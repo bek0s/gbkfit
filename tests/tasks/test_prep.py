@@ -3,6 +3,8 @@ Tests for the data preparation tasks (gbkfit.tasks.prep): the prepared
 files keep the world coordinates of the data they were cut from.
 """
 
+import os
+
 import astropy.io.fits as fits
 import astropy.wcs
 import numpy as np
@@ -783,3 +785,41 @@ def test_logarithmic_wavelengths_get_the_rest():
     assert coords.convention == 'log'
     assert coords.step[2] == pytest.approx(
         299792.458 * 1e-13 / 6600e-10, rel=1e-9)
+
+
+@pytest.mark.skipif(
+    'GBKFIT_TEST_NIRSPEC_CAL' not in os.environ,
+    reason="needs a cal file of a source of NIRSpec MSA (e.g. "
+           "jw01210-o001_s000009382_nirspec_f290lp-g395m_cal.fits of MAST) "
+           "in GBKFIT_TEST_NIRSPEC_CAL")
+def test_nirspec_msa_spectra_of_a_source_in_a_slitlet():
+    # A source in a slitlet of 3 shutters, observed at 3 nods, whose
+    # background is the other nods: each exposure has the others, of the
+    # sky moved by one or two pitches along the slit, of weights -1/2
+    pytest.importorskip('jwst')
+    import gbkfit.prep
+    spectra = gbkfit.prep.nirspec_msa_spectra(
+        os.environ['GBKFIT_TEST_NIRSPEC_CAL'])
+    assert len(spectra) == 3
+    for slitlet in spectra:
+        shutters = slitlet.aperture.rectangles()
+        pitch = shutters[1, 2] - shutters[0, 2]
+        assert [e.weight() for e in slitlet.exposures] == [1, -0.5, -0.5]
+        # (nods of about a pitch: the source within 1% of a pitch of the same
+        # place in its shutters)
+        nods = np.array([e.sky_offset() for e in slitlet.exposures[1:]])
+        np.testing.assert_allclose(
+            np.round(nods[:, 1] / pitch), nods[:, 1] / pitch, atol=0.02)
+        np.testing.assert_allclose(nods[:, 0], 0, atol=0.01)
+        # (the centre of the shutter of the source is the reference pixel)
+        assert np.any(
+            (shutters[:, 0] < 0) & (shutters[:, 1] > 0)
+            & (shutters[:, 2] < 0) & (shutters[:, 3] > 0))
+        # Light from across the shutter lands moved along the dispersion,
+        # about a pixel of the detector for each pixel of the image: as
+        # that of other wavelengths
+        coords = slitlet.dataset.grid().coords
+        x, y = coords.rpix
+        wave = 4e-6
+        dx, _ = slitlet.trace.offsets(wave, [x, x + 0.5], [y, y])
+        assert (x + 0.5 + dx[1]) - (x + dx[0]) == pytest.approx(0.5, abs=0.02)

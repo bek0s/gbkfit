@@ -11,9 +11,10 @@ import dataclasses
 import logging
 import re
 from collections.abc import Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import astropy.constants
+import astropy.coordinates
 import astropy.io.fits as fits
 import astropy.stats
 import astropy.table
@@ -29,9 +30,16 @@ import skimage.measure
 from gbkfit.utils import fitsutils, gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
+if TYPE_CHECKING:
+    from gbkfit.dataset import DatasetSlitlessSpectra
+    from gbkfit.observation.observables.apertures import ApertureShutters
+    from gbkfit.observation.observables.slitless_spectra import Exposure
+    from gbkfit.observation.observables.traces import TraceTable
+
 
 __all__ = [
     'FitsArrays',
+    'SlitletSpectra',
     'bin_index',
     'bin_spectra',
     'bin_values',
@@ -40,6 +48,7 @@ __all__ = [
     'largest_regions_mask',
     'muse_lsf_table',
     'muse_psf_table',
+    'nirspec_msa_spectra',
     'noise_errors',
     'pixel_fluxes',
     'range_mask',
@@ -1149,3 +1158,334 @@ def muse_lsf_table() -> astropy.table.QTable:
         sigma=fwhm / np.sqrt(8 * np.log(2)) * u.Angstrom))
 
 
+
+
+@dataclasses.dataclass(frozen=True)
+class SlitletSpectra:
+    """
+    The spectra of a source in a slitlet of the micro-shutter array of
+    JWST NIRSpec in one exposure, ready for slitless spectra behind the
+    shutters (see SlitlessSpectra.from_data, with the trace, the aperture
+    and the exposures; and nirspec_msa_spectra).
+
+    Attributes
+    ----------
+    dataset : DatasetSlitlessSpectra
+        The spectra on the detector, with the world coordinates of the
+        undispersed light.
+    trace : TraceTable
+        The trace, of the model of the instrument.
+    aperture : ApertureShutters
+        The open shutters of the slitlet.
+    exposures : tuple of Exposure
+        The exposures combined into the spectra: the exposure, and those
+        of the other nods subtracted as its background, if any.
+    """
+    dataset: 'DatasetSlitlessSpectra'
+    trace: 'TraceTable'
+    aperture: 'ApertureShutters'
+    exposures: tuple['Exposure', ...]
+
+
+def nirspec_msa_spectra(
+        filename: str, undo_corrections: bool = True
+) -> list[SlitletSpectra]:
+    """
+    Read the spectra of a source in a slitlet of the micro-shutter array
+    of JWST NIRSpec, of each of its exposures: from the cal file of the
+    source of stage 3 of the pipeline, its cutouts of the detector, not
+    resampled (needs the package jwst).
+
+    The cutout of each exposure is the image of slitless spectra behind
+    its shutters (see SlitlessSpectra). Its grid is that of the detector,
+    with the world coordinates of the undispersed light: its y along the
+    slit (against the y of the slit frame of the pipeline) and its x
+    perpendicular (within a degree of the dispersion), its reference
+    pixel where the centre of the shutter of the source lands at the
+    middle wavelength of the cutout, and its pixels of the sizes by which
+    the light of the sky moves a pixel of the detector there. The trace
+    is the model of the instrument of the pipeline (its WCS from the slit
+    to the detector, for the light of each wavelength from each place in
+    the shutters, which lands as that of other wavelengths from across a
+    shutter), sampled at nodes about every 4 pixels of the detector along
+    the wavelength and half a pixel across the places. The wavelengths
+    are those of the instrument (in vacuum; the pipeline applies no
+    barycentric correction). The pixels flagged DO_NOT_USE, or not finite,
+    are masked.
+
+    If the pipeline subtracted the background of each exposure with the
+    others (its step bkg_subtract, as for nods), each also has the other
+    exposures, of the sky moved to where it was in them (through the
+    plane of the shutters, shared by them), of weights -1 / (n - 1).
+
+    The model of slitless spectra behind shutters makes the losses of the
+    light through them, so the corrections of the pipeline for them (its
+    steps pathloss and barshadow) are undone (from the corrections in the
+    file), unless undo_corrections is False.
+
+    Parameters
+    ----------
+    filename : str
+        The cal file of the source (e.g.
+        jw01210-o001_s000009382_nirspec_f290lp-g395m_cal.fits).
+    undo_corrections : bool, optional
+        Whether to undo the corrections for the losses through the
+        shutters.
+
+    Returns
+    -------
+    list of SlitletSpectra
+        The spectra of each exposure.
+
+    Raises
+    ------
+    ConfigError
+        If the file is not of the exposures of a source of the
+        micro-shutter array, or a slitlet has closed shutters between
+        open ones or no shutter of the source.
+    """
+    from jwst import datamodels
+    with datamodels.open(filename) as model:
+        exposures = getattr(model, 'exposures', None)
+        if not exposures or model.meta.exposure.type != 'NRS_MSASPEC':
+            raise ConfigError(
+                f"{filename!r} is not a cal file of the exposures of a "
+                f"source of the micro-shutter array of NIRSpec")
+        slitlets = [_NirspecSlitlet(exposure) for exposure in exposures]
+        return [
+            _slitlet_spectra(exposure, slitlets, i, undo_corrections)
+            for i, exposure in enumerate(exposures)]
+
+
+# The nodes of the trace of a slitlet of NIRSpec: about every this many
+# pixels of the detector along the wavelength, and every this many pixels
+# of the places, to this many beyond the shutters across the dispersion
+# and beyond the cutout along the slit
+_NIRSPEC_WAVE_NODE_PIXELS = 4
+_NIRSPEC_PLACE_NODE_PIXELS = 0.5
+_NIRSPEC_PLACE_MARGIN = 3
+
+
+class _NirspecSlitlet:
+    """
+    The geometry of a slitlet of NIRSpec in an exposure, from its WCS: its
+    slit frame (x across the shutters, y along the slitlet, in units of
+    the open size of a shutter, from the centre of the shutter of the
+    source), on the sky (in arcsec of the frame of the model: x to the
+    west, y to the north, from the centre of the shutter of the source)
+    and on the detector (pixels of the cutout).
+    """
+
+    def __init__(self, exposure: Any):
+        wcs = exposure.meta.wcs
+        self.to_world = wcs.get_transform('slit_frame', 'world')
+        self.from_world = wcs.get_transform('world', 'slit_frame')
+        self.to_detector = wcs.get_transform('slit_frame', 'detector')
+        self.to_msa = wcs.get_transform('slit_frame', 'msa_frame')
+        ny, nx = exposure.data.shape
+        y, x = np.mgrid[:ny, :nx]
+        wave = wcs.get_transform('detector', 'slit_frame')(x, y)[2]
+        self.wave = np.nanmin(wave), np.nanmax(wave)
+        self.wave_ref = float(np.mean(self.wave))
+        ra, dec, self.world_wave = self.to_world(0.0, 0.0, self.wave_ref)
+        self.origin = astropy.coordinates.SkyCoord(
+            ra * astropy.units.deg, dec * astropy.units.deg)
+        # (the arcsec of a unit of x and of y of the slit frame)
+        self.axes = np.column_stack(
+            [self.sky(1.0, 0.0), self.sky(0.0, 1.0)])
+        self.state = exposure.shutter_state
+        self.yscale = exposure.slit_yscale
+
+    def sky(self, x: npt.ArrayLike, y: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the places on the sky (arcsec) of places of the slit frame,
+        of shape (2, ...).
+        """
+        ra, dec, _ = self.to_world(x, y, self.wave_ref)
+        east, north = self.origin.spherical_offsets_to(
+            astropy.coordinates.SkyCoord(
+                ra * astropy.units.deg, dec * astropy.units.deg))
+        return np.stack([-east.to_value('arcsec'), north.to_value('arcsec')])
+
+    def slit(self, sky: np.ndarray) -> np.ndarray:
+        """
+        Return the places of the slit frame of places on the sky (arcsec,
+        of shape (2, ...)): of the inverse of the WCS, refined by a step of
+        Newton (the inverse of the WCS is itself approximate).
+        """
+        world = self.origin.spherical_offsets_by(
+            -sky[0] * astropy.units.arcsec, sky[1] * astropy.units.arcsec)
+        x, y, _ = self.from_world(
+            world.ra.deg, world.dec.deg, self.world_wave)
+        slit = np.stack([x, y])
+        residual = sky - self.sky(x, y)
+        return slit + np.tensordot(
+            np.linalg.inv(self.axes), residual, axes=1)
+
+    def msa_to_slit(self, msa: np.ndarray) -> np.ndarray:
+        """
+        Return the places of the slit frame of places in the plane of the
+        shutters (of the affine map between them), of shape (2, ...).
+        """
+        corners = [np.array(self.to_msa(x, y, self.wave_ref)[:2])
+                   for x, y in ((0.0, 0.0), (1.0, 0.0), (0.0, 1.0))]
+        matrix = np.column_stack(
+            [corners[1] - corners[0], corners[2] - corners[0]])
+        return np.tensordot(
+            np.linalg.inv(matrix), msa - corners[0][:, None], axes=1)
+
+
+def _slitlet_spectra(
+        exposure: Any,
+        slitlets: list[_NirspecSlitlet],
+        index: int,
+        undo_corrections: bool
+) -> SlitletSpectra:
+    """
+    Return the spectra of an exposure of a source in a slitlet of NIRSpec
+    (see nirspec_msa_spectra), of the exposure of the given index among
+    those of the geometries of slitlets.
+    """
+    from gbkfit.dataset import Data, DatasetSlitlessSpectra
+    from gbkfit.observation.observables.apertures import ApertureShutters
+    from gbkfit.observation.observables.slitless_spectra import Exposure
+    from gbkfit.observation.observables.traces import TraceTable
+    slitlet = slitlets[index]
+    data, error = exposure.data.copy(), exposure.err.copy()
+    if undo_corrections:
+        for factor in _nirspec_loss_corrections(exposure):
+            data *= factor
+            error *= factor
+    mask = ((exposure.dq & 1) == 0) & np.isfinite(data) & np.isfinite(error)
+    # The axes of the image: y against that of the slit, x 90 degrees
+    # clockwise of it; pixels the sizes by which the light moves a pixel
+    # of the detector, from the centre of the shutter of the source
+    ax, ay = slitlet.axes.T
+    rota = np.degrees(np.arctan2(ay[0], -ay[1]))
+    rpix = np.array(slitlet.to_detector(0.0, 0.0, slitlet.wave_ref))
+
+    def moved(x: float, y: float) -> float:
+        return np.hypot(*(np.array(slitlet.to_detector(
+            x, y, slitlet.wave_ref)) - rpix))
+    step = (np.hypot(*ax) * 0.01 / moved(0.01, 0.0),
+            np.hypot(*ay) * 0.01 / moved(0.0, 0.01))
+    trace = _nirspec_trace(slitlet, exposure.data.shape, rpix, step, rota)
+    aperture = _nirspec_shutters(slitlet)
+    exposures = (Exposure(),)
+    if exposure.meta.cal_step.bkg_subtract == 'COMPLETE':
+        exposures += tuple(
+            Exposure(_nirspec_nod(slitlet, other, rota),
+                     weight=-1 / (len(slitlets) - 1))
+            for other in slitlets if other is not slitlet)
+    dataset = DatasetSlitlessSpectra(
+        Data(data, mask, error, exposure.meta.bunit_data),
+        step=step, rpix=tuple(rpix),
+        rval=(slitlet.origin.ra.deg, slitlet.origin.dec.deg), rota=rota)
+    return SlitletSpectra(dataset, trace, aperture, exposures)
+
+
+def _nirspec_loss_corrections(exposure: Any) -> list[np.ndarray]:
+    """
+    Return the corrections of the pipeline for the losses through the
+    shutters that it divided the data of an exposure by (pathloss, of the
+    type of the source, and barshadow), those it applied.
+    """
+    corrections = []
+    if exposure.meta.cal_step.pathloss == 'COMPLETE':
+        corrections.append(
+            exposure.pathloss_point
+            if exposure.pathloss_correction_type == 'POINT'
+            else exposure.pathloss_uniform)
+    if exposure.barshadow_corrected:
+        corrections.append(exposure.barshadow)
+    return corrections
+
+
+def _on_sky(image: np.ndarray, rota: float) -> np.ndarray:
+    """
+    Return places along the axes of an image of the rotation rota (arcsec,
+    of shape (2, ...)) on the sky, in the frame of the model (see
+    gridutils.sky_positions).
+    """
+    angle = np.radians(rota)
+    cos, sin = np.cos(angle), np.sin(angle)
+    return np.stack([cos * image[0] - sin * image[1],
+                     sin * image[0] + cos * image[1]])
+
+
+def _along_image(sky: np.ndarray, rota: float) -> np.ndarray:
+    """Return places on the sky along the axes of an image (see _on_sky)."""
+    return _on_sky(sky, -rota)
+
+
+def _nirspec_trace(
+        slitlet: _NirspecSlitlet,
+        shape: tuple[int, int],
+        rpix: np.ndarray,
+        step: tuple[float, float],
+        rota: float
+) -> 'TraceTable':
+    """
+    Return the trace of a slitlet of NIRSpec on the image of its cutout
+    (of the given shape, reference pixel, pixel sizes and rotation): the
+    offsets of the light of each wavelength at each place of the image,
+    from its place on the sky to the detector through the slit frame.
+    """
+    from gbkfit.observation.observables.traces import TraceTable
+    ny, nx = shape
+    margin, spacing = _NIRSPEC_PLACE_MARGIN, _NIRSPEC_PLACE_NODE_PIXELS
+    wave = np.linspace(
+        *slitlet.wave, max(4, nx // _NIRSPEC_WAVE_NODE_PIXELS))
+    x = rpix[0] + np.arange(-margin, margin + spacing / 2, spacing)
+    y = np.arange(-margin, ny - 1 + margin + spacing / 2, spacing)
+    yy, xx = np.meshgrid(y, x, indexing='ij')
+    slit_x, slit_y = slitlet.slit(_on_sky(np.stack(
+        [(xx - rpix[0]) * step[0], (yy - rpix[1]) * step[1]]), rota))
+    # (the transforms of jwst take inputs of one shape)
+    detector_x, detector_y = slitlet.to_detector(*np.broadcast_arrays(
+        slit_x[None], slit_y[None], wave[:, None, None]))
+    dx, dy = np.asarray(detector_x) - xx, np.asarray(detector_y) - yy
+    if not (np.all(np.isfinite(dx)) and np.all(np.isfinite(dy))):
+        raise ConfigError(
+            "the model of the instrument does not reach the detector from "
+            "every place and wavelength of the slitlet")
+    return TraceTable(wave, x, y, dx, dy)
+
+
+def _nirspec_shutters(slitlet: _NirspecSlitlet) -> 'ApertureShutters':
+    """
+    Return the open shutters of a slitlet of NIRSpec, along the axes of
+    its image, from the centre of the shutter of the source: of the open
+    size and the pitch of its shutters along the slit (y, against that of
+    the slit frame).
+    """
+    from gbkfit.observation.observables.apertures import ApertureShutters
+    state = slitlet.state
+    if 'x' not in state or set(state) - {'1', 'x'}:
+        raise ConfigError(
+            f"the slitlet of the shutters {state!r} has closed shutters "
+            f"between open ones, or none of the source")
+    width, length = np.hypot(*slitlet.axes)
+    pitch = slitlet.yscale * length
+    middle = (len(state) - 1) / 2 - state.index('x')
+    return ApertureShutters(
+        size=(width, length), pitch=pitch, count=len(state),
+        centre=(0.0, -middle * pitch))
+
+
+def _nirspec_nod(
+        slitlet: _NirspecSlitlet, other: _NirspecSlitlet, rota: float
+) -> tuple[float, float]:
+    """
+    Return the offset of the sky (arcsec along the axes of the image of
+    the rotation rota of a slitlet) in another exposure of it: where the
+    place of the sky at the centre of the shutter of the source lands in
+    the other exposure, in the slit frame of this one, through the plane
+    of the shutters.
+    """
+    east, north = other.origin.spherical_offsets_to(slitlet.origin)
+    centre = other.slit(np.array(
+        [-east.to_value('arcsec'), north.to_value('arcsec')]))
+    msa = np.array(other.to_msa(*centre, other.wave_ref)[:2])
+    offset = slitlet.axes @ slitlet.msa_to_slit(msa[:, None])[:, 0]
+    return tuple(float(v) for v in _along_image(offset, rota))

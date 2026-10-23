@@ -47,6 +47,7 @@ lmfit = ['lmfit']
 nautilus = ['nautilus-sampler']
 cmaes = ['cma']
 ultranest = ['ultranest']
+jwst = ['jwst']
 
 [project.urls]
 Homepage = 'https://github.com/bek0s/gbkfit'
