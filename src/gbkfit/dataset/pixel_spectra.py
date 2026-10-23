@@ -45,6 +45,10 @@ class DatasetPixelSpectra(Dataset):
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
         gridutils.make_medium).
+    convention : str, optional
+        The convention of the velocities of a rest: 'optical' (the default
+        of a rest wavelength), 'log' (of an axis uniform in ln w), or
+        'radio' (see gridutils.make_convention).
     """
 
     # The axes of a spectral cube: x, y and the spectral axis
@@ -143,11 +147,12 @@ class DatasetPixelSpectra(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
             rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None
+            medium: str | None = None,
+            convention: str | None = None
     ):
         super().__init__(dict(spectra=spectra))
         self._grid = _detail.make_grid(
-            self, step, rpix, rval, rota, rest, medium)
+            self, step, rpix, rval, rota, rest, medium, convention)
 
     def grid(self) -> gridutils.Grid:
         """Return the grid of the pixels and channels."""

@@ -67,6 +67,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
         gridutils.make_medium).
+    convention : str, optional
+        The convention of the velocities of the rest (see
+        gridutils.make_convention).
     """
 
     spectral_axis: int | None
@@ -108,7 +111,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         Return the options of the observable that a dataset gives.
 
-        Here, the grid (and the rest and the medium of its spectral axis);
+        Here, the grid (and the rest, the medium and the convention of its
+        spectral axis);
         observables of other data override this.
 
         Parameters
@@ -123,7 +127,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         grid = ('size', 'step', 'rpix', 'rval', 'rota')
         return grid + (
-            ('rest', 'medium') if cls.spectral_axis is not None else ())
+            ('rest', 'medium', 'convention')
+            if cls.spectral_axis is not None else ())
 
     def __init__(
             self,
@@ -133,11 +138,12 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             rval: Sequence[float],
             rota: float,
             rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None
+            medium: str | None = None,
+            convention: str | None = None
     ):
         self._grid = gridutils.make_grid(
             tuple(size), step, rpix, rval, rota, self.spectral_axis, rest,
-            medium)
+            medium, convention)
 
     def grid(self) -> gridutils.Grid:
         """Return the grid of the data."""
@@ -182,6 +188,13 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         has a rest wavelength.
         """
         return self._grid.coords.medium
+
+    def convention(self) -> str | None:
+        """
+        Return the convention of the velocities of the spectral axis, if it
+        has a rest (see gridutils.make_convention).
+        """
+        return self._grid.coords.convention
 
     @abc.abstractmethod
     def keys(self) -> tuple[str, ...]:

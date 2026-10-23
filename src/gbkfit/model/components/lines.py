@@ -465,6 +465,26 @@ class _OpticalVelocities:
         return 1 + velocity / _C
 
 
+class _LogVelocities:
+    """
+    The log velocities of a rest wavelength: c ln D, D the 1 + z, linear on
+    an axis uniform in ln w (FITS WAVE-LOG); the motions of a galaxy at any
+    systemic velocity are not stretched on it.
+    """
+
+    @staticmethod
+    def factor(velocity: np.ndarray) -> np.ndarray:
+        return np.exp(velocity / _C)
+
+    @staticmethod
+    def velocity(factor: np.ndarray) -> np.ndarray:
+        return _C * np.log(factor)
+
+    @staticmethod
+    def stretch(velocity: np.ndarray) -> np.ndarray:
+        return np.ones_like(velocity)
+
+
 class _RadioVelocities:
     """The velocities of a rest frequency: c (1 - 1 / D), D the 1 + z."""
 
@@ -513,14 +533,16 @@ class LinePlacement:
     doppler(vsys), D0 its 1 + z at the systemic velocity 0 (which the rows
     of Lines.values place exactly), whatever the axis. Its centre is the
     velocity of the axis of that factor D: c (D - 1) on an axis of
-    optical velocities (a rest wavelength), c (1 - 1 / D) on one of radio
-    velocities (a rest frequency), and c (D^2 - 1) / (D^2 + 1) on an axis
-    without a rest, whose velocities are relativistic, as those of the
-    galaxy (VELO). So one systemic velocity places a galaxy alike on axes
-    of every convention (e.g. its cubes of HI and of Halpha; read in the
-    convention of each axis, as an optical velocity on one and a radio one
-    on the other, it would place them c (D_radio - D_optical), about vsys^2
-    / c, apart: 83 km/s at 5000 km/s).
+    optical velocities (a rest wavelength), c ln D on one of log velocities
+    (a rest wavelength, the axis uniform in ln w), c (1 - 1 / D) on one of
+    radio velocities (a rest frequency), and c (D^2 - 1) / (D^2 + 1) on an
+    axis without a rest, whose velocities are relativistic, as those of the
+    galaxy (VELO); the convention of the axis says which (see
+    gridutils.make_convention). So one systemic velocity places a galaxy
+    alike on axes of every convention (e.g. its cubes of HI and of Halpha;
+    read in the convention of each axis, as an optical velocity on one and
+    a radio one on the other, it would place them c (D_radio - D_optical),
+    about vsys^2 / c, apart: 83 km/s at 5000 km/s).
 
     The systemic velocity stretches the motions about it: one km/s of the
     galaxy at the centre u spans 1 + u / c km/s of an axis of optical
@@ -538,13 +560,9 @@ class LinePlacement:
     """
 
     def __init__(self, rows: np.ndarray, spectral: gridutils.Grid):
-        rest = spectral.coords.rest
-        if rest is None:
-            self._convention = _RelativisticVelocities
-        elif rest.unit.is_equivalent(astropy.units.m):
-            self._convention = _OpticalVelocities
-        else:
-            self._convention = _RadioVelocities
+        coords = spectral.coords
+        self._convention = _CONVENTIONS[
+            gridutils.make_convention(coords.convention, coords.rest)]
         # The 1 + z of each line at the systemic velocity 0
         self._factors = self._convention.factor(
             np.array(rows[:, 0], dtype=float))
@@ -568,6 +586,15 @@ class LinePlacement:
         centres = self.centres(vsys)
         scales = self._convention.stretch(centres)
         return np.column_stack((centres - scales * vsys, scales))
+
+
+# The velocities of each convention of a spectral axis (see
+# gridutils.make_convention; None: an axis without a rest)
+_CONVENTIONS: dict[str | None, type] = {
+    'optical': _OpticalVelocities,
+    'log': _LogVelocities,
+    'radio': _RadioVelocities,
+    None: _RelativisticVelocities}
 
 
 class Bands:

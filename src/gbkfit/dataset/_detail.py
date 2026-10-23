@@ -240,8 +240,8 @@ def grid_coords(
     """
     Return the world coordinates of the grid of a dataset from those of
     its files, with step and rota, if given, instead (rpix and rval are
-    given to the reading of the files). A spectral grid has the rest and
-    the medium of its files too.
+    given to the reading of the files). A spectral grid has the rest, the
+    medium and the convention of its files too.
     """
     result = dict(
         step=coords.step if step is None else step,
@@ -249,7 +249,8 @@ def grid_coords(
         rval=coords.rval,
         rota=coords.rota if rota is None else rota)
     if spectral:
-        result.update(rest=coords.rest, medium=coords.medium)
+        result.update(rest=coords.rest, medium=coords.medium,
+                      convention=coords.convention)
     return result
 
 
@@ -260,7 +261,8 @@ def make_grid(
         rval: float | Sequence[float] | None,
         rota: float | None,
         rest: str | astropy.units.Quantity | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        convention: str | None = None
 ) -> gridutils.Grid:
     """
     Return the grid of the items of a dataset, with the given world
@@ -269,7 +271,7 @@ def make_grid(
     """
     return gridutils.make_grid(
         dataset.shape()[::-1], step, rpix, rval, rota,
-        dataset.spectral_axis, rest, medium)
+        dataset.spectral_axis, rest, medium, convention)
 
 
 def dump_grid_dataset(
@@ -295,6 +297,8 @@ def dump_grid_dataset(
         info.update(rest=str(grid.coords.rest))
     if grid.coords.medium is not None:
         info.update(medium=grid.coords.medium)
+    if grid.coords.convention is not None:
+        info.update(convention=grid.coords.convention)
 
     def write(filename: str, array: np.ndarray) -> None:
         fitsutils.write_data(

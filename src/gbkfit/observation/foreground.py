@@ -178,7 +178,8 @@ class LensPlan:
                 source.coords.step + grid.coords.step[2:],
                 source.coords.rpix + grid.coords.rpix[2:],
                 source.coords.rval + grid.coords.rval[2:],
-                source.coords.rota, grid.coords.rest, grid.coords.medium),
+                source.coords.rota, grid.coords.rest, grid.coords.medium,
+                grid.coords.convention),
             grid.spectral_axis)
 
     def evaluate(

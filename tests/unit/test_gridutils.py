@@ -56,3 +56,17 @@ def test_grids_must_overlap():
 def test_make_grid_errors(options, message):
     with pytest.raises(ConfigError, match=message):
         gridutils.make_grid(**options)
+
+
+def test_velocity_conventions_follow_the_rest():
+    # Of a rest wavelength, optical by default or log; of a frequency,
+    # radio; none without a rest
+    wave = gridutils.make_rest('6563 Angstrom')
+    freq = gridutils.make_rest('1420 MHz')
+    assert gridutils.make_convention(None, wave) == 'optical'
+    assert gridutils.make_convention('log', wave) == 'log'
+    assert gridutils.make_convention(None, freq) == 'radio'
+    assert gridutils.make_convention(None, None) is None
+    for convention, rest in (('radio', wave), ('log', freq), ('log', None)):
+        with pytest.raises(ConfigError, match="convention"):
+            gridutils.make_convention(convention, rest)

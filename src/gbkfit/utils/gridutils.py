@@ -25,6 +25,7 @@ __all__ = [
     'SpectraData',
     'check_overlap',
     'make_grid',
+    'make_convention',
     'make_medium',
     'make_rest',
     'pixels_on',
@@ -58,13 +59,16 @@ class Coords(NamedTuple):
         (degrees, north through east) of the +y axis.
     rest : Quantity or None
         The rest wavelength or frequency that the velocities of the
-        spectral axis refer to (in m or Hz; see make_rest). The velocities
-        of a rest wavelength are optical (VOPT), and those of a rest
-        frequency radio (VRAD).
+        spectral axis refer to (in m or Hz; see make_rest).
     medium : str or None
-        The medium of the wavelengths of optical velocities and of their
+        The medium of the wavelengths of the velocities and of their
         rest: 'vacuum' or 'air' (see make_medium); None without a rest
         wavelength.
+    convention : str or None
+        The convention of the velocities of a rest (see make_convention):
+        'optical' (VOPT) or 'log' of a rest wavelength, 'radio' (VRAD) of
+        a rest frequency; None: the default of the rest (optical, radio,
+        or relativistic, VELO, without a rest).
     """
     step: tuple[float, ...]
     rpix: tuple[float, ...]
@@ -72,6 +76,7 @@ class Coords(NamedTuple):
     rota: float
     rest: astropy.units.Quantity | None = None
     medium: str | None = None
+    convention: str | None = None
 
     def axes(self, *indices: int) -> 'Coords':
         """
@@ -139,7 +144,8 @@ class Grid(NamedTuple):
         """
         return Grid(
             self.size[:2],
-            self.coords.axes(0, 1)._replace(rest=None, medium=None), None)
+            self.coords.axes(0, 1)._replace(
+                rest=None, medium=None, convention=None), None)
 
     def spectral(self) -> 'Grid':
         """
@@ -163,7 +169,8 @@ def make_grid(
         rota: float | None = None,
         spectral_axis: int | None = None,
         rest: str | astropy.units.Quantity | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        convention: str | None = None
 ) -> Grid:
     """
     Make a grid.
@@ -185,6 +192,9 @@ def make_grid(
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
         make_medium).
+    convention : str, optional
+        The convention of the velocities of the rest (see
+        make_convention).
 
     Returns
     -------
@@ -197,7 +207,8 @@ def make_grid(
         If the sizes are not positive integers, the world coordinates do
         not have a value for each axis, a step is not positive, or the
         spectral axis is not an axis of the grid, if a grid without a
-        spectral axis has a rest, or if the medium is not valid.
+        spectral axis has a rest, or if the medium or the convention is
+        not valid.
     """
     ndim = len(size)
     if not all(isinstance(n, numbers.Integral) and not isinstance(n, bool)
@@ -232,7 +243,8 @@ def make_grid(
     rest = make_rest(rest)
     return Grid(
         tuple(size),
-        Coords(step, rpix, rval, rota, rest, make_medium(medium, rest)),
+        Coords(step, rpix, rval, rota, rest, make_medium(medium, rest),
+               make_convention(convention, rest)),
         spectral_axis)
 
 
@@ -270,6 +282,35 @@ def make_rest(
         if rest.unit.is_equivalent(unit) and rest.isscalar and rest.value > 0:
             return rest.to(unit)
     raise error
+
+
+def make_convention(
+        convention: str | None, rest: astropy.units.Quantity | None
+) -> str | None:
+    """
+    Make the convention of the velocities of a spectral axis of the given
+    rest (see make_rest): of a rest wavelength w0, 'optical', c (w / w0 -
+    1), the default, or 'log', c ln(w / w0) (exactly linear on an axis
+    uniform in ln w, as FITS WAVE-LOG); of a rest frequency, 'radio', c (1
+    - f / f0); without a rest, none (the velocities are relativistic).
+
+    Raises
+    ------
+    ConfigError
+        If the convention is not one of those of the rest.
+    """
+    if rest is None:
+        allowed, default = (None,), None
+    elif rest.unit.is_equivalent(astropy.units.m):
+        allowed, default = ('optical', 'log'), 'optical'
+    else:
+        allowed, default = ('radio',), 'radio'
+    convention = default if convention is None else convention
+    if convention not in allowed:
+        raise ConfigError(
+            f"the convention of the velocities of the rest {rest} must be "
+            f"one of {list(allowed)}; it is {convention!r}")
+    return convention
 
 
 def make_medium(

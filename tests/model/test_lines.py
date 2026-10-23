@@ -151,20 +151,24 @@ def test_the_redshift_places_the_lines(rest, k):
     assert nii_scale == pytest.approx(k * 6585.27 / 6564.61, rel=1e-12)
 
 
-@pytest.mark.parametrize('rest, centre, stretch', [
-    ('1420.405751768 MHz', C * (1 - 1 / D), 1 / D),
-    ('6564.61 Angstrom', C * (D - 1), D),
-    (None, 10000, 1 - (10000 / C) ** 2)])
-def test_the_systemic_velocity_is_one_on_every_axis(rest, centre, stretch):
+@pytest.mark.parametrize('rest, convention, centre, stretch', [
+    ('1420.405751768 MHz', None, C * (1 - 1 / D), 1 / D),
+    ('6564.61 Angstrom', None, C * (D - 1), D),
+    ('6564.61 Angstrom', 'log', C * np.log(D), 1),
+    (None, None, 10000, 1 - (10000 / C) ** 2)])
+def test_the_systemic_velocity_is_one_on_every_axis(
+        rest, convention, centre, stretch):
     # A galaxy at the redshift 0 and vsys = 10000 km/s, on an axis of the
     # rest of its line: the line is at the velocity of its 1 + z in the
     # convention of the axis, c (1 - 1 / D) for radio velocities, c (D -
     # 1) for optical ones, and 10000 km/s on an axis without a rest, of
-    # relativistic velocities; a km/s of the galaxy spans 1 - u / c, 1 +
-    # u / c and 1 - (u / c)^2 km/s of them (1 / D, D and 1 - (vsys / c)^2)
+    # relativistic velocities, and c ln D for log ones; a km/s of the
+    # galaxy spans 1 - u / c, 1 + u / c, 1 - (u / c)^2 and 1 km/s of them
+    # (1 / D, D, 1 - (vsys / c)^2 and 1)
     from gbkfit.model.components.lines import LinePlacement, Lines
     from gbkfit.utils import gridutils
-    spectral = gridutils.make_grid((41,), 10, spectral_axis=0, rest=rest)
+    spectral = gridutils.make_grid(
+        (41,), 10, spectral_axis=0, rest=rest, convention=convention)
     rows = Lines(None).values(spectral, 0.0)
     (offset, scale), = LinePlacement(rows, spectral)(10000)
     assert offset + scale * 10000 == pytest.approx(centre, rel=1e-12)

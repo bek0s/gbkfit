@@ -250,6 +250,7 @@ class DCube:
             rota: float,
             rest: u.Quantity | None,
             medium: str | None,
+            convention: str | None = None,
             scale: tuple[int, int, int],
             primary_beam: PrimaryBeam | None,
             psf: PSF | None,
@@ -265,7 +266,8 @@ class DCube:
         # by the plan
         rest = gridutils.make_rest(rest)
         coords = gridutils.Coords(
-            step, rpix, rval, rota, rest, gridutils.make_medium(medium, rest))
+            step, rpix, rval, rota, rest, gridutils.make_medium(medium, rest),
+            gridutils.make_convention(convention, rest))
         self._grid_lo = gridutils.Grid(size, coords, 2)
         self._scale = scale
         self._primary_beam = primary_beam

@@ -58,6 +58,10 @@ class SlitSpectra(Observable):
     medium : str, optional
         The medium of the wavelengths of a rest wavelength: 'vacuum' (the
         default) or 'air' (see gridutils.make_medium).
+    convention : str, optional
+        The convention of the velocities of a rest: 'optical' (the default
+        of a rest wavelength), 'log' (of an axis uniform in ln w), or
+        'radio' (see gridutils.make_convention).
     slit_width : float, optional
         The width of the slit; by default, the step along it.
     sky_rval : Sequence of float, optional
@@ -154,6 +158,7 @@ class SlitSpectra(Observable):
             rota=self.rota(),
             rest=_detail.dump_rest(self.rest()),
             medium=self.medium(),
+            convention=self.convention(),
             slit_width=self._slit_width,
             sky_rval=self._sky_rval,
             smooth_weights=self._smooth_weights,
@@ -169,13 +174,15 @@ class SlitSpectra(Observable):
             rota: float = 0,
             rest: str | astropy.units.Quantity | None = None,
             medium: str | None = None,
+            convention: str | None = None,
             slit_width: float | None = None,
             sky_rval: Sequence[float] = (0, 0),
             smooth_weights: bool = False,
             mask_cutoff: float | None = None,
             mask_apply: bool = False
     ):
-        super().__init__(size, step, rpix, rval, rota, rest, medium)
+        super().__init__(
+            size, step, rpix, rval, rota, rest, medium, convention)
         if slit_width is None:
             slit_width = self.step()[0]
         _detail.check_positive('slit_width', slit_width)
@@ -245,6 +252,7 @@ class SlitSpectra(Observable):
             rota=self.rota(),
             rest=self.rest(),
             medium=self.medium(),
+            convention=self.convention(),
             scale=(scale[0], across, scale[1]),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
