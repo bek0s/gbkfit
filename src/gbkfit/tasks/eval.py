@@ -344,10 +344,13 @@ def _write_mocks(
                 mocked = observation.with_data(
                     datasets[i][k], mock.likelihoods[i])
             # (the paths of the files of the data are relative to the
-            # root of the configuration, as its other paths)
+            # root of the configuration, as its other paths; they are
+            # of this run, whose earlier files a run into the same
+            # directory replaces)
             prefix = directory + os.sep
             mocked_info = _rebased(
-                observation_parser.dump(mocked, prefix), prefix,
+                observation_parser.dump(mocked, prefix, overwrite=True),
+                prefix,
                 os.path.relpath(directory, root) + os.sep)
             for filename in sorted(os.listdir(directory)):
                 run.record(
