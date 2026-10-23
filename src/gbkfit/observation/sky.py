@@ -372,9 +372,10 @@ class ObservationSky(Observation):
             raise ConfigError(
                 f"scale must have {ndim} values, each at least 1; it is "
                 f"{scale}")
-        if data is not None and likelihood is not None \
-                and likelihood.amplitudes() is not None:
-            _check_amplitudes(observable, calibration)
+        if data is not None:
+            observable.require_matching(data)
+            if likelihood is not None and likelihood.amplitudes() is not None:
+                _check_amplitudes(observable, calibration)
         self._observable = observable
         self._foreground = foreground
         self._instrument = instrument
@@ -386,7 +387,10 @@ class ObservationSky(Observation):
         self._calibration = calibration
         self._offsets = offsets
         self._scale = scale
-        super().__init__(driver, galaxies, data, likelihood, name)
+        super().__init__(
+            observable.keys(), driver, galaxies, data, likelihood, name,
+            observable.spectra_item(), observable.spectra_axis(),
+            observable.model_can_lack_values())
         observable.check_instrument(instrument)
         if data is not None:
             _check_beams(data, instrument)
@@ -490,20 +494,6 @@ class ObservationSky(Observation):
         """Return the instrument."""
         return self._instrument
 
-    def keys(self) -> tuple[str, ...]:
-        """Return the names of the data items of its observable."""
-        return self._observable.keys()
-
-    def model_can_lack_values(self) -> bool:
-        return self._observable.model_can_lack_values()
-
-    def require_matching(self, dataset: Dataset) -> None:
-        """
-        Check that a dataset holds the data of its observable (see
-        Observable.require_matching).
-        """
-        self._observable.require_matching(dataset)
-
     def dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
         Make the dataset of data items measured as its observable (see
@@ -555,14 +545,6 @@ class ObservationSky(Observation):
         (see Observable.psf_images), on its driver.
         """
         return self._observable.psf_images(self._driver, weights)
-
-    def spectra_item(self) -> str | None:
-        """Return the data item of spectra of its observable, if any."""
-        return self._observable.spectra_item()
-
-    def spectra_axis(self) -> int:
-        """Return the axis of the spectra of its observable."""
-        return self._observable.spectra_axis()
 
     def scale(self) -> tuple[int, ...]:
         """Return the oversampling of the model along each axis."""

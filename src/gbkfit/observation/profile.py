@@ -198,7 +198,7 @@ class ObservationProfile(Observation):
                 data={k: v for k, v in data.items() if k != 'type'},
                 likelihood=likelihood_parser.dump(self._likelihood))
         info |= dict(
-            functions=list(self._keys),
+            functions=list(self.keys()),
             radii=self._radii.value.tolist(),
             radius_unit=unitutils.format_unit(self._radii.unit))
         if self._distance is not None:
@@ -264,12 +264,17 @@ class ObservationProfile(Observation):
         if likelihood is not None and likelihood.amplitudes() is not None:
             raise ConfigError(
                 "free amplitudes scale spectra; a profile has none")
-        self._keys = keys
+        if data is not None:
+            _check_data(data, keys, radii, distance)
         self._radii = radii
         self._distance = distance
         self._inclination = None if inclination is None \
             else float(inclination)
-        super().__init__(driver, galaxies, data, likelihood, name)
+        # (slopes have no values where the galaxy has no density)
+        super().__init__(
+            keys, driver, galaxies, data, likelihood, name,
+            model_can_lack_values=any(
+                GalaxyFunctions.family(key) == 'slope' for key in keys))
 
     def radii(self) -> u.Quantity:
         """Return the radii."""
@@ -306,49 +311,6 @@ class ObservationProfile(Observation):
         """Return the name of the parameter of the inclination, if any."""
         return None if self._inclination is None else f'{self._name}_incl'
 
-    def keys(self) -> tuple[str, ...]:
-        """Return the names of its data items: the functions it measures."""
-        return self._keys
-
-    def model_can_lack_values(self) -> bool:
-        """
-        Check whether its model can lack values: slopes have none where
-        the galaxy has no density (see GalaxyFunctions).
-        """
-        return any(
-            GalaxyFunctions.family(key) == 'slope' for key in self._keys)
-
-    def require_matching(self, dataset: Dataset) -> None:
-        """
-        Check that a dataset holds the data of this profile: a table of it
-        (see DatasetProfile), of its functions, at its radii and their
-        distance, each in the unit of its function (or none).
-        """
-        if not isinstance(dataset, DatasetProfile):
-            raise ConfigError(
-                f"the data of a profile are a table of it (DatasetProfile); "
-                f"they are {type(dataset).__name__}")
-        if set(dataset.keys()) != set(self._keys):
-            raise ConfigError(
-                f"the profile has the functions {sorted(self._keys)}, but "
-                f"the data have {sorted(dataset.keys())}")
-        same_distance = dataset.distance() is None \
-            if self._distance is None else dataset.distance() is not None \
-            and u.isclose(dataset.distance(), self._distance)
-        if dataset.radii().unit != self._radii.unit \
-                or not np.array_equal(dataset.radii(), self._radii) \
-                or not same_distance:
-            raise ConfigError(
-                "the data are not at the radii of the profile, or of their "
-                "distance")
-        for key in self._keys:
-            unit = dataset[key].unit()
-            expected = GalaxyFunctions.radial_units(key)[0]
-            if unit is not None and unit != expected:
-                raise ConfigError(
-                    f"the data of {key} are in {unit}; give them in "
-                    f"{expected}, the unit of the function")
-
     def dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
         Make the table of data items of its functions (e.g. mock data) at
@@ -367,7 +329,7 @@ class ObservationProfile(Observation):
     def with_data(
             self, data: Dataset, likelihood: Likelihood | None = None
     ) -> Self:
-        self.require_matching(data)
+        _check_data(data, self.keys(), self._radii, self._distance)
         return type(self)(
             inclination=self._inclination, driver=self._driver,
             galaxies=self._galaxies, data=data,
@@ -414,7 +376,7 @@ class ObservationProfile(Observation):
         galaxy, mapping, label = \
             seen.galaxies[0], seen.mappings[0], seen.labels[0]
         functions = galaxy.plan_functions()
-        if missing := [k for k in self._keys if k not in functions.names()]:
+        if missing := [k for k in self.keys() if k not in functions.names()]:
             raise ConfigError(
                 f"galaxy {label} has no functions {missing}; its functions "
                 f"are {list(functions.names())}")
@@ -427,7 +389,7 @@ class ObservationProfile(Observation):
                 u.arcsec, u.dimensionless_angles())
         else:
             kpc = self._radii.to_value(u.kpc)
-        for key in self._keys:
+        for key in self.keys():
             bounds = functions.radius_range(key)
             if bounds is None:
                 continue
@@ -445,11 +407,49 @@ class ObservationProfile(Observation):
             inclination = (
                 self._inclination_param(),
                 np.sin(np.radians(self._inclination)),
-                tuple(k for k in self._keys
+                tuple(k for k in self.keys()
                       if GalaxyFunctions.family(k) in _ROTATIONS))
         return _ProfilePlan(
-            functions, mapping, self._keys, arcsec, kpc, inclination,
+            functions, mapping, self.keys(), arcsec, kpc, inclination,
             self._driver)
+
+
+def _check_data(
+        dataset: Dataset,
+        keys: Sequence[str],
+        radii: u.Quantity,
+        distance: u.Quantity | None
+) -> None:
+    """
+    Raise ConfigError unless a dataset holds the data of a profile of the
+    given functions, radii and distance: a table of it (see
+    DatasetProfile), of those functions, at those radii and distance, each
+    in the unit of its function (or none).
+    """
+    if not isinstance(dataset, DatasetProfile):
+        raise ConfigError(
+            f"the data of a profile are a table of it (DatasetProfile); "
+            f"they are {type(dataset).__name__}")
+    if set(dataset.keys()) != set(keys):
+        raise ConfigError(
+            f"the profile has the functions {sorted(keys)}, but the data "
+            f"have {sorted(dataset.keys())}")
+    same_distance = dataset.distance() is None if distance is None \
+        else dataset.distance() is not None \
+        and u.isclose(dataset.distance(), distance)
+    if dataset.radii().unit != radii.unit \
+            or not np.array_equal(dataset.radii(), radii) \
+            or not same_distance:
+        raise ConfigError(
+            "the data are not at the radii of the profile, or of their "
+            "distance")
+    for key in keys:
+        unit = dataset[key].unit()
+        expected = GalaxyFunctions.radial_units(key)[0]
+        if unit is not None and unit != expected:
+            raise ConfigError(
+                f"the data of {key} are in {unit}; give them in {expected}, "
+                f"the unit of the function")
 
 
 class _ProfilePlan(ObservablePlan):

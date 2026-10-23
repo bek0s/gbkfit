@@ -34,23 +34,22 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
     ObservationSky).
 
     Its data are named items of one shape (see keys), of a dataset of its
-    kind (see require_matching). Its likelihood and its kind can have
-    parameters of their own, named after it (see pdescs).
-
-    A kind sets what its methods read (e.g. its data items) before it
-    calls __init__, which checks the data and the likelihood with them.
-    A kind without spectra (see spectra_item) refuses a likelihood with
+    kind, which the kind checks before it makes it. Its likelihood and its
+    kind can have parameters of their own, named after it (see pdescs).
+    A kind without spectra (no spectra_item) refuses a likelihood with
     free amplitudes (see LikelihoodGaussian).
 
     Parameters
     ----------
+    keys : Sequence of str
+        The names of its data items (e.g. 'spectra').
     driver : Driver, optional
         Where its model is evaluated; by default, the host.
     galaxies : Sequence of str, optional
         The names of the galaxies it sees; required only when there are
         several (see ObservationGroup).
     data : Dataset, optional
-        The data, of its kind (see require_matching).
+        The data, of its kind.
     likelihood : Likelihood, optional
         How the model is compared with the data; Gaussian by default when
         there are data, and none without data.
@@ -58,13 +57,23 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         Its name, which is the id of its extra outputs instead of its
         position (see ObservationGroup.observation_label), and starts the
         names of its parameters.
+    spectra_item : str, optional
+        The name of its data item of spectra, if it has one: the spectra
+        that free amplitudes scale (see LikelihoodGaussian).
+    spectra_axis : int, optional
+        The axis of the arrays of its spectra along which each spectrum
+        runs; the first by default.
+    model_can_lack_values : bool, optional
+        Whether its model can lack values (NaN) where the data have some
+        (e.g. the velocity of a spectrum below its mask_cutoff): the
+        likelihood then needs a residual for them (see
+        LikelihoodGaussian). False by default.
 
     Raises
     ------
     ConfigError
         If a name is invalid, there are no galaxies or they repeat, there
-        is a likelihood without data, the data are not of the observation
-        (see require_matching), its model can lack values but its
+        is a likelihood without data, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
         likelihood fits a noise but it has no name, or fits the noise of
         items that it does not have, or both the scale and the jitter of
@@ -75,12 +84,17 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
 
     def __init__(
             self,
+            keys: Sequence[str],
             driver: Driver | None = None,
             galaxies: Sequence[str] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
-            name: str | None = None
+            name: str | None = None,
+            spectra_item: str | None = None,
+            spectra_axis: int = 0,
+            model_can_lack_values: bool = False
     ):
+        keys = tuple(keys)
         parseutils.check_name(name)
         if galaxies is not None:
             galaxies = tuple(galaxies)
@@ -97,11 +111,10 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         if data is None and likelihood is not None:
             raise ConfigError("a likelihood needs data")
         if data is not None:
-            self.require_matching(data)
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
-            _check_noise(likelihood, self.keys(), data)
-            _check_correlations(likelihood, self, data)
+            _check_noise(likelihood, keys, data)
+            _check_correlations(likelihood, keys, spectra_item, data)
             if name is None and likelihood.pdescs():
                 raise ConfigError(
                     "an observation whose likelihood has parameters (e.g. "
@@ -109,7 +122,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
                     "'{name}_noise_scale_moment1')")
             likelihood = likelihood.with_prefix(
                 '' if name is None else f'{name}_')
-            if self.model_can_lack_values() \
+            if model_can_lack_values \
                     and not likelihood.takes_lacking_values():
                 raise ConfigError(
                     "the model of the observation can lack values where the "
@@ -117,11 +130,15 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
                     "its mask_cutoff): its likelihood needs the residual of "
                     "such a value, the option missing_residual (e.g. 3; see "
                     "LikelihoodGaussian)")
+        self._keys = keys
         self._driver = driver
         self._galaxies = galaxies
         self._data = data
         self._likelihood = likelihood
         self._name = name
+        self._spectra_item = spectra_item
+        self._spectra_axis = spectra_axis
+        self._model_can_lack_values = model_can_lack_values
 
     def name(self) -> str | None:
         """Return its name, if any."""
@@ -178,29 +195,31 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return None
 
-    @abc.abstractmethod
     def keys(self) -> tuple[str, ...]:
         """Return the names of its data items (e.g. 'spectra')."""
+        return self._keys
 
-    @abc.abstractmethod
     def model_can_lack_values(self) -> bool:
         """
         Check whether its model can lack values (NaN) where the data have
         some: the likelihood then needs a residual for them (see
         LikelihoodGaussian).
         """
+        return self._model_can_lack_values
 
-    @abc.abstractmethod
-    def require_matching(self, dataset: Dataset) -> None:
+    def spectra_item(self) -> str | None:
         """
-        Check that a dataset holds data of this observation: of the kind
-        of its data, with its data items, measured where its model is.
+        Return the name of its data item of spectra, which free amplitudes
+        scale (see LikelihoodGaussian), if it has one.
+        """
+        return self._spectra_item
 
-        Raises
-        ------
-        ConfigError
-            If the dataset does not hold data of this observation.
+    def spectra_axis(self) -> int:
         """
+        Return the axis of the arrays of its data item of spectra along
+        which each spectrum runs (see spectra_item).
+        """
+        return self._spectra_axis
 
     @abc.abstractmethod
     def dataset(self, items: Mapping[str, Data]) -> Dataset:
@@ -348,21 +367,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
-    def spectra_item(self) -> str | None:
-        """
-        Return the name of its data item of spectra (see
-        Observable.spectra_item), which free amplitudes scale (see
-        LikelihoodGaussian), if it has one; here, None.
-        """
-        return None
-
-    def spectra_axis(self) -> int:
-        """
-        Return the axis of the arrays of its data item of spectra along
-        which each spectrum runs (see spectra_item); here, the first.
-        """
-        return 0
-
 
 def _check_noise(
         likelihood: Likelihood,
@@ -396,16 +400,18 @@ def _check_noise(
 
 def _check_correlations(
         likelihood: Likelihood,
-        observation: Observation,
+        keys: Sequence[str],
+        spectra_item: str | None,
         data: Dataset
 ) -> None:
     """
-    Raise ConfigError unless the items of the data whose noise is
+    Raise ConfigError unless the given items of the data whose noise is
     correlated can be (see Dataset.noise_correlation), keep the pixels of
-    correlated noise (see correlated_pixels), and have no upper limits or
-    amplitudes of spectra in their likelihood (see LikelihoodGaussian).
+    correlated noise (see correlated_pixels), and have no upper limits or,
+    for the item of spectra, amplitudes in their likelihood (see
+    LikelihoodGaussian).
     """
-    for key in observation.keys():
+    for key in keys:
         if data.noise_correlation(key) is None:
             continue
         correlated_pixels(key, data[key].mask())
@@ -413,8 +419,7 @@ def _check_correlations(
             raise ConfigError(
                 f"the noise of '{key}' is correlated, which does not go "
                 f"with upper limits")
-        if likelihood.amplitudes() is not None \
-                and key == observation.spectra_item():
+        if likelihood.amplitudes() is not None and key == spectra_item:
             raise ConfigError(
                 f"the noise of '{key}' is correlated, which does not go "
                 f"with amplitudes of spectra")
