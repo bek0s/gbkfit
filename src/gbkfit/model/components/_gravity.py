@@ -8,7 +8,7 @@ all the observations of the galaxy.
 
 import dataclasses
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 import astropy.units as u
 import numpy as np
@@ -33,6 +33,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'GalaxyGravity',
     'GalaxyMass',
     'GravityPlan'
 ]
@@ -81,6 +82,17 @@ class GalaxyMass:
     context: MassContext
     kpc_per_arcsec: float
     field: GravityField
+
+
+class GalaxyGravity(NamedTuple):
+    """
+    The gravity of a galaxy in one evaluation, for all the observations of
+    it (see ObservationGroup): what it gives each component it moves or
+    holds up, by the index of the component (see GravityPlan.evaluate),
+    and the mass of the galaxy (None without mass; see GravityPlan.mass).
+    """
+    given: dict[int, ParamValues]
+    mass: GalaxyMass | None
 
 
 class GravityPlan:
@@ -164,7 +176,8 @@ class GravityPlan:
     def evaluate(
             self,
             params: ParamValues,
-            out_extra: Extras | None = None
+            out_extra: Extras | None = None,
+            mass: GalaxyMass | None = None
     ) -> dict[int, ParamValues]:
         """
         Evaluate the gravity.
@@ -198,6 +211,9 @@ class GravityPlan:
             the first ring of the first: by more than 15% of their radius,
             or 20 degrees (which makes their circular velocities about 1%
             wrong, or more).
+        mass : GalaxyMass, optional
+            The mass of the galaxy at the parameters, if already made (see
+            mass); by default, it is made here.
 
         Returns
         -------
@@ -225,7 +241,8 @@ class GravityPlan:
         components = component_set.components()
         if out_extra is not None:
             self._warn_geometry(params)
-        mass = self.mass(params)
+        if mass is None:
+            mass = self.mass(params)
         kpc_per_arcsec = mass.kpc_per_arcsec
         # The mass is evaluated once, at the radii of all the components:
         # those of the parameters it gives, then the subnodes of the disks

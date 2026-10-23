@@ -13,6 +13,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import Extras
+from gbkfit.model.components._gravity import GalaxyGravity
 from gbkfit.model.components._units import DataUnit, flux_per_area
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
@@ -336,7 +337,7 @@ class DCubePlanBase(ObservablePlan):
     def evaluate(
             self,
             params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
+            gravity: Sequence[GalaxyGravity],
             out_extra: Extras | None
     ) -> ModelData:
         model_extra = None if out_extra is None else Extras()
@@ -354,7 +355,7 @@ class DCubePlanBase(ObservablePlan):
     def mock(
             self,
             params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
+            gravity: Sequence[GalaxyGravity],
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
@@ -425,7 +426,7 @@ class DCubePlanBase(ObservablePlan):
     def _evaluate_model(
             self,
             params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
+            gravity: Sequence[GalaxyGravity],
             model_extra: Extras | None
     ) -> None:
         """

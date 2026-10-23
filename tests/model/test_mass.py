@@ -2033,9 +2033,9 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     calls = []
     evaluate_gravity = GravityPlan.evaluate
 
-    def counted(self, params, out_extra=None):
+    def counted(self, params, *args):
         calls.append(params)
-        return evaluate_gravity(self, params, out_extra)
+        return evaluate_gravity(self, params, *args)
     monkeypatch.setattr(GravityPlan, 'evaluate', counted)
     # (pressure support samples the profiles of the disk on that driver)
     galaxy = disk_galaxy(

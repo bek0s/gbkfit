@@ -479,11 +479,17 @@ def _with_unit(output: Any, observation: Observation, key: str) -> Any:
     """
     Return an output of a data item of an observation (or of its model,
     which is in the unit of its data) with the unit of the item, if it
-    has one and the output takes it (see GridData, SpectraData).
+    has one and the output takes it (see GridData, SpectraData; a table
+    of values, see ObservationProfile.output, has it in its column
+    'value').
     """
     data = observation.data()
-    if data is None or data[key].unit() is None or not isinstance(
-            output, (gridutils.GridData, gridutils.SpectraData)):
+    if data is None or data[key].unit() is None:
+        return output
+    if isinstance(output, Table):
+        output['value'].unit = data[key].unit()
+        return output
+    if not isinstance(output, (gridutils.GridData, gridutils.SpectraData)):
         return output
     return output._replace(unit=unitutils.format_unit(data[key].unit()))
 

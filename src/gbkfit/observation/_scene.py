@@ -16,6 +16,7 @@ from gbkfit.model import (
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
+from gbkfit.model.components._gravity import GalaxyGravity
 from gbkfit.model.components._transfer import (
     LineResolution, TransferPlan, warn_resolution)
 from gbkfit.model.components._units import DataUnit
@@ -164,7 +165,7 @@ class ScenePlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
+            gravity: Sequence[GalaxyGravity],
             data: DeviceArray,
             out_extra: Extras | None
     ) -> None:
@@ -172,9 +173,9 @@ class ScenePlan(abc.ABC):
         Add the light of the galaxies to the data (the image or spectral
         cube), with the parameters of the observation group (params) and
         what the gravity of each galaxy gives its components (gravity, see
-        GravityPlan.evaluate). The extra outputs of each galaxy have its
-        label as the id 'galaxy', and those of a group of galaxies its
-        name as the id 'group'.
+        GalaxyGravity). The extra outputs of each galaxy have its label as
+        the id 'galaxy', and those of a group of galaxies its name as the
+        id 'group'.
         """
         scene = self._scene
         values = [
@@ -183,7 +184,8 @@ class ScenePlan(abc.ABC):
         extras = None if out_extra is None else [
             out_extra.scoped(galaxy=label) for label in scene._labels]
         self._evaluate(
-            params, values, gravity, {self._key: data}, extras, out_extra)
+            params, values, [g.given for g in gravity], {self._key: data},
+            extras, out_extra)
 
     @abc.abstractmethod
     def _evaluate(

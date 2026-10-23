@@ -72,7 +72,7 @@ class Galaxy(parseutils.Serializable):
         Its components; they need names when there are several. A galaxy
         of mass alone has none: observations on the sky see nothing of
         it, and its mass is for what is measured of it (e.g. its rotation
-        curve).
+        curve; see ObservationProfile).
     mass : MassComponent or Sequence of MassComponent, optional
         Its mass: the components of its mass (disks, spheroids, point
         masses, ...; a disk can follow the density of one of its disks).

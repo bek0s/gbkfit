@@ -9,6 +9,7 @@ import functools
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+import astropy.units as u
 import numpy as np
 import numpy.typing as npt
 
@@ -16,7 +17,7 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from .disks._disk import EQUILIBRIUM_DISPERSION
 from .disks._profiles import dispersion, rotation
-from ._gravity import GalaxyMass, GravityPlan
+from ._gravity import GalaxyGravity, GalaxyMass, GravityPlan
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
@@ -31,6 +32,17 @@ __all__ = [
 # _density_slope): their error, about 1e-6, and that of masses of
 # quadratures (to about 1e-10) amplified by 1 / step^2
 _SLOPE_STEP = 1e-3
+
+# The functions of radii by family (see GalaxyFunctions.family): the units
+# of their values and of their radii, and whether the family has one for
+# each mass component or disk ('vcirc_halo')
+_RADIAL_FAMILIES = dict(
+    vcirc=(u.km / u.s, u.kpc, True),
+    vnewton=(u.km / u.s, u.kpc, False),
+    mass=(u.Msun, u.kpc, True),
+    slope=(u.dimensionless_unscaled, u.kpc, True),
+    rotation=(u.km / u.s, u.arcsec, True),
+    dispersion=(u.km / u.s, u.arcsec, True))
 
 
 class GalaxyFunctions:
@@ -133,20 +145,83 @@ class GalaxyFunctions:
             names += [f'rotation{suffix}', f'dispersion{suffix}']
         self._names = tuple(names)
 
+    @staticmethod
+    def family(name: str) -> str | None:
+        """
+        Return the family of the function of radii of a name (see the
+        class): the name without the name of its mass component or disk
+        (e.g. 'vcirc' of 'vcirc_halo'), or None if no function of radii
+        has the name (e.g. 'kpc_per_arcsec').
+        """
+        family, _, own = name.partition('_')
+        if family in _RADIAL_FAMILIES \
+                and (not own or _RADIAL_FAMILIES[family][2]):
+            return family
+        return None
+
+    @staticmethod
+    def radial_units(
+            name: str
+    ) -> tuple[u.UnitBase, u.UnitBase] | None:
+        """
+        Return the units of the values and of the radii of the function of
+        radii of a name (see family; e.g. km/s and kpc of vcirc), or None
+        if no function of radii has the name.
+        """
+        family = GalaxyFunctions.family(name)
+        return None if family is None else _RADIAL_FAMILIES[family][:2]
+
     def names(self) -> tuple[str, ...]:
         """Return the names of its functions (see the class)."""
         return self._names
 
-    def bind(self, params: ParamValues) -> dict[str, Any]:
+    def radius_range(self, name: str) -> tuple[float, float] | None:
+        """
+        Return the range of the radii (arcsec) of its function of a disk
+        of the name (e.g. rotation_gas): from the first radial node of the
+        disk to its last; None for its other functions, of any radius.
+        """
+        for index, suffix in self._suffixes.items():
+            if name in (f'rotation{suffix}', f'dispersion{suffix}'):
+                rnodes = self._component_set.components()[
+                    index].density_disk().rnodes()
+                return float(rnodes[0]), float(rnodes[-1])
+        return None
+
+    def bind(
+            self,
+            params: ParamValues,
+            gravity: GalaxyGravity | None = None
+    ) -> dict[str, Any]:
         """
         Return its functions (see the class) at the values of the
-        parameters of the galaxy (see Galaxy.pdescs), by name. Its
-        gravity is evaluated once, when a function of a disk that takes
-        it first needs it (see GravityPlan.evaluate).
+        parameters of the galaxy (see Galaxy.pdescs), by name.
+
+        Parameters
+        ----------
+        params : ParamValues
+            The values of the parameters of the galaxy.
+        gravity : GalaxyGravity, optional
+            The gravity of the galaxy at the values, if evaluated (e.g. by
+            its observation group): the functions take its mass and what
+            it gives the components. By default, the mass is made here,
+            and the gravity is evaluated once, when a function of a disk
+            that takes it first needs it (see GravityPlan.evaluate).
+
+        Returns
+        -------
+        dict
+            The functions, by name.
         """
-        mass = self._gravity.mass(params)
-        given = functools.cache(functools.partial(
-            self._gravity.evaluate, params))
+        if gravity is None:
+            mass = self._gravity.mass(params)
+            given = functools.cache(functools.partial(
+                self._gravity.evaluate, params, None, mass))
+        else:
+            mass = gravity.mass
+
+            def given() -> dict[int, ParamValues]:
+                return gravity.given
         functions: dict[str, Any] = {}
         if mass is not None:
             functions['vcirc'] = functools.partial(

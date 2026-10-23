@@ -8,6 +8,7 @@ from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
+from gbkfit.model.components._gravity import GalaxyGravity
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, unitutils
@@ -420,7 +421,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
     def mock(
             self,
             params: ParamValues,
-            gravity: Sequence[dict[int, ParamValues]],
+            gravity: Sequence[GalaxyGravity],
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int

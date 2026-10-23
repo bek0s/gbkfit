@@ -3,6 +3,7 @@ from .data import *
 from .pixel_brightness import *
 from .pixel_moments import *
 from .pixel_spectra import *
+from .profile import *
 from .region_moments import *
 from .region_spectra import *
 from .slit_spectra import *
@@ -16,6 +17,7 @@ def _register_datasets() -> None:
         DatasetPixelBrightness,
         DatasetPixelMoments,
         DatasetPixelSpectra,
+        DatasetProfile,
         DatasetRegionMoments,
         DatasetRegionSpectra,
         DatasetSlitSpectra,

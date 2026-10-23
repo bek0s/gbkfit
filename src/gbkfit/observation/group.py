@@ -9,6 +9,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import Extras, Galaxy
 from gbkfit.model.components._functions import GalaxyFunctions
+from gbkfit.model.components._gravity import GalaxyGravity
 from gbkfit.model.components._units import DataUnit
 from gbkfit.model.mass.units import G
 from gbkfit.params import (
@@ -430,19 +431,21 @@ class ObservationGroup:
             self,
             params: ParamValues,
             out_extra: Extras | None
-    ) -> list[dict[int, ParamValues]]:
+    ) -> list[GalaxyGravity]:
         """
-        Evaluate what the gravity of each galaxy gives its components (see
-        GravityPlan.evaluate); its extra outputs go to out_extra, if
-        given, with the label of the galaxy as the id 'galaxy'.
+        Evaluate the gravity of each galaxy: its mass, and what it gives
+        its components (see GravityPlan.evaluate); its extra outputs go to
+        out_extra, if given, with the label of the galaxy as the id
+        'galaxy'.
         """
         gravity = []
         for plan, mapping, label in zip(
                 self._gravity_plans, self._mappings, self._galaxy_labels):
-            gravity.append(plan.evaluate(
-                {name: params[full] for name, full in mapping.items()},
-                None if out_extra is None
-                else out_extra.scoped(galaxy=label)))
+            own = {name: params[full] for name, full in mapping.items()}
+            mass = plan.mass(own)
+            gravity.append(GalaxyGravity(plan.evaluate(
+                own, None if out_extra is None
+                else out_extra.scoped(galaxy=label), mass), mass))
         return gravity
 
     def model_d(
