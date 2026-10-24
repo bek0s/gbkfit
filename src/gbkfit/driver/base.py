@@ -27,7 +27,9 @@ __all__ = [
     'DriverFFT',
     'DriverNUFFT',
     'FFTConvolution',
+    'MAX_ARRAY_SIZE',
     'NUFFT',
+    'check_array_size',
     'driver_by_name',
     'driver_parser'
 ]
@@ -40,11 +42,34 @@ DeviceArray: TypeAlias = Union[np.ndarray, 'cupy.ndarray']
 # The shape of an array
 Shape: TypeAlias = int | tuple[int, ...]
 
+# The most values of an array of the native kernels, which index them by
+# 32-bit integers
+MAX_ARRAY_SIZE = 2 ** 31 - 1
+
 # The floating types of the native modules, and the suffixes of their
 # classes (e.g. GModelf32)
 _NATIVE_CLASS_SUFFIXES = {
     np.dtype(np.float32): 'f32',
     np.dtype(np.float64): 'f64'}
+
+
+def check_array_size(shape: Shape) -> None:
+    """
+    Check that the native kernels can index an array of the given shape:
+    that it has at most MAX_ARRAY_SIZE values.
+
+    Raises
+    ------
+    ConfigError
+        If it has more (e.g. a model cube oversampled too much).
+    """
+    size = int(np.prod(shape, dtype=np.int64))
+    if size > MAX_ARRAY_SIZE:
+        raise parseutils.ConfigError(
+            f"an array of the model of shape {tuple(np.atleast_1d(shape))} "
+            f"has {size:.4g} values, more than the {MAX_ARRAY_SIZE:.4g} that "
+            f"the native kernels index (by 32-bit integers): lower the "
+            f"oversampling (the option scale) or cut the data")
 
 
 class FFTConvolution(abc.ABC):

@@ -6,7 +6,7 @@ import scipy.ndimage
 
 import gbkfit.driver.native._host as native_module
 from gbkfit.driver.base import (
-    DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape)
+    DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape, check_array_size)
 
 
 __all__ = [
@@ -29,6 +29,7 @@ class DriverHost(Driver):
             shape: Shape,
             dtype: npt.DTypeLike
     ) -> tuple[np.ndarray, DeviceArray]:
+        check_array_size(shape)
         data = np.empty(shape, dtype)
         return data, data
 
@@ -36,6 +37,7 @@ class DriverHost(Driver):
         return np.empty(shape, dtype)
 
     def mem_alloc_d(self, shape: Shape, dtype: npt.DTypeLike) -> DeviceArray:
+        check_array_size(shape)
         return np.empty(shape, dtype)
 
     def mem_copy_h2d(

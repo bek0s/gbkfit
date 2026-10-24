@@ -9,7 +9,7 @@ import numpy.typing as npt
 
 import gbkfit.driver.native._cuda as native_module
 from gbkfit.driver.base import (
-    DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape)
+    DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape, check_array_size)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -62,6 +62,7 @@ class DriverCuda(Driver):
             shape: Shape,
             dtype: npt.DTypeLike
     ) -> tuple[np.ndarray, DeviceArray]:
+        check_array_size(shape)
         with self._device:
             return cpx.empty_pinned(shape, dtype), cp.empty(shape, dtype)
 
@@ -70,6 +71,7 @@ class DriverCuda(Driver):
             return cpx.empty_pinned(shape, dtype)
 
     def mem_alloc_d(self, shape: Shape, dtype: npt.DTypeLike) -> DeviceArray:
+        check_array_size(shape)
         with self._device:
             return cp.empty(shape, dtype)
 

@@ -27,14 +27,12 @@ rad_to_deg(T rad)
     return rad * RAD_TO_DEG<T>;
 }
 
+// The angle (radians) in [-pi, pi]: off by the nearest whole number of
+// turns (no loop: an angle that is not finite gives NaN)
 template<typename T> constexpr T
 wrap_angle(T angle)
 {
-    while(angle < -PI<T>)
-        angle += 2 * PI<T>;
-    while(angle > +PI<T>)
-        angle -= 2 * PI<T>;
-    return angle;
+    return angle - 2 * PI<T> * std::rint(angle / (2 * PI<T>));
 }
 
 template <typename T> constexpr int

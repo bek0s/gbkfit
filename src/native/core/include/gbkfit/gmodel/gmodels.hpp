@@ -626,6 +626,14 @@ rnode_radius(
 template<typename T> constexpr bool
 disk_info(int& index, T radius, int nnodes, const T* nodes)
 {
+    // A radius that is not a number (e.g. of parameters out of their
+    // range) is in the first ring: its light is NaN, so that it is seen
+    if (std::isnan(radius))
+    {
+        index = 1;
+        return true;
+    }
+
     // Ignore anything smaller than the first node
     if (radius < nodes[0])
         return false;
@@ -652,41 +660,32 @@ ring_info(
 {
     T radius_min = rnode_radius(
             x, y, loose, tilted, 0, xpos, ypos, sincos);
-
-    // Ignore anything smaller than the first node
-    if (radius_min < nodes[0])
-        return false;
-
     T radius_max = rnode_radius(
             x, y, loose, tilted, nnodes-1, xpos, ypos, sincos);
 
-    // Ignore anything larger than the last node
-    if (radius_max >= nodes[nnodes-1])
+    // A radius that is not a number (e.g. of parameters out of their
+    // range) is in the first ring: its light is NaN, so that it is seen
+    if (std::isnan(radius_min) || std::isnan(radius_max))
+    {
+        index = 1;
+        radius = radius_min + radius_max;
+        return true;
+    }
+
+    // Ignore anything smaller than the first node, or larger than the last
+    if (radius_min < nodes[0] || radius_max >= nodes[nnodes-1])
         return false;
-#if 1
-    // Linear search
-    for(index = 1; index < nnodes; ++index)
+
+    // Linear search for the first node beyond the radius: the outer node
+    // of its ring (the last, if no other is: the radius is below it,
+    // checked above)
+    for(index = 1; index < nnodes - 1; ++index)
     {
         T radius_cur = rnode_radius(
                 x, y, loose, tilted, index, xpos, ypos, sincos);
         if (radius_cur < nodes[index])
             break;
     }
-#else
-    // Binary search
-    int ilo = 1;
-    int ihi = nnodes - 1;
-    while(ihi > ilo + 1)
-    {
-        index = (ihi + ilo)/2;
-        T radius_cur = rnode_radius(
-                x, y, loose, tilted, index, xpos, ypos, sincos);
-        if(nodes[index] > radius_cur)
-            ihi = index;
-        else
-            ilo = index;
-    }
-#endif
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
             x, y, loose, tilted, index-1, xpos, ypos, sincos);
@@ -706,41 +705,32 @@ ring_info(
 {
     T radius_min = rnode_radius(
             x, y, z, loose, tilted, 0, xpos, ypos, sincos);
-
-    // Ignore anything smaller than the first node
-    if (radius_min < nodes[0])
-        return false;
-
     T radius_max = rnode_radius(
             x, y, z, loose, tilted, nnodes-1, xpos, ypos, sincos);
 
-    // Ignore anything larger than the last node
-    if (radius_max >= nodes[nnodes-1])
+    // A radius that is not a number (e.g. of parameters out of their
+    // range) is in the first ring: its light is NaN, so that it is seen
+    if (std::isnan(radius_min) || std::isnan(radius_max))
+    {
+        index = 1;
+        radius = radius_min + radius_max;
+        return true;
+    }
+
+    // Ignore anything smaller than the first node, or larger than the last
+    if (radius_min < nodes[0] || radius_max >= nodes[nnodes-1])
         return false;
-#if 1
-    // Linear search
-    for(index = 1; index < nnodes; ++index)
+
+    // Linear search for the first node beyond the radius: the outer node
+    // of its ring (the last, if no other is: the radius is below it,
+    // checked above)
+    for(index = 1; index < nnodes - 1; ++index)
     {
         T radius_cur = rnode_radius(
                 x, y, z, loose, tilted, index, xpos, ypos, sincos);
         if (radius_cur < nodes[index])
             break;
     }
-#else
-    // Binary search
-    int ilo = 1;
-    int ihi = nnodes - 1;
-    while(ihi > ilo + 1)
-    {
-        index = (ihi + ilo)/2;
-        T radius_cur = rnode_radius(
-                x, y, z, loose, tilted, index, xpos, ypos, sincos);
-        if(nodes[index] > radius_cur)
-            ihi = index;
-        else
-            ilo = index;
-    }
-#endif
     // The radius is calculated using the velfi strategy
     T d1 = nodes[index-1] - rnode_radius(
             x, y, z, loose, tilted, index-1, xpos, ypos, sincos);

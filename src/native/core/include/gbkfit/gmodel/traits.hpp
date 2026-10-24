@@ -1807,6 +1807,10 @@ h_factor_table(int rnidx, const T* rnodes, int nrnodes, T r, T z,
 {
     const T zmax = consts[0];
     const int n = static_cast<int>(consts[1]);
+    // (a height that is not a number gives NaN, so that it is seen: its
+    // conversion to int would be undefined)
+    if (std::isnan(z))
+        return z;
     const T u = std::min(std::abs(z) / zmax, T{1}) * (n - 1);
     const int k = std::min(static_cast<int>(u), n - 2);
     const T t = u - k;

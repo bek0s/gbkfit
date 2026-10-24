@@ -220,3 +220,35 @@ def test_loose_disk_centres_its_rings(driver, evaluate_cases):
     inside = radius < 11
     np.testing.assert_allclose(
         row[inside], np.exp(-radius[inside] / 4), rtol=1e-3)
+
+
+@pytest.mark.parametrize('loose', [False, True])
+def test_a_centre_that_is_not_a_number_gives_nan(driver, loose):
+    # A centre that is not a number (e.g. of an expression out of its
+    # range, if the parameters let one through) puts every point of the
+    # disk in its first ring, of NaN light: it is seen (and no ring
+    # beyond the last node is read), flat or loose and tilted
+    from modelutils import observation_group
+    case = spectral_cube_case(driver, loose=loose, tilted=loose)
+    nodes = 12 if loose else 1
+    params = dict(
+        vsys=np.zeros(nodes), xpos=np.full(nodes, np.nan),
+        ypos=np.zeros(nodes), posa=np.zeros(nodes), incl=np.full(nodes, 45),
+        pt_a=1, pt_s=4, vpt_vt=100, dpt_a=10)
+    if not loose:
+        params = {k: v[0] if isinstance(v, np.ndarray) else v
+                  for k, v in params.items()}
+    group = observation_group([case])
+    assert np.all(np.isnan(group.model_h(params)[0]['spectra']['d']))
+
+
+def test_an_azimuth_that_is_not_finite_selects_nothing(driver):
+    # The selection by azimuth of a centre at an infinite angle selects no
+    # point (its angles are wrapped without a loop: it ends)
+    from modelutils import observation_group
+    case = spectral_cube_case(driver, sptraits=dict(type='azrange'))
+    params = dict(
+        vsys=0, xpos=0, ypos=0, posa=0, incl=45, pt_a=1, pt_s=4,
+        vpt_vt=100, dpt_a=10, spt_p=np.inf, spt_s=90)
+    group = observation_group([case])
+    assert not np.any(group.model_h(params)[0]['spectra']['d'])
