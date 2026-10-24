@@ -105,3 +105,30 @@ def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
     with pytest.raises(ConfigError, match=r"fft_dtype \(float32\) is less"):
         ObservationSky(
             observable, Flat(), dtype='float64', fft_dtype='float32')
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(weights=dict(moment2=2)), r"does not have: \['moment2'\]"),
+    (dict(upper_limits=dict(momnet0=dict(limit=1, error=0.1))),
+     r"does not have: \['momnet0'\]")])
+def test_likelihoods_name_items_of_their_observation(options, message):
+    # A typo in the name of an item of the options of a likelihood would
+    # leave the option out without a word
+    data = DatasetPixelMoments(
+        {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
+    with pytest.raises(ConfigError, match=message):
+        ObservationSky(
+            PixelMoments.from_data(data, spec_step=5), Flat(), data=data,
+            likelihood=LikelihoodGaussian(missing_residual=3, **options))
+
+
+def test_amplitudes_do_not_go_with_upper_limits_on_their_spectra():
+    from gbkfit.dataset import DatasetPixelSpectra
+    from gbkfit.observation import PixelSpectra
+    data = DatasetPixelSpectra(Data(np.ones((10, 4, 4))))
+    with pytest.raises(ConfigError, match="do not go with upper limits"):
+        ObservationSky(
+            PixelSpectra.from_data(data), Flat(), data=data,
+            likelihood=LikelihoodGaussian(
+                amplitudes='per_spectrum', amplitude_sigma=0.5,
+                upper_limits=dict(spectra=dict(limit=0.1, error=0.05))))

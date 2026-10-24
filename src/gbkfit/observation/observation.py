@@ -75,9 +75,10 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         If a name is invalid, there are no galaxies or they repeat, there
         is a likelihood without data, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
-        likelihood fits a noise but it has no name, or fits the noise of
-        items that it does not have, or both the scale and the jitter of
-        the noise of an item whose errors are all equal (see
+        likelihood fits a noise but it has no name, its likelihood names
+        items that it does not have or has amplitudes of spectra with
+        upper limits on them (see _check_items), fits both the scale and
+        the jitter of the noise of an item whose errors are all equal (see
         _check_noise), or the noise of an item is correlated where its
         data or its likelihood cannot take it (see _check_correlations).
     """
@@ -113,6 +114,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         if data is not None:
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
+            _check_items(likelihood, keys, spectra_item)
             _check_noise(likelihood, keys, data)
             _check_correlations(likelihood, keys, spectra_item, data)
             if name is None and likelihood.pdescs():
@@ -368,25 +370,43 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         return {}
 
 
+def _check_items(
+        likelihood: Likelihood,
+        keys: Sequence[str],
+        spectra_item: str | None
+) -> None:
+    """
+    Raise ConfigError if the options of a likelihood name data items that
+    an observation of the given items does not have (e.g. a typo in the
+    names of the weights, the upper limits or the fitted noise; see
+    LikelihoodGaussian), or it has amplitudes of the spectra and upper
+    limits on them, which the amplitudes are solved without.
+    """
+    if unknown := sorted(likelihood.named_items() - set(keys)):
+        raise ConfigError(
+            f"the options of the likelihood name data items that the "
+            f"observation does not have: {unknown}; its items are "
+            f"{list(keys)}")
+    if likelihood.amplitudes() is not None and spectra_item is not None \
+            and likelihood.upper_limit(spectra_item) is not None:
+        raise ConfigError(
+            f"the amplitudes of the spectra '{spectra_item}' do not go with "
+            f"upper limits on them: they are solved without the terms of "
+            f"the limits")
+
+
 def _check_noise(
         likelihood: Likelihood,
         keys: Sequence[str],
         data: Dataset
 ) -> None:
     """
-    Raise ConfigError unless the data items whose noise a likelihood fits
-    (see LikelihoodGaussian) are among the given items of an observation,
-    and those whose scale and jitter are both fitted have errors that
+    Raise ConfigError unless the data items whose scale and jitter of the
+    noise a likelihood fits (see LikelihoodGaussian) have errors that
     differ between their values (with equal errors, or none, the two are
     one).
     """
-    fitted = likelihood.fitted_noise()
-    if unknown := sorted(fitted.keys() - set(keys)):
-        raise ConfigError(
-            f"the likelihood fits the noise of data items that the "
-            f"observation does not have: {unknown}; its items are "
-            f"{list(keys)}")
-    for key, noise in fitted.items():
+    for key, noise in likelihood.fitted_noise().items():
         if not (noise.scale and noise.jitter):
             continue
         error = data[key].error()

@@ -116,6 +116,14 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """
         return 1.0
 
+    def named_items(self) -> frozenset[str]:
+        """
+        Return the names of the data items that its options name (e.g.
+        their weights, upper limits or fitted noise; see
+        LikelihoodGaussian); none here.
+        """
+        return frozenset()
+
     @abc.abstractmethod
     def missing_residual(self) -> float | None:
         """
@@ -448,6 +456,11 @@ class LikelihoodGaussian(Likelihood):
         if isinstance(self._weights, Real):
             return self._weights
         return self._weights.get(key, 1.0)
+
+    def named_items(self) -> frozenset[str]:
+        weights = () if isinstance(self._weights, Real) else self._weights
+        return frozenset(
+            [*weights, *(self._upper_limits or ()), *self._noise])
 
     def missing_residual(self) -> float | None:
         return self._missing_residual
