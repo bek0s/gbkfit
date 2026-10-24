@@ -50,6 +50,11 @@ class FitRun:
         The message of the fitter.
     samples : np.ndarray, optional
         The free values of the posterior samples (samplers), one per row.
+    unused : np.ndarray, optional
+        Which free elements each sample does not use (e.g. the rows of a
+        table that DNest4 leaves out; samples by free elements, bool):
+        NaN in the posterior. The samples hold the values with which the
+        model was evaluated there.
     weights : np.ndarray, optional
         The weight of each sample (nested samplers).
     evidence : Evidence, optional
@@ -63,6 +68,7 @@ class FitRun:
     success: bool
     message: str
     samples: np.ndarray | None = None
+    unused: np.ndarray | None = None
     weights: np.ndarray | None = None
     evidence: Evidence | None = None
     diagnostics: dict[str, Any] = dataclasses.field(default_factory=dict)
@@ -271,7 +277,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         posterior = None
         if run.samples is not None:
             posterior = _posterior(
-                problem, run.samples, run.weights, tuple(solutions[0].derived))
+                problem, run.samples, run.weights,
+                tuple(solutions[0].derived), run.unused)
         problem.finish()
         return FitResult(
             fitter=self.dump(),
@@ -436,26 +443,32 @@ def _posterior(
         problem: FitProblem,
         samples: np.ndarray,
         weights: np.ndarray | None,
-        derived: Sequence[str]
+        derived: Sequence[str],
+        unused: np.ndarray | None = None
 ) -> Posterior:
     """
     Return the posterior of all elements and of the given elements of the
-    derived values (see sample_values), from samples of the free. The
+    derived values (see sample_values), from samples of the free, with
+    NaN in the free elements a sample does not use (see FitRun). The
     samples of no weight and those where the parameters cannot be
     evaluated (which have no likelihood) are left out.
     """
     params = problem.params()
     names = tuple(params.kinds()) + tuple(derived)
+    columns = np.array([names.index(name) for name in problem.names()])
     rows = []
     kept = []
     for i, x in enumerate(samples):
         if weights is not None and weights[i] == 0:
             continue
         try:
-            rows.append(sample_values(params, x, derived))
-            kept.append(i)
+            row = sample_values(params, x, derived)
         except ParamEvaluationError:
-            pass
+            continue
+        if unused is not None:
+            row[columns[unused[i]]] = np.nan
+        rows.append(row)
+        kept.append(i)
     return Posterior(
         names=names, samples=np.array(rows).reshape(-1, len(names)),
         weights=None if weights is None else weights[kept],

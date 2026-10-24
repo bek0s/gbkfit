@@ -223,7 +223,7 @@ class FitterDNest4(Fitter):
         if not nsaves:
             raise FitStopped("dnest4 was stopped before its first save")
         post = posterior(output, rng)
-        samples, counts = _samples(problem, layout, output)
+        samples, unused, counts = _samples(problem, layout, output)
         best = problem.best()
         if best is None:
             raise RuntimeError("dnest4 found no point with a finite chi2")
@@ -237,6 +237,7 @@ class FitterDNest4(Fitter):
             success=not stopped,
             message=message,
             samples=samples,
+            unused=unused,
             weights=post.weights,
             evidence=evidence,
             diagnostics=dict(
@@ -325,17 +326,19 @@ def _samples(
         problem: FitProblem,
         layout: TableLayout,
         output: DNest4Output
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Return the free values of the saved particles (one per row, NaN in
-    the rows of a table a particle does not use), and the number of rows
-    of each table each uses (particles, tables).
+    Return the free values of the saved particles (one per row, those of
+    an unused row of a table in the rows a particle does not use, as its
+    likelihood was evaluated), which free elements each does not use, and
+    the number of rows of each table each uses (particles, tables).
     """
     coordinates, counts = _coordinates(layout, output.samples)
     samples = problem.prior_transform(coordinates)
-    for sample, count in zip(samples, counts):
-        sample[layout.unused(count)] = np.nan
-    return samples, counts
+    unused = np.array([layout.unused(count) for count in counts])
+    samples[unused] = np.broadcast_to(
+        layout.unused_values(), samples.shape)[unused]
+    return samples, unused, counts
 
 
 def _rows(

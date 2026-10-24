@@ -193,4 +193,10 @@ def test_a_stopped_fit_keeps_its_saves():
                     for i in range(3)]]
     used = ~np.isnan(a)
     assert np.all(used[:, :-1] >= used[:, 1:])
+    # It has every particle, whatever the number of rows it uses: the
+    # weights of those of k rows are the probability of k rows
+    weights = result.posterior.weights
+    nrows = np.sum(used, axis=1)
+    assert [np.sum(weights[nrows == k]) / np.sum(weights)
+            for k in range(4)] == pytest.approx(rows)
     assert math.isfinite(result.evidence.log_z)

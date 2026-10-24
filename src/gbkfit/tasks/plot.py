@@ -367,8 +367,15 @@ def _corner(
         truths: list[float],
         title: str
 ) -> Figure:
-    """Return the corner plot of samples, with the solution marked."""
+    """
+    Return the corner plot of samples, with the solution marked: of the
+    samples that have every element plotted (not NaN, e.g. a row of a
+    table that a sample does not use).
+    """
     import corner
+    kept = ~np.any(np.isnan(samples), axis=1)
+    samples = samples[kept]
+    weights = None if weights is None else weights[kept]
     n = len(names)
     figure = Figure(figsize=(2.4 * n + 1, 2.4 * n + 1))
     figure.subplots(n, n)

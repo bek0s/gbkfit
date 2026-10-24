@@ -34,7 +34,9 @@ def weighted_quantiles(
         weights: np.ndarray | None = None
 ) -> np.ndarray:
     """
-    Return quantiles of weighted samples, along the first axis.
+    Return quantiles of weighted samples, along the first axis, of the
+    values that are not NaN in each column (e.g. a row of a table that a
+    sample does not use).
 
     Parameters
     ----------
@@ -48,21 +50,25 @@ def weighted_quantiles(
     Returns
     -------
     np.ndarray
-        The quantiles of each column: shape (len(q), ncolumns); nan if
-        there are no samples.
+        The quantiles of each column: shape (len(q), ncolumns); nan for a
+        column without values.
     """
     q = np.atleast_1d(np.asarray(q, dtype=float))
     samples = np.asarray(samples, dtype=float).reshape(len(samples), -1)
-    if len(samples) == 0:
-        return np.full((len(q), samples.shape[1]), np.nan)
     if weights is None:
-        return np.quantile(samples, q, axis=0)
-    result = np.empty((len(q), samples.shape[1]))
+        weights = np.ones(len(samples))
+    result = np.full((len(q), samples.shape[1]), np.nan)
     for j in range(samples.shape[1]):
-        order = np.argsort(samples[:, j])
-        cdf = np.cumsum(weights[order])
+        kept = ~np.isnan(samples[:, j])
+        if not np.any(kept):
+            continue
+        if np.all(weights[kept] == weights[kept][0]):
+            result[:, j] = np.quantile(samples[kept, j], q)
+            continue
+        order = np.argsort(samples[kept, j])
+        cdf = np.cumsum(weights[kept][order])
         cdf /= cdf[-1]
-        result[:, j] = np.interp(q, cdf, samples[order, j])
+        result[:, j] = np.interp(q, cdf, samples[kept, j][order])
     return result
 
 
