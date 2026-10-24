@@ -1,0 +1,69 @@
+# equilibrium_heights_mond: A thick gas disk held up by the Jeans vertical equilibrium, rotating at each height in the gravity of its mass (a stellar bulge, and a disk that follows the gas) in MOND (gravity_a0); a small cube.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    name: gas
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 6}
+    kinematics:
+      vptraits: {type: mass, pressure_support: jeans}
+      dptraits: {type: uniform}
+      equilibrium: jeans
+      vhtraits: {type: mass, zmax: 6}
+    emission: {type: lines}
+  mass:
+  - type: spheroid
+    name: bulge
+    profile: {type: sersic}
+  - type: disk
+    name: gas
+    surface: {type: component, component: gas}
+    vertical: {type: component, component: gas}
+  distance: {type: direct, cosmology: Planck18}
+  gravity: {type: mond, interpolation: simple}
+observations:
+- type: sky
+  data:
+    step: [1, 1, 15]
+    rpix: [9.5, 9.5, 14.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.0002
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: null}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    gas_xpos: 0.3
+    gas_ypos: -0.4
+    gas_posa: {value: 43, min: 0, max: 90}
+    gas_incl: {value: 50, min: 10, max: 80}
+    gas_vsys: {value: 12, min: -50, max: 50}
+    gas_pt_a: 1
+    gas_pt_s: 3
+    gas_ht_s: {value: 0.8, min: 0.1, max: 3}
+    gas_dpt_a: 10
+    distance: 80
+    mass_bulge_log_m: {value: 10.2, min: 9, max: 12}
+    mass_bulge_re: 1.0
+    mass_bulge_n: 1.5
+    mass_gas_upsilon: 300000000.0
+    gravity_a0: {value: 1.6, min: 0, max: 5}

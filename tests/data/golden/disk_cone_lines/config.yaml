@@ -1,0 +1,85 @@
+# disk_cone_lines: A disk and an outflow cone, each emitting Halpha and [NII] 6583 (a ratio each), in a cube of a spectral axis of velocities of Halpha, with a free amplitude for each spectrum.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission:
+      type: lines
+      lines:
+      - {name: ha, rest: 6562.8 Angstrom}
+      - {name: nii, rest: 6583.45 Angstrom}
+    name: disk
+  - type: smcone
+    name: cone
+    rnodes: [0.5, 2, 4]
+    density:
+      ptraits: {type: uniform}
+      htraits: {type: gauss, zmax: 1}
+    kinematics:
+      vptraits: {type: uniform, direction: out}
+      dptraits: {type: uniform}
+    emission:
+      type: lines
+      lines:
+      - {name: ha, rest: 6562.8 Angstrom}
+      - {name: nii, rest: 6583.45 Angstrom}
+observations:
+- type: sky
+  data:
+    step: [0.6, 0.6, 50]
+    rpix: [11.5, 11.5, 19.5]
+    rval: [0, 0, 450]
+    rota: 0
+    rest: 6.562800000000002e-07 m
+    medium: vacuum
+    convention: optical
+    data: observation0_spectra_d.fits
+    error: 0.00015
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, amplitudes: per_spectrum,
+    amplitude_sigma: 0.5, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: null}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    disk_xpos: 0.21
+    disk_ypos: -0.33
+    disk_posa: {value: 43, min: 0, max: 90}
+    disk_incl: {value: 50, min: 10, max: 80}
+    disk_vsys: {value: 6, min: -50, max: 50}
+    disk_pt_a: 1
+    disk_pt_s: 2.7
+    disk_vpt_rt: 1.7
+    disk_vpt_vt: {value: 140, min: 50, max: 300}
+    disk_dpt_a: {value: 30, min: 5, max: 80}
+    disk_nii_ratio: {value: 0.35, min: 0, max: 2}
+    cone_xpos: 0.27
+    cone_ypos: -0.38
+    cone_posa: 40
+    cone_incl: 55
+    cone_vsys: 10
+    cone_wall: {value: 35, min: 5, max: 60}
+    cone_pt_a: 0.3
+    cone_ht_s: 0.3
+    cone_vpt_vo: {value: 220, min: 0, max: 500}
+    cone_dpt_a: 60
+    cone_nii_ratio: {value: 0.7, min: 0, max: 2}

@@ -1,0 +1,93 @@
+# params_features: Two gas disks (cold and warm) of one shared warped geometry (galaxy option geometries) and a nucleus, in a cube: the position angles of the warp given as offsets (mode), ties, extra parameters of the section pdescs (the flux of the nucleus, exp(mu + sigma z)), derived values, and priors on several parameters (gauss on an expression, smooth over the warp).
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- geometries:
+  - name: disk
+    tilted: true
+    rnodes: [0, 1.5, 3, 5, 7, 9.5, 12]
+  components:
+  - type: smdisk
+    name: cold
+    geometry: disk
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+  - type: smdisk
+    name: warm
+    geometry: disk
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+  - type: point
+    name: nucleus
+    emission: {type: lines}
+pdescs:
+  lnf_mu: {type: scalar}
+  lnf_sigma: {type: scalar}
+  lnf_z: {type: scalar}
+observations:
+- type: sky
+  data:
+    step: [1, 1, 15]
+    rpix: [11.5, 11.5, 14.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.0003
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    disk_xpos: 0.2
+    disk_ypos: -0.3
+    disk_vsys: {value: 12, min: -50, max: 50}
+    disk_posa:
+    - {value: 42, min: 0, max: 90}
+    - {value: 1, min: -30, max: 30}
+    - {value: 2, min: -30, max: 30}
+    - {value: 4, min: -30, max: 30}
+    - {value: 8, min: -30, max: 30}
+    - {value: 12, min: -30, max: 30}
+    - {value: 16, min: -30, max: 30}
+    disk_incl: {value: 50, min: 10, max: 80}
+    cold_pt_a: 1
+    cold_pt_s: 3
+    cold_vpt_rt: 2
+    cold_vpt_vt: {value: 140, min: 50, max: 300}
+    cold_dpt_a: 15
+    warm_pt_a: 0.5
+    warm_pt_s: 4
+    warm_vpt_rt: cold_vpt_rt
+    warm_vpt_vt: {value: 110, min: 50, max: 300}
+    warm_dpt_a: cold_dpt_a * 2.5
+    nucleus_xpos: disk_xpos
+    nucleus_ypos: disk_ypos
+    nucleus_vsys: disk_vsys
+    nucleus_flux: np.exp(lnf_mu + lnf_sigma * lnf_z)
+    nucleus_disp: 60
+    lnf_mu: 0.5
+    lnf_sigma: 0.3
+    lnf_z: {value: 0.0, min: -5, max: 5}
+  modes:
+    disk_posa: {type: offsets, origin: 0}
+  derived: {warp: 'disk_posa[-1] - disk_posa[0]', v_ratio: rotation_warm(8) / rotation_cold(8)}
+  priors:
+  - {type: gauss, expr: warm_vpt_vt / cold_vpt_vt, mean: 0.8, std: 0.05}
+  - {type: smooth, expr: disk_posa, order: 2, std: 1, positions: disk_rnodes}

@@ -1,0 +1,41 @@
+# points_particles_band: An image of a point (a nucleus) and of the particles of a table (the stars of a disk), which emit in a band.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: point
+    name: nucleus
+    emission: {type: band}
+  - type: particles
+    name: stars
+    file: particles.npz
+    emission: {type: band}
+observations:
+- type: sky
+  data:
+    step: [0.5, 0.5]
+    rpix: [15.5, 15.5]
+    rval: [0, 0]
+    rota: 0
+    data: observation0_brightness_d.fits
+    error: 0.02
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: null
+  observable: {type: pixel_brightness, mask_cutoff: null, mask_apply: false, median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    nucleus_xpos: 0.21
+    nucleus_ypos: -0.38
+    nucleus_flux: {value: 1.6, min: 0, max: 10}
+    stars_xpos: 0.27
+    stars_ypos: -0.38
+    stars_posa: {value: 45, min: 0, max: 90}
+    stars_incl: {value: 50, min: 10, max: 80}

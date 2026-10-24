@@ -1,0 +1,78 @@
+# fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04; screened: f(R) does not take the density of a contracted halo); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    name: gas
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: mass}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+  mass:
+  - type: disk
+    name: stars
+    surface: {type: exponential}
+    vertical: {type: thin}
+  - type: spheroid
+    name: halo
+    profile: {type: nfw}
+    baryons: [stars]
+    response: {type: gnedin04}
+  distance: {type: direct, cosmology: Planck18}
+  gravity:
+    type: hu_sawicki
+    screened: [halo]
+observations:
+- type: profile
+  name: rc
+  data:
+    file: rc_profile.ecsv
+    radius: {column: radius}
+    vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
+    rotation_gas: {column: rotation_gas, mask: rotation_gas_mask, error: rotation_gas_error}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+- type: sky
+  name: maps
+  data:
+    step: [1, 1]
+    rpix: [7.5, 7.5]
+    rval: [0, 0]
+    rota: 0
+    moment0: {data: maps_moment0_d.fits, error: maps_moment0_e.fits}
+    moment1: {data: maps_moment1_d.fits, mask: maps_moment1_m.fits, error: maps_moment1_e.fits}
+    moment2: {data: maps_moment2_d.fits, mask: maps_moment2_m.fits, error: maps_moment2_e.fits}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_moments, mask_cutoff: 0.001, spec_size: 60, spec_step: 10,
+    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: null, method: moments,
+    median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    gas_xpos: 0.3
+    gas_ypos: -0.4
+    gas_posa: {value: 43, min: 0, max: 90}
+    gas_incl: {value: 50, min: 10, max: 80}
+    gas_vsys: {value: 12, min: -50, max: 50}
+    gas_pt_a: 1
+    gas_pt_s: 3
+    gas_dpt_a: 20
+    distance: 80
+    mass_stars_log_m: {value: 10.4, min: 9, max: 12}
+    mass_stars_rd: 1.2
+    mass_halo_log_m: {value: 11.7, min: 10, max: 13}
+    mass_halo_c: 10
+    gravity_log_fr0: {value: -6.5, min: -8, max: -4}

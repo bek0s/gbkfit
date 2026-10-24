@@ -1,0 +1,69 @@
+# dust_extinction_band: An image in the band sdss_r of a thick disk of stars whose light is in MJy/sr (as the galaxy at z = 0.25 emits it), seen in data in uJy/arcsec2, dimmed by a thick disk of dust of the extinction law of Cardelli et al.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- redshift: 0.25
+  components:
+  - type: smdisk
+    name: stars
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 4}
+    emission:
+      type: band
+      bands: [sdss_r]
+      unit: MJy/sr
+  - type: smdisk
+    name: dust
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 4}
+    opacity:
+      type: dust
+      law: {type: ccm}
+observations:
+- type: sky
+  band: {name: sdss_r, wavelength: 6.166000000000001e-07 m}
+  data:
+    step: [0.5, 0.5]
+    rpix: [15.5, 15.5]
+    rval: [0, 0]
+    rota: 0
+    data: observation0_brightness_d.fits
+    error: 0.01
+    unit: uJy/arcsec2
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: null}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: null
+  observable: {type: pixel_brightness, mask_cutoff: null, mask_apply: false, median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    stars_xpos: 0.27
+    stars_ypos: -0.38
+    stars_posa: {value: 43, min: 0, max: 90}
+    stars_incl: 55
+    stars_pt_a: {value: 0.09, min: 0, max: 1}
+    stars_pt_s: 2.5
+    stars_ht_s: 0.6
+    dust_xpos: 0.27
+    dust_ypos: -0.38
+    dust_posa: 40
+    dust_incl: 55
+    dust_pt_a: {value: 0.3, min: 0, max: 2}
+    dust_pt_s: 3
+    dust_ht_s: 0.5

@@ -1,0 +1,93 @@
+# thick_disk_transfer: A thick disk of gas and one of dust, seen in two cubes: on a grid (the dust dims the light behind it) and through radiative transfer (the march along each line of sight).
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 4}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+    name: gas
+  - type: smdisk
+    name: dust
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 4}
+    opacity: {type: dust}
+observations:
+- type: sky
+  data:
+    step: [0.8, 0.8, 20]
+    rpix: [9.5, 9.5, 15.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.00015
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: null}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+- type: sky
+  data:
+    step: [0.8, 0.8, 20]
+    rpix: [9.5, 9.5, 15.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation1_spectra_d.fits
+    error: 0.00015
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight:
+    type: transfer
+    depth: {extent: galaxy, step: null}
+    slab: null
+    subchannels: 1
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    gas_xpos: 0.21
+    gas_ypos: -0.33
+    gas_posa: {value: 43, min: 0, max: 90}
+    gas_incl: {value: 50, min: 10, max: 80}
+    gas_vsys: {value: 6, min: -50, max: 50}
+    gas_pt_a: 1
+    gas_pt_s: 2.7
+    gas_vpt_rt: 1.7
+    gas_vpt_vt: {value: 140, min: 50, max: 300}
+    gas_dpt_a: {value: 30, min: 5, max: 80}
+    gas_ht_s: {value: 0.6, min: 0.1, max: 2}
+    dust_xpos: 0.27
+    dust_ypos: -0.38
+    dust_posa: 40
+    dust_incl: 55
+    dust_pt_a: {value: 0.3, min: 0, max: 2}
+    dust_pt_s: 3
+    dust_ht_s: 0.5

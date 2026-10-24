@@ -1,0 +1,40 @@
+{
+ "model": [
+  {
+   "spectra": {
+    "d": {
+     "size": 768,
+     "finite": 768,
+     "sum": 0.0,
+     "abs": 9.237965565531116,
+     "sumsq": 1.313329598091731,
+     "checksum": 0.332010959379083,
+     "scale": 9.876293035047755
+    }
+   }
+  }
+ ],
+ "objective": {
+  "chi2": 2450.5199873882616,
+  "log_likelihood": -1225.2599936941308,
+  "noise_chi2": 0.0,
+  "nresiduals": 768,
+  "nindependent": 768.0,
+  "nnuisance": 0,
+  "residuals": [
+   {
+    "size": 768,
+    "finite": 768,
+    "sum": 17.056583385312983,
+    "abs": 854.1199766197406,
+    "sumsq": 2450.519987388261,
+    "checksum": 3.9841374842511144,
+    "scale": 888.0448915225174
+   }
+  ],
+  "amplitudes": [
+   null
+  ]
+ },
+ "derived": {}
+}

@@ -1,0 +1,126 @@
+# two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- name: front
+  components:
+  - type: smdisk
+    name: gas
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 6}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+  - type: smdisk
+    name: dust
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 6}
+    opacity: {type: dust}
+- name: back
+  components:
+  - type: smdisk
+    name: gas
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+      htraits: {type: sech2, zmax: 6}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+depth_order: [front, back]
+observations:
+- type: sky
+  galaxies: [front, back]
+  data:
+    step: [1, 1, 15]
+    rpix: [9.5, 9.5, 14.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.0005
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight:
+    type: transfer
+    depth: {extent: galaxy, step: null}
+    slab: null
+    subchannels: 1
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+- type: sky
+  galaxies: [back]
+  data:
+    step: [1, 1]
+    rpix: [9.5, 9.5]
+    rval: [0, 0]
+    rota: 0
+    moment0: {data: observation1_moment0_d.fits, error: observation1_moment0_e.fits}
+    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits,
+      error: observation1_moment1_e.fits}
+    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits,
+      error: observation1_moment2_e.fits}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: null}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_moments, mask_cutoff: 0.001, spec_size: 60, spec_step: 10,
+    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: null, method: moments,
+    median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    front_gas_xpos: 0.3
+    front_gas_ypos: -0.4
+    front_gas_posa: {value: 43, min: 0, max: 90}
+    front_gas_incl: {value: 50, min: 10, max: 80}
+    front_gas_vsys: {value: 12, min: -50, max: 50}
+    front_gas_pt_a: 1
+    front_gas_pt_s: 3
+    front_gas_ht_s: 0.5
+    front_gas_vpt_rt: 2
+    front_gas_vpt_vt: {value: 130, min: 50, max: 300}
+    front_gas_dpt_a: 20
+    front_dust_xpos: 0
+    front_dust_ypos: 0
+    front_dust_posa: 60
+    front_dust_incl: 50
+    front_dust_pt_a: 0.4
+    front_dust_pt_s: 3
+    front_dust_ht_s: 0.4
+    back_gas_xpos: 2.5
+    back_gas_ypos: 2.0
+    back_gas_posa: 120
+    back_gas_incl: {value: 50, min: 10, max: 80}
+    back_gas_vsys: 40
+    back_gas_pt_a: 1
+    back_gas_pt_s: 3
+    back_gas_ht_s: 0.5
+    back_gas_vpt_rt: 2
+    back_gas_vpt_vt: {value: 130, min: 50, max: 300}
+    back_gas_dpt_a: 20

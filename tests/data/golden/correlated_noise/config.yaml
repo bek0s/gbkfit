@@ -1,0 +1,50 @@
+# correlated_noise: A cube of noise correlated on the sky by the beam and along the channels, declared on the data: the likelihood whitens its residuals.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+observations:
+- type: sky
+  data:
+    step: [1, 1, 20]
+    rpix: [7.5, 7.5, 14.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.0002
+    spatial_correlation: {type: gauss, sigma: 1.2}
+    spectral_correlation: {type: gauss, sigma: 25}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 1.2, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.2
+    ypos: -0.3
+    posa: {value: 42, min: 0, max: 90}
+    incl: {value: 50, min: 10, max: 80}
+    vsys: {value: 8, min: -50, max: 50}
+    pt_a: 1
+    pt_s: 3.2
+    vpt_rt: 2.2
+    vpt_vt: {value: 140, min: 50, max: 300}
+    dpt_a: {value: 30, min: 5, max: 80}

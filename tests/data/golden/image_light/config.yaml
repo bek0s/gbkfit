@@ -1,0 +1,54 @@
+# image_light: A cube at an RA and Dec of a disk whose light is that of an observed image there (an image trait, with offsets), made by its galaxy at the geometry of the disk.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    density:
+      ptraits:
+        type: image
+        file: image.fits
+        size: [40, 40]
+        step: 0.4
+        offsets: true
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+observations:
+- type: sky
+  data:
+    step: [0.6, 0.6, 15]
+    rpix: [11.5, 11.5, 19.5]
+    rval: [150.0, 2.0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.00015
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+    median_size: null}
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.21
+    ypos: -0.33
+    posa: {value: 43, min: 0, max: 90}
+    incl: {value: 50, min: 10, max: 80}
+    vsys: {value: 6, min: -50, max: 50}
+    pt_a: 1.1
+    vpt_rt: 1.7
+    vpt_vt: {value: 140, min: 50, max: 300}
+    dpt_a: {value: 30, min: 5, max: 80}
+    pt_dx: {value: 0.1, min: -1, max: 1}
+    pt_dy: 0

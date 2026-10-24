@@ -1,0 +1,80 @@
+# msa_shutters: Slitless spectra behind a slitlet of three MSA shutters: two nods subtracted (A - B, B - A) and aligned on the sky (sky and image offsets, weights), blurred by the LSF behind the aperture.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+observations:
+- type: sky
+  data:
+    step: [1, 1]
+    rpix: [15.5, 11.5]
+    rval: [0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    error: 0.005
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 40}
+  observable:
+    type: slitless_spectra
+    spec_size: 21
+    spec_step: 30
+    spec_rval: 0
+    spec_rest: 4e-06 m
+    spec_medium: vacuum
+    spec_convention: optical
+    trace:
+      type: polynomial
+      wave: 4e-06 m
+      dx: [0.0, 2498.2704833333332]
+      dy: [0.0]
+    aperture:
+      type: shutters
+      size: [1.0, 2.0]
+      count: 3
+      centre: [0.5, 0.0]
+      pitch: 2.5
+    exposures:
+    - sky_offset: [0.0, 2.5]
+      image_offset: [0.0, 0.0]
+      weight: 1.0
+    - sky_offset: [0.0, -2.5]
+      image_offset: [0.0, 0.0]
+      weight: -1.0
+    - sky_offset: [0.0, -2.5]
+      image_offset: [0.0, 5.0]
+      weight: 1.0
+    - sky_offset: [0.0, 2.5]
+      image_offset: [0.0, 5.0]
+      weight: -1.0
+    sky_sampling: 2
+    resampled: false
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.2
+    ypos: -0.3
+    posa: {value: 42, min: 0, max: 90}
+    incl: {value: 50, min: 10, max: 80}
+    vsys: {value: 8, min: -50, max: 50}
+    pt_a: 1
+    pt_s: 3.2
+    vpt_rt: 2.2
+    vpt_vt: {value: 140, min: 50, max: 300}
+    dpt_a: {value: 30, min: 5, max: 80}

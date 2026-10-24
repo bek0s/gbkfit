@@ -6,6 +6,9 @@
 !apps/studio/package.json
 !apps/studio/package-lock.json
 !apps/studio/tsconfig.json
+# (the golden cases of the tests: their data and golden values)
+!tests/data/golden/**/*.fits
+!tests/data/golden/**/*.json
 *.so
 *.user
 .DS_Store

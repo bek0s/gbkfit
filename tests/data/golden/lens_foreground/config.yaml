@@ -1,0 +1,61 @@
+# lens_foreground: The image of a source disk behind a foreground lens of three masses: an elliptical power law, its multipole of order 4 (tied to it by expressions) and an external shear.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2]
+    density:
+      ptraits: {type: exponential}
+    emission: {type: band}
+observations:
+- type: sky
+  name: hst
+  data:
+    step: [0.1, 0.1]
+    rpix: [19.5, 19.5]
+    rval: [0, 0]
+    rota: 0
+    data: hst_brightness_d.fits
+    error: 0.01
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground:
+    lens:
+      source_size: [40, 40]
+      source_step: [0.05, 0.05]
+      masses:
+      - {type: epl, name: main}
+      - {type: multipole, name: m4, order: 4}
+      - {type: shear, name: shear}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.08, ratio: 1.0, posa: 0.0}
+    lsf: null
+  observable: {type: pixel_brightness, mask_cutoff: null, mask_apply: false, median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.1
+    ypos: -0.05
+    posa: {value: 45, min: 0, max: 90}
+    incl: 55
+    pt_a: 1
+    pt_s: {value: 0.22, min: 0.05, max: 1}
+    hst_lens_main_theta_e: {value: 1.03, min: 0.5, max: 2}
+    hst_lens_main_slope: 2.1
+    hst_lens_main_q: {value: 0.78, min: 0.5, max: 1}
+    hst_lens_main_pa: 30
+    hst_lens_main_x: 0
+    hst_lens_main_y: 0
+    hst_lens_m4_theta_e: hst_lens_main_theta_e
+    hst_lens_m4_a: 0.02
+    hst_lens_m4_pa: hst_lens_main_pa
+    hst_lens_m4_x: hst_lens_main_x
+    hst_lens_m4_y: hst_lens_main_y
+    hst_lens_shear_gamma: {value: 0.06, min: 0, max: 0.2}
+    hst_lens_shear_pa: 70

@@ -1,0 +1,74 @@
+# mass_rotation_pressure: A gas disk that rotates in its mass (a thick disk that follows its light, and an NFW halo; a direct distance), with the Jeans pressure support of an anisotropic dispersion (sigma_R, sigma_phi, sigma_z); moment maps; a derived vcirc at 2.2 scale lengths, and priors on it and on sigma_phi / sigma_R.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    name: gas
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: mass, pressure_support: jeans}
+      dptraits:
+      - {type: uniform, direction: rad}
+      - {type: uniform, direction: tan}
+      - {type: uniform, direction: ver}
+    emission: {type: lines}
+  mass:
+  - type: disk
+    name: gas
+    surface: {type: component, component: gas}
+    vertical: {type: sech2}
+  - type: spheroid
+    name: halo
+    profile: {type: nfw}
+  distance: {type: direct, cosmology: Planck18}
+observations:
+- type: sky
+  data:
+    step: [1, 1]
+    rpix: [11.5, 11.5]
+    rval: [0, 0]
+    rota: 0
+    moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_moments, mask_cutoff: 0.001, spec_size: 60, spec_step: 10,
+    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: null, method: moments,
+    median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    gas_xpos: 0.3
+    gas_ypos: -0.4
+    gas_posa: {value: 43, min: 0, max: 90}
+    gas_incl: {value: 50, min: 10, max: 80}
+    gas_vsys: {value: 12, min: -50, max: 50}
+    gas_pt_a: 1
+    gas_pt_s: 3
+    gas_dpt_a: {value: 30, min: 5, max: 80}
+    gas_dpt1_a: 25
+    gas_dpt2_a: 15
+    distance: 80
+    mass_gas_upsilon: {value: 400000000.0, min: 10000000.0, max: 10000000000.0}
+    mass_gas_hz: 0.2
+    mass_halo_log_m: {value: 11.8, min: 10, max: 13}
+    mass_halo_c: 10
+  derived: {v22: vcirc(2.2 * gas_pt_s * kpc_per_arcsec)}
+  priors:
+  - {type: gauss, expr: v22, mean: 120, std: 10}
+  - {type: gauss, expr: gas_dpt1_a / gas_dpt_a, mean: 0.7, std: 0.1}

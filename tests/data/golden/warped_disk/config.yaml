@@ -1,0 +1,78 @@
+# warped_disk: A loose and tilted disk (centre, systemic velocity, position angle and inclination of each ring), with a radial harmonic flow, a vertical flow and an anisotropic dispersion, in Gauss-Hermite maps (h3, h4); the disk fills the maps (fits of spectra of noise alone are wild).
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: true
+    tilted: true
+    rnodes: [0, 4, 8, 12, 16]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits:
+      - {type: arctan, direction: tan}
+      - {type: nw_harmonic, direction: rad, order: 2}
+      - {type: uniform, direction: ver}
+      dptraits:
+      - {type: uniform, direction: rad}
+      - {type: uniform, direction: tan}
+      - {type: uniform, direction: ver}
+    emission: {type: lines}
+observations:
+- type: sky
+  data:
+    step: [0.6, 0.6]
+    rpix: [9.5, 9.5]
+    rval: [0, 0]
+    rota: 0
+    moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
+    moment1: {data: observation0_moment1_d.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
+    moment3: {data: observation0_moment3_d.fits, error: observation0_moment3_e.fits}
+    moment4: {data: observation0_moment4_d.fits, error: observation0_moment4_e.fits}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable: {type: pixel_moments, mask_cutoff: 0.001, spec_size: 60, spec_step: 10,
+    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: null, method: gauss_hermite,
+    median_size: null}
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: [0.27, 0.27, 0.32, 0.38, 0.47]
+    ypos: [-0.38, -0.38, -0.43, -0.49, -0.58]
+    vsys:
+    - {value: 9, min: -50, max: 50}
+    - 10
+    - 11
+    - 12
+    - 14
+    posa:
+    - {value: 41, min: 0, max: 90}
+    - 40
+    - 42
+    - 46
+    - {value: 51, min: 0, max: 90}
+    incl:
+    - 55
+    - 55
+    - {value: 56, min: 10, max: 80}
+    - 60
+    - 64
+    pt_a: 1
+    pt_s: 4
+    vpt_rt: 1.5
+    vpt_vt: {value: 147, min: 50, max: 300}
+    vpt1_a: [0, 12, 20, 18, 10]
+    vpt1_p: [30, 30, 35, 40, 45]
+    vpt2_vv: {value: 5, min: -50, max: 50}
+    dpt_a: {value: 28, min: 5, max: 80}
+    dpt1_a: 20
+    dpt2_a: 14

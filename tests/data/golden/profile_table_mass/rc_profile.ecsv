@@ -1,0 +1,17 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: radius, unit: kpc, datatype: float64}
+# - {name: vcirc, unit: '', datatype: float64}
+# - {name: vcirc_error, unit: '', datatype: float64}
+# - {name: vcirc_mask, datatype: float64}
+# schema: astropy-2.0
+radius vcirc vcirc_error vcirc_mask
+0.5 46.00376046961155 3.0 1.0
+1.0 73.6015632922373 3.0 1.0
+1.5 83.76614379928947 3.0 1.0
+2.0 94.77193583418747 3.0 1.0
+3.0 91.21163258774367 3.0 1.0
+4.0 100.6084195774671 3.0 1.0
+5.0 106.25225394285091 3.0 1.0
+6.5 114.32741150847319 3.0 1.0

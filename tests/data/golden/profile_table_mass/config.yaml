@@ -1,0 +1,42 @@
+# profile_table_mass: A galaxy of mass alone: the gas and the disk of a rotmod table of SPARC (upsilon, and D / D0 of a direct distance) and an NFW halo; its rotation curve from the table (radii in kpc at 10 Mpc), deprojected at an inclination that is a parameter; a derived dark fraction.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- mass:
+  - type: table
+    name: gas
+    file: rotmod.dat
+    format: ascii.no_header
+    radius: {column: col1, unit: kpc}
+    distance: 10
+    velocity: {column: col4}
+  - type: table
+    name: disk
+    file: rotmod.dat
+    format: ascii.no_header
+    radius: {column: col1, unit: kpc}
+    distance: 10
+    velocity: {column: col5}
+  - type: spheroid
+    name: halo
+    profile: {type: nfw}
+  distance: {type: direct, cosmology: Planck18}
+observations:
+- type: profile
+  name: rc
+  inclination: 60.0
+  data:
+    file: rc_profile.ecsv
+    radius: {column: radius}
+    distance: 10.0
+    vcirc: {column: vcirc, mask: vcirc_mask, error: vcirc_error}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+params:
+  properties:
+    distance: {value: 11, min: 5, max: 20}
+    mass_gas_upsilon: 1
+    mass_disk_upsilon: {value: 0.7, min: 0.1, max: 2}
+    mass_halo_log_m: {value: 11.2, min: 10, max: 13}
+    mass_halo_c: 10
+    rc_incl: {value: 55, min: 20, max: 90}
+  derived: {fdm: vcirc_halo(2.0) ** 2 / vcirc(2.0) ** 2}

@@ -1,0 +1,67 @@
+# instrument_full: A cube seen through a Moffat PSF whose alpha varies with velocity, an LSF whose sigma does, and a primary beam; oversampled, median filtered, masked (applied), with weights of the azimuth in the disk, smoothed.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+    name: gas
+observations:
+- type: sky
+  weights:
+    component: gas
+    traits:
+    - {type: azimuth_power, power: 1, axis: minor}
+  data:
+    step: [0.75, 0.75, 25]
+    rpix: [7.5, 7.5, 15.5]
+    rval: [0, 0, 0]
+    rota: 0
+    data: observation0_spectra_d.fits
+    mask: observation0_spectra_m.fits
+    error: observation0_spectra_e.fits
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: {type: gauss, fwhm: 8, x: 1, y: -0.5, frequency: null}
+    psf:
+      type: moffat
+      beta: 2.5
+      alpha:
+        velocity:
+          values: [-500.0, 0.0, 500.0]
+          unit: km / s
+        values: [1.2, 0.9, 0.6]
+    lsf:
+      type: gauss
+      sigma:
+        velocity:
+          values: [-500.0, 500.0]
+          unit: km / s
+        values: [12.0, 30.0]
+  observable: {type: pixel_spectra, smooth_weights: true, mask_cutoff: 0.0006, mask_apply: true,
+    median_size: 3}
+  scale: [2, 2, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    gas_xpos: 0.2
+    gas_ypos: -0.3
+    gas_posa: {value: 42, min: 0, max: 90}
+    gas_incl: {value: 50, min: 10, max: 80}
+    gas_vsys: {value: 8, min: -50, max: 50}
+    gas_pt_a: 1
+    gas_pt_s: 3.2
+    gas_vpt_rt: 2.2
+    gas_vpt_vt: {value: 140, min: 50, max: 300}
+    gas_dpt_a: {value: 30, min: 5, max: 80}

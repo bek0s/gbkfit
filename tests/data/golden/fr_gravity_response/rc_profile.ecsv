@@ -1,0 +1,18 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: radius, unit: arcsec, datatype: float64}
+# - {name: vcirc, unit: '', datatype: float64}
+# - {name: vcirc_error, unit: '', datatype: float64}
+# - {name: vcirc_mask, datatype: float64}
+# - {name: rotation_gas, unit: '', datatype: float64}
+# - {name: rotation_gas_error, unit: '', datatype: float64}
+# - {name: rotation_gas_mask, datatype: float64}
+# schema: astropy-2.0
+radius vcirc vcirc_error vcirc_mask rotation_gas rotation_gas_error rotation_gas_mask
+1.0 102.77227459427756 3.0 1.0 102.60560601600254 3.0 1.0
+2.5 177.7037750652917 3.0 1.0 179.74114760361246 3.0 1.0
+4.0 210.5915880059113 3.0 1.0 214.58656898397672 3.0 1.0
+6.0 233.69035709954977 3.0 1.0 233.33178088778976 3.0 1.0
+8.0 224.51135152688053 3.0 1.0 230.8530699694411 3.0 1.0
+10.0 223.7284922853088 3.0 1.0 222.9293579663235 3.0 1.0

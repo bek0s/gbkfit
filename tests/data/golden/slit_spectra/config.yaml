@@ -1,0 +1,53 @@
+# slit_spectra: The spectra of a long slit rotated on the sky, wider than its step.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+observations:
+- type: sky
+  data:
+    step: [0.5, 20]
+    rpix: [19.5, 19.5]
+    rval: [0, 0]
+    rota: 30
+    data: observation0_spectra_d.fits
+    error: 0.0005
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: {type: gauss, sigma: 20}
+  observable:
+    type: slit_spectra
+    slit_width: 1.5
+    sky_rval: [0.0, 0.0]
+    smooth_weights: false
+    mask_cutoff: null
+    mask_apply: false
+  scale: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.2
+    ypos: -0.3
+    posa: {value: 42, min: 0, max: 90}
+    incl: {value: 50, min: 10, max: 80}
+    vsys: {value: 8, min: -50, max: 50}
+    pt_a: 1
+    pt_s: 3.2
+    vpt_rt: 2.2
+    vpt_vt: {value: 140, min: 50, max: 300}
+    dpt_a: {value: 30, min: 5, max: 80}
