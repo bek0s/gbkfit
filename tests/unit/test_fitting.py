@@ -1113,6 +1113,32 @@ def test_observers_that_fail_are_dropped(caplog):
     assert len(failures) == 1
 
 
+def test_summaries_show_the_free_elements_decoded():
+    # Of a parameter with a mode (offsets: v[1] = v[0] + 5), the best
+    # value of v[1] and its error, as the quantiles beside them, not those
+    # of its coded offset
+    from gbkfit.fitting.result import Covariance, FitResult, FitSolution
+    covariance = Covariance(
+        names=('v[0]', 'v[1]'), matrix=np.diag([0.25, 1.0]),
+        std={'v[0]': 0.5, 'v[1]': 1.0}, correlation=np.eye(2),
+        element_std={'v[0]': 0.5, 'v[1]': 1.25}, derived_std={}, rank=2,
+        unconstrained=(), at_bounds=(), scaled=False)
+    solution = FitSolution(
+        free={'v[0]': 100.0, 'v[1]': 5.0},
+        values={'v': np.array([100.0, 105.0])},
+        elements={'v[0]': 100.0, 'v[1]': 105.0}, derived={}, chi2=10.0,
+        nresiduals=12, nfitted=2, dof=10, reduced_chi2=1.0,
+        log_likelihood=-5.0, log_prior=None, covariance=covariance,
+        laplace=None)
+    result = FitResult(
+        fitter=dict(type='grid'), params=None, versions={},
+        solutions=(solution,), posterior=None, evidence=None, nevals=1,
+        time=1.0, success=True, message='', diagnostics={})
+    line = next(line for line in result.summary().split('\n')
+                if line.startswith('v[1] '))
+    assert line.split()[1:] == ['105', '1.25']
+
+
 def test_the_information_criteria_of_a_solution():
     # Of 3 fitted quantities, 100 residuals and ln L = -50: AIC = 2 x 3 +
     # 100, BIC = 3 ln 100 + 100

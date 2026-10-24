@@ -426,12 +426,12 @@ class FitResult:
         if self.bootstrap is not None:
             columns.append(self.bootstrap.summary())
             labels.append('bootstrap')
-        std = best.covariance.std | best.covariance.derived_std \
+        std = best.covariance.element_std | best.covariance.derived_std \
             if best.covariance else {}
         lines.append(
             f"{'name':<16} {'best':>12} {'std':>12} "
             + ' '.join(f"{label + ' 16/50/84':>38}" for label in labels))
-        for name, value in (best.free | best.derived).items():
+        for name, value in (_free_elements(best) | best.derived).items():
             q_texts = [
                 f"{q[0]:>12.6g} {q[1]:>12.6g} {q[2]:>12.6g}"
                 if (q := column.get(name)) is not None else ' ' * 38
@@ -508,6 +508,15 @@ class FitResult:
 def _samples_table(names: Sequence[str], samples: np.ndarray) -> Table:
     """Return samples (one per row) as a table, a column of each name."""
     return Table(list(np.asarray(samples).T), names=list(names))
+
+
+def _free_elements(solution: FitSolution) -> dict[str, float]:
+    """
+    Return the values of the free elements of a solution, decoded (those
+    of parameters with modes are coded in its free values), as the
+    posterior, the Laplace samples and the bootstrap give them.
+    """
+    return {name: solution.elements[name] for name in solution.free}
 
 
 def _solution_summary(solution: FitSolution) -> dict[str, Any]:

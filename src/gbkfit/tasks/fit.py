@@ -302,7 +302,9 @@ def _bootstrap_summary(
     lines = [
         f"{'name':<16} {'best':>12} {'bootstrap std':>13} "
         f"{'bootstrap 16/50/84':>38}"]
-    for name, value in (solution['free'] | solution['derived']).items():
+    # (the free elements decoded, as the bootstrap gives them)
+    free = {name: solution['elements'][name] for name in solution['free']}
+    for name, value in (free | solution['derived']).items():
         q = quantiles.get(name, (math.nan,) * 3)
         lines.append(
             f"{name:<16} {value:>12.6g} {std.get(name, math.nan):>13.6g} "
