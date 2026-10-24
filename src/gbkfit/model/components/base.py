@@ -14,6 +14,7 @@ from .roles import Emission, LineEmission, Opacity
 if TYPE_CHECKING:
     from ..extras import Extras
     from ..mass import ComponentDensity
+    from ._needs import Need
     from ._stage import GalaxyMass
     from ._units import DataUnit
     from .disks._disk import Disk, DiskPlan
@@ -185,14 +186,21 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             return self._emission.lines().names()
         return ()
 
-    def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
+    def needs(self) -> tuple['Need', ...]:
         """
-        Return the parameters that its galaxy gives it: the circular
-        velocity of the mass of the galaxy at the given radii (arcsec), by
-        name (see traits.VPTraitMass). They are not in pdescs, but its
-        plans need them with the others. None here.
+        Return what it needs from its galaxy (e.g. its mass), each of which
+        checks itself against the galaxy when the galaxy is made (see
+        Need); nothing here.
         """
-        return {}
+        return ()
+
+    def uses_mass(self) -> bool:
+        """
+        Check whether it takes anything from the mass of its galaxy, when
+        there is one (e.g. its rotation in the gravity of the mass); False
+        here.
+        """
+        return False
 
     def bounding_radius(self) -> float:
         """

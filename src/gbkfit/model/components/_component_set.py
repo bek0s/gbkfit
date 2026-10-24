@@ -3,7 +3,7 @@ The components of a galaxy: their parameters (ComponentSet), and their
 evaluation on the grid of an observation (ComponentSetPlan).
 """
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
@@ -50,43 +50,14 @@ def _with_mass_params(
     """
     Return the parameters of the components of a galaxy, and those of its
     distance, its mass and its gravity (if any; Newtonian by default).
-    Raise ConfigError if components take the circular velocity of the
-    mass (see Component.circular_velocity_params) and there is none, if a
-    disk in a central equilibrium has neither mass nor rotation
-    (tangential velocity traits) or one in another equilibrium no mass, if the mass has no distance or the distance no
-    mass (its only user), if a mass component follows a
-    component that is not a disk of the galaxy (see
-    Component.density_disk), if the pressure support or the equilibrium
-    of a disk takes the density of a mass component that the galaxy does
-    not have, if the gravity is given without mass, if it does not take
-    the mass model (see Gravity.check_mass_model), if it does not give
-    what a feature takes (see Gravity: the forces of a jeans equilibrium
-    or of the rotation at each height, the self-gravitating sheets of a
-    self_gravitating equilibrium or pressure support, the shares of a
-    dark fraction), or if the names of the parameters repeat.
+    Raise ConfigError if the distance or the gravity is given without mass
+    (their only user), the mass has no distance, a component needs what
+    the galaxy does not give (see Component.needs: e.g. the mass), a mass
+    component follows a component that is not a disk of the galaxy (see
+    Component.density_disk), the gravity does not take the mass model (see
+    Gravity.check_mass_model) or does not give the shares of a dark
+    fraction, or the names of the parameters repeat.
     """
-    moved = any(cmp.circular_velocity_params() for cmp in components)
-    balanced = [cmp for cmp in components if _balanced(cmp)]
-    if moved and mass_model is None:
-        raise ConfigError(
-            "the 'mass' velocity traits need the mass of their galaxy")
-    for cmp in balanced if mass_model is None else ():
-        mode = cmp.density_disk().equilibrium().mode
-        if mode != 'central':
-            raise ConfigError(
-                f"the vertical equilibrium {mode!r} of the component "
-                f"{cmp.name()!r} needs the mass of its galaxy")
-        if not any(trait.direction() == 'tan'
-                   for trait in cmp.density_disk().traits('vpt')):
-            raise ConfigError(
-                f"the vertical equilibrium of the component {cmp.name()!r} "
-                f"takes the circular velocity of the mass of its galaxy, or "
-                f"without mass, the rotation of its disk; it has neither: "
-                f"give it tangential velocity traits, or the galaxy mass")
-    if mass_model is not None and distance is None:
-        raise ConfigError(
-            "the mass of a galaxy needs its distance (e.g. distance: "
-            "{type: direct})")
     if distance is not None and mass_model is None:
         raise ConfigError(
             "the distance of a galaxy is used by its mass only; give the "
@@ -95,9 +66,16 @@ def _with_mass_params(
         raise ConfigError(
             "the gravity of a galaxy is that of its mass; give the galaxy "
             "mass, or no gravity")
+    gravity = GravityNewton() if gravity is None else gravity
+    for cmp in components:
+        for need in cmp.needs():
+            need.check(mass_model, gravity)
     if mass_model is None:
         return params
-    gravity = GravityNewton() if gravity is None else gravity
+    if distance is None:
+        raise ConfigError(
+            "the mass of a galaxy needs its distance (e.g. distance: "
+            "{type: direct})")
     disks = [cmp.name() for cmp in components
              if cmp.density_disk() is not None]
     for mass_component in mass_model.components():
@@ -113,63 +91,17 @@ def _with_mass_params(
              if cmp.density_disk() is not None
              and cmp.density_disk().traits('rht')]
     gravity.check_mass_model(mass_model, thick)
-    mass_names = [component.name() for component in mass_model.components()]
-    for cmp in components:
-        disk = cmp.density_disk()
-        supports = {} if disk is None else disk.pressure_supported_params()
-        for support in supports.values():
-            unknown = [
-                name for name in support.density or ()
-                if name not in mass_names]
-            if unknown:
-                raise ConfigError(
-                    f"the pressure support of the component {cmp.name()!r} "
-                    f"takes the density of the mass components {unknown}, "
-                    f"which its galaxy does not have; its mass components: "
-                    f"{mass_names}")
-    for cmp in balanced:
-        equilibrium = cmp.density_disk().equilibrium()
-        if equilibrium.density is not None \
-                and equilibrium.density not in mass_names:
-            raise ConfigError(
-                f"the vertical equilibrium of the component {cmp.name()!r} "
-                f"takes the surface density of the mass component "
-                f"{equilibrium.density!r}, which its galaxy does not have; "
-                f"its mass components: {mass_names}")
-        if equilibrium.mode == 'jeans':
-            _check_gravity(
-                gravity.check_forces, mass_model,
-                what=f"the jeans equilibrium of the component "
-                     f"{cmp.name()!r} takes the vertical force of the "
-                     f"gravity of its galaxy")
-        if equilibrium.mode == 'self_gravitating':
-            _check_gravity(
-                gravity.check_self_gravitating_sheets,
-                what=f"the self_gravitating equilibrium of the component "
-                     f"{cmp.name()!r} takes the vertical structure of "
-                     f"self-gravitating sheets in Newtonian gravity")
-    for cmp in components:
-        disk = cmp.density_disk()
-        supports = {} if disk is None else disk.pressure_supported_params()
-        if any(s.mode == 'self_gravitating' for s in supports.values()):
-            _check_gravity(
-                gravity.check_self_gravitating_sheets,
-                what=f"the self_gravitating pressure support of the "
-                     f"component {cmp.name()!r} takes the vertical structure "
-                     f"of self-gravitating sheets in Newtonian gravity")
-        if disk is not None and disk.rotation_factor_params():
-            _check_gravity(
-                gravity.check_forces, mass_model,
-                what=f"the rotation at each height of the component "
-                     f"{cmp.name()!r} takes the radial force of the gravity "
-                     f"of its galaxy off its plane")
     for mass_component in mass_model.components():
-        if mass_component.takes_shares():
-            _check_gravity(
-                gravity.check_shares,
-                what=f"the mass component {mass_component.name()!r} takes "
-                     f"the shares of the components in the squared circular "
-                     f"velocity (its dark fraction)")
+        if not mass_component.takes_shares():
+            continue
+        try:
+            gravity.check_shares()
+        except ConfigError as e:
+            raise ConfigError(
+                f"the mass component {mass_component.name()!r} takes the "
+                f"shares of the components in the squared circular velocity "
+                f"(its dark fraction), which it does not give: {e.message}"
+            ) from None
     taken = distance.pdescs() | mass_model.pdescs() | gravity.pdescs()
     if repeated := sorted(params.keys() & taken.keys()):
         raise ConfigError(
@@ -177,27 +109,6 @@ def _with_mass_params(
             f"the names of parameters of the components: {repeated}; rename "
             f"the components")
     return params | taken
-
-
-def _balanced(component: Component) -> bool:
-    """Check whether a component is a disk in a vertical equilibrium."""
-    disk = component.density_disk()
-    return disk is not None and disk.equilibrium() is not None
-
-
-def _check_gravity(
-        check: Callable[..., None], *args: Any, what: str
-) -> None:
-    """
-    Call a check of what a gravity gives (see Gravity) with the given
-    arguments, and raise ConfigError with what a feature takes (what) if
-    it does not give it.
-    """
-    try:
-        check(*args)
-    except ConfigError as e:
-        raise ConfigError(
-            f"{what}, which it does not give: {e.message}") from None
 
 
 def _component_prefixes(components: Sequence[Component]) -> list[str]:
@@ -351,13 +262,10 @@ class ComponentSet:
 
     def components_use_mass(self) -> bool:
         """
-        Check whether a component uses the mass: moved by it (see
-        Component.circular_velocity_params) or held up by it (a vertical
-        equilibrium, see Kinematics).
+        Check whether a component uses the mass (see Component.uses_mass):
+        e.g. it is moved or held up by it.
         """
-        return any(
-            cmp.circular_velocity_params() or _balanced(cmp)
-            for cmp in self._components)
+        return any(cmp.uses_mass() for cmp in self._components)
 
     def gravity(self) -> Gravity:
         """Return the gravity of its mass (Newtonian if not given)."""

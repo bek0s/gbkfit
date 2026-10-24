@@ -14,6 +14,7 @@ from .._nodal import (
     NodalPlan, NodalTraits, ParamBuffer, TraitParams, evaluate_native,
     fill_param_values, native_traits, subring_radii)
 from ..base import NativeGrid
+from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
 from ..geometries import GEOMETRY_PARAMS
 from ..parts import Equilibrium
 from ..traits import PressureSupport, Trait
@@ -175,6 +176,69 @@ class Disk(abc.ABC):
         others.
         """
         return self._traits.circular_velocity_params()
+
+    def uses_mass(self) -> bool:
+        """
+        Check whether it takes anything from the mass of its galaxy, when
+        there is one: it rotates in it (see circular_velocity_params), or
+        it is in a vertical equilibrium (see Kinematics).
+        """
+        return bool(self.circular_velocity_params()) \
+            or self._equilibrium is not None
+
+    def needs(self, name: str | None) -> tuple[Need, ...]:
+        """
+        Return what it needs from its galaxy (see Need), as the disk of the
+        component of the given name: the mass, for its velocity traits
+        'mass' and a vertical equilibrium (but a central one with
+        tangential velocity traits, which takes their rotation without
+        mass); the forces of the mass, for a jeans equilibrium and for its
+        rotation at each height (see rotation_factor_params); and the
+        densities of mass components, for its pressure support and its
+        equilibrium.
+        """
+        label = repr(name)
+        needs: list[Need] = []
+        if self.circular_velocity_params():
+            needs.append(NeedsMass(
+                f"the 'mass' velocity traits of the component {label} need "
+                f"the mass of their galaxy"))
+        for support in self.pressure_supported_params().values():
+            needs.append(NeedsMassDensities(
+                support.density or (), support.mode == 'self_gravitating',
+                f"the {support.mode} pressure support of the component "
+                f"{label}"))
+        if self.rotation_factor_params():
+            needs.append(NeedsForces(
+                f"the rotation at each height of the component {label} "
+                f"takes the radial force of the gravity of its galaxy off "
+                f"its plane"))
+        equilibrium = self._equilibrium
+        if equilibrium is None:
+            return tuple(needs)
+        if equilibrium.mode != 'central':
+            needs.append(NeedsMass(
+                f"the vertical equilibrium {equilibrium.mode!r} of the "
+                f"component {label} needs the mass of its galaxy"))
+        elif not any(
+                trait.direction() == 'tan' for trait in self.traits('vpt')):
+            needs.append(NeedsMass(
+                f"the vertical equilibrium of the component {label} takes "
+                f"the circular velocity of the mass of its galaxy, or "
+                f"without mass, the rotation of its disk; it has neither: "
+                f"give it tangential velocity traits, or the galaxy mass"))
+        if equilibrium.mode == 'jeans':
+            needs.append(NeedsForces(
+                f"the jeans equilibrium of the component {label} takes the "
+                f"vertical force of the gravity of its galaxy"))
+        if equilibrium.density is not None \
+                or equilibrium.mode == 'self_gravitating':
+            needs.append(NeedsMassDensities(
+                () if equilibrium.density is None else (equilibrium.density,),
+                equilibrium.mode == 'self_gravitating',
+                f"the {equilibrium.mode} equilibrium of the component "
+                f"{label}"))
+        return tuple(needs)
 
     def pressure_supported_params(self) -> dict[str, PressureSupport]:
         """

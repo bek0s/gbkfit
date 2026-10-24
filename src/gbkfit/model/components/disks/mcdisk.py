@@ -9,6 +9,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
+from .._needs import Need
 from .._nodal import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FieldsLayout
@@ -287,8 +288,11 @@ class MCDisk(Component):
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())
 
-    def circular_velocity_params(self) -> dict[str, tuple[float, ...]]:
-        return self._disk.circular_velocity_params()
+    def needs(self) -> tuple[Need, ...]:
+        return self._disk.needs(self.name())
+
+    def uses_mass(self) -> bool:
+        return self._disk.uses_mass()
 
     def bounding_radius(self) -> float:
         return self._disk.bounding_radius()
