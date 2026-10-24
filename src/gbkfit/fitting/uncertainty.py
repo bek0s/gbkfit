@@ -316,21 +316,28 @@ def covariance(
     scaled = options.scale() and np.isfinite(reduced_chi2)
     if scaled:
         matrix *= reduced_chi2
-    std = np.sqrt(np.diag(matrix))
+    # (the values along the directions the data do not constrain, of the
+    # free values scaled by norms, are not constrained: infinite errors)
+    std = np.where(
+        _along(np.diag(1 / norms), vt[~keep]), np.inf,
+        np.sqrt(np.diag(matrix)))
     with np.errstate(divide='ignore', invalid='ignore'):
         correlation = matrix / np.outer(std, std)
+    correlation[~np.isfinite(std)] = np.nan
+    correlation[:, ~np.isfinite(std)] = np.nan
     names = problem.names()
     unconstrained = tuple(
-        name for name, weight in zip(names, np.abs(vt[~keep]).max(
-            axis=0, initial=0)) if weight > 0.1)
+        name for name, error in zip(names, std) if not np.isfinite(error))
     # The errors of all elements and of the derived values: J_e cov J_e^T,
     # with J_e the Jacobian of their values by the free values
     element_names = list(params.element_values(params.evaluate(x)))
     jac_elements = jacobian(
         lambda points: [sample_values(params, p, derived) for p in points],
         x, steps, lower, upper)
-    element_std = np.sqrt(np.maximum(np.einsum(
-        'ij,jk,ik->i', jac_elements, matrix, jac_elements), 0)).tolist()
+    element_std = np.where(
+        _along(jac_elements / norms, vt[~keep]), np.inf,
+        np.sqrt(np.maximum(np.einsum(
+            'ij,jk,ik->i', jac_elements, matrix, jac_elements), 0))).tolist()
     nelements = len(element_names)
     return Covariance(
         names=names,
@@ -345,6 +352,17 @@ def covariance(
             name for name, xi, lo, hi, h in zip(names, x, lower, upper, steps)
             if xi - lo < h or hi - xi < h),
         scaled=bool(scaled)), nevals
+
+
+def _along(gradients: np.ndarray, directions: np.ndarray) -> np.ndarray:
+    """
+    Return which of the gradients (rows) have more than a tenth of their
+    length along one of the directions (rows of unit vectors): which
+    values they are of change along them.
+    """
+    length = np.linalg.norm(gradients, axis=1)
+    along = np.abs(gradients @ directions.T).max(axis=1, initial=0)
+    return along > 0.1 * length
 
 
 def laplace_posterior(

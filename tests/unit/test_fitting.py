@@ -634,6 +634,33 @@ def test_errors_propagate_to_tied_and_fixed_elements():
     assert laplace['ypos'][1] == pytest.approx(laplace['xpos'][1] - 1.1)
 
 
+def test_unconstrained_elements_have_infinite_errors(tmp_path):
+    # A parameter that changes nothing (of a likelihood that does not use
+    # it): its error, and that of a value of it, is infinite (not 0), and
+    # there are no Laplace samples
+    from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
+    (tmp_path / 'like.py').write_text(
+        "def residuals(item, data, model, error, mask, params):\n"
+        "    return (model - data) / error\n")
+    likelihood = LikelihoodUser(
+        str(tmp_path / 'like.py'), 'residuals', 'residuals', ['unused'])
+    objective = mock_objective(
+        DriverHost(), likelihood=likelihood, name='mock')
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties() | dict(
+            mock_unused=dict(value=0.5, min=0, max=1)),
+        derived=dict(d='mock_unused + xpos'))
+    result = FitterScipyLeastSquares().fit(objective, params)
+    cov = result.best().covariance
+    assert cov.unconstrained == ('mock_unused',)
+    assert cov.std['mock_unused'] == np.inf
+    assert np.isfinite(cov.std['xpos'])
+    assert cov.derived_std['d'] == np.inf
+    assert result.best().laplace is None
+    assert any('no Laplace samples' in message
+               for message in result.diagnostics['uncertainty_errors'])
+
+
 def test_derived_values_get_errors_and_samples():
     # The error of a derived value is propagated from the covariance, as
     # that of a tied element (here of xpos + 2 ypos, with their

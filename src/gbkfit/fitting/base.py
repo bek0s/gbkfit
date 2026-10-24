@@ -374,7 +374,13 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                 problems.append((
                     'uncertainty_errors',
                     "no covariance: the fit was asked to stop"))
-        if cov is not None and options.laplace_samples() > 0:
+        if cov is not None and cov.unconstrained \
+                and options.laplace_samples() > 0:
+            problems.append((
+                'uncertainty_errors',
+                f"no Laplace samples: the data do not constrain "
+                f"{list(cov.unconstrained)} (infinite errors)"))
+        elif cov is not None and options.laplace_samples() > 0:
             laplace = laplace_posterior(
                 problem, x, cov, options.laplace_samples(), rng,
                 tuple(derived))

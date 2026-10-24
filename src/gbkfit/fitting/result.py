@@ -83,25 +83,31 @@ class Covariance:
     names : tuple of str
         The free elements, in order.
     matrix : np.ndarray
-        The covariance matrix.
+        The covariance matrix, in the directions that the data constrain
+        (see rank).
     std : dict
-        The standard error of each free element.
+        The standard error of each free element: infinite for those in
+        the directions that the data do not constrain (see unconstrained).
     correlation : np.ndarray
-        The correlation matrix.
+        The correlation matrix (NaN for the free elements of infinite
+        errors).
     element_std : dict
         The standard error of every element (propagated to the tied
-        elements; 0 for the fixed ones).
+        elements; 0 for the fixed ones, infinite for those that change in
+        the directions that the data do not constrain).
     derived_std : dict
         The standard error of each element of the derived values (see
         FitSolution.derived), propagated as those of the tied elements
-        (the delta method); NaN where they cannot be evaluated at a step.
+        (the delta method; infinite as theirs); NaN where they cannot be
+        evaluated at a step.
     rank : int
         The rank of the Jacobian. Below the number of free elements, some
-        directions are not constrained, and the errors are left out of
-        them: see unconstrained.
+        directions are not constrained (see unconstrained).
     unconstrained : tuple of str
         The free elements in the directions that the data do not
-        constrain.
+        constrain (more than a tenth of a unit vector of such a
+        direction, in the free values scaled by the Jacobian): their
+        errors are infinite.
     at_bounds : tuple of str
         The free elements at a bound (within a finite-difference step):
         their errors assume the bound is not there.
@@ -311,7 +317,9 @@ class FitSolution:
         stop (see the diagnostics 'uncertainty_errors' of FitResult).
     laplace : Posterior or None
         The Gaussian approximation of the posterior from the covariance
-        (approximate), or None if disabled or there is no covariance.
+        (approximate), or None if disabled, there is no covariance, or it
+        has directions that the data do not constrain (see the
+        diagnostics 'uncertainty_errors' of FitResult).
     """
     free: dict[str, float]
     values: ParamValues
