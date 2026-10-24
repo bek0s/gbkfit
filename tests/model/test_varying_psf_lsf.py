@@ -141,3 +141,19 @@ def test_lsf_images_of_one_profile_are_that_profile(driver, tmp_path):
         type='image', file=str(tmp_path / 'profile.fits'), step=4))
     np.testing.assert_allclose(
         images, single, atol=2e-6 * np.abs(single).max())
+
+
+def test_points_in_wavelength_on_axes_of_log_velocities():
+    # The point of a table at the wavelength w is at the velocity of the
+    # axis of w: c ln(w / rest) on an axis of log velocities, c (w / rest
+    # - 1) on one of optical velocities
+    import astropy.units as u
+    from gbkfit.instrument import varying
+    from gbkfit.utils import gridutils
+    c = 299792.458
+    rest = gridutils.make_rest('6564.61 Angstrom')
+    points = [6564.61 * 2.5] * u.Angstrom
+    for convention, velocity in (('log', c * np.log(2.5)), (None, c * 1.5)):
+        assert varying.to_velocities(
+            points, gridutils.VelocityConvention(rest, None, convention)) \
+            == pytest.approx([velocity], rel=1e-12)

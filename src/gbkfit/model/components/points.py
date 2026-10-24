@@ -72,7 +72,7 @@ def line_light(
     of the data (see Component.plan).
     """
     selected = lines.select(names)
-    rows = lines.values(spectral, redshift)[list(selected)]
+    factors = lines.factors(spectral, redshift)[list(selected)]
     # (with a unit, the frequency at which the galaxy emits each line)
     frequencies = None if unit is None \
         else lines.frequencies(spectral, redshift)[list(selected)]
@@ -81,9 +81,9 @@ def line_light(
         for row, index in enumerate(selected)
         if lines.ratio_name(index) is not None]
     return Fluxes(
-        len(rows), ratios,
-        line_factors(unit, data_unit, rows, spectral, frequencies)), \
-        LinePlacement(rows, spectral)
+        len(factors), ratios,
+        line_factors(unit, data_unit, factors, spectral, frequencies)), \
+        LinePlacement(factors, spectral)
 
 
 def band_light(

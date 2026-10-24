@@ -54,7 +54,6 @@ observations:
     rval: 0
     rest: null
     medium: null
-    convention: null
     data: observation1_spectra_d.fits
     error: observation1_spectra_e.fits
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}

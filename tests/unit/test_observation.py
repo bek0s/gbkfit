@@ -32,6 +32,22 @@ def test_observable_from_data():
     assert observation.driver().type() == 'host'
 
 
+@pytest.mark.parametrize('dataset_class, observable_class, shape', [
+    ('DatasetPixelSpectra', 'PixelSpectra', (10, 4, 4)),
+    ('DatasetSlitSpectra', 'SlitSpectra', (10, 4))])
+def test_spectra_keep_the_convention_of_their_data(
+        dataset_class, observable_class, shape):
+    # Spectra on an axis of log velocities (WAVE-LOG) make an observable of
+    # their grid, its convention included
+    import gbkfit.dataset
+    import gbkfit.observation
+    data = getattr(gbkfit.dataset, dataset_class)(
+        Data(np.zeros(shape)), rest='6564.61 Angstrom', convention='log')
+    observable = getattr(gbkfit.observation, observable_class).from_data(data)
+    assert observable.grid() == data.grid()
+    assert observable.grid().coords.convention == 'log'
+
+
 def test_a_model_that_can_lack_values_needs_their_residual():
     # A velocity map: the model has no velocity where its flux is below
     # the mask cutoff, and the residual there is the user's choice

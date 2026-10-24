@@ -202,7 +202,9 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         return False
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         """
         Return the PSF at points of the spectral axis.
@@ -211,8 +213,8 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         ----------
         points : Quantity
             Wavelengths, frequencies or velocities: one, or a sequence.
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords); needed
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis; needed
             between velocities and the points of the tables of a PSF
             that varies, if they are of another kind.
 
@@ -225,7 +227,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         return varying.per_point(points, lambda points_: [self] * len(points_))
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
         """
         Return the range of velocities of the spectral axis that the PSF
@@ -233,8 +235,8 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
 
         Parameters
         ----------
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords).
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis.
 
         Returns
         -------
@@ -683,18 +685,20 @@ class PSFSum(PSF):
         return any(psf.varies() for psf in self._psfs)
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         if not self.varies():
-            return super().at(points, rest)
+            return super().at(points, convention)
         return varying.per_point(points, lambda points_: [
             PSFSum(psfs, self._weights) for psfs in
-            _detail.terms_at(self._psfs, points_, rest)])
+            _detail.terms_at(self._psfs, points_, convention)])
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._psfs, rest)
+        return _detail.terms_velocity_range(self._psfs, convention)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         sizes = np.array([psf._size_impl(step) for psf in self._psfs])
@@ -752,18 +756,20 @@ class PSFConvolution(PSF):
         return any(psf.varies() for psf in self._psfs)
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         if not self.varies():
-            return super().at(points, rest)
+            return super().at(points, convention)
         return varying.per_point(points, lambda points_: [
             PSFConvolution(psfs) for psfs in
-            _detail.terms_at(self._psfs, points_, rest)])
+            _detail.terms_at(self._psfs, points_, convention)])
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._psfs, rest)
+        return _detail.terms_velocity_range(self._psfs, convention)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         # The sum of the (odd) sizes of the terms, less one for each
@@ -1044,16 +1050,20 @@ class PSFImages(PSF):
         return True
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         return varying.per_point(
-            points, lambda points_: self._at(points_, rest))
+            points, lambda points_: self._at(points_, convention))
 
     def _at(
-            self, points: u.Quantity, rest: u.Quantity | None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None
     ) -> list[PSFImage]:
         """The image of each of the points (1D)."""
-        blends = varying.blend(self._points, points, rest)
+        blends = varying.blend(self._points, points, convention)
         psfs = {}
         for i, j, t in set(blends):
             psfs[(i, j, t)] = PSFImage(
@@ -1061,9 +1071,9 @@ class PSFImages(PSF):
         return [psfs[blend] for blend in blends]
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        points = varying.to_velocities(self._points, rest)
+        points = varying.to_velocities(self._points, convention)
         return float(points.min()), float(points.max())
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -1105,15 +1115,17 @@ class PSFVarying(PSF):
         return True
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         return varying.per_point(
-            points, lambda points_: self._options.at(points_, rest))
+            points, lambda points_: self._options.at(points_, convention))
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        return self._options.velocity_range(rest)
+        return self._options.velocity_range(convention)
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         raise RuntimeError(

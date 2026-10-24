@@ -19,7 +19,7 @@ import numpy as np
 
 from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from .lines import Band, LinePlacement, air_refractive_index, doppler
+from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:
     from .base import Component
@@ -199,7 +199,7 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
             or emission.lines().names()[:1] != (HI_LINE,):
         return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
     frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
-    frame = _Axis(frequency).frame(0.0, frequency)
+    frame = _frame(gridutils.VelocityConvention(frequency), 0.0, frequency)
     intensity = _axis_integral(1 * unit, frame) / (u.km / u.s)
     temperature = intensity.to(u.K, u.brightness_temperature(frequency))
     column = temperature * (u.km / u.s) * _HI_COLUMN
@@ -313,7 +313,7 @@ def line_factor(
 def line_factors(
         source: u.UnitBase | None,
         target: DataUnit | None,
-        rows: np.ndarray,
+        redshifts: np.ndarray,
         spectral: gridutils.Grid,
         frequencies: np.ndarray | None
 ) -> 'LineFactors | None':
@@ -337,7 +337,7 @@ def line_factors(
             f"{unitutils.format_unit(source)!r}, but the data have no unit: "
             f"give them one (BUNIT in the header, or the option unit of the "
             f"data)")
-    return LineFactors(source, target, rows, spectral, frequencies)
+    return LineFactors(source, target, redshifts, spectral, frequencies)
 
 
 class LineFactors:
@@ -345,11 +345,11 @@ class LineFactors:
     The factors that turn the light of the lines of a component, in the
     unit of its emission (source), into the unit of the data of an
     observation (target), as the model holds them (see line_factor): one
-    for each line, of the given rows (where each is on the spectral axis,
-    see Lines.values), which the galaxy emits at the given frequencies
-    (Hz, see Lines.frequencies), at the frequency of the line at the
-    systemic velocity of the component (see __call__), which places it on
-    the axis.
+    for each line, of the given redshifts (the 1 + z of each on the
+    spectral axis, see Lines.factors), which the galaxy emits at the given
+    frequencies (Hz, see Lines.frequencies), at the frequency of the line
+    at the systemic velocity of the component (see __call__), which places
+    it on the axis.
 
     Each factor is a power of that frequency (brightness temperature
     ~ nu^-2; the dimming by the redshift ~ nu^3; the frequency or
@@ -371,7 +371,7 @@ class LineFactors:
             self,
             source: u.UnitBase,
             target: DataUnit,
-            rows: np.ndarray,
+            redshifts: np.ndarray,
             spectral: gridutils.Grid,
             frequencies: np.ndarray
     ):
@@ -383,11 +383,12 @@ class LineFactors:
                 f"it emits it, which the data see dimmed by the redshift of "
                 f"each line: the spectral axis needs its rest (RESTFRQ or "
                 f"RESTWAV in the header of the data, or the option rest)")
-        self._axis = _Axis(coords.rest, coords.medium)
-        self._placement = LinePlacement(rows, spectral)
-        self._offsets = np.array(rows[:, 0], dtype=float)
+        self._convention = gridutils.VelocityConvention.of(coords)
+        self._placement = LinePlacement(redshifts, spectral)
+        # (the velocity of each line on the axis at the systemic velocity 0)
+        self._offsets = self._convention.velocity(redshifts)
         self._emitted = np.array(frequencies, dtype=float)
-        self._beam = _BeamCurve(target, self._axis)
+        self._beam = _BeamCurve(target, self._convention)
         # The factor of each line at its frequency at the systemic velocity
         # 0 (with a beam of 1 arcsec^2), and its power of the frequency
         factors = []
@@ -414,17 +415,18 @@ class LineFactors:
         """
         def factor(velocity):
             return line_factor(
-                source, target.unit, self._axis.frame(velocity, emitted * u.Hz),
+                source, target.unit,
+                _frame(self._convention, velocity, emitted * u.Hz),
                 None if target.beam is None else 1.0, target.pixel,
                 target.integrated)
-        frequency = self._axis.frequency(offset)
+        frequency = self._convention.frequency(offset)
         first = factor(offset)
-        second = factor(self._axis.velocity(2 * frequency))
+        second = factor(self._convention.velocity_at(2 * frequency))
         return first, float(np.log2(second / first))
 
     def _frequency(self, vsys: float) -> np.ndarray:
         """Return the frequency (Hz) of each line at a systemic velocity."""
-        return self._axis.frequency(self._placement.centres(vsys))
+        return self._convention.frequency(self._placement.centres(vsys))
 
     def redshifts(self, vsys: float) -> np.ndarray:
         """
@@ -468,13 +470,14 @@ class OpacityScales:
             self,
             source: u.UnitBase,
             target: DataUnit | None,
-            rows: np.ndarray,
+            redshifts: np.ndarray,
             spectral: gridutils.Grid,
             frequencies: np.ndarray
     ):
         self._kelvin = LineFactors(
-            source, DataUnit(u.K, 1.0), rows, spectral, frequencies)
-        self._light = line_factors(source, target, rows, spectral, frequencies)
+            source, DataUnit(u.K, 1.0), redshifts, spectral, frequencies)
+        self._light = line_factors(
+            source, target, redshifts, spectral, frequencies)
 
     def __call__(self, vsys: float) -> np.ndarray:
         """
@@ -570,7 +573,8 @@ class BandFactors:
         Return the factor (an array of one), with the component at the
         given systemic velocity (km/s).
         """
-        return np.array([self._factor * doppler(vsys) ** self._power])
+        return np.array(
+            [self._factor * gridutils.doppler(vsys) ** self._power])
 
 
 def _band_factor(
@@ -608,58 +612,23 @@ def _band_factor(
             f"data in {unitutils.format_unit(target.unit)!r}: {e}") from e
 
 
-class _Axis:
+def _frame(
+        convention: gridutils.VelocityConvention,
+        velocity: float,
+        emitted: u.Quantity
+) -> LineFrame:
     """
-    A spectral axis of velocities that refer to a rest frequency (radio
-    velocities) or a rest wavelength (optical velocities, in the given
-    medium; see gridutils.Coords): the frequency (in vacuum) at each
-    velocity of the axis, and the reverse. The refractive index of air is
-    taken at the rest wavelength (it changes by about 1e-8 across 1000
-    km/s).
+    Return where a line, which the galaxy emits at the given frequency, is
+    on a spectral axis of the given convention at a velocity of the axis
+    (see LineFrame; its scale as in LinePlacement).
     """
-
-    def __init__(self, rest: u.Quantity, medium: str | None = None):
-        self._radio = rest.unit.is_equivalent(u.Hz)
-        if self._radio:
-            self._rest = rest.to_value(u.Hz)
-            self._index = 1.0
-        else:
-            self._rest = rest.to_value(u.m)
-            self._index = 1.0 if medium != 'air' \
-                else air_refractive_index(self._rest)
-
-    def frequency(self, velocity: float | np.ndarray) -> float | np.ndarray:
-        """Return the frequency (Hz) at velocities of the axis (km/s)."""
-        if self._radio:
-            return self._rest * (1 - velocity / _C)
-        return const.c.value / (self._index * self._rest * (1 + velocity / _C))
-
-    def velocity(self, frequency: float) -> float:
-        """Return the velocity of the axis (km/s) at a frequency (Hz)."""
-        if self._radio:
-            return _C * (1 - frequency / self._rest)
-        return _C * (
-            const.c.value / (self._index * self._rest * frequency) - 1)
-
-    def frame(self, velocity: float, emitted: u.Quantity) -> LineFrame:
-        """
-        Return where a line, which the galaxy emits at the given frequency,
-        is on the axis at a velocity of the axis (see LineFrame; its scale
-        as in LinePlacement).
-        """
-        frequency = self.frequency(velocity)
-        kms = u.km / u.s
-        if self._radio:
-            hz_per_kms = self._rest / _C
-            m_per_kms = const.c.value / frequency ** 2 * hz_per_kms
-            scale = 1 - velocity / _C
-        else:
-            m_per_kms = self._rest / _C
-            hz_per_kms = frequency / (_C * (1 + velocity / _C))
-            scale = 1 + velocity / _C
-        return LineFrame(
-            frequency * u.Hz, hz_per_kms * u.Hz / kms, m_per_kms * u.m / kms,
-            scale, emitted)
+    frequency = convention.frequency(velocity)
+    slope = convention.log_slope(velocity)
+    kms = u.km / u.s
+    return LineFrame(
+        frequency * u.Hz, frequency * slope * u.Hz / kms,
+        convention.wavelength(velocity) * slope * u.m / kms,
+        convention.stretch(velocity), emitted)
 
 
 class _BeamCurve:
@@ -671,7 +640,9 @@ class _BeamCurve:
     factors take none).
     """
 
-    def __init__(self, target: DataUnit, axis: _Axis):
+    def __init__(
+            self, target: DataUnit, convention: gridutils.VelocityConvention
+    ):
         self._velocities = None
         self._areas = 1.0
         if target.beam is None or u.beam not in target.unit.bases:
@@ -683,9 +654,8 @@ class _BeamCurve:
         if spectral.unit.is_equivalent(u.km / u.s):
             velocities = spectral.to_value(u.km / u.s)
         else:
-            velocities = np.array([
-                axis.velocity(frequency) for frequency in
-                spectral.to_value(u.Hz, u.spectral())])
+            velocities = convention.velocity_at(
+                spectral.to_value(u.Hz, u.spectral()))
         order = np.argsort(velocities)
         self._velocities = velocities[order]
         self._areas = np.asarray(target.beam, dtype=float)[order]

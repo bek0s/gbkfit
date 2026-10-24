@@ -60,15 +60,17 @@ def load_observable(
 def grid_options(grid: gridutils.Grid) -> dict[str, Any]:
     """
     Return the options of the grid of an observable (size, step, rpix,
-    rval, rota, and rest and medium with a spectral axis) of the given
-    grid.
+    rval, rota, and rest, medium and convention with a spectral axis) of
+    the given grid.
     """
     coords = grid.coords
     options = dict(
         size=grid.size, step=coords.step, rpix=coords.rpix, rval=coords.rval,
         rota=coords.rota)
     if grid.spectral_axis is not None:
-        options.update(rest=coords.rest, medium=coords.medium)
+        options.update(
+            rest=coords.rest, medium=coords.medium,
+            convention=coords.convention)
     return options
 
 

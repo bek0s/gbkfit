@@ -193,7 +193,9 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         return False
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         """
         Return the LSF at points of the spectral axis.
@@ -202,8 +204,8 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         ----------
         points : Quantity
             Wavelengths, frequencies or velocities: one, or a sequence.
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords); needed
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis; needed
             between velocities and the points of the tables of an LSF
             that varies, if they are of another kind.
 
@@ -216,7 +218,7 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         return varying.per_point(points, lambda points_: [self] * len(points_))
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
         """
         Return the range of velocities of the spectral axis that the LSF
@@ -224,8 +226,8 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
 
         Parameters
         ----------
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords).
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis.
 
         Returns
         -------
@@ -631,18 +633,20 @@ class LSFSum(LSF):
         return any(lsf.varies() for lsf in self._lsfs)
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         if not self.varies():
-            return super().at(points, rest)
+            return super().at(points, convention)
         return varying.per_point(points, lambda points_: [
             LSFSum(lsfs, self._weights) for lsfs in
-            _detail.terms_at(self._lsfs, points_, rest)])
+            _detail.terms_at(self._lsfs, points_, convention)])
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._lsfs, rest)
+        return _detail.terms_velocity_range(self._lsfs, convention)
 
     def _size_impl(self, step: float) -> float:
         return max(lsf._size_impl(step) for lsf in self._lsfs)
@@ -693,18 +697,20 @@ class LSFConvolution(LSF):
         return any(lsf.varies() for lsf in self._lsfs)
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         if not self.varies():
-            return super().at(points, rest)
+            return super().at(points, convention)
         return varying.per_point(points, lambda points_: [
             LSFConvolution(lsfs) for lsfs in
-            _detail.terms_at(self._lsfs, points_, rest)])
+            _detail.terms_at(self._lsfs, points_, convention)])
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        return _detail.terms_velocity_range(self._lsfs, rest)
+        return _detail.terms_velocity_range(self._lsfs, convention)
 
     def _size_impl(self, step: float) -> float:
         # The sum of the (odd) sizes of the terms, less one for each
@@ -911,16 +917,20 @@ class LSFImages(LSF):
         return True
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         return varying.per_point(
-            points, lambda points_: self._at(points_, rest))
+            points, lambda points_: self._at(points_, convention))
 
     def _at(
-            self, points: u.Quantity, rest: u.Quantity | None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None
     ) -> list[LSFImage]:
         """The image of each of the points (1D)."""
-        blends = varying.blend(self._points, points, rest)
+        blends = varying.blend(self._points, points, convention)
         lsfs = {}
         for i, j, t in set(blends):
             lsfs[(i, j, t)] = LSFImage(
@@ -928,9 +938,9 @@ class LSFImages(LSF):
         return [lsfs[blend] for blend in blends]
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        points = varying.to_velocities(self._points, rest)
+        points = varying.to_velocities(self._points, convention)
         return float(points.min()), float(points.max())
 
     def _size_impl(self, step: float) -> float:
@@ -968,15 +978,17 @@ class LSFVarying(LSF):
         return True
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         return varying.per_point(
-            points, lambda points_: self._options.at(points_, rest))
+            points, lambda points_: self._options.at(points_, convention))
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
-        return self._options.velocity_range(rest)
+        return self._options.velocity_range(convention)
 
     def _size_impl(self, step: float) -> float:
         raise RuntimeError(

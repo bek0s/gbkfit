@@ -3,6 +3,7 @@ Tests for the grids of pixels with world coordinates.
 """
 
 import astropy.io.fits as fits
+import astropy.units as u
 import astropy.wcs
 import numpy as np
 import pytest
@@ -71,6 +72,39 @@ def test_velocity_conventions_follow_the_rest():
     for convention, rest in (('radio', wave), ('log', freq), ('log', None)):
         with pytest.raises(ConfigError, match="convention"):
             gridutils.make_convention(convention, rest)
+
+
+@pytest.mark.parametrize('rest, convention', [
+    ('6563 Angstrom', None), ('6563 Angstrom', 'log'), ('1420 MHz', None),
+    (None, None)])
+def test_velocity_conventions_place_light(rest, convention):
+    # Each convention turns velocities into the 1 + z of their light and
+    # back, and a km/s of motion (which changes 1 + z by D / c) moves the
+    # light by its stretch in velocity of the axis
+    c = 299792.458
+    rest = None if rest is None else gridutils.make_rest(rest)
+    velocities = gridutils.VelocityConvention(rest, None, convention)
+    v = np.array([-3000.0, 0.0, 12000.0])
+    d = velocities.factor(v)
+    np.testing.assert_allclose(velocities.velocity(d), v, atol=1e-8)
+    moved = (velocities.velocity(d * (1 + 1e-3 / c)) - v) / 1e-3
+    np.testing.assert_allclose(velocities.stretch(v), moved, rtol=1e-6)
+
+
+def test_log_velocities_are_of_logarithmic_wavelengths():
+    # On an axis uniform in ln w, the light of the velocity v is at the
+    # wavelength rest exp(v / c), in its frequencies and in the equivalency
+    # of the points of tables (e.g. of a varying LSF) too
+    c = 299792.458
+    rest = gridutils.make_rest('6564.61 Angstrom')
+    velocities = gridutils.VelocityConvention(rest, None, 'log')
+    wavelength = 6564.61e-10 * np.exp(3000 / c)
+    assert velocities.wavelength(3000) == pytest.approx(wavelength, rel=1e-12)
+    assert velocities.frequency(3000) == pytest.approx(
+        c * 1e3 / wavelength, rel=1e-12)
+    assert velocities.velocity_at(c * 1e3 / wavelength) == pytest.approx(3000)
+    assert (3000 * u.km / u.s).to_value(
+        u.m, velocities.equivalency()) == pytest.approx(wavelength, rel=1e-12)
 
 
 def test_logarithmic_wavelengths_are_log_velocities(tmp_path):

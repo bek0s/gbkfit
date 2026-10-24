@@ -76,7 +76,9 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
         return False
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PrimaryBeam | list[PrimaryBeam]':
         """
         Return the primary beam at points of the spectral axis.
@@ -85,8 +87,8 @@ class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
         ----------
         points : Quantity
             Wavelengths, frequencies or velocities: one, or a sequence.
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords); needed
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis; needed
             for velocities, if the beam varies.
 
         Returns
@@ -166,14 +168,16 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
         return self._frequency is not None
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> 'PrimaryBeam | list[PrimaryBeam]':
         if not self.varies():
-            return super().at(points, rest)
+            return super().at(points, convention)
         return varying.per_point(points, lambda points_: [
             type(self)(self._fwhm * self._frequency / frequency, self._x,
                        self._y)
-            for frequency in varying.to_frequencies(points_, rest)])
+            for frequency in varying.to_frequencies(points_, convention)])
 
     def response(self, grid: gridutils.Grid) -> np.ndarray:
         x, y = gridutils.sky_positions(grid)

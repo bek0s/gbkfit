@@ -157,7 +157,8 @@ class DatasetRegionSpectra(Dataset):
             rpix=spectral.rpix[0],
             rval=spectral.rval[0],
             rest=None if spectral.rest is None else str(spectral.rest),
-            medium=spectral.medium, convention=spectral.convention) | item
+            # (the convention of the velocities is in the header of the file)
+            medium=spectral.medium) | item
 
     def __init__(
             self,

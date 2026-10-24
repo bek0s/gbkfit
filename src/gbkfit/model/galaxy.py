@@ -85,7 +85,7 @@ class Galaxy(parseutils.Serializable):
     redshift : float, optional
         Its one redshift: for what it emits and absorbs in its rest frame
         (its named lines are at their rest wavelengths times 1 + redshift,
-        see Lines.values; the dust of an image absorbs at the effective
+        see Lines.factors; the dust of an image absorbs at the effective
         wavelength of its band over 1 + redshift), and for its distance by
         redshift (see DistanceRedshift); the systemic velocity of its
         components is the velocity offset from it (a relativistic radial

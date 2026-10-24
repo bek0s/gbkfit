@@ -393,7 +393,8 @@ class ComponentPlans:
             step=tuple(coords.step) + tuple(spectral.step),
             rpix=tuple(coords.rpix) + tuple(spectral.rpix),
             rval=tuple(coords.rval) + tuple(spectral.rval),
-            rest=spectral.rest, medium=spectral.medium), 2)
+            rest=spectral.rest, medium=spectral.medium,
+            convention=spectral.convention), 2)
 
 
 def _label(components: Sequence['Component'], index: int) -> str:

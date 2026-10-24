@@ -762,7 +762,7 @@ def emission_setup(
     opacity_rows = [
         selected.index(line) if line in selected else -1
         for line in opacity_lines]
-    rows = lines.values(spectral, redshift)[list(selected)]
+    factors = lines.factors(spectral, redshift)[list(selected)]
     # (with a unit, the frequency at which the galaxy emits each line)
     frequencies = None if unit is None \
         else lines.frequencies(spectral, redshift)[list(selected)]
@@ -773,12 +773,12 @@ def emission_setup(
     opacity_scales = None
     if opacity_lines and unit is not None:
         opacity_scales = OpacityScales(
-            unit, data_unit, rows, spectral, frequencies)
+            unit, data_unit, factors, spectral, frequencies)
     return EmissionSetup(
         len(selected), opacity_rows,
-        Fluxes(len(rows), ratios, line_factors(
-            unit, data_unit, rows, spectral, frequencies)),
-        LinePlacement(rows, spectral), opacity_scales)
+        Fluxes(len(factors), ratios, line_factors(
+            unit, data_unit, factors, spectral, frequencies)),
+        LinePlacement(factors, spectral), opacity_scales)
 
 
 class NodalComponentPlan(ComponentPlan):

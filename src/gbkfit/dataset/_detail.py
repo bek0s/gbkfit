@@ -297,8 +297,7 @@ def dump_grid_dataset(
         info.update(rest=str(grid.coords.rest))
     if grid.coords.medium is not None:
         info.update(medium=grid.coords.medium)
-    if grid.coords.convention is not None:
-        info.update(convention=grid.coords.convention)
+    # (the convention of the velocities is in the headers of the files)
 
     def write(filename: str, array: np.ndarray) -> None:
         fitsutils.write_data(

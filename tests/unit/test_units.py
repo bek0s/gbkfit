@@ -99,26 +99,27 @@ def doppler(vsys):
 
 
 def factors(
-        source, target, rest=HI, rows=((0, 1, 1),), redshift=0.0, **options):
+        source, target, rest=HI, lines=(1.0,), redshift=0.0, convention=None,
+        **options):
     """
-    Return the factors of the lines of the given rows (see Lines.values) of
-    a component of the source unit, of a galaxy at the redshift, in data
-    of the target unit, on an axis of the rest.
+    Return the factors of the lines of the given 1 + z on the axis (see
+    Lines.factors) of a component of the source unit, of a galaxy at the
+    redshift, in data of the target unit, on an axis of the rest and the
+    convention.
     """
     spectral = gridutils.Grid((11,), gridutils.Coords(
-        (10,), (5,), (0,), 0, rest), 0)
-    rows = np.array(rows, dtype=float)
-    # (the frequency at which the galaxy emits each line: k is f / (1 + z)
-    # over the rest frequency of the axis, or w (1 + z) over its rest
-    # wavelength)
+        (10,), (5,), (0,), 0, rest, None, convention), 0)
+    lines = np.array(lines, dtype=float)
+    # (the frequency at which the galaxy emits each line: 1 + redshift
+    # times that of the line on the axis, the rest frequency of the axis
+    # over its 1 + z)
     frequencies = None
     if rest is not None:
-        axis = rest.to_value(u.Hz, u.spectral())
-        k = rows[:, 1] if rest.unit.is_equivalent(u.Hz) else 1 / rows[:, 1]
-        frequencies = axis * k * (1 + redshift)
+        frequencies = rest.to_value(u.Hz, u.spectral()) / lines \
+            * (1 + redshift)
     return LineFactors(
         parse_unit(source), DataUnit(parse_unit(target), PIXEL, **options),
-        rows, spectral, frequencies)
+        lines, spectral, frequencies)
 
 
 def test_hi_mass_is_its_moment_0_by_the_textbook():
@@ -163,7 +164,7 @@ def test_the_temperature_of_a_line_at_its_frequency():
     # rest frequency dimmed by (1 + z)^-3
     assert factors('K km/s', 'K')(470) == pytest.approx(
         doppler(470) ** -2, rel=1e-12)
-    assert factors('K km/s', 'K', rows=[(-C * 0.02, 1.02, 1)])(470) \
+    assert factors('K km/s', 'K', lines=[1 / 1.02])(470) \
         == pytest.approx(1.02 * doppler(470) ** -2, rel=1e-12)
     jansky = factors('K km/s', 'Jy/beam', beam=BEAM)
     for vsys in (0, 3000):
@@ -186,11 +187,16 @@ def test_lines_at_a_redshift_by_the_textbook():
     omega = (BEAM * u.arcsec ** 2).to_value(u.sr)
     assert co(0) == pytest.approx(
         omega * 1e12 * (230.538 / 2.5) ** 2 / (3.25e7 * 2.5), rel=2e-3)
-    halpha = factors(
-        '1e-17 erg/s/cm2/arcsec2', '1e-20 erg/s/cm2/Angstrom', HALPHA,
-        [(C * 1.5, 2.5, 1)], redshift=1.5)
-    assert halpha(0) == pytest.approx(
-        1e-17 * PIXEL / 1e-20 * C / 6564.61 / 2.5 ** 4, rel=1e-12)
+    # (on an axis of log velocities, a km/s of the galaxy spans one km/s of
+    # the axis, not 2.5: the line is 2.5 times narrower in its km/s, of
+    # 1 / 2.5 the light per km/s, the same per Angstrom)
+    for convention, stretch in (('optical', 2.5), ('log', 1)):
+        halpha = factors(
+            '1e-17 erg/s/cm2/arcsec2', '1e-20 erg/s/cm2/Angstrom', HALPHA,
+            [2.5], redshift=1.5, convention=convention)
+        assert halpha(0) == pytest.approx(
+            1e-17 * PIXEL / 1e-20 * C / 6564.61 / 2.5 ** 4 * stretch / 2.5,
+            rel=1e-12)
 
 
 def test_the_beam_of_each_channel_at_the_line():
@@ -242,7 +248,7 @@ def test_bands_dimmed_by_the_redshift():
 def test_data_must_tell_their_unit_and_beam(target, message):
     with pytest.raises(ConfigError, match=message):
         line_factors(
-            parse_unit('K km/s'), target, np.array([[0.0, 1.0, 1.0]]),
+            parse_unit('K km/s'), target, np.ones(1),
             gridutils.Grid((11,), gridutils.Coords(
                 (10,), (5,), (0,), 0, HI), 0),
             np.array([HI.to_value(u.Hz)]))

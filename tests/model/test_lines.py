@@ -119,14 +119,32 @@ def test_lines_in_vacuum_on_an_axis_in_air(medium, offset):
     # Angstrom in air, so on an axis in air of that rest it is at velocity
     # 0, and on an axis in vacuum it is 83 km/s above it (at 6564.61)
     from gbkfit.model import LineCatalogue
-    from gbkfit.model.components.lines import Lines
+    from gbkfit.model.components.lines import LinePlacement, Lines
     from gbkfit.utils import gridutils
     spectral = gridutils.make_grid(
         (41,), 10, spectral_axis=0, rest='6562.80 Angstrom', medium=medium)
     lines = Lines([LineCatalogue().line('halpha')])
-    (line_offset, scale, _), = lines.values(spectral, 0.0)
+    (line_offset, scale), = LinePlacement(
+        lines.factors(spectral, 0.0), spectral)(0.0)
     assert line_offset == pytest.approx(offset, abs=0.2)
     assert scale == pytest.approx(1, abs=3e-4)
+
+
+def halpha_nii(rest, convention=None):
+    """
+    The offsets and scales of Halpha and [NII] 6583 of a galaxy at z = 1.5
+    and the systemic velocity 0, on an axis of a rest (Angstrom) and a
+    convention (see LinePlacement).
+    """
+    from gbkfit.model import LineCatalogue
+    from gbkfit.model.components.lines import LinePlacement, Lines
+    from gbkfit.utils import gridutils
+    catalogue = LineCatalogue()
+    spectral = gridutils.make_grid(
+        (41,), 10, spectral_axis=0, rest=f'{rest} Angstrom',
+        convention=convention)
+    lines = Lines([catalogue.line('halpha'), catalogue.line('nii6583')])
+    return LinePlacement(lines.factors(spectral, 1.5), spectral)(0.0)
 
 
 @pytest.mark.parametrize('rest, k', [(6564.61 * 2.5, 1.0), (6564.61, 2.5)])
@@ -135,21 +153,25 @@ def test_the_redshift_places_the_lines(rest, k):
     # 1) or in its frame (k = 1 + z): Halpha is at 0 or at c z (optical
     # velocities), [NII] 6583 is 943.6 km/s of the galaxy above it, and a
     # km/s of the galaxy spans k km/s of the axis
-    from gbkfit.model import LineCatalogue
-    from gbkfit.model.components.lines import Lines
-    from gbkfit.utils import gridutils
-    catalogue = LineCatalogue()
-    spectral = gridutils.make_grid(
-        (41,), 10, spectral_axis=0, rest=f'{rest} Angstrom')
-    (halpha, halpha_scale, _), (nii, nii_scale, _) = Lines(
-        [catalogue.line('halpha'), catalogue.line('nii6583')]).values(
-        spectral, 1.5)
-    c = 299792.458
-    assert halpha == pytest.approx(c * (k - 1), abs=1e-6)
+    (halpha, halpha_scale), (nii, nii_scale) = halpha_nii(rest)
+    assert halpha == pytest.approx(C * (k - 1), abs=1e-6)
     assert halpha_scale == pytest.approx(k, rel=1e-12)
     assert (nii - halpha) / k == pytest.approx(
-        c * (6585.27 / 6564.61 - 1), rel=1e-9)
+        C * (6585.27 / 6564.61 - 1), rel=1e-9)
     assert nii_scale == pytest.approx(k * 6585.27 / 6564.61, rel=1e-12)
+
+
+@pytest.mark.parametrize('rest, k', [(6564.61 * 2.5, 1.0), (6564.61, 2.5)])
+def test_the_redshift_places_the_lines_on_log_axes(rest, k):
+    # The same on an axis uniform in ln w (log velocities, c ln D): Halpha
+    # is at c ln k, [NII] 6583 at c ln(6585.27 / 6564.61) above it, and a
+    # km/s of the galaxy spans one of the axis
+    (halpha, halpha_scale), (nii, nii_scale) = halpha_nii(rest, 'log')
+    assert halpha == pytest.approx(C * np.log(k), abs=1e-6)
+    assert nii - halpha == pytest.approx(
+        C * np.log(6585.27 / 6564.61), rel=1e-9)
+    assert halpha_scale == pytest.approx(1, rel=1e-12)
+    assert nii_scale == pytest.approx(1, rel=1e-12)
 
 
 @pytest.mark.parametrize('rest, convention, centre, stretch', [
@@ -170,8 +192,8 @@ def test_the_systemic_velocity_is_one_on_every_axis(
     from gbkfit.utils import gridutils
     spectral = gridutils.make_grid(
         (41,), 10, spectral_axis=0, rest=rest, convention=convention)
-    rows = Lines(None).values(spectral, 0.0)
-    (offset, scale), = LinePlacement(rows, spectral)(10000)
+    factors = Lines(None).factors(spectral, 0.0)
+    (offset, scale), = LinePlacement(factors, spectral)(10000)
     assert offset + scale * 10000 == pytest.approx(centre, rel=1e-12)
     assert scale == pytest.approx(stretch, rel=1e-12)
 

@@ -23,8 +23,8 @@ the points named wavelength, frequency or velocity, e.g.
     alpha: {table: psf.ecsv, column: alpha}
 
 Values without units are in the units of the option. Velocities are in
-the convention of the spectral axis: optical for a rest wavelength, and
-radio for a rest frequency (see gridutils.Coords).
+the convention of the spectral axis (see gridutils.VelocityConvention):
+optical or log for a rest wavelength, radio for a rest frequency.
 """
 
 from collections.abc import Callable, Mapping, Sequence
@@ -34,7 +34,7 @@ import astropy.table
 import astropy.units as u
 import numpy as np
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -52,28 +52,39 @@ _KMS = u.km / u.s
 _Thing = TypeVar('_Thing')
 
 
-def _doppler(rest: u.Quantity | None) -> u.Equivalency:
-    """The velocity convention of a spectral axis of the given rest."""
-    if rest is None:
-        raise ConfigError(
-            "velocities and wavelengths or frequencies are converted with "
-            "the rest of the spectral axis (rest), which is not given")
-    rest = u.Quantity(rest)
-    return (u.doppler_optical(rest) if rest.unit.is_equivalent(u.m)
-            else u.doppler_radio(rest))
-
-
 def _convert(
-        points: u.Quantity, unit: u.UnitBase, rest: u.Quantity | None
+        points: u.Quantity,
+        unit: u.UnitBase,
+        convention: gridutils.VelocityConvention | None
 ) -> np.ndarray:
     """
     Points of the spectral axis in the unit of another kind of point (e.g.
     velocities as wavelengths): only between velocities and the others
-    is the rest needed.
+    is the convention needed.
     """
     if points.unit.is_equivalent(unit, u.spectral()):
         return points.to_value(unit, u.spectral())
-    return points.to_value(unit, _doppler(rest))
+    return points.to_value(unit, _equivalency(convention))
+
+
+def _equivalency(
+        convention: gridutils.VelocityConvention | None
+) -> u.Equivalency:
+    """
+    Return the equivalency of the velocities of the spectral axis of a
+    convention and its wavelengths or frequencies.
+
+    Raises
+    ------
+    ConfigError
+        If there is no convention, or it has no rest.
+    """
+    if convention is None:
+        raise ConfigError(
+            "velocities and wavelengths or frequencies are converted with "
+            "the convention of the velocities of the spectral axis, which "
+            "is not given")
+    return convention.equivalency()
 
 
 def _quantity(
@@ -143,7 +154,8 @@ def per_point(
 
 
 def to_velocities(
-        points: u.Quantity, rest: u.Quantity | None = None
+        points: u.Quantity,
+        convention: gridutils.VelocityConvention | None = None
 ) -> np.ndarray:
     """
     Return points of the spectral axis as velocities.
@@ -152,8 +164,8 @@ def to_velocities(
     ----------
     points : Quantity
         Wavelengths, frequencies or velocities.
-    rest : Quantity, optional
-        The rest of the spectral axis (see gridutils.Coords); needed for
+    convention : VelocityConvention, optional
+        The velocity convention of the spectral axis; needed for
         wavelengths and frequencies.
 
     Returns
@@ -164,13 +176,14 @@ def to_velocities(
     Raises
     ------
     ConfigError
-        If the rest is needed but not given.
+        If the convention is needed but not given, or has no rest.
     """
-    return _convert(as_points(points), _KMS, rest)
+    return _convert(as_points(points), _KMS, convention)
 
 
 def to_frequencies(
-        points: u.Quantity, rest: u.Quantity | None = None
+        points: u.Quantity,
+        convention: gridutils.VelocityConvention | None = None
 ) -> np.ndarray:
     """
     Return points of the spectral axis as frequencies.
@@ -179,8 +192,8 @@ def to_frequencies(
     ----------
     points : Quantity
         Wavelengths, frequencies or velocities.
-    rest : Quantity, optional
-        The rest of the spectral axis (see gridutils.Coords); needed for
+    convention : VelocityConvention, optional
+        The velocity convention of the spectral axis; needed for
         velocities.
 
     Returns
@@ -191,9 +204,9 @@ def to_frequencies(
     Raises
     ------
     ConfigError
-        If the rest is needed but not given.
+        If the convention is needed but not given, or has no rest.
     """
-    return _convert(as_points(points), u.Hz, rest)
+    return _convert(as_points(points), u.Hz, convention)
 
 
 def load_points(info: dict[str, Any]) -> u.Quantity | None:
@@ -257,7 +270,9 @@ def dump_points(points: u.Quantity) -> dict[str, Any]:
 
 
 def blend(
-        points: u.Quantity, at: u.Quantity, rest: u.Quantity | None = None
+        points: u.Quantity,
+        at: u.Quantity,
+        convention: gridutils.VelocityConvention | None = None
 ) -> list[tuple[int, int, float]]:
     """
     Return how to blend things given at points of the spectral axis (e.g.
@@ -271,8 +286,8 @@ def blend(
         The points of the things: wavelengths, frequencies or velocities.
     at : Quantity
         The points to blend them at, of any kind (1D).
-    rest : Quantity, optional
-        The rest of the spectral axis (see gridutils.Coords); needed
+    convention : VelocityConvention, optional
+        The velocity convention of the spectral axis; needed
         between velocities and the other kinds of points.
 
     Returns
@@ -284,7 +299,7 @@ def blend(
     """
     order = np.argsort(points.value)
     positions = np.interp(
-        _convert(at, points.unit, rest), points.value[order],
+        _convert(at, points.unit, convention), points.value[order],
         np.arange(len(order)))
     result = []
     for position in positions:
@@ -495,7 +510,7 @@ class SpectralTable:
 
     def at(
             self, points: u.Quantity, unit: str | u.UnitBase,
-            rest: u.Quantity | None = None
+            convention: gridutils.VelocityConvention | None = None
     ) -> np.ndarray:
         """
         Return the values at points of the spectral axis.
@@ -508,8 +523,8 @@ class SpectralTable:
             The unit of the option. Values with other units are converted
             to it; for a velocity, a width in wavelength or frequency is
             converted at each point of the table.
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords); needed
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis; needed
             between velocities and the other kinds of points.
 
         Returns
@@ -520,24 +535,25 @@ class SpectralTable:
         Raises
         ------
         ConfigError
-            If the rest is needed but not given, or the values cannot be
+            If the convention is needed but not given or has no convention,
+            or the values cannot be
             converted to the unit of the option.
         """
-        x = _convert(as_points(points), self._points.unit, rest)
-        values = self._values_in(u.Unit(unit), rest)
+        x = _convert(as_points(points), self._points.unit, convention)
+        values = self._values_in(u.Unit(unit), convention)
         order = np.argsort(self._points.value)
         return np.interp(x, self._points.value[order], values[order])
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
         """
         Return the range of the points as velocities of a spectral axis.
 
         Parameters
         ----------
-        rest : Quantity, optional
-            The rest of the spectral axis (see gridutils.Coords); needed
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis; needed
             for points in wavelength or frequency.
 
         Returns
@@ -545,11 +561,13 @@ class SpectralTable:
         tuple of float
             The lowest and the highest velocity (km/s).
         """
-        velocities = to_velocities(self._points, rest)
+        velocities = to_velocities(self._points, convention)
         return float(velocities.min()), float(velocities.max())
 
     def _values_in(
-            self, unit: u.UnitBase, rest: u.Quantity | None
+            self,
+            unit: u.UnitBase,
+            convention: gridutils.VelocityConvention | None
     ) -> np.ndarray:
         """The values in a unit."""
         if self._unit is None:
@@ -560,7 +578,7 @@ class SpectralTable:
         if unit.is_equivalent(_KMS) and values.unit.is_equivalent(
                 u.m, u.spectral()):
             # A width around each point, in wavelength or frequency
-            doppler = _doppler(rest)
+            doppler = _equivalency(convention)
             centres = self._points.to(values.unit, u.spectral() + doppler)
             low = (centres - values / 2).to_value(_KMS, doppler)
             high = (centres + values / 2).to_value(_KMS, doppler)
@@ -654,11 +672,13 @@ class _VaryingOptions:
             name: table.dump() for name, table in self._tables.items()}
 
     def at(
-            self, points: u.Quantity, rest: u.Quantity | None = None
+            self,
+            points: u.Quantity,
+            convention: gridutils.VelocityConvention | None = None
     ) -> list[Any]:
         """Return an object of the class at each of the points (1D)."""
         values = {
-            name: table.at(points, self._cls.VARYING_OPTIONS[name], rest)
+            name: table.at(points, self._cls.VARYING_OPTIONS[name], convention)
             for name, table in self._tables.items()}
         return [
             self._cls(**self._constants | {
@@ -666,9 +686,10 @@ class _VaryingOptions:
             for i in range(len(points))]
 
     def velocity_range(
-            self, rest: u.Quantity | None = None
+            self, convention: gridutils.VelocityConvention | None = None
     ) -> tuple[float, float]:
         """Return the range of velocities that all the tables cover."""
         ranges = [
-            table.velocity_range(rest) for table in self._tables.values()]
+            table.velocity_range(convention)
+            for table in self._tables.values()]
         return (max(low for low, _ in ranges), min(high for _, high in ranges))

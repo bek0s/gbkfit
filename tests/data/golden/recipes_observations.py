@@ -220,6 +220,22 @@ CASES: list[dict[str, Any]] = [
             type='gaussian', weights=dict(moment1=2, moment2=0.5),
             missing_residual=3)]),
     dict(
+        name='log_lambda_cube',
+        doc="A cube of an axis uniform in ln w (FITS WAVE-LOG, log "
+            "velocities) of a galaxy at z = 0.03 that emits Halpha and "
+            "[NII] 6583.",
+        galaxies=[dict(redshift=0.03, components=[_thin_disk(
+            emission=dict(type='lines', lines=['halpha', 'nii6583']))])],
+        observations=[_sky(
+            dict(type='pixel_spectra', size=[20, 20, 50],
+                 step=[0.5, 0.5, 30], rval=[0, 0, 9300],
+                 rest='6564.61 Angstrom', convention='log'),
+            instrument=dict(psf=_PSF, lsf=_LSF))],
+        truth=_DISK_TRUTH | dict(nii6583_ratio=0.3),
+        trial=_DISK_TRIAL | dict(
+            nii6583_ratio=dict(value=0.35, min=0, max=2)),
+        noises=[_gauss(0.0005)]),
+    dict(
         name='slit_spectra',
         doc="The spectra of a long slit rotated on the sky, wider than "
             "its step.",

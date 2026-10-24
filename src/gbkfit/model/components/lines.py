@@ -1,6 +1,5 @@
 from collections.abc import Mapping, Sequence
 
-import astropy.constants
 import astropy.units
 import numpy as np
 
@@ -20,9 +19,6 @@ __all__ = [
     'line_parser'
 ]
 
-
-# The speed of light (km/s)
-_C = astropy.constants.c.to_value('km/s')
 
 # The lines of the catalogue (see LineCatalogue): the rest wavelength in
 # vacuum of the optical lines (those of the SDSS line list) and of the
@@ -62,23 +58,6 @@ _CATALOGUE_BANDS = {
     'twomass_ks': '2.159 um',
     'irac1': '3.550 um',
     'irac2': '4.493 um'}
-
-
-def air_refractive_index(wavelength: float) -> float:
-    """
-    Return the refractive index of standard air at a wavelength in vacuum
-    (m), as the IAU adopted it (Morton 2000, ApJS 130, 403, eq. 8; from
-    Edlen 1966 and Birch & Downs 1994): air wavelengths are those in
-    vacuum over it. Raise ConfigError below 2000 Angstrom, where air
-    wavelengths are not used.
-    """
-    if not wavelength >= 2e-7:
-        raise ConfigError(
-            f"wavelengths in air are used above 2000 Angstrom only; a line "
-            f"is at {wavelength * 1e10:.1f} Angstrom (in vacuum)")
-    # The wavenumber (1 / um), squared
-    s2 = (1e-6 / wavelength) ** 2
-    return 1 + 8.34254e-5 + 2.406147e-2 / (130 - s2) + 1.5998e-4 / (38.9 - s2)
 
 
 class Line(parseutils.Serializable):
@@ -348,30 +327,21 @@ class Lines:
         """
         return None if index == 0 else f'{self.names()[index]}_ratio'
 
-    def values(
+    def factors(
             self, spectral: gridutils.Grid, redshift: float
     ) -> np.ndarray:
         """
-        Return the offset, scale and flux of each line on a spectral axis
-        (a grid of one axis; an array of shape (nlines, 3); see
-        DiskPlan.evaluate), of a component of a galaxy of the given
-        redshift, such that a line of velocity v (in the frame of the
-        galaxy, e.g. the motions within it) is at offset + scale * v on
-        the axis, with a flux of 1 (the ratios are parameters): for a
-        component at the systemic velocity 0 (see LinePlacement for
-        others). One line without a name is at the velocity of the axis
-        (offset 0, scale 1), whatever the redshift.
-
-        With optical velocities (a rest wavelength), a line of rest
-        wavelength w is at w (1 + z) (1 + v / c), to first order in v,
-        which is at the velocity c (k - 1) + k v of the axis, where k is w
-        (1 + z) over the rest of the axis. With radio velocities (a rest
-        frequency), a line of rest frequency f is at f / (1 + z) (1 - v /
-        c), which is at the velocity c (1 - k) + k v, where k is f / (1 +
-        z) over the rest. The rest of the axis can be that of a line in
-        the frame of the galaxy (k = 1 + z) or as observed (k = 1): its
+        Return the 1 + z of each line on a spectral axis, of a component of
+        a galaxy of the given redshift at the systemic velocity 0 (see
+        LinePlacement, which places the lines at a systemic velocity): the
+        wavelength of the line over the rest wavelength of the axis, or
+        the rest frequency of the axis over the frequency of the line. A
+        line of rest wavelength w is at w (1 + z), one of rest frequency f
+        at f / (1 + z). The rest of the axis can be that of a line in the
+        frame of the galaxy (a factor 1 + z) or as observed (1): its
         velocities are then near c z or near 0, and those of the galaxy
-        are the same.
+        are the same. One line without a name is at the rest of the axis
+        (1), whatever the redshift.
 
         The rest wavelengths of the lines are in vacuum. If those of the
         axis are in air (see gridutils.Coords), w (1 + z) is that of each
@@ -379,9 +349,14 @@ class Lines:
         wavelength (in vacuum), with the galaxy at the velocity at which
         its first line is at the centre of the axis. (The index changes by
         less than 1e-7 across 2000 km/s.)
+
+        Raises
+        ------
+        ConfigError
+            If the lines have names, and the spectral axis has no rest.
         """
         if self._lines is None:
-            return np.array([[0.0, 1.0, 1.0]])
+            return np.ones(1)
         rest = spectral.coords.rest
         if rest is None:
             raise ConfigError(
@@ -390,24 +365,23 @@ class Lines:
                 "to: RESTWAV or RESTFRQ in the header of the data, or the "
                 "rest option of the observable (spec_rest for moments and "
                 "spectra in regions)")
-        optical = rest.unit == astropy.units.m
-        shift = 1 + redshift if optical else 1 / (1 + redshift)
-        ratios = [
-            float(line.rest().to_value(rest.unit, astropy.units.spectral())
-                  / rest.value) * shift
-            for line in self._lines]
+        # (wavelengths in vacuum, but that of a rest wavelength in air)
+        emitted = np.array([
+            line.rest().to_value(astropy.units.m, astropy.units.spectral())
+            for line in self._lines])
+        factors = emitted * (1 + redshift) \
+            / rest.to_value(astropy.units.m, astropy.units.spectral())
         if spectral.coords.medium == 'air':
+            convention = gridutils.VelocityConvention.of(spectral.coords)
             centre = spectral.zero()[0] \
                 + (spectral.size[0] - 1) / 2 * spectral.coords.step[0]
-            velocity = (centre - _C * (ratios[0] - 1)) / ratios[0]
-            ratios = [
-                ratio / air_refractive_index(line.rest().to_value(
-                    astropy.units.m, astropy.units.spectral())
-                    * (1 + redshift) * (1 + velocity / _C))
-                for ratio, line in zip(ratios, self._lines)]
-        return np.array([
-            (_C * (ratio - 1) if optical else _C * (1 - ratio), ratio, 1.0)
-            for ratio in ratios])
+            # (1 + v / c of the galaxy at the velocity v at which its first
+            # line is at the centre of the axis)
+            shift = convention.factor(centre) / factors[0]
+            factors = factors / np.array([
+                gridutils.air_refractive_index(w * (1 + redshift) * shift)
+                for w in emitted])
+        return factors
 
     def frequencies(
             self, spectral: gridutils.Grid, redshift: float
@@ -416,7 +390,7 @@ class Lines:
         Return the frequency (Hz, in vacuum) at which a galaxy of the given
         redshift emits each line, in its rest frame: the rest of each, or
         for one line without a name, which is at the velocity of the
-        spectral axis (see values), the rest of the axis times 1 +
+        spectral axis (see factors), the rest of the axis times 1 +
         redshift.
 
         Raises
@@ -436,88 +410,9 @@ class Lines:
                 "of the data, or the rest option of the observable")
         frequency = rest.to_value(astropy.units.Hz, astropy.units.spectral())
         if spectral.coords.medium == 'air':
-            frequency /= air_refractive_index(rest.to_value(astropy.units.m))
+            frequency /= gridutils.air_refractive_index(
+                rest.to_value(astropy.units.m))
         return np.array([frequency * (1 + redshift)])
-
-
-def doppler(velocity: float | np.ndarray) -> float | np.ndarray:
-    """
-    Return the Doppler factor of a radial velocity (km/s, relativistic):
-    the 1 + z of its light, sqrt((1 + v / c) / (1 - v / c)).
-    """
-    beta = velocity / _C
-    return np.sqrt((1 + beta) / (1 - beta))
-
-
-class _OpticalVelocities:
-    """The velocities of a rest wavelength: c (D - 1), D the 1 + z."""
-
-    @staticmethod
-    def factor(velocity: np.ndarray) -> np.ndarray:
-        return 1 + velocity / _C
-
-    @staticmethod
-    def velocity(factor: np.ndarray) -> np.ndarray:
-        return _C * (factor - 1)
-
-    @staticmethod
-    def stretch(velocity: np.ndarray) -> np.ndarray:
-        return 1 + velocity / _C
-
-
-class _LogVelocities:
-    """
-    The log velocities of a rest wavelength: c ln D, D the 1 + z, linear on
-    an axis uniform in ln w (FITS WAVE-LOG); the motions of a galaxy at any
-    systemic velocity are not stretched on it.
-    """
-
-    @staticmethod
-    def factor(velocity: np.ndarray) -> np.ndarray:
-        return np.exp(velocity / _C)
-
-    @staticmethod
-    def velocity(factor: np.ndarray) -> np.ndarray:
-        return _C * np.log(factor)
-
-    @staticmethod
-    def stretch(velocity: np.ndarray) -> np.ndarray:
-        return np.ones_like(velocity)
-
-
-class _RadioVelocities:
-    """The velocities of a rest frequency: c (1 - 1 / D), D the 1 + z."""
-
-    @staticmethod
-    def factor(velocity: np.ndarray) -> np.ndarray:
-        return 1 / (1 - velocity / _C)
-
-    @staticmethod
-    def velocity(factor: np.ndarray) -> np.ndarray:
-        return _C * (1 - 1 / factor)
-
-    @staticmethod
-    def stretch(velocity: np.ndarray) -> np.ndarray:
-        return 1 - velocity / _C
-
-
-class _RelativisticVelocities:
-    """
-    Relativistic velocities, c (D^2 - 1) / (D^2 + 1), D the 1 + z: those
-    of an axis without a rest (VELO).
-    """
-
-    @staticmethod
-    def factor(velocity: np.ndarray) -> np.ndarray:
-        return doppler(velocity)
-
-    @staticmethod
-    def velocity(factor: np.ndarray) -> np.ndarray:
-        return _C * (factor ** 2 - 1) / (factor ** 2 + 1)
-
-    @staticmethod
-    def stretch(velocity: np.ndarray) -> np.ndarray:
-        return 1 - (velocity / _C) ** 2
 
 
 class LinePlacement:
@@ -530,19 +425,19 @@ class LinePlacement:
 
     The systemic velocity is the radial velocity of the component from the
     redshift of the galaxy, relativistic: a line is redshifted by D0
-    doppler(vsys), D0 its 1 + z at the systemic velocity 0 (which the rows
-    of Lines.values place exactly), whatever the axis. Its centre is the
-    velocity of the axis of that factor D: c (D - 1) on an axis of
-    optical velocities (a rest wavelength), c ln D on one of log velocities
-    (a rest wavelength, the axis uniform in ln w), c (1 - 1 / D) on one of
-    radio velocities (a rest frequency), and c (D^2 - 1) / (D^2 + 1) on an
-    axis without a rest, whose velocities are relativistic, as those of the
-    galaxy (VELO); the convention of the axis says which (see
-    gridutils.make_convention). So one systemic velocity places a galaxy
-    alike on axes of every convention (e.g. its cubes of HI and of Halpha;
-    read in the convention of each axis, as an optical velocity on one and
-    a radio one on the other, it would place them c (D_radio - D_optical),
-    about vsys^2 / c, apart: 83 km/s at 5000 km/s).
+    doppler(vsys), D0 its 1 + z at the systemic velocity 0 (see
+    Lines.factors), whatever the axis. Its centre is the velocity of the
+    axis of that factor D: c (D - 1) on an axis of optical velocities (a
+    rest wavelength), c ln D on one of log velocities (a rest wavelength,
+    the axis uniform in ln w), c (1 - 1 / D) on one of radio velocities (a
+    rest frequency), and c (D^2 - 1) / (D^2 + 1) on an axis without a rest,
+    whose velocities are relativistic, as those of the galaxy (VELO); the
+    convention of the axis says which (see gridutils.VelocityConvention).
+    So one systemic velocity places a galaxy alike on axes of every
+    convention (e.g. its cubes of HI and of Halpha; read in the convention
+    of each axis, as an optical velocity on one and a radio one on the
+    other, it would place them c (D_radio - D_optical), about vsys^2 / c,
+    apart: 83 km/s at 5000 km/s).
 
     The systemic velocity stretches the motions about it: one km/s of the
     galaxy at the centre u spans 1 + u / c km/s of an axis of optical
@@ -559,13 +454,10 @@ class LinePlacement:
     do not change its rotation), which are left out.
     """
 
-    def __init__(self, rows: np.ndarray, spectral: gridutils.Grid):
-        coords = spectral.coords
-        self._convention = _CONVENTIONS[
-            gridutils.make_convention(coords.convention, coords.rest)]
+    def __init__(self, factors: np.ndarray, spectral: gridutils.Grid):
+        self._convention = gridutils.VelocityConvention.of(spectral.coords)
         # The 1 + z of each line at the systemic velocity 0
-        self._factors = self._convention.factor(
-            np.array(rows[:, 0], dtype=float))
+        self._factors = np.array(factors, dtype=float)
 
     def __len__(self) -> int:
         return len(self._factors)
@@ -575,7 +467,8 @@ class LinePlacement:
         Return the velocity of the axis at the centre of each line (km/s),
         with the component at the given systemic velocity (km/s).
         """
-        return self._convention.velocity(self._factors * doppler(vsys))
+        return self._convention.velocity(
+            self._factors * gridutils.doppler(vsys))
 
     def __call__(self, vsys: float) -> np.ndarray:
         """
@@ -586,15 +479,6 @@ class LinePlacement:
         centres = self.centres(vsys)
         scales = self._convention.stretch(centres)
         return np.column_stack((centres - scales * vsys, scales))
-
-
-# The velocities of each convention of a spectral axis (see
-# gridutils.make_convention; None: an axis without a rest)
-_CONVENTIONS: dict[str | None, type] = {
-    'optical': _OpticalVelocities,
-    'log': _LogVelocities,
-    'radio': _RadioVelocities,
-    None: _RelativisticVelocities}
 
 
 class Bands:

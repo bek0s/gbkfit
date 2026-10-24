@@ -251,7 +251,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             light stays in the unit of its emission.
         redshift : float
             The redshift of its galaxy, which places its named lines on
-            the spectral axis (see Lines.values) and, with a unit, dims its
+            the spectral axis (see Lines.factors) and, with a unit, dims its
             light (see _units.line_factor).
 
         Returns

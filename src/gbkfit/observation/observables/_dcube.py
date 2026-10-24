@@ -109,13 +109,13 @@ def _varying_padding(
     the PSF or the LSF is known.
     """
     psf, lsf = dcube.psf(), dcube.lsf()
-    rest = dcube.grid().coords.rest
+    convention = gridutils.VelocityConvention.of(dcube.grid().coords)
     step_lo = dcube.step()
     velocities_lo = dcube.zero()[2] + step_lo[2] * np.arange(dcube.size()[2])
     for kernel, desc in ((psf, 'PSF'), (lsf, 'LSF')):
         if kernel is None:
             continue
-        low, high = kernel.velocity_range(rest)
+        low, high = kernel.velocity_range(convention)
         margin = 1e-6 * abs(step_lo[2])
         if (velocities_lo.min() < low - margin
                 or velocities_lo.max() > high + margin):
@@ -130,13 +130,13 @@ def _varying_padding(
     if psf is not None:
         psf_size = tuple(np.max([
             p.size(step_hi[:2])
-            for p in _distinct(psf.at(velocities * _KMS, rest))],
+            for p in _distinct(psf.at(velocities * _KMS, convention))],
             axis=0).tolist())
     lsf_size = 1
     if lsf is not None:
         lsf_size = max(
             x.size(step_hi[2])
-            for x in _distinct(lsf.at(velocities * _KMS, rest)))
+            for x in _distinct(lsf.at(velocities * _KMS, convention)))
     size, edge = backend_fft.fft_convolution_shape(
         size_hi, psf_size + (lsf_size,))
     return ((int(size[0]), int(size[1]), size_hi[2] + lsf_size - 1),
@@ -181,7 +181,7 @@ def _varying_kernels(
     the channels of the data.
     """
     psf, lsf = dcube.psf(), dcube.lsf()
-    rest = grid_hi.coords.rest
+    convention = gridutils.VelocityConvention.of(grid_hi.coords)
     size, step = grid_hi.size, grid_hi.coords.step
     velocities = grid_hi.zero()[2] + step[2] * np.arange(size[2])
     psf_images = None
@@ -189,7 +189,8 @@ def _varying_kernels(
         # (like the PSF/LSF cube of DCubePlan: an even size puts the centre
         # one pixel before the middle)
         offset = gbkfit.math.is_odd(size[:2]) - 1
-        psfs = psf.at(velocities * _KMS, rest) if psf.varies() else [psf]
+        psfs = psf.at(velocities * _KMS, convention) if psf.varies() \
+            else [psf]
         psf_images = np.stack([
             p.asarray(step[:2], size[:2], offset, dcube.rota())
             for p in psfs])
@@ -198,7 +199,7 @@ def _varying_kernels(
         if lsf.varies():
             lsf_kernels = np.stack([
                 x.asarray(step[2], lsf_size)
-                for x in lsf.at(velocities * _KMS, rest)])
+                for x in lsf.at(velocities * _KMS, convention)])
         else:
             lsf_kernels = np.tile(lsf.asarray(step[2], lsf_size), (size[2], 1))
     return psf_images, lsf_kernels
@@ -344,7 +345,8 @@ class DCube:
         if lsf is not None:
             lsfs = lsf.at(
                 (self.zero()[2] + channel * np.arange(self.size()[2])) * _KMS,
-                self._grid_lo.coords.rest) if lsf.varies() else [lsf]
+                gridutils.VelocityConvention.of(self._grid_lo.coords)) \
+                if lsf.varies() else [lsf]
             dispersion = min(
                 _equivalent_dispersion(x, channel) for x in _distinct(lsfs))
         return float(np.hypot(dispersion, channel / np.sqrt(12)))
@@ -450,7 +452,9 @@ class DCubePlan:
         if beam is not None:
             velocities = grid_hi.zero()[2] \
                 + step_hi[2] * np.arange(size_hi[2])
-            beams = beam.at(velocities * _KMS, grid_hi.coords.rest) \
+            beams = beam.at(
+                velocities * _KMS,
+                gridutils.VelocityConvention.of(grid_hi.coords)) \
                 if beam.varies() else [beam]
             pbeam_hi = np.array([x.response(grid_hi) for x in beams])
             self._pbeam_hi = driver.mem_copy_h2d(pbeam_hi.astype(dtype))

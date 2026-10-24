@@ -41,7 +41,6 @@ observations:
     rota: 0
     rest: 6.562800000000002e-07 m
     medium: vacuum
-    convention: optical
     data: observation0_spectra_d.fits
     error: 0.00015
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, amplitudes: per_spectrum,

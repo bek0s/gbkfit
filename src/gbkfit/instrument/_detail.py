@@ -9,7 +9,7 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
@@ -124,24 +124,26 @@ def sum_weights(
 
 
 def terms_at(
-        terms: Sequence[_Term], points: u.Quantity, rest: u.Quantity | None
+        terms: Sequence[_Term],
+        points: u.Quantity,
+        convention: gridutils.VelocityConvention | None
 ) -> list[list[_Term]]:
     """
     Return the terms of a sum or a convolution (PSFs or LSFs) at each of
     the points of the spectral axis (1D): a list of terms per point.
     """
-    per_term = [term.at(points, rest) for term in terms]
+    per_term = [term.at(points, convention) for term in terms]
     return [list(terms_) for terms_ in zip(*per_term)]
 
 
 def terms_velocity_range(
-        terms: Sequence[_Term], rest: u.Quantity | None
+        terms: Sequence[_Term], convention: gridutils.VelocityConvention | None
 ) -> tuple[float, float]:
     """
     Return the range of velocities that the terms of a sum or a
     convolution are known at (see PSF.velocity_range).
     """
-    ranges = [term.velocity_range(rest) for term in terms]
+    ranges = [term.velocity_range(convention) for term in terms]
     return max(r[0] for r in ranges), min(r[1] for r in ranges)
 
 

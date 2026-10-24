@@ -122,7 +122,8 @@ def test_the_primary_beam_of_a_dish_scales_with_the_wavelength():
                  for x in beam.at([1.4e9, 0.7e9] * u.Hz)]
     np.testing.assert_allclose(responses, [1 / 16, 1 / 2])
     # (and at radio velocities, of a rest frequency)
-    half = beam.at(C / 2 * u.km / u.s, rest=1.4e9 * u.Hz)
+    half = beam.at(
+        C / 2 * u.km / u.s, gridutils.VelocityConvention(1.4e9 * u.Hz))
     assert half.response(grid)[0, 0] == pytest.approx(1 / 2)
 
 
@@ -142,7 +143,8 @@ def test_the_primary_beam_of_each_channel_attenuates_it(driver):
     responses = np.array([
         x.response(grid) for x in PrimaryBeamGauss(
             40, 2, -1, 1420.405752e6).at(
-            velocities * u.km / u.s, rest=grid.coords.rest)])
+            velocities * u.km / u.s,
+            gridutils.VelocityConvention.of(grid.coords))])
     np.testing.assert_allclose(
         attenuated, plain * responses, rtol=1e-5, atol=1e-6 * plain.max())
     assert np.ptp(responses, axis=0).max() > 1e-4

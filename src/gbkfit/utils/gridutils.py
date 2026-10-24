@@ -10,10 +10,12 @@ pixels_on).
 
 import numbers
 from collections.abc import Sequence
-from typing import NamedTuple
+from typing import NamedTuple, TypeVar
 
+import astropy.constants
 import astropy.units
 import numpy as np
+import numpy.typing as npt
 
 from gbkfit.utils.parseutils import ConfigError
 
@@ -23,7 +25,10 @@ __all__ = [
     'Grid',
     'GridData',
     'SpectraData',
+    'VelocityConvention',
+    'air_refractive_index',
     'check_overlap',
+    'doppler',
     'make_grid',
     'make_convention',
     'make_medium',
@@ -37,6 +42,11 @@ __all__ = [
 
 # Arcsec per radian
 _ARCSEC = np.degrees(1) * 3600
+
+# The speed of light (km/s)
+_C = astropy.constants.c.to_value('km/s')
+
+_T = TypeVar('_T')
 
 
 class Coords(NamedTuple):
@@ -352,6 +362,228 @@ def make_medium(
         raise ConfigError(
             f"the medium must be 'vacuum' or 'air'; it is {medium!r}")
     return medium
+
+
+def doppler(velocity: float | np.ndarray) -> float | np.ndarray:
+    """
+    Return the Doppler factor of a radial velocity (km/s, relativistic):
+    the 1 + z of its light, sqrt((1 + v / c) / (1 - v / c)).
+    """
+    beta = velocity / _C
+    return np.sqrt((1 + beta) / (1 - beta))
+
+
+def air_refractive_index(wavelength: float) -> float:
+    """
+    Return the refractive index of standard air at a wavelength in vacuum
+    (m), as the IAU adopted it (Morton 2000, ApJS 130, 403, eq. 8; from
+    Edlen 1966 and Birch & Downs 1994): air wavelengths are those in
+    vacuum over it.
+
+    Raises
+    ------
+    ConfigError
+        Below 2000 Angstrom, where air wavelengths are not used.
+    """
+    if not wavelength >= 2e-7:
+        raise ConfigError(
+            f"wavelengths in air are used above 2000 Angstrom only; a line "
+            f"is at {wavelength * 1e10:.1f} Angstrom (in vacuum)")
+    # The wavenumber (1 / um), squared
+    s2 = (1e-6 / wavelength) ** 2
+    return 1 + 8.34254e-5 + 2.406147e-2 / (130 - s2) + 1.5998e-4 / (38.9 - s2)
+
+
+class VelocityConvention:
+    """
+    The convention of the velocities of a spectral axis, with the rest
+    they refer to and the medium of its wavelengths (see Coords): which
+    light is at each velocity. A velocity v of the axis is that of light
+    of 1 + z = D (its wavelength over the rest wavelength, or the rest
+    frequency over its frequency), by the convention:
+
+    - 'optical' (a rest wavelength): v = c (D - 1);
+    - 'log' (a rest wavelength; an axis uniform in ln w, as FITS
+      WAVE-LOG): v = c ln D;
+    - 'radio' (a rest frequency): v = c (1 - 1 / D);
+    - none (an axis without a rest, VELO): relativistic, v = c (D^2 - 1)
+      / (D^2 + 1).
+
+    The wavelengths of the axis and of its rest are in its medium, its
+    frequencies in vacuum: the refractive index of air is taken at the
+    rest wavelength (it changes by about 1e-8 across 1000 km/s).
+
+    Parameters
+    ----------
+    rest : Quantity, optional
+        The rest wavelength or frequency (see make_rest).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        make_medium).
+    convention : str, optional
+        The convention of the velocities of the rest (see
+        make_convention).
+
+    Raises
+    ------
+    ConfigError
+        If the convention or the medium is not one of those of the rest.
+    """
+
+    @classmethod
+    def of(cls, coords: Coords) -> 'VelocityConvention':
+        """Return the convention of the spectral axis of coordinates."""
+        return cls(coords.rest, coords.medium, coords.convention)
+
+    def __init__(
+            self,
+            rest: astropy.units.Quantity | None = None,
+            medium: str | None = None,
+            convention: str | None = None
+    ):
+        self._name = make_convention(convention, rest)
+        self._medium = make_medium(medium, rest)
+        self._rest = rest
+        # The rest frequency (Hz, in vacuum), and the rest wavelength (m,
+        # in the medium; of a rest frequency, in vacuum)
+        self._rest_frequency = self._rest_wavelength = None
+        if rest is not None:
+            self._rest_frequency = rest.to_value(
+                astropy.units.Hz, astropy.units.spectral())
+            self._rest_wavelength = rest.to_value(
+                astropy.units.m, astropy.units.spectral())
+            if self._medium == 'air':
+                self._rest_frequency /= air_refractive_index(
+                    self._rest_wavelength)
+
+    def name(self) -> str | None:
+        """Return its name: 'optical', 'log', 'radio', or None."""
+        return self._name
+
+    def rest(self) -> astropy.units.Quantity | None:
+        """Return the rest of the velocities, if any."""
+        return self._rest
+
+    def factor(self, velocity: npt.ArrayLike) -> np.ndarray:
+        """Return the 1 + z of the light at velocities of the axis (km/s)."""
+        v = np.asarray(velocity, dtype=float)
+        if self._name == 'optical':
+            return 1 + v / _C
+        if self._name == 'log':
+            return np.exp(v / _C)
+        if self._name == 'radio':
+            return 1 / (1 - v / _C)
+        return doppler(v)
+
+    def velocity(self, factor: npt.ArrayLike) -> np.ndarray:
+        """Return the velocities of the axis (km/s) of light of 1 + z."""
+        d = np.asarray(factor, dtype=float)
+        if self._name == 'optical':
+            return _C * (d - 1)
+        if self._name == 'log':
+            return _C * np.log(d)
+        if self._name == 'radio':
+            return _C * (1 - 1 / d)
+        return _C * (d ** 2 - 1) / (d ** 2 + 1)
+
+    def log_slope(self, velocity: npt.ArrayLike) -> np.ndarray:
+        """
+        Return d ln D / dv at velocities of the axis (1 / (km/s)): the
+        relative change of the wavelength (or of the frequency, with the
+        sign changed) per km/s of the axis.
+        """
+        v = np.asarray(velocity, dtype=float)
+        if self._name == 'optical':
+            return 1 / (_C + v)
+        if self._name == 'log':
+            return np.full_like(v, 1 / _C)
+        if self._name == 'radio':
+            return 1 / (_C - v)
+        return 1 / (_C * (1 - (v / _C) ** 2))
+
+    def stretch(self, velocity: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the km/s of the axis that a km/s of motion (in the frame of
+        the light) spans at velocities of the axis: 1 + v / c (optical),
+        1 (log), 1 - v / c (radio), or 1 - (v / c)^2 (relativistic).
+        """
+        return 1 / (_C * self.log_slope(velocity))
+
+    def frequency(self, velocity: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the frequencies (Hz, in vacuum) at velocities of the axis.
+
+        Raises
+        ------
+        ConfigError
+            If the axis has no rest.
+        """
+        return self._require_rest(self._rest_frequency) \
+            / self.factor(velocity)
+
+    def wavelength(self, velocity: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the wavelengths (m; in the medium of a rest wavelength, in
+        vacuum of a rest frequency) at velocities of the axis.
+
+        Raises
+        ------
+        ConfigError
+            If the axis has no rest.
+        """
+        return self._require_rest(self._rest_wavelength) \
+            * self.factor(velocity)
+
+    def velocity_at(self, frequency: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the velocities of the axis (km/s) at frequencies (Hz, in
+        vacuum).
+
+        Raises
+        ------
+        ConfigError
+            If the axis has no rest.
+        """
+        return self.velocity(
+            self._require_rest(self._rest_frequency)
+            / np.asarray(frequency, dtype=float))
+
+    def equivalency(self) -> astropy.units.Equivalency:
+        """
+        Return the astropy equivalency between the velocities of the axis
+        and wavelengths or frequencies (those of the rest, ignoring the
+        medium: e.g. the points of a table of a varying PSF).
+
+        Raises
+        ------
+        ConfigError
+            If the axis has no rest.
+        """
+        rest = self._require_rest(self._rest)
+        if self._name == 'optical':
+            return astropy.units.doppler_optical(rest)
+        if self._name == 'radio':
+            return astropy.units.doppler_radio(rest)
+        wavelength = self._rest_wavelength
+        kms = astropy.units.km / astropy.units.s
+        c = astropy.constants.c.si.value
+        return astropy.units.Equivalency([
+            (kms, astropy.units.m,
+             lambda v: wavelength * np.exp(v / _C),
+             lambda w: _C * np.log(w / wavelength)),
+            (kms, astropy.units.Hz,
+             lambda v: c / (wavelength * np.exp(v / _C)),
+             lambda f: _C * np.log(c / (f * wavelength)))], 'doppler_log')
+
+    def _require_rest(self, value: _T) -> _T:
+        """Return a value of the rest, or raise if the axis has none."""
+        if self._rest is None:
+            raise ConfigError(
+                "velocities and wavelengths or frequencies are converted "
+                "with the rest of the spectral axis (RESTWAV or RESTFRQ in "
+                "the header of the data, or the option rest), which is not "
+                "given")
+        return value
 
 
 def sky_positions(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
