@@ -13,11 +13,10 @@ from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
-from gbkfit.objective.solves import SolveGaussian
 from gbkfit.observation import (
     Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
     PixelBrightness, PixelMoments, observable_parser)
-from gbkfit.params import ParamSpace
+from gbkfit.params import ParamSpace, SolveGaussian
 from gbkfit.utils.parseutils import ConfigError
 
 

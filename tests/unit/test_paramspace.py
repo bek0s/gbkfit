@@ -386,6 +386,65 @@ def test_mode_errors(properties, modes, pattern):
         load_moded_params(dict(v=[1, 2, 3, 4], s=0, t=0) | properties, modes)
 
 
+SOLVE = dict(type='gaussian', mean=1, sigma=0.5, minimum=0)
+
+
+def test_solved_elements_take_their_values_without_data_or_given():
+    pdescs = dict(
+        s=ParamScalarDesc(minimum=0), v=ParamVectorDesc(3, minimum=0))
+    params = load_params(pdescs, {
+        's': dict(solve=SOLVE),
+        'v[:2]': dict(solve=SOLVE | dict(mean=-1)),
+        'v[2]': 2})
+    assert params.kinds() == {
+        's': ParamKind.SOLVED, 'v[0]': ParamKind.SOLVED,
+        'v[1]': ParamKind.SOLVED, 'v[2]': ParamKind.FIXED}
+    solves = params.solves()
+    assert list(solves) == ['s', 'v[0]', 'v[1]']
+    assert solves['v[0]'] is solves['v[1]']
+    assert params.free_properties() == {}
+    # (without data, the mean, or the minimum below it)
+    values = params.evaluate()
+    assert values['s'] == 1
+    np.testing.assert_array_equal(values['v'], [0, 0, 2])
+    values = params.evaluate(solved={'s': 1.5, 'v[1]': 0.5})
+    assert values['s'] == 1.5
+    np.testing.assert_array_equal(values['v'], [0, 0.5, 2])
+    with pytest.raises(ValueError, match=r"not solved: \['v\[2\]'\]"):
+        params.evaluate(solved={'v[2]': 1})
+    assert load_params(pdescs, params.dump()['properties']).kinds() \
+        == params.kinds()
+
+
+@pytest.mark.parametrize('properties, modes, pattern', [
+    (dict(s=dict(solve=SOLVE, value=1)), {}, r"its 'solve' alone"),
+    (dict(s=dict(solve=dict(type='gaussian', mean=1, sigma=0))), {},
+     "sigma must be finite and positive"),
+    (dict(s=dict(solve=SOLVE | dict(minimum=-1))), {},
+     r"gives values in \[-1.0, inf\], outside its valid range"),
+    (dict(s=dict(solve=dict(type='gaussian', mean=1, sigma=1))), {},
+     "outside its valid range"),
+    (dict(v=dict(solve=SOLVE)), dict(v=dict(type='offsets')),
+     "with a mode cannot have solved elements"),
+    (dict(t='s * 2'), {}, r"'t' reads \['s'\], which have solved elements")])
+def test_solved_elements_refused(properties, modes, pattern):
+    pdescs = dict(
+        s=ParamScalarDesc(minimum=0), t=ParamScalarDesc(),
+        v=ParamVectorDesc(3, minimum=0))
+    info = dict(
+        properties=dict(s=dict(solve=SOLVE), t=1, v=1) | properties,
+        modes=modes)
+    with pytest.raises(ConfigError, match=pattern):
+        param_space_parser.load(info, pdescs=pdescs)
+
+
+def test_expressions_cannot_read_solved_elements():
+    params = load_params(
+        dict(s=ParamScalarDesc(minimum=0)), dict(s=dict(solve=SOLVE)))
+    with pytest.raises(ConfigError, match="it has solved elements"):
+        params.expression('s * 2')
+
+
 def test_error_types():
     # Invalid properties are configuration errors; failed evaluations are
     # evaluation errors

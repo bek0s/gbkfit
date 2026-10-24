@@ -23,6 +23,7 @@ from gbkfit.params._keys import (
     InvalidKeyError, Key, element_name, element_names, parse_key)
 from gbkfit.params.modes import ParamMode, param_mode_parser
 from gbkfit.params.pdescs import ParamDesc
+from gbkfit.params.solves import Solve, solve_parser
 from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -92,6 +93,7 @@ class ParamKind(enum.Enum):
     FIXED = 'fixed'              # a number
     TIED = 'tied'                # an expression
     FREE = 'free'                # the caller (e.g. a fitter)
+    SOLVED = 'solved'            # its solve, of the data (see Solve)
     TRANSFORMED = 'transformed'  # the transforms function (set to None)
 
 
@@ -164,6 +166,11 @@ class ParamSpace(parseutils.Serializable):
       the fitter (e.g. {'value': 1, 'min': 0, 'max': 2}); the values of
       the attributes whose names start with '*' are lists, spread over
       the elements (e.g. {'*value': [1, 2, 3], 'min': 0})
+    - a dict of 'solve' alone: the elements are solved at each evaluation
+      of an objective, from the data, by the solve (e.g. {'solve': {'type':
+      'gaussian', 'mean': 1, 'sigma': 0.5, 'minimum': 0}}; see Solve), in
+      the valid range of the parameter; only parameters that the model is
+      linear in can be (the objective says which)
     - None: the transforms function sets the elements
     - a list of these: one for each element
 
@@ -181,7 +188,10 @@ class ParamSpace(parseutils.Serializable):
     relations of gbkfit.relations (e.g. relations.log_mhalo_moster13).
     An expression that
     reads a parameter with a mode reads its decoded values. Expressions
-    and a transforms function are mutually exclusive.
+    and a transforms function are mutually exclusive. No expression can
+    read a parameter with solved elements, which have no values before
+    the objective solves them (their priors are in their solves), and a
+    parameter with a mode has none.
 
     Derived values are quantities that the models compute from the
     parameters, which no expression of them can (e.g. the circular
@@ -355,10 +365,12 @@ class ParamSpace(parseutils.Serializable):
             for index in (
                 [None] if pdesc.is_scalar() else range(pdesc.size()))]
         # What sets each element, and the fixed values, the properties of
-        # the free elements, and the expressions
+        # the free elements, the solves of the solved ones, and the
+        # expressions
         self._kinds: dict[_Element, ParamKind] = {}
         self._fixed: dict[_Element, float] = {}
         self._free: dict[_Element, dict[str, Any]] = {}
+        self._solves: dict[_Element, Solve] = {}
         self._assignments: list[_Assignment] = []
         errors = self._check_names()
         errors += self._read_properties()
@@ -366,6 +378,7 @@ class ParamSpace(parseutils.Serializable):
         errors += self._check_modes()
         errors += self._check_fixed_ranges()
         errors += self._compile_derived()
+        errors += self._check_solves()
         if not errors:
             errors += self._order_steps()
         if errors:
@@ -444,7 +457,8 @@ class ParamSpace(parseutils.Serializable):
             name: "it is a function of the models, which only derived "
                   "values can use: derive a value with it (see the option "
                   "derived), and read that"
-            for name in self._function_names}
+            for name in self._function_names} | {
+            name: "it has solved elements" for name in self._solved_names()}
         try:
             expression = Expression(
                 source, self._pdescs, self._constants, tuple(self._derived),
@@ -478,6 +492,13 @@ class ParamSpace(parseutils.Serializable):
             element_name(*e): copy.deepcopy(self._free[e])
             for e in self._free_elements}
 
+    def solves(self) -> dict[str, Solve]:
+        """
+        Return the solve of each solved element, by element name, in the
+        order of the elements (elements of one key share one).
+        """
+        return {element_name(*e): self._solves[e] for e in self._solved}
+
     def free_valid_ranges(self) -> dict[str, tuple[float, float]]:
         """
         Return the valid range of each free element whose value is that of
@@ -492,7 +513,8 @@ class ParamSpace(parseutils.Serializable):
 
     def evaluate(
             self,
-            free: Mapping[str, float] | Sequence[float] | None = None
+            free: Mapping[str, float] | Sequence[float] | None = None,
+            solved: Mapping[str, float] | None = None
     ) -> ParamValues:
         """
         Evaluate the parameters.
@@ -503,6 +525,10 @@ class ParamSpace(parseutils.Serializable):
             The values of the free elements: by element name, or in the
             order of free_properties. By default, their 'value' property
             (e.g. the initial value of a fit).
+        solved : Mapping, optional
+            The values of the solved elements, by element name (e.g. those
+            of Objective.solved); those without one have their value
+            without data (see Solve.default).
 
         Returns
         -------
@@ -513,13 +539,19 @@ class ParamSpace(parseutils.Serializable):
         Raises
         ------
         ValueError
-            If the values of the free elements are missing or unknown.
+            If the values of the free elements are missing or unknown, or
+            values are given for elements that are not solved.
         ParamEvaluationError
             If an expression or the transforms function fails, or a value
             is not finite or outside its valid range.
         """
         buffer = self._template.copy()
         buffer[self._free_flat] = self._free_values(free)
+        if solved:
+            if extra := [n for n in solved if n not in self._solved_flat]:
+                raise ValueError(f"these parameters are not solved: {extra}")
+            for name, value in solved.items():
+                buffer[self._solved_flat[name]] = value
         namespace: dict[str, Any] = dict(self._constants)
         for name, (start, stop, scalar) in self._layout.items():
             namespace[name] = (
@@ -848,6 +880,9 @@ class ParamSpace(parseutils.Serializable):
                     f"a list of {len(value)} values for "
                     f"{len(key.indices)} elements")
             return [(key.indices[i:i + 1], v) for i, v in enumerate(value)]
+        if isinstance(value, Mapping) and 'solve' in value:
+            # (one solve for all the elements)
+            return [(key.indices, value)]
         if isinstance(value, Mapping) and key.indices is not None:
             return [
                 (key.indices[i:i + 1], v)
@@ -893,6 +928,17 @@ class ParamSpace(parseutils.Serializable):
                 _Assignment(key, name, indices, expression))
         elif value is None:
             kind = ParamKind.TRANSFORMED
+        elif isinstance(value, Mapping) and 'solve' in value:
+            kind = ParamKind.SOLVED
+            if others := sorted(set(value) - {'solve'}):
+                raise ValueError(
+                    f"a solved element takes its 'solve' alone (its prior "
+                    f"is in it); not {others}")
+            try:
+                solve = solve_parser.load(value['solve'])
+            except ConfigError as e:
+                raise ValueError(f"its solve: {e.message}") from None
+            self._solves.update(dict.fromkeys(elements, solve))
         elif isinstance(value, Mapping):
             kind = ParamKind.FREE
             self._free.update(
@@ -986,6 +1032,43 @@ class ParamSpace(parseutils.Serializable):
                         f"'{name}', which has a mode")
         return errors
 
+    def _check_solves(self) -> list[str]:
+        """
+        Return the problems of the solved elements: those of parameters
+        with a mode, those whose solves give values outside the valid range
+        of their parameter, and expressions (of properties or derived
+        values) that read their parameters.
+        """
+        errors = []
+        names = self._solved_names()
+        if moded := sorted(names & set(self._modes)):
+            errors.append(
+                f"parameters with a mode cannot have solved elements: "
+                f"{moded}")
+        for element, solve in self._solves.items():
+            pdesc = self._pdescs[element[0]]
+            low, high = solve.bounds()
+            if low < pdesc.minimum() or high > pdesc.maximum():
+                errors.append(
+                    f"the solve of '{element_name(*element)}' gives values "
+                    f"in [{low}, {high}], outside its valid range "
+                    f"{self._range_text(element[0])} (e.g. give it a "
+                    f"minimum)")
+        readers = [(a.key, a.expression) for a in self._assignments] + [
+            (f"derived value '{name}'", expression)
+            for name, expression in self._derived_expressions.items()]
+        for key, expression in readers:
+            if read := sorted(names & set(expression.reads)):
+                errors.append(
+                    f"{key!r} reads {read}, which have solved elements: no "
+                    f"expression can (their values are known only after "
+                    f"the objective solves them)")
+        return errors
+
+    def _solved_names(self) -> set[str]:
+        """Return the names of the parameters with solved elements."""
+        return {name for name, _ in self._solves}
+
     def _check_fixed_ranges(self) -> list[str]:
         """
         Return the fixed values outside the valid ranges of their
@@ -1061,8 +1144,14 @@ class ParamSpace(parseutils.Serializable):
             self._layout[name] = (
                 start, start + pdesc.size(), pdesc.is_scalar())
             start += pdesc.size()
-        self._template = np.array(
-            [self._fixed.get(e, np.nan) for e in self._elements])
+        self._template = np.array([
+            self._fixed[e] if e in self._fixed
+            else self._solves[e].default() if e in self._solves
+            else np.nan
+            for e in self._elements])
+        self._solved = [e for e in self._elements if e in self._solves]
+        self._solved_flat = {
+            element_name(*e): self._flat[e] for e in self._solved}
         self._free_elements = [e for e in self._elements if e in self._free]
         self._free_names = [element_name(*e) for e in self._free_elements]
         self._free_flat = np.array(

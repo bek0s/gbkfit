@@ -7,9 +7,9 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Extras
 from gbkfit.objective.comparisons import comparison
-from gbkfit.objective.solves import Solution, Solve, SolveGaussian
 from gbkfit.observation import ObservationGroup
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import (
+    ParamDesc, ParamValues, Solution, Solve, SolveGaussian)
 from gbkfit.utils.parseutils import ConfigError
 
 

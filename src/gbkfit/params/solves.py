@@ -1,3 +1,13 @@
+"""
+The solves of parameters: how the values of solved elements are worked
+out at each evaluation, rather than fitted.
+
+An element of a parameter that the model is linear in (e.g. a scale of
+the flux of an observation) can be solved: the objective compares the
+model with the data, and the solve of the element gives its best value
+from the sums of that comparison, under its prior (see Solve).
+"""
+
 import abc
 import math
 from typing import NamedTuple
@@ -5,13 +15,15 @@ from typing import NamedTuple
 import numpy as np
 import scipy.special
 
+from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
     'Solution',
     'Solve',
-    'SolveGaussian'
+    'SolveGaussian',
+    'solve_parser'
 ]
 
 
@@ -27,17 +39,18 @@ class Solution(NamedTuple):
     log_term: float
 
 
-class Solve(abc.ABC):
+class Solve(parseutils.TypedSerializable, abc.ABC):
     """
-    How the values of parameters that the model is linear in (e.g. a scale
-    of the flux of the model) are solved at each evaluation of an
-    objective, rather than fitted: each is the best value for the data
-    under its prior, from the sums of the comparison of the model with the
-    data (see Comparison.scale_sums), with exact formulas. Optimizers take
-    the best values, with the residuals of their prior; samplers take the
-    log-likelihood with the values integrated out under their prior. Each
-    solved value counts as a parameter in the degrees of freedom, and its
-    prior as a residual: they cancel (see Objective.nnuisance).
+    How the values of elements of parameters that the model is linear in
+    (e.g. a scale of the flux of the model) are solved at each evaluation
+    of an objective, rather than fitted: each is the best value for the
+    data under its prior, from the sums of the comparison of the model
+    with the data (see Comparison.scale_sums), with exact formulas.
+    Optimizers take the best values, with the residuals of their prior;
+    samplers take the log-likelihood with the values integrated out under
+    their prior. Each solved value counts as a parameter in the degrees of
+    freedom, and its prior as a residual: they cancel (see
+    Objective.nnuisance).
     """
 
     @abc.abstractmethod
@@ -49,6 +62,18 @@ class Solve(abc.ABC):
         chi-square), arrays of one shape, one of each per solved value.
         """
         pass
+
+    @abc.abstractmethod
+    def bounds(self) -> tuple[float, float]:
+        """Return the smallest and the largest values it can give."""
+        pass
+
+    def default(self) -> float:
+        """
+        Return its value without data (e.g. of an evaluation of the model
+        alone): that of sums of 0.
+        """
+        return float(self.solve(np.zeros(1), np.zeros(1)).values[0])
 
 
 class SolveGaussian(Solve):
@@ -87,6 +112,15 @@ class SolveGaussian(Solve):
         and positive.
     """
 
+    @staticmethod
+    def type() -> str:
+        return 'gaussian'
+
+    def dump(self) -> dict[str, str | float]:
+        minimum = {} if self._minimum is None else dict(minimum=self._minimum)
+        return dict(type=self.type(), mean=self._mean, sigma=self._sigma) \
+            | minimum
+
     def __init__(
             self,
             mean: float,
@@ -104,6 +138,9 @@ class SolveGaussian(Solve):
         self._sigma = float(sigma)
         self._minimum = None if minimum is None else float(minimum)
 
+    def bounds(self) -> tuple[float, float]:
+        return -math.inf if self._minimum is None else self._minimum, math.inf
+
     def solve(self, a: np.ndarray, b: np.ndarray) -> Solution:
         mean, sigma, minimum = self._mean, self._sigma, self._minimum
         precision = 1 / sigma ** 2
@@ -119,3 +156,6 @@ class SolveGaussian(Solve):
                 - scipy.special.log_ndtr((mean - minimum) / sigma)
         return Solution(
             values, ((values - mean) / sigma).ravel(), float(np.sum(terms)))
+
+
+solve_parser = parseutils.TypedParser(Solve, [SolveGaussian])
