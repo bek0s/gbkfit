@@ -110,6 +110,29 @@ def test_fit_recovers_the_parameters_of_noiseless_data(tmp_path):
             best[name], abs=1e-3)
 
 
+def test_the_best_fit_so_far_starts_at_it(tmp_path):
+    # fit/best.yaml starts the free elements at the best fit so far, those
+    # of a parameter given as offsets (a mode) too: the elements it starts
+    # at are those of the best point of the progress (a few evaluations of
+    # the golden case of the features of the parameters)
+    from gbkfit.tasks import eval as eval_task
+    golden = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
+    config = yaml.load(golden / 'params_features' / 'config.yaml')
+    config |= dict(
+        root=str(golden / 'params_features'),
+        fitter=dict(type='scipy.least_squares', max_nfev=3))
+    yaml.dump(config, tmp_path / 'fit.yaml')
+    run_task(
+        tmp_path, 'fit', config='fit.yaml', output_dir='fit',
+        output_dir_mode='unique')
+    run = outputs.open(tmp_path / 'fit')
+    progress = pathlib.Path(run.filename(run.product('progress')))
+    best = json.loads(progress.read_text().splitlines()[-1])['best']
+    params = eval_task.load(run.filename(run.product('best_config'))).params
+    assert params.element_values(params.evaluate()) == pytest.approx(
+        params.element_values(params.evaluate(best)))
+
+
 @pytest.mark.slow
 def test_a_fit_resumes_from_its_output_directory(tmp_path):
     # Its configuration and the log of its evaluations are there: resumed,

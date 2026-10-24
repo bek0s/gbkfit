@@ -326,9 +326,12 @@ def _fit(
 
     _log.info("model-fitting started")
 
-    def write_best(values: dict[str, float]) -> None:
+    def write_best(free: dict[str, float]) -> None:
+        # (the free values of the progress are coded for the parameters
+        # with a mode; the configuration starts at those of the elements)
+        elements = params.element_values(params.evaluate(free))
         _write_config(
-            run, 'fit/best.yaml', 'best_config', cfg, root, params, values)
+            run, 'fit/best.yaml', 'best_config', cfg, root, params, elements)
 
     progress = _progress.JsonLinesProgress(
         run.filename('logs/progress.jsonl'))
