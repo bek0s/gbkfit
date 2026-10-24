@@ -186,6 +186,20 @@ def test_flux_scales_need_light_and_a_name():
             flux_scale='per_spectrum')
 
 
+@pytest.mark.parametrize('options, message', [
+    (dict(calibration=True), "is now flux_scale: 'one'"),
+    (dict(likelihood=dict(
+        type='gaussian', amplitudes='per_spectrum', amplitude_sigma=0.5)),
+     r"\{solve: \{type: gaussian, mean: 1, sigma: 0.5, minimum: 0\}\}")])
+def test_the_old_options_of_flux_scales_say_the_new_form(options, message):
+    from gbkfit.observation import observation_parser
+    info = dict(
+        type='sky', line_of_sight=dict(type='flat'),
+        observable=dict(type='pixel_spectra', size=[4, 4, 5])) | options
+    with pytest.raises(ConfigError, match=message):
+        observation_parser.load(info)
+
+
 def test_only_flux_scales_of_gaussian_likelihoods_are_solved(
         driver, tmp_path):
     spectra = model(driver)

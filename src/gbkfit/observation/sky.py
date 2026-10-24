@@ -256,9 +256,11 @@ class ObservationSky(Observation):
         Raises
         ------
         ConfigError
-            If the configuration has an error, or the driver is not one
-            of the drivers.
+            If the configuration has an error (e.g. the options of flux
+            scales of before 2026-10-25, see _refuse_old_options), or the
+            driver is not one of the drivers.
         """
+        _refuse_old_options(info)
         with parseutils.config_path('driver'):
             info['driver'] = driver_by_name(
                 info.get('driver'), drivers or {}, 'observation')
@@ -669,6 +671,28 @@ def _check_offsets(
             "an observation with offsets needs a name, which names their "
             "parameters (e.g. '{name}_dx')")
     return fitted
+
+
+def _refuse_old_options(info: Mapping[str, Any]) -> None:
+    """
+    Raise ConfigError if the configuration of an observation has the
+    options of its flux scale of before 2026-10-25, saying their new form
+    (until the migration of configurations rewrites them).
+    """
+    if 'calibration' in info:
+        raise ConfigError(
+            "option 'calibration' is now flux_scale: 'one', whose parameter "
+            "is '{name}_flux_scale' (was '{name}_calibration')")
+    likelihood = info.get('likelihood')
+    if isinstance(likelihood, Mapping) and (
+            {'amplitudes', 'amplitude_sigma'} & set(likelihood)):
+        sigma = likelihood.get('amplitude_sigma')
+        raise ConfigError(
+            f"the amplitudes of the likelihood are now a solved flux scale "
+            f"of the observation: its option flux_scale: per_spectrum (or "
+            f"per_row, of slitless spectra), and in the parameters "
+            f"'{{name}}_flux_scale': {{solve: {{type: gaussian, mean: 1, "
+            f"sigma: {sigma}, minimum: 0}}}}")
 
 
 def _check_flux_scale(
