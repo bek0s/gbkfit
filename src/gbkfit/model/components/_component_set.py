@@ -50,13 +50,10 @@ def _with_mass_params(
     """
     Return the parameters of the components of a galaxy, and those of its
     distance, its mass and its gravity (if any; Newtonian by default).
-    Raise ConfigError if components take
-    the circular velocity of the mass (see
-    Component.circular_velocity_params) and there is none, if there are
-    components and mass but no component uses it (nor a disk in vertical
-    equilibrium, see Kinematics), if a disk in a central equilibrium has neither mass
-    nor rotation (tangential velocity traits) or one in another
-    equilibrium no mass, if the mass has no distance or the distance no
+    Raise ConfigError if components take the circular velocity of the
+    mass (see Component.circular_velocity_params) and there is none, if a
+    disk in a central equilibrium has neither mass nor rotation
+    (tangential velocity traits) or one in another equilibrium no mass, if the mass has no distance or the distance no
     mass (its only user), if a mass component follows a
     component that is not a disk of the galaxy (see
     Component.density_disk), if the pressure support or the equilibrium
@@ -69,19 +66,10 @@ def _with_mass_params(
     dark fraction), or if the names of the parameters repeat.
     """
     moved = any(cmp.circular_velocity_params() for cmp in components)
-    balanced = [
-        cmp for cmp in components
-        if (disk := cmp.density_disk()) is not None
-        and disk.equilibrium() is not None]
+    balanced = [cmp for cmp in components if _balanced(cmp)]
     if moved and mass_model is None:
         raise ConfigError(
             "the 'mass' velocity traits need the mass of their galaxy")
-    if mass_model is not None and components and not moved \
-            and not balanced:
-        raise ConfigError(
-            "no component uses the mass of its galaxy; give the components "
-            "that it moves 'mass' velocity traits, or those it holds up a "
-            "vertical equilibrium")
     for cmp in balanced if mass_model is None else ():
         mode = cmp.density_disk().equilibrium().mode
         if mode != 'central':
@@ -189,6 +177,12 @@ def _with_mass_params(
             f"the names of parameters of the components: {repeated}; rename "
             f"the components")
     return params | taken
+
+
+def _balanced(component: Component) -> bool:
+    """Check whether a component is a disk in a vertical equilibrium."""
+    disk = component.density_disk()
+    return disk is not None and disk.equilibrium() is not None
 
 
 def _check_gravity(
@@ -354,6 +348,16 @@ class ComponentSet:
 
     def mass_model(self) -> MassModel | None:
         return self._mass_model
+
+    def components_use_mass(self) -> bool:
+        """
+        Check whether a component uses the mass: moved by it (see
+        Component.circular_velocity_params) or held up by it (a vertical
+        equilibrium, see Kinematics).
+        """
+        return any(
+            cmp.circular_velocity_params() or _balanced(cmp)
+            for cmp in self._components)
 
     def gravity(self) -> Gravity:
         """Return the gravity of its mass (Newtonian if not given)."""

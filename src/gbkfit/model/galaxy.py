@@ -246,6 +246,15 @@ class Galaxy(parseutils.Serializable):
         """Return its mass, as a mass model, if any."""
         return self._component_set.mass_model()
 
+    def components_use_mass(self) -> bool:
+        """
+        Check whether its components use its mass: moved by it ('mass'
+        velocity traits) or held up by it (a vertical equilibrium).
+        Observations of profiles of its functions and derived values can
+        use it too (see ObservationProfile and ParamSpace).
+        """
+        return self._component_set.components_use_mass()
+
     def distance(self) -> Distance | None:
         """Return its distance, if given."""
         return self._component_set.distance()

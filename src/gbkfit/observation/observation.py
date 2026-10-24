@@ -188,6 +188,14 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return None, None, None
 
+    def takes_mass(self) -> bool:
+        """
+        Check whether its model takes the mass of the galaxies it sees
+        beyond what their components take of it (e.g. profiles of their
+        circular velocity, see ObservationProfile); here, it does not.
+        """
+        return False
+
     def sky_origin(self) -> tuple[float, float] | None:
         """
         Return the RA and Dec (degrees) of the origin of the frame of its

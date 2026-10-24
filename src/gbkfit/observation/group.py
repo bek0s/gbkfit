@@ -1,4 +1,5 @@
 import copy
+import logging
 from collections.abc import Sequence
 from typing import Any, NamedTuple, Self
 
@@ -26,6 +27,9 @@ __all__ = [
     'DepthGroup',
     'ObservationGroup'
 ]
+
+
+_log = logging.getLogger(__name__)
 
 
 class DepthGroup(NamedTuple):
@@ -249,6 +253,7 @@ class ObservationGroup:
             for seen, observation, alignment in zip(
                 seen, self._observations, _alignments(self._observations)))
         _check_offsets(self._galaxies, self._observations, seen)
+        _warn_unused_masses(self._galaxies, self._observations, seen)
         self._init_evaluations()
 
     def _init_evaluations(self) -> None:
@@ -647,6 +652,31 @@ class _GroupFunctions(ParamFunctions):
 # or whose frames turn by more (deg; see _alignments)
 _ALIGNMENT_SEPARATION_WARNING = 1.0
 _ALIGNMENT_ROTATION_WARNING = 0.1
+
+
+def _warn_unused_masses(
+        galaxies: Sequence[Galaxy],
+        observations: Sequence[Observation],
+        seen: Sequence[Sequence[int]]
+) -> None:
+    """
+    Log a warning for each galaxy with mass that neither its components
+    nor the observations that see it take (e.g. of components without
+    'mass' velocity traits): only derived values can then use it.
+    """
+    for g, galaxy in enumerate(galaxies):
+        if galaxy.mass_model() is None or galaxy.components_use_mass():
+            continue
+        if any(g in indices and observation.takes_mass()
+               for observation, indices in zip(observations, seen)):
+            continue
+        name = f"galaxy {g}" if galaxy.name() is None \
+            else f"galaxy {galaxy.name()!r}"
+        _log.warning(
+            f"the mass of {name} is used by none of its components ('mass' "
+            f"velocity traits or a vertical equilibrium) and none of its "
+            f"observations (profiles of its mass): only derived values can "
+            f"use it")
 
 
 def _first_on_sky(observations: Sequence[Observation]) -> int | None:

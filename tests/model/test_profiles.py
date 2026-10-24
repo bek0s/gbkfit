@@ -14,7 +14,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     Flat, NoiseGauss, ObservationGroup, ObservationProfile, ObservationSky,
-    PixelSpectra, observation_parser)
+    PixelBrightness, PixelSpectra, observation_parser)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -142,6 +142,33 @@ def test_profile_beside_a_sky_observation(monkeypatch):
     assert len(masses) == 1
     expected = galaxy.plan_functions().bind(params)['rotation_gas'](radii)
     np.testing.assert_allclose(rotation, expected, rtol=1e-12)
+
+
+def test_mass_that_follows_light_of_a_rotation_curve(caplog):
+    # A galaxy whose mass follows the light of a component it does not
+    # move (e.g. an image and a rotation curve that fit a mass-to-light
+    # ratio): the profile takes its mass; without it, nothing but derived
+    # values can, which a warning says
+    light = dict(
+        type='smdisk', name='stars', loose=False, tilted=False,
+        rnodes=list(range(0, 21, 2)),
+        density=dict(ptraits=dict(type='exponential')),
+        emission=dict(type='band'))
+    galaxy = galaxy_parser.load(dict(
+        components=[light], distance=dict(type='direct'), mass=[dict(
+            type='disk', name='stellar', vertical=dict(type='thin'),
+            surface=dict(type='component', component='stars'))]))
+    image = ObservationSky(PixelBrightness(size=(8, 8), step=(1, 1)), Flat())
+    profile = ObservationProfile(['vcirc'], np.array([2.0, 6.0]) * u.arcsec)
+    group = ObservationGroup(galaxy, [image, profile])
+    params = dict(
+        stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
+        stars_pt_a=1, stars_pt_s=4, distance=10, mass_stellar_upsilon=1e8)
+    assert np.all(group.model_h(params)[1]['vcirc']['d'] > 0)
+    ObservationGroup(galaxy, image)
+    warnings = [record for record in caplog.records
+                if 'only derived values can use it' in record.message]
+    assert len(warnings) == 1
 
 
 def test_mock_profiles():

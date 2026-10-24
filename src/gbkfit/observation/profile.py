@@ -294,6 +294,9 @@ class ObservationProfile(Observation):
         """
         return self._inclination
 
+    def takes_mass(self) -> bool:
+        return any(GalaxyFunctions.of_mass(name) for name in self.keys())
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """
         Return its parameters: the inclination of the galaxy,

@@ -44,6 +44,9 @@ _RADIAL_FAMILIES = dict(
     rotation=(u.km / u.s, u.arcsec, True),
     dispersion=(u.km / u.s, u.arcsec, True))
 
+# The families of functions of the mass of the galaxy
+_MASS_FAMILIES = ('vcirc', 'vnewton', 'mass', 'slope')
+
 
 class GalaxyFunctions:
     """
@@ -164,6 +167,15 @@ class GalaxyFunctions:
                 and (not own or _RADIAL_FAMILIES[family][2]):
             return family
         return None
+
+    @staticmethod
+    def of_mass(name: str) -> bool:
+        """
+        Check whether the function of radii of a name is of the mass of
+        the galaxy (its circular velocity, enclosed mass or density slope,
+        not the rotation or the dispersion of a disk).
+        """
+        return GalaxyFunctions.family(name) in _MASS_FAMILIES
 
     @staticmethod
     def radial_units(

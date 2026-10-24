@@ -1387,10 +1387,13 @@ def test_mass_trait_parameters_and_round_trip():
 
 
 def test_mass_trait_mass_and_distance_need_each_other():
+    # (mass that no component uses is for profiles or derived values: see
+    # ObservationGroup, which warns of it unused)
     with pytest.raises(ConfigError, match="need the mass of their galaxy"):
         disk_galaxy('smdisk', dict(type='mass'))
-    with pytest.raises(ConfigError, match="no component uses"):
-        disk_galaxy('smdisk', dict(type='arctan', direction='tan'), MASS, DISTANCE)
+    assert not disk_galaxy(
+        'smdisk', dict(type='arctan', direction='tan'), MASS, DISTANCE
+    ).components_use_mass()
     with pytest.raises(ConfigError, match="needs its distance"):
         disk_galaxy('smdisk', dict(type='mass'), MASS)
     with pytest.raises(ConfigError, match="used by its mass only"):
