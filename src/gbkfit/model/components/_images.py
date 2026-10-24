@@ -96,6 +96,12 @@ class ImageMaps:
                 "the light of an image trait is placed on the sky by the "
                 "world coordinates of its image, which need the origin of "
                 "the frame of the model: an observation on the sky")
+        components = component_set.components()
+        for i, images in self._traits.items():
+            label = components[i].name() or f'component{i}'
+            for image in images:
+                image.trait.check_coverage(
+                    image.x, image.y, sky_origin, f"the disk of {label!r}")
 
     def indices(self) -> tuple[int, ...]:
         """Return the indices of the components with image traits."""

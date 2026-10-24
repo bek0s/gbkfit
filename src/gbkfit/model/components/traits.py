@@ -2285,6 +2285,46 @@ class RPTraitImage(RPTrait):
             self._data, [py, px], order=1, mode='constant', cval=0)
         return (params['a'] * image * np.cos(np.radians(incl))).ravel()
 
+    def check_coverage(
+            self,
+            x: np.ndarray,
+            y: np.ndarray,
+            origin: tuple[float, float],
+            label: str
+    ) -> None:
+        """
+        Warn (see parseutils.warn) if its image covers none of the given
+        positions on the sky (arcsec, in the frame of origin; see
+        face_on): e.g. its map about the origin, whose light would then be
+        none, because the world coordinates of the image or of the
+        observations are wrong.
+
+        Parameters
+        ----------
+        x, y : np.ndarray
+            The positions.
+        origin : tuple of float
+            The RA and Dec (degrees) of the origin of the frame.
+        label : str
+            What has the trait, for the message (e.g. "the disk of
+            'gas'").
+        """
+        px, py = gridutils.frame_to_pixels(x, y, origin, self._grid)
+        nx, ny = self._grid.size[:2]
+        if np.any((px >= -0.5) & (px <= nx - 0.5)
+                  & (py >= -0.5) & (py <= ny - 0.5)):
+            return
+        centre_x, centre_y = gridutils.frame_to_pixels(
+            np.zeros(1), np.zeros(1), origin, self._grid)
+        parseutils.warn(
+            f"the image {self._file!r} of the image trait of {label} "
+            f"covers none of its map about the origin of the frame of the "
+            f"model (RA {origin[0]:.6f}, Dec {origin[1]:.6f}), which is at "
+            f"its pixel ({centre_x[0]:.1f}, {centre_y[0]:.1f}) by their RA "
+            f"and Dec: the disk has no light unless its centre is far "
+            f"from the origin; check the world coordinates of the image "
+            f"and of the observations")
+
     def check_psf(self, psf: PSF | None) -> None:
         """
         Warn (see parseutils.warn) if the PSF of its image (if given)

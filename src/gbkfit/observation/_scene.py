@@ -59,13 +59,16 @@ class SeenGalaxies(NamedTuple):
     The galaxies an observation sees (see ObservationGroup): the
     galaxies, the mapping of the parameters of each to those of the
     observation group, their labels (the id 'galaxy' of their extra
-    outputs), and their order along the line of sight, front to back (in
-    units, see DepthUnit; None if not given).
+    outputs), their order along the line of sight, front to back (in
+    units, see DepthUnit; None if not given), and the RA and Dec (degrees)
+    of the origin of the frame of their parameters (that of the first
+    observation on the sky; None without one).
     """
     galaxies: tuple[Galaxy, ...]
     mappings: tuple[dict[str, str], ...]
     labels: tuple[str, ...]
     order: tuple[DepthUnit, ...] | None
+    sky_origin: tuple[float, float] | None
 
 
 class Scene:

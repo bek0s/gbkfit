@@ -131,20 +131,45 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
         rotation['image'], rotation['exponential'], atol=0.5)
 
 
-def test_images_need_an_observation_on_the_sky(tmp_path):
-    write_truth(tmp_path / 'truth.fits')
-    trait = dict(
-        type='image', file=str(tmp_path / 'truth.fits'), size=[8, 8],
-        step=0.2)
-    profile = dict(
-        type='profile', functions=['vcirc'], radii=[1.0], radius_unit='kpc')
+# A profile of the circular velocity at 1 kpc
+PROFILE = dict(
+    type='profile', functions=['vcirc'], radii=[1.0], radius_unit='kpc')
+
+
+def rotating_disk_of_image(path):
+    """
+    A galaxy of a thin disk whose light is the image at path, rotating in
+    a point mass.
+    """
+    trait = dict(type='image', file=str(path), size=[8, 8], step=0.2)
     galaxy = disk(trait) | dict(
         mass=[dict(type='point', name='bh')], distance=dict(type='direct'))
     galaxy['components'][0]['kinematics'] = dict(
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
+    return galaxy
+
+
+def test_images_need_an_observation_on_the_sky(tmp_path):
+    write_truth(tmp_path / 'truth.fits')
+    galaxy = rotating_disk_of_image(tmp_path / 'truth.fits')
     with pytest.raises(ConfigError, match="an observation on the sky"):
         ObservationGroup(
-            galaxy_parser.load(galaxy), observation_parser.load(profile))
+            galaxy_parser.load(galaxy), observation_parser.load(PROFILE))
+
+
+def test_profiles_of_galaxies_of_images(tmp_path):
+    # With an observation on the sky, a profile of the galaxy takes its
+    # origin on the sky, as the galaxy does: the circular velocity of the
+    # point mass, sqrt(G M / r)
+    write_truth(tmp_path / 'truth.fits')
+    galaxy = rotating_disk_of_image(tmp_path / 'truth.fits')
+    group = ObservationGroup(
+        galaxy_parser.load(galaxy),
+        observation_parser.load([dict(IMAGE), PROFILE]))
+    params = GEOMETRY | dict(
+        vsys=0, pt_a=1, dpt_a=10, distance=10, mass_bh_log_m=9)
+    vcirc = group.model_h(params)[1]['vcirc']['d']
+    assert vcirc == pytest.approx([np.sqrt(4.30092e-6 * 1e9)], rel=1e-4)
 
 
 def test_images_warn_of_their_blur_and_their_cells(tmp_path, caplog):
@@ -160,3 +185,17 @@ def test_images_warn_of_their_blur_and_their_cells(tmp_path, caplog):
         image_of(disk(trait), GEOMETRY | dict(pt_a=1), observation)
     assert "larger than the pixels of its image" in caplog.text
     assert "41% more than the data" in caplog.text
+
+
+def test_images_off_the_model_are_warned_of(tmp_path, caplog):
+    # An image whose world coordinates put it far from the observation (2
+    # degrees east) covers none of the map of its trait: the disk has no
+    # light
+    write_truth(tmp_path / 'truth.fits', rval=(152.0, 2.0))
+    trait = dict(
+        type='image', file=str(tmp_path / 'truth.fits'), size=[30, 30],
+        step=0.4)
+    with caplog.at_level(logging.WARNING):
+        _, model = image_of(disk(trait), GEOMETRY | dict(pt_a=1))
+    assert "covers none of its map" in caplog.text
+    assert not np.any(model)

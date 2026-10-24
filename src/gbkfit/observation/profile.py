@@ -375,7 +375,7 @@ class ObservationProfile(Observation):
         """
         galaxy, mapping, label = \
             seen.galaxies[0], seen.mappings[0], seen.labels[0]
-        functions = galaxy.plan_functions()
+        functions = galaxy.plan_functions(seen.sky_origin)
         if missing := [k for k in self.keys() if k not in functions.names()]:
             raise ConfigError(
                 f"galaxy {label} has no functions {missing}; its functions "

@@ -226,6 +226,10 @@ class ObservationGroup:
         self._observation_labels = [
             f'observation{i}' if name is None else name
             for i, name in enumerate(observation_names)]
+        # (the origin of the frame of the parameters of the galaxies)
+        first = _first_on_sky(self._observations)
+        self._sky_origin = None if first is None \
+            else self._observations[first].sky_origin()
         plans = []
         seen = []
         for i, observation in enumerate(self._observations):
@@ -235,10 +239,6 @@ class ObservationGroup:
         self._plans = tuple(plans)
         # The indices of the galaxies that each observation sees
         self._seen_galaxies = tuple(seen)
-        # (the origin of the frame of the parameters of the galaxies)
-        first = _first_on_sky(self._observations)
-        self._sky_origin = None if first is None \
-            else self._observations[first].sky_origin()
         gravity_plans = []
         for g, galaxy in enumerate(self._galaxies):
             with parseutils.config_path('galaxies', g):
@@ -324,7 +324,7 @@ class ObservationGroup:
             tuple(self._galaxies[j] for j in seen),
             tuple(self._mappings[j] for j in seen),
             tuple(self._galaxy_labels[j] for j in seen),
-            None if order is None else tuple(order))
+            None if order is None else tuple(order), self._sky_origin)
 
     def with_driver(self, driver: Driver) -> Self:
         """
