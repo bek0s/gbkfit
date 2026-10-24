@@ -81,7 +81,11 @@ def pattern_speed(
     flux, velocity : ArrayLike
         The flux and the velocity at the points (NaN where none).
     x, y : ArrayLike
-        The coordinates of the points (of the shape of flux).
+        The coordinates of the points (of the shape of flux):
+        their positions on the sky (arcsec, e.g.
+        gridutils.sky_positions of their grid), in which the angles
+        are those of the models (posa, north through east); the
+        pixels of a rotated grid give angles in its pixel axes.
     centre : tuple of float
         The centre (x, y) of the galaxy.
     pa : float

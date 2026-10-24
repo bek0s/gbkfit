@@ -100,7 +100,11 @@ def kinemetry(
     values : ArrayLike
         The map (NaN where it has no value): of a regular grid, or of bins.
     x, y : ArrayLike
-        The coordinates of its points (of the shape of values).
+        The coordinates of its points (of the shape of values):
+        their positions on the sky (arcsec, e.g.
+        gridutils.sky_positions of their grid), in which the angles
+        are those of the models (posa, north through east); the
+        pixels of a rotated grid give angles in its pixel axes.
     centre : tuple of float
         The centre (x, y) of the galaxy.
     radii : ArrayLike, optional
