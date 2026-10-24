@@ -66,6 +66,13 @@ class FitProblem:
     when the stage changes (see set_stage), and at the end (see finish).
     An observer that raises is logged and dropped: the fit goes on.
 
+    A model evaluation whose chi-square or log-likelihood is not a number
+    (e.g. of a model that is NaN where the data have values) counts as
+    one whose parameters cannot be evaluated (inf and -inf); residuals
+    with NaN go to the fitter as they are (least-squares libraries reject
+    or refuse them). Both are counted (see nan_nevals), and the first is
+    logged.
+
     Every model evaluation raises FitStopped once the control (if any) is
     stopped: those of a batch before it count, without a pool (with one,
     none of the batch do). The numbers it evaluates (chi-squares,
@@ -137,6 +144,7 @@ class FitProblem:
             float(np.finfo(obs.dtype()).eps)
             for obs in objective.group().observations())
         self._nevals = 0
+        self._nan_nevals = 0
         self._best_x: np.ndarray | None = None
         self._best_chi2 = math.inf
         self._observers = tuple(observers)
@@ -185,6 +193,13 @@ class FitProblem:
     def nevals(self) -> int:
         """Return the number of model evaluations so far."""
         return self._nevals
+
+    def nan_nevals(self) -> int:
+        """
+        Return the number of model evaluations so far whose chi-square
+        was not a number.
+        """
+        return self._nan_nevals
 
     def best(self) -> tuple[np.ndarray, float] | None:
         """
@@ -239,6 +254,8 @@ class FitProblem:
             # spinning into the next evaluation)
             with threadutils.single_threaded_blas():
                 cost = float(residuals @ residuals)
+            if math.isnan(cost):
+                self._count_nan(x)
             self._record(x, cost)
             batch.append(residuals)
         return batch
@@ -581,9 +598,10 @@ class FitProblem:
     ) -> Iterator[tuple[np.ndarray, tuple[float, float] | None]]:
         """
         Yield each point (one per row) with its chi-square and
-        log-likelihood, or None where the parameters cannot be evaluated:
-        from the log while a fit that resumes replays it, else from the
-        objective (see map_objective), and logged (None as inf and -inf).
+        log-likelihood, or None where the parameters cannot be evaluated
+        or they are not numbers: from the log while a fit that resumes
+        replays it, else from the objective (see map_objective), and
+        logged (None as inf and -inf, numbers that are not as they are).
 
         Raises
         ------
@@ -596,7 +614,7 @@ class FitProblem:
         for x in xs:
             logged = None if self._log is None else self._log.replay(x)
             if logged is not None:
-                yield x, _evaluated(logged)
+                yield x, self._evaluated(x, logged)
                 continue
             try:
                 new.append((x, self.evaluate(x)))
@@ -610,7 +628,33 @@ class FitProblem:
                 else next(evaluated)
             if self._log is not None:
                 self._log.append(x, *numbers)
-            yield x, _evaluated(numbers)
+            yield x, self._evaluated(x, numbers)
+
+    def _evaluated(
+            self, x: np.ndarray, numbers: tuple[float, float]
+    ) -> tuple[float, float] | None:
+        """
+        Return the chi-square and log-likelihood of a point, or None for
+        those of a point whose parameters could not be evaluated (inf,
+        -inf), or that are not numbers (counted).
+        """
+        if math.isnan(numbers[0]) or math.isnan(numbers[1]):
+            self._count_nan(x)
+            return None
+        return None if numbers == (math.inf, -math.inf) else numbers
+
+    def _count_nan(self, x: np.ndarray) -> None:
+        """
+        Count a model evaluation whose chi-square is not a number, and log
+        the first.
+        """
+        if not self._nan_nevals:
+            _log.warning(
+                "the chi-square is not a number at the free values %s (e.g. "
+                "a model that is NaN where the data have values); see the "
+                "diagnostics 'nan_nevals' of the result",
+                dict(zip(self._names, np.asarray(x).tolist())))
+        self._nan_nevals += 1
 
     def set_stage(self, stage: str) -> None:
         """
@@ -665,10 +709,3 @@ def _points(xs: npt.ArrayLike) -> np.ndarray:
     """Return points of free values, one per row."""
     return np.atleast_2d(np.asarray(xs, dtype=float))
 
-
-def _evaluated(numbers: tuple[float, float]) -> tuple[float, float] | None:
-    """
-    Return the chi-square and log-likelihood of a point, or None for
-    those of a point whose parameters could not be evaluated (inf, -inf).
-    """
-    return None if numbers == (math.inf, -math.inf) else numbers

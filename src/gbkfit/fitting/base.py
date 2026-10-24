@@ -273,6 +273,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             uncertainty_nevals += nevals
             problems += solution_problems
         diagnostics['uncertainty_nevals'] = uncertainty_nevals
+        diagnostics['nan_nevals'] = problem.nan_nevals()
         for key, message in problems:
             diagnostics.setdefault(key, []).append(message)
         posterior = None

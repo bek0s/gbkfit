@@ -20,8 +20,8 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
-    PixelBrightness)
+    Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
+    ObservationSky, PixelBrightness)
 from gbkfit.params import ParamEvaluationError, ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
@@ -455,6 +455,41 @@ def test_a_finished_chain_discards_all_its_burn_in(sampler):
         dict(type=sampler, nwalkers=16, nsteps=20, burnin=15))
     result = fitter.fit(objective, params)
     assert len(result.posterior.samples) == 16 * 5
+
+
+def test_evaluations_that_are_not_numbers_are_outside(tmp_path, caplog):
+    # A chi-square that is not a number (of a likelihood that is NaN where
+    # cut > 0) is that of parameters that cannot be evaluated, for every
+    # fitter (emcee refused it): counted, and the first logged
+    pytest.importorskip('emcee')
+    from gbkfit.fitting import fitter_parser
+    (tmp_path / 'like.py').write_text(
+        "import numpy as np\n"
+        "def log_like(item, data, model, error, mask, params):\n"
+        "    if params['cut'] > 0:\n"
+        "        return np.nan\n"
+        "    return -0.5 * np.sum(((model - data) / error) ** 2)\n")
+    likelihood = LikelihoodUser(
+        str(tmp_path / 'like.py'), 'log_like', 'log_likelihood', ['cut'])
+    objective = mock_objective(
+        DriverHost(), likelihood=likelihood, name='mock')
+    params = ParamSpace(objective.pdescs(), prior_properties(10) | dict(
+        mock_cut=dict(min=-1, max=1)))
+    problem = FitProblem(objective, params)
+    xs = [[TRUE[name] for name in problem.names()[:-1]] + [cut]
+          for cut in (-0.5, 0.5)]
+    assert np.isfinite(problem.cost_batch(xs)[0])
+    assert problem.cost_batch(xs)[1] == np.inf
+    assert problem.log_likelihood_batch(xs)[1] == -np.inf
+    assert problem.nan_nevals() == 3
+    result = fitter_parser.load(dict(
+        type='emcee', nwalkers=16, nsteps=20, burnin=10,
+        uncertainty=dict(covariance=False))).fit(objective, params)
+    assert result.diagnostics['nan_nevals'] > 0
+    assert result.best().free['mock_cut'] <= 0
+    logged = [record for record in caplog.records
+              if 'not a number' in record.message]
+    assert len(logged) == 2
 
 
 def test_a_stopped_emcee_keeps_its_chain_so_far(tmp_path):
