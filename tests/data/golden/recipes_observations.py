@@ -119,6 +119,22 @@ def _write_voronoi_bins(folder: pathlib.Path) -> None:
         gridutils.Coords((0.5, 0.5), (11.5, 11.5), (0, 0), 0), overwrite=True)
 
 
+def _write_uv_coverage(folder: pathlib.Path) -> None:
+    """
+    Write coverage.npz: 60 random baselines of up to 15 km, of 16 HI
+    channels of 20 km/s, of a phase centre 3.6 arcsec from the reference
+    pixel.
+    """
+    from gbkfit.dataset import UVCoverage
+    hi = 1420.405752e6
+    velocities = 140 - 20 * np.arange(16)
+    uvw = np.random.default_rng(1).uniform(-1, 1, (60, 3)) \
+        * [15e3, 15e3, 5e3]
+    UVCoverage(
+        uvw, hi * (1 - velocities / _C_KMS), (150.001, -30.0005), 'LSRK',
+        f'{hi} Hz').dump(str(folder / 'coverage.npz'), overwrite=True)
+
+
 def _write_detection_noise(folder: pathlib.Path) -> None:
     """
     Write detected_noise.fits: the error of the cube of the moment maps
@@ -304,6 +320,18 @@ CASES: list[dict[str, Any]] = [
         noises=[_gauss(0.0005), _gauss(0.005)],
         likelihoods=[dict(type='gaussian', missing_residual=3), None],
         prepare=_write_voronoi_bins),
+    dict(
+        name='visibilities',
+        doc="The visibilities of HI channels at random baselines, "
+            "smoothed by a Hanning correlator response.",
+        galaxies=_DISK,
+        observations=[_sky(
+            dict(type='visibilities', coverage='coverage.npz',
+                 size=[32, 28], step=1, rval=[150, -30]),
+            instrument=dict(lsf=dict(type='hanning', width=20)))],
+        truth=_DISK_TRUTH, trial=_DISK_TRIAL,
+        noises=[_gauss(0.01)],
+        prepare=_write_uv_coverage),
     dict(
         name='lens_foreground',
         doc="The image of a source disk behind a foreground lens of three "

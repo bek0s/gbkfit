@@ -266,9 +266,10 @@ class DatasetVisibilities(Dataset):
                 raise ConfigError(
                     f"the options {sorted(ms_options)} are of measurement "
                     f"sets (option ms)")
-            return cls.from_file(prefix + options['file'])
+            return cls.from_file(
+                parseutils.resolve_path(prefix + options['file']))
         return cls.from_ms(
-            prefix + options.pop('ms'), **options)
+            parseutils.resolve_path(prefix + options.pop('ms')), **options)
 
     @classmethod
     def from_file(cls, file: str) -> 'DatasetVisibilities':

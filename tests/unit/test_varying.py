@@ -241,3 +241,15 @@ def test_spectral_tables_from_files(tmp_path):
     np.testing.assert_allclose(table.points().to_value(u.AA), WAVELENGTHS)
     np.testing.assert_allclose(table.values(), ALPHAS)
     assert table.unit() == u.arcsec
+
+
+def test_table_files_are_relative_to_the_configuration(tmp_path):
+    # A relative table file is in the folder of the configuration (see
+    # parseutils.paths_relative_to), not in the current one
+    from gbkfit.utils import parseutils
+    folder = tmp_path / 'config'
+    folder.mkdir()
+    info = alpha_table(folder, 'ecsv') | dict(table='psf.ecsv')
+    with parseutils.paths_relative_to(str(folder)):
+        psf = psf_parser.load(dict(type='moffat', alpha=info, beta=2.5))
+    assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)

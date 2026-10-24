@@ -450,8 +450,8 @@ class SpectralTable:
                 optional={'hdu', 'units'})
             with parseutils.config_path('table'):
                 return cls.from_file(
-                    info['table'], info['column'], info.get('hdu'),
-                    info.get('units'))
+                    parseutils.resolve_path(info['table']), info['column'],
+                    info.get('hdu'), info.get('units'))
         info = parseutils.parse_options(
             info, required={'values'}, optional=set(_AXES))
         points = load_points(info)

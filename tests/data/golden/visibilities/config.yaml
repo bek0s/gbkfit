@@ -1,0 +1,49 @@
+# visibilities: The visibilities of HI channels at random baselines, smoothed by a Hanning correlator response.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: smdisk
+    loose: false
+    tilted: false
+    rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    density:
+      ptraits: {type: exponential}
+    kinematics:
+      vptraits: {type: arctan, direction: tan}
+      dptraits: {type: uniform}
+    emission: {type: lines}
+observations:
+- type: sky
+  data: {file: observation0_visibilities.npz}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
+  line_of_sight: {type: flat}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: null
+    lsf: {type: hanning, width: 20}
+  observable:
+    type: visibilities
+    size: [32, 28]
+    step: [1, 1]
+    rpix: [15.5, 13.5]
+    rval: [150, -30]
+    rota: 0
+    transform: exact
+    eps: null
+  scale: [1, 1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.2
+    ypos: -0.3
+    posa: {value: 42, min: 0, max: 90}
+    incl: {value: 50, min: 10, max: 80}
+    vsys: {value: 8, min: -50, max: 50}
+    pt_a: 1
+    pt_s: 3.2
+    vpt_rt: 2.2
+    vpt_vt: {value: 140, min: 50, max: 300}
+    dpt_a: {value: 30, min: 5, max: 80}

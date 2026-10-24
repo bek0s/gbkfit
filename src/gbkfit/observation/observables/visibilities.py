@@ -11,7 +11,7 @@ from gbkfit.model import LineEmission
 from gbkfit.model.components._gravity import GalaxyGravity
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
 from ._uv_transforms import UVTransform, uv_transforms
@@ -121,7 +121,8 @@ class Visibilities(Observable):
             dataset: DatasetVisibilities | None = None
     ) -> 'Visibilities':
         if dataset is None and 'coverage' in info:
-            info['coverage'] = UVCoverage.from_file(info['coverage'])
+            info['coverage'] = UVCoverage.from_file(
+                parseutils.resolve_path(info['coverage']))
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod
