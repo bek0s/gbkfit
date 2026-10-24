@@ -215,35 +215,23 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
 class DistanceDirect(Distance):
     """
     A distance given directly: its parameter is the angular diameter
-    distance (Mpc), and the epoch is a fixed redshift.
+    distance (Mpc), and the epoch is the redshift of the galaxy (see
+    Galaxy; 0 without one).
 
     Parameters
     ----------
-    epoch : float, optional
-        The redshift of the epoch of the galaxy (by default 0), at which
-        the quantities that depend on the cosmology are evaluated. It
-        does not set the distance.
     cosmology : str, optional
         The cosmology (see Distance).
 
     Raises
     ------
     ConfigError
-        If the epoch is negative, or the cosmology is unknown.
+        If the cosmology is unknown.
     """
 
     @staticmethod
     def type() -> str:
         return 'direct'
-
-    def dump(self) -> dict[str, Any]:
-        return super().dump() | dict(epoch=self._epoch)
-
-    def __init__(self, epoch: float = 0, cosmology: str = COSMOLOGY_DEFAULT):
-        super().__init__(cosmology)
-        if not epoch >= 0:
-            raise ConfigError(f"epoch cannot be negative; it is {epoch}")
-        self._epoch = float(epoch)
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(distance=ParamScalarDesc(
@@ -254,7 +242,7 @@ class DistanceDirect(Distance):
         return float(params['distance']) * KPC_PER_ARCSEC_MPC
 
     def epoch(self, params: ParamValues, redshift: float) -> float:
-        return self._epoch
+        return redshift
 
 
 class DistanceRedshift(Distance):

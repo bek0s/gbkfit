@@ -1217,12 +1217,13 @@ def test_distances_give_the_length_of_an_arcsec():
     # At 10 Mpc, an arcsec is 48.48 pc; by a redshift, the angular
     # diameter distance of the cosmology; a distance sets no redshift
     # The redshift of the galaxy (0.5 here) gives the distance of
-    # DistanceRedshift, unless it has its own (for the distance only)
+    # DistanceRedshift, unless it has its own (for the distance only), and
+    # the epoch of both
     direct = DistanceDirect()
     assert list(direct.pdescs()) == ['distance']
     assert direct.kpc_per_arcsec(dict(distance=10), 0.5) \
         == pytest.approx(0.0484813681)
-    assert direct.epoch(dict(distance=10), 0.5) == 0
+    assert direct.epoch(dict(distance=10), 0.5) == 0.5
     by_redshift = DistanceRedshift(cosmology='WMAP9')
     assert by_redshift.pdescs() == {}
 
@@ -1240,8 +1241,6 @@ def test_distances_give_the_length_of_an_arcsec():
         DistanceRedshift(redshift=-1)
     with pytest.raises(ConfigError, match="cosmology must be one of"):
         DistanceRedshift(cosmology='Planck99')
-    with pytest.raises(ConfigError, match="epoch cannot be negative"):
-        DistanceDirect(epoch=-1)
 
 
 MASS = [
@@ -1254,7 +1253,7 @@ MASS = [
         type='pseudo_isothermal', parameters='density_radius'),
         shape=dict(type='sphere'))]
 
-DISTANCE = dict(type='direct', cosmology='Planck18', epoch=0.0)
+DISTANCE = dict(type='direct', cosmology='Planck18')
 
 MASS_PROPERTIES = dict(
     distance=10, mass_stars_log_m=10.5, mass_stars_rd=0.5,
@@ -1268,6 +1267,20 @@ DISK = dict(
 
 DISK_PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, dpt_a=15)
+
+
+def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
+    # The critical density that defines its halos is that of its redshift
+    # (5.5 times that of today at z = 1.5), as by a distance of redshift
+    galaxy = galaxy_parser.load(dict(
+        components=[DISK | dict(type='smdisk', kinematics=dict(
+            vptraits=dict(type='mass'), dptraits=dict(type='uniform')))],
+        mass=copy.deepcopy(MASS), distance=copy.deepcopy(DISTANCE),
+        redshift=1.5))
+    mass = galaxy.plan_gravity().mass(DISK_PROPERTIES | MASS_PROPERTIES)
+    assert mass.context.critical_density == pytest.approx(
+        astropy.cosmology.Planck18.critical_density(1.5).to_value(
+            'solMass / kpc3'))
 
 
 def with_traits(component, **traits):
