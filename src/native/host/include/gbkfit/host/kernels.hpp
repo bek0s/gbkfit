@@ -265,15 +265,14 @@ gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
         const FieldsArgs<T>& f)
 {
-    // Parallelization: per cloud
-    // Each cloud has its own stream of random numbers
+    // Parallelization: per cloud (each has its own stream of random
+    // numbers; see gmodel_mcdisk_evaluate_cloud)
     #pragma omp parallel for
     for(int ci = 0; ci < mc.nclouds; ++ci)
     {
-        RNG<T> rng(mc.seed, ci);
         gbkfit::gmodel_mcdisk_evaluate_cloud<
                 atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-                Anisotropic>(rng, ci, a, g, mc, f);
+                Anisotropic>(ci, a, g, mc, f);
     }
 
     // The fields of each voxel, from the moments of its clouds.

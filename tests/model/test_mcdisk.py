@@ -440,3 +440,33 @@ def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
     with pytest.raises(RuntimeError, match="need b > 1"):
         evaluate_disk('mcdisk', driver.type(), component,
                       BLOBS | dict(pt_b=[2.0, 0.9]))
+
+
+def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
+    # A Monte Carlo disk of a node-wise density has a pool of clouds for
+    # each ring: more light at one node (more clouds in the pools of its
+    # rings) leaves the clouds of the rings beyond where they were (each
+    # cloud draws from the stream of its index in its pool)
+    from modelutils import observation_group
+    case = dict(
+        driver=dict(type=driver.type()),
+        observable=dict(type='pixel_brightness', size=[40, 40], step=0.5),
+        line_of_sight=dict(type='grid'),
+        galaxy=dict(components=[dict(
+            type='mcdisk', cflux=1e-3, seed=3, loose=False, tilted=False,
+            rnodes=list(range(0, 10)),
+            density=dict(
+                ptraits=dict(type='nw_uniform'),
+                htraits=dict(type='gauss', zmax=1)),
+            emission=dict(type='band'))]))
+    group = observation_group([case])
+    params = dict(
+        xpos=0, ypos=0, posa=0, incl=0, pt_a=np.ones(10), ht_s=0.2)
+    first = group.model_h(params)[0]['brightness']['d'].copy()
+    params['pt_a'] = np.where(np.arange(10) == 3, 2.0, 1.0)
+    second = group.model_h(params)[0]['brightness']['d']
+    y, x = np.indices(first.shape)
+    beyond = 0.5 * np.hypot(x - 19.5, y - 19.5) > 5.5
+    assert np.any(first[beyond])
+    np.testing.assert_allclose(
+        second[beyond], first[beyond], rtol=1e-5, atol=1e-7 * first.max())

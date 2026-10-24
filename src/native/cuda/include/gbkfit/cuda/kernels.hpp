@@ -211,11 +211,11 @@ gmodel_mcdisk_evaluate(
     if (tid >= mc.nclouds)
         return;
 
-    // Each cloud has its own stream of random numbers
-    RNG<T> rng(mc.seed, tid);
+    // (each cloud has its own stream of random numbers; see
+    // gmodel_mcdisk_evaluate_cloud)
     gbkfit::gmodel_mcdisk_evaluate_cloud<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-            Anisotropic>(rng, tid, a, g, mc, f);
+            Anisotropic>(tid, a, g, mc, f);
 }
 
 template<typename T> __global__ void

@@ -797,7 +797,7 @@ template<
         bool HasLineOpacity, bool Anisotropic, typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
-        RNG<T>& rng, int ci, const DiskArgs<T>& a, const GridArgs<T>& g,
+        int ci, const DiskArgs<T>& a, const GridArgs<T>& g,
         const MCDiskArgs<T>& mc, const FieldsArgs<T>& f)
 {
     int rnidx=0, tidx=0;
@@ -814,6 +814,12 @@ gmodel_mcdisk_evaluate_cloud(
         rnidx++;
     }
     rvalue = mc.cloud_flux[rnidx];
+
+    // Its own stream of random numbers: of its index in its pool and the
+    // pool, so that a change of the number of clouds of a pool (with its
+    // flux) leaves the clouds of the other pools as they are
+    const int first = rnidx > 0 ? mc.ncloudscsum[rnidx - 1] : 0;
+    RNG<T> rng(mc.seed, ci - first, rnidx);
 
     // Find which trait and subring the cloud belongs to.
     for(tidx = 0; tidx < a.rpt.n; ++tidx)

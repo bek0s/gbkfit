@@ -52,9 +52,10 @@ private:
 
 // A stream of uniform random numbers in the open interval (0, 1).
 //
-// Each stream is identified by a seed and a stream index (e.g., the
-// index of a Monte Carlo cloud). Because the numbers are a function of
-// the seed, the stream index, and the position in the stream only, the
+// Each stream is identified by a seed and a stream index, within a group
+// of streams (e.g., a Monte Carlo cloud, by its index in its pool and the
+// index of the pool). Because the numbers are a function of the seed,
+// the group, the stream index, and the position in the stream only, the
 // results do not depend on how the work is split between threads, and
 // the host and cuda code draw the same numbers.
 template<typename T>
@@ -62,8 +63,9 @@ struct RNG
 {
     static_assert(std::is_floating_point_v<T>);
 
-    constexpr RNG(std::uint32_t seed, std::uint32_t stream)
-        : seed(seed), stream(stream) {}
+    constexpr RNG(
+            std::uint32_t seed, std::uint32_t stream, std::uint32_t group = 0)
+        : seed(seed), stream(stream), group(group) {}
 
     constexpr T
     operator()(void)
@@ -87,7 +89,7 @@ private:
     {
         if (index == 4)
         {
-            const std::uint32_t counter[4] = {block++, 0, stream, 0};
+            const std::uint32_t counter[4] = {block++, group, stream, 0};
             const Philox4x32 philox(counter, seed, 0);
             for (int i = 0; i < 4; ++i)
                 buffer[i] = philox.values[i];
@@ -98,6 +100,7 @@ private:
 
     std::uint32_t seed;
     std::uint32_t stream;
+    std::uint32_t group;
     std::uint32_t block = 0;
     std::uint32_t buffer[4] = {0, 0, 0, 0};
     int index = 4;
