@@ -306,9 +306,9 @@ class FitSolution:
     log_prior : float or None
         The log of the prior density, if the fit has priors.
     covariance : Covariance or None
-        The covariance, or None if disabled or if the parameters cannot
-        be evaluated at a step of its Jacobian (see the diagnostics
-        'uncertainty_errors' of FitResult).
+        The covariance, or None if disabled, if the parameters cannot be
+        evaluated at a step of its Jacobian, or if the fit was asked to
+        stop (see the diagnostics 'uncertainty_errors' of FitResult).
     laplace : Posterior or None
         The Gaussian approximation of the posterior from the covariance
         (approximate), or None if disabled or there is no covariance.

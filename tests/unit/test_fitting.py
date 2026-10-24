@@ -337,6 +337,7 @@ class StopAfter(FitControl):
 @pytest.mark.parametrize('fitter', [
     dict(type='lmfit.least_squares'), dict(type='cmaes')])
 def test_a_stopped_fit_ends_with_its_best_point(fitter):
+    # Evaluated once, without its covariance
     pytest.importorskip('cma')
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
@@ -346,7 +347,27 @@ def test_a_stopped_fit_ends_with_its_best_point(fitter):
         objective, params, control=StopAfter(30))
     assert not result.success and 'stopped' in result.message
     assert result.nevals == 30
-    assert result.best().covariance is not None
+    assert result.best().covariance is None
+    assert result.diagnostics['uncertainty_nevals'] == 1
+
+
+def test_a_fit_stopped_in_its_uncertainty_ends_without_it():
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    control = FitControl()
+
+    def observer(progress):
+        if progress.stage == 'uncertainty':
+            control.stop()
+    result = fitter_parser.load(dict(type='lmfit.least_squares')).fit(
+        objective, params, [observer], control=control)
+    assert result.success
+    assert result.best().covariance is None
+    assert result.diagnostics['uncertainty_nevals'] == 1
+    assert result.diagnostics['uncertainty_errors'] == [
+        "no covariance: the fit was asked to stop"]
 
 
 def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):

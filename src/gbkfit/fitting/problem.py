@@ -229,8 +229,7 @@ class FitProblem:
         """
         xs = _points(xs)
         values = [self.evaluate(x) for x in xs]
-        evaluated = self.map_objective(
-            self._stoppable(Objective.residuals), values)
+        evaluated = self.map_objective(Objective.residuals, values)
         batch = []
         for x, residuals in zip(xs, evaluated):
             if self._priors is not None or self._joint:
@@ -497,7 +496,13 @@ class FitProblem:
         the objective at once (see EvaluationPool); else on the objective,
         one after the other as they are taken. It does not count, keep or
         log the evaluations (the other functions do).
+
+        Raises
+        ------
+        FitStopped
+            At an evaluation, if the fit was asked to stop.
         """
+        function = self._stoppable(function)
         if self._pool is not None:
             yield from self._pool.map(function, values)
         else:
@@ -598,7 +603,7 @@ class FitProblem:
             except ParamEvaluationError:
                 new.append((x, None))
         evaluated = self.map_objective(
-            self._stoppable(Objective.chi2_and_log_likelihood),
+            Objective.chi2_and_log_likelihood,
             [values for _, values in new if values is not None])
         for x, values in new:
             numbers = (math.inf, -math.inf) if values is None \

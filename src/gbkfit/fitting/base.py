@@ -184,8 +184,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
 
         A fit asked to stop (see FitControl) ends with what the fitter has:
         the best point so far (of an MCMC sampler, also its chain so far),
-        with its uncertainty, and success false. A fit with a log of its
-        evaluations can resume from it (see EvaluationLog).
+        and success false, without the covariance of its solutions (nor
+        those of a fit asked to stop as it computes them). A fit with a
+        log of its evaluations can resume from it (see EvaluationLog).
 
         Parameters
         ----------
@@ -333,8 +334,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         model evaluations it took, and its problems, as the keys of the
         diagnostics of the result and the messages: why its uncertainty
         is missing ('uncertainty_errors': the parameters cannot be
-        evaluated at a step of its Jacobian), or its derived values
-        ('derived_errors': an expression fails there).
+        evaluated at a step of its Jacobian, or the fit was asked to
+        stop), or its derived values ('derived_errors': an expression
+        fails there).
         """
         objective = problem.objective()
         params = problem.params()
@@ -367,6 +369,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                 nevals += cov_nevals
             except ParamEvaluationError as e:
                 problems.append(('uncertainty_errors', f"no covariance: {e}"))
+            except FitStopped:
+                problems.append((
+                    'uncertainty_errors',
+                    "no covariance: the fit was asked to stop"))
         if cov is not None and options.laplace_samples() > 0:
             laplace = laplace_posterior(
                 problem, x, cov, options.laplace_samples(), rng,
