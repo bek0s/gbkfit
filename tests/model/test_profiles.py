@@ -125,7 +125,7 @@ def test_profile_beside_a_sky_observation(monkeypatch):
     # The rotation of a disk in the mass, from a profile first and a cube
     # second: the frames are those of the cube, and the mass of the galaxy
     # is made once in an evaluation, for both
-    from gbkfit.model.components._gravity import GravityPlan
+    from gbkfit.model.components._stage import GalaxyStage
     galaxy = mass_galaxy(components=[copy.deepcopy(GAS)])
     radii = np.array([2.0, 6.0, 10.0])
     profile = ObservationProfile(['rotation_gas'], radii * u.arcsec)
@@ -134,10 +134,10 @@ def test_profile_beside_a_sky_observation(monkeypatch):
     group = ObservationGroup(galaxy, [profile, cube])
     params = PARAMS | GAS_PARAMS
     masses = []
-    original = GravityPlan.mass
+    original = GalaxyStage.mass
     monkeypatch.setattr(
-        GravityPlan, 'mass',
-        lambda self, values: masses.append(1) or original(self, values))
+        GalaxyStage, 'mass',
+        lambda self, *args: masses.append(1) or original(self, *args))
     rotation = model(group, params)['rotation_gas']
     assert len(masses) == 1
     expected = galaxy.plan_functions().bind(params)['rotation_gas'](radii)

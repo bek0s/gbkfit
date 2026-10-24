@@ -120,7 +120,7 @@ def test_central_equilibrium_in_the_mass_of_the_galaxy():
         DISK, mass=mass, distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
     extra = Extras()
-    given = balanced.plan_gravity().evaluate(params, extra)
+    given = balanced.plan_stage().evaluate(params, extra).given
     table = extra.get('equilibrium', component='component0')
     radii = np.array(balanced.constants()['subrnodes'])
     vcirc = np.sqrt(G * 1e10 / (radii[1:] * KPC_PER_ARCSEC))
@@ -149,7 +149,7 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
         mass=mass, distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_gas_log_m=9, mass_gas_rd=0.3)
     extra = Extras()
-    given = balanced.plan_gravity().evaluate(params, extra)
+    given = balanced.plan_stage().evaluate(params, extra).given
     table = extra.get('equilibrium', component='component0')
     R = np.array(balanced.constants()['subrnodes']) * KPC_PER_ARCSEC
     surface = 1e9 / (2 * np.pi * 0.3 ** 2) * np.exp(-R / 0.3)
@@ -179,7 +179,7 @@ def test_self_gravitating_equilibrium_in_its_own_mass_disk():
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(distance=10, mass_gas_upsilon=1e9)
     extra = Extras()
-    balanced.plan_gravity().evaluate(params, extra)
+    balanced.plan_stage().evaluate(params, extra)
     table = extra.get('equilibrium', component='gas')
     surface = 1e9 * np.exp(-np.array(table['radius']) / 4)
     np.testing.assert_allclose(table['surface_density'], surface, rtol=1e-12)
@@ -203,11 +203,11 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
         equilibrium=None), **info)
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10, dpt_a=10)
     extra = Extras()
-    rotation = balanced.plan_gravity().evaluate(params, extra)[0]['vpt_vt']
+    rotation = balanced.plan_stage().evaluate(params, extra).given[0]['vpt_vt']
     sigma = np.hypot(10, extra.get('equilibrium', component='component0')['sigma'])
     extra = Extras()
-    expected = given.plan_gravity().evaluate(
-        params | dict(dpt_a=sigma), extra)[0]['vpt_vt']
+    expected = given.plan_stage().evaluate(
+        params | dict(dpt_a=sigma), extra).given[0]['vpt_vt']
     assert np.max(-extra.get('vpt_vt_rotation', component='component0')['pressure']) > 100
     np.testing.assert_allclose(rotation, expected, rtol=1e-10)
 
@@ -221,7 +221,7 @@ def test_jeans_equilibrium_in_a_point_mass():
         distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
     extra = Extras()
-    balanced.plan_gravity().evaluate(params, extra)
+    balanced.plan_stage().evaluate(params, extra)
     sigma = extra.get('equilibrium', component='component0')['sigma']
     radii = np.array(balanced.constants()['subrnodes'])
 
@@ -253,7 +253,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
     params = {f'gas_{key}': value for key, value in PROPERTIES.items()} \
         | dict(gas_ht_s=0.05, distance=10, mass_gas_upsilon=1e9)
     extra = Extras()
-    balanced.plan_gravity().evaluate(params, extra)
+    balanced.plan_stage().evaluate(params, extra)
     table = extra.get('equilibrium', component='gas')
     radii = np.array(table['radius'])
     inner = (radii > 2) & (radii < 12)

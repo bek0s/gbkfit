@@ -104,8 +104,8 @@ class ComponentPlans:
     light is evaluated, and the components with dust (the absorbers: all
     of them, since they absorb whatever the observation sees; the line
     opacity of an emitter is that of its own lines, see LineOpacity). Each
-    component has its parameters, and those that the gravity of its galaxy
-    gives it (see GravityPlan).
+    component has its parameters, and those that its galaxy gives it (see
+    GalaxyStage).
 
     The absorbers add the optical depth of each voxel to the cubes of
     opacity, as the given OpacityCubes hold the dust (see opacity_cubes).
@@ -221,19 +221,18 @@ class ComponentPlans:
             for i in absorbers if i not in self.plans}
 
     def params(
-            self, params: ParamValues, gravity: dict[int, ParamValues]
+            self, params: ParamValues, given: dict[int, ParamValues]
     ) -> dict[int, ParamValues]:
         """
         Return the values of the parameters of each component it evaluates
         (by its own names), by index, from those of the galaxy, with those
-        that the gravity of the galaxy gives the components it moves
-        (gravity, see GravityPlan.evaluate).
+        that the galaxy gives them (given, see GalaxyStage.given).
         """
         components = self._component_set.components()
         mappings = self._component_set.mappings()
         return {
             i: {p: params[mappings[i][p]] for p in components[i].pdescs()}
-            | gravity.get(i, {})
+            | given.get(i, {})
             for i in sorted(self.plans)}
 
     def evaluate_opacity(

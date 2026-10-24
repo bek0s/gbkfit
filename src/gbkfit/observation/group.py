@@ -10,7 +10,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import Extras, Galaxy
 from gbkfit.model.components._functions import GalaxyFunctions
-from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components._stage import GalaxyState
 from gbkfit.model.components._units import DataUnit
 from gbkfit.model.mass.units import G
 from gbkfit.params import (
@@ -131,9 +131,9 @@ class ObservationGroup:
     are.
 
     The plans of the observations are made here, once (copies of the
-    group with other data share them; see with_data). The gravity of each
+    group with other data share them; see with_data). The stage of each
     galaxy is evaluated once for all the observations of it (see
-    Galaxy.plan_gravity).
+    Galaxy.plan_stage).
 
     Parameters
     ----------
@@ -247,11 +247,11 @@ class ObservationGroup:
         self._plans = tuple(plans)
         # The indices of the galaxies that each observation sees
         self._seen_galaxies = tuple(seen)
-        gravity_plans = []
+        stages = []
         for g, galaxy in enumerate(self._galaxies):
             with parseutils.config_path('galaxies', g):
-                gravity_plans.append(galaxy.plan_gravity(self._sky_origin))
-        self._gravity_plans = tuple(gravity_plans)
+                stages.append(galaxy.plan_stage(self._sky_origin))
+        self._stages = tuple(stages)
         self._frames = tuple(
             self._frame(seen, observation, alignment)
             for seen, observation, alignment in zip(
@@ -435,8 +435,8 @@ class ObservationGroup:
         parameters (see ParamSpace): those of each galaxy (see
         Galaxy.plan_functions), prefixed as its parameters (e.g.
         'north_vcirc'), and the gravitational constant G ((km/s)^2 kpc /
-        Msun). They have their own plans, apart from those of the
-        evaluations of the group.
+        Msun). They have their own stages and plans, apart from those of
+        the evaluations of the group (which may run at the same time).
 
         Returns
         -------
@@ -448,26 +448,23 @@ class ObservationGroup:
              for galaxy in self._galaxies],
             self._mappings, self._prefixes)
 
-    def _gravity(
+    def _galaxy_states(
             self,
             params: ParamValues,
             out_extra: Extras | None
-    ) -> list[GalaxyGravity]:
+    ) -> list[GalaxyState]:
         """
-        Evaluate the gravity of each galaxy: its mass, and what it gives
-        its components (see GravityPlan.evaluate); its extra outputs go to
+        Evaluate the stage of each galaxy: its mass, and what it gives its
+        components (see GalaxyStage.evaluate); its extra outputs go to
         out_extra, if given, with the label of the galaxy as the id
         'galaxy'.
         """
-        gravity = []
-        for plan, mapping, label in zip(
-                self._gravity_plans, self._mappings, self._galaxy_labels):
-            own = {name: params[full] for name, full in mapping.items()}
-            mass = plan.mass(own)
-            gravity.append(GalaxyGravity(plan.evaluate(
-                own, None if out_extra is None
-                else out_extra.scoped(galaxy=label), mass), mass))
-        return gravity
+        return [
+            stage.evaluate(
+                {name: params[full] for name, full in mapping.items()},
+                None if out_extra is None else out_extra.scoped(galaxy=label))
+            for stage, mapping, label in zip(
+                self._stages, self._mappings, self._galaxy_labels)]
 
     def model_d(
             self,
@@ -485,9 +482,9 @@ class ObservationGroup:
         out_extra : Extras, optional
             Where the extra outputs go, if wanted: those of each
             observation with its label as the id 'observation' (see
-            observation_label), and those of the gravity of each galaxy
-            (its rotation tables, see GravityPlan.evaluate) with its name,
-            or 'galaxy{i}', as the id 'galaxy'.
+            observation_label), and those of the stage of each galaxy
+            (e.g. its rotation tables, see GalaxyStage.evaluate) with its
+            name, or 'galaxy{i}', as the id 'galaxy'.
 
         Returns
         -------
@@ -498,11 +495,11 @@ class ObservationGroup:
         with (self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
-                gravity = self._gravity(params, out_extra)
+                states = self._galaxy_states(params, out_extra)
             for i, plan in enumerate(self._plans):
                 self._d_model_data[i] = plan.evaluate(
                     self._frames[i].moved(params),
-                    [gravity[g] for g in self._seen_galaxies[i]],
+                    [states[g] for g in self._seen_galaxies[i]],
                     None if out_extra is None else out_extra.scoped(
                         observation=self._observation_labels[i]))
         return self._d_model_data
@@ -563,7 +560,7 @@ class ObservationGroup:
                 f"{len(noises)} noises")
         if nmocks < 1:
             raise ConfigError(f"nmocks must be at least 1; it is {nmocks}")
-        gravity = self._gravity(params, None)
+        states = self._galaxy_states(params, None)
         streams = np.random.SeedSequence(seed).spawn(len(self._observations))
         mocks = []
         for i, (obs, plan, noise, stream) in enumerate(zip(
@@ -576,7 +573,7 @@ class ObservationGroup:
                         f"nsamples draws, at least 2; nsamples is {nsamples}")
                 draws, errors = plan.mock(
                     self._frames[i].moved(params),
-                    [gravity[g] for g in self._seen_galaxies[i]],
+                    [states[g] for g in self._seen_galaxies[i]],
                     noise, np.random.default_rng(stream),
                     nmocks + (0 if exact else nsamples))
             if errors is None:

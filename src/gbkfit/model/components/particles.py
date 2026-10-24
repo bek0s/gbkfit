@@ -344,7 +344,7 @@ class Particles(Component):
 
     (The positions are in arcsec, as those of every component: the
     distance of a galaxy reaches its components only through its mass
-    (see GravityPlan). Positions in kpc would let one table be seen at any
+    (see GalaxyStage). Positions in kpc would let one table be seen at any
     distance, with the length of an arcsec passed by the galaxy to the
     components that ask for it, as it passes the circular velocity to
     those it moves; not built.)

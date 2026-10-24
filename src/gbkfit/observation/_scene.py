@@ -16,7 +16,7 @@ from gbkfit.model import (
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
-from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components._stage import GalaxyState
 from gbkfit.model.components.traits import RPTraitImage
 from gbkfit.model.components._transfer import (
     LineResolution, TransferPlan, warn_resolution)
@@ -182,15 +182,15 @@ class ScenePlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             data: DeviceArray,
             out_extra: Extras | None
     ) -> None:
         """
         Add the light of the galaxies to the data (the image or spectral
         cube), with the parameters of the observation group (params) and
-        what the gravity of each galaxy gives its components (gravity, see
-        GalaxyGravity). The extra outputs of each galaxy have its label as
+        what each galaxy gives its components in the evaluation (see
+        GalaxyState). The extra outputs of each galaxy have its label as
         the id 'galaxy', and those of a group of galaxies its name as the
         id 'group'.
         """
@@ -201,7 +201,8 @@ class ScenePlan(abc.ABC):
         extras = None if out_extra is None else [
             out_extra.scoped(galaxy=label) for label in scene._labels]
         self._evaluate(
-            params, values, [g.given for g in gravity], {self._key: data},
+            params, values, [galaxy.given for galaxy in galaxies],
+            {self._key: data},
             extras, out_extra)
 
     @abc.abstractmethod
@@ -209,7 +210,7 @@ class ScenePlan(abc.ABC):
             self,
             group_params: ParamValues,
             params: list[ParamValues],
-            gravity: Sequence[dict[int, ParamValues]],
+            given: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
             extras: list[Extras] | None,
             group_extras: Extras | None
@@ -218,8 +219,8 @@ class ScenePlan(abc.ABC):
         Add the light of the galaxies to the output array (see evaluate),
         with the parameters of the observation group (group_params: e.g.
         the separations of the galaxies of a group, see DepthUnit), those
-        of each galaxy (by its own names) and what its gravity gives its
-        components; with extras, the extra outputs of each galaxy go to
+        of each galaxy (by its own names) and what it gives its components
+        (given); with extras, the extra outputs of each galaxy go to
         its item, and those of each group of galaxies to group_extras,
         with its name as the id 'group'.
         """
@@ -260,14 +261,14 @@ class AdditiveScenePlan(ScenePlan):
             self,
             group_params: ParamValues,
             params: list[ParamValues],
-            gravity: Sequence[dict[int, ParamValues]],
+            given: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
             extras: list[Extras] | None,
             group_extras: Extras | None
     ) -> None:
         resolutions = [
             plan.evaluate(
-                params[g], gravity[g], outputs,
+                params[g], given[g], outputs,
                 extras[g] if extras is not None else None)
             for g, plan in enumerate(self._plans)]
         if extras is not None and self._depth is not None:
@@ -340,7 +341,7 @@ class TransferScenePlan(ScenePlan):
             self,
             group_params: ParamValues,
             params: list[ParamValues],
-            gravity: Sequence[dict[int, ParamValues]],
+            given: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray],
             extras: list[Extras] | None,
             group_extras: Extras | None
@@ -367,7 +368,7 @@ class TransferScenePlan(ScenePlan):
                 for name in unit.separations]
             resolution = plan.evaluate(
                 [params[g] for g in unit.galaxies],
-                [gravity[g] for g in unit.galaxies], outputs, unit_extras,
+                [given[g] for g in unit.galaxies], outputs, unit_extras,
                 march_extra, self._opacity_front if dust else None,
                 self._tau if line_opacity else None, positions)
             if resolution is not None:

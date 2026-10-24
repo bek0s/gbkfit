@@ -15,7 +15,7 @@ from ..base import Component, ComponentPlan, FieldsLayout
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
-from . import _detail, _disk
+from . import _detail, _disk, _stage
 from ..parts import Density, Equilibrium, Kinematics
 
 
@@ -295,6 +295,16 @@ class MCDisk(Component):
 
     def density_disk(self) -> _disk.Disk:
         return self._disk
+
+    def plan_stage(
+            self,
+            driver: Driver,
+            sky_origin: tuple[float, float] | None,
+            followed: bool,
+            label: str
+    ) -> _stage.DiskStage | None:
+        return _stage.plan_disk_stage(
+            self._disk, self.emission(), driver, sky_origin, followed, label)
 
     def plan(
             self,

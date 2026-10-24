@@ -12,6 +12,9 @@ from .lines import Band
 from .roles import Emission, LineEmission, Opacity
 
 if TYPE_CHECKING:
+    from ..extras import Extras
+    from ..mass import ComponentDensity
+    from ._stage import GalaxyMass
     from ._units import DataUnit
     from .disks._disk import Disk, DiskPlan
 
@@ -19,6 +22,7 @@ if TYPE_CHECKING:
 __all__ = [
     'Component',
     'ComponentPlan',
+    'ComponentStage',
     'DepthAxis',
     'FieldsLayout',
     'NativeGrid',
@@ -206,6 +210,37 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return None
 
+    def plan_stage(
+            self,
+            driver: Driver,
+            sky_origin: tuple[float, float] | None,
+            followed: bool,
+            label: str
+    ) -> 'ComponentStage | None':
+        """
+        Plan its part in the stage of its galaxy (see GalaxyStage), if it
+        takes anything from the galaxy or the mass of the galaxy follows it;
+        None here (it takes nothing, and offers no density).
+
+        Parameters
+        ----------
+        driver : Driver
+            The driver where its part is evaluated.
+        sky_origin : tuple of float, optional
+            The RA and Dec (degrees) of the origin of the frame of the
+            parameters of the galaxy (see ObservationGroup).
+        followed : bool
+            Whether the mass of the galaxy follows its density.
+        label : str
+            Its name, or its position (e.g. 'component0'), for messages.
+
+        Returns
+        -------
+        ComponentStage or None
+            Its part.
+        """
+        return None
+
     @abc.abstractmethod
     def plan(
             self,
@@ -266,6 +301,60 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             (see _units.LineFactors and BandFactors).
         """
         pass
+
+
+class ComponentStage(abc.ABC):
+    """
+    The part of a component in the stage of its galaxy (see GalaxyStage):
+    what the galaxy computes for it once per evaluation, for all the
+    observations of the galaxy, from the values of its parameters and the
+    mass of the galaxy.
+    """
+
+    @abc.abstractmethod
+    def values(self, own: ParamValues) -> ParamValues:
+        """
+        Return the values of its parameters, from those of its own
+        parameters (by its own names), with those it makes before the mass
+        of the galaxy (e.g. the light of image traits): those that all its
+        part reads.
+        """
+        pass
+
+    def density(
+            self, values: ParamValues, kpc_per_arcsec: float
+    ) -> 'ComponentDensity | None':
+        """
+        Return its density at the values of its parameters (see values),
+        which the mass of its galaxy can follow (see mass.MassContext), in
+        a galaxy of the given length of an arcsec (kpc); None here.
+        """
+        return None
+
+    @abc.abstractmethod
+    def given(
+            self,
+            values: ParamValues,
+            mass: 'GalaxyMass | None',
+            out_extra: 'Extras | None'
+    ) -> ParamValues:
+        """
+        Return what its galaxy gives it at the values of its parameters
+        (see values), in the mass of the galaxy (None without mass): the
+        values of the parameters that it takes from the galaxy, by their
+        names. Its extra outputs, if wanted, go to out_extra (with the id
+        of the component).
+        """
+        pass
+
+    def rings(self, values: ParamValues) -> list[tuple[float, ...]]:
+        """
+        Return its rings that the gravity of its galaxy takes as concentric
+        and flat (see GalaxyStage), at the values of its parameters: the
+        radius, the centre and the plane of each (radius, xpos, ypos, posa,
+        incl; arcsec and degrees); none here.
+        """
+        return []
 
 
 class ComponentPlan(abc.ABC):

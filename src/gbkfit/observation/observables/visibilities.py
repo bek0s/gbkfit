@@ -8,7 +8,7 @@ from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
-from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components._stage import GalaxyState
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
@@ -423,12 +423,12 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
     def mock(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
     ) -> list[HostModelData]:
-        self._evaluate_model(params, gravity, None)
+        self._evaluate_model(params, galaxies, None)
         self._dcube_plan.record(self._flux_scale(params))
         recorded = self._to_host(self._measure())
         draws = [{

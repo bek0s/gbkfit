@@ -6,7 +6,7 @@ dispersion of its disks, at any radius.
 """
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import TYPE_CHECKING, Any
 
 import astropy.units as u
@@ -17,7 +17,7 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from .disks._disk import EQUILIBRIUM_DISPERSION
 from .disks._profiles import dispersion, rotation
-from ._gravity import GalaxyGravity, GalaxyMass, GravityPlan
+from ._stage import GalaxyMass, GalaxyStage, GalaxyState
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
@@ -56,8 +56,8 @@ class GalaxyFunctions:
 
     - vcirc(R): the circular velocity of its mass (km/s) at the radii R
       (kpc, in the plane of its disks), in its gravity (see Gravity),
-      signed as in the rotation tables of its gravity: negative where its
-      square is (see GravityPlan.evaluate)
+      signed as in the rotation tables of its disks: negative where its
+      square is (see DiskStage.given)
     - vnewton(R): that of its mass in Newtonian gravity (vcirc(R), with
       Newtonian gravity), signed
     - vcirc_{name}(R): that of its mass component of the name in
@@ -94,10 +94,12 @@ class GalaxyFunctions:
       dispersion is not isotropic needs
 
     The functions take numbers or arrays of radii, and return arrays of
-    their shape. They have their own plans of the gravity and of the
-    disks, on the given driver and in float64, apart from those of the
-    evaluations of the galaxy (which may run at the same time, e.g. in
-    an EvaluationPool).
+    their shape. They are of the mass of the galaxy and of what it gives
+    its components (see GalaxyState): of a state that they are given, or
+    of their own stage of the galaxy (see bind). They have their own stage
+    and plans of the disks, on the given driver and in float64, apart from
+    those of the evaluations of the galaxy (which may run at the same
+    time, e.g. in an EvaluationPool).
 
     Parameters
     ----------
@@ -110,7 +112,7 @@ class GalaxyFunctions:
     sky_origin : tuple of float, optional
         The RA and Dec (degrees) of the origin of the frame of the
         parameters of the galaxy, which its image traits need (see
-        GravityPlan).
+        GalaxyStage).
     """
 
     def __init__(
@@ -123,8 +125,7 @@ class GalaxyFunctions:
         components = component_set.components()
         mass_model = component_set.mass_model()
         self._component_set = component_set
-        self._gravity = GravityPlan(
-            component_set, driver, redshift, sky_origin)
+        self._stage = GalaxyStage(component_set, driver, redshift, sky_origin)
         # The disks with velocity or dispersion traits, by the index of
         # their component, and the suffixes of their functions
         self._suffixes = {
@@ -209,7 +210,7 @@ class GalaxyFunctions:
     def bind(
             self,
             params: ParamValues,
-            gravity: GalaxyGravity | None = None
+            state: GalaxyState | None = None
     ) -> dict[str, Any]:
         """
         Return its functions (see the class) at the values of the
@@ -219,27 +220,28 @@ class GalaxyFunctions:
         ----------
         params : ParamValues
             The values of the parameters of the galaxy.
-        gravity : GalaxyGravity, optional
-            The gravity of the galaxy at the values, if evaluated (e.g. by
-            its observation group): the functions take its mass and what
-            it gives the components. By default, the mass is made here,
-            and the gravity is evaluated once, when a function of a disk
-            that takes it first needs it (see GravityPlan.evaluate).
+        state : GalaxyState, optional
+            The galaxy at the values, if evaluated (e.g. by its observation
+            group): the functions take its mass and what it gives the
+            components. By default, its own stage evaluates the mass here,
+            and what the galaxy gives the components once, when a function
+            of a disk that takes it first needs it (see GalaxyStage).
 
         Returns
         -------
         dict
             The functions, by name.
         """
-        if gravity is None:
-            mass = self._gravity.mass(params)
-            given = functools.cache(functools.partial(
-                self._gravity.evaluate, params, None, mass))
+        if state is None:
+            values = self._stage.values(params)
+            mass = self._stage.mass(params, values)
+            given = functools.cache(
+                functools.partial(self._stage.given, values, mass))
         else:
-            mass = gravity.mass
+            mass = state.mass
 
-            def given() -> dict[int, ParamValues]:
-                return gravity.given
+            def given() -> Mapping[int, ParamValues]:
+                return state.given
         functions: dict[str, Any] = {}
         if mass is not None:
             functions['vcirc'] = functools.partial(
@@ -279,7 +281,7 @@ class GalaxyFunctions:
             self,
             index: int,
             params: ParamValues,
-            given: Callable[[], dict[int, ParamValues]],
+            given: Callable[[], Mapping[int, ParamValues]],
             R: npt.ArrayLike
     ) -> np.ndarray:
         """
@@ -298,7 +300,7 @@ class GalaxyFunctions:
             self,
             index: int,
             params: ParamValues,
-            given: Callable[[], dict[int, ParamValues]],
+            given: Callable[[], Mapping[int, ParamValues]],
             R: npt.ArrayLike,
             direction: str | None = None
     ) -> np.ndarray:
@@ -320,12 +322,12 @@ class GalaxyFunctions:
             self,
             index: int,
             params: ParamValues,
-            given: Callable[[], dict[int, ParamValues]]
+            given: Callable[[], Mapping[int, ParamValues]]
     ) -> ParamValues:
         """
         Return the values of the parameters of the component of the given
-        index (by its own names), with those that its gravity gives it (if
-        any; see GravityPlan.evaluate).
+        index (by its own names), with those that its galaxy gives it (if
+        any; see GalaxyStage.given).
         """
         component = self._component_set.components()[index]
         mapping = self._component_set.mappings()[index]

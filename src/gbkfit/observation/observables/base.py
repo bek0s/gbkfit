@@ -9,7 +9,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import Emission, Extras
-from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components._stage import GalaxyState
 from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
@@ -496,7 +496,7 @@ class ObservablePlan(abc.ABC):
     def evaluate(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             out_extra: Extras | None
     ) -> ModelData:
         """
@@ -506,10 +506,10 @@ class ObservablePlan(abc.ABC):
         ----------
         params : dict
             The parameters of the model.
-        gravity : Sequence of GalaxyGravity
-            The gravity of each galaxy it sees: its mass, and what it gives
-            its components (see GravityPlan.evaluate), in the order of the
-            galaxies it sees.
+        galaxies : Sequence of GalaxyState
+            Each galaxy it sees in the evaluation: its mass, and what it
+            gives its components (see GalaxyStage.evaluate), in the order
+            of the galaxies it sees.
         out_extra : Extras, optional
             Where the extra outputs go, if wanted: those of the instrument
             (e.g. the model cube), and those of the model (with the ids of
@@ -526,7 +526,7 @@ class ObservablePlan(abc.ABC):
     def mock(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
@@ -540,7 +540,7 @@ class ObservablePlan(abc.ABC):
 
         Parameters
         ----------
-        params, gravity
+        params, galaxies
             As for evaluate.
         noise : Noise
             The noise of the recorded data.

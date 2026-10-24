@@ -299,7 +299,7 @@ class TransferPlan:
     def evaluate(
             self,
             params: Sequence[ParamValues],
-            gravity: Sequence[dict[int, ParamValues]],
+            given: Sequence[dict[int, ParamValues]],
             outputs: dict[str, DeviceArray | None],
             out_extra: Sequence[Extras] | None,
             march_extra: Extras | None,
@@ -310,8 +310,8 @@ class TransferPlan:
         """
         Add the light of the emitters that reaches the viewer to the
         output array, the 'image' or the 'scube' in outputs, with the
-        parameters of each galaxy (params) and those that its gravity gives
-        its components (gravity, see GravityPlan.evaluate), at the given
+        parameters of each galaxy (params) and those that it gives its
+        components (given, see GalaxyStage.given), at the given
         positions along the line of sight (arcsec, away from the viewer,
         from any origin; all at one if None), dimmed by the opacity in
         front of the galaxies and their own, and add their own to that in
@@ -339,9 +339,9 @@ class TransferPlan:
         driver = self._driver
         grids = self._grids(positions)
         values = [
-            plans.params(galaxy_params, galaxy_gravity)
-            for plans, galaxy_params, galaxy_gravity
-            in zip(self._plans, params, gravity)]
+            plans.params(galaxy_params, galaxy_given)
+            for plans, galaxy_params, galaxy_given
+            in zip(self._plans, params, given)]
         extras = None
         if out_extra is not None:
             extras = [{} for _ in self._plans]

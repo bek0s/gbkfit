@@ -83,7 +83,7 @@ def test_circular_velocity_of_the_mass():
     assert bound['vcirc'](2.0).shape == ()
     # The same as the rotation table of the gravity
     extra = Extras()
-    galaxy.plan_gravity().evaluate(PARAMS, extra)
+    galaxy.plan_stage().evaluate(PARAMS, extra)
     table = extra.get('vpt_vt_rotation', component='gas')
     np.testing.assert_array_equal(bound['vnewton'](R), bound['vcirc'](R))
     for name in ('vcirc', 'vnewton', 'vcirc_bh', 'vcirc_halo'):
@@ -125,7 +125,7 @@ def test_rotation_and_dispersion_as_the_gravity_gives_them():
     params = PARAMS | dict(distance=100)
     bound = galaxy.plan_functions().bind(params)
     extra = Extras()
-    galaxy.plan_gravity().evaluate(params, extra)
+    galaxy.plan_stage().evaluate(params, extra)
     rotation = extra.get('vpt_vt_rotation', component='gas')
     radii = rotation['radius'].value
     assert np.all(np.isfinite(rotation['vrot']))
@@ -157,7 +157,7 @@ def test_pressure_support_of_the_velocity_ellipsoid():
 
     def rotation_table(galaxy, params):
         extra = Extras()
-        galaxy.plan_gravity().evaluate(params, extra)
+        galaxy.plan_stage().evaluate(params, extra)
         return extra.get('vpt_vt_rotation', component='gas'), extra
 
     directions = [

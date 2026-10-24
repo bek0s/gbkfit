@@ -95,7 +95,7 @@ def test_mond_circular_velocity(interpolation):
         np.testing.assert_allclose(
             bound[name](R), np.sqrt(vnewton2), rtol=1e-6)
     extra = Extras()
-    given = mond.plan_gravity().evaluate(PARAMS, extra)
+    given = mond.plan_stage().evaluate(PARAMS, extra).given
     table = extra.get('vpt_vt_rotation', component='gas')
     np.testing.assert_allclose(
         table['vcirc'].value, bound['vcirc'](table['radius_kpc'].value),
@@ -117,7 +117,7 @@ def test_mond_forces_anywhere():
     mond = galaxy(
         mass=POINT, distance=DISTANCE,
         gravity=dict(type='mond', interpolation='simple'))
-    field = mond.plan_gravity().mass(PARAMS).field
+    field = mond.plan_stage().mass(PARAMS).field
     R, z = np.array([0.1, 2.0, 10.0, 5.0]), np.array([0.5, -1.0, 20.0, 0])
     a0 = 1.2e-10 * KPC / 1e6
     r = np.hypot(R, z)
@@ -221,7 +221,7 @@ def test_hu_sawicki_unscreened_and_screened():
         type='hu_sawicki', n=1.0, screened=[], environment=True)
     R, z = np.array([1.0, 5, 20]), np.array([0.5, 0, 5])
     params = THICK_PARAMS | dict(gravity_log_fr0=-5, gravity_log_phi_ext=-9)
-    mass = galaxy_.plan_gravity().mass(params)
+    mass = galaxy_.plan_stage().mass(params)
     newton = mass.model.forces(R, z, mass.params, mass.context)
     np.testing.assert_allclose(
         mass.field.forces(R, z), 4 / 3 * np.array(newton), rtol=2e-3)
@@ -241,7 +241,7 @@ def test_hu_sawicki_sourced_by_a_contracted_halo():
     galaxy_ = galaxy(mass=[THICK[0], contracted], distance=DISTANCE,
                      gravity=dict(type='hu_sawicki'))
     R, z = np.array([1.0, 5, 20]), np.array([0.5, 0, 5])
-    mass = galaxy_.plan_gravity().mass(
+    mass = galaxy_.plan_stage().mass(
         THICK_PARAMS | dict(gravity_log_fr0=-5))
     newton = mass.model.forces(R, z, mass.params, mass.context)
     np.testing.assert_allclose(
@@ -303,7 +303,7 @@ def test_palatini_corrections_of_the_density_gradient():
     assert galaxy_parser.dump(galaxy_)['gravity'] == dict(type='palatini')
     params = PARAMS | dict(mass_stars_log_m=10, mass_stars_rd=3,
                            mass_stars_hz=0.3, gravity_alpha=-0.5)
-    mass = galaxy_.plan_gravity().mass(params)
+    mass = galaxy_.plan_stage().mass(params)
     R, z = np.array([1.0, 5, 10]), np.array([0.2, -0.5, 1])
     scale = 8 * np.pi * G * -0.5
 

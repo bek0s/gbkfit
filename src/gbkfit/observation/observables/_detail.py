@@ -13,7 +13,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import Extras
-from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components._stage import GalaxyState
 from gbkfit.model.components._units import DataUnit, flux_per_area
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
@@ -325,11 +325,11 @@ class DCubePlanBase(ObservablePlan):
     def evaluate(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             out_extra: Extras | None
     ) -> ModelData:
         model_extra = None if out_extra is None else Extras()
-        self._evaluate_model(params, gravity, model_extra)
+        self._evaluate_model(params, galaxies, model_extra)
         self._dcube_plan.evaluate(
             out_extra, self._extra_lo, self._extra_hi,
             self._flux_scale(params))
@@ -343,13 +343,13 @@ class DCubePlanBase(ObservablePlan):
     def mock(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             noise: 'Noise',
             rng: np.random.Generator,
             ndraws: int
     ) -> list[HostModelData]:
         # The recorded data, without noise, are kept on the host
-        self._evaluate_model(params, gravity, None)
+        self._evaluate_model(params, galaxies, None)
         dcube_plan = self._dcube_plan
         dcube_plan.record(self._flux_scale(params))
         recorded = self._driver.mem_copy_d2h(dcube_plan.dcube())
@@ -413,7 +413,7 @@ class DCubePlanBase(ObservablePlan):
     def _evaluate_model(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             model_extra: Extras | None
     ) -> None:
         """
@@ -427,7 +427,7 @@ class DCubePlanBase(ObservablePlan):
         cube = dcube_plan.scratch_dcube() if self._lens_plan is None \
             else self._source_cube
         self._driver.mem_fill(cube, 0)
-        self._model_plan.evaluate(params, gravity, cube, model_extra)
+        self._model_plan.evaluate(params, galaxies, cube, model_extra)
         if self._lens_plan is not None:
             self._lens_plan.evaluate(
                 params, cube, dcube_plan.scratch_dcube())

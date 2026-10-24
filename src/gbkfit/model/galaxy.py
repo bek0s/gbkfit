@@ -15,7 +15,7 @@ from gbkfit.utils.parseutils import ConfigError
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._functions import GalaxyFunctions
-from .components._gravity import GravityPlan
+from .components._stage import GalaxyStage
 from .components._transfer import TransferMember
 from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
@@ -53,7 +53,7 @@ class Galaxy(parseutils.Serializable):
     light (its opacity) or both. Its mass pulls: its components with the
     velocity trait 'mass' rotate in its gravity (see
     traits.VPTraitMass), which takes its disks as concentric and flat
-    (see GravityPlan).
+    (see GalaxyStage).
 
     Its parameters are those of its components, each prefixed by its name
     when there are several ('disk_pt_a'), and those of its geometries
@@ -96,9 +96,9 @@ class Galaxy(parseutils.Serializable):
         with a unit and has no systemic velocity, as nothing else then
         tells how far its light is dimmed.
     driver : Driver, optional
-        Where its own computations run: its gravity, in float64, once for
+        Where its own computations run: its stage, in float64, once for
         all the observations of it, whatever their drivers (see
-        plan_gravity); by default, the host. (In its configuration, the
+        plan_stage); by default, the host. (In its configuration, the
         name of a driver; see load.)
     name : str, optional
         Its name; required when there are several galaxies.
@@ -292,14 +292,15 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.constants()
 
-    def plan_gravity(
+    def plan_stage(
             self, sky_origin: tuple[float, float] | None = None
-    ) -> GravityPlan:
+    ) -> GalaxyStage:
         """
-        Plan the evaluation of the gravity of the galaxy on its driver, in
-        float64, once for all the observations of it: the circular velocity
-        of its mass at the radii of the components it moves (see
-        GravityPlan), which its plans on the grids of observations take.
+        Plan the stage of the galaxy on its driver, in float64, evaluated
+        once for all the observations of it: its mass, and what it gives
+        its components (e.g. the circular velocity of its mass at the radii
+        of the components it moves; see GalaxyStage), which its plans on
+        the grids of observations take.
 
         Parameters
         ----------
@@ -310,7 +311,7 @@ class Galaxy(parseutils.Serializable):
 
         Returns
         -------
-        GravityPlan
+        GalaxyStage
             The plan.
 
         Raises
@@ -318,7 +319,7 @@ class Galaxy(parseutils.Serializable):
         ConfigError
             If it has image traits, but there is no sky origin.
         """
-        return self._component_set.plan_gravity(
+        return self._component_set.plan_stage(
             self._driver, self.redshift(), sky_origin)
 
     def plan_functions(
@@ -329,13 +330,13 @@ class Galaxy(parseutils.Serializable):
         the derived values of its parameters (see ParamSpace): the
         circular velocity of its mass, and the rotation and dispersion of
         its disks, at any radius (see GalaxyFunctions). They have their
-        own plans, apart from those of its evaluations.
+        own stage and plans, apart from those of its evaluations.
 
         Parameters
         ----------
         sky_origin : tuple of float, optional
             The RA and Dec (degrees) of the origin of the frame of its
-            parameters, which its image traits need (see plan_gravity).
+            parameters, which its image traits need (see plan_stage).
 
         Returns
         -------

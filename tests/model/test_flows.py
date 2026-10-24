@@ -167,7 +167,7 @@ def test_a_spiral_wave_in_the_rotation_of_its_disk(driver):
     values = DISK_VALUES | dict(
         vpt_vt=100, vpt1_p=40, vpt1_c=50, vpt1_e=0.1, vpt1_o=2)
     galaxy = galaxy_parser.load(dict(components=[disk_config(vptraits)]))
-    given = galaxy.plan_gravity().evaluate(values)[0]
+    given = galaxy.plan_stage().evaluate(values).given[0]
     subrnodes = disk(vptraits).subrnodes()
     tables = davies(subrnodes, 100, 3, 50, 0.1, 2, -1)
     ar, at, f = (np.interp(R, subrnodes, tables[name])
@@ -197,7 +197,7 @@ def test_the_density_of_a_spiral_wave(driver):
     # gives, interpolated linearly
     galaxy = galaxy_parser.load(dict(
         components=[disk_config(WAVE_VPTRAITS, WAVE_PTRAITS)]))
-    given = galaxy.plan_gravity().evaluate(WAVE_VALUES)[0]
+    given = galaxy.plan_stage().evaluate(WAVE_VALUES).given[0]
     wave_disk = disk(WAVE_VPTRAITS, WAVE_PTRAITS)
     subrnodes = np.asarray(wave_disk.subrnodes())
     density = np.where(subrnodes > 0, 0.3 * np.exp(-subrnodes / 3), 0)
@@ -263,7 +263,7 @@ def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
         xpos=0, ypos=0, posa=0, incl=INCL, pt_a=1, pt_s=3, pt1_p=40,
         pt1_e=0.3, pt1_k=k)
     galaxy = galaxy_parser.load(dict(components=[component]))
-    given = galaxy.plan_gravity().evaluate(values)[0]
+    given = galaxy.plan_stage().evaluate(values).given[0]
     f = np.concatenate(
         ([0], np.cumsum(np.diff(subrnodes) * (k[1:] + k[:-1]) / 2)))
     density = np.where(subrnodes > 0, 0.3 * np.exp(-subrnodes / 3), 0)

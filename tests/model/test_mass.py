@@ -1318,7 +1318,7 @@ def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
             vptraits=dict(type='mass'), dptraits=dict(type='uniform')))],
         mass=copy.deepcopy(MASS), distance=copy.deepcopy(DISTANCE),
         redshift=1.5))
-    mass = galaxy.plan_gravity().mass(DISK_PROPERTIES | MASS_PROPERTIES)
+    mass = galaxy.plan_stage().mass(DISK_PROPERTIES | MASS_PROPERTIES)
     assert mass.context.critical_density == pytest.approx(
         astropy.cosmology.Planck18.critical_density(1.5).to_value(
             'solMass / kpc3'))
@@ -1695,7 +1695,7 @@ def test_disk_follows_a_component_without_light():
         vertical=dict(type='thin'))])
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, opacity)
     np.testing.assert_allclose(
-        galaxy.plan_gravity().evaluate(params)[0]['vpt_vt'],
+        galaxy.plan_stage().evaluate(params).given[0]['vpt_vt'],
         np.sqrt(nodewise.vcirc2(
             subrnodes * KPC_PER_ARCSEC,
             dict(mass_gas_log_sigma=np.log10(sigma)), CONTEXT)),
@@ -1860,7 +1860,7 @@ def test_pressure_support_takes_the_density_of_a_mass_component(mode):
         mass_stars_n=1, mass_stars_q=0.2, mass_halo_log_rho=7,
         mass_halo_rs=3)
     extra = Extras()
-    galaxy.plan_gravity().evaluate(params, extra)
+    galaxy.plan_stage().evaluate(params, extra)
     table = extra.get('vpt_vt_rotation', component='component0')
     r = np.asarray(table['radius'])
     profile = np.exp(-np.asarray(table['radius_kpc'])) \
@@ -1888,7 +1888,7 @@ def test_pressure_support_adds_the_densities_of_mass_components():
         mass_h2_log_m=9, mass_h2_rd=1, mass_h2_hz=0.1, mass_halo_log_rho=7,
         mass_halo_rs=3)
     extra = Extras()
-    galaxy.plan_gravity().evaluate(params, extra)
+    galaxy.plan_stage().evaluate(params, extra)
     table = extra.get('vpt_vt_rotation', component='component0')
     r, R = np.asarray(table['radius']), np.asarray(table['radius_kpc'])
     profile = 10 ** 9.5 / 4 * np.exp(-R / 2) + 10 ** 9 * np.exp(-R)
@@ -1922,7 +1922,7 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
                   for key, value in DISK_PROPERTIES.items()} | dict(
             gas_ht_s=0.5, distance=10, mass_hi_upsilon=1e8,
             mass_halo_log_rho=7, mass_halo_rs=3)
-        return galaxy.plan_gravity().evaluate(params)[0]['vpt_vt']
+        return galaxy.plan_stage().evaluate(params).given[0]['vpt_vt']
     np.testing.assert_allclose(
         rotation(dict(pressure_density='hi')), rotation({}), rtol=1e-10)
 
@@ -1936,7 +1936,7 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
     galaxy = disk_galaxy(
         'smdisk', vptraits | dict(pressure_density='stars'), MASS, DISTANCE)
     with pytest.raises(NotImplementedError, match="a thin disk"):
-        galaxy.plan_gravity().evaluate(DISK_PROPERTIES | MASS_PROPERTIES)
+        galaxy.plan_stage().evaluate(DISK_PROPERTIES | MASS_PROPERTIES)
 
 
 def rotation_at_heights(vptraits, mass, params):
@@ -1952,7 +1952,7 @@ def rotation_at_heights(vptraits, mass, params):
     galaxy = galaxy_parser.load(dict(
         components=[disk | dict(type='smdisk')], mass=copy.deepcopy(mass),
         distance=copy.deepcopy(DISTANCE)))
-    return galaxy, galaxy.plan_gravity().evaluate(params)[0]
+    return galaxy, galaxy.plan_stage().evaluate(params).given[0]
 
 
 def test_rotation_at_each_height_of_a_point_mass(driver):
@@ -2083,17 +2083,17 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     # the observations of it, whatever their drivers and dtypes: here one
     # on the host and one on the driver of the galaxy
     from gbkfit.driver.drivers.host import DriverHost
-    from gbkfit.model.components._gravity import GravityPlan
+    from gbkfit.model.components._stage import GalaxyStage
     from gbkfit.observation import (
         ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
     calls = []
-    evaluate_gravity = GravityPlan.evaluate
+    evaluate_stage = GalaxyStage.evaluate
 
     def counted(self, params, *args):
         calls.append(params)
-        return evaluate_gravity(self, params, *args)
-    monkeypatch.setattr(GravityPlan, 'evaluate', counted)
+        return evaluate_stage(self, params, *args)
+    monkeypatch.setattr(GalaxyStage, 'evaluate', counted)
     # (pressure support samples the profiles of the disk on that driver)
     galaxy = disk_galaxy(
         'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
@@ -2130,7 +2130,7 @@ def test_the_gravity_warns_of_a_disk_far_from_flat(caplog, tilt, warns):
     params = DISK_PROPERTIES | MASS_PROPERTIES | dict(
         posa=np.full(nodes, 30.0), incl=np.linspace(60, 60 + tilt, nodes))
     caplog.set_level(logging.WARNING)
-    galaxy.plan_gravity().evaluate(params, Extras())
+    galaxy.plan_stage().evaluate(params, Extras())
     assert ('tilted by' in caplog.text) == warns
 
 
@@ -2144,7 +2144,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
         DISTANCE)
     params = DISK_PROPERTIES | MASS_PROPERTIES
     extra = Extras()
-    given = galaxy.plan_gravity().evaluate(params, extra)
+    given = galaxy.plan_stage().evaluate(params, extra).given
     table = extra.get('vpt_vt_rotation', component='component0')
     assert table.colnames == [
         'radius', 'radius_kpc', 'vcirc_stars', 'vcirc_gas', 'vcirc_halo',

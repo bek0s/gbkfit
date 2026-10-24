@@ -13,7 +13,7 @@ from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
 from gbkfit.model.components._units import DataUnit
 from gbkfit.model.components.roles import load_band
 from gbkfit.model import Extras
-from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components._stage import GalaxyState
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import gridutils, parseutils, unitutils
@@ -745,10 +745,10 @@ class _FluxScaledPlan(ObservablePlan):
     def evaluate(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             out_extra: Extras | None
     ) -> ModelData:
-        model = self._plan.evaluate(params, gravity, out_extra)
+        model = self._plan.evaluate(params, galaxies, out_extra)
         driver = self._driver
         if self._h_values is None:
             shape = model[self._scale.items[0]]['d'].shape
@@ -766,7 +766,7 @@ class _FluxScaledPlan(ObservablePlan):
     def mock(
             self,
             params: ParamValues,
-            gravity: Sequence[GalaxyGravity],
+            galaxies: Sequence[GalaxyState],
             noise: Noise,
             rng: np.random.Generator,
             ndraws: int
@@ -785,7 +785,7 @@ class _FluxScaledPlan(ObservablePlan):
             raise ConfigError(
                 f"mock data take a flux scale per spectrum or per row of 1 "
                 f"only; '{self._param}' is not")
-        return self._plan.mock(params, gravity, noise, rng, ndraws)
+        return self._plan.mock(params, galaxies, noise, rng, ndraws)
 
     def has_exact_errors(self) -> bool:
         return self._plan.has_exact_errors()

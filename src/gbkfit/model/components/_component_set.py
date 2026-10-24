@@ -20,7 +20,7 @@ from . import _units
 from ._component_plans import ComponentPlans
 from ._detail import shared_params
 from ._functions import GalaxyFunctions
-from ._gravity import GravityPlan
+from ._stage import GalaxyStage
 from ._transfer import LineResolution
 from ._units import DataUnit
 from .base import Component, DepthAxis, OpacityCubes
@@ -373,18 +373,17 @@ class ComponentSet:
     def constants(self) -> dict[str, Any]:
         return _constants(self._components, self._prefixes)
 
-    def plan_gravity(
+    def plan_stage(
             self,
             driver: Driver,
             redshift: float,
             sky_origin: tuple[float, float] | None = None
-    ) -> GravityPlan:
+    ) -> GalaxyStage:
         """
-        Plan the evaluation of the gravity on a driver, of a galaxy of the
-        given redshift, in the frame of the given origin on the sky (see
-        GravityPlan).
+        Plan the stage of a galaxy of the given redshift on a driver, in
+        the frame of the given origin on the sky (see GalaxyStage).
         """
-        return GravityPlan(self, driver, redshift, sky_origin)
+        return GalaxyStage(self, driver, redshift, sky_origin)
 
     def plan_functions(
             self,
@@ -468,19 +467,18 @@ class ComponentSetPlan:
     def evaluate(
             self,
             params: ParamValues,
-            gravity: dict[int, ParamValues],
+            given: dict[int, ParamValues],
             outputs: dict[str, DeviceArray | None],
             out_extra: Extras | None
     ) -> LineResolution | None:
         """
         Add the light of the emitters to the output array, the 'image' or
         the 'scube' in outputs, with the parameters of the galaxy and those
-        that its gravity gives its components (see
-        GravityPlan.evaluate). The extra outputs of each component have
-        its name, or its position, as the id 'component' (e.g. 'disk' or
-        'component0'), and their totals none (see
-        ComponentPlans.add_extras). With extra outputs,
-        a warning says where zmax shapes a disk (see
+        that it gives its components (see GalaxyStage.given). The extra
+        outputs of each component have its name, or its position, as the
+        id 'component' (e.g. 'disk' or 'component0'), and their totals
+        none (see ComponentPlans.add_extras). With extra outputs, a
+        warning says where zmax shapes a disk (see
         ComponentPlans.warn_truncation), and it returns how finely it
         resolves the lines (see LineResolution: their light only); None
         otherwise.
@@ -500,7 +498,7 @@ class ComponentSetPlan:
             if self._depth is not None:
                 obdata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(obdata, 0)
-        values = plans.params(params, gravity)
+        values = plans.params(params, given)
         if out_extra is not None:
             plans.warn_truncation(values)
 
