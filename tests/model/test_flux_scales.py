@@ -1,7 +1,7 @@
 """
-Tests of the flux scales of observations per spectrum or per row (see
-ObservationSky), solved by the objective under their prior (see
-SolveGaussian), or fitted.
+Tests of the flux scales of observations (see ObservationSky): of one
+value (e.g. a calibration), per spectrum or per row; fixed, free, or
+solved by the objective under their prior (see SolveGaussian).
 """
 
 import pathlib
@@ -9,6 +9,7 @@ import pathlib
 import numpy as np
 import pytest
 import scipy.stats
+from modelutils import config_group
 
 from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
 from gbkfit.fitting import FitProblem
@@ -91,6 +92,72 @@ def best_scales(spectra, data, error):
     a = (spectra ** 2).sum(axis=0) / error ** 2 + 1 / SIGMA ** 2
     b = (spectra * data).sum(axis=0) / error ** 2 + 1 / SIGMA ** 2
     return np.maximum(b, 0) / a
+
+
+def config(driver, observables, flux_scale):
+    """
+    A configuration of the disk seen as the given observables, by
+    observations named 'first' and 'second'; the first with the given
+    flux scale.
+    """
+    observations = [
+        dict(type='sky', observable=observable,
+             line_of_sight=dict(type='flat'), name=name)
+        for observable, name in zip(observables, ['first', 'second'])]
+    observations[0]['flux_scale'] = flux_scale
+    return dict(
+        driver=dict(type=driver.type()), galaxies=[GALAXY],
+        observations=observations)
+
+
+def test_a_flux_scale_of_one_value_scales_the_flux(driver):
+    # Moment 0 of a scaled observation is times its scale; the velocities
+    # (moment 1) and the other observations are not
+    observables = [
+        dict(type='pixel_moments', size=[24, 24], orders=[0, 1],
+             spec_convention='relativistic'),
+        dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20])]
+
+    def evaluate(flux_scale):
+        group_ = config_group(config(driver, observables, flux_scale))
+        scale = dict(first_flux_scale=2) if flux_scale else {}
+        data = group_.model_h(
+            ParamSpace(group_.pdescs(), PARAMS | scale).evaluate())
+        return (
+            data[0]['moment0']['d'].copy(), data[0]['moment1']['d'].copy(),
+            data[1]['spectra']['d'].copy())
+    moment0, moment1, spectra = evaluate(None)
+    scaled = evaluate('one')
+    np.testing.assert_allclose(scaled[0], 2 * moment0, rtol=1e-6)
+    np.testing.assert_allclose(scaled[1], moment1, rtol=1e-5, atol=1e-3)
+    np.testing.assert_array_equal(scaled[2], spectra)
+
+
+def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
+    # Data of moment 0 twice the model, and of its moment 1: the solved
+    # scale is 2 (but for the pull of its prior), of moment 0 only
+    def moments(moment0, moment1):
+        dataset = DatasetPixelMoments({
+            0: Data(moment0, error=np.full_like(moment0, 1e-3)),
+            1: Data(moment1, error=np.full_like(moment1, 1.0))})
+        return ObservationGroup(
+            [galaxy_parser.load(GALAXY)], [ObservationSky(
+                PixelMoments.from_data(
+                    dataset, spec_size=21, spec_step=20,
+                    spec_convention='relativistic'),
+                line_of_sight_parser.load(dict(type='flat')), driver,
+                data=dataset, flux_scale='one', name='obs',
+                likelihood=LikelihoodGaussian(missing_residual=3))])
+    blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
+    model = blank.model_h(ParamSpace(
+        blank.pdescs(), PARAMS | dict(obs_flux_scale=1)).evaluate())[0]
+    scaled = moments(
+        2 * model['moment0']['d'], np.nan_to_num(model['moment1']['d']))
+    params = ParamSpace(
+        scaled.pdescs(), PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
+    obj = Objective(scaled, params.solves())
+    obj.chi2(params.evaluate())
+    assert obj.solved()['obs_flux_scale'] == pytest.approx(2, rel=1e-6)
 
 
 def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
