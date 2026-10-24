@@ -183,8 +183,17 @@ class MCDisk(Component):
     """
     A disk made of clouds drawn at random from its density, each of flux
     cflux, with the random numbers of the given seed: a sample of the
-    smooth disk of the same parts, to which it converges. It is thick
-    (density height traits), and evaluated on a grid with a depth axis.
+    smooth disk of the same parts, stepped at its subrings. The clouds of
+    the density polar traits that the disk draws as a whole (see
+    RPTrait.has_analytical_integral; e.g. the uniform one and the
+    mixtures of blobs) follow them exactly; those of the others are drawn
+    ring by ring: each subring (of width rstep) has the flux of its
+    density at its middle times its area, spread evenly over it. It
+    converges to that stepped disk: at the edges of a subring, some
+    (rstep / 2) / s off the density of an exponential of scale length s
+    (8% for 0.5 arcsec at 3 arcsec), so rstep should be at most about a
+    pixel. It is thick (density height traits), and evaluated on a grid
+    with a depth axis.
 
     Parameters
     ----------
