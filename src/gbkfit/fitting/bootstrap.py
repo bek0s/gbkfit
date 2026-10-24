@@ -394,7 +394,9 @@ def _models(
     for i, model in enumerate(group.model_h(values)):
         items = {key: item['d'].copy() for key, item in model.items()}
         if amplitudes[i] is not None:
-            key = group.observations()[i].spectra_item()
-            items[key] = items[key] * amplitudes[i]
+            observation = group.observations()[i]
+            key = observation.spectra_item()
+            items[key] = items[key] * np.expand_dims(
+                amplitudes[i], observation.spectra_axis())
         models.append(items)
     return models

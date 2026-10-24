@@ -560,11 +560,12 @@ def evaluation_outputs(
                 amplitudes, dict(observation=name))
             outputs[output.path] = output
             if model:
-                key = group.observations()[i].spectra_item()
+                observation = group.observations()[i]
+                key = observation.spectra_item()
                 path = f'observations/{name}/model/{key}.fits'
                 unscaled = outputs[path]
-                outputs[path] = unscaled._replace(
-                    value=_scaled(unscaled.value, amplitudes))
+                outputs[path] = unscaled._replace(value=_scaled(
+                    unscaled.value, amplitudes, observation.spectra_axis()))
                 output = _observation_output(
                     name, 'model_unscaled', key, unscaled.value)
                 outputs[output.path] = output
@@ -658,14 +659,16 @@ def _extension(value: Any) -> str:
     raise TypeError(f"outputs of type {type(value).__name__} are unsupported")
 
 
-def _scaled(output: Any, amplitudes: np.ndarray) -> Any:
+def _scaled(output: Any, amplitudes: np.ndarray, axis: int) -> Any:
     """
-    Return an output of spectra (along the first axis of its data) with
-    each spectrum times its amplitude.
+    Return an output of spectra (along the given axis of its data) with
+    each spectrum times its amplitude (the amplitudes have the shape of
+    the spectra but that axis; see Objective.amplitudes).
     """
+    factors = np.expand_dims(amplitudes, axis)
     if isinstance(output, np.ndarray):
-        return output * amplitudes
-    return output._replace(data=output.data * amplitudes)
+        return output * factors
+    return output._replace(data=output.data * factors)
 
 
 @contextlib.contextmanager

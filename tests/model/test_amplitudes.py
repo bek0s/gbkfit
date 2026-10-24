@@ -202,3 +202,26 @@ def test_the_outputs_of_a_fit_have_the_amplitudes(driver):
     np.testing.assert_allclose(
         outputs['amplitudes'][lit], 2,
         rtol=1e-3)
+
+
+def test_the_amplitudes_of_slitless_rows_scale_their_rows():
+    # Slitless spectra dispersed along x (the golden case slitless_rows: 24
+    # rows of 32 pixels) have an amplitude for each row, which scales its
+    # row in the model of the outputs and in that of the bootstrap
+    import pathlib
+    from gbkfit.fitting.bootstrap import _models
+    from gbkfit.tasks import eval as eval_task
+    from gbkfit.tasks._detail import evaluation_outputs
+    golden = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
+    evaluation = eval_task.load(str(golden / 'slitless_rows' / 'config.yaml'))
+    values = evaluation.params.evaluate()
+    outputs = {
+        x.kind: x.value for x in evaluation_outputs(
+            evaluation.group, evaluation.objective, values, True,
+            True).values()}
+    amplitudes = outputs['amplitudes']
+    assert amplitudes.shape == (24,)
+    scaled = outputs['model_unscaled'].data * amplitudes[:, None]
+    np.testing.assert_allclose(outputs['model'].data, scaled, rtol=1e-12)
+    [models] = _models(evaluation.objective, values)
+    np.testing.assert_allclose(models['spectra'], scaled, rtol=1e-12)
