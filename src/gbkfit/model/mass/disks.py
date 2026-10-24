@@ -3,6 +3,7 @@ Axisymmetric mass disks: a surface density (see surfaces) and a
 vertical structure (see vertical), each chosen on its own.
 """
 
+from collections.abc import Collection
 from typing import Any
 
 import numpy as np
@@ -115,6 +116,10 @@ class MassDisk(MassComponent):
         return self._surface.surface_density(R, params, context) \
             * self._vertical.height_pdf(R, z, params, context)
 
+    def gives_density(self, thick: Collection[str]) -> bool:
+        # (a thin disk has a surface density only)
+        return not self._vertical.thin_given(thick)
+
     def surface_density(
             self,
             R: npt.ArrayLike,
@@ -144,6 +149,9 @@ class MassDisk(MassComponent):
             masses[:, 0] = 2 * np.pi * half * np.sum(
                 weights * R * sigma, axis=1)
         return masses
+
+    def gives_cell_masses(self, thick: Collection[str]) -> bool:
+        return True
 
     def enclosed_mass(
             self,

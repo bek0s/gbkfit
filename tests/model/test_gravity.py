@@ -232,6 +232,22 @@ def test_hu_sawicki_unscreened_and_screened():
             bound['vcirc'](R), bound['vnewton'](R), rtol=1e-6)
 
 
+def test_hu_sawicki_sourced_by_a_contracted_halo():
+    # A halo that responds to its baryons sources the field by the mass of
+    # its spherical shells: unscreened, the forces are 4/3 of the
+    # Newtonian ones, as of a halo that does not
+    contracted = HALO | dict(
+        baryons=['stars'], response=dict(type='blumenthal86'))
+    galaxy_ = galaxy(mass=[THICK[0], contracted], distance=DISTANCE,
+                     gravity=dict(type='hu_sawicki'))
+    R, z = np.array([1.0, 5, 20]), np.array([0.5, 0, 5])
+    mass = galaxy_.plan_gravity().mass(
+        THICK_PARAMS | dict(gravity_log_fr0=-5))
+    newton = mass.model.forces(R, z, mass.params, mass.context)
+    np.testing.assert_allclose(
+        mass.field.forces(R, z), 4 / 3 * np.array(newton), rtol=2e-3)
+
+
 def test_hu_sawicki_thin_disks():
     # A thin disk sources the field as the limit of thick ones: its fifth
     # force adds to the circular velocity as that of one of a scale height
@@ -251,12 +267,21 @@ def test_hu_sawicki_thin_disks():
         np.testing.assert_allclose(added[0], added[1], atol=0.1)
 
 
-def test_hu_sawicki_options():
-    # The screened components are of the mass model; n is positive; the
+def test_hu_sawicki_options(tmp_path):
+    # The screened components are of the mass model; those not screened
+    # give where their mass is (not user components); n is positive; the
     # depth of the potential of the environment is a parameter with it
     with pytest.raises(ConfigError, match="screened mass components"):
         galaxy(mass=THICK, distance=DISTANCE,
                gravity=dict(type='hu_sawicki', screened=['gas']))
+    (tmp_path / 'curve.py').write_text(
+        "def vcirc2(R, params):\n    return 100 * R\n")
+    user = THICK + [dict(type='user', name='mine',
+                         file=str(tmp_path / 'curve.py'), func='vcirc2')]
+    with pytest.raises(ConfigError, match=r"\['mine'\] do not give where"):
+        galaxy(mass=user, distance=DISTANCE, gravity=dict(type='hu_sawicki'))
+    galaxy(mass=user, distance=DISTANCE,
+           gravity=dict(type='hu_sawicki', screened=['mine']))
     with pytest.raises(ConfigError, match="n must be positive"):
         galaxy(mass=THICK, distance=DISTANCE,
                gravity=dict(type='hu_sawicki', n=0))
@@ -297,17 +322,43 @@ def test_palatini_corrections_of_the_density_gradient():
     np.testing.assert_array_equal(bound['vcirc'](R), bound['vnewton'](R))
 
 
-def test_palatini_needs_the_density():
-    # Thin disks have none in their plane; the dark fraction takes
-    # Newtonian shares
-    galaxy_ = galaxy(mass=MASS, distance=DISTANCE,
-                     gravity=dict(type='palatini'))
-    params = PARAMS | dict(mass_stars_log_m=10, mass_stars_rd=3,
-                           gravity_alpha=-0.5)
-    with pytest.raises(NotImplementedError, match="takes the density"):
-        galaxy_.plan_functions().bind(params)['vcirc'](np.array([5.0]))
+# A thin disk that rotates in the mass of its galaxy, and a mass disk
+# that follows the gas
+THIN_DISK = DISK | dict(
+    density=dict(ptraits=dict(type='exponential')),
+    kinematics=dict(vptraits=dict(type='mass'), dptraits=dict(type='uniform')))
+GAS_MASS = dict(
+    type='disk', name='gas', surface=dict(type='component', component='gas'),
+    vertical=dict(type='component', component='gas'))
+
+
+@pytest.mark.parametrize('disk, mass, message', [
+    (DISK, MASS, r"\['stars'\] do not give it"),
+    (DISK, 'user', r"\['mine'\] do not give it"),
+    (DISK, [THICK[0], HALO | dict(
+        baryons=['stars'], response=dict(type='blumenthal86'))],
+     r"\['halo'\] do not give it"),
+    (THIN_DISK, [GAS_MASS], r"\['gas'\] do not give it")])
+def test_palatini_needs_the_density(tmp_path, disk, mass, message):
+    # Of every mass component, when the galaxy is made: thin disks have
+    # none in their plane (a disk that follows a thin component is thin);
+    # user components and halos that respond to their baryons do not
+    # give it; and a disk that follows a thick component does
+    (tmp_path / 'curve.py').write_text(
+        "def vcirc2(R, params):\n    return 100 * R\n")
+    if mass == 'user':
+        mass = [dict(type='user', name='mine',
+                     file=str(tmp_path / 'curve.py'), func='vcirc2')]
+    with pytest.raises(ConfigError, match=message):
+        galaxy(disk, mass=mass, distance=DISTANCE,
+               gravity=dict(type='palatini'))
+    galaxy(mass=[GAS_MASS], distance=DISTANCE, gravity=dict(type='palatini'))
+
+
+def test_palatini_takes_newtonian_shares():
+    # (those of the dark fraction)
     with pytest.raises(ConfigError, match="dark fraction"):
-        galaxy(mass=MASS + [dict(
+        galaxy(mass=[THICK[0], dict(
             type='spheroid', name='halo', profile=dict(type='nfw'),
             baryons=['stars'],
             dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))],

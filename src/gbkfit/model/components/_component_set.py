@@ -61,7 +61,8 @@ def _with_mass_params(
     component that is not a disk of the galaxy (see
     Component.density_disk), if the pressure support or the equilibrium
     of a disk takes the density of a mass component that the galaxy does
-    not have, if the gravity is given without mass, if it does not give
+    not have, if the gravity is given without mass, if it does not take
+    the mass model (see Gravity.check_mass_model), if it does not give
     what a feature takes (see Gravity: the forces of a jeans equilibrium
     or of the rotation at each height, the self-gravitating sheets of a
     self_gravitating equilibrium or pressure support, the shares of a
@@ -109,7 +110,6 @@ def _with_mass_params(
     if mass_model is None:
         return params
     gravity = GravityNewton() if gravity is None else gravity
-    gravity.check_mass_model(mass_model)
     disks = [cmp.name() for cmp in components
              if cmp.density_disk() is not None]
     for mass_component in mass_model.components():
@@ -119,6 +119,12 @@ def _with_mass_params(
                     f"the mass component {mass_component.name()!r} follows "
                     f"the component {name!r}, which is not a disk of its "
                     f"galaxy; its disks: {disks}")
+    # (of density height traits, as the densities that mass disks follow:
+    # see DiskDensity.thick)
+    thick = [cmp.name() for cmp in components
+             if cmp.density_disk() is not None
+             and cmp.density_disk().traits('rht')]
+    gravity.check_mass_model(mass_model, thick)
     mass_names = [component.name() for component in mass_model.components()]
     for cmp in components:
         disk = cmp.density_disk()

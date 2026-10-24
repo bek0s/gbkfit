@@ -5,7 +5,7 @@ spherical components (MassSpherical).
 
 import abc
 import dataclasses
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from typing import Any, Protocol
 
 import numpy as np
@@ -267,10 +267,19 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         NotImplementedError
-            If the component does not give its density.
+            If the component does not give its density (see
+            gives_density).
         """
         raise NotImplementedError(
             f"the mass component '{self.type()}' does not give its density")
+
+    def gives_density(self, thick: Collection[str]) -> bool:
+        """
+        Check whether it gives its density, in a galaxy whose thick
+        components (those whose densities have pdfs of the height, see
+        ComponentDensity.thick) have the given names; here, it does not.
+        """
+        return False
 
     def cell_masses(
             self,
@@ -291,7 +300,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         NotImplementedError
-            If the component does not give its density.
+            If the component does not give them (see gives_cell_masses).
         """
         r_edges = np.asarray(r_edges, dtype=float)
         b_edges = np.asarray(b_edges, dtype=float)
@@ -309,6 +318,14 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         volumes = 4 * np.pi / 3 * np.outer(
             np.diff(r_edges ** 3), np.diff(np.sin(b_edges)))
         return density.mean(axis=(2, 3)) * volumes
+
+    def gives_cell_masses(self, thick: Collection[str]) -> bool:
+        """
+        Check whether it gives its mass in cells (see cell_masses), in a
+        galaxy whose thick components have the given names (see
+        gives_density); by default, if it gives its density.
+        """
+        return self.gives_density(thick)
 
     def surface_density(
             self,
@@ -418,6 +435,9 @@ class MassSpherical(MassComponent, abc.ABC):
     """
 
     def spherical(self) -> bool:
+        return True
+
+    def gives_density(self, thick: Collection[str]) -> bool:
         return True
 
     @abc.abstractmethod

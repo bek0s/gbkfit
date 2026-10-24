@@ -10,7 +10,7 @@ need it check when the galaxy is made.
 """
 
 import abc
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 
 import astropy.constants
@@ -139,11 +139,14 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
         of its galaxy (those of the gravity among them), in its context.
         """
 
-    def check_mass_model(self, mass_model: MassModel) -> None:
+    def check_mass_model(
+            self, mass_model: MassModel, thick: Collection[str]
+    ) -> None:
         """
         Raise ConfigError, saying why, unless it takes the mass model of
-        its galaxy (e.g. the names of its components it refers to); here,
-        it does.
+        its galaxy, whose thick components have the given names (e.g. the
+        names of mass components it refers to, or what it takes of them,
+        see MassComponent.gives_density); here, it does.
         """
 
     @abc.abstractmethod
@@ -388,7 +391,8 @@ class GravityHuSawicki(Gravity):
     1 s (more where the screening is partial). It is sourced by the mass
     of the mass components (in each cell of the grid; thin disks in the
     cells next to the plane), but of those screened (e.g. the stars, as
-    SPAM can: each star screens itself), and but within 10 pc of the
+    SPAM can: each star screens itself; tables and user components, which
+    do not give where their mass is, must be), and but within 10 pc of the
     centre (e.g. a point mass, compact, screens itself). With the
     environment, its parameter 'gravity_log_phi_ext' is log10 of the depth
     of the Newtonian potential of the environment of the galaxy, -Phi_ext
@@ -506,12 +510,23 @@ class GravityHuSawicki(Gravity):
             _NewtonField(mass_model, params, context),
             grid.gradient(w, w_out), _C2 * background / 2)
 
-    def check_mass_model(self, mass_model: MassModel) -> None:
+    def check_mass_model(
+            self, mass_model: MassModel, thick: Collection[str]
+    ) -> None:
         names = [component.name() for component in mass_model.components()]
         if unknown := [name for name in self._screened if name not in names]:
             raise ConfigError(
                 f"the screened mass components {unknown} are not in the "
                 f"mass model; its components: {names}")
+        if massless := [
+                component.name() for component in mass_model.components()
+                if component.name() not in self._screened
+                and not component.gives_cell_masses(thick)]:
+            raise ConfigError(
+                f"the field of f(R) gravity is sourced by the mass of the "
+                f"mass components that are not screened; the mass "
+                f"components {massless} do not give where their mass is "
+                f"(e.g. tables or user components): screen them")
 
     def check_forces(self, mass_model: MassModel) -> None:
         # (of the Newtonian forces of all the mass)
@@ -578,16 +593,17 @@ class GravityPalatini(Gravity):
 
     The gradient of the density is numerical: central differences of
     steps of 1e-4 of R and of |z| (relative truncation errors of about
-    (1e-4 R / L)^2 / 6, for a density that changes on scales L). Thin
-    disks have no
-    density in their plane (the correction there depends on Sigma(R)
-    Z(0) of a vertical law Z, infinite for a thin disk), and raise
-    NotImplementedError; point masses have none away from the centre. It
-    does not give the vertical structure of self-gravitating sheets, or
-    the shares of the components (those of the dark fraction are
-    Newtonian). The Newtonian circular velocities of the components remain
-    in the rotation tables and the functions of the galaxy (see
-    GravityPlan.evaluate and GalaxyFunctions).
+    (1e-4 R / L)^2 / 6, for a density that changes on scales L). Every
+    mass component must give its density (see check_mass_model): thin
+    disks do not (the correction in their plane depends on Sigma(R) Z(0)
+    of a vertical law Z, infinite for a thin disk), nor do tables, user
+    components and halos that respond to their baryons; point masses
+    have none away from the centre. It does not give the vertical
+    structure of self-gravitating sheets, or the shares of the
+    components (those of the dark fraction are Newtonian). The Newtonian
+    circular velocities of the components remain in the rotation tables
+    and the functions of the galaxy (see GravityPlan.evaluate and
+    GalaxyFunctions).
     """
 
     @staticmethod
@@ -619,6 +635,18 @@ class GravityPalatini(Gravity):
         return _PalatiniField(
             _NewtonField(mass_model, params, context), density,
             8 * np.pi * G * float(params['gravity_alpha']))
+
+    def check_mass_model(
+            self, mass_model: MassModel, thick: Collection[str]
+    ) -> None:
+        if densityless := [
+                component.name() for component in mass_model.components()
+                if not component.gives_density(thick)]:
+            raise ConfigError(
+                f"Palatini f(R) gravity takes the density of every mass "
+                f"component; the mass components {densityless} do not give "
+                f"it (e.g. thin disks, tables, user components or halos "
+                f"that respond to their baryons)")
 
     def check_forces(self, mass_model: MassModel) -> None:
         # (of the Newtonian forces of all the mass)

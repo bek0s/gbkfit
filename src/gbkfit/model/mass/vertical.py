@@ -7,6 +7,7 @@ which may change with radius.
 """
 
 import abc
+from collections.abc import Collection
 from typing import Any
 
 import numpy as np
@@ -63,6 +64,15 @@ class DiskVertical(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
+    def thin_given(self, thick: Collection[str]) -> bool:
+        """
+        Check whether the disk is thin, in a galaxy whose thick components
+        (see ComponentDensity.thick) have the given names: as thin is, but
+        known when the galaxy is made.
+        """
+        pass
+
+    @abc.abstractmethod
     def height_pdf(
             self,
             R: npt.ArrayLike,
@@ -108,6 +118,9 @@ class VerticalLaw(DiskVertical, abc.ABC):
             desc="the scale height (kpc)", minimum=0))
 
     def thin(self, context: MassContext) -> bool:
+        return False
+
+    def thin_given(self, thick: Collection[str]) -> bool:
         return False
 
     def height_pdf(
@@ -169,6 +182,9 @@ class VerticalThin(VerticalLaw):
         return {}
 
     def thin(self, context: MassContext) -> bool:
+        return True
+
+    def thin_given(self, thick: Collection[str]) -> bool:
         return True
 
     def height_pdf(
@@ -365,6 +381,9 @@ class VerticalComponent(DiskVertical):
 
     def thin(self, context: MassContext) -> bool:
         return not context.density(self._component).thick()
+
+    def thin_given(self, thick: Collection[str]) -> bool:
+        return self._component not in thick
 
     def height_pdf(
             self,

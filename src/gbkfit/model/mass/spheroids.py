@@ -6,7 +6,7 @@ contracted adiabatically), or be given by its dark matter fraction.
 """
 
 import math
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from typing import Any
 
 import numpy as np
@@ -107,7 +107,9 @@ class MassSpheroid(MassComponent):
     - by a response (see HaloResponse; spherical only): e.g. contracted
       adiabatically, with the parameters of the response. Its forces are
       those of its spherical shells, -v^2(r) / r^2 toward the centre (r
-      the spherical radius); its density and potential are not given.
+      the spherical radius), as is its mass in cells (see
+      MassComponent.cell_masses); its density and potential are not
+      given.
     - given by its dark matter fraction (see DarkFraction): fdm = v^2 /
       (v^2 + v_b^2) at r_fdm (two parameters, instead of the parameter it
       sets), of its circular velocity, after its response if it has one,
@@ -290,6 +292,26 @@ class MassSpheroid(MassComponent):
         self._check_no_response('density')
         return self._shape.density(
             R, z, self._profile, self._given(params, context), context)
+
+    def gives_density(self, thick: Collection[str]) -> bool:
+        return self._response is None
+
+    def cell_masses(
+            self,
+            r_edges: np.ndarray,
+            b_edges: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        if self._response is None:
+            return super().cell_masses(r_edges, b_edges, params, context)
+        # (spherical: of its enclosed mass, as MassSpherical.cell_masses)
+        return np.outer(
+            np.diff(self.enclosed_mass(r_edges, params, context)),
+            np.diff(np.sin(b_edges)))
+
+    def gives_cell_masses(self, thick: Collection[str]) -> bool:
+        return True
 
     def surface_density(
             self,
