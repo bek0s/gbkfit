@@ -15,6 +15,7 @@ from typing import Literal, NamedTuple
 import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
+from astropy.table import Table
 from matplotlib.patches import Ellipse
 
 import gbkfit.outputs
@@ -138,10 +139,29 @@ def plot(
 
 
 def _read(source: Run, product: Product | None) -> np.ndarray | None:
-    """Return the data of a FITS product, or None without a product."""
+    """
+    Return the data of a product (of a FITS file, or the values of the
+    table of a profile), or None without a product.
+    """
     if product is None:
         return None
-    return np.asarray(source.read(product).data, dtype=float)
+    value = source.read(product)
+    if isinstance(value, Table):
+        return np.asarray(value['value'], dtype=float)
+    return np.asarray(value.data, dtype=float)
+
+
+def _radii(source: Run, product: Product) -> tuple[np.ndarray, str] | None:
+    """
+    Return the radii of the table of a profile and their label, or None
+    for a product that is not one.
+    """
+    value = source.read(product)
+    if not isinstance(value, Table):
+        return None
+    radius = value['radius']
+    unit = f' ({radius.unit})' if radius.unit is not None else ''
+    return np.asarray(radius, dtype=float), f'radius{unit}'
 
 
 def _find(source: Run, kind: str, **ids: str) -> Product | None:
@@ -164,7 +184,7 @@ def _fit_figures(source: Run) -> list[_Figure]:
         figure = _fit_figure(
             key, _read(source, data), _read(source, error),
             _read(source, model), _read(source, residual),
-            _psf_shape(_read(source, psf)))
+            _psf_shape(_read(source, psf)), _radii(source, model))
         figures.append(_Figure(
             f'observations/{observation}/fit/{key}', figure,
             ids | dict(plot='fit'),
@@ -198,11 +218,15 @@ def _fit_figure(
         error: np.ndarray | None,
         model: np.ndarray,
         residual: np.ndarray | None,
-        psf: _EllipseShape | None
+        psf: _EllipseShape | None,
+        radii: tuple[np.ndarray, str] | None = None
 ) -> Figure:
-    """Return the figure of the data, model and residuals of an item."""
+    """
+    Return the figure of the data, model and residuals of an item (of a
+    profile, at the given radii and their label).
+    """
     if data.ndim == 1:
-        return _profile_figure(key, data, error, model)
+        return _profile_figure(key, data, error, model, radii)
     if data.ndim == 3:
         # The moment 0 of the cube, and its position-velocity slice
         # through its central row (velocity along the vertical axis)
@@ -281,13 +305,18 @@ def _profile_figure(
         key: str,
         data: np.ndarray,
         error: np.ndarray | None,
-        model: np.ndarray
+        model: np.ndarray,
+        radii: tuple[np.ndarray, str] | None = None
 ) -> Figure:
-    """Return the figure of the data and model of values per region."""
+    """
+    Return the figure of the data and model of values per region, or of
+    a profile at the given radii and their label.
+    """
     figure = Figure(figsize=(8, 6), layout='constrained')
     top, bottom = figure.subplots(
         2, 1, sharex=True, gridspec_kw=dict(height_ratios=[3, 1]))
-    regions = np.arange(len(data))
+    regions, label = (np.arange(len(data)), 'region') if radii is None \
+        else radii
     top.errorbar(regions, data, yerr=error, fmt='o', label='data')
     top.plot(regions, model, '-', label='model')
     top.set_title(key)
@@ -299,7 +328,7 @@ def _profile_figure(
     else:
         bottom.plot(regions, (model - data) / error, 'o')
         bottom.set_ylabel('residual (errors)')
-    bottom.set_xlabel('region')
+    bottom.set_xlabel(label)
     return figure
 
 

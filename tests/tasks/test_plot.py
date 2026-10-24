@@ -13,8 +13,8 @@ from gbkfit.tasks.plot import plot
 
 def write_run(directory, task, with_posterior=False):
     """
-    Write a run with the outputs of a fit of a map, a cube and region
-    values (without its result and samples, if the task is eval).
+    Write a run with the outputs of a fit of a map, a cube, region values
+    and a profile (without its result and samples, if the task is eval).
     """
     rng = np.random.default_rng(1)
     y, x = np.indices((16, 20))
@@ -32,6 +32,15 @@ def write_run(directory, task, with_posterior=False):
             run.write(
                 f'observations/observation0/{kind}/{key}.fits', kind, value,
                 observation='observation0', item=key)
+    # (and a profile, as a table of the values at radii)
+    radii = np.linspace(1, 10, 8)
+    for kind, value in (
+            ('data', 150 * radii / (radii + 2)), ('error', np.full(8, 5.0)),
+            ('model', 148 * radii / (radii + 2)), ('residual', np.zeros(8))):
+        run.write(
+            f'observations/rc/{kind}/vcirc.ecsv', kind,
+            Table(dict(radius=radii, value=value)), observation='rc',
+            item='vcirc')
     psf = np.exp(-((x - 10) ** 2 / 2 + (y - 8) ** 2 / 8))
     run.write(
         'observations/observation0/extra/psf_lo.fits', 'extra', psf,
@@ -62,7 +71,8 @@ def figures(directory):
 
 ITEM_FIGURES = [
     f'observations/observation0/fit/{key}.png'
-    for key in ('moment1', 'spectra', 'values')]
+    for key in ('moment1', 'spectra', 'values')] + [
+    'observations/rc/fit/vcirc.png']
 
 
 @pytest.mark.parametrize('with_posterior', [True, False])
