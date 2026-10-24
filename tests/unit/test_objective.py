@@ -173,6 +173,32 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
     assert objective.nresiduals() == 24 * 32
 
 
+def test_upper_limits_count_within_their_footprint(driver, tmp_path):
+    # The masked values outside it (e.g. the corners of the field of an
+    # IFU, never observed) count nothing; data there are refused
+    from gbkfit.utils import fitsutils, gridutils
+    mask = np.ones((24, 32))
+    mask[:, :8] = 0
+    footprint = np.ones((24, 32))
+    footprint[:, :4] = 0
+    file = str(tmp_path / 'field.fits')
+    fitsutils.write_data(
+        file, footprint, gridutils.Coords((1, 1), (15.5, 11.5), (0, 0), 0))
+    limits = dict(brightness=dict(limit=0.01, error=0.2, footprint=file))
+    data = Data(
+        np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
+    objective, params = make_objective(
+        driver, data, LikelihoodGaussian(upper_limits=limits))
+    residuals = objective.residuals(params).reshape(24, 32)
+    np.testing.assert_array_equal(residuals[:, :4], 0)
+    assert np.all(residuals[:, 4:8] > 0)
+    assert objective.nresiduals() == 24 * 28
+    with pytest.raises(ConfigError, match="96 values outside the footprint"):
+        make_objective(
+            driver, Data(np.full((24, 32), 0.1), mask=mask[:, ::-1]),
+            LikelihoodGaussian(upper_limits=limits))
+
+
 def test_a_fitted_noise_is_exact_to_a_constant(driver):
     # -2 log L = sum ((m - d) / s)^2 + sum log s^2, s = sqrt((f e)^2 +
     # j^2): the residuals of the data are over s, and the noise residual,

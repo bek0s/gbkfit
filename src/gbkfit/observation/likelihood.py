@@ -12,7 +12,7 @@ from gbkfit.dataset import NoiseCorrelation
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import funcutils, parseutils
+from gbkfit.utils import fitsutils, funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -149,6 +149,14 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    def footprint(self, key: str) -> np.ndarray | None:
+        """
+        Return where the data item of the given name was observed, for its
+        upper limit (see LikelihoodGaussian): 1 inside, 0 outside; None
+        for all of it (here).
+        """
+        return None
+
     @abc.abstractmethod
     def amplitudes(self) -> str | None:
         """
@@ -208,7 +216,12 @@ class LikelihoodGaussian(Likelihood):
     e)^2 well above it). Without limits a model could put light where the
     data are blank for free (e.g. a disk too large). The limits are for
     values of light (brightness, spectra, moment 0), not for velocities,
-    of which a blank says nothing.
+    of which a blank says nothing. An upper limit can have a footprint:
+    where the instrument looked (e.g. the field of an IFU, whose corners
+    are blank but were never observed), 1 inside and 0 outside, of the
+    shape of the data or of their last axes (e.g. an image of the field
+    of a cube, the same in every channel); the masked values outside it
+    count nothing, and the data must have none there.
 
     With amplitudes 'per_spectrum' (spectra only, e.g. those of
     pixel_spectra, or each line of the image of slitless_spectra along
@@ -339,7 +352,9 @@ class LikelihoodGaussian(Likelihood):
     upper_limits : Mapping, optional
         The upper limit of the masked values of data items, by name (none
         for the others): a mapping of its 'limit' and its 'error' (the
-        noise of the non-detections); see above. None by default.
+        noise of the non-detections), and optionally its 'footprint' (a
+        FITS file, relative to the configuration: a filename, or a
+        mapping of it, 'file', and its 'hdu'); see above. None by default.
     amplitudes : str, optional
         'per_spectrum' for an amplitude for each spectrum of the model
         (see above); none by default.
@@ -361,7 +376,8 @@ class LikelihoodGaussian(Likelihood):
     ------
     ConfigError
         If missing_residual is negative or not finite, an upper limit is
-        not a finite limit and a finite, positive error, amplitudes is not
+        not a finite limit and a finite, positive error (and a footprint
+        that can be read, of values 0 and 1), amplitudes is not
         'per_spectrum', amplitude_sigma is missing with it, given without
         it, or not positive, the noise of an item is not as above, or the
         white floor is not in [0, 1).
@@ -410,6 +426,10 @@ class LikelihoodGaussian(Likelihood):
         self._upper_limits = None if upper_limits is None else {
             key: _check_upper_limit(key, limit)
             for key, limit in upper_limits.items()}
+        self._footprints = {
+            key: _read_footprint(key, limit['footprint'])
+            for key, limit in (self._upper_limits or {}).items()
+            if 'footprint' in limit}
         if amplitudes not in (None, 'per_spectrum'):
             raise ConfigError(
                 f"option 'amplitudes' must be 'per_spectrum' (or none); it "
@@ -472,6 +492,9 @@ class LikelihoodGaussian(Likelihood):
             return None
         limit = self._upper_limits[key]
         return limit['limit'], limit['error']
+
+    def footprint(self, key: str) -> np.ndarray | None:
+        return self._footprints.get(key)
 
     def amplitudes(self) -> str | None:
         return self._amplitudes
@@ -639,19 +662,40 @@ def _check_upper_limit(
         limit: Mapping[str, float]
 ) -> dict[str, float]:
     """
-    Return an upper limit (a mapping of its limit and error), or raise
-    ConfigError unless both are finite and the error is positive.
+    Return an upper limit (a mapping of its limit and error, and its
+    footprint if given), or raise ConfigError unless both are finite and
+    the error is positive.
     """
-    if not isinstance(limit, Mapping) or set(limit) != {'limit', 'error'}:
+    if not isinstance(limit, Mapping) or not (
+            {'limit', 'error'} <= set(limit)
+            <= {'limit', 'error', 'footprint'}):
         raise ConfigError(
             f"upper limit of '{key}': give its 'limit' and its 'error' (the "
-            f"noise of the non-detections); it is {limit!r}")
+            f"noise of the non-detections), and optionally its "
+            f"'footprint'; it is {limit!r}")
     value, error = float(limit['limit']), float(limit['error'])
     if not (math.isfinite(value) and math.isfinite(error) and error > 0):
         raise ConfigError(
             f"upper limit of '{key}': its limit must be finite and its "
             f"error finite and positive; they are {value} and {error}")
-    return dict(limit=value, error=error)
+    footprint = {} if 'footprint' not in limit \
+        else dict(footprint=limit['footprint'])
+    return dict(limit=value, error=error) | footprint
+
+
+def _read_footprint(key: str, file: str | Mapping[str, Any]) -> np.ndarray:
+    """
+    Return the footprint of the upper limit of a data item, read from its
+    FITS file (see LikelihoodGaussian), or raise ConfigError unless its
+    values are 0 and 1.
+    """
+    with parseutils.config_path('upper_limits', key, 'footprint'):
+        footprint = fitsutils.read_data(*parseutils.parse_file(file))[0]
+    if not np.all(np.isin(footprint, (0, 1))):
+        raise ConfigError(
+            f"upper limit of '{key}': its footprint must be 1 where the "
+            f"data were observed and 0 elsewhere")
+    return footprint.astype(float)
 
 
 class LikelihoodUser(Likelihood):

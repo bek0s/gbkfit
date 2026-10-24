@@ -7,7 +7,7 @@ import scipy.special
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Extras
-from gbkfit.observation import ObservationGroup
+from gbkfit.observation import Observation, ObservationGroup
 from gbkfit.observation.likelihood import LikelihoodUser, Whitening, whitening
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
@@ -192,6 +192,11 @@ class Objective:
             {key: obs.likelihood().upper_limit(key) or (np.nan, np.nan)
              for key in obs.keys()}
             for obs in observations)
+        # The footprint of the upper limits of data items that have one,
+        # of their shape (see LikelihoodGaussian)
+        self._footprints = tuple(
+            _footprints(obs, data) for obs, data in zip(
+                observations, self._datasets))
         # The data item of the spectra of amplitudes of each observation,
         # if any, the axis of its spectra, and the standard deviation of
         # their prior
@@ -240,6 +245,8 @@ class Objective:
         self._d_dataset_d_nddata = iterutils.make_list(n, {})
         self._d_dataset_m_nddata = iterutils.make_list(n, {})
         self._d_dataset_e_nddata = iterutils.make_list(n, {})
+        # The footprints of upper limits of the data items, by name
+        self._d_footprints = iterutils.make_list(n, {})
         # The residuals of each observation, in 1d arrays on the host (h)
         # and the device (d), and their views as the nd arrays of each item
         self._h_residual_vector = iterutils.make_list(n, None)
@@ -396,6 +403,9 @@ class Objective:
                         self._d_dataset_e_vector[i][slice_])
                     self._d_dataset_e_nddata[i][key] = \
                         self._d_dataset_e_vector[i][slice_].reshape(shape)
+                if key in self._footprints[i]:
+                    self._d_footprints[i][key] = driver.mem_copy_h2d(
+                        self._footprints[i][key].astype(dtype))
                 self._h_residual_nddata[i][key] = \
                     self._h_residual_vector[i][slice_].reshape(shape)
                 self._d_residual_nddata[i][key] = \
@@ -610,16 +620,19 @@ class Objective:
         Return the number of residuals that count: those of the values the
         data do not mask (the values the model does not have count too,
         with the missing_residual of their likelihood), all values of the
-        data items with upper limits, and that of the prior of each
+        data items with upper limits (within their footprints, if any),
+        and that of the prior of each
         amplitude of a spectrum, if any; not the noise residuals, which are
         not of the data (see LikelihoodGaussian).
         """
         return sum(
-            int(dataset[key].mask().size) if not np.isnan(limits[key][0])
+            int(np.count_nonzero(footprints[key])) if key in footprints
+            else int(dataset[key].mask().size)
+            if not np.isnan(limits[key][0])
             else int(np.count_nonzero(dataset[key].mask()))
-            for dataset, obs, limits in zip(
+            for dataset, obs, limits, footprints in zip(
                 self._datasets, self._group.observations(),
-                self._upper_limits)
+                self._upper_limits, self._footprints)
             for key in obs.keys()) + self.nnuisance()
 
     def nindependent(self) -> float:
@@ -819,6 +832,12 @@ class Objective:
                         *self._upper_limits[i][key],
                         *self._noise_values(i, key, params),
                         self._d_residual_nddata[i][key])
+                    if key in self._d_footprints[i]:
+                        # (the limits count nothing outside the footprint)
+                        observation.driver().math_mul(
+                            self._d_residual_nddata[i][key],
+                            self._d_footprints[i][key],
+                            out=self._d_residual_nddata[i][key])
                     if weighted and key in self._whiteners[i]:
                         self._whiteners[i][key](
                             self._d_residual_nddata[i][key])
@@ -987,3 +1006,39 @@ class Objective:
                 + scipy.special.log_ndtr(x) - np.log(sigma * np.sqrt(a))
                 - scipy.special.log_ndtr(1 / sigma)))
         return total
+
+
+def _footprints(
+        observation: Observation, dataset: Dataset | None
+) -> dict[str, np.ndarray]:
+    """
+    Return the footprint of the upper limit of each data item of an
+    observation that has one, of the shape of the item (see
+    LikelihoodGaussian), by name.
+
+    Raises
+    ------
+    ConfigError
+        If a footprint is not of the shape of its item or of its last
+        axes, or the item has values outside it.
+    """
+    footprints = {}
+    for key in observation.keys() if dataset is not None else ():
+        footprint = observation.likelihood().footprint(key)
+        if footprint is None:
+            continue
+        data = dataset[key]
+        try:
+            footprint = np.broadcast_to(footprint, data.shape())
+        except ValueError:
+            raise ConfigError(
+                f"the footprint of the upper limit of '{key}' is of the "
+                f"shape {footprint.shape}, not of its data, {data.shape()}, "
+                f"or of their last axes") from None
+        if outside := int(np.count_nonzero(
+                (data.mask() != 0) & (footprint == 0))):
+            raise ConfigError(
+                f"the data of '{key}' have {outside} values outside the "
+                f"footprint of their upper limit; mask them")
+        footprints[key] = footprint
+    return footprints
