@@ -111,6 +111,24 @@ def test_cd_matrix():
         tolerance=1e-4)
 
 
+@pytest.mark.parametrize('frame', [
+    dict(CTYPE1='GLON-TAN', CTYPE2='GLAT-TAN'),
+    dict(RADESYS='FK4', EQUINOX=1950.0)])
+def test_other_celestial_frames_are_turned_into_icrs(frame):
+    # The RA and Dec of the reference pixel, and the position angle of the
+    # +y axis from north of ICRS there, as astropy turns the pixels
+    header = CELESTIAL | dict(
+        CDELT1=-2 / 3600, CDELT2=2 / 3600, CROTA2=10.0) | frame
+    coords = write(header)
+    sky = astropy.wcs.WCS(header).celestial.pixel_to_world(
+        [11.5, 11.5], [9.5, 10.5]).icrs
+    assert coords.rval == pytest.approx(
+        (sky[0].ra.deg, sky[0].dec.deg), abs=1e-9)
+    assert same_angle(
+        coords.rota, sky[0].position_angle(sky[1]).deg, tolerance=1e-4)
+    assert not same_angle(coords.rota, 10.0, tolerance=0.1)
+
+
 def test_crota():
     # CROTA2 is deprecated, but old files have it
     header = CELESTIAL | dict(

@@ -11,10 +11,12 @@ coordinates become those of the model (see coords_from_wcs).
 import typing
 
 import astropy.constants
+import astropy.coordinates
 import astropy.io.fits
 import astropy.table
 import astropy.units
 import astropy.wcs
+import astropy.wcs.utils
 import numpy as np
 
 from gbkfit.utils.gridutils import Coords, make_medium, make_rest
@@ -280,7 +282,11 @@ def coords_from_wcs(
     rpix is the reference pixel (CRPIX - 1), and rval the world position
     there (CRVAL). Either can be given instead, and the other is computed
     from the WCS. The rest of the spectral axis is that of the WCS
-    (RESTWAV or RESTFRQ), or rest, if given.
+    (RESTWAV or RESTFRQ), or rest, if given. Celestial axes of another
+    frame than ICRS (e.g. Galactic, or FK4) are turned into it: the RA and
+    Dec of the reference pixel, and the rotation of the pixel grid from
+    north of ICRS there (exact at it; the frames differ by more, a hair
+    away from it, only for fields of degrees).
 
     Parameters
     ----------
@@ -342,6 +348,8 @@ def coords_from_wcs(
     elif rval is None:
         world = np.ravel(wcs.pixel_to_world_values(*rpix))
         rval = np.multiply(world, scale).tolist()
+    if lng >= 0:
+        rval, rota = _to_icrs(source, wcs, list(rval), rota)
     rest = _spectral_rest(source, wcs, make_rest(rest))
     return Coords(
         tuple(float(x) for x in step),
@@ -709,7 +717,7 @@ def _sky_header(coords):
         CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=cdelt[0],
         CRPIX1=coords.rpix[0] + 1, CRVAL1=coords.rval[0],
         CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=cdelt[1],
-        CRPIX2=coords.rpix[1] + 1, CRVAL2=coords.rval[1],
+        CRPIX2=coords.rpix[1] + 1, CRVAL2=coords.rval[1], RADESYS='ICRS',
         PC1_1=pc[0, 0], PC1_2=pc[0, 1],
         PC2_1=pc[1, 0], PC2_2=pc[1, 1])
 
@@ -908,6 +916,33 @@ def _celestial_rotation(source, linear):
             f"{source}: the pixel grid is skewed (its axes are not "
             f"perpendicular on the sky), which the model does not support")
     return float(np.degrees(np.arctan2(column_y[0], column_y[1])))
+
+
+def _to_icrs(source, wcs, rval, rota):
+    """
+    Return the world position of the reference pixel (rval, of the
+    celestial axes in degrees) and the position angle of the +y pixel
+    axis (rota) of a WCS in ICRS: as they are in it, else turned from its
+    celestial frame, by the position angle of its north in ICRS at the
+    reference pixel.
+    """
+    try:
+        frame = astropy.wcs.utils.wcs_to_celestial_frame(wcs)
+    except ValueError as e:
+        raise ConfigError(
+            f"{source}: the celestial frame of the world coordinates is "
+            f"not known: {e}") from e
+    if isinstance(frame, astropy.coordinates.ICRS):
+        return rval, rota
+    lng, lat = wcs.wcs.lng, wcs.wcs.lat
+    reference = astropy.coordinates.SkyCoord(
+        rval[lng], rval[lat], unit='deg', frame=frame)
+    north = reference.directional_offset_by(
+        0 * astropy.units.deg, 1 * astropy.units.arcsec)
+    reference, north = reference.icrs, north.icrs
+    rval[lng], rval[lat] = reference.ra.deg, reference.dec.deg
+    turn = reference.position_angle(north).deg
+    return rval, float((rota + turn + 180) % 360 - 180)
 
 
 def _check_uncoupled(source, wcs, linear):
