@@ -26,6 +26,10 @@ def kernel_consts_cases():
         zpt=traits.zpt_parser, spt=traits.spt_parser)
     for kind, parser in parsers.items():
         for type_, cls in parser.registered_classes().items():
+            # (an image is a file; its constants are those of the map, see
+            # test_image_light)
+            if cls is traits.RPTraitImage:
+                continue
             if kind == 'rht':
                 options, consts = dict(zmax=5.0, rnodes=True), (5.0, True)
             elif kind == 'vht' and type_ == 'mass':

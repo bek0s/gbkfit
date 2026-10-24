@@ -363,21 +363,31 @@ class ComponentSet:
     def constants(self) -> dict[str, Any]:
         return _constants(self._components, self._prefixes)
 
-    def plan_gravity(self, driver: Driver, redshift: float) -> GravityPlan:
+    def plan_gravity(
+            self,
+            driver: Driver,
+            redshift: float,
+            sky_origin: tuple[float, float] | None = None
+    ) -> GravityPlan:
         """
         Plan the evaluation of the gravity on a driver, of a galaxy of the
-        given redshift (see GravityPlan).
+        given redshift, in the frame of the given origin on the sky (see
+        GravityPlan).
         """
-        return GravityPlan(self, driver, redshift)
+        return GravityPlan(self, driver, redshift, sky_origin)
 
     def plan_functions(
-            self, driver: Driver, redshift: float
+            self,
+            driver: Driver,
+            redshift: float,
+            sky_origin: tuple[float, float] | None = None
     ) -> GalaxyFunctions:
         """
         Plan the functions of a galaxy of the given redshift on a driver,
-        for the derived values of its parameters (see GalaxyFunctions).
+        in the frame of the given origin on the sky, for the derived values
+        of its parameters (see GalaxyFunctions).
         """
-        return GalaxyFunctions(self, driver, redshift)
+        return GalaxyFunctions(self, driver, redshift, sky_origin)
 
     def plan(
             self,

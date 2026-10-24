@@ -104,18 +104,24 @@ class GalaxyFunctions:
         The driver where the disks sample their profiles.
     redshift : float
         The redshift of the galaxy (for its distance, see Distance).
+    sky_origin : tuple of float, optional
+        The RA and Dec (degrees) of the origin of the frame of the
+        parameters of the galaxy, which its image traits need (see
+        GravityPlan).
     """
 
     def __init__(
             self,
             component_set: 'ComponentSet',
             driver: Driver,
-            redshift: float
+            redshift: float,
+            sky_origin: tuple[float, float] | None = None
     ):
         components = component_set.components()
         mass_model = component_set.mass_model()
         self._component_set = component_set
-        self._gravity = GravityPlan(component_set, driver, redshift)
+        self._gravity = GravityPlan(
+            component_set, driver, redshift, sky_origin)
         # The disks with velocity or dispersion traits, by the index of
         # their component, and the suffixes of their functions
         self._suffixes = {
@@ -313,7 +319,8 @@ class GalaxyFunctions:
         mapping = self._component_set.mappings()[index]
         values = {p: params[mapping[p]] for p in component.pdescs()}
         disk = component.density_disk()
-        if disk.circular_velocity_params() or disk.equilibrium() is not None:
+        if disk.circular_velocity_params() or disk.image_params() \
+                or disk.equilibrium() is not None:
             values |= given()[index]
         return values
 

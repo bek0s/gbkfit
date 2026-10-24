@@ -203,6 +203,15 @@ class Disk(abc.ABC):
         """
         return self._traits.wave_params()
 
+    def image_params(self) -> tuple[str, ...]:
+        """
+        Return the names of the parameters that are not in pdescs, but
+        whose values are the face-on light of an image, which its galaxy
+        makes (see traits.RPTraitImage). The disk plans need them with the
+        others.
+        """
+        return self._traits.image_params()
+
     @abc.abstractmethod
     def plan(
             self,

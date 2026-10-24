@@ -235,8 +235,15 @@ class ObservationGroup:
         self._plans = tuple(plans)
         # The indices of the galaxies that each observation sees
         self._seen_galaxies = tuple(seen)
-        self._gravity_plans = tuple(
-            galaxy.plan_gravity() for galaxy in self._galaxies)
+        # (the origin of the frame of the parameters of the galaxies)
+        first = _first_on_sky(self._observations)
+        self._sky_origin = None if first is None \
+            else self._observations[first].sky_origin()
+        gravity_plans = []
+        for g, galaxy in enumerate(self._galaxies):
+            with parseutils.config_path('galaxies', g):
+                gravity_plans.append(galaxy.plan_gravity(self._sky_origin))
+        self._gravity_plans = tuple(gravity_plans)
         self._frames = tuple(
             self._frame(seen, observation, alignment)
             for seen, observation, alignment in zip(
@@ -424,7 +431,8 @@ class ObservationGroup:
             The functions.
         """
         return _GroupFunctions(
-            [galaxy.plan_functions() for galaxy in self._galaxies],
+            [galaxy.plan_functions(self._sky_origin)
+             for galaxy in self._galaxies],
             self._mappings, self._prefixes)
 
     def _gravity(
@@ -638,6 +646,17 @@ _ALIGNMENT_SEPARATION_WARNING = 1.0
 _ALIGNMENT_ROTATION_WARNING = 0.1
 
 
+def _first_on_sky(observations: Sequence[Observation]) -> int | None:
+    """
+    Return the index of the first observation on the sky (see
+    Observation.sky_origin), whose frame is that of the parameters of the
+    galaxies; None if none is.
+    """
+    return next(
+        (i for i, observation in enumerate(observations)
+         if observation.sky_origin() is not None), None)
+
+
 def _alignments(
         observations: Sequence[Observation]
 ) -> list[tuple[float, float]]:
@@ -653,11 +672,10 @@ def _alignments(
     of an origin far from the first, near a pole, also turns by about the
     separation times tan(Dec).
     """
-    origins = [observation.sky_origin() for observation in observations]
-    on_sky = [i for i, origin in enumerate(origins) if origin is not None]
-    if not on_sky:
+    f = _first_on_sky(observations)
+    if f is None:
         return [(0.0, 0.0)] * len(observations)
-    f = on_sky[0]
+    origins = [observation.sky_origin() for observation in observations]
     first = SkyCoord(*origins[f], unit='deg')
     alignments = []
     for i, origin in enumerate(origins):

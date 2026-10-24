@@ -17,6 +17,7 @@ from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
 from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.model.components.traits import RPTraitImage
 from gbkfit.model.components._transfer import (
     LineResolution, TransferPlan, warn_resolution)
 from gbkfit.model.components._units import DataUnit
@@ -115,6 +116,19 @@ class Scene:
         return max(
             _bounding_radius(galaxy, emitters)
             for galaxy, emitters in zip(self._galaxies, self._emitters))
+
+    def image_traits(self) -> tuple[RPTraitImage, ...]:
+        """
+        Return the image traits of the disks whose light it sees (see
+        traits.RPTraitImage).
+        """
+        return tuple(
+            trait
+            for galaxy, emitters in zip(self._galaxies, self._emitters)
+            for i in emitters
+            if (disk := galaxy.components()[i].density_disk()) is not None
+            for trait in disk.traits('rpt')
+            if isinstance(trait, RPTraitImage))
 
     def component_params(self, name: str) -> dict[str, str]:
         """

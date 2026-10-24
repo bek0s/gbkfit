@@ -28,6 +28,7 @@ __all__ = [
     'make_convention',
     'make_medium',
     'make_rest',
+    'frame_to_pixels',
     'pixels_on',
     'sky_positions',
     'sky_to_pixel'
@@ -457,7 +458,39 @@ def pixels_on(grid: Grid, other: Grid) -> tuple[np.ndarray, np.ndarray]:
         The x and y pixel coordinates (0-based) on other of the centres of
         the pixels of grid, each of shape (ny, nx) of grid.
     """
-    ra, dec = _to_sky(*sky_positions(grid), grid.coords.rval)
+    return frame_to_pixels(*sky_positions(grid), grid.coords.rval, other)
+
+
+def frame_to_pixels(
+        x: np.ndarray,
+        y: np.ndarray,
+        rval: Sequence[float],
+        other: Grid
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the pixel coordinates, on a grid, of positions in the frame of
+    a reference RA and Dec, by their RA and Dec.
+
+    The frame and the positions on the sky of the grid are gnomonic (TAN)
+    projections around their references.
+
+    Parameters
+    ----------
+    x, y : np.ndarray
+        The positions (arcsec from the reference, +x to the west and +y to
+        the north, as xpos and ypos; see sky_positions).
+    rval : Sequence of float
+        The RA and Dec (degrees) of the reference of the frame.
+    other : Grid
+        The grid of the pixel coordinates; only its x and y axes are used.
+
+    Returns
+    -------
+    tuple of ndarray
+        The x and y pixel coordinates (0-based) on other of the positions,
+        of their shape.
+    """
+    ra, dec = _to_sky(x, y, rval)
     x, y = _from_sky(ra, dec, other.coords.rval)
     matrix, rpix = sky_to_pixel(other)
     return (matrix[0, 0] * x + matrix[0, 1] * y + rpix[0],

@@ -583,6 +583,9 @@ class ObservationSky(Observation):
         scene = make_scene(
             seen, self._components, self._lines, self._band,
             self._line_of_sight, self._observable.emission, self.data_unit())
+        # (the light of an image is blurred by its PSF and again by ours)
+        for trait in scene.image_traits():
+            trait.check_psf(self._instrument.psf())
         return self._observable.plan(
             self._driver, scene, self._foreground, self._instrument,
             self._scale, self._dtype, self._fft_dtype, self._weights,

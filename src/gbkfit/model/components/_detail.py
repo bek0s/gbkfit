@@ -17,6 +17,35 @@ if TYPE_CHECKING:
     from .geometries import Geometry
 
 
+def disk_to_sky(
+        x: np.ndarray,
+        y: np.ndarray,
+        z: np.ndarray | float,
+        xpos: np.ndarray | float,
+        ypos: np.ndarray | float,
+        posa: np.ndarray | float,
+        incl: np.ndarray | float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Return the positions on the sky (x and y, arcsec, as xpos and ypos)
+    and the depths along the line of sight (arcsec, away from the viewer)
+    of points of a disk: at (x, y) in its plane (x along the azimuth 0, y
+    along the azimuth 90 degrees) and the height z above it, of its
+    centre (xpos, ypos), position angle posa and inclination incl
+    (degrees), as the kernels place them (transform_cpos_posa_incl_inverse
+    in gmodels.hpp). The arguments broadcast together.
+    """
+    incl = np.radians(incl)
+    # The inclination about the major axis (x)...
+    y_incl = y * np.cos(incl) - z * np.sin(incl)
+    depth = y * np.sin(incl) + z * np.cos(incl)
+    # ... then the position angle and the centre
+    theta = -np.radians(posa) - np.pi
+    sky_x = -x * np.sin(theta) + y_incl * np.cos(theta)
+    sky_y = -x * np.cos(theta) - y_incl * np.sin(theta)
+    return sky_x + xpos, sky_y + ypos, depth
+
+
 class Fluxes:
     """
     The fluxes of the rows of the light of a component that an

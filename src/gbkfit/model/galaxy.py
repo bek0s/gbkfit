@@ -283,22 +283,38 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.constants()
 
-    def plan_gravity(self) -> GravityPlan:
+    def plan_gravity(
+            self, sky_origin: tuple[float, float] | None = None
+    ) -> GravityPlan:
         """
         Plan the evaluation of the gravity of the galaxy on its driver, in
         float64, once for all the observations of it: the circular velocity
         of its mass at the radii of the components it moves (see
         GravityPlan), which its plans on the grids of observations take.
 
+        Parameters
+        ----------
+        sky_origin : tuple of float, optional
+            The RA and Dec (degrees) of the origin of the frame of its
+            parameters (see ObservationGroup), which its image traits need
+            (see traits.RPTraitImage).
+
         Returns
         -------
         GravityPlan
             The plan.
+
+        Raises
+        ------
+        ConfigError
+            If it has image traits, but there is no sky origin.
         """
         return self._component_set.plan_gravity(
-            self._driver, self.redshift())
+            self._driver, self.redshift(), sky_origin)
 
-    def plan_functions(self) -> GalaxyFunctions:
+    def plan_functions(
+            self, sky_origin: tuple[float, float] | None = None
+    ) -> GalaxyFunctions:
         """
         Plan the functions of the galaxy on its driver, in float64, for
         the derived values of its parameters (see ParamSpace): the
@@ -306,13 +322,24 @@ class Galaxy(parseutils.Serializable):
         its disks, at any radius (see GalaxyFunctions). They have their
         own plans, apart from those of its evaluations.
 
+        Parameters
+        ----------
+        sky_origin : tuple of float, optional
+            The RA and Dec (degrees) of the origin of the frame of its
+            parameters, which its image traits need (see plan_gravity).
+
         Returns
         -------
         GalaxyFunctions
             The functions.
+
+        Raises
+        ------
+        ConfigError
+            If it has image traits, but there is no sky origin.
         """
         return self._component_set.plan_functions(
-            self._driver, self.redshift())
+            self._driver, self.redshift(), sky_origin)
 
     def plan(
             self,

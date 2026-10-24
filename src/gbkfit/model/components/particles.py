@@ -14,7 +14,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._detail import Fluxes, dump_geometry, dump_name
+from ._detail import Fluxes, disk_to_sky, dump_geometry, dump_name
 from ._units import DataUnit
 from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
 from .geometries import Geometry
@@ -88,16 +88,12 @@ def _sky(
     along it (without the systemic velocity), seen as a disk of their
     frame is (see transform_cpos_posa_incl_inverse and vp_disk_project).
     """
+    x, y, depth = disk_to_sky(
+        particles['x'], particles['y'], particles['z'], params['xpos'],
+        params['ypos'], params['posa'], params['incl'])
     incl = np.radians(params['incl'])
-    # The inclination about the major axis (x of the frame)...
-    y = particles['y'] * np.cos(incl) - particles['z'] * np.sin(incl)
-    depth = particles['y'] * np.sin(incl) + particles['z'] * np.cos(incl)
     velocity = particles['vy'] * np.sin(incl) + particles['vz'] * np.cos(incl)
-    # ... then the position angle and the centre
-    theta = -np.radians(params['posa']) - np.pi
-    x = -particles['x'] * np.sin(theta) + y * np.cos(theta)
-    y = -particles['x'] * np.cos(theta) - y * np.sin(theta)
-    return x + params['xpos'], y + params['ypos'], depth, velocity
+    return x, y, depth, velocity
 
 
 def _pixels(

@@ -20,6 +20,7 @@ from ..extras import Extras
 from ..gravity import GravityField
 from ..mass import MassContext, MassModel
 from ..mass.units import G
+from ._images import ImageMaps
 from ._units import mass_per_unit
 from .disks._disk import EQUILIBRIUM_DISPERSION
 from .disks._profiles import (
@@ -108,9 +109,11 @@ class GravityPlan:
     (those with an equilibrium, see Kinematics): in the circular velocity
     of the mass ('central'; without mass, that of the rotation of each
     disk), in the vertical force of the mass ('jeans'), or in the surface
-    density of a mass component ('self_gravitating'); and the tables of
+    density of a mass component ('self_gravitating'); the tables of
     the density waves of its disks (the traits 'spiral', see
-    Disk.wave_params), in the rotation of each disk, at its subnodes.
+    Disk.wave_params), in the rotation of each disk, at its subnodes; and
+    the face-on light of the image traits of its disks (see ImageMaps),
+    which all the rest takes (e.g. the mass that follows such a disk).
 
     It takes the disks it moves and follows as concentric and flat: their
     rings around one centre, in one plane, whatever their geometries (the
@@ -134,16 +137,28 @@ class GravityPlan:
         The driver where the disks sample their profiles.
     redshift : float
         The redshift of the galaxy (for its distance, see Distance).
+    sky_origin : tuple of float, optional
+        The RA and Dec (degrees) of the origin of the frame of the
+        parameters of the galaxy (that of the first observation on the
+        sky; see ObservationGroup), which its image traits need (see
+        ImageMaps).
+
+    Raises
+    ------
+    ConfigError
+        If a disk has an image trait, but there is no sky origin.
     """
 
     def __init__(
             self,
             component_set: 'ComponentSet',
             driver: Driver,
-            redshift: float
+            redshift: float,
+            sky_origin: tuple[float, float] | None = None
     ):
         components = component_set.components()
         mass_model = component_set.mass_model()
+        self._images = ImageMaps(component_set, sky_origin)
         followed = set() if mass_model is None else {
             name for mass_component in mass_model.components()
             for name in mass_component.followed_components()}
@@ -226,18 +241,23 @@ class GravityPlan:
             factors of its rotation at the heights of its velocity height
             trait 'mass', at its subnodes (see _rotation_factors); the
             dispersion of the equilibrium of its disk at its subnodes
-            (km/s, as EQUILIBRIUM_DISPERSION, see Kinematics); and the
-            tables of the density waves of its disk, at its subnodes (see
-            Disk.wave_params).
+            (km/s, as EQUILIBRIUM_DISPERSION, see Kinematics); the tables
+            of the density waves of its disk, at its subnodes (see
+            Disk.wave_params); and the face-on light of the image traits
+            of its disk (see Disk.image_params). With extra outputs, a
+            warning says if a disk with image traits is near edge-on (see
+            ImageMaps.warn_inclination).
         """
         component_set = self._component_set
         mass_model = component_set.mass_model()
         own = {i: self._component_params(i, params) for i in self._disk_plans}
+        if out_extra is not None:
+            self._images.warn_inclination(params)
         if mass_model is None:
-            return self._with_waves(own, {
+            return self._with_images(params, own, self._with_waves(own, {
                 i: {EQUILIBRIUM_DISPERSION: self._equilibrium(
                     i, own[i], None, None, out_extra)}
-                for i in self._balanced})
+                for i in self._balanced}))
         components = component_set.components()
         if out_extra is not None:
             self._warn_geometry(params)
@@ -307,7 +327,7 @@ class GravityPlan:
                 values[i] |= self._rotation_factors(
                     i, mass, heights, own.get(i),
                     values[i].get(EQUILIBRIUM_DISPERSION))
-        return self._with_waves(own, values)
+        return self._with_images(params, own, self._with_waves(own, values))
 
     def _with_waves(
             self,
@@ -326,6 +346,28 @@ class GravityPlan:
             given |= density_waves(
                 components[i].density_disk(), self._disk_plans[i],
                 params[i] | given)
+        return values
+
+    def _with_images(
+            self,
+            params: ParamValues,
+            own: dict[int, ParamValues],
+            values: dict[int, ParamValues]
+    ) -> dict[int, ParamValues]:
+        """
+        Return the values that the gravity gives the components (values),
+        with the face-on light of the image traits of the disks that have
+        them (see ImageMaps): from the values of the parameters of those it
+        plans (own, by their own names), or made here from those of the
+        galaxy (params).
+        """
+        components = self._component_set.components()
+        for i in self._images.indices():
+            cmp_values = own[i] if i in own \
+                else self._component_params(i, params)
+            names = components[i].density_disk().image_params()
+            values.setdefault(i, {}).update(
+                {name: cmp_values[name] for name in names})
         return values
 
     def _rotation_factors(
@@ -496,11 +538,15 @@ class GravityPlan:
     ) -> ParamValues:
         """
         Return the values of the parameters of the component of the given
-        index (by its own names), from those of the galaxy.
+        index (by its own names), from those of the galaxy, with the
+        face-on light of its image traits, if any (see ImageMaps).
         """
         component = self._component_set.components()[index]
         mapping = self._component_set.mappings()[index]
-        return {p: params[mapping[p]] for p in component.pdescs()}
+        values = {p: params[mapping[p]] for p in component.pdescs()}
+        if index in self._images.indices():
+            values |= self._images.values(index, values)
+        return values
 
 
 def _pressure_density(
