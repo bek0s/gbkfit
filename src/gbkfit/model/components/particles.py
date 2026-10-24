@@ -290,8 +290,11 @@ class ParticlesPlan(ComponentPlan):
                 for key, column in self._particles.items()}
             x, y, depth, velocity = _sky(chunk, params)
             points, xs, ys = _pixels(x, y, grid)
+            # (the plane of each in the slab of the grid, from its plane
+            # slab_zero of the depth axis; see NativeGrid)
             zs = np.floor((depth[points] - grid['spat_zero'][2])
-                          / grid['spat_step'][2] + 0.5).astype(int)
+                          / grid['spat_step'][2] + 0.5).astype(int) \
+                - grid['slab_zero']
             kept = (zs >= 0) & (zs < size_z)
             index = (zs[kept] * size_y + ys[kept]) * size_x + xs[kept]
             light = chunk['flux'][points][kept] / area

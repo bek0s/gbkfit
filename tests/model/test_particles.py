@@ -49,9 +49,15 @@ def disk_particles(path, n=200_000, seed=1):
 
 
 def evaluate(driver, galaxy, properties, line_of_sight='flat'):
+    """
+    The cube of a galaxy along a line of sight (its type, or its
+    options).
+    """
+    if isinstance(line_of_sight, str):
+        line_of_sight = dict(type=line_of_sight)
     group = observation_group([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
-        line_of_sight=dict(type=line_of_sight), observable=CUBE)])
+        line_of_sight=line_of_sight, observable=CUBE)])
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     return group.model_h(params.evaluate())[0]['spectra']['d'].astype(float)
 
@@ -84,6 +90,21 @@ def test_particles_of_a_disk_are_seen_as_the_disk(
                   / disk_image[bright]) < 0.2
     difference = np.abs(velocity - disk_velocity)[bright]
     assert np.max(difference) < 10 and np.mean(difference) < 2
+
+
+def test_particles_go_to_their_planes_in_slabs(driver, tmp_path):
+    # A march in slabs of two planes of the depth axis (the option slab)
+    # places each particle in its plane of the slab that has it: the cube
+    # of the whole axis at once
+    particles = dict(components=[dict(
+        type='particles',
+        file=disk_particles(tmp_path / 'disk.npz', n=20_000),
+        emission=dict(type='lines'))])
+    whole = evaluate(driver, particles, GEOMETRY, 'transfer')
+    slabs = evaluate(
+        driver, particles, GEOMETRY, dict(type='transfer', slab=2))
+    np.testing.assert_allclose(
+        slabs, whole, rtol=1e-5, atol=1e-6 * whole.max())
 
 
 def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
