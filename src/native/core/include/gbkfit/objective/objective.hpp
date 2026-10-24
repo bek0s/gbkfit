@@ -117,12 +117,13 @@ objective_amplitude_terms(
 // The term of value i in the noise residual of a data item whose noise is
 // fitted (see LikelihoodGaussian): c^2 log(noise^2 / (scale_minimum
 // error)^2), c the factor of its residual (see objective_residual: the
-// weight, times mdl_w and obs_m where the model has a value), and error
-// that of obs_e (1 without errors). It is the share of the value in the
-// normalisation of the Gaussian, c^2 log(noise^2), less a part that the
-// noise does not change, so that it is never negative (the scale is at
-// least scale_minimum). The values the data mask have none: an upper
-// limit is a probability, which has no normalisation.
+// weight, times mdl_w and obs_m), and error that of obs_e (1 without
+// errors). It is the share of the value in the normalisation of the
+// Gaussian, c^2 log(noise^2), less a part that the noise does not change,
+// so that it is never negative (the scale is at least scale_minimum). The
+// values the data mask have none (an upper limit is a probability, which
+// has no normalisation), nor those the model lacks (their residual,
+// 'missing', does not take the noise).
 template<typename T> constexpr double
 objective_noise_term(
         long long i,
@@ -130,17 +131,15 @@ objective_noise_term(
         const T* mdl_d, const T* mdl_w,
         T weight, T scale, T jitter, T scale_minimum)
 {
-    if (obs_m && obs_m[i] == 0) {
+    if ((obs_m && obs_m[i] == 0) || std::isnan(mdl_d[i])) {
         return 0;
     }
     double c = weight;
-    if (!std::isnan(mdl_d[i])) {
-        if (mdl_w) {
-            c *= mdl_w[i];
-        }
-        if (obs_m) {
-            c *= obs_m[i];
-        }
+    if (mdl_w) {
+        c *= mdl_w[i];
+    }
+    if (obs_m) {
+        c *= obs_m[i];
     }
     // (noise / (scale_minimum error), in double precision)
     const double error = obs_e ? double(obs_e[i]) : 1.0;

@@ -297,6 +297,35 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     assert objective.chi2(compact) > objective.chi2(truth)
 
 
+def test_values_the_model_lacks_take_no_noise(driver):
+    # Their residual, missing_residual, does not take the fitted noise:
+    # they add nothing to its normalisation (the noise residual), sum
+    # log((f e)^2 / (f_min e)^2) over the values the model has
+    def group(observable, dataset=None):
+        likelihood = None if dataset is None else LikelihoodGaussian(
+            missing_residual=3, noise=dict(
+                moment1=dict(scale=True, scale_minimum=0.1)))
+        observation = ObservationSky(
+            observable, Flat(), driver, data=dataset, likelihood=likelihood,
+            name='obs')
+        return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
+    image = group(observable_parser.load(dict(
+        type='pixel_moments', size=[24, 24], orders=[0, 1])))
+    model = image.model_h(ParamSpace(image.pdescs(), DISK).evaluate())[0]
+    dataset = DatasetPixelMoments({
+        order: Data(model[f'moment{order}']['d'], error=np.full((24, 24), 5.0))
+        for order in (0, 1)})
+    objective = Objective(group(PixelMoments.from_data(dataset), dataset))
+    compact = ParamSpace(objective.pdescs(), DISK | dict(
+        pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
+    moment1 = objective.group().model_h(compact)[0]['moment1']['d']
+    has = ~np.isnan(moment1) & (dataset['moment1'].mask() != 0)
+    assert np.any(np.isnan(moment1) & (dataset['moment1'].mask() != 0))
+    objective.chi2(compact)
+    assert objective.noise_chi2() == pytest.approx(
+        np.count_nonzero(has) * np.log((2 / 0.1) ** 2), rel=1e-6)
+
+
 def correlated_data(rng, correlation):
     """
     An image of noise whose errors differ, with some pixels masked, and

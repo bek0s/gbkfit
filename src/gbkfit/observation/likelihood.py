@@ -288,9 +288,11 @@ class LikelihoodGaussian(Likelihood):
     Least squares then fit the noise too, and exactly, as do the other
     fitters. Masked values with an upper limit take the fitted noise of
     their error, but add nothing (a probability has no normalisation);
-    values the model lacks cost missing_residual, and add their part. The
-    chi-square has the noise residuals; the reduced chi-square of a fit
-    does not (see Objective.noise_chi2).
+    values the model lacks cost missing_residual, which does not take the
+    noise, and add nothing either (counting them would bias the scale low,
+    by about half their share of the values). The chi-square has the
+    noise residuals; the reduced chi-square of a fit does not (see
+    Objective.noise_chi2).
 
     The residuals of a data item whose noise is correlated (see Data:
     e.g. by the beam of a radio image) are whitened. The noise of its
