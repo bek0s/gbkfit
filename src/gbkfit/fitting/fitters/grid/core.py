@@ -74,16 +74,19 @@ class FitterGrid(Fitter):
     """
     A brute-force grid (e.g. 3D Barolo's SPACEPAR): the chi-square at
     every combination of the values of the free elements (see
-    FitParamGrid), evaluated in batches. Its best solution is the point
-    of the lowest chi-square. With two free elements and the others
-    fixed, it maps how they trade off (e.g. the inclination and the
-    rotation of a ring: free one element of each node-wise parameter).
+    FitParamGrid), with that of the priors on several parameters, if any
+    (the cost of the optimizers; see FitProblem.cost), evaluated in
+    batches. Its best solution is the point of the lowest. With two free
+    elements and the others fixed, it maps how they trade off (e.g. the
+    inclination and the rotation of a ring: free one element of each
+    node-wise parameter).
 
     Its diagnostics 'grid' hold the names of the free elements, the
     values of each on the grid ('axes') and the chi-square of every point
-    ('chi2', of the shape of the grid, the first element along the first
-    axis; inf where the parameters cannot be evaluated, NaN where a
-    stopped grid did not evaluate it).
+    ('chi2', with that of the priors on several parameters; of the shape
+    of the grid, the first element along the first axis; inf where the
+    parameters cannot be evaluated, NaN where a stopped grid did not
+    evaluate it).
 
     Parameters
     ----------
@@ -157,7 +160,7 @@ class FitterGrid(Fitter):
         for start in range(0, npoints, self._batch):
             end = min(start + self._batch, npoints)
             try:
-                chi2[start:end] = problem.chi2_batch(points[start:end])
+                chi2[start:end] = problem.cost_batch(points[start:end])
             except FitStopped:
                 stopped = True
                 break

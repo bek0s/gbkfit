@@ -522,6 +522,18 @@ def test_a_grid_maps_the_chi2_of_two_free_elements():
         [grid['axes'][0][2], grid['axes'][1][3]])))
 
 
+def test_a_grid_takes_the_priors_on_several_parameters():
+    # A tight prior on posa at 36 moves the best point of the grid there
+    from gbkfit.fitting.fitters.grid import FitterGrid
+    objective = mock_objective(DriverHost())
+    properties = TRUE | dict(
+        posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=11))
+    params = ParamSpace(objective.pdescs(), properties, priors=[
+        dict(type='gauss', expr='posa', mean=36, std=0.01)])
+    result = FitterGrid().fit(objective, params)
+    assert result.best().free['posa'] == 36
+
+
 def test_a_stopped_grid_keeps_the_points_it_evaluated():
     from gbkfit.fitting.fitters.grid import FitterGrid
     objective = mock_objective(DriverHost())
