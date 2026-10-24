@@ -8,7 +8,7 @@ from typing import Any, Literal, Self
 
 import numpy as np
 
-from gbkfit.dataset import NoiseCorrelation
+from gbkfit.dataset import Dataset, NoiseCorrelation
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
@@ -70,26 +70,18 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """Return the parameters of the likelihood, by name."""
         return {}
 
-    @abc.abstractmethod
-    def fitted_noise(self) -> dict[str, FittedNoise]:
+    def check(self, keys: Sequence[str], data: Dataset) -> None:
         """
-        Return how the noise of data items is fitted, by name, for those
-        whose noise is fitted (see LikelihoodGaussian).
+        Check that it suits an observation of the given data items, of the
+        given data.
+
+        Raises
+        ------
+        ConfigError
+            If it does not (e.g. its options name items that the
+            observation does not have); here, it suits any.
         """
         pass
-
-    def noise_params(self, key: str) -> tuple[str | None, str | None]:
-        """
-        Return the names of the parameters of the scale and of the jitter
-        of the noise of the data item of the given name (see
-        LikelihoodGaussian), None for those that are not fitted.
-        """
-        noise = self.fitted_noise().get(key)
-        if noise is None:
-            return None, None
-        return (
-            f'{self._prefix}noise_scale_{key}' if noise.scale else None,
-            f'{self._prefix}noise_jitter_{key}' if noise.jitter else None)
 
     def noise(
             self,
@@ -99,69 +91,18 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
     ) -> np.ndarray:
         """
         Return the noise of the values of the data item of the given name,
-        of its errors (1 where it has none), at the values of the
-        parameters: the errors, or with a fitted noise (see
-        LikelihoodGaussian), sqrt((f e)^2 + j^2).
+        of its errors, at the values of the parameters (e.g. with a fitted
+        noise; see LikelihoodGaussian): the errors here, 1 where it has
+        none.
         """
-        error = np.ones(()) if error is None else error
-        scale, jitter = self.noise_params(key)
-        return np.hypot(
-            (1.0 if scale is None else float(params[scale])) * error,
-            0.0 if jitter is None else float(params[jitter]))
-
-    def weight(self, key: str) -> float:
-        """
-        Return the weight of the residuals of the data item of the given
-        name (see LikelihoodGaussian); 1 here.
-        """
-        return 1.0
-
-    def named_items(self) -> frozenset[str]:
-        """
-        Return the names of the data items that its options name (e.g.
-        their weights, upper limits or fitted noise; see
-        LikelihoodGaussian); none here.
-        """
-        return frozenset()
+        return np.ones(()) if error is None else error
 
     @abc.abstractmethod
-    def missing_residual(self) -> float | None:
-        """
-        Return the residual of a value that the model does not have where
-        the data have one, if given (see LikelihoodGaussian).
-        """
-        pass
-
     def takes_lacking_values(self) -> bool:
         """
         Check whether it takes the values that the model lacks where the
         data have some (e.g. the velocity of a spectrum below the
-        flux_floor of a moment map): with a missing_residual here.
-        """
-        return self.missing_residual() is not None
-
-    @abc.abstractmethod
-    def upper_limit(self, key: str) -> tuple[float, float] | None:
-        """
-        Return the detection limit below which the data item of the given
-        name is where it is masked, and the noise there, if given (see
-        LikelihoodGaussian).
-        """
-        pass
-
-    def footprint(self, key: str) -> np.ndarray | None:
-        """
-        Return where the data item of the given name was observed, for its
-        upper limit (see LikelihoodGaussian): 1 inside, 0 outside; None
-        for all of it (here).
-        """
-        return None
-
-    @abc.abstractmethod
-    def white_floor(self) -> float:
-        """
-        Return the share of the variance of correlated noise taken as white
-        (see LikelihoodGaussian).
+        flux_floor of a moment map; see LikelihoodGaussian).
         """
         pass
 
@@ -378,33 +319,117 @@ class LikelihoodGaussian(Likelihood):
                     minimum=0)
         return pdescs
 
+    def check(self, keys: Sequence[str], data: Dataset) -> None:
+        """
+        Check that it suits an observation of the given data items, of the
+        given data.
+
+        Raises
+        ------
+        ConfigError
+            If its options name items that the observation does not have
+            (e.g. a typo in the names of the weights, the upper limits or
+            the fitted noise), it fits both the scale and the jitter of the
+            noise of an item whose errors are all equal, or the noise of an
+            item is correlated and its mask does not keep the pixels of
+            correlated noise (see correlated_pixels), or it has an upper
+            limit.
+        """
+        weights = () if isinstance(self._weights, Real) else self._weights
+        named = {*weights, *(self._upper_limits or ()), *self._noise}
+        if unknown := sorted(named - set(keys)):
+            raise ConfigError(
+                f"the options of the likelihood name data items that the "
+                f"observation does not have: {unknown}; its items are "
+                f"{list(keys)}")
+        for key, noise in self._noise.items():
+            if noise.scale and noise.jitter:
+                _check_errors_differ(key, data)
+        for key in keys:
+            if data.noise_correlation(key) is None:
+                continue
+            correlated_pixels(key, data[key].mask())
+            if self.upper_limit(key) is not None:
+                raise ConfigError(
+                    f"the noise of '{key}' is correlated, which does not go "
+                    f"with upper limits")
+
+    def noise_params(self, key: str) -> tuple[str | None, str | None]:
+        """
+        Return the names of the parameters of the scale and of the jitter
+        of the noise of the data item of the given name, None for those
+        that are not fitted.
+        """
+        noise = self._noise.get(key)
+        if noise is None:
+            return None, None
+        return (
+            f'{self._prefix}noise_scale_{key}' if noise.scale else None,
+            f'{self._prefix}noise_jitter_{key}' if noise.jitter else None)
+
+    def noise(
+            self,
+            key: str,
+            error: np.ndarray | None,
+            params: ParamValues
+    ) -> np.ndarray:
+        """
+        Return the noise of the values of the data item of the given name,
+        of its errors (1 where it has none), at the values of the
+        parameters: the errors, or with a fitted noise, sqrt((f e)^2 +
+        j^2).
+        """
+        error = np.ones(()) if error is None else error
+        scale, jitter = self.noise_params(key)
+        return np.hypot(
+            (1.0 if scale is None else float(params[scale])) * error,
+            0.0 if jitter is None else float(params[jitter]))
+
     def weight(self, key: str) -> float:
         """Return the weight of the data item of the given name."""
         if isinstance(self._weights, Real):
             return self._weights
         return self._weights.get(key, 1.0)
 
-    def named_items(self) -> frozenset[str]:
-        weights = () if isinstance(self._weights, Real) else self._weights
-        return frozenset(
-            [*weights, *(self._upper_limits or ()), *self._noise])
-
     def missing_residual(self) -> float | None:
+        """
+        Return the residual of a value that the model does not have where
+        the data have one, if given.
+        """
         return self._missing_residual
 
+    def takes_lacking_values(self) -> bool:
+        return self._missing_residual is not None
+
     def upper_limit(self, key: str) -> tuple[float, float] | None:
+        """
+        Return the detection limit below which the data item of the given
+        name is where it is masked, and the noise there, if given.
+        """
         if self._upper_limits is None or key not in self._upper_limits:
             return None
         limit = self._upper_limits[key]
         return limit['limit'], limit['error']
 
     def footprint(self, key: str) -> np.ndarray | None:
+        """
+        Return where the data item of the given name was observed, for its
+        upper limit: 1 inside, 0 outside; None for all of it.
+        """
         return self._footprints.get(key)
 
     def fitted_noise(self) -> dict[str, FittedNoise]:
+        """
+        Return how the noise of data items is fitted, by name, for those
+        whose noise is fitted.
+        """
         return dict(self._noise)
 
     def white_floor(self) -> float:
+        """
+        Return the share of the variance of correlated noise taken as
+        white.
+        """
         return self._white_floor
 
 
@@ -522,6 +547,21 @@ def _whitening(
             f"the correlation of the noise of '{key}' is singular with the "
             f"white floor {white_floor} (see LikelihoodGaussian): raise it"
         ) from None
+
+
+def _check_errors_differ(key: str, data: Dataset) -> None:
+    """
+    Raise ConfigError unless the values of a data item whose scale and
+    jitter of the noise are fitted have errors that differ (with equal
+    errors, or none, the two are one).
+    """
+    error = data[key].error()
+    used = None if error is None else error[data[key].mask() != 0]
+    if used is None or used.size == 0 or np.all(used == used[0]):
+        raise ConfigError(
+            f"the scale and the jitter of the noise of '{key}' cannot both "
+            f"be fitted: its errors are all equal, or it has none, so only "
+            f"(scale error)^2 + jitter^2 counts; fit one of them")
 
 
 def _check_noise(key: str, info: Mapping[str, Any]) -> FittedNoise:
@@ -687,20 +727,8 @@ class LikelihoodUser(Likelihood):
         return {f'{self._prefix}{name}': ParamScalarDesc()
                 for name in self._params}
 
-    def fitted_noise(self) -> dict[str, FittedNoise]:
-        return {}
-
-    def missing_residual(self) -> float | None:
-        return None
-
     def takes_lacking_values(self) -> bool:
         return True
-
-    def upper_limit(self, key: str) -> tuple[float, float] | None:
-        return None
-
-    def white_floor(self) -> float:
-        return 0.0
 
     def evaluate(
             self,

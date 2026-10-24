@@ -14,7 +14,7 @@ from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import SeenGalaxies
-from .likelihood import Likelihood, LikelihoodGaussian, correlated_pixels
+from .likelihood import Likelihood, LikelihoodGaussian
 from .observables import FluxScale, ObservablePlan
 
 
@@ -68,12 +68,10 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         If a name is invalid, there are no galaxies or they repeat, there
         is a likelihood without data, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
-        likelihood fits a noise but it has no name, its likelihood names
-        items that it does not have (see _check_items), fits both the
-        scale and
-        the jitter of the noise of an item whose errors are all equal (see
-        _check_noise), or the noise of an item is correlated where its
-        data or its likelihood cannot take it (see _check_correlations).
+        likelihood fits a noise but it has no name, the noise of an item
+        is correlated where its kind of data cannot have it (see
+        Dataset.noise_correlation), or its likelihood does not suit it
+        (see Likelihood.check).
     """
 
     def __init__(
@@ -105,9 +103,11 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         if data is not None:
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
-            _check_items(likelihood, keys)
-            _check_noise(likelihood, keys, data)
-            _check_correlations(likelihood, keys, data)
+            for key in keys:
+                # (the correlation of its noise must be one its kind of data
+                # can have)
+                data.noise_correlation(key)
+            likelihood.check(keys, data)
             if name is None and likelihood.pdescs():
                 raise ConfigError(
                     "an observation whose likelihood has parameters (e.g. "
@@ -367,64 +367,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
             The images, by name.
         """
         return {}
-
-
-def _check_items(likelihood: Likelihood, keys: Sequence[str]) -> None:
-    """
-    Raise ConfigError if the options of a likelihood name data items that
-    an observation of the given items does not have (e.g. a typo in the
-    names of the weights, the upper limits or the fitted noise; see
-    LikelihoodGaussian).
-    """
-    if unknown := sorted(likelihood.named_items() - set(keys)):
-        raise ConfigError(
-            f"the options of the likelihood name data items that the "
-            f"observation does not have: {unknown}; its items are "
-            f"{list(keys)}")
-
-
-def _check_noise(
-        likelihood: Likelihood,
-        keys: Sequence[str],
-        data: Dataset
-) -> None:
-    """
-    Raise ConfigError unless the data items whose scale and jitter of the
-    noise a likelihood fits (see LikelihoodGaussian) have errors that
-    differ between their values (with equal errors, or none, the two are
-    one).
-    """
-    for key, noise in likelihood.fitted_noise().items():
-        if not (noise.scale and noise.jitter):
-            continue
-        error = data[key].error()
-        used = None if error is None else error[data[key].mask() != 0]
-        if used is None or used.size == 0 or np.all(used == used[0]):
-            raise ConfigError(
-                f"the scale and the jitter of the noise of '{key}' cannot "
-                f"both be fitted: its errors are all equal, or it has none, "
-                f"so only (scale error)^2 + jitter^2 counts; fit one of them")
-
-
-def _check_correlations(
-        likelihood: Likelihood,
-        keys: Sequence[str],
-        data: Dataset
-) -> None:
-    """
-    Raise ConfigError unless the given items of the data whose noise is
-    correlated can be (see Dataset.noise_correlation), keep the pixels of
-    correlated noise (see correlated_pixels), and have no upper limits in
-    their likelihood (see LikelihoodGaussian).
-    """
-    for key in keys:
-        if data.noise_correlation(key) is None:
-            continue
-        correlated_pixels(key, data[key].mask())
-        if likelihood.upper_limit(key) is not None:
-            raise ConfigError(
-                f"the noise of '{key}' is correlated, which does not go "
-                f"with upper limits")
 
 
 observation_parser = parseutils.TypedParser(Observation)

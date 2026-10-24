@@ -197,20 +197,17 @@ class ObservationSky(Observation):
         If a name is invalid, there are no galaxies or they repeat, a band
         is given to an observable that is not an image, it has a flux
         scale or offsets but no name, its flux scale is not one of its
-        observable, the offsets are not position
-        and velocity, true or false, the scale is not one integer of at
-        least 1 for each axis, there is a likelihood without data, the data are
-        not those of the observable, its model can lack values but its
-        likelihood has no residual for them (see LikelihoodGaussian), its
-        likelihood fits a noise but it has no name, or fits the noise of
-        items that the observable does not
-        have, or both the scale and the jitter of the noise of an item
-        whose errors are all equal (see _check_noise), the noise of an
-        item is correlated where its data or its likelihood cannot take
-        it (see _check_correlations), the observable cannot be seen
-        through the instrument (see Observable.check_instrument), the
-        dtype or the fft_dtype is not one of the native modules (see
-        Driver.dtypes), or the fft_dtype is less precise than the dtype.
+        observable, the offsets are not position and velocity, true or
+        false, the scale is not one integer of at least 1 for each axis,
+        there is a likelihood without data, the data are not those of the
+        observable, its model can lack values but its likelihood has no
+        residual for them (see LikelihoodGaussian), its likelihood fits a
+        noise but it has no name, the noise of an item is correlated where
+        its kind of data cannot have it, its likelihood does not suit it
+        (see Likelihood.check), the observable cannot be seen through the
+        instrument (see Observable.check_instrument), the dtype or the
+        fft_dtype is not one of the native modules (see Driver.dtypes), or
+        the fft_dtype is less precise than the dtype.
     """
 
     @staticmethod
