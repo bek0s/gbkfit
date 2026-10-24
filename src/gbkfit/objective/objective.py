@@ -2,15 +2,14 @@ from collections.abc import Sequence
 from typing import Any, NamedTuple, Self
 
 import numpy as np
-import scipy.special
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Extras
-from gbkfit.observation import Observation, ObservationGroup
-from gbkfit.observation.likelihood import LikelihoodUser, Whitening, whitening
+from gbkfit.objective.comparisons import comparison
+from gbkfit.objective.solves import Solution, Solve, SolveGaussian
+from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import iterutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -19,87 +18,16 @@ __all__ = [
 ]
 
 
-class _Noise(NamedTuple):
+class _Solved(NamedTuple):
     """
-    The fitted noise of a data item (see LikelihoodGaussian): the names of
-    the parameters of its scale and of its jitter (None for those not
-    fitted), and the smallest scale (1 if the scale is not fitted).
+    Solved values (see Solve): the scales of a data item of an observation
+    (its index), one at each point of the axes of the item but one, and
+    how they are solved.
     """
-    scale: str | None
-    jitter: str | None
-    scale_minimum: float
-
-
-class _Whitener:
-    """
-    The whitening of the residuals of a data item (see Whitening) on the
-    device of a driver: the indices of its pixels and its matrices (that
-    of the sky transposed), which copies share (see shared), and the
-    residuals of its pixels and their products, of its own.
-    """
-
-    def __init__(
-            self,
-            driver: Driver,
-            pixels: DeviceArray,
-            spatial: DeviceArray | None,
-            spectral: DeviceArray | None,
-            nchannels: int,
-            dtype: np.dtype
-    ):
-        self._driver = driver
-        self._pixels = pixels
-        self._spatial = spatial
-        self._spectral = spectral
-        self._dtype = dtype
-        # (the channels by the pixels; one channel for an image)
-        size = (nchannels, pixels.size)
-        self._values = driver.mem_alloc_d(size, dtype)
-        self._products = driver.mem_alloc_d(size, dtype)
-
-    @classmethod
-    def on_device(
-            cls,
-            driver: Driver,
-            whitening: Whitening,
-            shape: tuple[int, ...],
-            dtype: np.dtype
-    ) -> Self:
-        """
-        Return the whitening on the device of a driver, for residuals of a
-        shape and a type.
-        """
-        spatial = None if whitening.spatial is None \
-            else driver.mem_copy_h2d(np.ascontiguousarray(
-                whitening.spatial.T, dtype))
-        spectral = None if whitening.spectral is None \
-            else driver.mem_copy_h2d(whitening.spectral.astype(dtype))
-        return cls(
-            driver, driver.mem_copy_h2d(whitening.pixels), spatial, spectral,
-            int(np.prod(shape[:-2])), dtype)
-
-    def shared(self) -> Self:
-        """
-        Return a copy that shares its pixels and matrices, with residuals
-        of its own.
-        """
-        return type(self)(
-            self._driver, self._pixels, self._spatial, self._spectral,
-            self._values.shape[0], self._dtype)
-
-    def __call__(self, residual: DeviceArray) -> None:
-        """Whiten the residuals of the item (of its shape) in place."""
-        driver = self._driver
-        values, products = self._values, self._products
-        flat = residual.reshape(values.shape[0], -1)
-        driver.mem_gather(flat, self._pixels, out=values)
-        if self._spatial is not None:
-            driver.math_matmul(values, self._spatial, out=products)
-            values, products = products, values
-        if self._spectral is not None:
-            driver.math_matmul(self._spectral, values, out=products)
-            values, products = products, values
-        driver.mem_scatter(values, self._pixels, flat)
+    observation: int
+    key: str
+    axis: int
+    solve: Solve
 
 
 class Objective:
@@ -107,42 +35,19 @@ class Objective:
     The comparison of the models of a group of observations with their
     data, each under its likelihood.
 
-    The likelihood is Gaussian (but a user likelihood, see below). The
-    residual of each value is (model - data) / error, times the weights
-    of the model (if any) and of the data item (from the likelihood of
-    its observation). Values the data mask have a residual of 0 and do
-    not count. Where the data have a value but the model none (NaN, e.g.
-    the velocity of a spectrum without flux), the residual is the
-    missing_residual of the likelihood (times the weight of the item): a
-    model must not lower the chi-square by having no values. A data item
-    with an upper limit (see LikelihoodGaussian) gives its masked values
-    the residual of a non-detection instead. Each observation checks that
-    its data are of the form of its model (see Observation).
+    Each observation has a comparison of its kind of likelihood (see
+    Comparison): its residuals, of each value of its data, and the terms
+    of the chi-square beyond them (e.g. the noise residuals of a fitted
+    noise; see LikelihoodGaussian). The objective sums them.
 
-    A likelihood with amplitudes of spectra (see LikelihoodGaussian)
-    scales each spectrum of the model by its best amplitude before the
-    residuals, whose prior adds a residual of each spectrum after those of
-    the data; its log-likelihood has them integrated out. They are
-    nuisance parameters (see nnuisance), and an extra output of their
-    observation, 'amplitudes'.
-
-    A likelihood with a fitted noise (see LikelihoodGaussian) divides the
-    residuals of its data items by their noise in place of their errors,
-    and adds the noise residual of each of those items after all the
-    other residuals of the observations (see residuals and noise_chi2).
-
-    The weighted residuals of a data item whose noise is correlated are
-    whitened (see LikelihoodGaussian): the sum of their squares is its
-    chi-square. The objective works out their whitening on its first
-    evaluation (see prepare); its copies with other data share it (see
-    with_data).
-
-    An observation of a user likelihood (see LikelihoodUser) has the
-    residuals its function gives for each data item, on the host, times
-    the weights of the model, of the data mask and of the item, as above;
-    or of a function of the log-likelihood, residuals of 0 and the
-    chi-square -2 log L (see residual_sums), which has no residuals for
-    least squares (see residuals).
+    Some values of parameters are solved at each evaluation, rather than
+    fitted (see Solve): for now, the amplitudes of the spectra of an
+    observation whose likelihood has them (see LikelihoodGaussian). The
+    comparison of the observation gives their sums, the solve their
+    values, and the comparison then compares the model times them. Their
+    priors add residuals after those of the data; the log-likelihood has
+    them integrated out. They are nuisance parameters (see nnuisance), and
+    an extra output of their observation, 'amplitudes'.
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -163,11 +68,11 @@ class Objective:
     Raises
     ------
     ConfigError
-        If an observation has no data.
+        If an observation has no data, or its comparison cannot be made
+        (see Comparison).
     """
 
     def __init__(self, group: ObservationGroup):
-        n = group.nobservations()
         observations = group.observations()
         if missing := [
                 i for i, obs in enumerate(observations) if obs.data() is None]:
@@ -176,58 +81,15 @@ class Objective:
                 f"none: {missing}")
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)
-        # The weight of each data item, and the residual of the values the
-        # model does not have, from the likelihood
-        self._weights_u = tuple(
-            {key: obs.likelihood().weight(key)
-             for key in obs.keys()}
-            for obs in observations)
-        # (none where the model cannot lack values: NaN would show one)
-        missing = [obs.likelihood().missing_residual() for obs in observations]
-        self._missing_residuals = tuple(
-            np.nan if residual is None else residual for residual in missing)
-        # The upper limit of each data item where it is masked, and its
-        # noise (NaN for none; see LikelihoodGaussian)
-        self._upper_limits = tuple(
-            {key: obs.likelihood().upper_limit(key) or (np.nan, np.nan)
-             for key in obs.keys()}
-            for obs in observations)
-        # The footprint of the upper limits of data items that have one,
-        # of their shape (see LikelihoodGaussian)
-        self._footprints = tuple(
-            _footprints(obs, data) for obs, data in zip(
-                observations, self._datasets))
-        # The data item of the spectra of amplitudes of each observation,
-        # if any, the axis of its spectra, and the standard deviation of
-        # their prior
-        self._amplitude_items = tuple(
-            obs.spectra_item()
-            if obs.likelihood().amplitudes() is not None else None
-            for obs in observations)
-        self._amplitude_axes = tuple(
-            obs.spectra_axis() for obs in observations)
-        self._amplitude_sigmas = tuple(
-            obs.likelihood().amplitude_sigma() for obs in observations)
-        # The data items of each observation whose noise is fitted, by
-        # name, and their noise residuals, in float64 (each sums a term of
-        # every value of its item: float32 would round it off)
-        self._noise = tuple(
-            {key: _Noise(*obs.likelihood().noise_params(key),
-                         noise.scale_minimum if noise.scale else 1.0)
-             for key, noise in obs.likelihood().fitted_noise().items()}
-            for obs in observations)
-        self._noise_residuals = [
-            np.zeros(len(noise)) for noise in self._noise]
-        # The user likelihood of each observation, if any, and the
-        # chi-square of those of the log-likelihood (see LikelihoodUser)
-        self._users = tuple(
-            obs.likelihood()
-            if isinstance(obs.likelihood(), LikelihoodUser) else None
-            for obs in observations)
-        self._user_chi2 = [0.0] * n
-        # The whitening to share with copies of it of other data, of each
-        # data item of each observation, by name (see with_data)
-        self._shared = iterutils.make_list(n, {})
+        self._comparisons = tuple(comparison(obs) for obs in observations)
+        # (the amplitudes of spectra, of their likelihoods: of a prior of
+        # mean 1, cut at 0)
+        self._solved = tuple(
+            _Solved(
+                i, obs.spectra_item(), obs.spectra_axis(),
+                SolveGaussian(1.0, obs.likelihood().amplitude_sigma(), 0.0))
+            for i, obs in enumerate(observations)
+            if obs.likelihood().amplitudes() is not None)
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -235,54 +97,14 @@ class Objective:
         Drop its memory (see prepare and close): the next evaluation
         allocates it again.
         """
-        n = self.nobservations()
-        # The data items of each observation, one after the other, in 1d
-        # arrays: the data (d), masks (m) and errors (e)
-        self._d_dataset_d_vector = iterutils.make_list(n, None)
-        self._d_dataset_m_vector = iterutils.make_list(n, None)
-        self._d_dataset_e_vector = iterutils.make_list(n, None)
-        # Views of the above, as the nd arrays of each item
-        self._d_dataset_d_nddata = iterutils.make_list(n, {})
-        self._d_dataset_m_nddata = iterutils.make_list(n, {})
-        self._d_dataset_e_nddata = iterutils.make_list(n, {})
-        # The footprints of upper limits of the data items, by name
-        self._d_footprints = iterutils.make_list(n, {})
-        # The residuals of each observation, in 1d arrays on the host (h)
-        # and the device (d), and their views as the nd arrays of each item
-        self._h_residual_vector = iterutils.make_list(n, None)
-        self._d_residual_vector = iterutils.make_list(n, None)
-        self._h_residual_nddata = iterutils.make_list(n, {})
-        self._d_residual_nddata = iterutils.make_list(n, {})
-        # The sum of the residuals of each observation (1d, size 1)
-        self._h_residual_scalar = iterutils.make_list(n, None)
-        self._d_residual_scalar = iterutils.make_list(n, None)
-        # The sums of each spectrum of amplitudes (A and B, see
-        # LikelihoodGaussian) on the host (h) and the device (d), the
-        # amplitudes, which scale the spectra of the model, and the
-        # residuals of their prior (views of the end of the residuals of
-        # the observation)
-        self._h_amplitude_sums = iterutils.make_list(n, None)
-        self._d_amplitude_sums = iterutils.make_list(n, None)
-        self._h_amplitudes = iterutils.make_list(n, None)
-        self._d_amplitudes = iterutils.make_list(n, None)
-        self._h_prior_residuals = iterutils.make_list(n, None)
-        self._d_prior_residuals = iterutils.make_list(n, None)
-        # The squares of the noise residuals of the data items whose noise
-        # is fitted, on the host (h) and the device (d)
-        self._h_noise_sums = iterutils.make_list(n, None)
-        self._d_noise_sums = iterutils.make_list(n, None)
-        # The whitening of the residuals of the data items of each
-        # observation whose noise is correlated, by name, and the numbers
-        # of independent values they are worth (see Whitening)
-        self._whiteners = iterutils.make_list(n, {})
-        self._nindependent = iterutils.make_list(n, {})
-        # The share of its values that each data item whose noise is fitted
-        # counts in its noise residual: 1, but the independent values they
-        # are worth over their number for correlated noise (see
-        # LikelihoodGaussian)
-        self._noise_shares = [np.ones(len(noise)) for noise in self._noise]
-        # The native objective of each observation, for its driver
-        self._backends = iterutils.make_list(n, None)
+        for comparison_ in self._comparisons:
+            comparison_.close()
+        # The values of each solve of the last evaluation, and its scales
+        # on the host (h) and the device (d) of its observation
+        n = len(self._solved)
+        self._solutions: list[Solution | None] = [None] * n
+        self._h_scales: list[np.ndarray | None] = [None] * n
+        self._d_scales: list[DeviceArray | None] = [None] * n
         # The memory is allocated on the first evaluation (see prepare)
         self._prepared = False
 
@@ -310,30 +132,22 @@ class Objective:
     def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
         Return a copy of it with other data of its observations (e.g. those
-        of a bootstrap; see ObservationGroup.with_data). The copy shares
-        the whitening of the residuals of the data items whose noise is
-        correlated as before, with the same masks, if it is worked out
-        (see prepare): e.g. the refits of a bootstrap work it out once.
+        of a bootstrap; see ObservationGroup.with_data). The comparisons of
+        the copy share what they can with its own (see Comparison.share):
+        e.g. the refits of a bootstrap work out the whitening of correlated
+        noise once.
         """
         objective = Objective(self._group.with_data(datasets))
-        for i, dataset in enumerate(objective.datasets()):
-            before = self._datasets[i]
-            for key, whitener in self._whiteners[i].items():
-                item, old = dataset[key], before[key]
-                if item.spatial_correlation() is old.spatial_correlation() \
-                        and item.spectral_correlation() \
-                        is old.spectral_correlation() \
-                        and np.array_equal(item.mask(), old.mask()):
-                    objective._shared[i][key] = (
-                        whitener, self._nindependent[i][key])
+        for new, old in zip(objective._comparisons, self._comparisons):
+            new.share(old)
         return objective
 
     def close(self) -> None:
         """
         Release its memory on the devices and the host now, rather than
         when Python collects it (e.g. hundreds of megabytes of the whitening
-        of correlated noise; see the class). The next evaluation allocates
-        it again.
+        of correlated noise; see LikelihoodGaussian). The next evaluation
+        allocates it again.
         """
         self._reset_memory()
 
@@ -353,99 +167,20 @@ class Objective:
 
     def prepare(self) -> None:
         """
-        Allocate the memory of the residuals, copy the data to the device of
-        each observation, and work out the whitening of the residuals of
-        data items whose noise is correlated (once, for every evaluation;
-        e.g. about 4 s for 7000 pixels), unless shared (see with_data). The
-        first evaluation calls it; it does nothing once done (until close).
+        Allocate its memory, and prepare the comparisons (see
+        Comparison.prepare; e.g. they work out the whitening of correlated
+        noise). The first evaluation calls it; it does nothing once done
+        (until close).
         """
         if self._prepared:
             return
-        for i in range(self.nobservations()):
-            dataset = self._datasets[i]
-            observation = self._group.observations()[i]
-            driver = observation.driver()
-            keys = observation.keys()
-            dtype = observation.dtype()
-            # The data items, one after the other (they have one shape);
-            # the residuals, and after them those of the prior of the
-            # amplitudes of spectra, if any
-            shape = dataset.shape()
-            npix = int(np.prod(shape))
-            nelem = npix * len(keys)
-            nprior = self._nprior(i)
-            self._d_dataset_d_vector[i] = driver.mem_alloc_d(nelem, dtype)
-            self._d_dataset_m_vector[i] = driver.mem_alloc_d(nelem, dtype)
-            self._d_dataset_e_vector[i] = driver.mem_alloc_d(nelem, dtype)
-            (self._h_residual_vector[i],
-             self._d_residual_vector[i]) = driver.mem_alloc_s(
-                nelem + nprior, dtype)
-            # (the sums are in double precision, of millions of terms)
-            (self._h_residual_scalar[i],
-             self._d_residual_scalar[i]) = driver.mem_alloc_s(1, np.float64)
-            for j, key in enumerate(keys):
-                data = dataset[key]
-                slice_ = slice(j * npix, (j + 1) * npix)
-                driver.mem_copy_h2d(
-                    data.data().ravel().astype(dtype),
-                    self._d_dataset_d_vector[i][slice_])
-                self._d_dataset_d_nddata[i][key] = \
-                    self._d_dataset_d_vector[i][slice_].reshape(shape)
-                if data.mask() is not None:
-                    driver.mem_copy_h2d(
-                        data.mask().ravel().astype(dtype),
-                        self._d_dataset_m_vector[i][slice_])
-                    self._d_dataset_m_nddata[i][key] = \
-                        self._d_dataset_m_vector[i][slice_].reshape(shape)
-                if data.error() is not None:
-                    driver.mem_copy_h2d(
-                        data.error().ravel().astype(dtype),
-                        self._d_dataset_e_vector[i][slice_])
-                    self._d_dataset_e_nddata[i][key] = \
-                        self._d_dataset_e_vector[i][slice_].reshape(shape)
-                if key in self._footprints[i]:
-                    self._d_footprints[i][key] = driver.mem_copy_h2d(
-                        self._footprints[i][key].astype(dtype))
-                self._h_residual_nddata[i][key] = \
-                    self._h_residual_vector[i][slice_].reshape(shape)
-                self._d_residual_nddata[i][key] = \
-                    self._d_residual_vector[i][slice_].reshape(shape)
-                if key in self._shared[i]:
-                    whitener, nindependent = self._shared[i][key]
-                    self._whiteners[i][key] = whitener.shared()
-                    self._nindependent[i][key] = nindependent
-                elif self._users[i] is None and (
-                        correlation := dataset.noise_correlation(key)) \
-                        is not None:
-                    whitening_ = whitening(
-                        key, data.mask(), correlation,
-                        observation.likelihood().white_floor())
-                    self._whiteners[i][key] = _Whitener.on_device(
-                        driver, whitening_, shape, dtype)
-                    self._nindependent[i][key] = whitening_.nindependent
-            self._backends[i] = driver.native_class('Objective', dtype)()
-            if self._amplitude_items[i] is not None:
-                # (one of each per spectrum: of the shape of the data, of 1
-                # along the axis of the spectra, to scale them)
-                spectra = tuple(
-                    1 if k == self._amplitude_axes[i] else n
-                    for k, n in enumerate(shape))
-                sums = [driver.mem_alloc_s(spectra, np.float64)
-                        for _ in range(2)]
-                self._h_amplitude_sums[i] = [h for h, _ in sums]
-                self._d_amplitude_sums[i] = [d for _, d in sums]
-                (self._h_amplitudes[i],
-                 self._d_amplitudes[i]) = driver.mem_alloc_s(spectra, dtype)
-                self._h_prior_residuals[i] = self._h_residual_vector[i][nelem:]
-                self._d_prior_residuals[i] = self._d_residual_vector[i][nelem:]
-            if self._noise[i]:
-                (self._h_noise_sums[i],
-                 self._d_noise_sums[i]) = driver.mem_alloc_s(
-                    len(self._noise[i]), np.float64)
-            for j, key in enumerate(self._noise[i]):
-                if key in self._nindependent[i]:
-                    self._noise_shares[i][j] = self._nindependent[i][key] \
-                        / np.count_nonzero(dataset[key].mask())
+        for comparison_ in self._comparisons:
+            comparison_.prepare()
+        for j, solved in enumerate(self._solved):
+            observation = self._group.observations()[solved.observation]
+            (self._h_scales[j],
+             self._d_scales[j]) = observation.driver().mem_alloc_s(
+                self._scales_shape(solved), observation.dtype())
         self._prepared = True
 
     def chi2(
@@ -455,7 +190,7 @@ class Objective:
     ) -> float:
         """
         Return the chi-square of all observations: the sum of their squared
-        weighted residuals (with those of the priors of amplitudes and
+        weighted residuals (with those of the priors of solved values and
         the noise residuals, if any; see residuals).
 
         Parameters
@@ -470,7 +205,11 @@ class Objective:
         float
             The chi-square.
         """
-        return float(sum(self.residual_sums(params, True, out_extra)))
+        self._update_residual_d(params, True, out_extra)
+        with self._group.timers().measure('objective_residual_sum_eval'):
+            chi2 = sum(comparison_.chi2() for comparison_ in self._comparisons)
+        return float(chi2 + sum(
+            np.sum(residuals ** 2) for residuals in self._solve_residuals()))
 
     def log_likelihood(
             self,
@@ -479,7 +218,7 @@ class Objective:
     ) -> float:
         """
         Return the log-likelihood of all observations: -chi2 / 2, and
-        with free amplitudes, their integral (see LikelihoodGaussian). The
+        with solved values, their integral (see Solve). The
         part of the Gaussian normalisation that depends only on the errors
         of the data is left out (with a fitted noise, the rest is in the
         chi-square, as its noise residuals).
@@ -520,7 +259,8 @@ class Objective:
             The chi-square and the log-likelihood.
         """
         chi2 = self.chi2(params, out_extra)
-        return chi2, -0.5 * chi2 + self._amplitude_terms()
+        return chi2, -0.5 * chi2 + sum(
+            solution.log_term for solution in self._solutions)
 
     def residuals(
             self,
@@ -530,7 +270,8 @@ class Objective:
         """
         Return the weighted residuals of all observations, one after the
         other, in a new array (in float64; see residual_vector_h for each
-        observation), and after them the noise residuals of each
+        observation), after them the residuals of the priors of the solved
+        values (see Solve), and then the noise residuals of each
         observation (see LikelihoodGaussian), if any.
 
         Parameters
@@ -549,8 +290,9 @@ class Objective:
         """
         self._check_residuals()
         vectors = self.residual_vector_h(params, True, out_extra)
+        noise = [c.noise_residuals() for c in self._comparisons]
         return np.concatenate(
-            [*vectors, *self._noise_residuals], dtype=np.float64)
+            [*vectors, *self._solve_residuals(), *noise], dtype=np.float64)
 
     def pointwise_log_likelihood(self, params: ParamValues) -> np.ndarray:
         """
@@ -574,14 +316,15 @@ class Objective:
         Raises
         ------
         NotImplementedError
-            If an observation fits its noise or the amplitudes of its
-            spectra, whose terms are sums over many points.
+            If an observation fits its noise, or values are solved (see
+            Solve), whose terms are sums over many points.
         """
-        if any(self._noise) or self.nnuisance():
+        if self._solved or any(
+                c.noise_residuals().size for c in self._comparisons):
             raise NotImplementedError(
                 "the log-likelihood of each point is not given with a fitted "
-                "noise or free amplitudes of spectra: their terms are sums "
-                "over many points")
+                "noise or solved values (e.g. amplitudes of spectra): their "
+                "terms are sums over many points")
         return -0.5 * self.residuals(params) ** 2
 
     def noise_chi2(self) -> float:
@@ -592,48 +335,40 @@ class Objective:
         chi-square); 0 without a fitted noise.
         """
         return float(sum(
-            np.sum(residuals ** 2) for residuals in self._noise_residuals))
+            np.sum(c.noise_residuals() ** 2) for c in self._comparisons))
 
     def amplitudes(self) -> list[np.ndarray | None]:
         """
-        Return the free amplitudes of the spectra of each observation (see
+        Return the amplitudes of the spectra of each observation (see
         LikelihoodGaussian), of the last evaluation, as new arrays of the
         shape of the spectra but their axis; None for the observations
         without them, or before an evaluation.
         """
-        return [
-            None if amplitudes is None
-            else np.squeeze(amplitudes, axis).copy()
-            for amplitudes, axis in zip(
-                self._h_amplitudes, self._amplitude_axes)]
+        amplitudes: list[np.ndarray | None] = [None] * self.nobservations()
+        for solved, solution in zip(self._solved, self._solutions):
+            if solution is not None:
+                amplitudes[solved.observation] = np.squeeze(
+                    solution.values, solved.axis).copy()
+        return amplitudes
 
     def nnuisance(self) -> int:
         """
         Return the number of nuisance parameters that the objective solves
-        itself: the amplitude of each spectrum (see LikelihoodGaussian).
-        The degrees of freedom of a fit exclude them.
+        itself (see Solve). The degrees of freedom of a fit exclude them.
         """
-        return sum(self._nprior(i) for i in range(self.nobservations()))
+        return sum(
+            int(np.prod(self._scales_shape(solved)))
+            for solved in self._solved)
 
     def nresiduals(self) -> int:
         """
-        Return the number of residuals that count: those of the values the
-        data do not mask (the values the model does not have count too,
-        with the missing_residual of their likelihood), all values of the
-        data items with upper limits (within their footprints, if any),
-        and that of the prior of each
-        amplitude of a spectrum, if any; not the noise residuals, which are
-        not of the data (see LikelihoodGaussian).
+        Return the number of residuals that count: those of the comparisons
+        (see Comparison.nresiduals), and that of the prior of each solved
+        value; not the noise residuals, which are not of the data (see
+        LikelihoodGaussian).
         """
-        return sum(
-            int(np.count_nonzero(footprints[key])) if key in footprints
-            else int(dataset[key].mask().size)
-            if not np.isnan(limits[key][0])
-            else int(np.count_nonzero(dataset[key].mask()))
-            for dataset, obs, limits, footprints in zip(
-                self._datasets, self._group.observations(),
-                self._upper_limits, self._footprints)
-            for key in obs.keys()) + self.nnuisance()
+        return sum(c.nresiduals() for c in self._comparisons) \
+            + self.nnuisance()
 
     def nindependent(self) -> float:
         """
@@ -645,73 +380,32 @@ class Objective:
         out the whitening of the residuals, if not yet (see prepare).
         """
         self.prepare()
-        total = float(self.nresiduals())
-        for dataset, nindependent in zip(self._datasets, self._nindependent):
-            for key, n in nindependent.items():
-                total += n - np.count_nonzero(dataset[key].mask())
-        return total
+        return sum(c.nindependent() for c in self._comparisons) \
+            + self.nnuisance()
 
-    def _nprior(self, i: int) -> int:
+    def _scales_shape(self, solved: _Solved) -> tuple[int, ...]:
         """
-        Return the number of amplitudes of spectra of observation i, each
-        with the residual of its prior (0 without them).
+        Return the shape of the scales of solved values: that of their data
+        item, of 1 along its axis.
         """
-        key = self._amplitude_items[i]
-        if key is None:
-            return 0
-        shape = self._datasets[i][key].shape()
-        return int(np.prod(shape)) // shape[self._amplitude_axes[i]]
+        shape = self._datasets[solved.observation].shape()
+        return tuple(1 if k == solved.axis else n for k, n in enumerate(shape))
 
-    def residual_sums(
-            self,
-            params: ParamValues,
-            squared: bool = True,
-            out_extra: Extras | None = None
-    ) -> list[float]:
+    def _solve_residuals(self) -> list[np.ndarray]:
         """
-        Return the sum of the weighted residuals of each observation, its
-        noise residuals included (see residuals).
-
-        Parameters
-        ----------
-        params : ParamValues
-            The parameters of the models, prefixed (see pdescs).
-        squared : bool, optional
-            Whether to sum the squared residuals (the chi-square), or their
-            absolute values.
-        out_extra : Extras, optional
-            Where the extra outputs of the models go, if wanted.
-
-        Returns
-        -------
-        list of float
-            The sum of each observation.
+        Return the residuals of the priors of the solved values of the last
+        evaluation, of each solve.
         """
-        if not squared:
-            self._check_residuals()
-        self._update_residual_d(params, True, out_extra)
-        sums = []
-        with self._group.timers().measure('objective_residual_sum_eval'):
-            for i in range(self.nobservations()):
-                driver = self._group.observations()[i].driver()
-                self._backends[i].residual_sum(
-                    self._d_residual_vector[i], squared,
-                    self._d_residual_scalar[i])
-                driver.mem_copy_d2h(
-                    self._d_residual_scalar[i], self._h_residual_scalar[i])
-                noise = self._noise_residuals[i]
-                sums.append(float(self._h_residual_scalar[i][0]) + float(
-                    np.sum(noise ** 2) if squared else np.sum(np.abs(noise)))
-                    + self._user_chi2[i])
-        return sums
+        return [solution.residuals for solution in self._solutions]
 
     def _check_residuals(self) -> None:
         """
-        Raise ConfigError if an observation has a user likelihood of the
-        log-likelihood, which has no residuals (see LikelihoodUser).
+        Raise ConfigError if the comparison of an observation gives no
+        residuals (e.g. a user likelihood of the log-likelihood; see
+        LikelihoodUser).
         """
-        for i, user in enumerate(self._users):
-            if user is not None and user.form() == 'log_likelihood':
+        for i, comparison_ in enumerate(self._comparisons):
+            if not comparison_.gives_residuals():
                 raise ConfigError(
                     f"the likelihood of observation {i} is a function of "
                     f"the log-likelihood, which has no residuals (e.g. for "
@@ -745,7 +439,7 @@ class Objective:
             The residuals of each observation.
         """
         self._update_residual_h(params, weighted, out_extra)
-        return self._h_residual_vector
+        return [c.residual_vector_h() for c in self._comparisons]
 
     def residual_vector_d(
             self,
@@ -758,7 +452,7 @@ class Objective:
         residual_vector_h).
         """
         self._update_residual_d(params, weighted, out_extra)
-        return self._d_residual_vector
+        return [c.residual_vector_d() for c in self._comparisons]
 
     def residual_nddata_h(
             self,
@@ -772,7 +466,7 @@ class Objective:
         evaluation overwrites (see residual_vector_h).
         """
         self._update_residual_h(params, weighted, out_extra)
-        return self._h_residual_nddata
+        return [c.residual_nddata_h() for c in self._comparisons]
 
     def residual_nddata_d(
             self,
@@ -785,7 +479,7 @@ class Objective:
         device (see residual_nddata_h).
         """
         self._update_residual_d(params, weighted, out_extra)
-        return self._d_residual_nddata
+        return [c.residual_nddata_d() for c in self._comparisons]
 
     def _update_residual_h(
             self,
@@ -796,10 +490,8 @@ class Objective:
         """Evaluate the residuals, and copy them to the host."""
         self._update_residual_d(params, weighted, out_extra)
         with self._group.timers().measure('objective_residual_d2h'):
-            for i in range(self.nobservations()):
-                driver = self._group.observations()[i].driver()
-                driver.mem_copy_d2h(
-                    self._d_residual_vector[i], self._h_residual_vector[i])
+            for comparison_ in self._comparisons:
+                comparison_.copy_to_host()
 
     def _update_residual_d(
             self,
@@ -807,238 +499,46 @@ class Objective:
             weighted: bool,
             out_extra: Extras | None = None
     ) -> None:
-        """Evaluate the models and the residuals."""
+        """Evaluate the models, the solved values and the residuals."""
         self.prepare()
-        model_data = self._group.model_d(params, out_extra)
+        models = self._group.model_d(params, out_extra)
         with self._group.timers().measure('objective_residual_eval'):
-            for i in range(self.nobservations()):
-                if self._users[i] is not None:
-                    self._update_user_residuals(
-                        i, model_data[i], params, weighted)
-                    continue
-                if self._amplitude_items[i] is not None:
-                    self._scale_spectra(i, model_data[i], params, out_extra)
-                observation = self._group.observations()[i]
-                for key in observation.keys():
-                    weight = self._weights_u[i][key] if weighted else 1.0
-                    self._backends[i].residual(
-                        self._d_dataset_d_nddata[i][key],
-                        self._d_dataset_e_nddata[i].get(key),
-                        self._d_dataset_m_nddata[i].get(key),
-                        model_data[i][key]['d'],
-                        model_data[i][key]['w'],
-                        weight,
-                        self._missing_residuals[i],
-                        *self._upper_limits[i][key],
-                        *self._noise_values(i, key, params),
-                        self._d_residual_nddata[i][key])
-                    if key in self._d_footprints[i]:
-                        # (the limits count nothing outside the footprint)
-                        observation.driver().math_mul(
-                            self._d_residual_nddata[i][key],
-                            self._d_footprints[i][key],
-                            out=self._d_residual_nddata[i][key])
-                    if weighted and key in self._whiteners[i]:
-                        self._whiteners[i][key](
-                            self._d_residual_nddata[i][key])
-                if self._noise[i]:
-                    self._update_noise_residuals(
-                        i, model_data[i], params, weighted)
+            scales = self._solve(models, params, out_extra)
+            for comparison_, model, scales_ in zip(
+                    self._comparisons, models, scales):
+                comparison_.evaluate(model, params, weighted, scales_)
 
-    def _update_user_residuals(
+    def _solve(
             self,
-            i: int,
-            model_data: dict[str, dict[str, DeviceArray | None]],
-            params: ParamValues,
-            weighted: bool
-    ) -> None:
-        """
-        Evaluate the residuals of observation i, of a user likelihood (see
-        LikelihoodUser), on the host, and copy them to its device: those
-        its function gives each data item, times the weights of the model,
-        of the data mask and of the item (if weighted); or of a function
-        of the log-likelihood, residuals of 0, and its chi-square.
-        """
-        likelihood = self._users[i]
-        driver = self._group.observations()[i].driver()
-        self._user_chi2[i] = 0.0
-        for key in self._group.observations()[i].keys():
-            item = self._datasets[i][key]
-            mask = item.mask()
-            model = np.asarray(
-                driver.mem_copy_d2h(model_data[key]['d']), dtype=np.float64)
-            result = likelihood.evaluate(
-                key, item.data(), model, item.error(), mask, params)
-            residuals = self._h_residual_nddata[i][key]
-            if likelihood.form() == 'log_likelihood':
-                self._user_chi2[i] -= 2 * result
-                residuals[...] = 0
-                continue
-            if (weights := model_data[key]['w']) is not None:
-                result = result * driver.mem_copy_d2h(weights)
-            if mask is not None:
-                result = np.where(mask != 0, result * mask, 0)
-            weight = self._weights_u[i][key] if weighted else 1.0
-            residuals[...] = result * weight
-        driver.mem_copy_h2d(
-            self._h_residual_vector[i], self._d_residual_vector[i])
-
-    def _noise_values(
-            self,
-            i: int,
-            key: str,
-            params: ParamValues
-    ) -> tuple[float, float]:
-        """
-        Return the scale and the jitter of the noise of data item key of
-        observation i (see LikelihoodGaussian): 1 and 0 for those that are
-        not fitted.
-        """
-        noise = self._noise[i].get(key)
-        if noise is None:
-            return 1.0, 0.0
-        scale = 1.0 if noise.scale is None else float(params[noise.scale])
-        jitter = 0.0 if noise.jitter is None else float(params[noise.jitter])
-        return scale, jitter
-
-    def _update_noise_residuals(
-            self,
-            i: int,
-            model_data: dict[str, dict[str, DeviceArray | None]],
-            params: ParamValues,
-            weighted: bool
-    ) -> None:
-        """
-        Evaluate the noise residuals of observation i (see
-        LikelihoodGaussian), with the weights of its data items if
-        weighted (as its residuals).
-        """
-        driver = self._group.observations()[i].driver()
-        for j, (key, noise) in enumerate(self._noise[i].items()):
-            weight = self._weights_u[i][key] if weighted else 1.0
-            self._backends[i].noise_sum(
-                self._d_dataset_e_nddata[i].get(key),
-                self._d_dataset_m_nddata[i].get(key),
-                model_data[key]['d'],
-                model_data[key]['w'],
-                weight,
-                *self._noise_values(i, key, params),
-                noise.scale_minimum,
-                self._d_noise_sums[i][j:j + 1])
-        driver.mem_copy_d2h(self._d_noise_sums[i], self._h_noise_sums[i])
-        # (each term is at least 0, but rounding can leave a sum of terms
-        # of 0, at the smallest scale and no jitter, a hair below it)
-        self._noise_residuals[i][...] = np.sqrt(
-            np.maximum(self._h_noise_sums[i], 0) * self._noise_shares[i])
-
-    def _scale_spectra(
-            self,
-            i: int,
-            model_data: dict[str, dict[str, DeviceArray | None]],
+            models: list[dict[str, dict[str, DeviceArray | None]]],
             params: ParamValues,
             out_extra: Extras | None
-    ) -> None:
+    ) -> list[dict[str, DeviceArray]]:
         """
-        Scale each spectrum of the model of observation i by its best
-        amplitude (see LikelihoodGaussian), write the residuals of their
-        prior, and keep their sums for the log-likelihood; with extras, the
-        amplitudes go to them ('{prefix}amplitudes', of the shape of the
-        spectra but their axis).
+        Solve the solved values of the models (see Solve), and return the
+        scales of the data items of each observation, on its device, by
+        name; with extras, the amplitudes of spectra go to them
+        ('{prefix}amplitudes', of the shape of the spectra but their axis).
         """
-        key = self._amplitude_items[i]
-        driver = self._group.observations()[i].driver()
-        model = model_data[key]
-        self._backends[i].amplitude_sums(
-            self._d_dataset_d_nddata[i][key],
-            self._d_dataset_e_nddata[i].get(key),
-            self._d_dataset_m_nddata[i].get(key),
-            model['d'], model['w'], *self._noise_values(i, key, params),
-            self._amplitude_axes[i], *self._d_amplitude_sums[i])
-        for h, d in zip(self._h_amplitude_sums[i], self._d_amplitude_sums[i]):
-            driver.mem_copy_d2h(d, h)
-        # The best amplitude: the minimum of the chi-square of the spectrum
-        # (its sums A and B times the weight of the item, squared) and that
-        # of the prior, (a - 1)^2 / s^2
-        a, b = self._h_amplitude_sums[i]
-        weight = self._weights_u[i][key] ** 2
-        precision = 1 / self._amplitude_sigmas[i] ** 2
-        amplitudes = self._h_amplitudes[i]
-        amplitudes[...] = np.maximum(weight * b + precision, 0) \
-            / (weight * a + precision)
-        driver.mem_copy_h2d(amplitudes, self._d_amplitudes[i])
-        driver.math_mul(model['d'], self._d_amplitudes[i], out=model['d'])
-        # (the prior as residuals, (a - 1) / s, after those of the data)
-        self._h_prior_residuals[i][...] = \
-            (amplitudes.ravel() - 1) / self._amplitude_sigmas[i]
-        driver.mem_copy_h2d(
-            self._h_prior_residuals[i], self._d_prior_residuals[i])
-        if out_extra is not None:
-            out_extra.add(
-                'amplitudes',
-                np.squeeze(amplitudes, self._amplitude_axes[i]).copy(),
-                "Amplitudes of the spectra",
-                "The amplitude of each spectrum of the model that fits the "
-                "data best (see LikelihoodGaussian): the factor of its model "
-                "in the residuals.",
-                observation=self._group.observation_label(i))
-
-    def _amplitude_terms(self) -> float:
-        """
-        Return the sum of the terms of the log-likelihood of the amplitudes
-        of spectra of the last evaluation, beyond -chi2 / 2 (whose
-        chi-square has the residuals of their prior; see
-        LikelihoodGaussian): for each spectrum, log(Phi(B' / sqrt(A')) /
-        (s sqrt(A') Phi(1 / s))) + (B'^2 / 2A' if B' < 0), with A' = w A +
-        1/s^2 and B' = w B + 1/s^2 (w the weight of the item, squared). A
-        spectrum that does not count in the chi-square (A = 0) has none.
-        """
-        total = 0.0
-        for i, key in enumerate(self._amplitude_items):
-            if key is None:
-                continue
-            a, b = self._h_amplitude_sums[i]
-            sigma = self._amplitude_sigmas[i]
-            weight = self._weights_u[i][key] ** 2
-            a, b = weight * a + 1 / sigma ** 2, weight * b + 1 / sigma ** 2
-            x = b / np.sqrt(a)
-            total += float(np.sum(
-                np.where(b < 0, 0.5 * x ** 2, 0.0)
-                + scipy.special.log_ndtr(x) - np.log(sigma * np.sqrt(a))
-                - scipy.special.log_ndtr(1 / sigma)))
-        return total
-
-
-def _footprints(
-        observation: Observation, dataset: Dataset | None
-) -> dict[str, np.ndarray]:
-    """
-    Return the footprint of the upper limit of each data item of an
-    observation that has one, of the shape of the item (see
-    LikelihoodGaussian), by name.
-
-    Raises
-    ------
-    ConfigError
-        If a footprint is not of the shape of its item or of its last
-        axes, or the item has values outside it.
-    """
-    footprints = {}
-    for key in observation.keys() if dataset is not None else ():
-        footprint = observation.likelihood().footprint(key)
-        if footprint is None:
-            continue
-        data = dataset[key]
-        try:
-            footprint = np.broadcast_to(footprint, data.shape())
-        except ValueError:
-            raise ConfigError(
-                f"the footprint of the upper limit of '{key}' is of the "
-                f"shape {footprint.shape}, not of its data, {data.shape()}, "
-                f"or of their last axes") from None
-        if outside := int(np.count_nonzero(
-                (data.mask() != 0) & (footprint == 0))):
-            raise ConfigError(
-                f"the data of '{key}' have {outside} values outside the "
-                f"footprint of their upper limit; mask them")
-        footprints[key] = footprint
-    return footprints
+        scales: list[dict[str, DeviceArray]] = [
+            {} for _ in range(self.nobservations())]
+        for j, solved in enumerate(self._solved):
+            i = solved.observation
+            sums = self._comparisons[i].scale_sums(
+                models[i], params, solved.key, solved.axis)
+            solution = solved.solve.solve(*sums)
+            self._solutions[j] = solution
+            self._h_scales[j][...] = solution.values
+            self._group.observations()[i].driver().mem_copy_h2d(
+                self._h_scales[j], self._d_scales[j])
+            scales[i][solved.key] = self._d_scales[j]
+            if out_extra is not None:
+                out_extra.add(
+                    'amplitudes',
+                    np.squeeze(solution.values, solved.axis).copy(),
+                    "Amplitudes of the spectra",
+                    "The amplitude of each spectrum of the model that fits "
+                    "the data best (see LikelihoodGaussian): the factor of "
+                    "its model in the residuals.",
+                    observation=self._group.observation_label(i))
+        return scales

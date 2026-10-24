@@ -13,6 +13,7 @@ from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
+from gbkfit.objective.solves import SolveGaussian
 from gbkfit.observation import (
     Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
     PixelBrightness, PixelMoments, observable_parser)
@@ -434,13 +435,44 @@ def test_correlated_noise_goes_without_upper_limits_and_a_floor_of_0():
         objective.chi2(params)
 
 
+@pytest.mark.parametrize('mean, sigma, minimum', [
+    (1.0, 0.5, 0.0), (1.3, 0.4, 0.2), (-0.5, 2.0, None)])
+def test_solved_values_are_the_best_and_integrate_out(mean, sigma, minimum):
+    # (sums of a value that the data pull below its minimum, one near its
+    # mean, and one whose values do not count)
+    a, b = np.array([4.0, 9.0, 0.0]), np.array([-3.0, 11.0, 0.0])
+    solution = SolveGaussian(mean, sigma, minimum).solve(a, b)
+    lower = -np.inf if minimum is None else minimum
+
+    def chi2(x, k):
+        return a[k] * x ** 2 - 2 * b[k] * x + ((x - mean) / sigma) ** 2
+
+    def prior(x):
+        return np.exp(-0.5 * ((x - mean) / sigma) ** 2) / (
+            sigma * np.sqrt(2 * np.pi)
+            * scipy.special.ndtr((mean - lower) / sigma))
+
+    x = np.linspace(max(lower, mean - 40 * sigma), mean + 40 * sigma, 400001)
+    log_terms = 0.0
+    for k in range(3):
+        best = x[np.argmin(chi2(x, k))]
+        assert solution.values[k] == pytest.approx(best, abs=1e-3)
+        integral = np.trapezoid(
+            np.exp(-0.5 * (a[k] * x ** 2 - 2 * b[k] * x)) * prior(x), x)
+        # (the log of the integral, beyond -chi2 / 2 at the best value)
+        log_terms += np.log(integral) + 0.5 * chi2(solution.values[k], k)
+    assert solution.log_term == pytest.approx(log_terms, rel=1e-8)
+    np.testing.assert_allclose(
+        solution.residuals, (solution.values - mean) / sigma)
+
+
 def test_a_closed_objective_releases_its_memory_and_evaluates_again(driver):
     data = Data(np.random.default_rng(10).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(driver, data)
     chi2 = objective.chi2(params)
     with objective:
         assert objective.chi2(params) == pytest.approx(chi2)
-    assert objective._d_residual_vector[0] is None
+    assert objective._comparisons[0].residual_vector_d() is None
     assert objective.chi2(params) == pytest.approx(chi2)
 
 
@@ -456,13 +488,13 @@ def test_copies_with_other_data_share_the_whitening_of_their_masks(driver):
     same = dataset.with_data(dict(brightness=rng.normal(0.1, 1, (24, 32))))
     other = same.with_data(dict(brightness=np.where(
         np.arange(32) < 4, np.nan, same['brightness'].data())))
-    whitener = objective._whiteners[0]['brightness']
+    whitener = objective._comparisons[0]._whiteners['brightness']
     for copy_data, shared in ((same, True), (other, False)):
         with objective.with_data([copy_data]) as copy:
             fresh, _ = make_objective(driver, copy_data['brightness'])
             assert copy.chi2(params) == pytest.approx(
                 fresh.chi2(params), rel=1e-6)
-            assert (copy._whiteners[0]['brightness']._spatial
+            assert (copy._comparisons[0]._whiteners['brightness']._spatial
                     is whitener._spatial) == shared
 
 
