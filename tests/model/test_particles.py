@@ -168,11 +168,15 @@ def test_particles_in_an_image(driver, tmp_path):
     assert np.count_nonzero(image) == 2
 
 
-def test_particles_need_their_columns(tmp_path):
+@pytest.mark.parametrize('columns, message', [
+    (dict(x=np.zeros(2), y=np.zeros(2)), "have no columns \\['z', 'vx'"),
+    ({key: np.zeros(0) for key in ('x', 'y', 'z', 'vx', 'vy', 'vz', 'flux')},
+     "has no particles")])
+def test_particles_need_their_columns(tmp_path, columns, message):
     from gbkfit.model import galaxy_parser
     from gbkfit.utils.parseutils import ConfigError
-    np.savez(tmp_path / 'some.npz', x=np.zeros(2), y=np.zeros(2))
-    with pytest.raises(ConfigError, match="have no columns \\['z', 'vx'"):
+    np.savez(tmp_path / 'some.npz', **columns)
+    with pytest.raises(ConfigError, match=message):
         galaxy_parser.load(dict(components=[dict(
             type='particles', file=str(tmp_path / 'some.npz'),
             emission=dict(type='band'))]))

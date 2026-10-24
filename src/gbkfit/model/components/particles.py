@@ -49,8 +49,8 @@ def read_particles(file: str) -> dict[str, np.ndarray]:
     ------
     ConfigError
         If the file cannot be read, a column is missing, the columns are
-        not of one length, a value is not finite, or a dispersion is
-        negative.
+        not of one length or have no particles, a value is not finite, or
+        a dispersion is negative.
     """
     try:
         if os.path.splitext(file)[1].lower() == '.npz':
@@ -70,6 +70,8 @@ def read_particles(file: str) -> dict[str, np.ndarray]:
     if len({len(column) for column in columns.values()}) > 1:
         raise ConfigError(f"the columns of the particles of {file} differ "
                           f"in length")
+    if not len(columns['x']):
+        raise ConfigError(f"the table of {file} has no particles")
     if not all(np.all(np.isfinite(column)) for column in columns.values()):
         raise ConfigError(f"the particles of {file} have values that are "
                           f"not finite")
