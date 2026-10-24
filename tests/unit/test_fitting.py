@@ -710,6 +710,27 @@ def test_multistart_finds_the_four_minima_of_a_thin_disk():
     assert minima == {(40, 55), (220, 55), (40, 125), (220, 125)}
 
 
+def test_cmaes_gives_the_minimum_of_its_own_run():
+    # Two runs on one problem (as multistart makes them): the second, in
+    # bounds of posa without a minimum (the minima are at 40 and 220),
+    # gives its own best point, within them, not the minimum of the first
+    pytest.importorskip('cma')
+    from gbkfit.fitting.fitters.cmaes import FitterCMAES
+    from gbkfit.fitting.problem import FitProblem
+    objective = mock_objective(DriverHost())
+    fitter = FitterCMAES(maxfevals=300)
+    rng = np.random.default_rng(1)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    problem = FitProblem(objective, params)
+    fitter._run(problem, list(fitter.load_fit_params(params).values()), rng)
+    posa = list(problem.names()).index('posa')
+    boxed = ParamSpace(objective.pdescs(), bounded_properties() | dict(
+        posa=dict(value=120, min=100, max=150)))
+    run = fitter._run(
+        problem, list(fitter.load_fit_params(boxed).values()), rng)
+    assert 100 <= run.solutions[0][posa] <= 150
+
+
 @pytest.mark.parametrize('fitter', [
     dict(type='lmfit.least_squares'),
     dict(type='scipy.least_squares', method='lm'),

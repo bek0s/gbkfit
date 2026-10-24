@@ -24,6 +24,10 @@ __all__ = [
 ]
 
 
+# The stops of a run of CMA-ES that mean it converged (the others: the
+# budget of evaluations or iterations, or a run that went wrong)
+_CONVERGED = frozenset({'tolfun', 'tolfunhist', 'tolx'})
+
 class FitParamCMAES(FitParamBounded):
     """
     The options of a free element for CMA-ES: its initial value, its
@@ -190,18 +194,19 @@ class FitterCMAES(Fitter):
             options['popsize'] = self._popsize
         if self._maxfevals is not None:
             options['maxfevals'] = self._maxfevals
-        _, es = cma.fmin2(
+        zbest, es = cma.fmin2(
             None, np.zeros(len(params)), 1.0, options,
             restarts=self._restarts, bipop=self._bipop,
             parallel_objective=chi2)
-        # The best point of all runs
-        best = problem.best()
-        if best is None:
+        if problem.best() is None:
             raise RuntimeError("CMA-ES found no point with a finite chi2")
         stop = {str(k): v for k, v in es.stop().items()}
+        # The best point of its runs (not that of the problem: e.g. a
+        # multistart runs it from many starts on one problem); a success
+        # if the last run converged
         return FitRun(
-            solutions=[best[0]],
-            success='maxfevals' not in stop,
+            solutions=[x0 + scale * np.asarray(zbest)],
+            success=bool(_CONVERGED & set(stop)),
             message=f"stopped by {stop}",
             diagnostics=dict(
                 iterations=int(es.result.iterations), stop=stop),
