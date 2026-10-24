@@ -57,7 +57,9 @@ class MassModel(parseutils.Serializable):
     ConfigError
         If there are no components, their names repeat, or a component
         responds to one that the model does not have, to itself, or in a
-        loop (see MassComponent.responds_to).
+        loop (see MassComponent.responds_to), or takes the enclosed mass
+        of one that does not give it (see
+        MassComponent.takes_enclosed_masses).
     """
 
     @classmethod
@@ -89,7 +91,8 @@ class MassModel(parseutils.Serializable):
     def _check_responses(self) -> None:
         """
         Raise ConfigError if a component responds to one that the model
-        does not have, or in a loop (itself included).
+        does not have, or in a loop (itself included), or takes the
+        enclosed mass of one that does not give it.
         """
         names = [component.name() for component in self._components]
         responses = {
@@ -111,6 +114,19 @@ class MassModel(parseutils.Serializable):
                 visit(other, path + (name,))
         for name in names:
             visit(name, ())
+        for component in self._components:
+            if not component.takes_enclosed_masses():
+                continue
+            if massless := [
+                    other for other in component.responds_to()
+                    if not self.component(other).gives_enclosed_mass()]:
+                raise ConfigError(
+                    f"the response of the mass component "
+                    f"{component.name()!r} takes the masses within spheres "
+                    f"of its baryons; {massless} do not give them (tables "
+                    f"give their circular velocity in the plane only, user "
+                    f"components without a function of their mass): give "
+                    f"them as mass disks of their surface densities")
 
     def components(self) -> tuple[MassComponent, ...]:
         """Return its mass components."""
@@ -346,18 +362,29 @@ class MassModel(parseutils.Serializable):
     ) -> MassContext:
         """
         Return the context of a component: that of the model, with the
-        squared circular velocities of the components it responds to.
+        squared circular velocities and the masses within spheres (of
+        those that give them) of the components it responds to.
         """
         if not component.responds_to():
             return context
 
-        def vcirc2(name: str) -> Callable[[np.ndarray], np.ndarray]:
+        def bound(
+                function: Callable[..., np.ndarray],
+                own: ParamValues,
+                other_context: MassContext
+        ) -> Callable[[np.ndarray], np.ndarray]:
+            return lambda r: function(r, own, other_context)
+        vcirc2s, enclosed_masses = {}, {}
+        for name in component.responds_to():
             other = self.component(name)
             own = self.component_params(name, params)
             other_context = self._context(other, params, context)
-            return lambda R: other.vcirc2(R, own, other_context)
-        return dataclasses.replace(context, vcirc2s={
-            name: vcirc2(name) for name in component.responds_to()})
+            vcirc2s[name] = bound(other.vcirc2, own, other_context)
+            if other.gives_enclosed_mass():
+                enclosed_masses[name] = bound(
+                    other.enclosed_mass, own, other_context)
+        return dataclasses.replace(
+            context, vcirc2s=vcirc2s, enclosed_masses=enclosed_masses)
 
 
 mass_model_parser = parseutils.BasicParser(MassModel)

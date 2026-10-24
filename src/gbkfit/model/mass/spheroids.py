@@ -105,7 +105,9 @@ class MassSpheroid(MassComponent):
     baryons, mass components of its model (see MassComponent.responds_to):
 
     - by a response (see HaloResponse; spherical only): e.g. contracted
-      adiabatically, with the parameters of the response. Its forces are
+      adiabatically, by the masses of the baryons within spheres (which
+      they must give, see MassComponent.gives_enclosed_mass), with the
+      parameters of the response. Its forces are
       those of its spherical shells, -v^2(r) / r^2 toward the centre (r
       the spherical radius), as is its mass in cells (see
       MassComponent.cell_masses); its density and potential are not
@@ -241,6 +243,9 @@ class MassSpheroid(MassComponent):
 
     def takes_shares(self) -> bool:
         return self._dark_fraction is not None
+
+    def takes_enclosed_masses(self) -> bool:
+        return self._response is not None
 
     def pdescs(self) -> dict[str, ParamDesc]:
         pdescs = self._profile.pdescs() | self._shape.pdescs()
@@ -379,7 +384,8 @@ class MassSpheroid(MassComponent):
             return self._shape.vcirc2(radii, self._profile, params, context)
 
         def baryons(radii: np.ndarray) -> np.ndarray:
-            return self._baryons_vcirc2(radii, context)
+            return sum((context.enclosed_masses[name](radii)
+                        for name in self._baryons), np.zeros_like(radii))
         if self._response is None:
             return vcirc2(R)
         return self._response.vcirc2(

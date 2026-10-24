@@ -48,6 +48,9 @@ _CONTRACTION_BISECTIONS = 80
 # A squared circular velocity of the radius (kpc)
 _VCirc2 = Callable[[np.ndarray], np.ndarray]
 
+# A mass (Msun) within spheres of the radii (kpc)
+_Mass = Callable[[np.ndarray], np.ndarray]
+
 # The units of the scattering rate of SIDM: the cross-section (cm^2/g) in
 # kpc^2/Msun, and a velocity (km/s) times a time (Gyr) in kpc
 _SIGMA_UNIT = (1 * astropy.units.Unit('cm2 / g')).to_value('kpc2 / solMass')
@@ -108,18 +111,17 @@ class HaloResponse(parseutils.TypedSerializable, abc.ABC):
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         """
         Return the squared circular velocity ((km/s)^2) of the halo after
-        its response at the radii R (kpc; 1-D), of those of the halo
-        before and of the baryons in the plane (functions of the radius),
-        the profile of the halo, the values of the parameters of its
-        spheroid and its context (see MassComponent.vcirc2). NaN where the
-        baryons push outwards (negative v^2).
+        its response at the radii R (kpc; 1-D), of that of the halo before
+        and the mass of the baryons within spheres (functions of the
+        radius), the profile of the halo, the values of the parameters of
+        its spheroid and its context (see MassComponent.vcirc2).
         """
 
 
@@ -127,8 +129,9 @@ class ResponseBlumenthal86(HaloResponse):
     """
     The adiabatic contraction of Blumenthal et al. (1986): the dark matter
     within r' ends within r, with r' M(r') = r (M(r') + M_b(r)) (Burkert
-    et al. 2010, Eq. 19), M = v^2 r / G of the halo before and of the
-    baryons in the plane: v^2(r) = G M(r') / r = v^2(r') r' / r. (Burkert
+    et al. 2010, Eq. 19), of the masses within spheres of the halo before
+    (M = v^2 r / G) and of the baryons: v^2(r) = G M(r') / r = v^2(r') r'
+    / r. (Burkert
     et al. 2010, Eq. 18, which DysmalPy's documentation quotes, writes
     v^2(r') for this term, smaller by r / r': it does not keep the mass
     that Eq. 19 moves within r.)
@@ -142,12 +145,12 @@ class ResponseBlumenthal86(HaloResponse):
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        return _contracted(R, halo_vcirc2, baryons_vcirc2)
+        return _contracted(R, halo_vcirc2, baryons_mass)
 
 
 class ResponseGnedin04(HaloResponse):
@@ -174,13 +177,13 @@ class ResponseGnedin04(HaloResponse):
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         return _contracted(
-            R, halo_vcirc2, baryons_vcirc2, _GNEDIN04_A0, _GNEDIN04_W,
+            R, halo_vcirc2, baryons_mass, _GNEDIN04_A0, _GNEDIN04_W,
             profile.halo_radius(params, context))
 
 
@@ -188,10 +191,10 @@ class ResponseCautun20(HaloResponse):
     """
     The contraction of Cautun et al. (2020, Eq. 11), as they fit their
     simulations: the mass of the halo within r times 0.45 + 0.38 (eta +
-    1.16)^0.53, eta = M_b (1 - f_b) / (f_b M) of the masses M = v^2 r / G
-    within r of the halo before (of dark matter only) and of the baryons
-    in the plane, f_b the cosmic baryon fraction of the cosmology of the
-    galaxy (about 1 at eta = 1: baryons that follow the dark matter).
+    1.16)^0.53, eta = M_b (1 - f_b) / (f_b M) of the masses within the
+    sphere of r of the halo before (of dark matter only, M = v^2 r / G)
+    and of the baryons, f_b the cosmic baryon fraction of the cosmology of
+    the galaxy (about 1 at eta = 1: baryons that follow the dark matter).
     """
 
     @staticmethod
@@ -202,7 +205,7 @@ class ResponseCautun20(HaloResponse):
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
@@ -213,11 +216,12 @@ class ResponseCautun20(HaloResponse):
                 "the contraction 'cautun20' takes the cosmic baryon "
                 "fraction, which the cosmology of the galaxy lacks "
                 "(Omega_b)")
-        halo, baryons = halo_vcirc2(R), baryons_vcirc2(R)
+        # (G M / r of both)
+        halo = halo_vcirc2(R)
         with np.errstate(divide='ignore', invalid='ignore'):
+            baryons = G * baryons_mass(R) / R
             eta = baryons * (1 - fraction) / (fraction * halo)
             out = halo * (0.45 + 0.38 * (eta + 1.16) ** 0.53)
-        out = np.where(baryons < 0, np.nan, out)
         out[R == 0] = 0
         return out
 
@@ -250,12 +254,12 @@ class ResponseSIDM(HaloResponse):
     of itself and of the baryons (Eq. 4-5), of rho0 and v0 such that its
     density and its mass match those of the halo before at r1 (the
     solution of the lower density: Elbert et al. 2018; Jiang et al. 2023,
-    Sect. 2.3). Outside r1, it is the halo before. The baryons are
-    spherical, of the mass M_b = v_b^2 r / G of their circular velocity in
-    the plane (as the contractions take them; Jiang et al. 2023 take a
-    Hernquist sphere). Without scatterings within the age, the halo is
-    that before. (Jiang et al. 2023 take v from a Dekel-Zhao profile fitted
-    to the halo before, of dark matter alone, for speed.)
+    Sect. 2.3). Outside r1, it is the halo before. The baryons are taken
+    spherical, of their mass within spheres (as the contractions take
+    them; Jiang et al. 2023 take a Hernquist sphere). Without scatterings
+    within the age, the halo is that before. (Jiang et al. 2023 take v
+    from a Dekel-Zhao profile fitted to the halo before, of dark matter
+    alone, for speed.)
 
     Its parameters: 'sigma_m', the cross-section per unit mass (cm^2/g),
     and 't_age', the age of the halo (Gyr). The core is integrated by
@@ -327,15 +331,15 @@ class ResponseSIDM(HaloResponse):
             self,
             R: np.ndarray,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
         before = self._before(
-            halo_vcirc2, baryons_vcirc2, profile, params, context)
+            halo_vcirc2, baryons_mass, profile, params, context)
         core = self.core(
-            halo_vcirc2, baryons_vcirc2, profile, params, context)
+            halo_vcirc2, baryons_mass, profile, params, context)
         out = before(R)
         if core is not None:
             inside = (R > 0) & (R < core.r1)
@@ -345,7 +349,7 @@ class ResponseSIDM(HaloResponse):
     def core(
             self,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
@@ -363,14 +367,14 @@ class ResponseSIDM(HaloResponse):
         rate = (4 / np.sqrt(np.pi) * params['sigma_m'] * _SIGMA_UNIT
                 * params['t_age'] * _TIME_UNIT)
         return _sidm_core(
-            self._before(halo_vcirc2, baryons_vcirc2, profile, params,
+            self._before(halo_vcirc2, baryons_mass, profile, params,
                          context),
-            baryons_vcirc2, rate)
+            baryons_mass, rate)
 
     def _before(
             self,
             halo_vcirc2: _VCirc2,
-            baryons_vcirc2: _VCirc2,
+            baryons_mass: _Mass,
             profile: SpheroidProfile,
             params: ParamValues,
             context: MassContext
@@ -385,20 +389,21 @@ class ResponseSIDM(HaloResponse):
 
         def before(radii: np.ndarray) -> np.ndarray:
             return contraction.vcirc2(
-                radii, halo_vcirc2, baryons_vcirc2, profile, params, context)
+                radii, halo_vcirc2, baryons_mass, profile, params, context)
 
         return before
 
 
 def _sidm_core(
         before: _VCirc2,
-        baryons_vcirc2: _VCirc2,
+        baryons_mass: _Mass,
         rate: float
 ) -> SIDMCore | None:
     """
     Return the isothermal core of SIDM of a halo (see ResponseSIDM), of
-    the squared circular velocities of the halo before and of the baryons
-    and of rate = (4 / sqrt(pi)) sigma_m t_age (kpc^3/Msun / (km/s)); None
+    the squared circular velocity of the halo before, the mass of the
+    baryons within spheres and rate = (4 / sqrt(pi)) sigma_m t_age
+    (kpc^3/Msun / (km/s)); None
     without scatterings within the age.
 
     Raises
@@ -410,7 +415,7 @@ def _sidm_core(
     radii = _SIDM_RADII
     lnr = np.log(radii)
     mass = scipy.interpolate.CubicSpline(lnr, before(radii) * radii / G)
-    baryons = baryons_vcirc2(radii) * radii / G
+    baryons = baryons_mass(radii)
     density = mass(lnr, 1) / (4 * np.pi * radii ** 3)
     # (rho v^2 = int_r^inf rho G (M + M_b) / r'^2 dr', in ln r')
     integrand = density * G * (mass(lnr) + baryons) / radii
@@ -435,7 +440,7 @@ def _sidm_core(
     rho1 = float(np.exp(np.interp(ln_r1, lnr, np.log(density))))
     mass1 = float(mass(ln_r1))
     v1 = float(np.interp(ln_r1, lnr, dispersion))
-    core = _IsothermalCore(r1, baryons_vcirc2)
+    core = _IsothermalCore(r1, baryons_mass)
     rho0, v0 = np.exp(_sidm_match(core, rho1, mass1, v1))
     return SIDMCore(
         r1, float(rho0), float(v0), core.mass_function(rho0, v0))
@@ -444,17 +449,17 @@ def _sidm_core(
 class _IsothermalCore:
     """
     The isothermal cores of SIDM to the radius r1 in the potential of the
-    baryons (of their squared circular velocity): their density at r1 and
+    baryons (of their mass within spheres): their density at r1 and
     their mass within the radii, of their central density rho0 and
     velocity dispersion v0 (arrays of several), by Runge-Kutta in ln r.
     """
 
-    def __init__(self, r1: float, baryons_vcirc2: _VCirc2):
+    def __init__(self, r1: float, baryons_mass: _Mass):
         nsteps = int(np.ceil(-np.log(_SIDM_START) / _SIDM_STEP))
         # (the radii of the steps and of their middles)
         self.radii = r1 * np.exp(np.linspace(
             np.log(_SIDM_START), 0, 2 * nsteps + 1))
-        self.baryons = baryons_vcirc2(self.radii) * self.radii / G
+        self.baryons = baryons_mass(self.radii)
         self.step = -np.log(_SIDM_START) / nsteps
 
     def integrate(
@@ -572,7 +577,7 @@ def _sidm_match(
 def _contracted(
         R: np.ndarray,
         halo_vcirc2: _VCirc2,
-        baryons_vcirc2: _VCirc2,
+        baryons_mass: _Mass,
         a0: float = 1.0,
         w: float = 1.0,
         r_d: float = 1.0
@@ -584,17 +589,15 @@ def _contracted(
     1: Blumenthal et al. 1986): the dark matter within r_bar' of the shell
     of the radius r' ends within r_bar of r, with r' M(r_bar') = r (M(
     r_bar') + M_b(r_bar)) (Burkert et al. 2010, Eq. 19, with the radii of
-    Gnedin et al.), M = v^2 r / G of the halo before and of the baryons
-    in the plane (halo_vcirc2 and baryons_vcirc2, functions of the
-    radius): at R = r_bar, v^2 = G M(r_bar') / R. NaN where the baryons
-    push outwards (negative v^2).
+    Gnedin et al.), of the masses within spheres of the halo before (M =
+    v^2 r / G, of halo_vcirc2) and of the baryons (baryons_mass), functions
+    of the radius: at R = r_bar, v^2 = G M(r_bar') / R.
     """
-    out = np.full_like(R, np.nan)
-    baryons_all = baryons_vcirc2(R) * R
-    valid = (R > 0) & (baryons_all >= 0)
-    out[R == 0] = 0
+    out = np.zeros_like(R)
+    valid = R > 0
     averaged = R[valid]
-    baryons = baryons_all[valid]
+    # (G M of both)
+    baryons = G * baryons_mass(averaged)
     # (the radius of the shell whose orbit-averaged radius is R)
     r = r_d * (averaged / (a0 * r_d)) ** (1 / w)
     lo = np.log(r)

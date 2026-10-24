@@ -51,6 +51,14 @@ class DiskVertical(parseutils.TypedSerializable, abc.ABC):
         """
         return None
 
+    def knots(self, context: MassContext) -> np.ndarray:
+        """
+        Return the radii (kpc) where its shape bends (e.g. those it takes
+        the shape at, linear between them), in the context of its galaxy
+        (see MassContext); none here.
+        """
+        return np.empty(0)
+
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name; none here."""
         return {}

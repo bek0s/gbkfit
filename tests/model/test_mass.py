@@ -782,8 +782,9 @@ def responding_halo(**options):
 
 def test_contracted_halos_keep_the_dark_matter_of_their_shells():
     # Within r, the dark matter the halo had within r', with r' M(r') =
-    # r (M(r') + M_b(r)) (M = v^2 r, in units of G), against r' found by
-    # root finding at each radius
+    # r (M(r') + M_b(r)) (in units of G: M = v^2 r of the halo, and the
+    # mass of the baryons within the sphere), against r' found by root
+    # finding at each radius
     model = mass_model(
         BARYONS + [responding_halo(response=dict(type='blumenthal86'))])
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
@@ -794,10 +795,11 @@ def test_contracted_halos_keep_the_dark_matter_of_their_shells():
     def halo_mass(r):
         return float(halo.vcirc2(
             np.array([r]), dict(log_m=12, c=5), CONTEXT)[0]) * r
-    baryons = parts['stars'] + parts['bulge']
-    for r, baryon_v2, v2 in zip(radius, baryons, parts['halo']):
+    masses = model.enclosed_mass_components(radius, params, CONTEXT)
+    baryons = G * (masses['stars'] + masses['bulge'])
+    for r, baryon, v2 in zip(radius, baryons, parts['halo']):
         initial = scipy.optimize.brentq(
-            lambda x: x * halo_mass(x) - r * (halo_mass(x) + baryon_v2 * r),
+            lambda x: x * halo_mass(x) - r * (halo_mass(x) + baryon),
             r, 1e4 * r, xtol=1e-14, rtol=1e-15)
         assert v2 == pytest.approx(halo_mass(initial) / r, rel=1e-10)
 
@@ -811,11 +813,12 @@ def test_gnedin_and_cautun_contractions():
     params = BARYON_VALUES | dict(mass_halo_log_m=12, mass_halo_c=5)
     radius = np.array([0.5, 2, 5, 20])
     context = dataclasses.replace(CONTEXT, baryon_fraction=0.16)
-    parts = {
-        name: mass_model(
-            BARYONS + [responding_halo(response=dict(type=name))]
-        ).vcirc2_components(radius, params, context)
+    models = {
+        name: mass_model(BARYONS + [responding_halo(response=dict(type=name))])
         for name in ('blumenthal86', 'gnedin04', 'cautun20')}
+    parts = {
+        name: model.vcirc2_components(radius, params, context)
+        for name, model in models.items()}
     halo, halo_params = MassSpheroid('h', ProfileNFW()), dict(log_m=12, c=5)
     r_d = 5 * ProfileNFW().scales(halo_params, context)[1]
 
@@ -825,20 +828,22 @@ def test_gnedin_and_cautun_contractions():
     def mass(r):
         return float(halo.vcirc2(
             np.array([averaged(r)]), halo_params, context)[0]) * averaged(r)
-    baryons = parts['gnedin04']['stars'] + parts['gnedin04']['bulge']
-    for R, baryon_v2, v2 in zip(radius, baryons, parts['gnedin04']['halo']):
+    masses = models['gnedin04'].enclosed_mass_components(
+        radius, params, context)
+    baryons = G * (masses['stars'] + masses['bulge'])
+    for R, baryon, v2 in zip(radius, baryons, parts['gnedin04']['halo']):
         r = r_d * (R / (0.85 * r_d)) ** (1 / 0.8)
         initial = scipy.optimize.brentq(
-            lambda x: x * mass(x) - r * (mass(x) + baryon_v2 * R),
+            lambda x: x * mass(x) - r * (mass(x) + baryon),
             r, 1e4 * r, xtol=1e-14, rtol=1e-15)
         assert v2 == pytest.approx(mass(initial) / R, rel=1e-10)
     before = halo.vcirc2(radius, halo_params, context)
     assert np.all(before < parts['gnedin04']['halo'])
     assert np.all(parts['gnedin04']['halo'] < parts['blumenthal86']['halo'])
-    eta = baryons * 0.84 / (0.16 * before)
+    eta = baryons / radius * 0.84 / (0.16 * before)
     np.testing.assert_allclose(
         parts['cautun20']['halo'],
-        before * (0.45 + 0.38 * (eta + 1.16) ** 0.53), rtol=1e-12)
+        before * (0.45 + 0.38 * (eta + 1.16) ** 0.53), rtol=1e-10)
     with pytest.raises(ValueError, match="cosmic baryon fraction"):
         mass_model(BARYONS + [responding_halo(response=dict(type='cautun20'))]
                    ).vcirc2(radius, params, CONTEXT)
@@ -867,7 +872,17 @@ def test_dark_fractions_set_a_parameter_of_the_halo(
             np.array([5.0]), params | dict(mass_halo_fdm=0.999), CONTEXT)
 
 
-def test_responding_halos_are_checked():
+def test_responding_halos_are_checked(tmp_path):
+    # (of baryons that give their masses within spheres: not those of user
+    # components without a function of it, nor tables)
+    (tmp_path / 'curve.py').write_text(
+        "def vcirc2(R, params):\n    return 100 * R\n")
+    with pytest.raises(ConfigError, match=r"\['mine'\] do not give them"):
+        mass_model([
+            dict(type='user', name='mine', file=str(tmp_path / 'curve.py'),
+                 func='vcirc2'),
+            responding_halo(
+                baryons=['mine'], response=dict(type='blumenthal86'))])
     with pytest.raises(ConfigError, match="needs the baryons"):
         MassSpheroid('h', ProfileNFW(), response=ResponseBlumenthal86())
     with pytest.raises(ConfigError, match="spherical shape"):
@@ -925,13 +940,16 @@ def test_sidm_cores(with_baryons):
 
     stars = mass_model(baryons) if with_baryons else None
 
-    def baryons_v2(r):
+    def baryons_mass(r):
         if stars is None:
             return np.zeros_like(r)
-        return stars.vcirc2(r, params, CONTEXT)
+        return stars.enclosed_mass(r, params, CONTEXT)
+
+    def baryon_mass(r):
+        return float(baryons_mass(np.array([r]))[0])
 
     core = model.component('halo').response().core(
-        halo_v2, baryons_v2, ProfileNFW(), own, CONTEXT)
+        halo_v2, baryons_mass, ProfileNFW(), own, CONTEXT)
     r1 = core.r1
 
     def mass(r, v2):
@@ -940,7 +958,7 @@ def test_sidm_cores(with_baryons):
     rho1 = ProfileNFW().density(np.array([r1]), own, CONTEXT)[0]
     pressure = scipy.integrate.quad(
         lambda r: ProfileNFW().density(np.array([r]), own, CONTEXT)[0] * G
-        * (mass(r, halo_v2) + mass(r, baryons_v2)) / r ** 2,
+        * (mass(r, halo_v2) + baryon_mass(r)) / r ** 2,
         r1, np.inf, epsrel=1e-10, limit=400)[0]
     scatterings = (4 / np.sqrt(np.pi) * rho1 * np.sqrt(pressure / rho1)
                    * SIGMA_UNIT * 10 * TIME_UNIT)
@@ -948,7 +966,7 @@ def test_sidm_cores(with_baryons):
 
     def isothermal(r, state):
         y, m = state
-        return [G * (m + mass(r, baryons_v2)) / (r ** 2 * core.v0 ** 2),
+        return [G * (m + baryon_mass(r)) / (r ** 2 * core.v0 ** 2),
                 4 * np.pi * r ** 2 * core.rho0 * np.exp(-y)]
 
     start = 1e-4 * r1
@@ -956,7 +974,7 @@ def test_sidm_cores(with_baryons):
     radii = np.array([0.1, 0.5, 0.9]) * r1
     solution = scipy.integrate.solve_ivp(
         isothermal, (start, r1),
-        [G * (m0 + mass(start, baryons_v2)) / (2 * start * core.v0 ** 2), m0],
+        [G * (m0 + baryon_mass(start)) / (2 * start * core.v0 ** 2), m0],
         t_eval=np.append(radii, r1), rtol=1e-11, atol=0)
     y, m = solution.y
     assert core.rho0 * np.exp(-y[-1]) == pytest.approx(rho1, rel=1e-4)
@@ -1093,6 +1111,29 @@ def test_disks_enclose_the_mass_of_their_density_within_spheres(vertical):
             for r in radius]
     np.testing.assert_allclose(
         disk.enclosed_mass(radius, params, CONTEXT), expected, rtol=1e-8)
+
+
+@pytest.mark.parametrize('vertical', ['thin', 'exponential'])
+def test_nodewise_disks_enclose_their_mass_of_every_radius(vertical):
+    # Linear between its nodes, where it bends: 2 pi int Sigma(R) s(R,
+    # sqrt(r^2 - R^2)) R dR, between the nodes; all of it beyond them
+    nodes = [0.0, 0.3, 0.6, 1.2]
+    disk = MassDisk('d', SurfaceNodewise(nodes), LAWS[vertical]())
+    params = dict(log_sigma=[8, 7.8, 7.5], hz=0.05)
+    radius = np.array([0.1, 0.45, 0.9, 1.2, 50.0, 1e4])
+
+    def mass(r):
+        def ring(R):
+            sigma = disk.surface().surface_density(R, params, CONTEXT)
+            height = np.sqrt(max(r ** 2 - R ** 2, 0))
+            share = disk.vertical().share_within(R, height, params, CONTEXT)
+            return 2 * np.pi * R * sigma * share
+        return scipy.integrate.quad(
+            ring, 0, min(r, nodes[-1]), epsabs=0, epsrel=1e-12, limit=200,
+            points=[node for node in nodes[1:-1] if node < r])[0]
+    np.testing.assert_allclose(
+        disk.enclosed_mass(radius, params, CONTEXT),
+        [mass(r) for r in radius], rtol=1e-10)
 
 
 def test_disks_as_thick_as_a_component_enclose_their_density():

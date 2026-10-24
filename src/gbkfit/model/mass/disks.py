@@ -8,7 +8,6 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
-import scipy.integrate
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
@@ -21,6 +20,42 @@ from .vertical import DiskVertical, disk_vertical_parser
 __all__ = [
     'MassDisk'
 ]
+
+
+# The composite Gauss-Legendre quadratures of the enclosed masses of
+# disks: the nodes of each panel, the largest widths of the panels in ln R
+# (and in ln theta, see MassDisk.enclosed_mass), and the smallest of their
+# edges but 0, relative to the largest one
+_ENCLOSED_NODES = 8
+_ENCLOSED_PANEL = 0.2
+_ENCLOSED_SMALLEST = 1e-8
+
+
+def _panel_edges(top: float, cuts: np.ndarray) -> np.ndarray:
+    """
+    Return the edges of the panels of a composite quadrature from 0 to
+    top: 0, then at most _ENCLOSED_PANEL apart in ln from _ENCLOSED_SMALLEST
+    times top, and the given cuts.
+    """
+    start = np.log(_ENCLOSED_SMALLEST * top)
+    count = int(np.ceil((np.log(top) - start) / _ENCLOSED_PANEL))
+    return np.unique(np.concatenate(
+        [[0.0], np.exp(np.linspace(start, np.log(top), count + 1)), cuts]))
+
+
+def _panel_nodes(edges: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the nodes and the weights of the Gauss-Legendre quadratures of
+    the panels between the edges (along the last axis; e.g. one row for
+    each of several quadratures), flat over the panels of each: of shape
+    (..., panels * _ENCLOSED_NODES).
+    """
+    nodes, weights = np.polynomial.legendre.leggauss(_ENCLOSED_NODES)
+    middle = (edges[..., 1:] + edges[..., :-1]) / 2
+    half = np.diff(edges, axis=-1) / 2
+    shape = edges.shape[:-1] + (-1,)
+    return ((middle[..., None] + half[..., None] * nodes).reshape(shape),
+            (half[..., None] * weights).reshape(shape))
 
 
 class MassDisk(MassComponent):
@@ -159,24 +194,49 @@ class MassDisk(MassComponent):
             params: ParamValues,
             context: MassContext
     ) -> np.ndarray:
-        # 2 pi int_0^r Sigma(R) s(R, sqrt(r^2 - R^2)) R dR, s the share of
-        # the mass at R within that height (see DiskVertical.share_within),
-        # by adaptive quadrature (to 1e-10)
-        def mass(radius: float) -> float:
-            def ring(R: float) -> float:
-                height = np.sqrt(max(radius ** 2 - R ** 2, 0))
-                sigma = self._surface.surface_density(
-                    np.array([R]), params, context)[0]
-                share = self._vertical.share_within(
-                    R, height, params, context)
-                return 2 * np.pi * R * sigma * float(share)
-            value, _ = scipy.integrate.quad(
-                ring, 0, radius, epsabs=0, epsrel=1e-10, limit=200)
-            return value
+        # By composite Gauss-Legendre quadrature, of all the radii at once:
+        # of a thin disk, the mass within the cylinder of each radius, 2 pi
+        # int_0^r Sigma(R) R dR, summed over panels between the radii, at
+        # most _ENCLOSED_PANEL wide in ln R and cut at the knots of the
+        # surface density (exact to rounding); of a thick one, 2 pi int_0^r
+        # Sigma(R) s(R, sqrt(r^2 - R^2)) R dR (s the share of the mass at R
+        # within the height of the sphere there, see
+        # DiskVertical.share_within) in theta, R = r sin(theta), where it
+        # is smooth, of panels at most _ENCLOSED_PANEL wide in ln theta and
+        # ln (pi/2 - theta), cut at the knots of the surface density and
+        # of the vertical structure (to about 1e-12)
         r = np.asarray(r, dtype=float)
-        return np.reshape(
-            [mass(radius) if radius > 0 else 0.0 for radius in r.ravel()],
-            r.shape)
+        radii = r.ravel()
+        inside = radii > 0
+        out = np.zeros(radii.shape)
+        if not np.any(inside):
+            return out.reshape(r.shape)
+        if self._vertical.thin(context):
+            edges = _panel_edges(radii.max(), np.concatenate(
+                [radii[inside], self._surface.knots(context)]))
+            # (each panel alone: the masses between the edges)
+            R, weights = _panel_nodes(
+                np.stack([edges[:-1], edges[1:]], axis=1))
+            masses = np.concatenate([[0], np.cumsum(2 * np.pi * np.sum(
+                weights * R * self._surface.surface_density(
+                    R, params, context), axis=1))])
+            return masses[np.searchsorted(edges, radii)].reshape(r.shape)
+        # (the knots beyond a radius cut it at pi/2: panels of no width)
+        radius = radii[inside, None]
+        quarter = _panel_edges(np.pi / 4, np.empty(0))
+        common = np.union1d(quarter, np.pi / 2 - quarter)
+        knots = np.union1d(
+            self._surface.knots(context), self._vertical.knots(context))
+        edges = np.sort(np.concatenate([
+            np.broadcast_to(common, (len(radius), len(common))),
+            np.arcsin(np.minimum(knots / radius, 1))], axis=1), axis=1)
+        theta, weights = _panel_nodes(edges)
+        R, h = radius * np.sin(theta), radius * np.cos(theta)
+        out[inside] = 2 * np.pi * np.sum(
+            weights * self._surface.surface_density(R, params, context)
+            * self._vertical.share_within(R, h, params, context) * R * h,
+            axis=1)
+        return out.reshape(r.shape)
 
     def forces(
             self,

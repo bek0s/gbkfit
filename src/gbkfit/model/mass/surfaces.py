@@ -178,6 +178,14 @@ class DiskSurface(parseutils.TypedSerializable, abc.ABC):
         """
         return None
 
+    def knots(self, context: MassContext) -> np.ndarray:
+        """
+        Return the radii (kpc) where the surface density bends (e.g. the
+        nodes between which it is linear), in the context of its galaxy
+        (see MassContext); none here.
+        """
+        return np.empty(0)
+
     @abc.abstractmethod
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
@@ -552,6 +560,9 @@ class SurfaceNodewise(DiskSurface):
         """Return the radii (kpc) of its nodes."""
         return self._nodes
 
+    def knots(self, context: MassContext) -> np.ndarray:
+        return self._nodes
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1,
@@ -684,6 +695,10 @@ class SurfaceComponent(DiskSurface):
 
     def followed_component(self) -> str | None:
         return self._component
+
+    def knots(self, context: MassContext) -> np.ndarray:
+        # (the radii it takes the density at, linear between them)
+        return context.density(self._component).knots(self._rstep)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
