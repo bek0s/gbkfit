@@ -904,11 +904,11 @@ def check_posterior(result):
 @pytest.mark.slow
 def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     # Noise correlated by the PSF (as the beam correlates that of radio
-    # data): the covariance, which takes it as independent, gives errors
-    # about 3.5 times smaller than the scatter of the fits over
-    # independent mocks; the bootstrap, in blocks of about 2 FWHM of the
-    # PSF, about that scatter (0.85 of it on average over 8 mocks, 1/2 in
-    # blocks of 2 pixels)
+    # data), of data that do not say so: the covariance, which takes it
+    # as independent, gives errors about 3.5 times smaller than the
+    # scatter of the fits over independent mocks; the bootstrap, in blocks
+    # of about 2 FWHM of the PSF, about that scatter (0.85 of it on
+    # average over 8 mocks, 1/2 in blocks of 2 pixels)
     from gbkfit.fitting import (
         BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
     from gbkfit.observation import NoiseGauss
@@ -924,7 +924,10 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     noise = NoiseGauss(rms=0.01 * peak, spatial_correlation='instrument')
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     fits = []
-    for dataset in image.mock(values, noise, nmocks=41, seed=5)[0]:
+    for mock in image.mock(values, noise, nmocks=41, seed=5)[0]:
+        # (without the correlation that mocks declare)
+        dataset = DatasetPixelBrightness(Data(
+            mock['brightness'].data(), error=mock['brightness'].error()))
         objective = Objective(group(dataset))
         params = ParamSpace(objective.pdescs(), bounded_properties())
         fits.append((objective, params, fitter.fit(objective, params)))
