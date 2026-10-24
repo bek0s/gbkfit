@@ -508,10 +508,12 @@ class ObservationGroup:
         ObservablePlan.mock), with their errors.
 
         The data that are what the instrument records plus the noise (e.g.
-        spectra) have its dispersion as their errors; those measured from
-        them (e.g. moments) the scatter of their values over nsamples
-        other draws (the standard deviation, of the values that are
-        finite in at least two draws; the others are missing).
+        spectra) have its dispersion as their errors, and declare its
+        correlation; those measured from them (e.g. moments) the scatter
+        of their values over nsamples other draws (the standard deviation,
+        of the values that are finite in at least two draws; the others
+        are missing). The mock data have the unit and the beam of the
+        data of their observation, if it has data.
 
         Parameters
         ----------
@@ -566,9 +568,10 @@ class ObservationGroup:
                     nmocks + (0 if exact else nsamples))
             if errors is None:
                 errors = _scatter(draws[nmocks:])
+            options = _mock_options(obs, noise, exact)
             mocks.append([
                 obs.dataset({
-                    key: Data(item['d'], error=errors[key])
+                    key: Data(item['d'], error=errors[key], **options[key])
                     for key, item in draw.items()})
                 for draw in draws[:nmocks]])
         return mocks
@@ -730,6 +733,29 @@ def _check_offsets(
                     f"every observation of galaxy {galaxy.name() or g} has "
                     f"offsets of {kind}; one needs none, whose frame places "
                     f"the galaxy")
+
+
+def _mock_options(
+        observation: Observation, noise: Noise, exact: bool
+) -> dict[str, dict[str, Any]]:
+    """
+    Return the options of the mock data of each data item of an
+    observation (see ObservationGroup.mock): the unit and the beam of its
+    data, if any, and the correlation of the noise of those that are what
+    the instrument records plus the noise (exact errors).
+    """
+    spatial, spectral = noise.correlations() if exact else (None, None)
+    if spatial == 'instrument':
+        # (only observations on the sky draw noise correlated by their
+        # instrument; see Noise.draw)
+        spatial = observation.instrument().psf()
+    data = observation.data()
+    return {
+        key: dict(
+            spatial_correlation=spatial, spectral_correlation=spectral)
+        | ({} if data is None else dict(
+            unit=data[key].unit(), beam=data[key].beam()))
+        for key in observation.keys()}
 
 
 def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:

@@ -62,6 +62,15 @@ class Noise(parseutils.TypedSerializable, abc.ABC):
             The options.
         """
 
+    def correlations(self) -> tuple[PSF | str | None, LSF | None]:
+        """
+        Return its correlation on the sky (a PSF, or 'instrument': the PSF
+        of the instrument) and along the spectral axis, which the mock
+        data of it declare (see ObservationGroup.mock); none for noise
+        independent from value to value.
+        """
+        return None, None
+
     @abc.abstractmethod
     def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
         """
@@ -234,6 +243,9 @@ class NoiseGauss(Noise):
     def spectral_correlation(self) -> LSF | None:
         """Return the correlation along the spectral axis, if any."""
         return self._spectral_correlation
+
+    def correlations(self) -> tuple[PSF | str | None, LSF | None]:
+        return self._spatial_correlation, self._spectral_correlation
 
     def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
         return _dispersion(self._rms, self._error, grid)

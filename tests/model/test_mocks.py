@@ -87,6 +87,32 @@ def test_recorded_data_have_the_noise_as_their_error(driver, name):
         np.testing.assert_array_equal(again[0][key].data(), mocks[0][key].data())
 
 
+def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
+    # A mock of an observation of data in Jy/beam with a beam, of noise
+    # correlated by the PSF of the instrument, has that unit and beam and
+    # declares the correlation: a fit of it whitens its residuals
+    from gbkfit.dataset import Data
+    from gbkfit.objective import Objective
+    group = group_of(driver, dict(
+        type='pixel_spectra', psf=dict(type='gauss', sigma=1.5))
+        | RECORDED['pixel_spectra'])
+    model, _, params = evaluate(group)
+    observation = group.observations()[0]
+    data = observation.dataset({'spectra': Data(
+        model['spectra'], error=np.full_like(model['spectra'], 0.01),
+        unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
+    group = group.with_data([data])
+    [mock] = group.mock(
+        params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
+        seed=1)[0]
+    assert mock['spectra'].unit() == data['spectra'].unit()
+    assert mock['spectra'].beam() == data['spectra'].beam()
+    assert mock['spectra'].spatial_correlation() \
+        == observation.instrument().psf()
+    with Objective(group.with_data([mock])) as objective:
+        assert objective.nindependent() < objective.nresiduals()
+
+
 @pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
 def test_the_errors_of_moments_are_their_scatter(driver, method):
     # The moments of the spectra of the cube plus noise (a twentieth of
