@@ -324,6 +324,33 @@ def test_an_isothermal_sphere_makes_an_einstein_ring(driver):
     ring = np.abs(radius - einstein) < 0.5
     assert lensed[ring].mean() > 20 * lensed[radius < 3].mean()
 
+def test_the_frame_of_an_observation_moves_its_lens(driver):
+    # An offset of the frame moves the centres of the masses of its lens
+    # as those of the components: as moving both by it
+    from gbkfit.observation import ObservationGroup, ObservationSky
+    group = observation_group([dict(
+        driver=dict(type=driver.type()), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
+    plain = group.observations()[0]
+    reference = ObservationSky(
+        plain.observable(), plain.line_of_sight(), plain.driver(),
+        name='reference')
+    observation = ObservationSky(
+        plain.observable(), plain.line_of_sight(), plain.driver(),
+        foreground=Foreground(Lens((40, 40), (0.5, 0.5), LensSIE())),
+        name='obs', offsets=dict(position=True))
+    group = ObservationGroup(group.galaxies(), [reference, observation])
+    lens = dict(theta_e=3.0, q=0.8, pa=20, y=0.3)
+    images = []
+    for x, offset in ((1.5, 0.0), (0.0, 1.5)):
+        properties = PROPERTIES | dict(xpos=x, obs_dx=offset, obs_dy=0) \
+            | lens_params(**lens, x=x)
+        params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+        images.append(group.model_h(params.evaluate())[1]['brightness'][
+            'd'].copy())
+    np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
+
+
 def test_a_scaled_map_scales_its_deflection():
     # (e.g. by D_LS / D_S, of a source at another redshift than the map's)
     lens = LensDeflectionMap(

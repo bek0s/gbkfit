@@ -188,6 +188,15 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return None, None, None
 
+    def centre_params(self) -> tuple[tuple[str, str], ...]:
+        """
+        Return the names of the parameters of the centres (x and y) of what
+        it adds to the galaxies it sees in the frame of the model (e.g. the
+        masses of its lens), which its frame moves as the centres of their
+        components (see ObservationGroup); none here.
+        """
+        return ()
+
     def takes_mass(self) -> bool:
         """
         Check whether its model takes the mass of the galaxies it sees

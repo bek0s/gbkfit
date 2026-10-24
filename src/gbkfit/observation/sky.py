@@ -446,6 +446,9 @@ class ObservationSky(Observation):
         return calibration | offsets | self._foreground.pdescs() \
             | super().pdescs()
 
+    def centre_params(self) -> tuple[tuple[str, str], ...]:
+        return self._foreground.centre_params()
+
     def offset_params(self) -> tuple[str | None, str | None, str | None]:
         """
         Return the names of the parameters of the offsets of its frame

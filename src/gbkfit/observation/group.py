@@ -54,7 +54,8 @@ class _Frame(NamedTuple):
     """
     How an observation moves what it sees into its frame (see
     ObservationGroup): the parameters of the centres (x and y) and of the
-    systemic velocities (v) of the components of the galaxies it sees,
+    systemic velocities (v) of the components of the galaxies it sees
+    (and the centres of what it adds, e.g. the masses of its lens),
     where the origin of the frame of the first observation is in its
     frame (arcsec, x and y), and the names of the parameters of the
     offsets of its frame, of x, y and the velocity (None for those it does
@@ -123,8 +124,11 @@ class ObservationGroup:
     its frame (see ObservationSky) sees the galaxies moved by them too,
     for what the coordinates do not know (e.g. the errors of their
     astrometry); each galaxy seen on the sky needs an observation on the
-    sky without them. The observations that are not on the sky see the
-    parameters as they are.
+    sky without them. The centres of what an observation adds in the
+    frame of the model (e.g. the masses of its lens, see
+    Observation.centre_params) are moved with those of the components.
+    The observations that are not on the sky see the parameters as they
+    are.
 
     The plans of the observations are made here, once (copies of the
     group with other data share them; see with_data). The gravity of each
@@ -304,6 +308,10 @@ class ObservationGroup:
                     name = mapping[params[own]] if own in params else None
                     if name is not None and name not in names[key]:
                         names[key].append(name)
+        # (and the centres of what the observation adds, e.g. its lens)
+        for x, y in observation.centre_params():
+            names['x'].append(x)
+            names['y'].append(y)
         return _Frame(
             tuple(names['x']), tuple(names['y']), tuple(names['v']),
             alignment, observation.offset_params())

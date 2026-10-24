@@ -3,7 +3,8 @@ The masses of a gravitational lens (see Lens): each deflects the light
 of the source plane, and the deflections of the masses of a lens add up.
 
 The analytic masses are placed by their centre (x, y; arcsec, in the
-frame of the model, as xpos and ypos) and oriented by the position angle
+frame of the model, as xpos and ypos: the frame of each observation moves
+them too, see ObservationGroup) and oriented by the position angle
 (pa; degrees, north through east, as that of disks) of their major axis
 (u, from +y towards -x; the minor axis v is 90 degrees clockwise of it).
 Their convergence is elliptical in xi = sqrt(q u^2 + v^2 / q), so the
@@ -80,6 +81,13 @@ class LensMass(parseutils.TypedSerializable, abc.ABC):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         """Return its parameters, by name (none by default)."""
         return {}
+
+    def centred(self) -> bool:
+        """
+        Check whether it is placed by its centre, its parameters x and y
+        (in the frame of the model, as xpos and ypos); not here.
+        """
+        return False
 
     @abc.abstractmethod
     def deflection(
@@ -301,6 +309,9 @@ class LensSIE(LensMass):
     def type() -> str:
         return 'sie'
 
+    def centred(self) -> bool:
+        return True
+
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(theta_e=ParamScalarDesc(
             "the Einstein radius (arcsec)", minimum=0)) | _ellipse_pdescs()
@@ -343,6 +354,9 @@ class LensEPL(LensMass):
     @staticmethod
     def type() -> str:
         return 'epl'
+
+    def centred(self) -> bool:
+        return True
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
@@ -389,6 +403,9 @@ class LensNFW(LensMass):
     @staticmethod
     def type() -> str:
         return 'nfw'
+
+    def centred(self) -> bool:
+        return True
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
@@ -464,6 +481,9 @@ class LensMultipole(LensMass):
     def order(self) -> int:
         """Return its order."""
         return self._order
+
+    def centred(self) -> bool:
+        return True
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(

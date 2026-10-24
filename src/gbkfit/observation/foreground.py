@@ -111,6 +111,16 @@ class Lens(parseutils.Serializable):
         """
         return dict(self._pdescs)
 
+    def centre_params(self) -> tuple[tuple[str, str], ...]:
+        """
+        Return the names of the parameters of the centres (x and y) of its
+        masses that are placed by them (see LensMass.centred).
+        """
+        return tuple(
+            (names['x'], names['y'])
+            for mass, names in zip(self._masses, self._mappings)
+            if mass.centred())
+
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
@@ -316,6 +326,17 @@ class Foreground(parseutils.Serializable):
         return {
             f'{self._prefix}lens_{name}': pdesc
             for name, pdesc in self._lens.pdescs().items()}
+
+    def centre_params(self) -> tuple[tuple[str, str], ...]:
+        """
+        Return the names of the parameters of the centres (x and y) of the
+        masses of its lens (see Lens.centre_params), as pdescs names them.
+        """
+        if self._lens is None:
+            return ()
+        return tuple(
+            (f'{self._prefix}lens_{x}', f'{self._prefix}lens_{y}')
+            for x, y in self._lens.centre_params())
 
     def plan_lens(
             self, driver: Driver, grid: gridutils.Grid, dtype: np.dtype
