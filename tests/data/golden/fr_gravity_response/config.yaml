@@ -1,4 +1,4 @@
-# fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04; screened: f(R) does not take the density of a contracted halo); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
+# fr_gravity_response: A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a stellar disk, and an NFW halo contracted by it (gnedin04, screened); a profile observation of vcirc and the rotation of the gas at radii in arcsec, and small moment maps.
 # (written by make_golden.py; do not edit)
 driver: {type: host}
 galaxies:

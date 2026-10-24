@@ -205,8 +205,8 @@ _SPIRAL_BAR_FLOWS = dict(
 _FR_GRAVITY_RESPONSE = dict(
     name='fr_gravity_response',
     doc="A gas disk rotating in Hu-Sawicki f(R) gravity (log_fr0) of a "
-        "stellar disk, and an NFW halo contracted by it (gnedin04; "
-        "screened: f(R) does not take the density of a contracted halo); "
+        "stellar disk, and an NFW halo contracted by it (gnedin04, "
+        "screened); "
         "a profile observation of vcirc and the rotation of the gas at "
         "radii in arcsec, and small moment maps.",
     galaxies=[dict(
