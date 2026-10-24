@@ -422,6 +422,20 @@ def test_a_fit_with_a_pool_logs_its_evaluations_in_order(tmp_path):
     assert resumed.best().free == pooled.best().free
 
 
+@pytest.mark.parametrize('sampler', ['emcee', 'zeus'])
+def test_a_finished_chain_discards_all_its_burn_in(sampler):
+    # A burn-in of more than half the chain (15 of 20 steps of 16
+    # walkers): the posterior is of the 5 steps after it
+    pytest.importorskip(sampler)
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    fitter = fitter_parser.load(
+        dict(type=sampler, nwalkers=16, nsteps=20, burnin=15))
+    result = fitter.fit(objective, params)
+    assert len(result.posterior.samples) == 16 * 5
+
+
 def test_a_stopped_emcee_keeps_its_chain_so_far(tmp_path):
     # The steps go to the log as the chain runs (16 walkers, 6 elements
     # and the log-probability)

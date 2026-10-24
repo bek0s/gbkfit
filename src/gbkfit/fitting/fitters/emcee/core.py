@@ -150,7 +150,8 @@ class FitterEmcee(Fitter):
         except FitStopped:
             stopped = True
         nsteps = sampler.iteration
-        burnin = min(burnin, nsteps // 2)
+        if burnin >= nsteps:
+            burnin = nsteps // 2
         if nsteps - burnin < 1:
             raise FitStopped("emcee was stopped before its first steps")
         samples = sampler.get_chain(discard=burnin, thin=self._thin, flat=True)

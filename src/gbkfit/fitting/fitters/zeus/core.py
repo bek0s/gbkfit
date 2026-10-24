@@ -204,7 +204,8 @@ class FitterZeus(Fitter):
                     break
                 coords = sampler.get_last_sample()
                 log_prob = sampler.get_last_log_prob()
-        burnin = min(self._burnin, nsteps // 2)
+        # (a fit stopped within the burn-in keeps half of its chain)
+        burnin = self._burnin if self._burnin < nsteps else nsteps // 2
         # (the steps of the burn-in in the chain of the last stage)
         discard = max(0, burnin - (nsteps - sampler.iteration))
         if sampler.iteration - discard < 1:
