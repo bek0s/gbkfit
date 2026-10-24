@@ -1038,6 +1038,25 @@ def test_fits_report_their_progress():
     assert set(reports[-1].best) == set(result.best().free)
 
 
+def test_observers_that_fail_are_dropped(caplog):
+    # The fit goes on, and the other observers receive every report
+    pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    reports = []
+
+    def failing(progress):
+        raise OSError("no space left on device")
+    result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
+        objective, params, [failing, reports.append])
+    assert result.best().chi2 < np.inf
+    assert reports[-1].final
+    failures = [record for record in caplog.records
+                if 'progress observer failed' in record.message]
+    assert len(failures) == 1
+
+
 def test_the_information_criteria_of_a_solution():
     # Of 3 fitted quantities, 100 residuals and ln L = -50: AIC = 2 x 3 +
     # 100, BIC = 3 ln 100 + 100

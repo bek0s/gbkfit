@@ -3,6 +3,7 @@ The problem that fitters solve: the objective as functions of the free
 values.
 """
 
+import logging
 import math
 import time
 import typing
@@ -21,6 +22,9 @@ from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
 from gbkfit.utils import threadutils
+
+
+_log = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -60,6 +64,7 @@ class FitProblem:
     The problem reports the progress of the fit to the given observers
     (see FitProgress): at most every interval seconds as it evaluates,
     when the stage changes (see set_stage), and at the end (see finish).
+    An observer that raises is logged and dropped: the fit goes on.
 
     Every model evaluation raises FitStopped once the control (if any) is
     stopped: those of a batch before it count, without a pool (with one,
@@ -638,8 +643,17 @@ class FitProblem:
         progress = FitProgress(
             self._stage, self._nevals, now - self._start, self._last_chi2,
             self._best_chi2, best, final)
+        failed = []
         for observer in self._observers:
-            observer(progress)
+            try:
+                observer(progress)
+            except Exception:
+                _log.exception(
+                    "a progress observer failed; the fit goes on without it")
+                failed.append(observer)
+        self._observers = tuple(
+            observer for observer in self._observers
+            if observer not in failed)
 
 
 def _points(xs: npt.ArrayLike) -> np.ndarray:
