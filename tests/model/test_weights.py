@@ -74,7 +74,8 @@ def test_weights_follow_the_plane_of_the_disk(driver):
 
 
 @pytest.mark.parametrize('observable, component, message', [
-    (dict(type='pixel_moments', size=[24, 24], method='gaussian_fit'), None,
+    (dict(type='pixel_moments', size=[24, 24], method='gaussian_fit',
+          spec_convention='relativistic'), None,
      "gaussian_fit does not support weights"),
     (dict(type='pixel_spectra', size=[24, 24, 21]),
      dict(type='point', name='gas', emission=dict(type='lines')),

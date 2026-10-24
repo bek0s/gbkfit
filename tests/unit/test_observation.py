@@ -22,7 +22,8 @@ def test_observable_from_data():
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2, rota=30)
-    observable = PixelMoments.from_data(data, spec_step=5)
+    observable = PixelMoments.from_data(data, spec_step=5,
+                                        spec_convention='relativistic')
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spec_rval() == 1500
@@ -53,14 +54,15 @@ def test_a_model_that_can_lack_values_needs_their_residual():
     # the mask cutoff, and the residual there is the user's choice
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
-    observable = PixelMoments.from_data(data, spec_step=5)
+    observable = PixelMoments.from_data(data, spec_step=5,
+                                        spec_convention='relativistic')
     with pytest.raises(ConfigError, match="option missing_residual"):
         ObservationSky(observable, Flat(), data=data)
 
 
 def test_observable_options_are_checked():
     with pytest.raises(ConfigError, match="flux_floor is a fraction"):
-        PixelMoments(size=(8, 8), flux_floor=1)
+        PixelMoments(size=(8, 8), flux_floor=1, spec_convention='relativistic')
     with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
         ObservationSky(
             PixelBrightness(size=(8, 8)), Flat(),
@@ -118,7 +120,9 @@ def test_likelihoods_name_items_of_their_observation(options, message):
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
     with pytest.raises(ConfigError, match=message):
         ObservationSky(
-            PixelMoments.from_data(data, spec_step=5), Flat(), data=data,
+            PixelMoments.from_data(
+                data, spec_step=5, spec_convention='relativistic'),
+            Flat(), data=data,
             likelihood=LikelihoodGaussian(missing_residual=3, **options))
 
 

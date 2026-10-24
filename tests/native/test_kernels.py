@@ -460,8 +460,7 @@ def test_residual_sum_precision(driver):
 def test_noise_sum(driver):
     # sum c^2 log(noise^2 / (scale_minimum error)^2), c the factor of the
     # residual: the weight of the item times those of the model and of the
-    # data mask, the weight alone where the model has no value; none
-    # where the data are masked
+    # data mask; none where the data are masked or the model has no value
     memory = Memory(driver)
     inputs = _residual_inputs()
     masked = inputs['obs_m'] == 0
@@ -472,7 +471,7 @@ def test_noise_sum(driver):
         **{k: memory.to_device(v) for k, v in inputs.items() if k != 'obs_d'},
         weight=0.7, scale=1.3, jitter=0.4, scale_minimum=0.5, sum=total)
     error = inputs['obs_e'].astype(float)
-    c = np.where(missing, 0.7, 0.7 * inputs['mdl_w'] * inputs['obs_m'])
+    c = np.where(missing, 0, 0.7 * inputs['mdl_w'] * inputs['obs_m'])
     terms = c ** 2 * np.log(np.hypot(1.3 * error, 0.4) ** 2
                             / (0.5 * error) ** 2)
     assert memory.to_host(total)[0] == pytest.approx(

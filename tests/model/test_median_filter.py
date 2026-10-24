@@ -68,9 +68,11 @@ def test_images_and_cubes_are_filtered_on_the_sky(driver):
 def test_moment_maps_are_of_the_filtered_spectra(driver):
     # (the cube of the spectra, an extra output, is that of the filter)
     filtered, plain = Extras(), Extras()
-    model(driver, PixelMoments(size=(24, 20), orders=(0, 1), median_size=3),
+    model(driver, PixelMoments(size=(24, 20), orders=(0, 1), median_size=3,
+                               spec_convention='relativistic'),
           disk('lines'), 'moment1', filtered)
-    model(driver, PixelMoments(size=(24, 20), orders=(0, 1)), disk('lines'),
+    model(driver, PixelMoments(size=(24, 20), orders=(0, 1),
+                               spec_convention='relativistic'), disk('lines'),
           'moment1', plain)
     np.testing.assert_array_equal(
         filtered.get('dcube_lo').data,

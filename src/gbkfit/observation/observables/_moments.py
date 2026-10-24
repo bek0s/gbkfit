@@ -5,6 +5,7 @@ Helpers shared by the observables of moments.
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
+import astropy.units
 import numpy as np
 
 import gbkfit.math
@@ -113,6 +114,25 @@ def check_moment_options(
     if spec_size is not None and spec_size < 1:
         raise ConfigError(f"spec_size must be at least 1; it is {spec_size}")
     return orders
+
+
+def check_velocities(
+        spec_rest: str | astropy.units.Quantity | None,
+        spec_convention: str | None
+) -> None:
+    """
+    Raise ConfigError unless the convention of the velocities of the maps
+    is given (its rest, or 'relativistic' without one): the maps of the
+    data were measured in one, and none is right for all (e.g. radio for
+    HI, optical for lines of stars and ionised gas; at 5000 km/s, the
+    rotation of the others differs by 1.6%).
+    """
+    if spec_rest is None and spec_convention is None:
+        raise ConfigError(
+            "the velocities of moment maps need their convention: give "
+            "spec_rest (e.g. 'hi21' for the radio velocities of HI, or "
+            "'6562.8 Angstrom' for optical ones), or spec_convention "
+            "'relativistic'")
 
 
 def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:

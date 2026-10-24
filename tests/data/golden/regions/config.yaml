@@ -36,7 +36,7 @@ observations:
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
   observable: {type: region_moments, flux_floor: 1.0e-06, spec_size: 60, spec_step: 10,
-    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: null, method: moments}
+    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: relativistic, method: moments}
   scale: [1, 1]
   dtype: float64
   fft_dtype: float64

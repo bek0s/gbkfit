@@ -40,7 +40,8 @@ CASES = {
         GRID, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'moments': (
         dict(components=[THIN_DISK]),
-        dict(type='pixel_moments', size=[33, 32], step=[1, 1]),
+        dict(type='pixel_moments', size=[33, 32], step=[1, 1],
+             spec_convention='relativistic'),
         FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'varying psf': (
         dict(components=[THIN_DISK]),

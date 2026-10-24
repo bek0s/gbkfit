@@ -298,14 +298,17 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
             observable, Flat(), driver, data=dataset, likelihood=likelihood)
         return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
     image = group(observable_parser.load(dict(
-        type='pixel_moments', size=[24, 24], orders=[0, 1, 2])))
+        type='pixel_moments', size=[24, 24], orders=[0, 1, 2],
+        spec_convention='relativistic')))
     model = image.model_h(ParamSpace(image.pdescs(), DISK).evaluate())[0]
     errors = dict(moment0=0.01, moment1=5.0, moment2=5.0)
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full(
             (24, 24), errors[f'moment{order}']))
         for order in (0, 1, 2)})
-    objective = Objective(group(PixelMoments.from_data(dataset), dataset))
+    observable = PixelMoments.from_data(
+        dataset, spec_convention='relativistic')
+    objective = Objective(group(observable, dataset))
     truth = ParamSpace(objective.pdescs(), DISK).evaluate()
     compact = ParamSpace(
         objective.pdescs(), DISK | dict(pt_s=0.1)).evaluate()
@@ -336,12 +339,15 @@ def test_values_the_model_lacks_take_no_noise(driver):
             name='obs')
         return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
     image = group(observable_parser.load(dict(
-        type='pixel_moments', size=[24, 24], orders=[0, 1])))
+        type='pixel_moments', size=[24, 24], orders=[0, 1],
+        spec_convention='relativistic')))
     model = image.model_h(ParamSpace(image.pdescs(), DISK).evaluate())[0]
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full((24, 24), 5.0))
         for order in (0, 1)})
-    objective = Objective(group(PixelMoments.from_data(dataset), dataset))
+    observable = PixelMoments.from_data(
+        dataset, spec_convention='relativistic')
+    objective = Objective(group(observable, dataset))
     compact = ParamSpace(objective.pdescs(), DISK | dict(
         pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
     moment1 = objective.group().model_h(compact)[0]['moment1']['d']

@@ -206,6 +206,7 @@ spec_medium, method : optional
         self._spec_rest = gridutils.make_rest(spec_rest)
         self._spec_medium = gridutils.make_medium(
             spec_medium, self._spec_rest)
+        _moments.check_velocities(spec_rest, spec_convention)
         self._spec_convention = gridutils.make_convention(
             spec_convention, self._spec_rest)
         # The area of each pixel in the regions, so that their sums are

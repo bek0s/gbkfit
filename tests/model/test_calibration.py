@@ -45,7 +45,8 @@ def test_calibration_scales_the_flux(driver):
     # calibration; the velocities (moment 1) and the other observations
     # are not
     observables = [
-        dict(type='pixel_moments', size=[24, 24], orders=[0, 1]),
+        dict(type='pixel_moments', size=[24, 24], orders=[0, 1],
+             spec_convention='relativistic'),
         dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20])]
 
     def evaluate(calibration):

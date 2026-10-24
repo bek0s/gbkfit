@@ -70,9 +70,12 @@ class PixelMoments(Observable):
         The medium of the wavelengths of a rest wavelength: 'vacuum' (the
         default) or 'air' (see gridutils.make_medium).
     spec_convention : str, optional
-        The convention of the velocities of the rest: 'optical' (the
-        default of a rest wavelength), 'log', or 'radio' (see
-        gridutils.make_convention); that of the velocities of the maps.
+        The convention of the velocities of the maps, as the data were
+        measured: of a rest wavelength, 'optical' (its default) or 'log';
+        of a rest frequency, 'radio'; without a rest, 'relativistic' (see
+        gridutils.make_convention). A rest or the convention is required:
+        none is right for all data (e.g. radio for HI, optical for lines
+        of stars and ionised gas).
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
         data were: 'moments'; 'gaussian_fit' (the flux, centre and
@@ -93,8 +96,9 @@ class PixelMoments(Observable):
     ------
     ConfigError
         If the orders are not valid for the method, flux_floor is not from
-        0 to below 1, spec_size is less than 1, spec_step is not positive,
-        or median_size is not an odd number of at least 3.
+        0 to below 1, neither spec_rest nor spec_convention is given,
+        spec_size is less than 1, spec_step is not positive, or
+        median_size is not an odd number of at least 3.
     """
 
     dataset_class = DatasetPixelMoments
@@ -230,6 +234,7 @@ class PixelMoments(Observable):
         self._spec_rest = gridutils.make_rest(spec_rest)
         self._spec_medium = gridutils.make_medium(
             spec_medium, self._spec_rest)
+        _moments.check_velocities(spec_rest, spec_convention)
         self._spec_convention = gridutils.make_convention(
             spec_convention, self._spec_rest)
 

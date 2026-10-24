@@ -152,7 +152,8 @@ def test_amplitudes_scale_spectra_only(observable, calibration, message):
     if observable == 'moments':
         from gbkfit.dataset import DatasetPixelMoments
         data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
-        observable = PixelMoments.from_data(data)
+        observable = PixelMoments.from_data(data,
+                                            spec_convention='relativistic')
     else:
         data = DatasetPixelSpectra(Data(np.zeros((5, 4, 4))))
         observable = PixelSpectra.from_data(data)

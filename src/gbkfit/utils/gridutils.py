@@ -303,7 +303,8 @@ def make_convention(
     rest (see make_rest): of a rest wavelength w0, 'optical', c (w / w0 -
     1), the default, or 'log', c ln(w / w0) (exactly linear on an axis
     uniform in ln w, as FITS WAVE-LOG); of a rest frequency, 'radio', c (1
-    - f / f0); without a rest, none (the velocities are relativistic).
+    - f / f0); without a rest, 'relativistic' if given, or none (true
+    radial velocities either way; none for axes that are not spectral).
 
     Raises
     ------
@@ -311,7 +312,7 @@ def make_convention(
         If the convention is not one of those of the rest.
     """
     if rest is None:
-        allowed, default = (None,), None
+        allowed, default = (None, 'relativistic'), None
     elif rest.unit.is_equivalent(astropy.units.m):
         allowed, default = ('optical', 'log'), 'optical'
     else:
@@ -457,7 +458,10 @@ class VelocityConvention:
                     self._rest_wavelength)
 
     def name(self) -> str | None:
-        """Return its name: 'optical', 'log', 'radio', or None."""
+        """
+        Return its name: 'optical', 'log', 'radio', or 'relativistic' (or
+        None: relativistic too, not given).
+        """
         return self._name
 
     def rest(self) -> astropy.units.Quantity | None:

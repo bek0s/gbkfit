@@ -60,9 +60,11 @@ def test_region_moments_of_single_pixel_bins_are_pixel_moments(driver):
     # maps
     regions = write_bins(np.arange(32 * 41).reshape(41, 32))
     mmaps = evaluate(driver, dict(
-        type='pixel_moments', size=[32, 41], **SPECTRAL, **INSTRUMENT))
+        type='pixel_moments', size=[32, 41], **SPECTRAL, **INSTRUMENT,
+        spec_convention='relativistic'))
     bmaps = evaluate(driver, dict(
-        type='region_moments', regions=regions, **SPECTRAL, **INSTRUMENT))
+        type='region_moments', regions=regions, **SPECTRAL, **INSTRUMENT,
+        spec_convention='relativistic'))
     for key in ('moment0', 'moment1', 'moment2'):
         assert bmaps[key].shape == (32 * 41,)
         np.testing.assert_allclose(
@@ -80,7 +82,8 @@ def test_region_moments_are_the_moments_of_the_summed_spectra(driver):
         type='pixel_spectra', size=[32, 41, 101], step=[1, 1, 5],
         **INSTRUMENT))['spectra']
     bmaps = evaluate(driver, dict(
-        type='region_moments', regions=regions, **SPECTRAL, **INSTRUMENT))
+        type='region_moments', regions=regions, **SPECTRAL, **INSTRUMENT,
+        spec_convention='relativistic'))
     velocity = (np.arange(101) - 50) * 5
     for i in range(2):
         spectrum = scube[:, index == i].sum(axis=1)
@@ -99,7 +102,8 @@ def test_region_moments_of_apertures(driver):
         **INSTRUMENT))['spectra']
     bmaps = evaluate(driver, dict(
         type='region_moments', size=[32, 41], **SPECTRAL, **INSTRUMENT,
-        regions=dict(type='apertures', apertures=[dict(type='field')])))
+        regions=dict(type='apertures', apertures=[dict(type='field')]),
+        spec_convention='relativistic'))
     np.testing.assert_allclose(
         bmaps['moment0'], [scube.sum() * 5], rtol=1e-4)
 
@@ -107,7 +111,8 @@ def test_region_moments_of_apertures(driver):
 def test_region_moments_output_is_a_map_of_the_bins():
     from gbkfit.observation import RegionMoments
     index = np.array([[0, 0, -1], [1, 2, 2]])
-    bmaps = RegionMoments(RegionsBins(index, step=2, rota=10))
+    bmaps = RegionMoments(RegionsBins(index, step=2, rota=10),
+                          spec_convention='relativistic')
     output = bmaps.output(np.array([1.0, 2.0, 3.0], dtype=np.float32))
     np.testing.assert_array_equal(output.data, [[1, 1, np.nan], [2, 3, 3]])
     assert output.coords == bmaps.regions().grid().coords
@@ -130,7 +135,8 @@ def test_region_moments_observation_from_data(tmp_path):
     info = dict(
         type='sky',
         data=data_info, line_of_sight=FLAT,
-        observable=dict(type='region_moments', spec_step=2),
+        observable=dict(type='region_moments', spec_step=2,
+                        spec_convention='relativistic'),
         likelihood=dict(type='gaussian', missing_residual=3))
     observation = observation_parser.load(copy.deepcopy(info))
     observable = observation.observable()
@@ -143,7 +149,8 @@ def test_region_moments_observation_from_data(tmp_path):
     assert 'size' not in dumped['observable']
     with pytest.raises(Exception, match="give its options \\['size'\\]"):
         observation_parser.load(info | dict(observable=dict(
-            type='region_moments', size=[3, 2])))
+            type='region_moments', size=[3, 2],
+            spec_convention='relativistic')))
 
 
 
@@ -153,7 +160,8 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_p
     from gbkfit.observation import (
         Flat, ObservationSky, RegionMoments, observation_parser)
     observation = ObservationSky(RegionMoments(
-        RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11),
+        RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11,
+        spec_convention='relativistic'),
         Flat(), driver)
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
@@ -174,7 +182,8 @@ def test_region_moments_objective_residual(driver):
     index[10:20, 5:15] = 0
     index[20:30, 10:25] = 1
     regions = RegionsBins(index)
-    observable = RegionMoments(regions, orders=[1, 2], **SPECTRAL)
+    observable = RegionMoments(regions, orders=[1, 2], **SPECTRAL,
+                               spec_convention='relativistic')
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],

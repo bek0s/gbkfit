@@ -300,7 +300,8 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
     mmaps = dict(
         type='sky',
         name='maps', line_of_sight=dict(type='flat'),
-        observable=dict(type='pixel_moments', size=[48, 48]))
+        observable=dict(type='pixel_moments', size=[48, 48],
+                        spec_convention='relativistic'))
     config['observations'] = [scube | dict(name='cube'), mmaps]
     run = run_eval('model', config, tmp_path / 'model')
     assert array(run, 'model', observation='cube').shape == (50, 48, 48)
