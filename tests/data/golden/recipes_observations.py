@@ -63,7 +63,8 @@ _CUBE = _sky(
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 _MOMENTS = _sky(
-    dict(type='pixel_moments', size=[24, 24], spec_size=60, spec_step=10),
+    dict(type='pixel_moments', size=[24, 24], spec_size=60, spec_step=10,
+         spec_convention='relativistic'),
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 
@@ -263,17 +264,16 @@ CASES: list[dict[str, Any]] = [
         noises=[_gauss(0.0005)]),
     dict(
         name='slitless_rows',
-        doc="Slitless spectra of a polynomial trace along x, with free "
-            "amplitudes per spectrum (the rows, along the dispersion).",
+        doc="Slitless spectra of a polynomial trace along x, with a solved "
+            "flux scale per row (along the dispersion).",
         galaxies=_DISK,
         observations=[_sky(
             dict(type='slitless_spectra', size=[32, 24]) | _GRISM,
-            instrument=dict(psf=_PSF))],
-        truth=_DISK_TRUTH, trial=_DISK_TRIAL,
-        noises=[_gauss(0.02)],
-        likelihoods=[dict(
-            type='gaussian', amplitudes='per_spectrum',
-            amplitude_sigma=0.5)]),
+            instrument=dict(psf=_PSF), name='grism', flux_scale='per_row')],
+        truth=_DISK_TRUTH | dict(grism_flux_scale=1),
+        trial=_DISK_TRIAL | dict(grism_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1, sigma=0.5, minimum=0))),
+        noises=[_gauss(0.02)]),
     dict(
         name='msa_shutters',
         doc="Slitless spectra behind a slitlet of three MSA shutters: two "
@@ -304,7 +304,8 @@ CASES: list[dict[str, Any]] = [
         observations=[
             _sky(dict(type='region_moments',
                       regions=dict(type='bins', file='bins.fits'),
-                      spec_size=60, spec_step=10),
+                      spec_size=60, spec_step=10,
+                      spec_convention='relativistic'),
                  instrument=dict(psf=_PSF, lsf=_LSF)),
             _sky(dict(type='region_spectra', size=[24, 24], step=[0.5, 0.5],
                       spec_size=40, spec_step=20,
@@ -373,15 +374,15 @@ CASES: list[dict[str, Any]] = [
         likelihoods=[dict(type='gaussian', missing_residual=3)]),
     dict(
         name='upper_limits_fitted_noise',
-        doc="The moment maps of a named observation with a calibration, "
+        doc="The moment maps of a named observation with a flux scale, "
             "of spectra blanked beyond the detection: upper limits on its "
             "masked moment 0, and a fitted noise (scale and jitter) of its "
             "moment 1.",
         galaxies=_DISK,
-        observations=[_MOMENTS | dict(name='halpha', calibration=True)],
-        truth=_DISK_TRUTH | dict(halpha_calibration=1.2),
+        observations=[_MOMENTS | dict(name='halpha', flux_scale='one')],
+        truth=_DISK_TRUTH | dict(halpha_flux_scale=1.2),
         trial=_DISK_TRIAL | dict(
-            halpha_calibration=dict(value=1.0, min=0.5, max=2),
+            halpha_flux_scale=dict(value=1.0, min=0.5, max=2),
             halpha_noise_scale_moment1=dict(value=1.3, min=0.5, max=5),
             halpha_noise_jitter_moment1=dict(value=2.0, min=0, max=20)),
         noises=[dict(type='gauss', error='detected_noise.fits')],

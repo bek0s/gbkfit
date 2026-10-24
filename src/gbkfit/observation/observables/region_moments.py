@@ -256,6 +256,9 @@ spec_medium, method : optional
         return _detail.region_data_unit(
             dataset, 'moment0' if 0 in self._orders else None, True)
 
+    def light_items(self) -> tuple[str, ...]:
+        return ('moment0',) if 0 in self._orders else ()
+
     def model_can_lack_values(self) -> bool:
         # (moment 0, the flux, always has a value)
         return any(order >= 1 for order in self._orders)
@@ -303,7 +306,7 @@ spec_medium, method : optional
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'RegionMomentsPlan':
         if weights is not None:
             raise ConfigError("region_moments does not support weights yet")
@@ -311,7 +314,7 @@ spec_medium, method : optional
             self, scale, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, scene, foreground, dtype,
-            calibration)
+            flux_scale)
 
 
 class RegionMomentsPlan(_detail.DCubePlanBase):
@@ -325,10 +328,10 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            calibration: str | None
+            flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None, calibration)
+            dcube, driver, scene, foreground, dtype, None, flux_scale)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions

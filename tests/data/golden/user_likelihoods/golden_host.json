@@ -228,11 +228,7 @@
     "scale": 0.0
    }
   ],
-  "amplitudes": [
-   null,
-   null,
-   null
-  ]
+  "solved": null
  },
  "derived": {}
 }

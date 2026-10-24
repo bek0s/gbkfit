@@ -54,7 +54,7 @@ def _moments(
         type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
         observable=dict(
             type='pixel_moments', size=[size, size], spec_size=60,
-            spec_step=10),
+            spec_step=10, spec_convention='relativistic'),
         instrument=_INSTRUMENT) | options
 
 

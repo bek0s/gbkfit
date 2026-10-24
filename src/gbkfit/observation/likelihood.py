@@ -158,22 +158,6 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         return None
 
     @abc.abstractmethod
-    def amplitudes(self) -> str | None:
-        """
-        Return the amplitudes of the spectra of the model, if any (see
-        LikelihoodGaussian).
-        """
-        pass
-
-    @abc.abstractmethod
-    def amplitude_sigma(self) -> float | None:
-        """
-        Return the standard deviation of the prior of the amplitudes, if
-        any (see LikelihoodGaussian).
-        """
-        pass
-
-    @abc.abstractmethod
     def white_floor(self) -> float:
         """
         Return the share of the variance of correlated noise taken as white
@@ -222,58 +206,6 @@ class LikelihoodGaussian(Likelihood):
     shape of the data or of their last axes (e.g. an image of the field
     of a cube, the same in every channel); the masked values outside it
     count nothing, and the data must have none there.
-
-    With amplitudes 'per_spectrum' (spectra only, e.g. those of
-    pixel_spectra, or each line of the image of slitless_spectra along
-    the dispersion, as the row amplitudes of geko), each spectrum of the
-    model is times an amplitude of its own, a >= 0: the fit then takes
-    the shape of each spectrum from
-    the model (where its lines are, how wide; with beam smearing, also how
-    the light of the model weighs its velocities), and its brightness
-    mostly from the data, which suits a model whose light misses
-    structure of the data (e.g. the clumps of a clumpy disk). The fitters
-    never see the amplitudes: the objective works them out for each
-    spectrum, with exact formulas, never putting the flux of the data into
-    the model. They have a prior: a is about 1, a Gaussian of standard
-    deviation amplitude_sigma (s) around 1, cut at a = 0; that is, each
-    spectrum may be brighter or fainter than the model by a factor of
-    about 1 +- s. With the sums of a spectrum A = sum w m^2, B = sum w m d
-    and C = sum w d^2 over its values (m the model, d the data, w the
-    weight of each value in the chi-square, (weight / error)^2), and A' =
-    A + 1/s^2, B' = B + 1/s^2:
-
-    - for optimizers, the objective takes the best amplitude, a =
-      max(0, B' / A'), the minimum of the chi-square of the spectrum
-      plus that of the prior, (a - 1)^2 / s^2, which is a residual too:
-      (a - 1) / s, after those of the data;
-    - for samplers, the log-likelihood has the amplitudes integrated out
-      under their prior: for each spectrum, the log of the integral over
-      a >= 0 of exp(-chi2(a) / 2) times the prior, which is -chi2 / 2 at
-      the best amplitude + log(Phi(B' / sqrt(A')) / (s sqrt(A') Phi(1 /
-      s))) + (B'^2 / 2A' if B' < 0), Phi the normal cdf.
-
-    Each amplitude counts as a parameter in the degrees of freedom, and
-    its prior as a residual: they cancel.
-
-    Why this prior (the user chose it, 2026-10-15; revise here): the
-    log-likelihood of samplers needs one. A flat prior on a makes the
-    integral over a grow as the model gets fainter (half the light,
-    twice the amplitudes, twice the integral): samplers would prefer
-    galaxies of no light. A flat prior on the flux of each spectrum (a
-    times the sum of the model there) removes that, but favours model
-    lines whose flux the data pin down loosely (broad lines) where the
-    spectra are faint: in 4000 random spectra of 61 channels of 10 km/s
-    (noise 1), the log-evidence of a 60 km/s model line over a 30 km/s
-    one was +0.35 on noise alone and +0.22 on a faint line truly 30 km/s
-    wide (flux 3); with this prior (s = 0.5), +0.03 and -0.09. Over
-    thousands of faint spectra (e.g. of clumpy disks at z ~ 1.5) the flat
-    prior would pull the dispersion up. This prior is proper (the
-    evidence is a normal one), and keeps the brightness of the model
-    meaningful: it is the mean brightness, about which the spectra
-    scatter. Its cost is s, a statement of how much the spectra may
-    differ from the model: a very large s is a flat prior on a again,
-    with its bias. (s could become a parameter of the likelihood, fitted
-    with the others; it is a fixed option for now.)
 
     With noise, the noise of data items is fitted: the errors e of an item
     (1 where the data have none) are times a scale f, and a jitter j adds
@@ -337,10 +269,12 @@ class LikelihoodGaussian(Likelihood):
     product, and the pixels must be at most MAX_CORRELATED_PIXELS (C is a
     dense matrix).
     Correlated noise does not go with upper limits (the probability of
-    correlated non-detections has no closed form) or amplitudes of
-    spectra (the best amplitude of each spectrum would depend on the
-    others). Observations of correlated noise are in float64 by default
-    (see ObservationSky).
+    correlated non-detections has no closed form), or with solved flux
+    scales of the item (see ObservationSky; the best scale of each
+    spectrum would depend on the others). Observations of correlated noise
+    are in float64 by default (see ObservationSky). Solved flux scales do
+    not go with upper limits of their items either: they are solved
+    without the terms of the limits.
 
     Parameters
     ----------
@@ -355,12 +289,6 @@ class LikelihoodGaussian(Likelihood):
         noise of the non-detections), and optionally its 'footprint' (a
         FITS file, relative to the configuration: a filename, or a
         mapping of it, 'file', and its 'hdu'); see above. None by default.
-    amplitudes : str, optional
-        'per_spectrum' for an amplitude for each spectrum of the model
-        (see above); none by default.
-    amplitude_sigma : float, optional
-        The standard deviation of the prior of the amplitudes around 1
-        (see above); required with them.
     noise : Mapping, optional
         The fitted noise of data items, by name (none for the others): a
         mapping of 'scale' (whether the errors are times a fitted scale),
@@ -377,10 +305,8 @@ class LikelihoodGaussian(Likelihood):
     ConfigError
         If missing_residual is negative or not finite, an upper limit is
         not a finite limit and a finite, positive error (and a footprint
-        that can be read, of values 0 and 1), amplitudes is not
-        'per_spectrum', amplitude_sigma is missing with it, given without
-        it, or not positive, the noise of an item is not as above, or the
-        white floor is not in [0, 1).
+        that can be read, of values 0 and 1), the noise of an item is not
+        as above, or the white floor is not in [0, 1).
     """
 
     @staticmethod
@@ -388,9 +314,6 @@ class LikelihoodGaussian(Likelihood):
         return 'gaussian'
 
     def dump(self) -> dict[str, Any]:
-        amplitudes = {} if self._amplitudes is None else dict(
-            amplitudes=self._amplitudes,
-            amplitude_sigma=self._amplitude_sigma)
         limits = {} if self._upper_limits is None else dict(
             upper_limits=self._upper_limits)
         noise = {} if not self._noise else dict(noise={
@@ -401,7 +324,7 @@ class LikelihoodGaussian(Likelihood):
         return dict(
             type=self.type(), weights=self._weights,
             missing_residual=self._missing_residual) \
-            | limits | amplitudes | noise \
+            | limits | noise \
             | dict(white_floor=self._white_floor)
 
     def __init__(
@@ -409,8 +332,6 @@ class LikelihoodGaussian(Likelihood):
             weights: float | Mapping[str, float] = 1.0,
             missing_residual: float | None = None,
             upper_limits: Mapping[str, Mapping[str, float]] | None = None,
-            amplitudes: str | None = None,
-            amplitude_sigma: float | None = None,
             noise: Mapping[str, Mapping[str, Any]] | None = None,
             white_floor: float = 0.01
     ):
@@ -430,22 +351,6 @@ class LikelihoodGaussian(Likelihood):
             key: _read_footprint(key, limit['footprint'])
             for key, limit in (self._upper_limits or {}).items()
             if 'footprint' in limit}
-        if amplitudes not in (None, 'per_spectrum'):
-            raise ConfigError(
-                f"option 'amplitudes' must be 'per_spectrum' (or none); it "
-                f"is {amplitudes!r}")
-        if (amplitudes is None) != (amplitude_sigma is None):
-            raise ConfigError(
-                "options 'amplitudes' and 'amplitude_sigma' (the spread of "
-                "the amplitudes around 1, e.g. 0.5) go together")
-        if amplitude_sigma is not None and not (
-                math.isfinite(amplitude_sigma) and amplitude_sigma > 0):
-            raise ConfigError(
-                f"option 'amplitude_sigma' must be finite and positive; it "
-                f"is {amplitude_sigma}")
-        self._amplitudes = amplitudes
-        self._amplitude_sigma = None if amplitude_sigma is None \
-            else float(amplitude_sigma)
         self._noise = {
             key: _check_noise(key, info)
             for key, info in (noise or {}).items()}
@@ -495,12 +400,6 @@ class LikelihoodGaussian(Likelihood):
 
     def footprint(self, key: str) -> np.ndarray | None:
         return self._footprints.get(key)
-
-    def amplitudes(self) -> str | None:
-        return self._amplitudes
-
-    def amplitude_sigma(self) -> float | None:
-        return self._amplitude_sigma
 
     def fitted_noise(self) -> dict[str, FittedNoise]:
         return dict(self._noise)
@@ -720,9 +619,9 @@ class LikelihoodUser(Likelihood):
       least squares do not take it (they need residuals).
 
     It has none of the options of LikelihoodGaussian (fitted noise, upper
-    limits, amplitudes of spectra, missing_residual; correlated noise is
-    not whitened): its function does what it needs, and takes the values
-    that the model lacks.
+    limits, missing_residual; correlated noise is not whitened), and
+    solves no flux scales (see ObservationSky): its function does what it
+    needs, and takes the values that the model lacks.
 
     Parameters
     ----------
@@ -798,12 +697,6 @@ class LikelihoodUser(Likelihood):
         return True
 
     def upper_limit(self, key: str) -> tuple[float, float] | None:
-        return None
-
-    def amplitudes(self) -> str | None:
-        return None
-
-    def amplitude_sigma(self) -> float | None:
         return None
 
     def white_floor(self) -> float:

@@ -1,5 +1,5 @@
 import abc
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from typing import NamedTuple, Self
 
 import numpy as np
@@ -34,9 +34,9 @@ class Comparison(abc.ABC):
     and the terms of the chi-square beyond them (e.g. the noise residuals
     of a fitted noise).
 
-    The model it compares can have scales (e.g. the amplitudes of its
-    spectra; see Solve): factors of the values of data items, which it
-    applies to a copy of the model of its own.
+    The model it compares can have scales (the solved values of a flux
+    scale of the observation; see Objective): factors of the values of
+    data items, which it applies to a copy of the model of its own.
 
     Its memory on the device (and the host) is allocated by prepare and
     released by close. The methods of the residuals return arrays that the
@@ -171,6 +171,16 @@ class Comparison(abc.ABC):
         """
         pass
 
+    def check_scales(self, keys: Collection[str]) -> None:
+        """
+        Raise ConfigError unless it can give the sums of solved scales of
+        the given data items (see scale_sums): here, it cannot.
+        """
+        raise ConfigError(
+            f"the likelihood of the observation, "
+            f"{self._observation.likelihood().type()}, solves no scales of "
+            f"its model (e.g. its flux scale)")
+
     def scale_sums(
             self,
             model: _Model,
@@ -183,17 +193,10 @@ class Comparison(abc.ABC):
         takes along an axis (see Solve): at each point of the other axes,
         A = sum w m^2 and B = sum w m d of the values along it, m the
         model, d the data and w the weight of the value in the chi-square;
-        new arrays of the shape of the item, of 1 along the axis.
-
-        Raises
-        ------
-        ConfigError
-            If its likelihood does not solve scales.
+        new arrays of the shape of the item, of 1 along the axis. Only
+        comparisons that can solve scales give them (see check_scales).
         """
-        raise ConfigError(
-            f"the likelihood of the observation, "
-            f"{self._observation.likelihood().type()}, does not solve "
-            f"scales of its model")
+        raise NotImplementedError
 
     def noise_residuals(self) -> np.ndarray:
         """
@@ -578,6 +581,22 @@ class ComparisonGaussian(Comparison):
                 self._whiteners[key](residual)
         if self._noise:
             self._update_noise_residuals(model, scaled, params, weighted)
+
+    def check_scales(self, keys: Collection[str]) -> None:
+        """
+        Raise ConfigError if a data item of the given ones has an upper
+        limit (the sums leave out its terms) or correlated noise (the best
+        scale of each spectrum would depend on the others).
+        """
+        for key in keys:
+            if not np.isnan(self._upper_limits[key][0]):
+                raise ConfigError(
+                    f"solved scales of '{key}' do not go with its upper "
+                    f"limit: they are solved without the terms of the limit")
+            if self._dataset.noise_correlation(key) is not None:
+                raise ConfigError(
+                    f"solved scales of '{key}' do not go with its correlated "
+                    f"noise")
 
     def scale_sums(
             self,

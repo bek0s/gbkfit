@@ -1,19 +1,23 @@
 """
-Tests of the amplitudes of spectra (LikelihoodGaussian(amplitudes=
-'per_spectrum')), which the objective solves under their prior.
+Tests of the flux scales of observations per spectrum or per row (see
+ObservationSky), solved by the objective under their prior (see
+SolveGaussian), or fitted.
 """
+
+import pathlib
 
 import numpy as np
 import pytest
 import scipy.stats
 
-from gbkfit.dataset import Data, DatasetPixelSpectra
-from gbkfit.model import Extras, galaxy_parser
+from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
+from gbkfit.fitting import FitProblem
+from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LikelihoodGaussian, ObservationGroup, ObservationSky, PixelMoments,
-    PixelSpectra, line_of_sight_parser)
-from gbkfit.params import ParamSpace
+    LikelihoodGaussian, LikelihoodUser, ObservationGroup, ObservationSky,
+    PixelMoments, PixelSpectra, line_of_sight_parser, noise_parser)
+from gbkfit.params import ParamSpace, SolveGaussian
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -26,48 +30,61 @@ GALAXY = dict(components=dict(
     type='smdisk', rnodes=list(range(0, 11)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
-        vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
+        vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform')),
     emission=dict(type='lines')))
 
-
-# The standard deviation of the prior of the amplitudes
+# The standard deviation of the prior of the scales, and their solve
 SIGMA = 0.5
+SOLVE = dict(type='gaussian', mean=1, sigma=SIGMA, minimum=0)
+
+GOLDEN = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
 
 
-def objective(
-        driver, data, error, amplitudes='per_spectrum', weights=1.0,
-        noise=None, **values):
+def group(driver, data, error, likelihood=None):
     """
-    The objective of a disk seen in data with the given errors, under a
-    likelihood of the given amplitudes (of the prior SIGMA), weights and
-    fitted noise (of an observation named 'obs'), and the values of the
-    parameters (PARAMS and the given values).
+    The observations of a disk seen in data with the given errors, named
+    'obs', with a flux scale per spectrum, under a likelihood (Gaussian
+    by default).
     """
     dataset = DatasetPixelSpectra(
         Data(data, error=np.full_like(data, error)), step=STEP)
-    group = ObservationGroup(
+    return ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), driver,
-            data=dataset, likelihood=LikelihoodGaussian(
-                weights=weights, amplitudes=amplitudes,
-                amplitude_sigma=None if amplitudes is None else SIGMA,
-                noise=noise),
-            name=None if noise is None else 'obs')])
-    return Objective(group), ParamSpace(
-        group.pdescs(), PARAMS | values).evaluate()
+            data=dataset, likelihood=likelihood, flux_scale='per_spectrum',
+            name='obs')])
+
+
+def objective(driver, data, error, scale=None, likelihood=None, **values):
+    """
+    The objective of a disk seen in data (see group), and its parameters
+    (PARAMS and the given values), of the given flux scale (solved by
+    SOLVE by default).
+    """
+    group_ = group(driver, data, error, likelihood)
+    scale = dict(solve=SOLVE) if scale is None else scale
+    params = ParamSpace(
+        group_.pdescs(), PARAMS | dict(obs_flux_scale=scale) | values)
+    return Objective(group_, params.solves()), params
 
 
 def model(driver):
-    """The spectra of the disk, as data of no amplitudes see them."""
-    blank = np.zeros(SIZE[::-1])
-    obj, values = objective(driver, blank, 1.0, None)
-    return obj.group().model_h(values)[0]['spectra']['d'].astype(float)
+    """The spectra of the disk, of a flux scale of 1."""
+    obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
+    return obj.group().model_h(params.evaluate())[0]['spectra']['d'] \
+        .astype(float)
 
 
-def best_amplitudes(spectra, data, error):
+def solved(obj):
+    """The solved scales of the spectra of the last evaluation, an image."""
+    return np.reshape(list(obj.solved().values()), SIZE[1::-1])
+
+
+def best_scales(spectra, data, error):
     """
-    The amplitudes of the spectra (along the first axis) of the given
+    The best scales of the spectra (along the first axis) of the given
     data, under their prior: (sum m d / e^2 + 1/s^2) / (sum m^2 / e^2 +
     1/s^2), at least 0.
     """
@@ -76,34 +93,35 @@ def best_amplitudes(spectra, data, error):
     return np.maximum(b, 0) / a
 
 
-def test_amplitudes_take_the_brightness_of_each_spectrum(driver):
+def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     # Data that are the model times a scale for each spectrum, of small
-    # errors: the amplitudes are those scales (but for the pull of the
+    # errors: the solved scales are those scales (but for the pull of the
     # prior, small), and the chi-square mostly that of their prior,
     # ((a - 1) / s)^2
     spectra = model(driver)
     rng = np.random.default_rng(1)
     scales = rng.uniform(0.5, 2, SIZE[1::-1])
     error = 1e-3 * spectra.max()
-    obj, values = objective(driver, spectra * scales, error)
-    extra = Extras()
-    chi2 = obj.chi2(values, extra)
-    amplitudes = extra.get('amplitudes')
+    obj, params = objective(driver, spectra * scales, error)
+    chi2 = obj.chi2(params.evaluate())
+    found = solved(obj)
     np.testing.assert_allclose(
-        amplitudes, best_amplitudes(spectra, spectra * scales, error),
-        rtol=1e-5)
+        found, best_scales(spectra, spectra * scales, error), rtol=1e-5)
     lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
-    np.testing.assert_allclose(amplitudes[lit], scales[lit], rtol=1e-3)
+    np.testing.assert_allclose(found[lit], scales[lit], rtol=1e-3)
     assert chi2 == pytest.approx(
-        np.sum(((amplitudes - 1) / SIGMA) ** 2), rel=1e-3)
-    np.testing.assert_array_equal(
-        obj.amplitudes()[0], extra.get('amplitudes'))
-    plain, _ = objective(driver, spectra * scales, error, None)
-    assert plain.chi2(values) > 1e3
+        np.sum(((found - 1) / SIGMA) ** 2), rel=1e-3)
     assert obj.nnuisance() == SIZE[0] * SIZE[1]
+    fixed, params = objective(driver, spectra * scales, error, scale=1)
+    assert fixed.chi2(params.evaluate()) > 1e3
+    # (fitted, the same scales give the same model as solved)
+    values = params.evaluate() | dict(obs_flux_scale=found.ravel())
+    np.testing.assert_allclose(
+        fixed.group().model_h(values)[0]['spectra']['d'],
+        spectra * found, rtol=1e-6, atol=1e-9 * spectra.max())
 
 
-def test_amplitudes_weigh_the_values_by_their_fitted_noise(driver):
+def test_solved_scales_weigh_the_values_by_their_fitted_noise(driver):
     # With a fitted jitter j, the noise of each value, sqrt(e^2 + j^2),
     # weighs it in place of its error e, as in its residual
     spectra = model(driver)
@@ -111,16 +129,17 @@ def test_amplitudes_weigh_the_values_by_their_fitted_noise(driver):
     error, jitter = 0.01 * spectra.max(), 0.03 * spectra.max()
     data = spectra * rng.uniform(0.5, 2, SIZE[1::-1]) \
         + rng.normal(0, jitter, spectra.shape)
-    obj, values = objective(
-        driver, data, error, noise=dict(spectra=dict(jitter=True)),
+    obj, params = objective(
+        driver, data, error,
+        likelihood=LikelihoodGaussian(noise=dict(spectra=dict(jitter=True))),
         obs_noise_jitter_spectra=jitter)
-    obj.chi2(values)
+    obj.chi2(params.evaluate())
     np.testing.assert_allclose(
-        obj.amplitudes()[0],
-        best_amplitudes(spectra, data, np.hypot(error, jitter)), rtol=1e-5)
+        solved(obj), best_scales(spectra, data, np.hypot(error, jitter)),
+        rtol=1e-5)
 
 
-def test_the_log_likelihood_integrates_the_amplitudes(driver):
+def test_the_log_likelihood_integrates_the_solved_scales(driver):
     # Noisy data, some spectra of which the model fits best with no light
     # (a = 0): the log-likelihood is the sum of the logs of the integrals
     # of exp(-chi2(a) / 2) of each spectrum times the prior of a (Gaussian
@@ -129,8 +148,8 @@ def test_the_log_likelihood_integrates_the_amplitudes(driver):
     rng = np.random.default_rng(2)
     error = 0.05 * spectra.max()
     data = 0.7 * spectra + rng.normal(0, error, spectra.shape)
-    obj, values = objective(driver, data, error)
-    _, log_likelihood = obj.chi2_and_log_likelihood(values)
+    obj, params = objective(driver, data, error)
+    _, log_likelihood = obj.chi2_and_log_likelihood(params.evaluate())
     expected = 0.0
     a = np.linspace(0, 20, 40001)[:, None]
     prior = scipy.stats.truncnorm.pdf(
@@ -143,86 +162,91 @@ def test_the_log_likelihood_integrates_the_amplitudes(driver):
     assert log_likelihood == pytest.approx(expected, abs=1e-2)
 
 
-@pytest.mark.parametrize('observable, calibration, message', [
-    ('moments', False, "has none"),
-    ('spectra', True, "has no calibration")])
-def test_amplitudes_scale_spectra_only(observable, calibration, message):
-    likelihood = LikelihoodGaussian(
-        amplitudes='per_spectrum', amplitude_sigma=SIGMA)
-    if observable == 'moments':
-        from gbkfit.dataset import DatasetPixelMoments
-        data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
-        observable = PixelMoments.from_data(data,
-                                            spec_convention='relativistic')
-    else:
-        data = DatasetPixelSpectra(Data(np.zeros((5, 4, 4))))
-        observable = PixelSpectra.from_data(data)
-    with pytest.raises(ConfigError, match=message):
-        ObservationSky(
-            observable, line_of_sight_parser.load(dict(type='flat')),
-            data=data, likelihood=likelihood, calibration=calibration,
-            name='obs')
-
-
-@pytest.mark.parametrize('options, message', [
-    (dict(amplitudes='per_pixel', amplitude_sigma=SIGMA),
-     "must be 'per_spectrum'"),
-    (dict(amplitudes='per_spectrum'), "go together"),
-    (dict(amplitude_sigma=SIGMA), "go together"),
-    (dict(amplitudes='per_spectrum', amplitude_sigma=0), "positive")])
-def test_amplitudes_need_their_prior(options, message):
-    with pytest.raises(ConfigError, match=message):
-        LikelihoodGaussian(**options)
-
-
-def test_a_likelihood_of_no_weight_has_no_amplitude_terms(driver):
+def test_a_likelihood_of_no_weight_has_no_terms_of_solved_scales(driver):
     # (an item of weight 0 counts nothing, not NaN)
     spectra = model(driver)
-    obj, values = objective(
-        driver, spectra, 1e-3 * spectra.max(), weights=0.0)
-    assert obj.chi2_and_log_likelihood(values) == (0.0, 0.0)
+    obj, params = objective(
+        driver, spectra, 1e-3 * spectra.max(),
+        likelihood=LikelihoodGaussian(weights=0.0))
+    assert obj.chi2_and_log_likelihood(params.evaluate()) == (0.0, 0.0)
 
 
-def test_the_outputs_of_a_fit_have_the_amplitudes(driver):
-    # The model of the spectra in the outputs is that which the residuals
-    # compare (times the amplitudes), beside the model without them
-    from gbkfit.tasks._detail import evaluation_outputs
+def test_flux_scales_need_light_and_a_name():
+    data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
+    observable = PixelMoments.from_data(data, spec_convention='relativistic')
+    with pytest.raises(ConfigError, match=r"has the flux scales \[\]"):
+        ObservationSky(
+            observable, line_of_sight_parser.load(dict(type='flat')),
+            data=data, flux_scale='one', name='obs')
+    with pytest.raises(ConfigError, match="needs a name"):
+        ObservationSky(
+            PixelSpectra.from_data(DatasetPixelSpectra(
+                Data(np.zeros((5, 4, 4))))),
+            line_of_sight_parser.load(dict(type='flat')),
+            flux_scale='per_spectrum')
+
+
+def test_only_flux_scales_of_gaussian_likelihoods_are_solved(
+        driver, tmp_path):
+    spectra = model(driver)
+    group_ = group(driver, spectra, 1.0)
+    with pytest.raises(ConfigError, match=r"cannot: \['vsys'\]"):
+        Objective(group_, dict(vsys=SolveGaussian(0, 10)))
+    (tmp_path / 'like.py').write_text(
+        "def like(key, data, model, error, mask, params):\n"
+        "    return model - data\n")
+    user = LikelihoodUser(
+        str(tmp_path / 'like.py'), 'like', 'residuals')
+    with pytest.raises(ConfigError, match="solves no scales"):
+        objective(driver, spectra, 1.0, likelihood=user)
+    # (and a fit needs an objective that solves those of its parameters)
+    obj, params = objective(driver, spectra, 1.0, vsys=dict(value=0))
+    with pytest.raises(ValueError, match="must solve the solved elements"):
+        FitProblem(Objective(obj.group()), params)
+
+
+def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):
+    obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
+    noise = noise_parser.load(dict(type='gauss', rms=1.0))
+    obj.group().mock(params.evaluate(), noise, nsamples=2, seed=1)
+    values = params.evaluate() | dict(
+        obs_flux_scale=np.full(SIZE[0] * SIZE[1], 2.0))
+    with pytest.raises(ConfigError, match="of 1 only"):
+        obj.group().mock(values, noise, nsamples=2, seed=1)
+
+
+def test_the_outputs_have_the_solved_scales(driver):
+    # The model in the outputs is that which the residuals compare (times
+    # the solved scales), and the scales are an image
+    from gbkfit.tasks.eval import Evaluation
     spectra = model(driver)
     error = 1e-3 * spectra.max()
-    obj, values = objective(driver, 2 * spectra, error)
+    obj, params = objective(driver, 2 * spectra, error)
+    evaluation = Evaluation(obj.group(), params, obj)
     outputs = {
-        x.kind: x.value for x in evaluation_outputs(
-            obj.group(), obj, values, True, True).values()}
+        x.kind: x.value
+        for x in evaluation.outputs(evaluation.values()).values()}
+    scales = best_scales(spectra, 2 * spectra, error)
     np.testing.assert_allclose(
-        outputs['model'].data,
-        spectra * best_amplitudes(spectra, 2 * spectra, error), rtol=1e-5,
+        outputs['model'].data, spectra * scales, rtol=1e-5,
         atol=1e-6 * spectra.max())
-    np.testing.assert_allclose(
-        outputs['model_unscaled'].data, spectra, rtol=1e-6)
+    np.testing.assert_allclose(outputs['flux_scale'], scales, rtol=1e-6)
     lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
-    np.testing.assert_allclose(
-        outputs['amplitudes'][lit], 2,
-        rtol=1e-3)
+    np.testing.assert_allclose(outputs['flux_scale'][lit], 2, rtol=1e-3)
 
 
-def test_the_amplitudes_of_slitless_rows_scale_their_rows():
+def test_the_scales_of_slitless_rows_scale_their_rows():
     # Slitless spectra dispersed along x (the golden case slitless_rows: 24
-    # rows of 32 pixels) have an amplitude for each row, which scales its
-    # row in the model of the outputs and in that of the bootstrap
-    import pathlib
-    from gbkfit.fitting.bootstrap import _models
+    # rows of 32 pixels) have a solved scale for each row, which scales its
+    # row in the model of the outputs
     from gbkfit.tasks import eval as eval_task
-    from gbkfit.tasks._detail import evaluation_outputs
-    golden = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
-    evaluation = eval_task.load(str(golden / 'slitless_rows' / 'config.yaml'))
-    values = evaluation.params.evaluate()
+    evaluation = eval_task.load(str(GOLDEN / 'slitless_rows' / 'config.yaml'))
+    unscaled = evaluation.group.model_h(
+        evaluation.params.evaluate())[0]['spectra']['d'].copy()
     outputs = {
-        x.kind: x.value for x in evaluation_outputs(
-            evaluation.group, evaluation.objective, values, True,
-            True).values()}
-    amplitudes = outputs['amplitudes']
-    assert amplitudes.shape == (24,)
-    scaled = outputs['model_unscaled'].data * amplitudes[:, None]
-    np.testing.assert_allclose(outputs['model'].data, scaled, rtol=1e-12)
-    [models] = _models(evaluation.objective, values)
-    np.testing.assert_allclose(models['spectra'], scaled, rtol=1e-12)
+        x.kind: x.value for x in evaluation.outputs(
+            evaluation.values()).values()}
+    scales = outputs['flux_scale']
+    assert scales.shape == (24,)
+    np.testing.assert_allclose(
+        outputs['model'].data, unscaled * scales[:, None], rtol=1e-12)

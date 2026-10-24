@@ -251,6 +251,9 @@ class PixelMoments(Observable):
             dataset, 'moment0' if 0 in self._orders else None,
             abs(self.step()[0] * self.step()[1]), True)
 
+    def light_items(self) -> tuple[str, ...]:
+        return ('moment0',) if 0 in self._orders else ()
+
     def model_can_lack_values(self) -> bool:
         # (moment 0, the flux, always has a value)
         return any(order >= 1 for order in self._orders)
@@ -295,7 +298,7 @@ class PixelMoments(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'PixelMomentsPlan':
         if weights is not None and self._method != 'moments':
             raise ConfigError(
@@ -304,7 +307,7 @@ class PixelMoments(Observable):
             self, scale, instrument, dtype, fft_dtype, self._median_size)
         return PixelMomentsPlan(
             self, dcube, driver, scene, foreground, dtype, weights,
-            calibration)
+            flux_scale)
 
 
 class PixelMomentsPlan(_detail.DCubePlanBase):
@@ -318,10 +321,10 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             foreground: 'Foreground',
             dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, weights, calibration)
+            dcube, driver, scene, foreground, dtype, weights, flux_scale)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)

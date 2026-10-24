@@ -15,7 +15,7 @@ from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, LikelihoodGaussian, correlated_pixels
-from .observables import ObservablePlan
+from .observables import FluxScale, ObservablePlan
 
 
 __all__ = [
@@ -35,9 +35,8 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
 
     Its data are named items of one shape (see keys), of a dataset of its
     kind, which the kind checks before it makes it. Its likelihood and its
-    kind can have parameters of their own, named after it (see pdescs).
-    A kind without spectra (no spectra_item) refuses a likelihood with
-    free amplitudes (see LikelihoodGaussian).
+    kind can have parameters of their own, named after it (see pdescs),
+    e.g. a flux scale of its model (see flux_scale).
 
     Parameters
     ----------
@@ -57,12 +56,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         Its name, which is the id of its extra outputs instead of its
         position (see ObservationGroup.observation_label), and starts the
         names of its parameters.
-    spectra_item : str, optional
-        The name of its data item of spectra, if it has one: the spectra
-        that free amplitudes scale (see LikelihoodGaussian).
-    spectra_axis : int, optional
-        The axis of the arrays of its spectra along which each spectrum
-        runs; the first by default.
     model_can_lack_values : bool, optional
         Whether its model can lack values (NaN) where the data have some
         (e.g. the velocity of a spectrum below its flux_floor): the
@@ -76,8 +69,8 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         is a likelihood without data, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
         likelihood fits a noise but it has no name, its likelihood names
-        items that it does not have or has amplitudes of spectra with
-        upper limits on them (see _check_items), fits both the scale and
+        items that it does not have (see _check_items), fits both the
+        scale and
         the jitter of the noise of an item whose errors are all equal (see
         _check_noise), or the noise of an item is correlated where its
         data or its likelihood cannot take it (see _check_correlations).
@@ -91,8 +84,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             name: str | None = None,
-            spectra_item: str | None = None,
-            spectra_axis: int = 0,
             model_can_lack_values: bool = False
     ):
         keys = tuple(keys)
@@ -114,9 +105,9 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         if data is not None:
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
-            _check_items(likelihood, keys, spectra_item)
+            _check_items(likelihood, keys)
             _check_noise(likelihood, keys, data)
-            _check_correlations(likelihood, keys, spectra_item, data)
+            _check_correlations(likelihood, keys, data)
             if name is None and likelihood.pdescs():
                 raise ConfigError(
                     "an observation whose likelihood has parameters (e.g. "
@@ -138,8 +129,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         self._data = data
         self._likelihood = likelihood
         self._name = name
-        self._spectra_item = spectra_item
-        self._spectra_axis = spectra_axis
         self._model_can_lack_values = model_can_lack_values
 
     def name(self) -> str | None:
@@ -226,19 +215,12 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return self._model_can_lack_values
 
-    def spectra_item(self) -> str | None:
+    def flux_scale(self) -> tuple[str, FluxScale] | None:
         """
-        Return the name of its data item of spectra, which free amplitudes
-        scale (see LikelihoodGaussian), if it has one.
+        Return the parameter of the flux scale of its model and how it
+        scales the model (see ObservationSky), if it has one; none here.
         """
-        return self._spectra_item
-
-    def spectra_axis(self) -> int:
-        """
-        Return the axis of the arrays of its data item of spectra along
-        which each spectrum runs (see spectra_item).
-        """
-        return self._spectra_axis
+        return None
 
     @abc.abstractmethod
     def dataset(self, items: Mapping[str, Data]) -> Dataset:
@@ -387,29 +369,18 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         return {}
 
 
-def _check_items(
-        likelihood: Likelihood,
-        keys: Sequence[str],
-        spectra_item: str | None
-) -> None:
+def _check_items(likelihood: Likelihood, keys: Sequence[str]) -> None:
     """
     Raise ConfigError if the options of a likelihood name data items that
     an observation of the given items does not have (e.g. a typo in the
     names of the weights, the upper limits or the fitted noise; see
-    LikelihoodGaussian), or it has amplitudes of the spectra and upper
-    limits on them, which the amplitudes are solved without.
+    LikelihoodGaussian).
     """
     if unknown := sorted(likelihood.named_items() - set(keys)):
         raise ConfigError(
             f"the options of the likelihood name data items that the "
             f"observation does not have: {unknown}; its items are "
             f"{list(keys)}")
-    if likelihood.amplitudes() is not None and spectra_item is not None \
-            and likelihood.upper_limit(spectra_item) is not None:
-        raise ConfigError(
-            f"the amplitudes of the spectra '{spectra_item}' do not go with "
-            f"upper limits on them: they are solved without the terms of "
-            f"the limits")
 
 
 def _check_noise(
@@ -438,15 +409,13 @@ def _check_noise(
 def _check_correlations(
         likelihood: Likelihood,
         keys: Sequence[str],
-        spectra_item: str | None,
         data: Dataset
 ) -> None:
     """
     Raise ConfigError unless the given items of the data whose noise is
     correlated can be (see Dataset.noise_correlation), keep the pixels of
-    correlated noise (see correlated_pixels), and have no upper limits or,
-    for the item of spectra, amplitudes in their likelihood (see
-    LikelihoodGaussian).
+    correlated noise (see correlated_pixels), and have no upper limits in
+    their likelihood (see LikelihoodGaussian).
     """
     for key in keys:
         if data.noise_correlation(key) is None:
@@ -456,10 +425,6 @@ def _check_correlations(
             raise ConfigError(
                 f"the noise of '{key}' is correlated, which does not go "
                 f"with upper limits")
-        if likelihood.amplitudes() is not None and key == spectra_item:
-            raise ConfigError(
-                f"the noise of '{key}' is correlated, which does not go "
-                f"with amplitudes of spectra")
 
 
 observation_parser = parseutils.TypedParser(Observation)

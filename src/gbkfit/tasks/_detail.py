@@ -501,12 +501,12 @@ def evaluation_outputs(
     of each data item: the models (kind 'model'; 'model_mask' and
     'model_weight'), and the residuals ((model - data) / error) without
     and with the weights of the data items ('residual' and 'wresidual';
-    these need the objective). With the residuals, the free amplitudes of
-    spectra (see LikelihoodGaussian) are 'amplitudes'
-    (observations/<observation>/amplitudes), and with the models too, the
-    model of the spectra is that which the residuals compare, times the
-    amplitudes ('model'), and the model without them is
-    'model_unscaled'. With the models, the images that the observations
+    these need the objective; the values of the parameters must have
+    those of the solved elements that it solves, see Objective.solved).
+    With the models, a flux scale of several values of an observation
+    (see ObservationSky) is 'flux_scale'
+    (observations/<observation>/flux_scale), of the shape of its spectra
+    but their axis. With the models, the images that the observations
     make of them ('model_image', in place of the item: the name of the
     image; see Observation.images), and of the data minus them
     ('residual_image'), with the weights of the data. Unless left out
@@ -532,6 +532,11 @@ def evaluation_outputs(
                         _observation_output(name, kind, key, output))
             outputs += _images(
                 observation, name, {k: v['d'] for k, v in data_i.items()})
+            if (scale := _flux_scale_map(observation, values, data_i)) \
+                    is not None:
+                outputs.append(Output(
+                    f'observations/{name}/flux_scale.fits', 'flux_scale',
+                    scale, dict(observation=name)))
     if residuals:
         if objective is None:
             raise ValueError("the residuals need an objective")
@@ -549,27 +554,27 @@ def evaluation_outputs(
                         name, kind, key, observation.output(value))
                     for key, value in data_i.items()]
     outputs += [_extra_output(x) for x in extras or ()]
-    outputs = {output.path: output for output in outputs}
-    if residuals:
-        for i, amplitudes in enumerate(objective.amplitudes()):
-            if amplitudes is None:
-                continue
-            name = group.observation_label(i)
-            output = Output(
-                f'observations/{name}/amplitudes.fits', 'amplitudes',
-                amplitudes, dict(observation=name))
-            outputs[output.path] = output
-            if model:
-                observation = group.observations()[i]
-                key = observation.spectra_item()
-                path = f'observations/{name}/model/{key}.fits'
-                unscaled = outputs[path]
-                outputs[path] = unscaled._replace(value=_scaled(
-                    unscaled.value, amplitudes, observation.spectra_axis()))
-                output = _observation_output(
-                    name, 'model_unscaled', key, unscaled.value)
-                outputs[output.path] = output
-    return outputs
+    return {output.path: output for output in outputs}
+
+
+def _flux_scale_map(
+        observation: Observation,
+        values: ParamValues,
+        model: Mapping[str, Mapping[str, np.ndarray | None]]
+) -> np.ndarray | None:
+    """
+    Return the values of the flux scale of an observation of several
+    values (see ObservationSky), of the shape of its model but the axis of
+    the scale (e.g. an image of the scale of each spectrum of a cube);
+    None for an observation without one.
+    """
+    if (flux_scale := observation.flux_scale()) is None \
+            or flux_scale[1].axis is None:
+        return None
+    param, scale = flux_scale
+    shape = list(model[scale.items[0]]['d'].shape)
+    del shape[scale.axis]
+    return np.reshape(values[param], shape)
 
 
 def _images(
@@ -657,18 +662,6 @@ def _extension(value: Any) -> str:
                           np.generic)):
         return '.json'
     raise TypeError(f"outputs of type {type(value).__name__} are unsupported")
-
-
-def _scaled(output: Any, amplitudes: np.ndarray, axis: int) -> Any:
-    """
-    Return an output of spectra (along the given axis of its data) with
-    each spectrum times its amplitude (the amplitudes have the shape of
-    the spectra but that axis; see Objective.amplitudes).
-    """
-    factors = np.expand_dims(amplitudes, axis)
-    if isinstance(output, np.ndarray):
-        return output * factors
-    return output._replace(data=output.data * factors)
 
 
 @contextlib.contextmanager

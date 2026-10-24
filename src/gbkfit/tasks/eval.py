@@ -7,6 +7,7 @@ and write the outputs. Programs that evaluate a configuration themselves
 
 import logging
 import os
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, NamedTuple
 
 import pandas as pd
@@ -44,6 +45,21 @@ class Evaluation(NamedTuple):
     params: ParamSpace
     objective: Objective | None
 
+    def values(
+            self, free: Mapping[str, float] | Sequence[float] | None = None
+    ) -> ParamValues:
+        """
+        Return the values of the parameters at those of the free elements
+        (see ParamSpace.evaluate), with those of the solved elements that
+        the objective solves there (see Objective.solved); without an
+        objective, their values without data.
+        """
+        values = self.params.evaluate(free)
+        if self.objective is None or not self.objective.solves():
+            return values
+        self.objective.chi2(values)
+        return self.params.evaluate(free, self.objective.solved())
+
     def outputs(
             self,
             values: ParamValues,
@@ -57,7 +73,8 @@ class Evaluation(NamedTuple):
         Parameters
         ----------
         values : ParamValues
-            The values of the parameters (see ParamSpace.evaluate).
+            The values of the parameters, with those of the solved
+            elements (see values).
         data : bool, optional
             Whether to add the data of the observations ('data', 'error'
             and 'data_image'), which do not change with the values.
@@ -196,7 +213,7 @@ def load(config: str) -> Evaluation:
     objective = None
     if all(obs.data() is not None for obs in group.observations()):
         _log.info("setting up objective...")
-        objective = Objective(group)
+        objective = Objective(group, params.solves())
     return Evaluation(group, params, objective)
 
 
@@ -242,14 +259,14 @@ def _eval(
         objective = None
         if mode == 'objective':
             _log.info("setting up objective...")
-            objective = Objective(group)
+            objective = Objective(group, params.solves())
         mock = None
         if mode == 'mock':
             with parseutils.config_path('mock'):
                 mock = _load_mock(cfg['mock'], group.nobservations())
 
     _log.info("calculating model parameters...")
-    param_values = params.evaluate()
+    param_values = Evaluation(group, params, objective).values()
     run.write('params.json', 'params', dict(
         params=param_values, eparams=params.element_values(param_values),
         derived=params.derived_values(param_values)))

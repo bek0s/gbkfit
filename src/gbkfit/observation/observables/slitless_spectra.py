@@ -17,7 +17,7 @@ from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from ._region_sums import RegionSumsPlan
 from .apertures import Aperture, aperture_parser
-from .base import HostModelData, ModelData, Observable
+from .base import FluxScale, HostModelData, ModelData, Observable
 from .traces import Trace, trace_parser
 
 if TYPE_CHECKING:
@@ -590,17 +590,21 @@ class SlitlessSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def spectra_item(self) -> str | None:
-        return 'spectra'
+    def light_items(self) -> tuple[str, ...]:
+        return ('spectra',)
 
-    def spectra_axis(self) -> int:
+    def flux_scales(self) -> dict[str, FluxScale]:
         # (each line of the image along the dispersion, that over which the
         # trace moves the most across the channels at the centre of the
         # image: x, the last axis of the image, or y)
         edges = self._channel_edges()[[0, -1], [0, 1]]
         centre = (np.array(self.size()) - 1) / 2
         dx, dy = self._trace.offsets(edges, *centre)
-        return 1 if abs(dx[1] - dx[0]) >= abs(dy[1] - dy[0]) else 0
+        axis = 1 if abs(dx[1] - dx[0]) >= abs(dy[1] - dy[0]) else 0
+        # (the image is of the shape (y, x): a line along x at each y)
+        nrows = self.size()[1] if axis == 1 else self.size()[0]
+        return super().flux_scales() \
+            | dict(per_row=FluxScale(('spectra',), axis, nrows))
 
     def dataset(self, items: Mapping[str, Data]) -> DatasetSlitlessSpectra:
         return DatasetSlitlessSpectra(
@@ -631,7 +635,7 @@ class SlitlessSpectra(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'SlitlessSpectraPlan':
         if weights is not None:
             raise ConfigError("slitless spectra do not support weights yet")
@@ -661,7 +665,7 @@ class SlitlessSpectra(Observable):
         dispersion = self._dispersion(edges, size, offset)
         return SlitlessSpectraPlan(
             dcube, dispersion, self.grid(), driver, scene, foreground, dtype,
-            calibration)
+            flux_scale)
 
     def _channel_edges(self) -> np.ndarray:
         """
@@ -864,10 +868,10 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            calibration: str | None
+            flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None, calibration)
+            dcube, driver, scene, foreground, dtype, None, flux_scale)
         self._dispersion = RegionSumsPlan(dispersion, driver, dtype)
         size = grid.size
         self._image = driver.mem_alloc_d((1, size[0] * size[1]), dtype)

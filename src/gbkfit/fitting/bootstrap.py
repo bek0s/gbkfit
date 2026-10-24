@@ -269,18 +269,18 @@ def bootstrap(
     the beam), and with what the model misses.
 
     The data of each refit are m + sigma r*, of the model m of the best
-    fit (that which the objective compares, of the spectra times their
-    amplitudes, if fitted; see Objective), the noise sigma of each value
-    (its error, or its fitted noise; see Likelihood.noise), and the
-    residuals in units of it, r = (d - m) / sigma, redrawn by the scheme
-    of each observation (see BootstrapScheme): a residual moved from a
-    noisy value to a quiet one takes the noise of the latter. The values
-    without a residual keep their data (the masked values stay masked,
-    and those the model lacks keep theirs). Each refit starts at the best
-    fit (see ParamSpace.with_values), with the fitter of the options, or
-    else that of the fit, which works out no uncertainty. The refits that
-    fail (the fitter reports no success or finds no point, or the
-    parameters cannot be evaluated) are counted and left out.
+    fit (with the values of its solved elements; see Objective), the noise
+    sigma of each value (its error, or its fitted noise; see
+    Likelihood.noise), and the residuals in units of it, r = (d - m) /
+    sigma, redrawn by the scheme of each observation (see
+    BootstrapScheme): a residual moved from a noisy value to a quiet one
+    takes the noise of the latter. The values without a residual keep
+    their data (the masked values stay masked, and those the model lacks
+    keep theirs). Each refit starts at the best fit (see
+    ParamSpace.with_values), with the fitter of the options, or else that
+    of the fit, which works out no uncertainty. The refits that fail (the
+    fitter reports no success or finds no point, or the parameters cannot
+    be evaluated) are counted and left out.
 
     The fitter of the refits may differ from that of the fit (e.g. least
     squares after a sampler or CMA-ES): the bootstrap tells how the best
@@ -320,10 +320,15 @@ def bootstrap(
     seed = refitter.seed() if options.seed() is None else options.seed()
     rng = np.random.default_rng(seed)
     start_params = params.with_values(start)
-    values = start_params.evaluate()
+    # (the model that the objective compares with the data: with the
+    # values of the solved elements that it solves there)
+    objective.chi2(start_params.evaluate())
+    values = start_params.evaluate(solved=objective.solved())
     group = objective.group()
     schemes = options.schemes(group.nobservations())
-    models = _models(objective, values)
+    models = [
+        {key: item['d'].copy() for key, item in model.items()}
+        for model in group.model_h(values)]
     noises = [
         {key: obs.likelihood().noise(key, dataset[key].error(), values)
          for key in dataset}
@@ -376,27 +381,3 @@ def bootstrap(
         names=names, samples=np.array(rows, dtype=float).reshape(
             -1, len(names)),
         failures=tuple(failures), options=options.dump())
-
-
-def _models(
-        objective: Objective, values: ParamValues
-) -> list[dict[str, np.ndarray]]:
-    """
-    Return the model of each data item of each observation of an
-    objective at the values of the parameters, as the objective compares
-    it with the data: of the spectra, times their amplitudes, if fitted.
-    """
-    # (an evaluation of the objective gives the amplitudes)
-    objective.chi2(values)
-    amplitudes = objective.amplitudes()
-    group = objective.group()
-    models = []
-    for i, model in enumerate(group.model_h(values)):
-        items = {key: item['d'].copy() for key, item in model.items()}
-        if amplitudes[i] is not None:
-            observation = group.observations()[i]
-            key = observation.spectra_item()
-            items[key] = items[key] * np.expand_dims(
-                amplitudes[i], observation.spectra_axis())
-        models.append(items)
-    return models

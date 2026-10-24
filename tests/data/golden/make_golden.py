@@ -277,7 +277,7 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     a summary of each part of each item of its model (data, mask,
     weights); of the objective, the chi-square, the log-likelihood, the
     noise chi-square, the counts, and summaries of the residuals and of
-    the free amplitudes; the summaries of the derived values; and the
+    the solved values, if any; the summaries of the derived values; and the
     chi-square of the priors on several parameters, if any.
     """
     from gbkfit.fitting.problem import FitProblem
@@ -294,7 +294,7 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
                if array is not None}
          for key, item in model.items()}
         for model in group.model_h(values)])
-    with Objective(group) as objective:
+    with Objective(group, params.solves()) as objective:
         chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         golden['objective'] = dict(
             chi2=chi2, log_likelihood=log_likelihood,
@@ -306,9 +306,8 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
             # log-likelihood are 0, and the objective has no residuals)
             residuals=[
                 summary(r) for r in objective.residual_vector_h(values, True)],
-            amplitudes=[
-                None if a is None else summary(a)
-                for a in objective.amplitudes()])
+            solved=summary(list(objective.solved().values()))
+            if params.solves() else None)
         derived = params.derived_values(values)
         golden['derived'] = {
             name: summary(value) for name, value in derived.items()}

@@ -342,14 +342,16 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         objective = problem.objective()
         params = problem.params()
         x = np.asarray(x, dtype=float)
-        values = params.evaluate(x)
+        chi2, log_likelihood = objective.chi2_and_log_likelihood(
+            params.evaluate(x))
+        # (with the values of the solved elements there)
+        values = params.evaluate(x, objective.solved())
         problems = []
         try:
             derived = params.derived_elements(values)
         except ParamEvaluationError as e:
             derived = {}
             problems.append(('derived_errors', f"no derived values: {e}"))
-        chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         nresiduals = objective.nresiduals()
         nevals = 1
         nfitted = problem.ndim() + objective.nnuisance()

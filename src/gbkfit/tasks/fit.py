@@ -239,15 +239,14 @@ def _set_up(cfg: dict[str, Any], root: str) -> _Setup:
         _log.info("setting up galaxies and observations...")
         drivers = _detail.load_drivers(cfg)
         group = _detail.load_observation_group(cfg, drivers)
-        _log.info("setting up objective...")
-        objective = gbkfit.objective.Objective(group)
         _log.info("setting up fitter...")
         with parseutils.config_path('fitter'):
             fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
         _log.info("setting up params...")
         params = _detail.load_params(
-            cfg, objective.pdescs(), objective.constants(),
-            group.plan_functions())
+            cfg, group.pdescs(), group.constants(), group.plan_functions())
+        _log.info("setting up objective...")
+        objective = gbkfit.objective.Objective(group, params.solves())
         # Check the free properties for the fitter, and the priors on
         # several parameters, before the fit starts
         with parseutils.config_path('params', 'properties'):

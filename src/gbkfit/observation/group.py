@@ -214,7 +214,7 @@ class ObservationGroup:
                      "from the first of its group (arcsec, away from the "
                      "viewer)")
             for separation in self._separations.values()}
-        # The parameters of the observations (their calibrations)
+        # The parameters of the observations (e.g. their flux scales)
         for observation in self._observations:
             pdescs = observation.pdescs()
             if repeated := sorted(pdescs.keys() & self._pdescs.keys()):

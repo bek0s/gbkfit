@@ -7,19 +7,25 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.dataset import Data, Dataset
-from gbkfit.driver import Driver, driver_by_name
+from gbkfit.driver import DeviceArray, Driver, driver_by_name
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
 from gbkfit.model.components._units import DataUnit
 from gbkfit.model.components.roles import load_band
-from gbkfit.params import ParamDesc, ParamScalarDesc
+from gbkfit.model import Extras
+from gbkfit.model.components._gravity import GalaxyGravity
+from gbkfit.params import (
+    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import SeenGalaxies, check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, likelihood_parser
 from .line_of_sight import LineOfSight, line_of_sight_parser
-from .observables import Observable, ObservablePlan, observable_parser
+from .noise import Noise
+from .observables import (
+    FluxScale, HostModelData, ModelData, Observable, ObservablePlan,
+    observable_parser)
 from .observation import Observation
 from .weights import Weights, weights_parser
 
@@ -66,6 +72,42 @@ class ObservationSky(Observation):
     model is in the unit of the components it sees, which must then have
     one (or none).
 
+    Its model can have a flux scale: its items of light (see
+    Observable.light_items) are times the values of the parameter
+    '{name}_flux_scale', one value ('one'; e.g. the calibration between
+    the instruments of a joint fit), one for each spectrum of its data
+    ('per_spectrum'), or one for each line of the image of slitless
+    spectra along the dispersion ('per_row', the row amplitudes of geko).
+    Its values can be fixed, tied, free or solved (see ParamSpace): e.g.
+    {solve: {type: gaussian, mean: 1, sigma: 0.5, minimum: 0}} (see
+    SolveGaussian). Scales per spectrum make a fit take the shape of each
+    spectrum from the model (where its lines are, how wide; with beam
+    smearing, also how the light of the model weighs its velocities), and
+    its brightness mostly from the data, which suits a model whose light
+    misses structure of the data (e.g. the clumps of a clumpy disk);
+    solved, each is worked out at each evaluation with exact formulas,
+    never putting the flux of the data into the model.
+
+    Why that prior for scales per spectrum (the user chose it,
+    2026-10-15; revise here): the log-likelihood of samplers needs one
+    (they integrate the solved values out). A flat prior on a scale makes
+    the integral grow as the model gets fainter (half the light, twice
+    the scales, twice the integral): samplers would prefer galaxies of no
+    light. A flat prior on the flux of each spectrum (the scale times the
+    sum of the model there) removes that, but favours model lines whose
+    flux the data pin down loosely (broad lines) where the spectra are
+    faint: in 4000 random spectra of 61 channels of 10 km/s (noise 1),
+    the log-evidence of a 60 km/s model line over a 30 km/s one was
+    +0.35 on noise alone and +0.22 on a faint line truly 30 km/s wide
+    (flux 3); with this prior (sigma 0.5), +0.03 and -0.09. Over
+    thousands of faint spectra (e.g. of clumpy disks at z ~ 1.5) the flat
+    prior would pull the dispersion up. This prior is proper (the evidence
+    is a normal one), and keeps the brightness of the model meaningful:
+    it is the mean brightness, about which the spectra scatter. Its cost
+    is sigma, a statement of how much the spectra may differ from the
+    model: a very large sigma is a flat prior on the scales again, with
+    its bias.
+
     Parameters
     ----------
     observable : Observable
@@ -98,10 +140,11 @@ class ObservationSky(Observation):
     weights : Weights, optional
         The spatial weights of its data (e.g. less weight near the minor
         axis of a disk); none by default.
-    calibration : bool, optional
-        Whether the flux of its model is times a parameter,
-        '{name}_calibration' (e.g. a flux scale between the instruments
-        of a joint fit); its name is then required. False by default.
+    flux_scale : str, optional
+        The flux scale of its model (see above): 'one', or of an observable
+        that has them (see Observable.flux_scales), 'per_spectrum' or
+        'per_row'; its name is then required. None by default. Mock data
+        take scales per spectrum or per row of 1 only.
     offsets : Mapping, optional
         The offsets of its frame that are fitted, for data whose positions
         or velocities are off from those of the other observations (e.g.
@@ -152,15 +195,15 @@ class ObservationSky(Observation):
     ------
     ConfigError
         If a name is invalid, there are no galaxies or they repeat, a band
-        is given to an observable that is not an image, it has a
-        calibration or offsets but no name, the offsets are not position
+        is given to an observable that is not an image, it has a flux
+        scale or offsets but no name, its flux scale is not one of its
+        observable, the offsets are not position
         and velocity, true or false, the scale is not one integer of at
         least 1 for each axis, there is a likelihood without data, the data are
         not those of the observable, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
-        likelihood has free amplitudes and the observable has no spectra
-        or it has a calibration, its likelihood fits a noise but it has no
-        name, or fits the noise of items that the observable does not
+        likelihood fits a noise but it has no name, or fits the noise of
+        items that the observable does not
         have, or both the scale and the jitter of the noise of an item
         whose errors are all equal (see _check_noise), the noise of an
         item is correlated where its data or its likelihood cannot take
@@ -295,7 +338,8 @@ class ObservationSky(Observation):
             band=band_parser.dump(self._band))
         weights = {} if self._weights is None else dict(
             weights=self._weights.dump())
-        calibration = dict(calibration=True) if self._calibration else {}
+        flux_scale = {} if self._flux_scale is None else dict(
+            flux_scale=self._flux_scale)
         offsets = {} if not self._offsets else dict(offsets=dict(
             self._offsets))
         # The form of the data is that of the observable: no type
@@ -304,7 +348,7 @@ class ObservationSky(Observation):
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | galaxies | components | lines | band | weights \
-            | calibration | offsets | data | dict(
+            | flux_scale | offsets | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -326,7 +370,7 @@ class ObservationSky(Observation):
             lines: Sequence[str] | None = None,
             band: Band | None = None,
             weights: Weights | None = None,
-            calibration: bool = False,
+            flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
@@ -347,10 +391,7 @@ class ObservationSky(Observation):
             lines = tuple(lines)
             for line in lines:
                 parseutils.check_name(line)
-        if calibration and name is None:
-            raise ConfigError(
-                "an observation with a calibration needs a name, which "
-                "names its parameter ('{name}_calibration')")
+        _check_flux_scale(flux_scale, observable, name)
         offsets = _check_offsets(offsets, name)
         if band is not None and observable.emission is not BandEmission:
             raise ConfigError(
@@ -374,8 +415,6 @@ class ObservationSky(Observation):
                 f"{scale}")
         if data is not None:
             observable.require_matching(data)
-            if likelihood is not None and likelihood.amplitudes() is not None:
-                _check_amplitudes(observable, calibration)
         self._observable = observable
         self._foreground = foreground
         self._instrument = instrument
@@ -384,12 +423,11 @@ class ObservationSky(Observation):
         self._lines = lines
         self._band = band
         self._weights = weights
-        self._calibration = calibration
+        self._flux_scale = flux_scale
         self._offsets = offsets
         self._scale = scale
         super().__init__(
             observable.keys(), driver, galaxies, data, likelihood, name,
-            observable.spectra_item(), observable.spectra_axis(),
             observable.model_can_lack_values())
         observable.check_instrument(instrument)
         if data is not None:
@@ -426,15 +464,19 @@ class ObservationSky(Observation):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
-        Return its parameters: that of its calibration and those of the
+        Return its parameters: that of its flux scale and those of the
         offsets of its frame, if any (see the class), those of its lens,
         '{name}_lens_{parameter}' (see Foreground.pdescs), and those of the
         fitted noise of its likelihood, e.g. '{name}_noise_scale_{item}'
         (see LikelihoodGaussian).
         """
-        name = self._calibration_param()
-        calibration = {} if name is None else {name: ParamScalarDesc(
-            desc=f"the flux scale of observation {self._name}")}
+        flux_scale = {}
+        if (scale := self.flux_scale()) is not None:
+            name, kind = scale
+            desc = f"the flux scale of observation {self._name}"
+            flux_scale[name] = ParamScalarDesc(desc=desc, minimum=0) \
+                if kind.axis is None \
+                else ParamVectorDesc(kind.size, desc=desc, minimum=0)
         descs = (
             "the offset of its frame to the west (arcsec)",
             "the offset of its frame to the north (arcsec)",
@@ -443,7 +485,7 @@ class ObservationSky(Observation):
             param: ParamScalarDesc(desc=f"{desc}, of observation {self._name}")
             for param, desc in zip(self.offset_params(), descs)
             if param is not None}
-        return calibration | offsets | self._foreground.pdescs() \
+        return flux_scale | offsets | self._foreground.pdescs() \
             | super().pdescs()
 
     def centre_params(self) -> tuple[tuple[str, str], ...]:
@@ -470,9 +512,15 @@ class ObservationSky(Observation):
         """
         return self._observable.sky_rval()
 
-    def _calibration_param(self) -> str | None:
-        """Return the name of the parameter of its calibration, if any."""
-        return f'{self._name}_calibration' if self._calibration else None
+    def flux_scale(self) -> tuple[str, FluxScale] | None:
+        """
+        Return the parameter of its flux scale and how it scales its model
+        (see the class), if it has one.
+        """
+        if self._flux_scale is None:
+            return None
+        return (f'{self._name}_flux_scale',
+                self._observable.flux_scales()[self._flux_scale])
 
     def with_data(
             self, data: Dataset, likelihood: Likelihood | None = None
@@ -481,7 +529,7 @@ class ObservationSky(Observation):
             self._observable, self._line_of_sight, self._driver,
             self._foreground, self._instrument, self._galaxies,
             self._components, self._lines, self._band, self._weights,
-            self._calibration, self._offsets, data,
+            self._flux_scale, self._offsets, data,
             likelihood if likelihood is not None else self._likelihood,
             self._scale, self._dtype.name, self._fft_dtype.name, self._name)
 
@@ -589,10 +637,17 @@ class ObservationSky(Observation):
         # (the light of an image is blurred by its PSF and again by ours)
         for trait in scene.image_traits():
             trait.check_psf(self._instrument.psf())
-        return self._observable.plan(
+        # (a flux scale of one value scales the flux of the model where the
+        # observable records it; one of several values, its items of light)
+        scale = self.flux_scale()
+        one = scale is not None and scale[1].axis is None
+        plan = self._observable.plan(
             self._driver, scene, self._foreground, self._instrument,
             self._scale, self._dtype, self._fft_dtype, self._weights,
-            self._calibration_param())
+            scale[0] if one else None)
+        if scale is None or one:
+            return plan
+        return _FluxScaledPlan(plan, self._driver, *scale, self._dtype)
 
 
 def _check_offsets(
@@ -619,22 +674,100 @@ def _check_offsets(
     return fitted
 
 
-def _check_amplitudes(observable: Observable, calibration: bool) -> None:
+def _check_flux_scale(
+        flux_scale: str | None,
+        observable: Observable,
+        name: str | None
+) -> None:
     """
-    Raise ConfigError unless the free amplitudes of a likelihood (see
-    LikelihoodGaussian) can scale the model of an observable, which must
-    have spectra, and no calibration (which the amplitudes take).
+    Raise ConfigError unless a flux scale is one of an observable (see
+    Observable.flux_scales), and the observation has a name.
     """
-    if observable.spectra_item() is None:
+    if flux_scale is None:
+        return
+    kinds = observable.flux_scales()
+    if flux_scale not in kinds:
         desc = parseutils.make_typed_desc(observable.__class__, 'observable')
         raise ConfigError(
-            f"free amplitudes scale spectra (e.g. those of pixel_spectra, "
-            f"slit_spectra, region_spectra, or the lines of slitless_spectra "
-            f"along the dispersion); {desc} has none")
-    if calibration:
+            f"{desc} has the flux scales {list(kinds)}; not {flux_scale!r}")
+    if name is None:
         raise ConfigError(
-            "free amplitudes take the flux scale of the model: an "
-            "observation with them has no calibration")
+            "an observation with a flux scale needs a name, which names its "
+            "parameter ('{name}_flux_scale')")
+
+
+class _FluxScaledPlan(ObservablePlan):
+    """
+    The plan of an observable times a flux scale of several values (see
+    ObservationSky): its items of light are times the values, each along
+    the axis of the scale (one value at each point of the other axes).
+    """
+
+    def __init__(
+            self,
+            plan: ObservablePlan,
+            driver: Driver,
+            param: str,
+            scale: FluxScale,
+            dtype: np.dtype
+    ):
+        self._plan = plan
+        self._driver = driver
+        self._param = param
+        self._scale = scale
+        self._dtype = dtype
+        # The values, of the shape of the items but 1 along the axis, on
+        # the host (h) and the device (d), allocated on first use
+        self._h_values: np.ndarray | None = None
+        self._d_values: DeviceArray | None = None
+
+    def evaluate(
+            self,
+            params: ParamValues,
+            gravity: Sequence[GalaxyGravity],
+            out_extra: Extras | None
+    ) -> ModelData:
+        model = self._plan.evaluate(params, gravity, out_extra)
+        driver = self._driver
+        if self._h_values is None:
+            shape = model[self._scale.items[0]]['d'].shape
+            (self._h_values, self._d_values) = driver.mem_alloc_s(
+                tuple(1 if k == self._scale.axis else n
+                      for k, n in enumerate(shape)), self._dtype)
+        self._h_values[...] = np.reshape(
+            params[self._param], self._h_values.shape)
+        driver.mem_copy_h2d(self._h_values, self._d_values)
+        for key in self._scale.items:
+            values = model[key]['d']
+            driver.math_mul(values, self._d_values, out=values)
+        return model
+
+    def mock(
+            self,
+            params: ParamValues,
+            gravity: Sequence[GalaxyGravity],
+            noise: Noise,
+            rng: np.random.Generator,
+            ndraws: int
+    ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
+        """
+        Draw mock data (see ObservablePlan.mock), of scales of 1 only: the
+        noise is drawn where the observable records the light, which a
+        scale of each spectrum does not reach.
+
+        Raises
+        ------
+        ConfigError
+            If a value of the scale is not 1.
+        """
+        if np.any(params[self._param] != 1):
+            raise ConfigError(
+                f"mock data take a flux scale per spectrum or per row of 1 "
+                f"only; '{self._param}' is not")
+        return self._plan.mock(params, gravity, noise, rng, ndraws)
+
+    def has_exact_errors(self) -> bool:
+        return self._plan.has_exact_errors()
 
 
 def _has_correlated_noise(data: Dataset) -> bool:

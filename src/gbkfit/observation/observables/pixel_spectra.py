@@ -10,7 +10,7 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import LineEmission
 from gbkfit.model.components._units import DataUnit
 from . import _dcube, _detail
-from .base import ModelData, Observable
+from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
     from .._scene import Scene
@@ -168,8 +168,14 @@ class PixelSpectra(Observable):
         return _detail.data_unit(
             dataset, 'spectra', abs(self.step()[0] * self.step()[1]), False)
 
-    def spectra_item(self) -> str | None:
-        return 'spectra'
+    def light_items(self) -> tuple[str, ...]:
+        return ('spectra',)
+
+    def flux_scales(self) -> dict[str, FluxScale]:
+        # (each spectrum runs along the first axis, at each pixel)
+        nspectra = self.size()[0] * self.size()[1]
+        return super().flux_scales() \
+            | dict(per_spectrum=FluxScale(('spectra',), 0, nspectra))
 
     def model_can_lack_values(self) -> bool:
         return False
@@ -187,7 +193,7 @@ class PixelSpectra(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'PixelSpectraPlan':
         dcube = _dcube.DCube(
             size=self.size(),
@@ -207,7 +213,7 @@ class PixelSpectra(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelSpectraPlan(
-            dcube, driver, scene, foreground, dtype, weights, calibration)
+            dcube, driver, scene, foreground, dtype, weights, flux_scale)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

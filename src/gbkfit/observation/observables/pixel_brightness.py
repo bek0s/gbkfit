@@ -150,6 +150,9 @@ class PixelBrightness(Observable):
             dataset, 'brightness', abs(self.step()[0] * self.step()[1]),
             False)
 
+    def light_items(self) -> tuple[str, ...]:
+        return ('brightness',)
+
     def model_can_lack_values(self) -> bool:
         return False
 
@@ -169,7 +172,7 @@ class PixelBrightness(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel
         dcube = _dcube.DCube(
@@ -189,7 +192,7 @@ class PixelBrightness(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelBrightnessPlan(
-            dcube, driver, scene, foreground, dtype, weights, calibration)
+            dcube, driver, scene, foreground, dtype, weights, flux_scale)
 
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):

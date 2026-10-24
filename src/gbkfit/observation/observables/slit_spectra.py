@@ -12,7 +12,7 @@ from gbkfit.model.components._units import DataUnit
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
-from .base import ModelData, Observable
+from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
     from .._scene import Scene
@@ -199,8 +199,14 @@ class SlitSpectra(Observable):
         return _detail.data_unit(
             dataset, 'spectra', abs(self.step()[0]) * self._slit_width, False)
 
-    def spectra_item(self) -> str | None:
-        return 'spectra'
+    def light_items(self) -> tuple[str, ...]:
+        return ('spectra',)
+
+    def flux_scales(self) -> dict[str, FluxScale]:
+        # (each spectrum runs along the first axis, at each position along
+        # the slit)
+        return super().flux_scales() \
+            | dict(per_spectrum=FluxScale(('spectra',), 0, self.size()[0]))
 
     def model_can_lack_values(self) -> bool:
         return False
@@ -218,7 +224,7 @@ class SlitSpectra(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'SlitSpectraPlan':
         # The cube of a slit is one pixel (the slit width) across the slit,
         # sampled as finely as the pixels along it (the model is the mean
@@ -243,7 +249,7 @@ class SlitSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return SlitSpectraPlan(
-            dcube, driver, scene, foreground, dtype, weights, calibration)
+            dcube, driver, scene, foreground, dtype, weights, flux_scale)
 
 
 class SlitSpectraPlan(_detail.DCubePlanBase):

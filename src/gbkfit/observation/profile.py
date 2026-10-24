@@ -100,8 +100,7 @@ class ObservationProfile(Observation):
         the distance are invalid (see check_profile_radii), a slope has a
         radius of 0, it sees more than one galaxy, the inclination is not
         above 0 and at most 90, or it has no name or no rotation
-        velocities, the likelihood has free amplitudes (it has no
-        spectra), or see Observation.
+        velocities, or see Observation.
     """
 
     @staticmethod
@@ -261,9 +260,6 @@ class ObservationProfile(Observation):
                 raise ConfigError(
                     "an inclination scales rotation velocities (e.g. vcirc, "
                     "rotation_gas); the profile has none")
-        if likelihood is not None and likelihood.amplitudes() is not None:
-            raise ConfigError(
-                "free amplitudes scale spectra; a profile has none")
         if data is not None:
             _check_data(data, keys, radii, distance)
         self._radii = radii

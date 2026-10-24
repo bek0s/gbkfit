@@ -126,13 +126,14 @@ def test_likelihoods_name_items_of_their_observation(options, message):
             likelihood=LikelihoodGaussian(missing_residual=3, **options))
 
 
-def test_amplitudes_do_not_go_with_upper_limits_on_their_spectra():
+def test_solved_scales_do_not_go_with_upper_limits_on_their_items():
     from gbkfit.dataset import DatasetPixelSpectra
+    from gbkfit.objective.comparisons import comparison
     from gbkfit.observation import PixelSpectra
     data = DatasetPixelSpectra(Data(np.ones((10, 4, 4))))
-    with pytest.raises(ConfigError, match="do not go with upper limits"):
-        ObservationSky(
-            PixelSpectra.from_data(data), Flat(), data=data,
-            likelihood=LikelihoodGaussian(
-                amplitudes='per_spectrum', amplitude_sigma=0.5,
-                upper_limits=dict(spectra=dict(limit=0.1, error=0.05))))
+    observation = ObservationSky(
+        PixelSpectra.from_data(data), Flat(), data=data,
+        likelihood=LikelihoodGaussian(
+            upper_limits=dict(spectra=dict(limit=0.1, error=0.05))))
+    with pytest.raises(ConfigError, match="do not go with its upper limit"):
+        comparison(observation).check_scales(['spectra'])

@@ -257,8 +257,8 @@ class DCubePlanBase(ObservablePlan):
     the plan of the scene (what an observation sees) on its high-res grid
     (see _model_grid), that of the spatial weights of the data, if any,
     which fill the weight cube of the DCube, and the name of the parameter
-    of the calibration of the observation, if any, which scales the flux
-    of the cube.
+    of the flux scale of the observation, if one value (see
+    ObservationSky), which scales the flux of the cube.
 
     It evaluates the model on the cube, records and masks it (see
     DCubePlan.evaluate), and measures the data items from its low-res
@@ -280,12 +280,12 @@ class DCubePlanBase(ObservablePlan):
             foreground: 'Foreground',
             dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
-        self._calibration = calibration
+        self._flux_param = flux_scale
         self._dcube_plan = dcube.plan(driver, has_weights=weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
@@ -406,9 +406,9 @@ class DCubePlanBase(ObservablePlan):
             for key, item in data.items()}
 
     def _flux_scale(self, params: ParamValues) -> float | None:
-        """Return the calibration of the observation, if any."""
-        return None if self._calibration is None \
-            else params[self._calibration]
+        """Return the flux scale of the observation, if one value."""
+        return None if self._flux_param is None \
+            else params[self._flux_param]
 
     def _evaluate_model(
             self,

@@ -1,6 +1,6 @@
 import abc
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Self, TypeAlias
+from typing import TYPE_CHECKING, Any, NamedTuple, Self, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'FluxScale',
     'HostModelData',
     'ModelData',
     'Observable',
@@ -39,6 +40,19 @@ ModelData: TypeAlias = dict[str, dict[str, DeviceArray | None]]
 
 # Model data copied to the host
 HostModelData: TypeAlias = dict[str, dict[str, np.ndarray | None]]
+
+
+class FluxScale(NamedTuple):
+    """
+    How the values of a flux scale of an observation scale its model (see
+    ObservationSky): the data items of light that they multiply, the axis
+    of their arrays along which each value is one (one value at each point
+    of the other axes, in their order, e.g. one for each spectrum), or None
+    for one value for all, and the number of values.
+    """
+    items: tuple[str, ...]
+    axis: int | None
+    size: int
 
 
 class Observable(parseutils.TypedSerializable, abc.ABC):
@@ -250,22 +264,25 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
-    def spectra_item(self) -> str | None:
+    @abc.abstractmethod
+    def light_items(self) -> tuple[str, ...]:
         """
-        Return the name of its data item of spectra, along an axis of its
-        arrays (see spectra_axis; one spectrum at each point of the other
-        axes), if it has one: the spectra that free amplitudes scale (see
-        LikelihoodGaussian). None here; observables of spectra override
-        this.
+        Return the names of its data items of light (e.g. 'spectra' or
+        'moment0'): those that are times the flux of the model, which a
+        flux scale multiplies (see flux_scales); none for data of
+        velocities only.
         """
-        return None
+        pass
 
-    def spectra_axis(self) -> int:
+    def flux_scales(self) -> dict[str, FluxScale]:
         """
-        Return the axis of the arrays of its data item of spectra along
-        which each spectrum runs (see spectra_item): the first here.
+        Return the flux scales that the model of an observation of it can
+        have (see ObservationSky), by kind: 'one', of its items of light,
+        if any. Observables of spectra add 'per_spectrum' (or, of the lines
+        of an image along an axis, 'per_row').
         """
-        return 0
+        items = self.light_items()
+        return {} if not items else dict(one=FluxScale(items, None, 1))
 
     def check_instrument(self, instrument: Instrument) -> None:
         """
@@ -427,7 +444,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'ObservablePlan':
         """
         Plan the evaluation of a scene (what an observation sees) as this
@@ -453,9 +470,10 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             least as precise as dtype).
         weights : Weights, optional
             The spatial weights of the data.
-        calibration : str, optional
-            The name of the parameter that scales the flux of the model
-            (the calibration of the observation), if any.
+        flux_scale : str, optional
+            The name of the parameter that scales the flux of the model, if
+            one value (the flux scale 'one' of the observation; see
+            ObservationSky).
 
         Returns
         -------

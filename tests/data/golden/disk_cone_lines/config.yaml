@@ -1,4 +1,4 @@
-# disk_cone_lines: A disk and an outflow cone, each emitting Halpha and [NII] 6583 (a ratio each), in a cube of a spectral axis of velocities of Halpha, with a free amplitude for each spectrum.
+# disk_cone_lines: A disk and an outflow cone, each emitting Halpha and [NII] 6583 (a ratio each), in a cube of a spectral axis of velocities of Halpha, with a solved flux scale for each spectrum.
 # (written by make_golden.py; do not edit)
 driver: {type: host}
 galaxies:
@@ -34,6 +34,8 @@ galaxies:
       - {name: nii, rest: 6583.45 Angstrom}
 observations:
 - type: sky
+  name: cube
+  flux_scale: per_spectrum
   data:
     step: [0.6, 0.6, 50]
     rpix: [11.5, 11.5, 19.5]
@@ -41,10 +43,9 @@ observations:
     rota: 0
     rest: 6.562800000000002e-07 m
     medium: vacuum
-    data: observation0_spectra_d.fits
+    data: cube_spectra_d.fits
     error: 0.00015
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, amplitudes: per_spectrum,
-    amplitude_sigma: 0.5, white_floor: 0.01}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: grid
     depth: {extent: galaxy, step: null}
@@ -53,8 +54,7 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: pixel_spectra, smooth_weights: false,
-    median_size: null}
+  observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   scale: [1, 1, 1]
   dtype: float64
   fft_dtype: float64
@@ -82,3 +82,5 @@ params:
     cone_vpt_vo: {value: 220, min: 0, max: 500}
     cone_dpt_a: 60
     cone_nii_ratio: {value: 0.7, min: 0, max: 2}
+    cube_flux_scale:
+      solve: {type: gaussian, mean: 1, sigma: 0.5, minimum: 0}

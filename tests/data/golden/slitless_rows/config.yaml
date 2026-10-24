@@ -1,4 +1,4 @@
-# slitless_rows: Slitless spectra of a polynomial trace along x, with free amplitudes per spectrum (the rows, along the dispersion).
+# slitless_rows: Slitless spectra of a polynomial trace along x, with a solved flux scale per row (along the dispersion).
 # (written by make_golden.py; do not edit)
 driver: {type: host}
 galaxies:
@@ -15,15 +15,16 @@ galaxies:
     emission: {type: lines}
 observations:
 - type: sky
+  name: grism
+  flux_scale: per_row
   data:
     step: [1, 1]
     rpix: [15.5, 11.5]
     rval: [0, 0]
     rota: 0
-    data: observation0_spectra_d.fits
+    data: grism_spectra_d.fits
     error: 0.02
-  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, amplitudes: per_spectrum,
-    amplitude_sigma: 0.5, white_floor: 0.01}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
@@ -65,3 +66,5 @@ params:
     vpt_rt: 2.2
     vpt_vt: {value: 140, min: 50, max: 300}
     dpt_a: {value: 30, min: 5, max: 80}
+    grism_flux_scale:
+      solve: {type: gaussian, mean: 1, sigma: 0.5, minimum: 0}

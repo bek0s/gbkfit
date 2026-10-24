@@ -515,7 +515,7 @@ class DCubePlan:
     def record(self, flux_scale: float | None = None) -> None:
         """
         Scale the flux of the high-res cube by flux_scale (if given; e.g.
-        the calibration of an observation), attenuate it by the primary
+        the flux scale of an observation), attenuate it by the primary
         beam, convolve and downscale it into the low-res one: the data the
         instrument records.
         """

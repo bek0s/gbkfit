@@ -115,8 +115,8 @@
   }
  ],
  "objective": {
-  "chi2": 1528.3222092805709,
-  "log_likelihood": -764.1611046402854,
+  "chi2": 1528.3222092805704,
+  "log_likelihood": -764.1611046402852,
   "noise_chi2": 0.0,
   "nresiduals": 522,
   "nindependent": 522.0,
@@ -141,10 +141,7 @@
     "scale": 604.8388789379754
    }
   ],
-  "amplitudes": [
-   null,
-   null
-  ]
+  "solved": null
  },
  "derived": {}
 }

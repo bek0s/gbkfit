@@ -12,7 +12,7 @@ import numpy as np
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
 from gbkfit.objective import Objective
-from gbkfit.params import ParamEvaluationError, ParamSpace
+from gbkfit.params import ParamEvaluationError, ParamKind, ParamSpace
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -211,7 +211,9 @@ def sample_values(
     Return the values of a sample of the posterior at the given free
     values: those of every element (see ParamSpace.element_values), then
     those of the given elements of the derived values (see
-    ParamSpace.derived_elements), NaN where they cannot be evaluated.
+    ParamSpace.derived_elements), NaN where they cannot be evaluated. The
+    solved elements are NaN: the objective solves them at each point, or
+    integrates them out (see Objective), and the samples do not keep them.
 
     Raises
     ------
@@ -219,7 +221,10 @@ def sample_values(
         If the parameters cannot be evaluated there.
     """
     values = params.evaluate(x)
-    elements = list(params.element_values(values).values())
+    elements = [
+        np.nan if kind is ParamKind.SOLVED else value
+        for value, kind in zip(
+            params.element_values(values).values(), params.kinds().values())]
     if not derived:
         return np.array(elements)
     try:

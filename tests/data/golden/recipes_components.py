@@ -63,7 +63,7 @@ def _moments(
         type='sky', line_of_sight=dict(type='flat'), dtype='float64',
         observable=dict(
             type='pixel_moments', size=size, step=step, spec_size=60,
-            spec_step=10) | observable,
+            spec_step=10, spec_convention='relativistic') | observable,
         instrument=dict(psf=_PSF, lsf=_LSF))
 
 
@@ -258,21 +258,22 @@ _DISK_CONE_LINES = dict(
     name='disk_cone_lines',
     doc="A disk and an outflow cone, each emitting Halpha and [NII] 6583 "
         "(a ratio each), in a cube of a spectral axis of velocities of "
-        "Halpha, with a free amplitude for each spectrum.",
+        "Halpha, with a solved flux scale for each spectrum.",
     galaxies=[dict(components=[
         _disk(name='disk', emission=_HALPHA_NII), _CONE])],
     observations=[_cube(
         [24, 24, 40], [0.6, 0.6, 50], 'grid', rval=[0, 0, 450],
-        rest='6562.8 Angstrom')],
+        rest='6562.8 Angstrom') | dict(
+            name='cube', flux_scale='per_spectrum')],
     truth=_prefixed('disk', _DISK_TRUTH | dict(nii_ratio=0.3))
-    | _prefixed('cone', _CONE_TRUTH),
+    | _prefixed('cone', _CONE_TRUTH) | dict(cube_flux_scale=1),
     trial=_prefixed('disk', _DISK_TRIAL | dict(nii_ratio=_free(0.35, 0, 2)))
     | _prefixed('cone', _CONE_TRUTH | dict(
         wall=_free(35, 5, 60), vpt_vo=_free(220, 0, 500),
-        nii_ratio=_free(0.7, 0, 2))),
-    noises=[dict(type='gauss', rms=1.5e-4)],
-    likelihoods=[dict(
-        type='gaussian', amplitudes='per_spectrum', amplitude_sigma=0.5)])
+        nii_ratio=_free(0.7, 0, 2)))
+    | dict(cube_flux_scale=dict(solve=dict(
+        type='gaussian', mean=1, sigma=0.5, minimum=0))),
+    noises=[dict(type='gauss', rms=1.5e-4)])
 
 
 # --- A6: a point and particles, in an image ----------------------------------

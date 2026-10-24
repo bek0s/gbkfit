@@ -244,6 +244,9 @@ class Visibilities(Observable):
         # surface brightness times their area, see VisibilitiesPlan)
         return _detail.region_data_unit(dataset, 're', False)
 
+    def light_items(self) -> tuple[str, ...]:
+        return ('re', 'im')
+
     def model_can_lack_values(self) -> bool:
         return False
 
@@ -334,7 +337,7 @@ class Visibilities(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'VisibilitiesPlan':
         if tuple(scale[:2]) != (1, 1):
             raise ConfigError(
@@ -372,7 +375,7 @@ class Visibilities(Observable):
             _EPS[np.dtype(dtype)] if self._eps is None else self._eps)
         return VisibilitiesPlan(
             transform, abs(self.step()[0] * self.step()[1]), reversed_, dcube,
-            driver, scene, foreground, dtype, calibration)
+            driver, scene, foreground, dtype, flux_scale)
 
 
 class VisibilitiesPlan(_detail.DCubePlanBase):
@@ -401,10 +404,10 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            calibration: str | None
+            flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None, calibration)
+            dcube, driver, scene, foreground, dtype, None, flux_scale)
         self._transform = transform
         self._area = area
         self._reversed = reversed_

@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
 import numpy as np
@@ -6,10 +6,10 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Extras
-from gbkfit.objective.comparisons import comparison
-from gbkfit.observation import ObservationGroup
-from gbkfit.params import (
-    ParamDesc, ParamValues, Solution, Solve, SolveGaussian)
+from gbkfit.objective.comparisons import Comparison, comparison
+from gbkfit.observation import FluxScale, ObservationGroup
+from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
+from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -20,13 +20,15 @@ __all__ = [
 
 class _Solved(NamedTuple):
     """
-    Solved values (see Solve): the scales of a data item of an observation
-    (its index), one at each point of the axes of the item but one, and
-    how they are solved.
+    Solved elements of the flux scale of an observation (see Solve): the
+    observation (its index), the parameter of the scale, the indices of
+    the elements (None for a scalar), how the scale scales the model of
+    the observation, and how the elements are solved.
     """
     observation: int
-    key: str
-    axis: int
+    param: str
+    indices: np.ndarray | None
+    scale: FluxScale
     solve: Solve
 
 
@@ -40,14 +42,16 @@ class Objective:
     of the chi-square beyond them (e.g. the noise residuals of a fitted
     noise; see LikelihoodGaussian). The objective sums them.
 
-    Some values of parameters are solved at each evaluation, rather than
-    fitted (see Solve): for now, the amplitudes of the spectra of an
-    observation whose likelihood has them (see LikelihoodGaussian). The
-    comparison of the observation gives their sums, the solve their
-    values, and the comparison then compares the model times them. Their
-    priors add residuals after those of the data; the log-likelihood has
-    them integrated out. They are nuisance parameters (see nnuisance), and
-    an extra output of their observation, 'amplitudes'.
+    The elements of parameters can be solved at each evaluation, rather
+    than fitted (see Solve and ParamSpace): for now, those of the flux
+    scales of observations (see ObservationSky), which the model is linear
+    in. The model is evaluated with them at 1, the comparison of their
+    observation gives their sums, their solve their values, and the
+    comparison then compares the model times them (see
+    Comparison.evaluate). The priors of the solved values add residuals
+    after those of the data; the log-likelihood has the values integrated
+    out. They are nuisance parameters (see nnuisance); solved gives their
+    values.
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -64,15 +68,24 @@ class Objective:
     ----------
     group : ObservationGroup
         The observations, each with data.
+    solves : Mapping, optional
+        The solve of each solved element of the parameters, by element
+        name (see ParamSpace.solves); none by default.
 
     Raises
     ------
     ConfigError
-        If an observation has no data, or its comparison cannot be made
-        (see Comparison).
+        If an observation has no data, its comparison cannot be made (see
+        Comparison), or a solved element is not of the flux scale of an
+        observation whose comparison can solve it (see
+        Comparison.check_scales).
     """
 
-    def __init__(self, group: ObservationGroup):
+    def __init__(
+            self,
+            group: ObservationGroup,
+            solves: Mapping[str, Solve] | None = None
+    ):
         observations = group.observations()
         if missing := [
                 i for i, obs in enumerate(observations) if obs.data() is None]:
@@ -82,14 +95,10 @@ class Objective:
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)
         self._comparisons = tuple(comparison(obs) for obs in observations)
-        # (the amplitudes of spectra, of their likelihoods: of a prior of
-        # mean 1, cut at 0)
-        self._solved = tuple(
-            _Solved(
-                i, obs.spectra_item(), obs.spectra_axis(),
-                SolveGaussian(1.0, obs.likelihood().amplitude_sigma(), 0.0))
-            for i, obs in enumerate(observations)
-            if obs.likelihood().amplitudes() is not None)
+        self._solves = dict(solves or {})
+        self._solved = _solved(group, self._comparisons, self._solves)
+        # The observations with solved elements
+        self._scaled = sorted({solved.observation for solved in self._solved})
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -99,12 +108,12 @@ class Objective:
         """
         for comparison_ in self._comparisons:
             comparison_.close()
-        # The values of each solve of the last evaluation, and its scales
-        # on the host (h) and the device (d) of its observation
-        n = len(self._solved)
-        self._solutions: list[Solution | None] = [None] * n
-        self._h_scales: list[np.ndarray | None] = [None] * n
-        self._d_scales: list[DeviceArray | None] = [None] * n
+        # The values of the solved elements of the last evaluation, and
+        # the scales of the observations with some, on the host (h) and
+        # the device (d), by index
+        self._solutions: list[Solution | None] = [None] * len(self._solved)
+        self._h_scales: dict[int, np.ndarray] = {}
+        self._d_scales: dict[int, DeviceArray] = {}
         # The memory is allocated on the first evaluation (see prepare)
         self._prepared = False
 
@@ -127,7 +136,7 @@ class Objective:
         copy shares the data; its memory is its own. Copies on several
         devices evaluate several points at once.
         """
-        return Objective(self._group.with_driver(driver))
+        return Objective(self._group.with_driver(driver), self._solves)
 
     def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
@@ -137,7 +146,7 @@ class Objective:
         e.g. the refits of a bootstrap work out the whitening of correlated
         noise once.
         """
-        objective = Objective(self._group.with_data(datasets))
+        objective = Objective(self._group.with_data(datasets), self._solves)
         for new, old in zip(objective._comparisons, self._comparisons):
             new.share(old)
         return objective
@@ -176,11 +185,15 @@ class Objective:
             return
         for comparison_ in self._comparisons:
             comparison_.prepare()
-        for j, solved in enumerate(self._solved):
-            observation = self._group.observations()[solved.observation]
-            (self._h_scales[j],
-             self._d_scales[j]) = observation.driver().mem_alloc_s(
-                self._scales_shape(solved), observation.dtype())
+        for i in self._scaled:
+            observation = self._group.observations()[i]
+            _, scale = observation.flux_scale()
+            shape = tuple(
+                1 if scale.axis in (None, k) else n
+                for k, n in enumerate(self._datasets[i].shape()))
+            (self._h_scales[i],
+             self._d_scales[i]) = observation.driver().mem_alloc_s(
+                shape, observation.dtype())
         self._prepared = True
 
     def chi2(
@@ -323,8 +336,8 @@ class Objective:
                 c.noise_residuals().size for c in self._comparisons):
             raise NotImplementedError(
                 "the log-likelihood of each point is not given with a fitted "
-                "noise or solved values (e.g. amplitudes of spectra): their "
-                "terms are sums over many points")
+                "noise or solved values (e.g. flux scales): their terms are "
+                "sums over many points")
         return -0.5 * self.residuals(params) ** 2
 
     def noise_chi2(self) -> float:
@@ -337,28 +350,31 @@ class Objective:
         return float(sum(
             np.sum(c.noise_residuals() ** 2) for c in self._comparisons))
 
-    def amplitudes(self) -> list[np.ndarray | None]:
+    def solves(self) -> dict[str, Solve]:
+        """Return the solve of each solved element, by element name."""
+        return dict(self._solves)
+
+    def solved(self) -> dict[str, float]:
         """
-        Return the amplitudes of the spectra of each observation (see
-        LikelihoodGaussian), of the last evaluation, as new arrays of the
-        shape of the spectra but their axis; None for the observations
-        without them, or before an evaluation.
+        Return the values of the solved elements of the last evaluation,
+        by element name (see ParamSpace.evaluate); none before one.
         """
-        amplitudes: list[np.ndarray | None] = [None] * self.nobservations()
+        values = {}
         for solved, solution in zip(self._solved, self._solutions):
-            if solution is not None:
-                amplitudes[solved.observation] = np.squeeze(
-                    solution.values, solved.axis).copy()
-        return amplitudes
+            if solution is None:
+                continue
+            names = [solved.param] if solved.indices is None else [
+                element_name(solved.param, int(k)) for k in solved.indices]
+            values.update(zip(names, solution.values.tolist()))
+        return values
 
     def nnuisance(self) -> int:
         """
         Return the number of nuisance parameters that the objective solves
-        itself (see Solve). The degrees of freedom of a fit exclude them.
+        itself: the solved elements (see Solve). The degrees of freedom of
+        a fit exclude them.
         """
-        return sum(
-            int(np.prod(self._scales_shape(solved)))
-            for solved in self._solved)
+        return len(self._solves)
 
     def nresiduals(self) -> int:
         """
@@ -382,14 +398,6 @@ class Objective:
         self.prepare()
         return sum(c.nindependent() for c in self._comparisons) \
             + self.nnuisance()
-
-    def _scales_shape(self, solved: _Solved) -> tuple[int, ...]:
-        """
-        Return the shape of the scales of solved values: that of their data
-        item, of 1 along its axis.
-        """
-        shape = self._datasets[solved.observation].shape()
-        return tuple(1 if k == solved.axis else n for k, n in enumerate(shape))
 
     def _solve_residuals(self) -> list[np.ndarray]:
         """
@@ -499,46 +507,130 @@ class Objective:
             weighted: bool,
             out_extra: Extras | None = None
     ) -> None:
-        """Evaluate the models, the solved values and the residuals."""
+        """
+        Evaluate the models (with the solved elements at 1), the solved
+        values and the residuals.
+        """
         self.prepare()
-        models = self._group.model_d(params, out_extra)
+        models = self._group.model_d(self._unscaled(params), out_extra)
         with self._group.timers().measure('objective_residual_eval'):
-            scales = self._solve(models, params, out_extra)
+            scales = self._solve(models, params)
             for comparison_, model, scales_ in zip(
                     self._comparisons, models, scales):
                 comparison_.evaluate(model, params, weighted, scales_)
 
+    def _unscaled(self, params: ParamValues) -> ParamValues:
+        """
+        Return the values of the parameters with the solved elements at 1
+        (copies of those of their parameters).
+        """
+        if not self._solved:
+            return params
+        values = dict(params)
+        for solved in self._solved:
+            if solved.indices is None:
+                values[solved.param] = 1.0
+            else:
+                values[solved.param] = np.array(values[solved.param])
+                values[solved.param][solved.indices] = 1.0
+        return values
+
     def _solve(
             self,
             models: list[dict[str, dict[str, DeviceArray | None]]],
-            params: ParamValues,
-            out_extra: Extras | None
+            params: ParamValues
     ) -> list[dict[str, DeviceArray]]:
         """
-        Solve the solved values of the models (see Solve), and return the
-        scales of the data items of each observation, on its device, by
-        name; with extras, the amplitudes of spectra go to them
-        ('{prefix}amplitudes', of the shape of the spectra but their axis).
+        Solve the solved elements of the models (see Solve), and return
+        the scales of the data items of each observation, on its device, by
+        name.
         """
         scales: list[dict[str, DeviceArray]] = [
             {} for _ in range(self.nobservations())]
+        for i in self._scaled:
+            self._h_scales[i][...] = 1
         for j, solved in enumerate(self._solved):
             i = solved.observation
-            sums = self._comparisons[i].scale_sums(
-                models[i], params, solved.key, solved.axis)
-            solution = solved.solve.solve(*sums)
+            a, b = _scale_sums(
+                self._comparisons[i], models[i], params, solved.scale)
+            if solved.indices is not None:
+                a, b = a[solved.indices], b[solved.indices]
+            solution = solved.solve.solve(a, b)
             self._solutions[j] = solution
-            self._h_scales[j][...] = solution.values
-            self._group.observations()[i].driver().mem_copy_h2d(
-                self._h_scales[j], self._d_scales[j])
-            scales[i][solved.key] = self._d_scales[j]
-            if out_extra is not None:
-                out_extra.add(
-                    'amplitudes',
-                    np.squeeze(solution.values, solved.axis).copy(),
-                    "Amplitudes of the spectra",
-                    "The amplitude of each spectrum of the model that fits "
-                    "the data best (see LikelihoodGaussian): the factor of "
-                    "its model in the residuals.",
-                    observation=self._group.observation_label(i))
+            flat = self._h_scales[i].reshape(-1)
+            flat[slice(None) if solved.indices is None
+                 else solved.indices] = solution.values
+        for i in self._scaled:
+            observation = self._group.observations()[i]
+            observation.driver().mem_copy_h2d(
+                self._h_scales[i], self._d_scales[i])
+            _, scale = observation.flux_scale()
+            scales[i] = dict.fromkeys(scale.items, self._d_scales[i])
         return scales
+
+
+def _solved(
+        group: ObservationGroup,
+        comparisons: Sequence[Comparison],
+        solves: Mapping[str, Solve]
+) -> tuple[_Solved, ...]:
+    """
+    Return the solved elements of the flux scales of the observations of a
+    group, of the solve of each element (by element name), those of one
+    parameter and one solve together.
+
+    Raises
+    ------
+    ConfigError
+        If an element is not of the flux scale of an observation, or its
+        comparison cannot solve it (see Comparison.check_scales).
+    """
+    pdescs = group.pdescs()
+    solved = []
+    found = set()
+    for i, observation in enumerate(group.observations()):
+        if (flux_scale := observation.flux_scale()) is None:
+            continue
+        param, scale = flux_scale
+        pdesc = pdescs[param]
+        names = [param] if pdesc.is_scalar() else [
+            element_name(param, k) for k in range(pdesc.size())]
+        indices_of: dict[int, list[int]] = {}
+        for k, name in enumerate(names):
+            if name in solves:
+                indices_of.setdefault(id(solves[name]), []).append(k)
+                found.add(name)
+        if indices_of:
+            comparisons[i].check_scales(scale.items)
+        for indices in indices_of.values():
+            solve = solves[names[indices[0]]]
+            solved.append(_Solved(
+                i, param, None if pdesc.is_scalar() else np.array(indices),
+                scale, solve))
+    if unknown := [name for name in solves if name not in found]:
+        raise ConfigError(
+            f"only the flux scales of observations can be solved (the "
+            f"model is linear in them); these cannot: {unknown}")
+    return tuple(solved)
+
+
+def _scale_sums(
+        comparison_: Comparison,
+        model: dict[str, dict[str, DeviceArray | None]],
+        params: ParamValues,
+        scale: FluxScale
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the sums of the values of a flux scale (see
+    Comparison.scale_sums) of the model of an observation, over the items
+    it scales, in the order of the elements of its parameter (one for a
+    scale of one value).
+    """
+    total_a = total_b = 0.0
+    for key in scale.items:
+        a, b = comparison_.scale_sums(
+            model, params, key, 0 if scale.axis is None else scale.axis)
+        if scale.axis is None:
+            a, b = np.sum(a), np.sum(b)
+        total_a, total_b = total_a + a, total_b + b
+    return np.ravel(total_a), np.ravel(total_b)

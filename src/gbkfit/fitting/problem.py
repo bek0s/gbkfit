@@ -102,9 +102,11 @@ class FitProblem:
     Raises
     ------
     ValueError
-        If the parameter space lacks parameters of the objective, nothing
-        is free, the number of priors is wrong, the log is of a fit of
-        other free elements, or the pool is of another objective.
+        If the parameter space lacks parameters of the objective, the
+        objective does not solve its solved elements (see
+        Objective.solves), nothing is free, the number of priors is
+        wrong, the log is of a fit of other free elements, or the pool is
+        of another objective.
     ConfigError
         If a prior on several parameters is invalid.
     """
@@ -124,6 +126,11 @@ class FitProblem:
             raise ValueError(
                 f"these parameters of the objective are missing from the "
                 f"parameter space: {sorted(missing)}")
+        if objective.solves() != params.solves():
+            raise ValueError(
+                "the objective must solve the solved elements of the "
+                "parameters, with their solves: make it with "
+                "Objective(group, params.solves())")
         names = tuple(params.free_properties())
         if not names:
             raise ValueError("no parameter is free")

@@ -97,8 +97,14 @@ def test_cubes_of_correlated_noise_keep_whole_spectra(driver):
     objective(driver, whole['spectra'], LikelihoodGaussian())
 
 
-def test_cubes_of_correlated_noise_go_without_amplitudes(driver):
-    data = noisy_cube(np.random.default_rng(9), None)
-    with pytest.raises(ConfigError, match="amplitudes of spectra"):
-        objective(driver, data, LikelihoodGaussian(
-            amplitudes='per_spectrum', amplitude_sigma=0.5))
+def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
+    from gbkfit.params import SolveGaussian
+    dataset = DatasetPixelSpectra(
+        noisy_cube(np.random.default_rng(9), None), step=STEP)
+    group = ObservationGroup(
+        [galaxy_parser.load(GALAXY)], [ObservationSky(
+            PixelSpectra.from_data(dataset),
+            line_of_sight_parser.load(dict(type='flat')), driver,
+            data=dataset, flux_scale='one', name='obs')])
+    with pytest.raises(ConfigError, match="its correlated noise"):
+        Objective(group, dict(obs_flux_scale=SolveGaussian(1, 0.5, 0)))

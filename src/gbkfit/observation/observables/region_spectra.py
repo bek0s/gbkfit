@@ -14,7 +14,7 @@ from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
 from ._region_sums import RegionSumsPlan, flux_weights
-from .base import ModelData, Observable
+from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
     import scipy.sparse
@@ -222,8 +222,14 @@ class RegionSpectra(Observable):
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.region_data_unit(dataset, 'spectra', False)
 
-    def spectra_item(self) -> str | None:
-        return 'spectra'
+    def light_items(self) -> tuple[str, ...]:
+        return ('spectra',)
+
+    def flux_scales(self) -> dict[str, FluxScale]:
+        # (each spectrum runs along the first axis, of each region)
+        nregions = self._regions.nregions()
+        return super().flux_scales() \
+            | dict(per_spectrum=FluxScale(('spectra',), 0, nregions))
 
     def model_can_lack_values(self) -> bool:
         return False
@@ -253,7 +259,7 @@ class RegionSpectra(Observable):
             dtype: np.dtype,
             fft_dtype: np.dtype,
             weights: 'Weights | None',
-            calibration: str | None
+            flux_scale: str | None
     ) -> 'RegionSpectraPlan':
         if weights is not None:
             raise ConfigError("region_spectra does not support weights yet")
@@ -277,7 +283,7 @@ class RegionSpectra(Observable):
             fft_dtype=fft_dtype)
         return RegionSpectraPlan(
             self._weights, dcube, driver, scene, foreground, dtype,
-            calibration)
+            flux_scale)
 
 
 class RegionSpectraPlan(_detail.DCubePlanBase):
@@ -290,10 +296,10 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            calibration: str | None
+            flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None, calibration)
+            dcube, driver, scene, foreground, dtype, None, flux_scale)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)
