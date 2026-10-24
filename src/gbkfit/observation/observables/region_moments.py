@@ -50,10 +50,10 @@ class RegionMoments(Observable):
         The spatial grid of the cube (see gridutils.make_grid), for
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
-    mask_cutoff, orders, spec_size, spec_step, spec_rval, spec_rest, \
+    flux_floor, orders, spec_size, spec_step, spec_rval, spec_rest, \
 spec_medium, spec_convention, method : optional
         As those of PixelMoments: the regions whose moment 0 is not above
-        mask_cutoff are masked.
+        flux_floor times the largest of the regions are masked.
 
     Raises
     ------
@@ -101,7 +101,7 @@ spec_medium, spec_convention, method : optional
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] | None = None,
             rota: float | None = None,
-            mask_cutoff: float = 1e-6,
+            flux_floor: float = 1e-6,
             spec_size: int | None = None,
             spec_step: float = _moments.SPEC_STEP,
             spec_rval: float | None = None,
@@ -121,7 +121,7 @@ spec_medium, spec_convention, method : optional
         size, step, rpix, rval, rota : optional
             As those of RegionMoments: the spatial grid of the cube, for
             regions on the sky.
-        mask_cutoff, spec_size, spec_step, spec_rval, spec_rest, \
+        flux_floor, spec_size, spec_step, spec_rval, spec_rest, \
 spec_medium, method : optional
             As those of PixelMoments.from_data.
 
@@ -141,7 +141,7 @@ spec_medium, method : optional
             dataset.regions(), size, step, rpix, rval, rota,
             **_moments.spectral_axis_from_data(
                 dataset, spec_step, spec_size, spec_rval),
-            mask_cutoff=mask_cutoff, orders=dataset.orders(),
+            flux_floor=flux_floor, orders=dataset.orders(),
             spec_step=spec_step, spec_rest=spec_rest,
             spec_medium=spec_medium, spec_convention=spec_convention,
             method=method)
@@ -161,7 +161,7 @@ spec_medium, method : optional
                     overwrite=overwrite),
                 orders=self._orders)
         return info | _detail.dump_spatial_grid(self, self._regions) | dict(
-            mask_cutoff=self._mask_cutoff,
+            flux_floor=self._flux_floor,
             spec_size=self._spec_size,
             spec_step=self._spec_step,
             spec_rval=self._spec_rval,
@@ -178,7 +178,7 @@ spec_medium, method : optional
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] | None = None,
             rota: float | None = None,
-            mask_cutoff: float = 1e-6,
+            flux_floor: float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
             spec_step: float = _moments.SPEC_STEP,
@@ -194,11 +194,11 @@ spec_medium, method : optional
         super().__init__(
             spatial.size, coords.step, coords.rpix, coords.rval, coords.rota)
         self._orders = _moments.check_moment_options(
-            orders, mask_cutoff, method, spec_size, spec_step)
+            orders, flux_floor, method, spec_size, spec_step)
         if spec_size is None:
             spec_size = _moments.default_spec_size(spec_step)
         self._regions = regions
-        self._mask_cutoff = mask_cutoff
+        self._flux_floor = flux_floor
         self._method = method
         self._spec_size = spec_size
         self._spec_step = spec_step
@@ -219,8 +219,8 @@ spec_medium, method : optional
     def orders(self) -> tuple[int, ...]:
         return self._orders
 
-    def mask_cutoff(self) -> float:
-        return self._mask_cutoff
+    def flux_floor(self) -> float:
+        return self._flux_floor
 
     def method(self) -> str:
         return self._method
@@ -260,7 +260,7 @@ spec_medium, method : optional
         return any(order >= 1 for order in self._orders)
 
     def check_instrument(self, instrument: Instrument) -> None:
-        _moments.warn_unmasked_noise(self._mask_cutoff, instrument)
+        _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
     def _require_matching_coordinates(
             self, dataset: DatasetRegionMoments
@@ -334,7 +334,7 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], 1, nregions), dtype)
         self._moments = _moments.MomentsPlan(
-            driver, (nregions, 1), moments.orders(), moments.mask_cutoff(),
+            driver, (nregions, 1), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)
 
     def _measure(self) -> ModelData:

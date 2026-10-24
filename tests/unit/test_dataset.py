@@ -273,7 +273,7 @@ def test_observable_grid_comes_from_the_data(tmp_path):
     observable_info = observation_parser.dump(
         observation, prefix=str(tmp_path / 'dump_'))['observable']
     assert observable_info == dict(
-        type='pixel_brightness', mask_cutoff=None, mask_apply=False,
+        type='pixel_brightness',
         median_size=None)
     with pytest.raises(Exception, match="give its options \\['step'\\]"):
         observation_parser.load(

@@ -47,8 +47,13 @@ class PixelMoments(Observable):
         the centre by default.
     rota : float, optional
         The rotation of the maps on the sky.
-    mask_cutoff : float, optional
-        The spectra whose moment 0 is not above it are masked.
+    flux_floor : float, optional
+        The spectra of the model whose moment 0 is not above this fraction
+        of the largest of the maps (in absolute value) have no moments
+        (they are masked): 1e-6 by default, from 0 to below 1. It keeps
+        out spectra of hardly any flux, whose moments are noise (e.g. of
+        the rounding of convolutions); what the data lack is for their
+        mask and their likelihood (e.g. upper limits).
     orders : Sequence of int, optional
         The orders of the moments.
     spec_size : int, optional
@@ -87,9 +92,9 @@ class PixelMoments(Observable):
     Raises
     ------
     ConfigError
-        If the orders are not valid for the method, mask_cutoff is None or
-        negative, spec_size is less than 1, spec_step is not positive, or
-        median_size is not an odd number of at least 3.
+        If the orders are not valid for the method, flux_floor is not from
+        0 to below 1, spec_size is less than 1, spec_step is not positive,
+        or median_size is not an odd number of at least 3.
     """
 
     dataset_class = DatasetPixelMoments
@@ -119,7 +124,7 @@ class PixelMoments(Observable):
     def from_data(
             cls,
             dataset: DatasetPixelMoments,
-            mask_cutoff: float = 1e-6,
+            flux_floor: float = 1e-6,
             spec_size: int | None = None,
             spec_step: float = _moments.SPEC_STEP,
             spec_rval: float | None = None,
@@ -137,7 +142,7 @@ class PixelMoments(Observable):
         ----------
         dataset : DatasetPixelMoments
             The moment maps.
-        mask_cutoff, spec_step, spec_rest, spec_medium, spec_convention, \
+        flux_floor, spec_step, spec_rest, spec_medium, spec_convention, \
                 method, median_size : optional
             As those of PixelMoments.
         spec_size, spec_rval : optional
@@ -162,7 +167,7 @@ class PixelMoments(Observable):
             **_detail.grid_options(dataset.grid()),
             **_moments.spectral_axis_from_data(
                 dataset, spec_step, spec_size, spec_rval),
-            mask_cutoff=mask_cutoff, orders=dataset.orders(),
+            flux_floor=flux_floor, orders=dataset.orders(),
             spec_step=spec_step, spec_rest=spec_rest,
             spec_medium=spec_medium, spec_convention=spec_convention,
             method=method, median_size=median_size)
@@ -181,7 +186,7 @@ class PixelMoments(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
-            mask_cutoff=self._mask_cutoff,
+            flux_floor=self._flux_floor,
             orders=self._orders,
             spec_size=self._spec_size,
             spec_step=self._spec_step,
@@ -199,7 +204,7 @@ class PixelMoments(Observable):
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] = (0, 0),
             rota: float = 0,
-            mask_cutoff: float = 1e-6,
+            flux_floor: float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
             spec_size: int | None = None,
             spec_step: float = _moments.SPEC_STEP,
@@ -214,10 +219,10 @@ class PixelMoments(Observable):
         _detail.check_median_size(median_size)
         self._median_size = median_size
         self._orders = _moments.check_moment_options(
-            orders, mask_cutoff, method, spec_size, spec_step)
+            orders, flux_floor, method, spec_size, spec_step)
         if spec_size is None:
             spec_size = _moments.default_spec_size(spec_step)
-        self._mask_cutoff = mask_cutoff
+        self._flux_floor = flux_floor
         self._method = method
         self._spec_size = spec_size
         self._spec_step = spec_step
@@ -248,8 +253,8 @@ class PixelMoments(Observable):
     def orders(self) -> tuple[int, ...]:
         return self._orders
 
-    def mask_cutoff(self) -> float:
-        return self._mask_cutoff
+    def flux_floor(self) -> float:
+        return self._flux_floor
 
     def method(self) -> str:
         return self._method
@@ -273,7 +278,7 @@ class PixelMoments(Observable):
         return self._spec_convention
 
     def check_instrument(self, instrument: Instrument) -> None:
-        _moments.warn_unmasked_noise(self._mask_cutoff, instrument)
+        _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
     def plan(
             self,
@@ -313,7 +318,7 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
         super().__init__(
             dcube, driver, scene, foreground, dtype, weights, calibration)
         self._moments = _moments.MomentsPlan(
-            driver, moments.size(), moments.orders(), moments.mask_cutoff(),
+            driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)
 
     def _measure(self) -> ModelData:

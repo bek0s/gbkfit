@@ -139,17 +139,16 @@ GAUSS = dict(type='gauss', sigma=1)
 # value other than its default
 OBSERVABLES = dict(
     pixel_brightness=(dict(
-        size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
-        mask_cutoff=0.1, mask_apply=True),
+        size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10),
         dict(psf=GAUSS, lsf=None), [2, 1]),
     pixel_spectra=(dict(
         size=[20, 16, 11], step=[2, 1, 10], rpix=[3, 4, 5], rval=[1, 2, 3],
-        rota=10, smooth_weights=True, mask_cutoff=0.1, mask_apply=True,
+        rota=10, smooth_weights=True,
         rest='6.56461e-07 m', convention='log'),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1, 1]),
     slit_spectra=(dict(
         size=[20, 11], step=[2, 10], rpix=[3, 5], rval=[1, 3], rota=10,
-        slit_width=3, smooth_weights=True, mask_cutoff=0.1, mask_apply=True,
+        slit_width=3, smooth_weights=True,
         rest='6.56461e-07 m', convention='log'),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]),
     slitless_spectra=(dict(
@@ -161,7 +160,7 @@ OBSERVABLES = dict(
         dict(psf=GAUSS, lsf=None), [2, 1]),
     pixel_moments=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
-        mask_cutoff=0.1, orders=[0, 1], spec_size=201, spec_step=2,
+        flux_floor=0.1, orders=[0, 1], spec_size=201, spec_step=2,
         spec_rval=1500, spec_rest='6.56461e-07 m', spec_convention='log'),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]))
 

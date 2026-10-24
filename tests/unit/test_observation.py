@@ -59,8 +59,8 @@ def test_a_model_that_can_lack_values_needs_their_residual():
 
 
 def test_observable_options_are_checked():
-    with pytest.raises(ConfigError, match="mask_apply needs a mask_cutoff"):
-        PixelBrightness(size=(8, 8), mask_apply=True)
+    with pytest.raises(ConfigError, match="flux_floor is a fraction"):
+        PixelMoments(size=(8, 8), flux_floor=1)
     with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
         ObservationSky(
             PixelBrightness(size=(8, 8)), Flat(),

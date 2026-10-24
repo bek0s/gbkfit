@@ -54,15 +54,15 @@ OBSERVABLES = dict(
         rest='6562.8 Angstrom'),
     pixel_moments=dict(
         type='pixel_moments', size=[24, 25], spec_size=81, spec_step=10,
-        spec_rest='6562.8 Angstrom', mask_cutoff=1e-4),
+        spec_rest='6562.8 Angstrom', flux_floor=1e-4),
     pixel_moments_fit=dict(
         type='pixel_moments', size=[24, 25], spec_size=81, spec_step=10,
-        spec_rest='6562.8 Angstrom', mask_cutoff=1e-4,
+        spec_rest='6562.8 Angstrom', flux_floor=1e-4,
         method='gaussian_fit'),
     region_moments=dict(
         type='region_moments', regions=APERTURES, size=[24, 25],
         spec_size=81, spec_step=10, spec_rest='6562.8 Angstrom',
-        mask_cutoff=1e-4),
+        flux_floor=1e-4),
     region_spectra=dict(
         type='region_spectra', regions=APERTURES, size=[24, 25],
         spec_size=61, spec_step=20, spec_rest='6562.8 Angstrom'))

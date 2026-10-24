@@ -122,7 +122,7 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
     # the model)
     group = group_of(driver, dict(
         type='pixel_moments', size=[16, 17], spec_size=31, spec_step=20,
-        mask_cutoff=1e-4, method=method))
+        flux_floor=1e-4, method=method))
     model, extra, params = evaluate(group)
     peak = extra.get('dcube_lo').data.max()
     mocks = group.mock(

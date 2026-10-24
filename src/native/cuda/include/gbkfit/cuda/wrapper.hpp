@@ -36,12 +36,6 @@ struct Wrapper
             const T* src_cube, T* dst_cube);
 
     static void
-    dmodel_dcube_mask(
-            T cutoff, bool apply,
-            int size_x, int size_y, int size_z,
-            T* dcube_d, T* dcube_m, T* dcube_w);
-
-    static void
     dmodel_mmaps_moments(
             int size_x, int size_y, int size_z,
             T step_z, T zero_z,

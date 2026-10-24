@@ -47,11 +47,6 @@ class PixelBrightness(Observable):
         the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
-    mask_cutoff : float, optional
-        The pixels of the model whose absolute value is not above it are
-        masked; no masking if None.
-    mask_apply : bool, optional
-        Whether the masked pixels of the model are NaN.
     median_size : int, optional
         The size (an odd number of pixels, at least 3) of the median filter
         that smoothed the data on the sky, which smooths the model as well
@@ -62,8 +57,7 @@ class PixelBrightness(Observable):
     Raises
     ------
     ConfigError
-        If median_size is not an odd number of at least 3, mask_cutoff
-        is negative, or mask_apply is true without it.
+        If median_size is not an odd number of at least 3.
     """
 
     dataset_class = DatasetPixelBrightness
@@ -88,8 +82,6 @@ class PixelBrightness(Observable):
     def from_data(
             cls,
             dataset: DatasetPixelBrightness,
-            mask_cutoff: float | None = None,
-            mask_apply: bool = False,
             median_size: int | None = None
     ) -> 'PixelBrightness':
         """
@@ -99,7 +91,7 @@ class PixelBrightness(Observable):
         ----------
         dataset : DatasetPixelBrightness
             The image.
-        mask_cutoff, mask_apply, median_size : optional
+        median_size : optional
             As those of PixelBrightness.
 
         Returns
@@ -115,8 +107,7 @@ class PixelBrightness(Observable):
         """
         cls._require_dataset_class(dataset)
         return cls(
-            **_detail.grid_options(dataset.grid()), mask_cutoff=mask_cutoff,
-            mask_apply=mask_apply, median_size=median_size)
+            **_detail.grid_options(dataset.grid()), median_size=median_size)
 
     def dump(
             self,
@@ -132,8 +123,6 @@ class PixelBrightness(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
-            mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply,
             median_size=self._median_size), data)
 
     def __init__(
@@ -143,15 +132,10 @@ class PixelBrightness(Observable):
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] = (0, 0),
             rota: float = 0,
-            mask_cutoff: float | None = None,
-            mask_apply: bool = False,
             median_size: int | None = None
     ):
         super().__init__(size, step, rpix, rval, rota)
-        _detail.check_mask_options(mask_cutoff, mask_apply)
         _detail.check_median_size(median_size)
-        self._mask_cutoff = mask_cutoff
-        self._mask_apply = mask_apply
         self._median_size = median_size
 
     def keys(self) -> tuple[str, ...]:
@@ -167,7 +151,7 @@ class PixelBrightness(Observable):
             False)
 
     def model_can_lack_values(self) -> bool:
-        return self._mask_apply
+        return False
 
     def check_instrument(self, instrument: Instrument) -> None:
         if instrument.lsf() is not None:
@@ -201,8 +185,6 @@ class PixelBrightness(Observable):
             psf=instrument.psf(),
             lsf=None,
             smooth_weights=False,
-            mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply,
             dtype=dtype,
             fft_dtype=fft_dtype,
             median_size=self._median_size)
@@ -231,5 +213,5 @@ class PixelBrightnessPlan(_detail.DCubePlanBase):
         plan = self._dcube_plan
         return dict(brightness=dict(
             d=plan.dcube()[0, :, :],
-            m=plan.mcube()[0, :, :] if plan.mcube() is not None else None,
+            m=None,
             w=plan.wcube()[0, :, :] if plan.wcube() is not None else None))

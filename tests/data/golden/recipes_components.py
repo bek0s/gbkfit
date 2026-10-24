@@ -63,7 +63,7 @@ def _moments(
         type='sky', line_of_sight=dict(type='flat'), dtype='float64',
         observable=dict(
             type='pixel_moments', size=size, step=step, spec_size=60,
-            spec_step=10, mask_cutoff=1e-3) | observable,
+            spec_step=10) | observable,
         instrument=dict(psf=_PSF, lsf=_LSF))
 
 
@@ -225,7 +225,7 @@ _BLOBS_MAPS_SELECTION = dict(
             dict(type='mixture_exponential', nblobs=3),
             dict(type='map', size=[4, 4], step=2)]),
         sptraits=[dict(type='rrange'), dict(type='azrange')])])],
-    observations=[_moments([24, 24], [0.6, 0.6], mask_cutoff=0.03)],
+    observations=[_moments([24, 24], [0.6, 0.6], flux_floor=0.03)],
     truth=_DISK_TRUTH | dict(
         pt1_r=[2, 4, 5.5], pt1_t=[30, 160, 260], pt1_a=[0.8, 0.6, 0.5],
         pt1_s=[0.6, 0.8, 0.5], pt1_q=[0.6, 0.8, 1], pt1_p=[0, 30, 0],

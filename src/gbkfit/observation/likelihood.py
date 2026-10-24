@@ -136,7 +136,7 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """
         Check whether it takes the values that the model lacks where the
         data have some (e.g. the velocity of a spectrum below the
-        mask_cutoff of a moment map): with a missing_residual here.
+        flux_floor of a moment map): with a missing_residual here.
         """
         return self.missing_residual() is not None
 
@@ -180,7 +180,7 @@ class LikelihoodGaussian(Likelihood):
     chi-squared.
 
     Where the data have a value but the model none (e.g. the velocity of
-    a spectrum whose flux is below the mask_cutoff of a moment map), there
+    a spectrum whose flux is below the flux_floor of a moment map), there
     is no residual to compute: the residual is then missing_residual.
     Counting such values as 0 would let a fit lower its chi-square by
     making its model lack values where it fits the data badly (e.g. by

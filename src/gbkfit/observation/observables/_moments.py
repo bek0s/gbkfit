@@ -82,7 +82,7 @@ def spectral_axis_from_data(
 
 def check_moment_options(
         orders: Sequence[int],
-        mask_cutoff: float | None,
+        flux_floor: float,
         method: str,
         spec_size: int | None,
         spec_step: float
@@ -90,9 +90,9 @@ def check_moment_options(
     """
     Return the moment orders, sorted and unique. Raise ConfigError unless
     they are valid for the method (see METHODS; a Gaussian has moments 0
-    to 2, a Gauss-Hermite series 0 to 4), masking is enabled (mask_cutoff,
-    not negative), as the moments need, and the spectral axis has channels
-    (if its size is given) of a positive width.
+    to 2, a Gauss-Hermite series 0 to 4), the flux floor is from 0 to
+    below 1, and the spectral axis has channels (if its size is given) of
+    a positive width.
     """
     if method not in METHODS:
         raise ConfigError(
@@ -105,28 +105,27 @@ def check_moment_options(
         raise ConfigError(
             f"the moment orders of the method {method} must be between 0 "
             f"and {max_order}")
-    if mask_cutoff is None:
+    if not 0 <= flux_floor < 1:
         raise ConfigError(
-            "masking cannot be disabled for moments; set the mask_cutoff to "
-            "a value greater or equal to 0")
-    _detail.check_mask_options(mask_cutoff, False)
+            f"flux_floor is a fraction of the flux of the brightest "
+            f"spectrum, from 0 to below 1; it is {flux_floor}")
     _detail.check_positive('spec_step', spec_step)
     if spec_size is not None and spec_size < 1:
         raise ConfigError(f"spec_size must be at least 1; it is {spec_size}")
     return orders
 
 
-def warn_unmasked_noise(mask_cutoff: float, instrument: Instrument) -> None:
+def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
     """
-    Warn if the mask cutoff of moments is 0 with a PSF or an LSF, whose
+    Warn if the flux floor of moments is 0 with a PSF or an LSF, whose
     convolution leaves noise in the faint parts of the model.
     """
-    if mask_cutoff == 0 and (
+    if flux_floor == 0 and (
             instrument.psf() is not None or instrument.lsf() is not None):
         parseutils.warn(
-            "mask_cutoff is 0, but the instrument has a PSF or an LSF: the "
+            "flux_floor is 0, but the instrument has a PSF or an LSF: the "
             "FFT-based convolution leaves noise in the faint parts of the "
-            "model, whose moments can give artefacts; a mask_cutoff "
+            "model, whose moments can give artefacts; a flux_floor "
             "greater than 0 is highly recommended")
 
 
@@ -142,8 +141,7 @@ def spectra_dcube(
     Return the DCube of the spectra that the moments of an observable are
     measured from: on its spatial grid, with its spectral axis centred on
     spec_rval, smoothed by the median filter of median_size (if given; see
-    DCube). The masking of DCube is disabled; the moments are masked by
-    moment 0.
+    DCube).
     """
     spec_size = observable.spec_size()
     return _dcube.DCube(
@@ -160,8 +158,6 @@ def spectra_dcube(
         psf=instrument.psf(),
         lsf=instrument.lsf(),
         smooth_weights=False,
-        mask_cutoff=None,
-        mask_apply=False,
         dtype=dtype,
         fft_dtype=fft_dtype,
         median_size=median_size)
@@ -172,8 +168,9 @@ class MomentsPlan:
     The moments of the given orders of the spectra of cubes (nz, ny, nx)
     on a driver, measured with the given method (see METHODS): a map
     (ny, nx) for each order, one mask shared by them (the spectra whose
-    moment 0 is not above mask_cutoff, and those whose fit fails), and
-    one weight map shared by them (with the method moments).
+    moment 0 is not above flux_floor times the largest of the map, in
+    absolute value, and those whose fit fails), and one weight map shared
+    by them (with the method moments).
     """
 
     def __init__(
@@ -181,14 +178,14 @@ class MomentsPlan:
             driver: Driver,
             size: Sequence[int],
             orders: Sequence[int],
-            mask_cutoff: float,
+            flux_floor: float,
             method: str,
             dtype: np.dtype
     ):
         """size is that of the maps (nx, ny)."""
         size_all = tuple(size) + (len(orders),)
         self._orders = orders
-        self._mask_cutoff = mask_cutoff
+        self._flux_floor = flux_floor
         self._method = method
         self._mmaps_o = driver.mem_alloc_d(len(orders), np.int32)
         self._mmaps_d = driver.mem_alloc_d(size_all[::-1], dtype)
@@ -198,6 +195,14 @@ class MomentsPlan:
         driver.mem_fill(self._mmaps_d, np.nan)
         driver.mem_fill(self._mmaps_m, 0)
         driver.mem_fill(self._mmaps_w, 1)
+        # (the map of moment 0 that gives the floor: its own order, mask
+        # and weights)
+        self._flux_o = driver.mem_alloc_d(1, np.int32)
+        self._flux_d = driver.mem_alloc_d((1,) + tuple(size)[::-1], dtype)
+        self._flux_m = driver.mem_alloc_d(tuple(size)[::-1], dtype)
+        self._flux_w = driver.mem_alloc_d(tuple(size)[::-1], dtype)
+        driver.mem_copy_h2d(np.zeros(1, dtype=np.int32), self._flux_o)
+        self._driver = driver
         self._backend = driver.native_class('DModel', dtype)()
 
     def evaluate(
@@ -215,22 +220,42 @@ class MomentsPlan:
         # TODO: unexplained, not investigated. Where the model has almost
         # no flux (moment 0 ~1e-4 of its peak), its moments are noise, and
         # a step of 3e-4 in any parameter switches pixels between masked
-        # and not (probably moment 0 crossing mask_cutoff): the chi-square
+        # and not (probably moment 0 crossing the floor): the chi-square
         # jumps by 1e3-2e4 and least squares rejects every step (M83 of
         # LVHIS, tilted rings, a brightness falling to 0 at the edge of
         # the data). A guess: the round-off of the float32 FFT convolution
         # (moment 0 had pixels of -3.5e-8, though the brightness is >= 0).
         # Workaround: a disk bright beyond the data.
+        cutoff = self._flux_floor * self._largest_flux(step, zero, cube)
         if self._method in ('gaussian_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
-                step, zero, cube, self._mask_cutoff, self._mmaps_o,
+                step, zero, cube, cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m,
                 hermite=self._method == 'gauss_hermite')
         else:
             self._backend.mmaps_moments(
-                step, zero, cube, wcube, self._mask_cutoff, self._mmaps_o,
+                step, zero, cube, wcube, cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
             f'moment{order}': dict(
                 d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
             for i, order in enumerate(self._orders)}
+
+    def _largest_flux(
+            self,
+            step: Sequence[float],
+            zero: Sequence[float],
+            cube: DeviceArray
+    ) -> float:
+        """
+        Return the largest moment 0 of the spectra of cube, in absolute
+        value (0 without flux): of its map, measured with nothing masked
+        (a cutoff below 0) and copied to the host.
+        """
+        if self._flux_floor == 0:
+            return 0.0
+        self._backend.mmaps_moments(
+            step, zero, cube, None, -1, self._flux_o, self._flux_d,
+            self._flux_m, self._flux_w)
+        flux = np.abs(self._driver.mem_copy_d2h(self._flux_d))
+        return float(np.nanmax(flux, initial=0))

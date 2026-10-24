@@ -59,21 +59,6 @@ struct DModel
                 kernels.data(), cube.data(), scratch.data());
     }
 
-    // Mark the pixels of dcube_d above the cutoff in dcube_m (optional),
-    // and if apply is true, set the rest to NaN
-    static void
-    dcube_mask(T cutoff, bool apply, Cube dcube_d, Cube dcube_m, Cube dcube_w)
-    {
-        const typename Kernels::DeviceScope scope(dcube_d.device_id());
-        require_same_shape(dcube_m, dcube_d, "dcube_m", "dcube_d");
-        require_same_shape(dcube_w, dcube_d, "dcube_w", "dcube_d");
-        const auto size = size_xyz(dcube_d);
-        Kernels::dmodel_dcube_mask(
-                cutoff, apply,
-                size[0], size[1], size[2],
-                dcube_d.data(), data(dcube_m), data(dcube_w));
-    }
-
     // The moment maps of the given orders of dcube_d, with the moment
     // map mask in mmaps_m and, with the weights dcube_w, the weights of
     // the moment maps in mmaps_w: one mask and one weight map for all the
@@ -201,12 +186,6 @@ struct DModel
                         nb::arg("kernels").noconvert(),
                         nb::arg("cube").noconvert(),
                         nb::arg("scratch").noconvert())
-                .def_static("dcube_mask", &dcube_mask,
-                        ReleaseGil(),
-                        nb::arg("cutoff"), nb::arg("apply"),
-                        nb::arg("dcube_d").noconvert(),
-                        nb::arg("dcube_m").noconvert().none(),
-                        nb::arg("dcube_w").noconvert().none())
                 .def_static("mmaps_moments", &mmaps_moments,
                         ReleaseGil(),
                         nb::arg("step"), nb::arg("zero"),

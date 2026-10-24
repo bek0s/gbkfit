@@ -656,8 +656,6 @@ class SlitlessSpectra(Observable):
             psf=instrument.psf(),
             lsf=instrument.lsf(),
             smooth_weights=False,
-            mask_cutoff=None,
-            mask_apply=False,
             dtype=dtype,
             fft_dtype=fft_dtype)
         dispersion = self._dispersion(edges, size, offset)

@@ -63,8 +63,7 @@ _CUBE = _sky(
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 _MOMENTS = _sky(
-    dict(type='pixel_moments', size=[24, 24], spec_size=60, spec_step=10,
-         mask_cutoff=1e-3),
+    dict(type='pixel_moments', size=[24, 24], spec_size=60, spec_step=10),
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 
@@ -352,13 +351,13 @@ CASES: list[dict[str, Any]] = [
         name='instrument_full',
         doc="A cube seen through a Moffat PSF whose alpha varies with "
             "velocity, an LSF whose sigma does, and a primary beam; "
-            "oversampled, median filtered, masked (applied), with weights "
-            "of the azimuth in the disk, smoothed.",
+            "oversampled, median filtered, with weights of the azimuth in "
+            "the disk, smoothed.",
         galaxies=[dict(components=[_thin_disk(name='gas')])],
         observations=[_sky(
             dict(type='pixel_spectra', size=[16, 16, 32],
                  step=[0.75, 0.75, 25], smooth_weights=True,
-                 mask_cutoff=0.0006, mask_apply=True, median_size=3),
+                 median_size=3),
             scale=[2, 2, 1],
             weights=dict(component='gas', traits=dict(
                 type='azimuth_power', power=1)),

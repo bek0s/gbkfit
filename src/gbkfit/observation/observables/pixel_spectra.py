@@ -54,11 +54,6 @@ class PixelSpectra(Observable):
     smooth_weights : bool, optional
         Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
-    mask_cutoff : float, optional
-        The pixels of the model whose absolute value is not above it are
-        masked; no masking if None.
-    mask_apply : bool, optional
-        Whether the masked pixels of the model are NaN.
     median_size : int, optional
         The size (an odd number of pixels, at least 3) of the median filter
         that smoothed the data on the sky, which smooths the model as well
@@ -69,8 +64,7 @@ class PixelSpectra(Observable):
     Raises
     ------
     ConfigError
-        If median_size is not an odd number of at least 3, mask_cutoff
-        is negative, or mask_apply is true without it.
+        If median_size is not an odd number of at least 3.
     """
 
     dataset_class = DatasetPixelSpectra
@@ -96,8 +90,6 @@ class PixelSpectra(Observable):
             cls,
             dataset: DatasetPixelSpectra,
             smooth_weights: bool = False,
-            mask_cutoff: float | None = None,
-            mask_apply: bool = False,
             median_size: int | None = None
     ) -> 'PixelSpectra':
         """
@@ -107,7 +99,7 @@ class PixelSpectra(Observable):
         ----------
         dataset : DatasetPixelSpectra
             The spectral cube.
-        smooth_weights, mask_cutoff, mask_apply, median_size : optional
+        smooth_weights, median_size : optional
             As those of PixelSpectra.
 
         Returns
@@ -124,8 +116,7 @@ class PixelSpectra(Observable):
         cls._require_dataset_class(dataset)
         return cls(
             **_detail.grid_options(dataset.grid()),
-            smooth_weights=smooth_weights, mask_cutoff=mask_cutoff,
-            mask_apply=mask_apply, median_size=median_size)
+            smooth_weights=smooth_weights, median_size=median_size)
 
     def dump(
             self,
@@ -145,8 +136,6 @@ class PixelSpectra(Observable):
             medium=self.medium(),
             convention=self.convention(),
             smooth_weights=self._smooth_weights,
-            mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply,
             median_size=self._median_size), data)
 
     def __init__(
@@ -160,17 +149,12 @@ class PixelSpectra(Observable):
             medium: str | None = None,
             convention: str | None = None,
             smooth_weights: bool = False,
-            mask_cutoff: float | None = None,
-            mask_apply: bool = False,
             median_size: int | None = None
     ):
         super().__init__(
             size, step, rpix, rval, rota, rest, medium, convention)
-        _detail.check_mask_options(mask_cutoff, mask_apply)
         _detail.check_median_size(median_size)
         self._smooth_weights = smooth_weights
-        self._mask_cutoff = mask_cutoff
-        self._mask_apply = mask_apply
         self._median_size = median_size
 
     def keys(self) -> tuple[str, ...]:
@@ -188,7 +172,7 @@ class PixelSpectra(Observable):
         return 'spectra'
 
     def model_can_lack_values(self) -> bool:
-        return self._mask_apply
+        return False
 
     def check_instrument(self, instrument: Instrument) -> None:
         _detail.warn_unsmoothed_weights(self._smooth_weights, instrument)
@@ -219,8 +203,6 @@ class PixelSpectra(Observable):
             psf=instrument.psf(),
             lsf=instrument.lsf(),
             smooth_weights=self._smooth_weights,
-            mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply,
             dtype=dtype,
             fft_dtype=fft_dtype,
             median_size=self._median_size)
@@ -241,4 +223,4 @@ class PixelSpectraPlan(_detail.DCubePlanBase):
     def _measure(self) -> ModelData:
         plan = self._dcube_plan
         return dict(spectra=dict(
-            d=plan.dcube(), m=plan.mcube(), w=plan.wcube()))
+            d=plan.dcube(), m=None, w=plan.wcube()))

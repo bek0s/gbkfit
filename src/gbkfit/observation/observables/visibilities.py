@@ -359,8 +359,6 @@ class Visibilities(Observable):
             psf=None,
             lsf=instrument.lsf(),
             smooth_weights=False,
-            mask_cutoff=None,
-            mask_apply=False,
             dtype=dtype,
             fft_dtype=fft_dtype)
         # The channels of the cube are those of the data from the highest

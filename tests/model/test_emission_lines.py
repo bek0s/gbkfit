@@ -240,7 +240,7 @@ def test_moment_maps_of_one_line(driver):
     galaxy = galaxy_of(with_lines(COMPONENT, LINES))
     observable = dict(
         type='pixel_moments', size=[32, 41], spec_size=301, spec_step=10,
-        spec_rval=500, spec_rest='6562.8 Angstrom', mask_cutoff=1e-3)
+        spec_rval=500, spec_rest='6562.8 Angstrom', flux_floor=1e-4)
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
     ha = evaluate_observation(
         driver, galaxy, observable, properties, lines=['ha'])

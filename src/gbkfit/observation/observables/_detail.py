@@ -116,20 +116,6 @@ def without_options_from_data(
     return {k: v for k, v in info.items() if k not in options}
 
 
-def check_mask_options(mask_cutoff: float | None, mask_apply: bool) -> None:
-    """
-    Raise ConfigError if the mask cutoff is negative, or if the mask is
-    applied without one (with masking disabled).
-    """
-    if mask_cutoff is not None and mask_cutoff < 0:
-        raise ConfigError(
-            f"mask_cutoff must not be negative; it is {mask_cutoff}")
-    if mask_apply and mask_cutoff is None:
-        raise ConfigError(
-            "mask_apply needs a mask_cutoff, but masking is disabled "
-            "(mask_cutoff is null)")
-
-
 def check_median_size(median_size: int | None) -> None:
     """
     Raise ConfigError unless the size of a median filter (see
@@ -408,7 +394,6 @@ class DCubePlanBase(ObservablePlan):
             noisy.astype(self._dtype), self._dcube_plan.dcube())
         # (the data are smoothed with their noise)
         self._dcube_plan.smooth()
-        self._dcube_plan.mask()
         return self._to_host(self._measure())
 
     def _to_host(self, data: ModelData) -> HostModelData:

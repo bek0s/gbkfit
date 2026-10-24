@@ -71,17 +71,11 @@ class SlitSpectra(Observable):
     smooth_weights : bool, optional
         Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
-    mask_cutoff : float, optional
-        The pixels of the model whose absolute value is not above it are
-        masked; no masking if None.
-    mask_apply : bool, optional
-        Whether the masked pixels of the model are NaN.
 
     Raises
     ------
     ConfigError
-        If slit_width is not positive, sky_rval is not two numbers,
-        mask_cutoff is negative, or mask_apply is true without it.
+        If slit_width is not positive, or sky_rval is not two numbers.
     """
 
     dataset_class = DatasetSlitSpectra
@@ -109,9 +103,7 @@ class SlitSpectra(Observable):
             dataset: DatasetSlitSpectra,
             slit_width: float | None = None,
             sky_rval: Sequence[float] = (0, 0),
-            smooth_weights: bool = False,
-            mask_cutoff: float | None = None,
-            mask_apply: bool = False
+            smooth_weights: bool = False
     ) -> 'SlitSpectra':
         """
         Make the observable of the spectra of a slit, on their grid.
@@ -121,8 +113,6 @@ class SlitSpectra(Observable):
         dataset : DatasetSlitSpectra
             The spectra.
         slit_width, sky_rval, smooth_weights : optional
-            As those of SlitSpectra.
-        mask_cutoff, mask_apply : optional
             As those of SlitSpectra.
 
         Returns
@@ -139,8 +129,7 @@ class SlitSpectra(Observable):
         cls._require_dataset_class(dataset)
         return cls(
             **_detail.grid_options(dataset.grid()), slit_width=slit_width,
-            sky_rval=sky_rval, smooth_weights=smooth_weights,
-            mask_cutoff=mask_cutoff, mask_apply=mask_apply)
+            sky_rval=sky_rval, smooth_weights=smooth_weights)
 
     def dump(
             self,
@@ -161,9 +150,7 @@ class SlitSpectra(Observable):
             convention=self.convention(),
             slit_width=self._slit_width,
             sky_rval=self._sky_rval,
-            smooth_weights=self._smooth_weights,
-            mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply), data)
+            smooth_weights=self._smooth_weights), data)
 
     def __init__(
             self,
@@ -177,9 +164,7 @@ class SlitSpectra(Observable):
             convention: str | None = None,
             slit_width: float | None = None,
             sky_rval: Sequence[float] = (0, 0),
-            smooth_weights: bool = False,
-            mask_cutoff: float | None = None,
-            mask_apply: bool = False
+            smooth_weights: bool = False
     ):
         super().__init__(
             size, step, rpix, rval, rota, rest, medium, convention)
@@ -192,11 +177,8 @@ class SlitSpectra(Observable):
                 f"sky_rval is the RA and Dec of the reference point of the "
                 f"slit; it is {sky_rval}")
         self._sky_rval = float(sky_rval[0]), float(sky_rval[1])
-        _detail.check_mask_options(mask_cutoff, mask_apply)
         self._slit_width = slit_width
         self._smooth_weights = smooth_weights
-        self._mask_cutoff = mask_cutoff
-        self._mask_apply = mask_apply
 
     def slit_width(self) -> float:
         """Return the width of the slit."""
@@ -221,7 +203,7 @@ class SlitSpectra(Observable):
         return 'spectra'
 
     def model_can_lack_values(self) -> bool:
-        return self._mask_apply
+        return False
 
     def check_instrument(self, instrument: Instrument) -> None:
         _detail.warn_unsmoothed_weights(self._smooth_weights, instrument)
@@ -258,8 +240,6 @@ class SlitSpectra(Observable):
             psf=instrument.psf(),
             lsf=instrument.lsf(),
             smooth_weights=self._smooth_weights,
-            mask_cutoff=self._mask_cutoff,
-            mask_apply=self._mask_apply,
             dtype=dtype,
             fft_dtype=fft_dtype)
         return SlitSpectraPlan(
@@ -291,5 +271,5 @@ class SlitSpectraPlan(_detail.DCubePlanBase):
         plan = self._dcube_plan
         return dict(spectra=dict(
             d=plan.dcube()[:, 0, :],
-            m=plan.mcube()[:, 0, :] if plan.mcube() is not None else None,
+            m=None,
             w=plan.wcube()[:, 0, :] if plan.wcube() is not None else None))

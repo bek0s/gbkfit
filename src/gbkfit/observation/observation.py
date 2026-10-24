@@ -65,7 +65,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         runs; the first by default.
     model_can_lack_values : bool, optional
         Whether its model can lack values (NaN) where the data have some
-        (e.g. the velocity of a spectrum below its mask_cutoff): the
+        (e.g. the velocity of a spectrum below its flux_floor): the
         likelihood then needs a residual for them (see
         LikelihoodGaussian). False by default.
 
@@ -129,7 +129,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
                 raise ConfigError(
                     "the model of the observation can lack values where the "
                     "data have some (e.g. the velocity of a spectrum below "
-                    "its mask_cutoff): its likelihood needs the residual of "
+                    "its flux_floor): its likelihood needs the residual of "
                     "such a value, the option missing_residual (e.g. 3; see "
                     "LikelihoodGaussian)")
         self._keys = keys

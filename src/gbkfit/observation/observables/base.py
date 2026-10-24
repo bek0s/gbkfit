@@ -206,7 +206,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def model_can_lack_values(self) -> bool:
         """
         Check whether its model can lack values (NaN) where the data have
-        some (e.g. the velocity of a spectrum below its mask_cutoff): the
+        some (e.g. the velocity of a spectrum below its flux_floor): the
         likelihood then needs a residual for them (see LikelihoodGaussian).
         """
         pass

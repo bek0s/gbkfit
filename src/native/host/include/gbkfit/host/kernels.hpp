@@ -71,29 +71,6 @@ dmodel_dcube_downscale(
     }
 }
 
-template<typename T> void
-dmodel_dcube_mask(
-        T cutoff, bool apply,
-        int size_x, int size_y, int size_z,
-        T* dcube_d, T* dcube_m, T* dcube_w)
-{
-    // Parallelization: per 3d position in the dcube
-    #pragma omp parallel for collapse(3)
-    for(int z = 0; z < size_z; ++z) {
-    for(int y = 0; y < size_y; ++y) {
-    for(int x = 0; x < size_x; ++x) {
-
-    gbkfit::dmodel_dcube_mask(
-            x, y, z,
-            cutoff, apply,
-            size_x, size_y, size_z,
-            dcube_d, dcube_m, dcube_w);
-
-    }
-    }
-    }
-}
-
 // The number of pixels of a row whose spectra are copied together by
 // for_each_spectrum
 constexpr int SPECTRA_TILE = 128;
@@ -517,11 +494,6 @@ struct Wrapper
     static void
     dmodel_dcube_downscale(auto... args) {
         kernels::dmodel_dcube_downscale<T>(args...);
-    }
-
-    static void
-    dmodel_dcube_mask(auto... args) {
-        kernels::dmodel_dcube_mask<T>(args...);
     }
 
     static void

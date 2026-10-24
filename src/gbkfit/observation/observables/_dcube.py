@@ -35,16 +35,12 @@ _CUBE_EXTRAS = dict(
         "Model cube",
         "The model as the instrument records it, before it is measured "
         "(e.g. into moments): through the primary beam, the PSF and the "
-        "LSF, downscaled, median-filtered and masked (as the options of "
-        f"the observation say). {_ON_THE_DATA}"),
+        "LSF, downscaled and median-filtered (as the options of the "
+        f"observation say). {_ON_THE_DATA}"),
     dcube_hi=(
         "Model cube (high resolution)",
         "The model through the primary beam, the PSF and the LSF, before "
         f"it is downscaled to the grid of the data. {_ON_THE_HIGH_RES}"),
-    mcube_lo=(
-        "Mask of the model cube",
-        "Where the model cube has values: 1, or 0 where it is below the "
-        f"option mask_cutoff. {_ON_THE_DATA}"),
     wcube_lo=(
         "Weights of the model cube",
         f"The weights of the model in each voxel. {_ON_THE_DATA}"),
@@ -234,9 +230,7 @@ class DCube:
     and the LSF convolve it, it is downscaled to the grid, smoothed by a
     median filter of median_size pixels on the sky if given (as the data
     were: each channel takes the median of the median_size by median_size
-    pixels about each, with zero beyond the edges), and masked where its
-    values are not above mask_cutoff (the mask is applied, NaN, if
-    mask_apply). The weights are smoothed by the PSF and the LSF if
+    pixels about each, with zero beyond the edges). The weights are smoothed by the PSF and the LSF if
     smooth_weights. Its values are of dtype, and the FFTs of its
     convolutions of fft_dtype (at least as precise).
     """
@@ -257,8 +251,6 @@ class DCube:
             psf: PSF | None,
             lsf: LSF | None,
             smooth_weights: bool,
-            mask_cutoff: float | None,
-            mask_apply: bool,
             dtype: np.dtype,
             fft_dtype: np.dtype,
             median_size: int | None = None
@@ -275,8 +267,6 @@ class DCube:
         self._psf = psf
         self._lsf = lsf
         self._smooth_weights = smooth_weights
-        self._mask_cutoff = mask_cutoff
-        self._mask_apply = mask_apply
         self._dtype = dtype
         self._fft_dtype = fft_dtype
         self._median_size = median_size
@@ -316,12 +306,6 @@ class DCube:
 
     def smooth_weights(self) -> bool:
         return self._smooth_weights
-
-    def mask_cutoff(self) -> float | None:
-        return self._mask_cutoff
-
-    def mask_apply(self) -> bool:
-        return self._mask_apply
 
     def median_size(self) -> int | None:
         return self._median_size
@@ -482,13 +466,6 @@ class DCubePlan:
         if dcube.median_size() is not None:
             self._smoothed_lo = driver.mem_alloc_d(shape_lo, dtype)
 
-        # The mask cube, if masking is enabled: masking is done on the
-        # low-res cube only
-        self._mcube_lo = None
-        if dcube.mask_cutoff() is not None:
-            self._mcube_lo = driver.mem_alloc_d(shape_lo, dtype)
-            driver.mem_fill(self._mcube_lo, 1)
-
         self._dcube = dcube
         self._varies = varies
         self._separable = separable
@@ -516,9 +493,6 @@ class DCubePlan:
     def wcube(self) -> DeviceArray | None:
         return self._wcube_lo
 
-    def mcube(self) -> DeviceArray | None:
-        return self._mcube_lo
-
     def evaluate(
             self,
             out_extra: Extras | None,
@@ -527,15 +501,14 @@ class DCubePlan:
             flux_scale: float | None = None
     ) -> None:
         """
-        Record the high-res cube into the low-res one (see record), smooth
-        it (see smooth) and mask it (see mask). The extra outputs on the
+        Record the high-res cube into the low-res one (see record) and
+        smooth it (see smooth). The extra outputs on the
         low- and high-res grids go to out_extra as extra_lo and extra_hi
         make them from their data and grid (e.g. cube_extra or
         plain_extra).
         """
         self.record(flux_scale)
         self.smooth()
-        self.mask()
         if out_extra is not None:
             self._extras(out_extra, extra_lo, extra_hi)
 
@@ -603,17 +576,6 @@ class DCubePlan:
                 self._dcube_lo, (1, size, size), out=self._smoothed_lo)
             self._driver.mem_copy_d2d(self._smoothed_lo, self._dcube_lo)
 
-    def mask(self) -> None:
-        """
-        Mask the low-res cube where its values are not above mask_cutoff,
-        if masking is enabled (the mask is applied, NaN, if mask_apply).
-        """
-        mask_cutoff = self._dcube.mask_cutoff()
-        if mask_cutoff is not None:
-            self._backend_dmodel.dcube_mask(
-                mask_cutoff, self._dcube.mask_apply(), self._dcube_lo,
-                self._mcube_lo, self._wcube_lo)
-
     def _extras(
             self,
             out_extra: Extras,
@@ -630,10 +592,8 @@ class DCubePlan:
         dcube_hi = self._dcube_hi
         wcube_lo = self._wcube_lo
         wcube_hi = self._wcube_hi
-        mcube_lo = self._mcube_lo
         pbeam_hi = self._pbeam_hi
         has_weights = self._has_weights
-        mask_cutoff = dcube.mask_cutoff()
         driver = self._driver
 
         def lo(data: DeviceArray) -> gridutils.GridData | np.ndarray:
@@ -647,8 +607,6 @@ class DCubePlan:
 
         add('dcube_lo', lo(dcube_lo))
         add('dcube_hi', hi(dcube_hi))
-        if mask_cutoff is not None:
-            add('mcube_lo', lo(mcube_lo))
         if has_weights:
             add('wcube_lo', lo(wcube_lo))
             add('wcube_hi', hi(wcube_hi))

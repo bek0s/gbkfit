@@ -34,8 +34,6 @@ observations:
     slit_width: 1.5
     sky_rval: [0.0, 0.0]
     smooth_weights: false
-    mask_cutoff: null
-    mask_apply: false
   scale: [1, 1]
   dtype: float64
   fft_dtype: float64

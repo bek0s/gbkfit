@@ -98,34 +98,6 @@ dmodel_dcube_convolve_z_row(
     }
 }
 
-template<typename T> constexpr void
-dmodel_dcube_mask(
-        int x, int y, int z,
-        T cutoff, bool apply,
-        int size_x, int size_y, int size_z,
-        T* dcube_d, T* dcube_m, T* dcube_w)
-{
-    // Do not touch the weights for now.
-    // Rethink about this in the future.
-    (void)dcube_w;
-
-    const int idx = index_3d_to_1d(x, y, z, size_x, size_y);
-
-    T mvalue = 1;
-
-    if (std::fabs(dcube_d[idx]) <= cutoff)
-    {
-        mvalue = 0;
-        if (apply) {
-            dcube_d[idx] = NAN;
-        }
-    }
-
-    if (dcube_m) {
-        dcube_m[idx] = mvalue;
-    }
-}
-
 // The moments of the given orders (sorted) of the spectrum of the pixel
 // (x, y) of a cube: its flux (order 0), mean velocity (1), dispersion
 // (2), and central moments (above 2); with the weights of the spectrum,

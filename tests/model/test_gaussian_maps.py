@@ -120,11 +120,30 @@ def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):
     np.testing.assert_allclose(sigma, 1.5, rtol=0.6)
 
 
+@pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
+def test_the_flux_floor_is_relative_to_the_brightest_spectrum(
+        driver, method):
+    # The spectra of a moment 0 not above the floor times the largest are
+    # masked, whatever the unit (here of 1e-20: the floor of an absolute
+    # 1e-6 masked every spectrum)
+    nz, ny, nx = 41, 2, 3
+    velocity = -100 + 5.0 * np.arange(nz)[:, None, None]
+    flux = np.array([[1.0, 0.5, 0.2], [2e-3, 5e-4, 1e-4]])
+    line = np.exp(-0.5 * (velocity / 20) ** 2) / (20 * np.sqrt(2 * np.pi))
+    plan = MomentsPlan(driver, (nx, ny), (0, 1), 1e-3, method, np.float64)
+    for unit in (1.0, 1e-20):
+        maps = plan.evaluate(
+            (1, 1, 5.0), (0, 0, -100.0),
+            driver.mem_copy_h2d(flux * line * unit), None)
+        mask = driver.mem_copy_d2h(maps['moment0']['m'])
+        np.testing.assert_array_equal(mask, flux > 1e-3)
+
+
 def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
     # Without a psf, each spectrum of a thin disk is one line, whose fit
     # is its moments (up to the channel integration of the model)
     mmaps = dict(type='pixel_moments', size=[32, 41], spec_size=161, spec_step=5,
-                 orders=[0, 1, 2], mask_cutoff=1e-3)
+                 orders=[0, 1, 2], flux_floor=1e-4)
     moments = evaluate(driver, mmaps)
     fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
     good = np.isfinite(moments['moment1']) & np.isfinite(fitted['moment1'])
@@ -142,7 +161,7 @@ def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
     # A psf mixes the lines of a rotating disk into skewed spectra, whose
     # Gaussian fits and moments differ (e.g. near the centre)
     mmaps = dict(type='pixel_moments', size=[32, 41], spec_size=161, spec_step=5,
-                 orders=[0, 1, 2], mask_cutoff=1e-3,
+                 orders=[0, 1, 2], flux_floor=1e-4,
                  psf=dict(type='gauss', sigma=2))
     moments = evaluate(driver, mmaps)
     fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
@@ -157,7 +176,7 @@ def test_gaussian_fit_of_bins(driver):
         'bins.fits', np.arange(32 * 41).reshape(41, 32),
         gridutils.Coords((1, 1), (15.5, 20), (0, 0), 0))
     options = dict(spec_size=161, spec_step=5, orders=[1, 2],
-                   mask_cutoff=1e-3, method='gaussian_fit')
+                   flux_floor=1e-4, method='gaussian_fit')
     mmaps = evaluate(driver, dict(type='pixel_moments', size=[32, 41]) | options)
     bmaps = evaluate(driver, dict(
         type='region_moments', regions=dict(type='bins', file='bins.fits')) | options)

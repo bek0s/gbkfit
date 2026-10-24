@@ -79,19 +79,6 @@ Wrapper<T>::dmodel_dcube_downscale(
 }
 
 template<typename T> void
-Wrapper<T>::dmodel_dcube_mask(
-        T cutoff, bool apply,
-        int size_x, int size_y, int size_z,
-        T* dcube_d, T* dcube_m, T* dcube_w)
-{
-    const int n = size_x * size_y * size_z;
-    launch("dmodel_dcube_mask", n, kernels::dmodel_dcube_mask<T>,
-            cutoff, apply,
-            size_x, size_y, size_z,
-            dcube_d, dcube_m, dcube_w);
-}
-
-template<typename T> void
 Wrapper<T>::dmodel_mmaps_moments(
         int size_x, int size_y, int size_z,
         T step_z, T zero_z,

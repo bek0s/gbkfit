@@ -1,4 +1,4 @@
-# instrument_full: A cube seen through a Moffat PSF whose alpha varies with velocity, an LSF whose sigma does, and a primary beam; oversampled, median filtered, masked (applied), with weights of the azimuth in the disk, smoothed.
+# instrument_full: A cube seen through a Moffat PSF whose alpha varies with velocity, an LSF whose sigma does, and a primary beam; oversampled, median filtered, with weights of the azimuth in the disk, smoothed.
 # (written by make_golden.py; do not edit)
 driver: {type: host}
 galaxies:
@@ -48,7 +48,7 @@ observations:
           values: [-500.0, 500.0]
           unit: km / s
         values: [12.0, 30.0]
-  observable: {type: pixel_spectra, smooth_weights: true, mask_cutoff: 0.0006, mask_apply: true,
+  observable: {type: pixel_spectra, smooth_weights: true,
     median_size: 3}
   scale: [2, 2, 1]
   dtype: float64

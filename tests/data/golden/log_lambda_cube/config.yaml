@@ -34,7 +34,7 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: pixel_spectra, smooth_weights: false, mask_cutoff: null, mask_apply: false,
+  observable: {type: pixel_spectra, smooth_weights: false,
     median_size: null}
   scale: [1, 1, 1]
   dtype: float64
