@@ -58,6 +58,25 @@ struct SpheroidArgs
     const T* jeans = nullptr;
     const T* jeans_range = nullptr;
 
+    // Or its kinematics of traits (optional), as those of a thick disk
+    // (see DiskArgs): on the radial nodes of R, from 0 to rmax at least,
+    // the velocity (v) and dispersion (d) polar traits of R and the
+    // azimuth theta, and height traits of |z|, one for each polar trait.
+    // The velocity polar traits are speeds, each along its direction
+    // (VPT_DIRECTION_TAN, see vp_disk_project); the dispersion polar
+    // traits each along its direction (DPT_DIRECTION_*), or all isotropic
+    // without dpt_directions. Each point moves with a Gaussian
+    // distribution of velocities, of the mean vsys plus the sum of the
+    // velocity traits on the line of sight, and the dispersion of the
+    // velocity ellipsoid of the sums of the dispersion traits along each
+    // direction (see gmodel_ellipsoid_dispersion), or the absolute value
+    // of their sum when they are all isotropic.
+    int nrnodes = 0;
+    const T* rnodes = nullptr;
+    TraitSet<T> vpt, vht, dpt, dht;
+    const int* vpt_directions = nullptr;
+    const int* dpt_directions = nullptr;
+
     // Whether it is evaluated as its projection on the sky, on a grid
     // without a depth axis, of the surface density of the sum of its
     // terms, each a f(m / s), m^2 = x^2 + y^2 / q^2 (x along the major axis

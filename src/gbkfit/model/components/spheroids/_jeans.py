@@ -3,25 +3,30 @@ The Jeans kinematics of a spheroid (JeansKinematics): its stars in a
 steady state in the gravity of its galaxy, their mean velocity and
 dispersions from the Jeans equations of a velocity ellipsoid aligned with
 the cylinder (JAM_cyl, Cappellari 2008), tabled on (R, |z|) in each
-evaluation (JeansTables, see jeans_tables).
+evaluation (JeansTables, see jeans_tables), the state of their motion
+(JeansMotion).
 """
 
 import dataclasses
+import math
 from typing import Any
 
 import numpy as np
 import scipy.interpolate
 
+from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import parseutils
 from ...gravity import GravityField
+from .._native import ParamBuffer
+from .._stage import GalaxyMass
 from ..base import ComponentState
+from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion
 
 
 __all__ = [
     'JeansKinematics',
+    'JeansMotion',
     'JeansTables',
-    'jeans_kinematics_parser',
     'jeans_tables'
 ]
 
@@ -38,7 +43,7 @@ _TAIL_SPAN = 100.0
 _SUBSTEPS = 4
 
 
-class JeansKinematics(parseutils.TypedSerializable):
+class JeansKinematics(SpheroidKinematics):
     """
     The kinematics of the stars of a spheroid in a steady state in the
     gravity of its galaxy, of a velocity ellipsoid aligned with the
@@ -75,12 +80,11 @@ class JeansKinematics(parseutils.TypedSerializable):
                 desc="the rotation, the share of <v_phi^2> - sigma_R^2 "
                      "whose square root is the mean rotation"))
 
-    def dump(self) -> dict[str, Any]:
-        return dict(type=self.type())
+    def uses_mass(self) -> bool:
+        return True
 
-
-jeans_kinematics_parser = parseutils.TypedParser(
-    JeansKinematics, [JeansKinematics])
+    def motion(self, rmax: float) -> 'JeansMotion':
+        return JeansMotion(self, rmax)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -184,7 +188,7 @@ def _interpolated(
 
 def jeans_tables(
         kinematics_params: ParamValues,
-        light_terms: Any,
+        light_terms: SpheroidLight,
         rmax: float,
         field: GravityField,
         kpc_per_arcsec: float
@@ -265,3 +269,59 @@ def jeans_tables(
         return JeansTables(
             float(lnr[0]), float(lnr[1] - lnr[0]),
             float(lnr[0]), float(lnr[1] - lnr[0]), *values)
+
+
+class JeansMotion(SpheroidMotion):
+    """
+    The motion of the stars of a spheroid of JeansKinematics, of the given
+    rmax: its tables in each evaluation (its state, see jeans_tables), in
+    the groups 'jeans' (the four planes of the tables) and 'jeans_range'
+    of the buffer.
+    """
+
+    def __init__(self, kinematics: JeansKinematics, rmax: float):
+        self._kinematics = kinematics
+        self._rmax = rmax
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return self._kinematics.pdescs()
+
+    def state(
+            self,
+            values: ParamValues,
+            light: SpheroidLight,
+            mass: GalaxyMass | None
+    ) -> JeansTables:
+        if mass is None:
+            raise ValueError(
+                "the Jeans kinematics of a spheroid need the mass of its "
+                "galaxy")
+        return jeans_tables(
+            values, light, self._rmax, mass.field, mass.kpc_per_arcsec)
+
+    def sizes(self) -> dict[str, int]:
+        return dict(jeans=4 * math.prod(table_shape()), jeans_range=4)
+
+    def native(
+            self, driver: Driver, dtype: np.dtype, buffer: ParamBuffer
+    ) -> dict[str, Any]:
+        return dict(
+            jeans=buffer.device('jeans'),
+            jeans_range=buffer.device('jeans_range'),
+            jeans_shape=table_shape())
+
+    def write(
+            self,
+            buffer: ParamBuffer,
+            params: ParamValues,
+            state: ComponentState | None
+    ) -> None:
+        if not isinstance(state, JeansTables):
+            raise ValueError(
+                "the Jeans kinematics of a spheroid need its tables (its "
+                "state, see JeansTables)")
+        buffer.host('jeans')[:] = np.stack((
+            state.vphi, state.sigma_r, state.sigma_phi,
+            state.sigma_z)).ravel()
+        buffer.host('jeans_range')[:] = (
+            state.lnr_zero, state.lnr_step, state.lnz_zero, state.lnz_step)

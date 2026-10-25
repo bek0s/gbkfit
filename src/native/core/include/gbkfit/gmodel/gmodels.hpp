@@ -1475,16 +1475,23 @@ gmodel_spheroid_jeans_value(
             + tr * ((1 - tz) * row1[j] + tz * row1[j + 1]);
 }
 
+// Whether the stars of a spheroid move: it has kinematics, of the Jeans
+// tables or of traits (see SpheroidArgs::jeans and SpheroidArgs::vpt)
+template<typename T> constexpr bool
+gmodel_spheroid_moves(const SpheroidArgs<T>& a)
+{
+    return a.jeans || a.vpt.uids;
+}
+
 // The mean velocity and the dispersion on the line of sight of the stars
-// of a spheroid at the point (x, y, z) of its frame, seen at the
-// inclination incl (radians; see SpheroidArgs::jeans)
+// of a spheroid at the point of its frame at the distance R from its
+// axis, the azimuth theta and the height z, seen at the inclination incl
+// (radians), of its Jeans tables (see SpheroidArgs::jeans)
 template<typename T> constexpr void
-gmodel_spheroid_kinematics(
-        T x, T y, T z, T incl, const SpheroidArgs<T>& a,
+gmodel_spheroid_jeans_kinematics(
+        T R, T theta, T z, T incl, const SpheroidArgs<T>& a,
         T& velocity, T& dispersion)
 {
-    const T R = std::sqrt(x * x + y * y);
-    const T theta = std::atan2(y, x);
     // (the position in the tables, in points, at their nearest point
     // beyond them: e.g. at the centre, R = 0)
     const T pr = std::min(std::max(
@@ -1510,6 +1517,72 @@ gmodel_spheroid_kinematics(
     dispersion = gmodel_ellipsoid_dispersion(srad, stan, sver, theta, incl);
 }
 
+// The mean velocity and the dispersion on the line of sight of the stars
+// of a spheroid at the point (x, y, z) of its frame, at the distance R
+// from its axis and the azimuth theta, seen at the inclination incl
+// (radians), of its traits (see SpheroidArgs::vpt); NaN beyond its nodes
+// (where it has no light)
+template<typename T> constexpr void
+gmodel_spheroid_traits_kinematics(
+        T x, T y, T z, T R, T theta, T incl, const SpheroidArgs<T>& a,
+        T& velocity, T& dispersion)
+{
+    int rnidx = -1;
+    if (!disk_info(rnidx, R, a.nrnodes, a.rnodes))
+    {
+        velocity = dispersion = T(NAN);
+        return;
+    }
+
+    // Velocity traits: their speeds, projected on the line of sight, and
+    // the systemic velocity
+    velocity = a.vsys[0] + gmodel_traits_sum<vp_trait<T>, vh_trait<T>>(
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes,
+            x, y, R, theta, z,
+            [&](int i, T value) {
+                return vp_disk_project(
+                        value, a.vpt_directions[i], R, theta, z, incl);
+            });
+
+    // Dispersion traits: the sum of those along each direction
+    // (DPT_DIRECTION_*), positive, and the velocity ellipsoid of the sums
+    // on the line of sight
+    T sums[4] = {0, 0, 0, 0};
+    gmodel_traits_each<dp_trait<T>, dh_trait<T>>(
+            [&](int i, T value) {
+                sums[a.dpt_directions ? a.dpt_directions[i]
+                                      : DPT_DIRECTION_ISO] += value;
+            },
+            a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
+            x, y, R, theta, z, Unprojected{});
+    const T iso = sums[DPT_DIRECTION_ISO];
+    dispersion = a.dpt_directions
+            ? gmodel_ellipsoid_dispersion(
+                    std::abs(iso + sums[DPT_DIRECTION_RAD]),
+                    std::abs(iso + sums[DPT_DIRECTION_TAN]),
+                    std::abs(iso + sums[DPT_DIRECTION_VER]), theta, incl)
+            : std::abs(iso);
+}
+
+// The mean velocity and the dispersion on the line of sight of the stars
+// of a spheroid at the point (x, y, z) of its frame, seen at the
+// inclination incl (radians), of its kinematics (see
+// gmodel_spheroid_moves)
+template<typename T> constexpr void
+gmodel_spheroid_kinematics(
+        T x, T y, T z, T incl, const SpheroidArgs<T>& a,
+        T& velocity, T& dispersion)
+{
+    const T R = std::sqrt(x * x + y * y);
+    const T theta = std::atan2(y, x);
+    if (a.jeans)
+        gmodel_spheroid_jeans_kinematics(
+                R, theta, z, incl, a, velocity, dispersion);
+    else
+        gmodel_spheroid_traits_kinematics(
+                x, y, z, R, theta, incl, a, velocity, dispersion);
+}
+
 // Write the light of a point of a spheroid (rvalue; with opacity, orvalue
 // after it), of the given velocity and dispersion, at (x, y, z) of the
 // grid g: to its pixel of the image or its spectrum of the spectral cube
@@ -1531,7 +1604,7 @@ gmodel_spheroid_light_write(
 
 // Evaluate the voxel (x, y, z) of a smooth spheroid: its density (see
 // SPHEROID_SUBGRID) times the depth of the voxel is its light, with its
-// kinematics, if any (see SpheroidArgs::jeans; in the voxels near the
+// kinematics, if any (see gmodel_spheroid_moves; in the voxels near the
 // centre, the mean velocity and the dispersion of the velocities of the
 // points of their mean density). AddFunT
 // adds the light of the voxel to the pixel of its spaxel, which the other
@@ -1557,7 +1630,7 @@ gmodel_smspheroid_evaluate_voxel(
             + g.spat_step[1] * g.spat_step[1]
             + g.spat_step[2] * g.spat_step[2]);
     const T rn = std::sqrt(xn * xn + yn * yn + zn * zn);
-    const bool moves = a.jeans != nullptr;
+    const bool moves = gmodel_spheroid_moves(a);
     T rvalue = 0;
     T vvalue = 0;
     T dvalue = 0;

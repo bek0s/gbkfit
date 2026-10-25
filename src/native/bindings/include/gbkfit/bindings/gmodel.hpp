@@ -105,14 +105,17 @@ struct ConeArrays
 };
 
 // The arrays that describe a spheroid: its geometry, its extent, the
-// terms of its density, their function and its table, if any, and the
-// tables of its kinematics, if any, of the given shape (see
-// gbkfit::SpheroidArgs). They are created once, and their values are
-// updated in place before each evaluation.
+// terms of its density, their function and its table, if any, and its
+// kinematics, if any: the tables of its Jeans equations, of the given
+// shape, or its radial nodes and its traits (with the direction of each
+// velocity polar trait, and of each dispersion polar trait if any is not
+// isotropic; see gbkfit::SpheroidArgs). They are created once, and their
+// values are updated in place before each evaluation.
 template<typename T, typename Device>
 struct SpheroidArrays
 {
     using Values = Array<Device, const T, nb::ndim<1>>;
+    using Traits = std::optional<TraitSetArrays<T, Device>>;
 
     Values xpos;
     Values ypos;
@@ -127,6 +130,10 @@ struct SpheroidArrays
     Values jeans;
     Values jeans_range;
     std::array<int, 2> jeans_shape;
+    Values rnodes;
+    Traits vpt, vht, dpt, dht;
+    Array<Device, const int, nb::ndim<1>> vpt_directions;
+    Array<Device, const int, nb::ndim<1>> dpt_directions;
 };
 
 // The arrays of an emitter of the march of radiative transfer (see
@@ -269,7 +276,7 @@ struct GModel
                                && !fields.is_valid()),
                 "the projection of a spheroid is evaluated on a grid "
                 "without a depth axis, into an image, without opacity");
-        require(!scube.is_valid() || spheroid.jeans.is_valid(),
+        require(!scube.is_valid() || gmodel_spheroid_moves(a),
                 "a spheroid in a spectral cube needs its kinematics");
         Kernels::gmodel_smspheroid_evaluate(
                 a, g, make_fields_args(!projected, 0, g, fields, 3));
@@ -599,11 +606,23 @@ struct GModel
                         Values posa, Values incl, Values vsys, T rmax,
                         Values terms, Values function, Values table,
                         Values table_range, Values jeans,
-                        Values jeans_range, std::array<int, 2> jeans_shape) {
+                        Values jeans_range, std::array<int, 2> jeans_shape,
+                        Values rnodes,
+                        const Traits* vpt, const Traits* vht,
+                        const Traits* dpt, const Traits* dht,
+                        Array<Device, const int, nb::ndim<1>>
+                                vpt_directions,
+                        Array<Device, const int, nb::ndim<1>>
+                                dpt_directions) {
+                    auto optional = [](const Traits* traits) {
+                        return traits ? std::optional(*traits) : std::nullopt;
+                    };
                     new (self) Spheroid{
                             xpos, ypos, posa, incl, vsys, rmax, terms,
                             function, table, table_range, jeans, jeans_range,
-                            jeans_shape};
+                            jeans_shape, rnodes, optional(vpt), optional(vht),
+                            optional(dpt), optional(dht), vpt_directions,
+                            dpt_directions};
                 },
                 nb::arg("xpos").noconvert(),
                 nb::arg("ypos").noconvert(),
@@ -617,7 +636,14 @@ struct GModel
                 nb::arg("table_range").noconvert().none() = nb::none(),
                 nb::arg("jeans").noconvert().none() = nb::none(),
                 nb::arg("jeans_range").noconvert().none() = nb::none(),
-                nb::arg("jeans_shape") = std::array<int, 2>{0, 0});
+                nb::arg("jeans_shape") = std::array<int, 2>{0, 0},
+                nb::arg("rnodes").noconvert().none() = nb::none(),
+                nb::arg("vpt").none() = nb::none(),
+                nb::arg("vht").none() = nb::none(),
+                nb::arg("dpt").none() = nb::none(),
+                nb::arg("dht").none() = nb::none(),
+                nb::arg("vpt_directions").noconvert().none() = nb::none(),
+                nb::arg("dpt_directions").noconvert().none() = nb::none());
 
         nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
                 .def("__init__", [](
@@ -774,9 +800,9 @@ private:
         return a;
     }
 
-    // The direction of each velocity polar trait of a disk or a cone (see
-    // gbkfit::DiskArgs and gbkfit::ConeArgs): given with those traits, and
-    // only with them
+    // The direction of each velocity polar trait of a disk, a cone or a
+    // spheroid (see gbkfit::DiskArgs, gbkfit::ConeArgs and
+    // gbkfit::SpheroidArgs): given with those traits, and only with them
     template<typename Arrays>
     static const int*
     vpt_directions(const Arrays& arrays)
@@ -967,6 +993,34 @@ private:
         a.jeans_nz = spheroid.jeans.is_valid() ? nz : 0;
         a.jeans = data(spheroid.jeans);
         a.jeans_range = data(spheroid.jeans_range);
+        // (traits: the velocity and dispersion traits, with their height
+        // traits, on nodes from 0 to rmax at least)
+        const bool traits = spheroid.vpt || spheroid.vht || spheroid.dpt
+                || spheroid.dht || spheroid.rnodes.is_valid();
+        require(!traits || (spheroid.vpt && spheroid.vht && spheroid.dpt
+                            && spheroid.dht && spheroid.rnodes.is_valid()),
+                "the traits of a spheroid are its velocity and dispersion "
+                "polar and height traits, on its radial nodes");
+        require(!(traits && spheroid.jeans.is_valid()),
+                "a spheroid moves by its Jeans tables or by its traits, "
+                "not both");
+        a.nrnodes = traits ? int(spheroid.rnodes.shape(0)) : 0;
+        a.rnodes = data(spheroid.rnodes);
+        require(!traits || a.nrnodes >= 2,
+                "the traits of a spheroid need at least two radial nodes");
+        a.vpt = trait_set(spheroid.vpt);
+        a.vpt_directions = vpt_directions(spheroid);
+        a.vht = trait_set(spheroid.vht);
+        a.dpt = trait_set(spheroid.dpt);
+        require(!spheroid.dpt_directions.is_valid()
+                || (spheroid.dpt && spheroid.dpt_directions.shape(0)
+                                    == spheroid.dpt->uids.shape(0)),
+                "dpt_directions needs a direction for each dispersion polar "
+                "trait, and goes with them only");
+        a.dpt_directions = data(spheroid.dpt_directions);
+        a.dht = trait_set(spheroid.dht);
+        require(a.vht.n == a.vpt.n && a.dht.n == a.dpt.n,
+                "height traits must have as many traits as polar traits");
         a.projected = projected;
         return a;
     }

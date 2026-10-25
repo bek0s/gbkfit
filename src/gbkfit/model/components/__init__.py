@@ -14,4 +14,6 @@ from .scenes import *
 from . import cones, disks, spheroids, traits
 from .cones import Cone
 from .disks import Clouds, Disk, LineOpacity
-from .spheroids import LightMGE, LightSersic, Spheroid
+from .spheroids import (
+    JeansKinematics, LightMGE, LightSersic, Spheroid, SpheroidKinematics,
+    TraitsKinematics)

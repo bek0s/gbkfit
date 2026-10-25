@@ -2,8 +2,9 @@
 Tests for the spheroids (Spheroid): their light in images against the
 exact projections of their profiles, the mean density near the centre
 of a cusp, and their options; the mass that follows their light
-(mass.MassLightSpheroid); and their Jeans kinematics (JeansKinematics),
-against exact and independent solutions, and in spectral cubes of stars.
+(mass.MassLightSpheroid); their Jeans kinematics (JeansKinematics),
+against exact and independent solutions, and in spectral cubes of stars;
+and the kinematics of their traits (TraitsKinematics).
 """
 
 import numpy as np
@@ -274,6 +275,14 @@ def test_a_spheroid_round_trips():
     (dict(profile=dict(type='mge', ngauss=2),
           shape=dict(type='flattened')), "takes no shape"),
     (dict(profile=dict(type='mge', ngauss=0)), "ngauss must be"),
+    # (stars do not flow out)
+    (dict(kinematics=dict(
+        type='traits', vptraits=dict(type='uniform', direction='out'),
+        dptraits=dict(type='uniform'))), "takes velocity traits along"),
+    (dict(kinematics=dict(
+        type='traits', vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform'), rnodes=[0, 5])),
+     "go from 0 to its rmax"),
 ])
 def test_invalid_spheroids_are_refused(options, message):
     info = dict(profile=dict(type='sersic'), rmax=10, emission=BAND) \
@@ -623,3 +632,74 @@ def test_no_line_is_named_stars():
             density=dict(ptraits=dict(type='exponential')),
             emission=dict(type='lines', lines=[
                 dict(name='stars', rest='656.28 nm')]))]))
+
+
+# A round Gaussian of stars of the kinematics of traits: a uniform rotation
+# of 100 km/s around the axis that falls with the height (exponentially,
+# of the scale height 4 arcsec), and the dispersions 30, 50 and 70 km/s
+# along R, phi and z
+TRAITS_SPHEROID = dict(
+    type='spheroid', name='stars', rmax=30, emission=STARS_EMISSION,
+    profile=dict(type='mge', ngauss=1), kinematics=dict(
+        type='traits', vptraits=dict(type='uniform', direction='tan'),
+        vhtraits=dict(type='exponential'), dptraits=[
+            dict(type='uniform', direction=direction)
+            for direction in ('rad', 'tan', 'ver')]))
+TRAITS_PROPERTIES = GEOMETRY | dict(
+    vsys=20, stars_i0=[1], stars_sigma=[8], stars_q=[1], stars_vpt_vt=100,
+    stars_vht_s=4, stars_dpt_a=30, stars_dpt1_a=50, stars_dpt2_a=70)
+
+
+def spheroid_frame(grid_data, xpos, ypos, posa, incl):
+    """
+    The position of each voxel of an extra output on a 3d grid in the
+    frame of a spheroid of the given centre and axis (see the cones'
+    cone_frame): x along the major axis, y towards the far side, and z
+    along the axis.
+    """
+    coords = grid_data.coords
+    depth, y, x = np.meshgrid(*(
+        coords.rval[axis] * (axis == 2)
+        + (np.arange(size) - coords.rpix[axis]) * coords.step[axis]
+        for axis, size in zip((2, 1, 0), grid_data.data.shape)),
+        indexing='ij')
+    p, i = np.radians(posa), np.radians(incl)
+    x, y = x - xpos, y - ypos
+    major = -x * np.sin(p) + y * np.cos(p)
+    far = -x * np.cos(p) - y * np.sin(p)
+    return (
+        major,
+        far * np.cos(i) + depth * np.sin(i),
+        -far * np.sin(i) + depth * np.cos(i))
+
+
+def test_the_stars_move_as_their_traits(driver, evaluate_cases):
+    # At each voxel, vsys plus the rotation on the line of sight, 100
+    # exp(-|z| / 4) cos(theta) sin(incl), and the dispersion of the
+    # velocity ellipsoid on it; but in the voxels near the centre, which
+    # hold the moments of their parts (within 3 voxel diagonals)
+    case = stars_cube(driver, TRAITS_SPHEROID | dict(geometry='galaxy'))
+    case['galaxy'] = dict(components=[case['galaxy']['components'][0]])
+    _, extra = evaluate_cases([case], TRAITS_PROPERTIES)
+    vdata = extra.get('vdata', component='stars')
+    ddata = extra.get('ddata', component='stars')
+    x, y, z = spheroid_frame(vdata, **GEOMETRY)
+    theta = np.arctan2(y, x)
+    incl = np.radians(GEOMETRY['incl'])
+    velocity = 20 + 100 * np.exp(-np.abs(z) / 4) * np.cos(theta) \
+        * np.sin(incl)
+    dispersion = np.sqrt(
+        (30 * np.sin(theta) * np.sin(incl)) ** 2
+        + (50 * np.cos(theta) * np.sin(incl)) ** 2
+        + (70 * np.cos(incl)) ** 2)
+    on = np.isfinite(vdata.data) & (np.sqrt(x ** 2 + y ** 2 + z ** 2) > 9)
+    assert on.sum() > 1000
+    np.testing.assert_allclose(vdata.data[on], velocity[on], atol=1e-3)
+    np.testing.assert_allclose(ddata.data[on], dispersion[on], atol=1e-3)
+
+
+def test_a_spheroid_of_traits_round_trips():
+    # (it moves without mass: its galaxy has none)
+    galaxy = galaxy_parser.load(dict(components=[TRAITS_SPHEROID]))
+    assert set(galaxy.pdescs()) == set(TRAITS_PROPERTIES)
+    assert galaxy_parser.load(galaxy.dump()).dump() == galaxy.dump()
