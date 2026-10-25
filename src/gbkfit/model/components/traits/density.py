@@ -9,7 +9,6 @@ import numpy as np
 import scipy.ndimage
 import scipy.special
 
-import gbkfit.math
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import RPTrait, params_nw_distortion, splits_nw_distortion
 from .options import Blobs, Harmonic, SAMPLING_DEFAULT, Sampling, Spiral
@@ -52,80 +51,105 @@ RPT_UID_NW_DISTORTION = 103
 RPT_UID_SPIRAL = 104
 
 
-def _integrate_rings(
-        rings: np.ndarray,
-        fun: Callable[..., np.ndarray],
-        *args: np.ndarray
+def _rings(subrnodes: np.ndarray) -> tuple[np.ndarray, ...]:
+    """
+    Return the inner edges, the middles and the outer edges of the rings
+    of a disk whose clouds are drawn ring by ring, as the kernels draw them:
+    around its subnodes but the first and the last (its edges), of the
+    half width of its first step.
+    """
+    subrnodes = np.asarray(subrnodes, dtype=float)
+    half = subrnodes[1] - subrnodes[0]
+    middles = subrnodes[1:-1]
+    return middles - half, middles, middles + half
+
+
+def _ring_flux(
+        cumulative: Callable[..., np.ndarray],
+        subrnodes: np.ndarray,
+        *params: np.ndarray
 ) -> np.ndarray:
-    # ring centers, equally spaced, same width
-    rsep = rings[1] - rings[0]
-    # Minimum radius of the rings
-    rmin = rings - rsep * 0.5
-    # Maximum radius of the rings
-    rmax = rings + rsep * 0.5
-    # Calculate the amplitude of each ring
-    ampl = fun(rings, *args)
-    return ampl * np.pi * (rmax * rmax - rmin * rmin)
+    """
+    Return the flux of each ring of a radial profile: its cumulative flux
+    within the radius (cumulative, of the radius and the parameters) at
+    the outer edge, minus that at the inner one.
+    """
+    inner, _, outer = _rings(subrnodes)
+    return cumulative(outer, *params) - cumulative(inner, *params)
+
+
+def _cumulative_exponential(r, a, s):
+    x = r / s
+    return 2 * np.pi * a * s * s * (1 - (1 + x) * np.exp(-x))
+
+
+def _cumulative_gauss(r, a, s):
+    x = r / s
+    return 2 * np.pi * a * s * s * -np.expm1(-x * x / 2)
+
+
+def _cumulative_ggauss(r, a, s, b):
+    x = np.abs(r / s)
+    return 2 * np.pi * a * s * s * scipy.special.gamma(2 / b) / b \
+        * scipy.special.gammainc(2 / b, x ** b)
+
+
+def _cumulative_lorentz(r, a, s):
+    x = r / s
+    return np.pi * a * s * s * np.log1p(x * x)
+
+
+def _cumulative_moffat(r, a, s, b):
+    # ((1 + x^2)^(1 - b) - 1) / (1 - b), log(1 + x^2) at b = 1
+    u = np.log1p((r / s) ** 2)
+    c = 1 - b
+    scaled = np.expm1(c * u) / np.where(c != 0, c, 1)
+    return np.pi * a * s * s * np.where(c != 0, scaled, u)
+
+
+def _cumulative_sech2(r, a, s):
+    x = np.abs(r / s)
+    log_cosh = x + np.log1p(np.exp(-2 * x)) - np.log(2)
+    return 2 * np.pi * a * s * s * (x * np.tanh(x) - log_cosh)
 
 
 def _ptrait_integrate_uniform(
-        params: dict[str, np.ndarray], rings: np.ndarray
+        params: dict[str, np.ndarray], subrnodes: np.ndarray
 ) -> np.ndarray:
     a = params['a']
-    rsep = rings[1] - rings[0]
-    rmin = rings[0] - 0.5 * rsep
-    rmax = rings[-1] + 0.5 * rsep
+    rmin, rmax = subrnodes[0], subrnodes[-1]
     return np.pi * a * (rmax * rmax - rmin * rmin)
 
 
-def _ptrait_integrate_exponential(
-        params: dict[str, np.ndarray], rings: np.ndarray
+def _linear_moment(
+        r0: np.ndarray, r1: np.ndarray, v0: np.ndarray, v1: np.ndarray
 ) -> np.ndarray:
-    a = params['a']
-    s = params['s']
-    return _integrate_rings(rings, gbkfit.math.expon_1d_fun, a, 0, s)
+    """
+    Return the integral of r |v(r)| from r0 to r1, v linear from v0 at r0
+    to v1 at r1 (elementwise): of r v, apart where v crosses 0.
+    """
+    def moment(r0, r1, v0, v1):
+        return (r1 - r0) * (r0 * (2 * v0 + v1) + r1 * (v0 + 2 * v1)) / 6
+    crosses = v0 * v1 < 0
+    rz = np.where(
+        crosses, r0 + v0 * (r1 - r0) / np.where(crosses, v0 - v1, 1), r1)
+    vz = np.where(crosses, 0, v1)
+    return np.abs(moment(r0, rz, v0, vz)) + np.abs(moment(rz, r1, vz, v1))
 
 
-def _ptrait_integrate_gauss(
-        params: dict[str, np.ndarray], rings: np.ndarray
+def _nodewise_moments(
+        values: np.ndarray, subrnodes: np.ndarray
 ) -> np.ndarray:
-    a = params['a']
-    s = params['s']
-    return _integrate_rings(rings, gbkfit.math.gauss_1d_fun, a, 0, s)
-
-
-def _ptrait_integrate_ggauss(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:
-    a = params['a']
-    s = params['s']
-    b = params['b']
-    return _integrate_rings(rings, gbkfit.math.ggauss_1d_fun, a, 0, s, b)
-
-
-def _ptrait_integrate_lorentz(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:
-    a = params['a']
-    s = params['s']
-    return _integrate_rings(rings, gbkfit.math.lorentz_1d_fun, a, 0, s)
-
-
-def _ptrait_integrate_moffat(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:
-    a = params['a']
-    s = params['s']
-    b = params['b']
-    return _integrate_rings(rings, gbkfit.math.moffat_1d_fun, a, 0, s, b)
-
-
-def _ptrait_integrate_sech2(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:
-    a = params['a']
-    s = params['s']
-    return _integrate_rings(rings, gbkfit.math.sech2_1d_fun, a, 0, s)
+    """
+    Return the integral of r |v(r)| over each ring (see _rings) of a
+    node-wise value v (linear between the subnodes, values at them).
+    """
+    values = np.asarray(values, dtype=float)
+    inner, middles, outer = _rings(subrnodes)
+    at_inner = np.interp(inner, subrnodes, values)
+    at_outer = np.interp(outer, subrnodes, values)
+    return _linear_moment(inner, middles, at_inner, values[1:-1]) \
+        + _linear_moment(middles, outer, values[1:-1], at_outer)
 
 
 def _ptrait_cloud_flux_mixture(
@@ -142,22 +166,22 @@ def _ptrait_cloud_flux_mixture(
 
 
 def _ptrait_integrate_mixture_exponential(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:  # noqa
+        params: dict[str, np.ndarray]
+) -> np.ndarray:
     s = np.asarray(params['s'])
     return _ptrait_cloud_flux_mixture(params, 2 * np.pi * s * s)
 
 
 def _ptrait_integrate_mixture_gauss(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:  # noqa
+        params: dict[str, np.ndarray]
+) -> np.ndarray:
     s = np.asarray(params['s'])
     return _ptrait_cloud_flux_mixture(params, 2 * np.pi * s * s)
 
 
 def _ptrait_integrate_mixture_ggauss(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:  # noqa
+        params: dict[str, np.ndarray]
+) -> np.ndarray:
     s = np.asarray(params['s'])
     b = np.asarray(params['b'])
     return _ptrait_cloud_flux_mixture(
@@ -165,8 +189,8 @@ def _ptrait_integrate_mixture_ggauss(
 
 
 def _ptrait_integrate_mixture_moffat(
-        params: dict[str, np.ndarray], rings: np.ndarray
-) -> np.ndarray:  # noqa
+        params: dict[str, np.ndarray]
+) -> np.ndarray:
     s = np.asarray(params['s'])
     b = np.asarray(params['b'])
     if np.any(b <= 1):
@@ -176,42 +200,65 @@ def _ptrait_integrate_mixture_moffat(
     return _ptrait_cloud_flux_mixture(params, np.pi * s * s / (b - 1))
 
 
-def _ptrait_integrate_nw_uniform(
-        params: dict[str, np.ndarray], rings: np.ndarray
+def _ptrait_cloud_flux_nw_uniform(
+        params: dict[str, np.ndarray], subrnodes: np.ndarray
 ) -> np.ndarray:
-    a = params['a']
-    c = np.inf
-    return _integrate_rings(rings, gbkfit.math.uniform_1d_fun, a, 0, c)
+    # (|a| over each ring; the kernel gives each cloud the sign of a)
+    return 2 * np.pi * _nodewise_moments(params['a'], subrnodes)
 
 
 def _ptrait_cloud_flux_nw_harmonic(
-        params: dict[str, np.ndarray], rings: np.ndarray, order: int
+        a: np.ndarray, subrnodes: np.ndarray, order: int
 ) -> np.ndarray:
-    # The integral of |a cos(k (t - p))| around a ring is 2 / pi of that of
-    # |a| for k > 0
-    a = params['a'] * (2 / np.pi if order else 1)
-    c = np.inf
-    return _integrate_rings(rings, gbkfit.math.uniform_1d_fun, a, 0, c)
+    # The integral of |a cos(k (t - p))| around a ring is 4 |a| for k > 0,
+    # whatever p (the kernel gives each cloud the sign of the harmonic)
+    factor = 4 if order else 2 * np.pi
+    return factor * _nodewise_moments(a, subrnodes)
+
+
+# The points of the Gauss-Legendre quadrature of the flux of the rings of a
+# distortion (the integrand is smooth between its subnodes, and where a is
+# not 0: far below the error of any data)
+_DISTORTION_NODES, _DISTORTION_WEIGHTS = np.polynomial.legendre.leggauss(32)
 
 
 def _ptrait_integrate_nw_distortion(
-        params: dict[str, np.ndarray], rings: np.ndarray
+        params: dict[str, np.ndarray], subrnodes: np.ndarray
 ) -> np.ndarray:
     """
-    Return the flux of each ring of a distortion: its area times the mean
-    around it of a exp(-(t r)^2 / (2 s^2)), for the azimuths t within half
-    a turn of the centre of the distortion.
+    Return the flux of each ring (see _rings) of a distortion: the
+    integral of r |a| exp(-(t r)^2 / (2 s^2)) over the azimuths t within
+    half a turn of its centre and the radii of the ring, sqrt(2 pi) |a|
+    |s| erf(pi r / (sqrt(2) |s|)), of a and s linear between the
+    subnodes (the kernel gives each cloud the sign of a).
     """
-    a = params['a']
-    s = np.abs(params['s'])
+    subrnodes = np.asarray(subrnodes, dtype=float)
+    a = np.asarray(params['a'], dtype=float)
+    s = np.abs(np.asarray(params['s'], dtype=float))
+    inner, middles, outer = _rings(subrnodes)
 
-    def mean(r):
-        width = s / r
+    def integrand(r):
+        sr = np.interp(r, subrnodes, s)
         erf = scipy.special.erf(
-            np.pi / (np.sqrt(2) * np.maximum(width, 1e-300)))
-        return np.where(
-            width > 0, np.sqrt(2 * np.pi) * width * erf / (2 * np.pi), 0) * a
-    return _integrate_rings(rings, mean)
+            np.pi * r / (np.sqrt(2) * np.maximum(sr, 1e-300)))
+        return np.sqrt(2 * np.pi) * np.abs(np.interp(r, subrnodes, a)) \
+            * np.where(sr > 0, sr * erf, 0)
+
+    def integral(r0, r1):
+        # (split where a crosses 0, at its kink)
+        a0 = np.interp(r0, subrnodes, a)
+        a1 = np.interp(r1, subrnodes, a)
+        crosses = a0 * a1 < 0
+        rz = np.where(
+            crosses, r0 + a0 * (r1 - r0) / np.where(crosses, a0 - a1, 1), r1)
+        total = 0
+        for lo, hi in ((r0, rz), (rz, r1)):
+            r = (lo + hi)[:, None] / 2 \
+                + (hi - lo)[:, None] / 2 * _DISTORTION_NODES
+            total = total + (hi - lo) / 2 * (
+                integrand(r) @ _DISTORTION_WEIGHTS)
+        return total
+    return integral(inner, middles) + integral(middles, outer)
 
 
 class RPTraitUniform(RPTrait):
@@ -243,9 +290,9 @@ class RPTraitUniform(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_uniform(params, rings)
+        return _ptrait_integrate_uniform(params, subrnodes)
 
 
 class RPTraitExponential(RPTrait):
@@ -279,9 +326,10 @@ class RPTraitExponential(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_exponential(params, rings)
+        return _ring_flux(
+            _cumulative_exponential, subrnodes, params['a'], params['s'])
 
 
 class RPTraitGauss(RPTrait):
@@ -316,9 +364,10 @@ class RPTraitGauss(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_gauss(params, rings)
+        return _ring_flux(
+            _cumulative_gauss, subrnodes, params['a'], params['s'])
 
 
 class RPTraitGGauss(RPTrait):
@@ -355,9 +404,11 @@ class RPTraitGGauss(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_ggauss(params, rings)
+        return _ring_flux(
+            _cumulative_ggauss, subrnodes, params['a'], params['s'],
+            params['b'])
 
 
 class RPTraitLorentz(RPTrait):
@@ -392,9 +443,10 @@ class RPTraitLorentz(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_lorentz(params, rings)
+        return _ring_flux(
+            _cumulative_lorentz, subrnodes, params['a'], params['s'])
 
 
 class RPTraitMoffat(RPTrait):
@@ -430,9 +482,11 @@ class RPTraitMoffat(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_moffat(params, rings)
+        return _ring_flux(
+            _cumulative_moffat, subrnodes, params['a'], params['s'],
+            params['b'])
 
 
 class RPTraitSech2(RPTrait):
@@ -466,9 +520,10 @@ class RPTraitSech2(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_sech2(params, rings)
+        return _ring_flux(
+            _cumulative_sech2, subrnodes, params['a'], params['s'])
 
 
 class RPTraitMixtureExponential(RPTrait):
@@ -514,9 +569,9 @@ class RPTraitMixtureExponential(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_mixture_exponential(params, rings)
+        return _ptrait_integrate_mixture_exponential(params)
 
 
 class RPTraitMixtureGauss(RPTrait):
@@ -562,9 +617,9 @@ class RPTraitMixtureGauss(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_mixture_gauss(params, rings)
+        return _ptrait_integrate_mixture_gauss(params)
 
 
 class RPTraitMixtureGGauss(RPTrait):
@@ -611,9 +666,9 @@ class RPTraitMixtureGGauss(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_mixture_ggauss(params, rings)
+        return _ptrait_integrate_mixture_ggauss(params)
 
 
 class RPTraitMixtureMoffat(RPTrait):
@@ -660,9 +715,9 @@ class RPTraitMixtureMoffat(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_mixture_moffat(params, rings)
+        return _ptrait_integrate_mixture_moffat(params)
 
 
 class RPTraitNWUniform(RPTrait):
@@ -710,9 +765,9 @@ class RPTraitNWUniform(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_nw_uniform(params, rings)
+        return _ptrait_cloud_flux_nw_uniform(params, subrnodes)
 
 
 class RPTraitNWHarmonic(RPTrait):
@@ -767,10 +822,10 @@ class RPTraitNWHarmonic(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         return _ptrait_cloud_flux_nw_harmonic(
-            params, rings, self._option(Harmonic).order)
+            params['a'], subrnodes, self._option(Harmonic).order)
 
 
 class RPTraitNWDistortion(RPTrait):
@@ -829,9 +884,9 @@ class RPTraitNWDistortion(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_nw_distortion(params, rings)
+        return _ptrait_integrate_nw_distortion(params, subrnodes)
 
 
 class RPTraitSpiral(RPTrait):
@@ -929,7 +984,7 @@ class RPTraitSpiral(RPTrait):
         return False
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         return _ptrait_cloud_flux_nw_harmonic(
-            params, rings, self._option(Spiral).order)
+            params['a'], subrnodes, self._option(Spiral).order)

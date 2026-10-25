@@ -843,7 +843,8 @@ gmodel_mcdisk_evaluate_cloud(
             a.rpt.uids[tidx], rpt_cptr, rpt_pptr,
             rnidx, a.rnodes, a.nrnodes);
 
-    // The sign of the cloud within its pool (harmonics)
+    // The sign of the trait at the cloud, relative to that of the flux of
+    // its pool (e.g. of a harmonic)
     rvalue *= sign;
 
     // Convert to surface brightness

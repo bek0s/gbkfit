@@ -296,6 +296,70 @@ rp_trait_sample_polar_coords_nw(
     rp_trait_sample_polar_coords(out_r, out_t, rng, rmin, rmax);
 }
 
+// The node that ends the interval of nodes of the radius r, in the ring of
+// the node rnidx (see lerp)
+template<typename T> constexpr int
+ring_node(T r, int rnidx, const T* rnodes)
+{
+    return r < rnodes[rnidx] ? rnidx : rnidx + 1;
+}
+
+// A point of the ring of the node rnidx (see
+// rp_trait_sample_polar_coords_nw), at a uniform azimuth out_t, and of
+// the radius out_r drawn from the density r w(r): w(r) >= 0 is the
+// azimuthal mean of the trait at the radius, at most weight_max in the
+// ring. By rejection of points uniform in area, so that the clouds of a
+// ring follow its trait across it.
+template<typename T, typename Weight> constexpr void
+rp_trait_sample_polar_coords_ring(
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        T weight_max, const Weight& weight)
+{
+    do {
+        rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    } while (rng() * weight_max > weight(out_r));
+}
+
+// A point of the ring of the node rnidx of a radial profile (|profile(r)|,
+// monotonic in r: at most at an edge of the ring)
+template<typename T, typename Profile> constexpr void
+rp_trait_profile_rnd(
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const Profile& profile)
+{
+    const T half_ring_width = rnodes[1] - rnodes[0];
+    auto weight = [&](T r) { return std::abs(profile(r)); };
+    const T weight_max = std::max(
+            weight(rnodes[rnidx] - half_ring_width),
+            weight(rnodes[rnidx] + half_ring_width));
+    rp_trait_sample_polar_coords_ring(
+            out_r, out_t, rng, rnidx, rnodes, weight_max, weight);
+}
+
+// The node-wise value (of the values params[offset + i] at the nodes) at the
+// radius r of the ring of the node rnidx
+template<typename T> constexpr T
+ring_nodewise(T r, int rnidx, const T* rnodes, const T* params, int offset)
+{
+    return nodewise(r, ring_node(r, rnidx, rnodes), rnodes, params, offset, 1);
+}
+
+// The largest |value| of a node-wise parameter (of the values params[offset
+// + i] at the nodes) in the ring of the node rnidx: at one of its edges or
+// its middle, between which it is linear
+template<typename T> constexpr T
+ring_nodewise_max(int rnidx, const T* rnodes, const T* params, int offset)
+{
+    const T half_ring_width = rnodes[1] - rnodes[0];
+    const T inner = ring_nodewise(
+            rnodes[rnidx] - half_ring_width, rnidx, rnodes, params, offset);
+    const T outer = ring_nodewise(
+            rnodes[rnidx] + half_ring_width, rnidx, rnodes, params, offset);
+    return std::max(
+            std::max(std::abs(inner), std::abs(outer)),
+            std::abs(params[offset + rnidx]));
+}
+
 template<typename T> constexpr void
 rp_trait_uniform(T& out, const T* params)
 {
@@ -319,9 +383,14 @@ rp_trait_exponential(T& out, T r, const T* params)
 
 template<typename T> constexpr void
 rp_trait_exponential_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const T* params)
 {
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_profile_rnd(out_r, out_t, rng, rnidx, rnodes, [&](T r) {
+        T out = 0;
+        p_trait_exponential(out, r, params);
+        return out;
+    });
 }
 
 template<typename T> constexpr void
@@ -332,10 +401,14 @@ rp_trait_gauss(T& out, T r, const T* params)
 
 template<typename T> constexpr void
 rp_trait_gauss_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const T* params)
 {
-    // trait does not use an analytical integral
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_profile_rnd(out_r, out_t, rng, rnidx, rnodes, [&](T r) {
+        T out = 0;
+        p_trait_gauss(out, r, params);
+        return out;
+    });
 }
 
 template<typename T> constexpr void
@@ -346,10 +419,14 @@ rp_trait_ggauss(T& out, T r, const T* params)
 
 template<typename T> constexpr void
 rp_trait_ggauss_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const T* params)
 {
-    // trait does not use an analytical integral
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_profile_rnd(out_r, out_t, rng, rnidx, rnodes, [&](T r) {
+        T out = 0;
+        p_trait_ggauss(out, r, params);
+        return out;
+    });
 }
 
 template<typename T> constexpr void
@@ -360,10 +437,14 @@ rp_trait_lorentz(T& out, T r, const T* params)
 
 template<typename T> constexpr void
 rp_trait_lorentz_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const T* params)
 {
-    // trait does not use an analytical integral
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_profile_rnd(out_r, out_t, rng, rnidx, rnodes, [&](T r) {
+        T out = 0;
+        p_trait_lorentz(out, r, params);
+        return out;
+    });
 }
 
 template<typename T> constexpr void
@@ -374,10 +455,14 @@ rp_trait_moffat(T& out, T r, const T* params)
 
 template<typename T> constexpr void
 rp_trait_moffat_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const T* params)
 {
-    // trait does not use an analytical integral
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_profile_rnd(out_r, out_t, rng, rnidx, rnodes, [&](T r) {
+        T out = 0;
+        p_trait_moffat(out, r, params);
+        return out;
+    });
 }
 
 template<typename T> constexpr void
@@ -388,10 +473,14 @@ rp_trait_sech2(T& out, T r, const T* params)
 
 template<typename T> constexpr void
 rp_trait_sech2_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes,
+        const T* params)
 {
-    // trait does not use an analytical integral
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_profile_rnd(out_r, out_t, rng, rnidx, rnodes, [&](T r) {
+        T out = 0;
+        p_trait_sech2(out, r, params);
+        return out;
+    });
 }
 
 // The integral over the plane of the radial profile f of a round blob of
@@ -576,11 +665,20 @@ rp_trait_nw_uniform(
     p_trait_nw_uniform(out, rnidx, rnodes, r, params);
 }
 
+// A point of the ring of the node rnidx of the node-wise amplitude a
+// (params[i]): of the radius drawn from |a|, and out_s the sign of a there
 template<typename T> constexpr void
 rp_trait_nw_uniform_rnd(
-        T& out_r, T& out_t, RNG<T>& rng, int rnidx, const T* rnodes)
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng, int rnidx,
+        const T* rnodes, const T* params)
 {
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_sample_polar_coords_ring(
+            out_r, out_t, rng, rnidx, rnodes,
+            ring_nodewise_max(rnidx, rnodes, params, 0),
+            [&](T r) {
+                return std::abs(ring_nodewise(r, rnidx, rnodes, params, 0));
+            });
+    out_s = ring_nodewise(out_r, rnidx, rnodes, params, 0) < 0 ? -1 : 1;
 }
 
 template<typename T> constexpr void
@@ -606,21 +704,33 @@ harmonic_azimuth_rnd(T& out_s, T& out_t, RNG<T>& rng, int k, T p)
     out_s = j % 2 ? -1 : 1;
 }
 
+// A point of the ring of the node rnidx of a harmonic a cos(k (t - p)), of
+// the node-wise a and p (params): of the radius drawn from |a| (the
+// azimuthal mean of the |harmonic| is |a| times a constant), and the
+// azimuth from the |cosine| of the p there; out_s is the sign of the
+// harmonic at the point.
 template<typename T> constexpr void
 rp_trait_nw_harmonic_rnd(
         T& out_s, T& out_r, T& out_t, RNG<T>& rng,
         int rnidx, const T* rnodes, int nrnodes,
         const T* consts, const T* params)
 {
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
+    rp_trait_sample_polar_coords_ring(
+            out_r, out_t, rng, rnidx, rnodes,
+            ring_nodewise_max(rnidx, rnodes, params, 0),
+            [&](T r) {
+                return std::abs(ring_nodewise(r, rnidx, rnodes, params, 0));
+            });
+    out_s = ring_nodewise(out_r, rnidx, rnodes, params, 0) < 0 ? -1 : 1;
+    // (a harmonic of order 0 is uniform, and has no phase parameter)
     int k = std::rint(consts[0]);
-    // A harmonic of order 0 is uniform (and has no phase parameter). The
-    // sign of the amplitude is in the flux of the clouds.
-    out_s = 1;
     if (k == 0)
         return;
-    T p = params[nrnodes + rnidx] * DEG_TO_RAD<T>;
-    harmonic_azimuth_rnd(out_s, out_t, rng, k, p);
+    T p = ring_nodewise(out_r, rnidx, rnodes, params, nrnodes)
+            * DEG_TO_RAD<T>;
+    T lobe = 1;
+    harmonic_azimuth_rnd(lobe, out_t, rng, k, p);
+    out_s *= lobe;
 }
 
 // The density of a spiral density wave of m = consts[0] arms (see
@@ -641,21 +751,32 @@ rp_trait_spiral(
     out = a * std::cos(m * (theta - p) - f);
 }
 
-// A cloud of a spiral density wave in the ring rnidx: of the harmonic a
-// cos(m (theta - p) - f) of the f of the ring, whose maxima are at the
-// azimuths p + f / m (see harmonic_azimuth_rnd). The sign of a is in the
-// flux of the clouds.
+// A cloud of a spiral density wave in the ring rnidx: of the radius drawn
+// from |a| (see rp_trait_nw_harmonic_rnd), and the azimuth from the
+// |harmonic| a cos(m (theta - p) - f) of the f there, whose maxima are at
+// the azimuths p + f / m (see harmonic_azimuth_rnd); out_s is its sign
+// at the point.
 template<typename T> constexpr void
 rp_trait_spiral_rnd(
         T& out_s, T& out_r, T& out_t, RNG<T>& rng,
         int rnidx, const T* rnodes, int nrnodes,
         const T* consts, const T* params)
 {
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
     int m = std::rint(consts[0]);
     int offset = std::rint(consts[1]);
-    T p = params[0] * DEG_TO_RAD<T> + params[offset + nrnodes + rnidx] / m;
-    harmonic_azimuth_rnd(out_s, out_t, rng, m, p);
+    rp_trait_sample_polar_coords_ring(
+            out_r, out_t, rng, rnidx, rnodes,
+            ring_nodewise_max(rnidx, rnodes, params, offset),
+            [&](T r) {
+                return std::abs(
+                        ring_nodewise(r, rnidx, rnodes, params, offset));
+            });
+    out_s = ring_nodewise(out_r, rnidx, rnodes, params, offset) < 0 ? -1 : 1;
+    T f = ring_nodewise(out_r, rnidx, rnodes, params, offset + nrnodes);
+    T p = params[0] * DEG_TO_RAD<T> + f / m;
+    T lobe = 1;
+    harmonic_azimuth_rnd(lobe, out_t, rng, m, p);
+    out_s *= lobe;
 }
 
 template<typename T> constexpr void
@@ -667,19 +788,42 @@ rp_trait_nw_distortion(
     p_trait_nw_distortion(out, rnidx, rnodes, nrnodes, r, theta, params);
 }
 
+// A point of the ring of the node rnidx of a distortion a exp(-(t r)^2 / (2
+// s^2)) (t, the azimuth from p, within half a turn), of the node-wise a, p
+// and s (params): of the radius drawn from its azimuthal mean, |a| (|s| /
+// r) erf(pi r / (sqrt(2) |s|)) (times 1 / sqrt(2 pi)), which is at most |a|
+// sqrt(2 pi) and |a| |s| / r; at the azimuth p + d, where d is drawn from a
+// Gaussian of the arc length s at the radius, truncated to a turn: by
+// rejection, of Gaussian draws for narrow ones, and of uniform draws for
+// wide ones (both accept most draws); out_s is the sign of a there.
 template<typename T> constexpr void
 rp_trait_nw_distortion_rnd(
-        T& out_r, T& out_t, RNG<T>& rng,
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
         int rnidx, const T* rnodes, int nrnodes,
         const T* params)
 {
-    // A point of the ring, at the azimuth p + d, where d is drawn from a
-    // Gaussian of the arc length s at the radius, truncated to a turn: by
-    // rejection, of Gaussian draws for narrow ones, and of uniform draws
-    // for wide ones (both accept most draws)
-    rp_trait_sample_polar_coords_nw(out_r, out_t, rng, rnidx, rnodes);
-    const T p = params[1 * nrnodes + rnidx] * DEG_TO_RAD<T>;
-    const T s = params[2 * nrnodes + rnidx];
+    auto at = [&](T r, int k) {
+        return ring_nodewise(r, rnidx, rnodes, params, k * nrnodes);
+    };
+    const T inner = rnodes[rnidx] - (rnodes[1] - rnodes[0]);
+    const T wide = std::sqrt(2 * PI<T>);
+    const T narrow = inner > 0
+            ? ring_nodewise_max(rnidx, rnodes, params, 2 * nrnodes) / inner
+            : wide;
+    rp_trait_sample_polar_coords_ring(
+            out_r, out_t, rng, rnidx, rnodes,
+            ring_nodewise_max(rnidx, rnodes, params, 0)
+            * std::min(wide, narrow),
+            [&](T r) {
+                const T s = std::abs(at(r, 2));
+                return s > 0 && r > 0
+                        ? std::abs(at(r, 0)) * (s / r)
+                          * std::erf(PI<T> * r / (std::sqrt(T(2)) * s))
+                        : T(0);
+            });
+    out_s = at(out_r, 0) < 0 ? -1 : 1;
+    const T p = at(out_r, 1) * DEG_TO_RAD<T>;
+    const T s = at(out_r, 2);
     const T width = std::abs(s / out_r);
     T d = 0;
     if (width < PI<T>) {
@@ -1433,32 +1577,32 @@ rp_trait_rnd(
     case RPT_UID_EXP:
         rp_trait_exponential_rnd(
                 out_r, out_t,
-                rng, rnidx, rnodes);
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_GAUSS:
         rp_trait_gauss_rnd(
                 out_r, out_t,
-                rng, rnidx, rnodes);
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_GGAUSS:
         rp_trait_ggauss_rnd(
                 out_r, out_t,
-                rng, rnidx, rnodes);
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_LORENTZ:
         rp_trait_lorentz_rnd(
                 out_r, out_t,
-                rng, rnidx, rnodes);
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_MOFFAT:
         rp_trait_moffat_rnd(
                 out_r, out_t,
-                rng, rnidx, rnodes);
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_SECH2:
         rp_trait_sech2_rnd(
                 out_r, out_t,
-                rng, rnidx, rnodes);
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_MIXTURE_EXP:
         rp_trait_mixture_exponential_rnd(
@@ -1482,8 +1626,8 @@ rp_trait_rnd(
         break;
     case RPT_UID_NW_UNIFORM:
         rp_trait_nw_uniform_rnd(
-                out_r, out_t,
-                rng, rnidx, rnodes);
+                out_s, out_r, out_t,
+                rng, rnidx, rnodes, params);
         break;
     case RPT_UID_NW_HARMONIC:
         rp_trait_nw_harmonic_rnd(
@@ -1497,7 +1641,7 @@ rp_trait_rnd(
         break;
     case RPT_UID_NW_DISTORTION:
         rp_trait_nw_distortion_rnd(
-                out_r, out_t,
+                out_s, out_r, out_t,
                 rng, rnidx, rnodes, nrnodes, params);
         break;
     case RPT_UID_MAP:

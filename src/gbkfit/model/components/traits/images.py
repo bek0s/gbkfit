@@ -161,7 +161,7 @@ class RPTraitMap(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         # The kernel draws the cells by |a| and gives each cloud the sign
         # of the density of its cell
@@ -339,7 +339,7 @@ class RPTraitImage(RPTrait):
         return True
 
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         # (as that of a map, of the cells m)
         return np.sum(np.abs(params['m'])) * self._step ** 2

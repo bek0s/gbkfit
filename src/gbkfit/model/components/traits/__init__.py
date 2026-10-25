@@ -112,9 +112,9 @@ centred on its centre, x along the azimuth 0 and y along the azimuth 90
 degrees, with one density for each cell (a free map). The image trait is
 such a grid, whose densities its galaxy makes from an observed image.
 
-The Monte Carlo disks draw their clouds from the density traits: from
-each subring, where the trait is flat, for most, and exactly for the
-uniform, mixture and map traits.
+The disks of clouds draw their clouds from the density traits: for the
+whole disk (the uniform, mixture and map traits), or ring by ring (see
+Clouds).
 
 The modules: base (Trait and the bases of the kinds), options (the
 options the traits hold, e.g. Direction), density, images (the maps of

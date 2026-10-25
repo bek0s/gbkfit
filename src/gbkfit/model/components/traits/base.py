@@ -235,16 +235,17 @@ class RPTrait(PTrait, abc.ABC):
 
     @abc.abstractmethod
     def cloud_flux(
-            self, params: dict[str, np.ndarray], rings: np.ndarray
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         """
         Return the flux the Monte Carlo disk shares among the clouds of
         the trait: for the whole disk (one value, with an analytical
-        integral) or for each of the given rings. It is the integral of
-        |B| (B is the trait) with the sign of the amplitude of the trait.
-        Where B changes sign along a ring, the kernel draws the clouds
-        from |B| and gives each the sign of B relative to the amplitude
-        (e.g. the sign of the cosine of a harmonic).
+        integral) or for each of its rings (around its subnodes subrnodes
+        but the first and the last, its edges; params has the values of
+        the node-wise parameters at all of them). It is the integral of |B|
+        (B is the trait) over the disk or the ring, of the sign of its
+        amplitude where that is one number; else the kernel gives each
+        cloud the sign of B where it draws it (e.g. a harmonic).
         """
 
     @abc.abstractmethod

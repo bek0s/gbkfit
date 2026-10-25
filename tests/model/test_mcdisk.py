@@ -185,6 +185,19 @@ def test_mcdisk_map_matches_smdisk(driver):
     assert relative_difference(mcdisk.sum(axis=0), smdisk.sum(axis=0)) < 0.02
 
 
+def test_mcdisk_clouds_follow_a_steep_density_across_their_rings(driver):
+    # Rings 2 arcsec wide on an exponential of scale 1.5, whose density
+    # changes by e^(4/3) across a ring: the clouds follow it (as the
+    # smooth disk, which evaluates it at every voxel), not its value at
+    # the middle of each ring
+    component = dict(rnsep=4, rstep=2)
+    properties = dict(pt_s=1.5, incl=30)
+    mcdisk = evaluate_disk(
+        'mcdisk', driver.type(), component | clouds(1e-5), properties)
+    smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
+    assert relative_difference(mcdisk.sum(0), smdisk.sum(0)) < 0.02
+
+
 def test_mcdisk_same_on_all_drivers(driver):
     # Every driver draws the same random numbers for every cloud
     cube = evaluate_disk('mcdisk', driver.type())

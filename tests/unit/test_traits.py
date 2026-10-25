@@ -4,7 +4,9 @@ Tests for the validation of trait options.
 
 import inspect
 
+import numpy as np
 import pytest
+import scipy.integrate
 
 from gbkfit.model.components import traits
 from gbkfit.utils.parseutils import ConfigError
@@ -76,3 +78,65 @@ def test_harmonic_orders_are_integers():
     # by the trait)
     with pytest.raises(ConfigError, match="order must be an integer"):
         traits.RPTraitNWHarmonic(order=1.5)
+
+
+# The subnodes of a disk of clouds: its edges 0 and 6, and the middles of
+# its three rings, of half width 0.75 (see density._rings)
+SUBRNODES = np.array([0, 0.75, 2.25, 3.75, 5.25, 6])
+
+
+def ring_integrals(azimuthal, knots=()):
+    """
+    The integral of a density over each ring of SUBRNODES, of the
+    integral of its |value| over the azimuths at each radius
+    (azimuthal(r)), split at the radii of its kinks (knots).
+    """
+    middles = SUBRNODES[1:-1]
+    return np.array([scipy.integrate.quad(
+        lambda r: r * azimuthal(r), middle - 0.75, middle + 0.75,
+        points=[k for k in (middle, *knots)
+                if middle - 0.75 < k < middle + 0.75],
+        epsabs=1e-13, epsrel=1e-12)[0] for middle in middles])
+
+
+@pytest.mark.parametrize('trait, params, profile', [
+    (traits.RPTraitExponential(), dict(a=2.0, s=1.5),
+     lambda r: 2 * np.exp(-r / 1.5)),
+    (traits.RPTraitGauss(), dict(a=2.0, s=1.5),
+     lambda r: 2 * np.exp(-r ** 2 / 4.5)),
+    (traits.RPTraitGGauss(), dict(a=2.0, s=1.5, b=0.7),
+     lambda r: 2 * np.exp(-(r / 1.5) ** 0.7)),
+    (traits.RPTraitLorentz(), dict(a=2.0, s=1.5),
+     lambda r: 2 * 2.25 / (r ** 2 + 2.25)),
+    (traits.RPTraitMoffat(), dict(a=2.0, s=1.5, b=2.5),
+     lambda r: 2 * (1 + (r / 1.5) ** 2) ** -2.5),
+    (traits.RPTraitSech2(), dict(a=2.0, s=1.5),
+     lambda r: 2 / np.cosh(r / 1.5) ** 2)])
+def test_the_rings_of_clouds_have_the_flux_of_the_profile_over_them(
+        trait, params, profile):
+    np.testing.assert_allclose(
+        trait.cloud_flux(params, SUBRNODES),
+        ring_integrals(lambda r: 2 * np.pi * profile(r)), rtol=1e-8)
+
+
+def test_the_rings_of_clouds_of_node_wise_traits_have_their_flux():
+    # (of |the trait|: the clouds take its sign, which a changes in a ring;
+    # |cos(2 (t - p))| integrates to 4 over a turn, whatever p)
+    a = np.array([1, 0.5, -0.5, 0.2, 1, 0.3])
+    p = np.array([0, 10, 20, 30, 40, 50])
+    s = np.array([0.5, 1, 1.5, 0.5, 2, 1])
+    zeros = (1.5, 2.25 + 1.5 * 0.5 / 0.7)
+
+    def at(values, r):
+        return np.interp(r, SUBRNODES, values)
+    harmonic = traits.RPTraitNWHarmonic(2)
+    np.testing.assert_allclose(
+        harmonic.cloud_flux(dict(a=a, p=p), SUBRNODES),
+        ring_integrals(lambda r: 4 * np.abs(at(a, r)), zeros), rtol=1e-8)
+    distortion = traits.RPTraitNWDistortion()
+    np.testing.assert_allclose(
+        distortion.cloud_flux(dict(a=a, p=p, s=s), SUBRNODES),
+        ring_integrals(lambda r: np.abs(at(a, r)) * scipy.integrate.quad(
+            lambda t: np.exp(-(t * r) ** 2 / (2 * at(s, r) ** 2)),
+            -np.pi, np.pi, epsabs=1e-14, epsrel=1e-13)[0], zeros),
+        rtol=1e-8)

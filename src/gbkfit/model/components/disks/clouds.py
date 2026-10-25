@@ -33,11 +33,15 @@ class Clouds(parseutils.Serializable):
     """
     The clouds of a disk made of clouds (see Disk): drawn at random from
     its density, each of the flux cflux, with the random numbers of the
-    given seed. The clouds of the density polar traits that the disk draws
-    as a whole (see RPTrait.has_analytical_integral; e.g. the uniform one
-    and the mixtures of blobs) follow them exactly; those of the others
-    are drawn ring by ring: each subring (of width rstep) has the flux of
-    its density at its middle times its area, spread evenly over it.
+    given seed: a sample of the smooth disk of the same parts. The clouds
+    of the density polar traits that the disk draws as a whole (see
+    RPTrait.has_analytical_integral; e.g. the uniform one and the mixtures
+    of blobs) follow them exactly; those of the others are drawn ring by
+    ring (subrings of width rstep): each ring has the flux of the trait
+    over it (its integral, see RPTrait.cloud_flux), and its clouds are at
+    radii drawn from the trait across it, and at azimuths drawn from the
+    trait at their radii. A disk of clouds converges to the smooth disk
+    as its clouds get more (smaller cflux).
 
     Parameters
     ----------
@@ -161,23 +165,17 @@ class CloudDiskPlan(_disk.DiskPlan):
         disk = self._disk
         driver = self._driver
 
-        # The flux of each pool
+        # The flux of each pool: of each trait (one value if it has an
+        # analytical integral), or of each of its rings, of its parameters
+        # by their names in it (the node-wise ones at the subnodes)
         pool_flux = []
-        rpt_params = disk.trait_params('rpt')
-        ring_centers = np.array(disk.subrnodes()[1:-1], self._dtype)
-        for trait, pnames in zip(disk.traits('rpt'), rpt_params.pnames):
-            # Make a parameter dict for the current trait
-            # Use the original names and not the new/prefixed ones
-            trait_params = {}
-            for old_name, new_name in pnames.items():
-                if rpt_params.sampling[new_name] is not None:
-                    trait_params[old_name] = params[new_name][1:-1]
-                else:
-                    trait_params[old_name] = params[new_name]
-            # The flux of the trait (one value if it has an analytical
-            # integral), or of each of its rings
+        subrnodes = np.asarray(disk.subrnodes(), dtype=float)
+        for trait, pnames in zip(
+                disk.traits('rpt'), disk.trait_params('rpt').pnames):
+            trait_params = {
+                name: params[prefixed] for name, prefixed in pnames.items()}
             pool_flux.extend(np.atleast_1d(
-                trait.cloud_flux(trait_params, ring_centers)))
+                trait.cloud_flux(trait_params, subrnodes)))
         pool_flux = np.asarray(pool_flux, np.float64)
 
         # Each pool has as many clouds as its flux needs at cflux each
