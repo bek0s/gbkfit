@@ -28,7 +28,10 @@ OBSERVATION = dict(
     (dict(likelihood=dict(
         type='gaussian', amplitudes='per_spectrum', amplitude_sigma=0.5)),
      'likelihood',
-     r"\{solve: \{type: gaussian, mean: 1, sigma: 0.5, minimum: 0\}\}")])
+     r"\{solve: \{type: gaussian, mean: 1, sigma: 0.5, minimum: 0\}\}"),
+    (dict(scale=[2, 2, 1]), 'scale', "'scale' is now oversampling"),
+    (dict(weights=dict(component='disk')), 'weights',
+     "'weights' is now pixel_weights")])
 def test_old_forms_are_refused_with_their_new_form(options, path, message):
     config = dict(observations=[OBSERVATION | options])
     with pytest.raises(ConfigError, match=message) as error:
@@ -126,3 +129,11 @@ def test_the_old_disk_types_are_refused_and_migrated():
 def test_old_components_keep_their_own_geometries(components, owns):
     migration.migrate(dict(galaxies=[dict(components=components)]))
     assert [c.get('geometry') == 'own' for c in components] == owns
+
+
+def test_the_old_observation_options_are_migrated():
+    observation = OBSERVATION | dict(
+        scale=[2, 2, 1], weights=dict(component='disk'))
+    migration.migrate(dict(observations=[observation]))
+    assert observation == OBSERVATION | dict(
+        oversampling=[2, 2, 1], pixel_weights=dict(component='disk'))

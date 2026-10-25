@@ -268,7 +268,7 @@ class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
     the plan of the scene (what an observation sees) on its high-res grid
-    (see _model_grid), that of the spatial weights of the data, if any,
+    (see _model_grid), that of the pixel weights of the data, if any,
     which fill the weight cube of the DCube, and the name of the parameter
     of the flux scale of the observation, if one value (see
     ObservationSky), which scales the flux of the cube.
@@ -281,8 +281,8 @@ class DCubePlanBase(ObservablePlan):
     Raises
     ------
     ConfigError
-        If there are weights and a lens (not supported yet), or the
-        weights are not in the plane of a disk of the scene.
+        If there are pixel weights and a lens (not supported yet), or the
+        pixel weights are not in the plane of a disk of the scene.
     """
 
     def __init__(
@@ -292,27 +292,28 @@ class DCubePlanBase(ObservablePlan):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ):
         self._driver = driver
         self._dtype = dtype
         self._dcube = dcube
         self._flux_param = flux_scale
-        self._dcube_plan = dcube.plan(driver, has_weights=weights is not None)
+        self._dcube_plan = dcube.plan(
+            driver, has_weights=pixel_weights is not None)
         grid = self._model_grid()
         self._weights_plan = None
-        if weights is not None:
+        if pixel_weights is not None:
             self._weights_plan = plan_weights(
-                weights, scene, self._dcube_plan.scratch_grid().spatial(),
-                driver, dtype)
+                pixel_weights, scene,
+                self._dcube_plan.scratch_grid().spatial(), driver, dtype)
         # With a lens, the model is evaluated on the source plane, into a
         # cube of its own, which is lensed into the high-res cube
         self._lens_plan = None
         self._source_cube = None
         if foreground.lens() is not None:
-            if weights is not None:
-                raise ConfigError("a lens does not support weights yet")
+            if pixel_weights is not None:
+                raise ConfigError("a lens does not support pixel_weights yet")
             self._lens_plan = foreground.plan_lens(
                 driver, self._dcube_plan.scratch_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)

@@ -68,7 +68,7 @@ OBSERVABLES = dict(
         type='region_spectra', regions=APERTURES, size=[24, 25],
         spec_size=61, spec_step=20, spec_rest='6562.8 Angstrom'))
 
-SCALES = dict(
+OVERSAMPLING = dict(
     pixel_spectra=[2, 2, 1], slit_spectra=[2, 1], pixel_moments=[2, 2],
     pixel_moments_fit=[2, 2], region_moments=[2, 2],
     region_spectra=[2, 2, 1])
@@ -98,7 +98,7 @@ def test_feature_combinations(driver, name, lens):
     observation = ObservationSky(
         observable_parser.load(info), Flat(), foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
-        components=['gas'], scale=SCALES[name])
+        components=['gas'], oversampling=OVERSAMPLING[name])
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)

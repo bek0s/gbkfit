@@ -25,7 +25,7 @@ ExtraFunction: TypeAlias = Callable[
 _ON_THE_DATA = "On the grid of the data."
 _ON_THE_HIGH_RES = (
     "On the grid on which the model is evaluated: that of the data, finer "
-    "by the option scale of the observation, and padded for the "
+    "by the option oversampling of the observation, and padded for the "
     "convolution.")
 
 # The titles and the descriptions of the extra outputs of DCube (see
@@ -225,7 +225,7 @@ def _kernel_cube(dcube: 'DCube', grid_hi: gridutils.Grid) -> np.ndarray:
 class DCube:
     """
     A cube of the data of an observable (x, y and the spectral axis), of
-    the given grid, made from a model evaluated on a finer grid (scale
+    the given grid, made from a model evaluated on a finer grid (oversampling
     times finer along each axis): the primary beam attenuates it, the PSF
     and the LSF convolve it, it is downscaled to the grid, smoothed by a
     median filter of median_size pixels on the sky if given (as the data
@@ -246,7 +246,7 @@ class DCube:
             rest: u.Quantity | None,
             medium: str | None,
             convention: str | None = None,
-            scale: tuple[int, int, int],
+            oversampling: tuple[int, int, int],
             primary_beam: PrimaryBeam | None,
             psf: PSF | None,
             lsf: LSF | None,
@@ -262,7 +262,7 @@ class DCube:
             step, rpix, rval, rota, rest, gridutils.make_medium(medium, rest),
             gridutils.make_convention(convention, rest))
         self._grid_lo = gridutils.Grid(size, coords, 2)
-        self._scale = scale
+        self._oversampling = oversampling
         self._primary_beam = primary_beam
         self._psf = psf
         self._lsf = lsf
@@ -292,8 +292,8 @@ class DCube:
     def rota(self) -> float:
         return self._grid_lo.coords.rota
 
-    def scale(self) -> tuple[int, int, int]:
-        return self._scale
+    def oversampling(self) -> tuple[int, int, int]:
+        return self._oversampling
 
     def primary_beam(self) -> PrimaryBeam | None:
         return self._primary_beam
@@ -355,7 +355,7 @@ class DCubePlan:
         size_lo = dcube.size()
         step_lo = dcube.step()
         rpix_lo = dcube.rpix()
-        scale = dcube.scale()
+        oversampling = dcube.oversampling()
         psf = dcube.psf()
         lsf = dcube.lsf()
         dtype = dcube.dtype()
@@ -363,8 +363,8 @@ class DCubePlan:
         backend_fft = driver.fft(fft_dtype)
 
         # The size and step of the high-res cube, before the padding
-        size_hi = tuple(size_lo[i] * scale[i] for i in range(3))
-        step_hi = tuple(step_lo[i] / scale[i] for i in range(3))
+        size_hi = tuple(size_lo[i] * oversampling[i] for i in range(3))
+        step_hi = tuple(step_lo[i] / oversampling[i] for i in range(3))
         spat_step_hi = step_hi[:2]
         spec_step_hi = step_hi[2]
 
@@ -388,10 +388,11 @@ class DCubePlan:
                 size_hi, edge_hi = backend_fft.fft_convolution_shape(
                     size_hi, psf_size_hi + (lsf_size_hi,))
 
-        # The high-res grid: scale pixels for each low-res pixel, centred on
-        # it, after edge_hi pixels of padding
+        # The high-res grid: oversampling pixels for each low-res pixel,
+        # centred on it, after edge_hi pixels of padding
         rpix_hi = tuple(
-            (rpix_lo[i] + 0.5) * scale[i] - 0.5 + edge_hi[i] for i in range(3))
+            (rpix_lo[i] + 0.5) * oversampling[i] - 0.5 + edge_hi[i]
+            for i in range(3))
         grid_hi = gridutils.Grid(
             tuple(size_hi), dcube.grid().coords._replace(
                 step=step_hi, rpix=rpix_hi), 2)
@@ -560,10 +561,10 @@ class DCubePlan:
         # always need it, smoothed or not, to reach the low-res cube
         if dcube_lo is not dcube_hi:
             backend_dmodel.dcube_downscale(
-                dcube.scale(), self._edge_hi, dcube_hi, dcube_lo)
+                dcube.oversampling(), self._edge_hi, dcube_hi, dcube_lo)
             if has_weights:
                 backend_dmodel.dcube_downscale(
-                    dcube.scale(), self._edge_hi, wcube_hi, wcube_lo)
+                    dcube.oversampling(), self._edge_hi, wcube_hi, wcube_lo)
 
     def smooth(self) -> None:
         """

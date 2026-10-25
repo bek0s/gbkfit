@@ -35,7 +35,7 @@ observations:
     psf: {type: gauss, sigma: 0.08, ratio: 1.0, posa: 0.0}
     lsf: null
   observable: {type: pixel_brightness, median_size: null}
-  scale: [1, 1]
+  oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
 params:

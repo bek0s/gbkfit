@@ -32,7 +32,7 @@ observations:
     rota: 0
     transform: exact
     eps: null
-  scale: [1, 1, 1]
+  oversampling: [1, 1, 1]
   dtype: float64
   fft_dtype: float64
 params:

@@ -293,19 +293,21 @@ class PixelMoments(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelMomentsPlan':
-        if weights is not None and self._method != 'moments':
+        if pixel_weights is not None and self._method != 'moments':
             raise ConfigError(
-                f"the method {self._method} does not support weights yet")
+                f"the method {self._method} does not support pixel_weights "
+                f"yet")
         dcube = _moments.spectra_dcube(
-            self, scale, instrument, dtype, fft_dtype, self._median_size)
+            self, oversampling, instrument, dtype, fft_dtype,
+            self._median_size)
         return PixelMomentsPlan(
-            self, dcube, driver, scene, foreground, dtype, weights,
+            self, dcube, driver, scene, foreground, dtype, pixel_weights,
             flux_scale)
 
 
@@ -319,11 +321,11 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             scene: 'Scene',
             foreground: 'Foreground',
             dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, weights, flux_scale)
+            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)

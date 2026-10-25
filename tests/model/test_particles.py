@@ -130,7 +130,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     disk = observation_group([dict(
         driver=dict(type='host'), galaxy=DISK,
         line_of_sight=dict(type='flat'),
-        observable=CUBE | dict(scale=[4, 4, 1]))])
+        observable=CUBE | dict(oversampling=[4, 4, 1]))])
     objective = Objective(ObservationGroup(
         disk.galaxies(), disk.observations()[0].with_data(mock)).plan())
     properties = DISK_PROPERTIES | dict(

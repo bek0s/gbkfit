@@ -438,10 +438,10 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'ObservablePlan':
         """
@@ -458,7 +458,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             What the light meets before the telescope.
         instrument : Instrument
             The instrument.
-        scale : Sequence of int
+        oversampling : Sequence of int
             How many times the model is oversampled along each axis of the
             data.
         dtype : np.dtype
@@ -466,8 +466,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         fft_dtype : np.dtype
             The floating type of the FFT convolutions of the model (at
             least as precise as dtype).
-        weights : Weights, optional
-            The spatial weights of the data.
+        pixel_weights : Weights, optional
+            The pixel weights of the data.
         flux_scale : str, optional
             The name of the parameter that scales the flux of the model, if
             one value (the flux scale 'one' of the observation; see
@@ -481,7 +481,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         ConfigError
-            If it does not support weights, or with the foreground (see
+            If it does not support pixel weights, or with the foreground (see
             DCubePlanBase).
         """
         pass

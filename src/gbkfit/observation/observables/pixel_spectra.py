@@ -188,10 +188,10 @@ class PixelSpectra(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelSpectraPlan':
         dcube = _dcube.DCube(
@@ -203,7 +203,7 @@ class PixelSpectra(Observable):
             rest=self.rest(),
             medium=self.medium(),
             convention=self.convention(),
-            scale=tuple(scale),
+            oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
             lsf=instrument.lsf(),
@@ -212,7 +212,7 @@ class PixelSpectra(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelSpectraPlan(
-            dcube, driver, scene, foreground, dtype, weights, flux_scale)
+            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

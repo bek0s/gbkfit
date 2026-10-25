@@ -1,8 +1,8 @@
 """
-Spatial weights of the data of an observation: functions of the position
-of each pixel in the plane of a disk of a galaxy it sees (e.g. less
-weight near the minor axis), evaluated with the current parameters of
-the disk, so that free angles are followed.
+Pixel weights of the data of an observation (its option pixel_weights):
+functions of the position of each pixel in the plane of a disk of a
+galaxy it sees (e.g. less weight near the minor axis), evaluated with
+the current parameters of the disk, so that free angles are followed.
 """
 
 import abc
@@ -188,7 +188,8 @@ class Weights(parseutils.Serializable):
     ):
         traits = iterutils.tuplify(traits)
         if not traits:
-            raise ConfigError("weights need at least one weight function")
+            raise ConfigError(
+                "pixel weights need at least one weight function")
         self._component = component
         self._traits = traits
 
@@ -278,6 +279,6 @@ def plan_weights(
     names = dict(xpos=frame.x, ypos=frame.y, posa=frame.posa, incl=frame.incl)
     if missing := [role for role, name in names.items() if name is None]:
         raise ConfigError(
-            f"weights need the plane of a disk; the component "
+            f"pixel weights need the plane of a disk; the component "
             f"{weights.component()!r} has no {missing}")
     return WeightsPlan(weights, names, grid, driver, dtype)

@@ -1,5 +1,5 @@
 """
-Tests for the spatial weights of the data of observations: functions of
+Tests for the pixel weights of the data of observations: functions of
 the azimuth of each pixel in the plane of a disk.
 """
 
@@ -42,7 +42,7 @@ def config(driver, observable, weights, component=None):
         observations=[dict(
             type='sky',
             observable=observable, line_of_sight=dict(type='flat'),
-            weights=weights)])
+            pixel_weights=weights)])
 
 
 PROPERTIES = dict(
@@ -77,10 +77,10 @@ def test_weights_follow_the_plane_of_the_disk(driver):
 @pytest.mark.parametrize('observable, component, message', [
     (dict(type='pixel_moments', size=[24, 24], method='gaussian_fit',
           spec_convention='relativistic'), None,
-     "gaussian_fit does not support weights"),
+     "gaussian_fit does not support pixel_weights"),
     (dict(type='pixel_spectra', size=[24, 24, 21]),
      dict(type='point', name='gas', emission=dict(type='lines')),
-     "weights need the plane of a disk")])
+     "pixel weights need the plane of a disk")])
 def test_weights_are_checked(driver, observable, component, message):
     weights = dict(
         component='gas', traits=dict(type='azimuth_range', half_width=20))

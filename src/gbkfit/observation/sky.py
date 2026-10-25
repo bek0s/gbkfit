@@ -133,9 +133,9 @@ class ObservationSky(Observation):
         The band of an image: it sees the components that emit in every
         band or in it (see BandEmission), and dust of an extinction law
         dims them at its rest wavelength (see Galaxy).
-    weights : Weights, optional
-        The spatial weights of its data (e.g. less weight near the minor
-        axis of a disk); none by default.
+    pixel_weights : Weights, optional
+        The weights of the pixels of its data (e.g. less weight near the
+        minor axis of a disk); none by default.
     flux_scale : str, optional
         The flux scale of its model (see above): 'one', or of an observable
         that has them (see Observable.flux_scales), 'per_spectrum' or
@@ -157,7 +157,7 @@ class ObservationSky(Observation):
     likelihood : Likelihood, optional
         How the model is compared with the data; Gaussian by default when
         there are data, and none without data.
-    scale : Sequence of int, optional
+    oversampling : Sequence of int, optional
         How many times the model is oversampled along each axis of the
         data (an accuracy setting); 1 by default. The smooth components
         are sampled at the centre of each (sub)pixel, which differs from
@@ -191,12 +191,12 @@ class ObservationSky(Observation):
     ------
     ConfigError
         If a name is invalid, there are no galaxies or they repeat, a band
-        is given to an observable that is not an image, it has a flux
-        scale or offsets but no name, its flux scale is not one of its
+        is given to an observable that is not an image, it has a flux scale
+        or offsets but no name, its flux scale is not one of its
         observable, the offsets are not position and velocity, true or
-        false, the scale is not one integer of at least 1 for each axis,
-        there is a likelihood without data, the data are not those of the
-        observable, its model can lack values but its likelihood has no
+        false, the oversampling is not one integer of at least 1 for each
+        axis, there is a likelihood without data, the data are not those of
+        the observable, its model can lack values but its likelihood has no
         residual for them (see LikelihoodGaussian), its likelihood fits a
         noise but it has no name, the noise of an item is correlated where
         its kind of data cannot have it, its likelihood does not suit it
@@ -278,7 +278,7 @@ class ObservationSky(Observation):
         parseutils.load_option_and_update_info(
             foreground_parser, info, 'foreground')
         parseutils.load_option_and_update_info(
-            weights_parser, info, 'weights')
+            weights_parser, info, 'pixel_weights')
         parseutils.load_option_and_update_info(
             instrument_parser, info, 'instrument')
         parseutils.load_option_and_update_info(
@@ -317,8 +317,8 @@ class ObservationSky(Observation):
         lines = {} if self._lines is None else dict(lines=list(self._lines))
         band = {} if self._band is None else dict(
             band=band_parser.dump(self._band))
-        weights = {} if self._weights is None else dict(
-            weights=self._weights.dump())
+        pixel_weights = {} if self._pixel_weights is None else dict(
+            pixel_weights=self._pixel_weights.dump())
         flux_scale = {} if self._flux_scale is None else dict(
             flux_scale=self._flux_scale)
         offsets = {} if not self._offsets else dict(offsets=dict(
@@ -328,14 +328,14 @@ class ObservationSky(Observation):
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
-        return name | galaxies | components | lines | band | weights \
+        return name | galaxies | components | lines | band | pixel_weights \
             | flux_scale | offsets | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
             observable=observable_parser.dump(
                 self._observable, data=self._data, **kwargs),
-            scale=self._scale,
+            oversampling=self._oversampling,
             dtype=self._dtype.name,
             fft_dtype=self._fft_dtype.name)
 
@@ -349,12 +349,12 @@ class ObservationSky(Observation):
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
             band: Band | None = None,
-            weights: Weights | None = None,
+            pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
-            scale: Sequence[int] | None = None,
+            oversampling: Sequence[int] | None = None,
             dtype: str | None = None,
             fft_dtype: str = 'float64',
             name: str | None = None
@@ -394,11 +394,12 @@ class ObservationSky(Observation):
         if instrument is None:
             instrument = Instrument()
         ndim = len(observable.size())
-        scale = tuple(scale) if scale is not None else (1,) * ndim
-        if len(scale) != ndim or any(s < 1 for s in scale):
+        oversampling = tuple(oversampling) if oversampling is not None \
+            else (1,) * ndim
+        if len(oversampling) != ndim or any(s < 1 for s in oversampling):
             raise ConfigError(
-                f"scale must have {ndim} values, each at least 1; it is "
-                f"{scale}")
+                f"oversampling must have {ndim} values, each at least 1; it "
+                f"is {oversampling}")
         if data is not None:
             observable.require_matching(data)
         self._observable = observable
@@ -408,10 +409,10 @@ class ObservationSky(Observation):
         self._components = components
         self._lines = lines
         self._band = band
-        self._weights = weights
+        self._pixel_weights = pixel_weights
         self._flux_scale = flux_scale
         self._offsets = offsets
-        self._scale = scale
+        self._oversampling = oversampling
         super().__init__(
             observable.keys(), galaxies, data, likelihood, name,
             observable.model_can_lack_values())
@@ -444,9 +445,9 @@ class ObservationSky(Observation):
         """Return its band (of an image), if given."""
         return self._band
 
-    def weights(self) -> Weights | None:
-        """Return the spatial weights of its data, if any."""
-        return self._weights
+    def pixel_weights(self) -> Weights | None:
+        """Return the weights of the pixels of its data, if any."""
+        return self._pixel_weights
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """
@@ -514,10 +515,11 @@ class ObservationSky(Observation):
         return type(self)(
             self._observable, self._line_of_sight, self._foreground,
             self._instrument, self._galaxies,
-            self._components, self._lines, self._band, self._weights,
+            self._components, self._lines, self._band, self._pixel_weights,
             self._flux_scale, self._offsets, data,
             likelihood if likelihood is not None else self._likelihood,
-            self._scale, self._dtype.name, self._fft_dtype.name, self._name)
+            self._oversampling, self._dtype.name, self._fft_dtype.name,
+            self._name)
 
     def observable(self) -> Observable:
         """Return the observable."""
@@ -586,9 +588,9 @@ class ObservationSky(Observation):
         """
         return self._observable.psf_images(driver, weights)
 
-    def scale(self) -> tuple[int, ...]:
+    def oversampling(self) -> tuple[int, ...]:
         """Return the oversampling of the model along each axis."""
-        return self._scale
+        return self._oversampling
 
     def dtype(self) -> np.dtype:
         """Return the floating type of the model."""
@@ -634,7 +636,8 @@ class ObservationSky(Observation):
         one = scale is not None and scale[1].axis is None
         plan = self._observable.plan(
             driver, scene, self._foreground, self._instrument,
-            self._scale, self._dtype, self._fft_dtype, self._weights,
+            self._oversampling, self._dtype, self._fft_dtype,
+            self._pixel_weights,
             scale[0] if one else None)
         if scale is None or one:
             return plan

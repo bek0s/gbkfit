@@ -219,10 +219,10 @@ class SlitSpectra(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'SlitSpectraPlan':
         # The cube of a slit is one pixel (the slit width) across the slit,
@@ -230,7 +230,7 @@ class SlitSpectra(Observable):
         # over the slit)
         size, step = self.size(), self.step()
         rpix, rval = self.rpix(), self.rval()
-        across = scale[0] * max(1, round(self._slit_width / step[0]))
+        across = oversampling[0] * max(1, round(self._slit_width / step[0]))
         dcube = _dcube.DCube(
             size=(size[0], 1, size[1]),
             step=(step[0], self._slit_width, step[1]),
@@ -240,7 +240,7 @@ class SlitSpectra(Observable):
             rest=self.rest(),
             medium=self.medium(),
             convention=self.convention(),
-            scale=(scale[0], across, scale[1]),
+            oversampling=(oversampling[0], across, oversampling[1]),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
             lsf=instrument.lsf(),
@@ -248,7 +248,7 @@ class SlitSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return SlitSpectraPlan(
-            dcube, driver, scene, foreground, dtype, weights, flux_scale)
+            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
 
 
 class SlitSpectraPlan(_detail.DCubePlanBase):

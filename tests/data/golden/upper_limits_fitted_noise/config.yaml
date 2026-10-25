@@ -43,7 +43,7 @@ observations:
   observable: {type: pixel_moments, flux_floor: 1.0e-06, spec_size: 60, spec_step: 10,
     spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: relativistic,
     method: moments, median_size: null}
-  scale: [1, 1]
+  oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
 params:

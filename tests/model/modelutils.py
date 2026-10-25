@@ -8,7 +8,7 @@ def split_case(case):
     A galaxy, an observation of it and the configuration of its driver,
     from a case of the tests: a dict with a driver, a galaxy, a line of
     sight, an observable (with the primary beam, psf and lsf of the
-    instrument, and the scale and dtype of the observation), an optional
+    instrument, and the oversampling and dtype of the observation), an optional
     name, which names the galaxy, and the optional lines or band that the
     observation sees. The components of the galaxy have their own
     geometries (geometry 'own', unless they give one), whose parameters
@@ -24,7 +24,7 @@ def split_case(case):
         instrument={k: observable.pop(k)
                     for k in ('primary_beam', 'psf', 'lsf')
                     if k in observable})
-    for key in ('scale', 'dtype'):
+    for key in ('oversampling', 'dtype'):
         if key in observable:
             observation[key] = observable.pop(key)
     for key in ('lines', 'band'):

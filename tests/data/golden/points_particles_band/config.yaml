@@ -4,12 +4,12 @@ driver: {type: host}
 galaxies:
 - components:
   - type: point
-    geometry: own
     name: nucleus
+    geometry: own
     emission: {type: band}
   - type: particles
-    geometry: own
     name: stars
+    geometry: own
     file: particles.npz
     emission: {type: band}
 observations:
@@ -29,7 +29,7 @@ observations:
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: null
   observable: {type: pixel_brightness, median_size: null}
-  scale: [1, 1]
+  oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
 params:

@@ -173,17 +173,17 @@ LINE_OF_SIGHT = dict(type='grid', depth=dict(extent=21.0, step=1.5))
 @pytest.mark.parametrize('observable_type', OBSERVABLES)
 def test_observation_dump_has_every_option(observable_type):
     from gbkfit.observation import observation_parser
-    observable, instrument, scale = OBSERVABLES[observable_type]
+    observable, instrument, oversampling = OBSERVABLES[observable_type]
     info = dict(
         type='sky',
         name='obs', galaxies=['galaxy'], components=['gas'], lines=['ha'],
         line_of_sight=LINE_OF_SIGHT,
         instrument=instrument,
         observable=dict(type=observable_type) | observable,
-        scale=scale, dtype='float64')
+        oversampling=oversampling, dtype='float64')
     dumped = json.loads(json.dumps(roundtrip(observation_parser, info)))
     for key in ('name', 'galaxies', 'components', 'lines', 'line_of_sight',
-                'scale', 'dtype'):
+                'oversampling', 'dtype'):
         assert dumped[key] == info[key], key
     for key, value in info['observable'].items():
         assert dumped['observable'][key] == value, key

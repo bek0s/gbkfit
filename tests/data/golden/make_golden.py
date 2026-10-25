@@ -17,11 +17,15 @@ configuration to its chi-square.
 Usage:
 
     python make_golden.py data [--root DIR] [CASE ...]
+    python make_golden.py config [--root DIR] [CASE ...]
     python make_golden.py values [--root DIR] [--driver NAME] [CASE ...]
 
 'data' writes the configuration and the data of cases from their recipes
 (all cases by default): for new cases, or recipes that change; their
-golden values must then be made again. 'values' writes the golden values
+golden values must then be made again. 'config' writes the configuration
+of cases from their recipes and keeps their data: after a change of the
+format of configurations, which must not change their golden values.
+'values' writes the golden values
 of cases with the current code (both drivers by default): after a change
 that changes the results on purpose, which its commit says. --root
 writes or reads the cases in another directory (e.g. to try a recipe).
@@ -34,6 +38,7 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
 from collections.abc import Callable, Mapping
 from typing import Any
 
@@ -240,12 +245,39 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     config = dict(driver=dict(type='host')) | sections | dict(
         observations=observations,
         params=dict(properties=case.trial) | case.params)
+    _write_config(case, folder, numutils.nativify(config))
+
+
+def make_config(case: Case, folder: pathlib.Path) -> None:
+    """
+    Write the configuration of a case into its folder from its recipe,
+    with the data of the case as they are: that of new data (made in a
+    temporary folder), with the options of the data of each observation
+    of the case (migrated to the current format).
+    """
+    from gbkfit import migration
+    with tempfile.TemporaryDirectory() as temporary:
+        make_data(case, pathlib.Path(temporary))
+        with open(pathlib.Path(temporary, 'config.yaml')) as f:
+            config = yaml.safe_load(f)
+    with open(folder / 'config.yaml') as f:
+        current = yaml.safe_load(f)
+    migration.migrate(current)
+    for observation, data in zip(
+            config['observations'], current['observations'], strict=True):
+        observation['data'] = data['data']
+    _write_config(case, folder, config)
+
+
+def _write_config(
+        case: Case, folder: pathlib.Path, config: dict[str, Any]
+) -> None:
+    """Write the configuration of a case into its folder."""
     with open(folder / 'config.yaml', 'w') as f:
         f.write(f"# {case.name}: {case.doc}\n")
         f.write("# (written by make_golden.py; do not edit)\n")
         yaml.safe_dump(
-            numutils.nativify(config), f, sort_keys=False,
-            default_flow_style=None, width=78)
+            config, f, sort_keys=False, default_flow_style=None, width=78)
 
 
 # --- The golden values ---------------------------------------------------
@@ -405,19 +437,20 @@ def write_values(folder: pathlib.Path, driver: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    parser.add_argument('what', choices=('data', 'values'))
+    parser.add_argument('what', choices=('data', 'config', 'values'))
     parser.add_argument('cases', nargs='*')
     parser.add_argument('--root', type=pathlib.Path, default=HERE)
     parser.add_argument('--driver', choices=DRIVERS, action='append')
     args = parser.parse_args()
-    if args.what == 'data':
+    if args.what in ('data', 'config'):
         known = recipes()
         names = args.cases or list(known)
         if unknown := [name for name in names if name not in known]:
             sys.exit(f"unknown cases: {unknown}")
+        make = make_data if args.what == 'data' else make_config
         for name in names:
-            make_data(known[name], args.root / name)
-            print(f"{name}: data")
+            make(known[name], args.root / name)
+            print(f"{name}: {args.what}")
         return
     names = args.cases or sorted(
         path.name for path in args.root.iterdir()

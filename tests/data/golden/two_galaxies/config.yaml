@@ -5,8 +5,8 @@ galaxies:
 - name: front
   components:
   - type: disk
-    geometry: own
     name: gas
+    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -18,8 +18,8 @@ galaxies:
       dptraits: {type: uniform}
     emission: {type: lines}
   - type: disk
-    geometry: own
     name: dust
+    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -30,8 +30,8 @@ galaxies:
 - name: back
   components:
   - type: disk
-    geometry: own
     name: gas
+    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -64,9 +64,8 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: pixel_spectra, smooth_weights: false,
-    median_size: null}
-  scale: [1, 1, 1]
+  observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
+  oversampling: [1, 1, 1]
   dtype: float64
   fft_dtype: float64
 - type: sky
@@ -90,10 +89,10 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: pixel_moments, spec_size: 60, spec_step: 10,
-    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: relativistic, method: moments,
-    median_size: null}
-  scale: [1, 1]
+  observable: {type: pixel_moments, flux_floor: 1.0e-06, spec_size: 60, spec_step: 10,
+    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: relativistic,
+    method: moments, median_size: null}
+  oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
 params:

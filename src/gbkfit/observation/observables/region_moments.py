@@ -301,16 +301,17 @@ spec_medium, method : optional
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'RegionMomentsPlan':
-        if weights is not None:
-            raise ConfigError("region_moments does not support weights yet")
+        if pixel_weights is not None:
+            raise ConfigError(
+                "region_moments does not support pixel_weights yet")
         dcube = _moments.spectra_dcube(
-            self, scale, instrument, dtype, fft_dtype)
+            self, oversampling, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, scene, foreground, dtype,
             flux_scale)

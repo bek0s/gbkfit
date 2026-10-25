@@ -254,14 +254,15 @@ class RegionSpectra(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'RegionSpectraPlan':
-        if weights is not None:
-            raise ConfigError("region_spectra does not support weights yet")
+        if pixel_weights is not None:
+            raise ConfigError(
+                "region_spectra does not support pixel_weights yet")
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
         dcube = _dcube.DCube(
@@ -273,7 +274,7 @@ class RegionSpectra(Observable):
             rest=self.rest(),
             medium=self.medium(),
             convention=self.convention(),
-            scale=tuple(scale),
+            oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
             lsf=instrument.lsf(),

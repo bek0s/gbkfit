@@ -338,7 +338,8 @@ def test_a_finer_sky_places_the_light_within_its_pixels(driver):
     # within the pixels moves along the trace with them, so the images
     # converge, with the same light in total
     images = [
-        evaluate(driver, SLITLESS | dict(scale=[6 // k] * 2, sky_sampling=k))
+        evaluate(driver, SLITLESS | dict(
+            oversampling=[6 // k] * 2, sky_sampling=k))
         for k in (1, 3, 6)]
     np.testing.assert_allclose(
         [image.sum() for image in images], images[2].sum(), rtol=1e-3)

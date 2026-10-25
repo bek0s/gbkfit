@@ -20,7 +20,8 @@ _STARS = dict(
 _NFW = dict(type='spheroid', name='halo', profile=dict(type='nfw'))
 
 # The rings of a disk of its own geometry
-_RINGS = dict(loose=False, tilted=False, rnodes=list(range(0, 13)))
+_RINGS = dict(
+    geometry='own', loose=False, tilted=False, rnodes=list(range(0, 13)))
 
 
 def _disk(
@@ -299,7 +300,7 @@ def _c6_gas() -> dict[str, Any]:
 
 
 _C6_DUST = dict(
-    type='disk', name='dust', loose=False, tilted=False,
+    type='disk', name='dust', geometry='own', loose=False, tilted=False,
     rnodes=list(range(0, 11)),
     density=dict(
         ptraits=dict(type='exponential'),
@@ -367,7 +368,8 @@ _PARAMS_FEATURES = dict(
             name='disk', tilted=True, rnodes=[0, 1.5, 3, 5, 7, 9.5, 12])],
         components=[
             _warped('cold'), _warped('warm'),
-            dict(type='point', name='nucleus', emission=dict(type='lines'))])],
+            dict(type='point', name='nucleus', geometry='own',
+                 emission=dict(type='lines'))])],
     observations=[_cube([24, 24, 30], 'flat')],
     truth=dict(
         disk_xpos=0.3, disk_ypos=-0.4, disk_vsys=10,

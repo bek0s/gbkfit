@@ -111,13 +111,16 @@ _DISK_TRIAL = dict(
 # --- A1: a thick disk and dust, on a grid and through radiative transfer -----
 
 def _thick_disk(name: str, **roles: Any) -> dict[str, Any]:
-    """A thick disk of rings to 8 arcsec, of the given roles, unmoving."""
+    """
+    A thick disk of rings to 8 arcsec of its own geometry, of the given
+    roles, unmoving.
+    """
     return dict(
-        type='disk', name=name, loose=False, tilted=False,
+        type='disk', name=name, geometry='own', loose=False, tilted=False,
         rnodes=list(range(0, 9)), density=_THICK) | roles
 
 
-_GAS = _disk(name='gas', density=_THICK)
+_GAS = _disk(name='gas', geometry='own', density=_THICK)
 _DUST = _thick_disk('dust', opacity=dict(type='dust'))
 
 _DUST_TRUTH = dict(
@@ -166,7 +169,7 @@ _WARPED_DISK = dict(
         "Gauss-Hermite maps (h3, h4); the disk fills the maps (fits of "
         "spectra of noise alone are wild).",
     galaxies=[dict(components=[_disk(
-        loose=True, tilted=True, rnodes=[0, 4, 8, 12, 16],
+        geometry='own', loose=True, tilted=True, rnodes=[0, 4, 8, 12, 16],
         kinematics=dict(
             vptraits=[
                 dict(type='arctan', direction='tan'),
@@ -242,7 +245,7 @@ _BLOBS_MAPS_SELECTION = dict(
 # --- A5: a disk and an outflow cone, in two lines ----------------------------
 
 _CONE = dict(
-    type='cone', name='cone', rnodes=[0.5, 2, 4],
+    type='cone', name='cone', geometry='own', rnodes=[0.5, 2, 4],
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
@@ -260,7 +263,7 @@ _DISK_CONE_LINES = dict(
         "(a ratio each), in a cube of a spectral axis of velocities of "
         "Halpha, with a solved flux scale for each spectrum.",
     galaxies=[dict(components=[
-        _disk(name='disk', emission=_HALPHA_NII), _CONE])],
+        _disk(name='disk', geometry='own', emission=_HALPHA_NII), _CONE])],
     observations=[_cube(
         [24, 24, 40], [0.6, 0.6, 50], 'grid', rval=[0, 0, 450],
         rest='6562.8 Angstrom') | dict(
@@ -307,9 +310,9 @@ _POINTS_PARTICLES_BAND = dict(
     doc="An image of a point (a nucleus) and of the particles of a table "
         "(the stars of a disk), which emit in a band.",
     galaxies=[dict(components=[
-        dict(type='point', name='nucleus', emission=_BAND),
-        dict(type='particles', name='stars', file='particles.npz',
-             emission=_BAND)])],
+        dict(type='point', name='nucleus', geometry='own', emission=_BAND),
+        dict(type='particles', name='stars', geometry='own',
+             file='particles.npz', emission=_BAND)])],
     observations=[_image([32, 32], [0.5, 0.5])],
     truth=dict(
         nucleus_xpos=0.27, nucleus_ypos=-0.38, nucleus_flux=2,
@@ -362,6 +365,7 @@ def _write_image(folder: pathlib.Path) -> None:
     GBKFIT makes it: 40 x 40 pixels of 0.4 arcsec at _SKY, of the
     geometry of the disk of the case.
     """
+    from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.utils import fitsutils
@@ -376,7 +380,7 @@ def _write_image(folder: pathlib.Path) -> None:
     group = ObservationGroup(
         galaxy_parser.load(galaxy), observation_parser.load(observation))
     params = dict(xpos=0.27, ypos=-0.38, posa=40, incl=55, pt_a=1, pt_s=2.5)
-    image = group.model_h(params)[0]['brightness']['d']
+    image = group.plan(DriverHost()).model_h(params)[0]['brightness']['d']
     coords = group.observations()[0].observable().grid().coords
     fitsutils.write_data(
         str(folder / 'image.fits'), image.astype(np.float32), coords, None,

@@ -630,14 +630,15 @@ class SlitlessSpectra(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'SlitlessSpectraPlan':
-        if weights is not None:
-            raise ConfigError("slitless spectra do not support weights yet")
+        if pixel_weights is not None:
+            raise ConfigError(
+                "slitless spectra do not support pixel_weights yet")
         edges = self._channel_edges()
         offset, size = self._sky(edges)
         rpix, step, k = self.rpix(), self.step(), self._sky_sampling
@@ -654,7 +655,7 @@ class SlitlessSpectra(Observable):
             rest=self._spec_rest,
             medium=self._spec_medium,
             convention=self._spec_convention,
-            scale=tuple(scale) + (1,),
+            oversampling=tuple(oversampling) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
             lsf=instrument.lsf(),

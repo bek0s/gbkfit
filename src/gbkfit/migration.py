@@ -294,11 +294,41 @@ class _OwnGeometries(Rule):
         return changes
 
 
+class _ObservationRenames(Rule):
+    """
+    Two options of observations were renamed (2026-10-25): scale is
+    oversampling (an observation has a flux scale too), and weights is
+    pixel_weights (its likelihood has weights too).
+    """
+
+    _NEW = dict(scale='oversampling', weights='pixel_weights')
+
+    def find(
+            self, section: str, item: Mapping[str, Any]
+    ) -> ConfigError | None:
+        if section != 'observations':
+            return None
+        for old, new in self._NEW.items():
+            if old in item:
+                return ConfigError(f"option '{old}' is now {new}", [old])
+        return None
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            for old, new in self._NEW.items():
+                if old in item:
+                    _rename(item, old, new)
+                    changes.append(Change(path, f"{old} -> {new}"))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
     _DiskTypes(),
     _OwnGeometries(),
+    _ObservationRenames(),
 )
 
 

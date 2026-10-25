@@ -127,8 +127,8 @@ def test_the_pixels_of_visibilities_are_not_oversampled(driver):
     COVERAGE.dump('coverage.npz', overwrite=True)
     with pytest.raises(ConfigError, match="not oversampled"):
         evaluate(driver, DISK, dict(
-            type='visibilities', coverage='coverage.npz', scale=[2, 2, 1])
-            | GRID, DISK_PROPERTIES)
+            type='visibilities', coverage='coverage.npz',
+            oversampling=[2, 2, 1]) | GRID, DISK_PROPERTIES)
 
 
 def observation_of_data(driver, offset):

@@ -331,22 +331,23 @@ class Visibilities(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'VisibilitiesPlan':
-        if tuple(scale[:2]) != (1, 1):
+        if tuple(oversampling[:2]) != (1, 1):
             raise ConfigError(
                 f"the pixels of visibilities are the points of their "
                 f"transform, not oversampled (the means of their subpixels "
                 f"would damp the long baselines): give a smaller step "
-                f"instead; the spatial scale is {tuple(scale[:2])}")
-        if weights is not None:
+                f"instead; the spatial oversampling is "
+                f"{tuple(oversampling[:2])}")
+        if pixel_weights is not None:
             raise ConfigError(
-                "the spatial weights of data do not apply to visibilities, "
-                "which are not on pixels")
+                "pixel_weights do not apply to visibilities, which are not "
+                "on pixels")
         dcube = _dcube.DCube(
             size=self.size(),
             step=self.step(),
@@ -355,7 +356,7 @@ class Visibilities(Observable):
             rota=self.rota(),
             rest=self.rest(),
             medium=None,
-            scale=tuple(scale),
+            oversampling=tuple(oversampling),
             primary_beam=instrument.primary_beam(),
             psf=None,
             lsf=instrument.lsf(),

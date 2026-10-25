@@ -69,7 +69,7 @@ def check_array_size(shape: Shape) -> None:
             f"an array of the model of shape {tuple(np.atleast_1d(shape))} "
             f"has {size:.4g} values, more than the {MAX_ARRAY_SIZE:.4g} that "
             f"the native kernels index (by 32-bit integers): lower the "
-            f"oversampling (the option scale) or cut the data")
+            f"option oversampling or cut the data")
 
 
 class FFTConvolution(abc.ABC):

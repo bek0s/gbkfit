@@ -4,7 +4,6 @@ driver: {type: host}
 galaxies:
 - components:
   - type: disk
-    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -19,9 +18,10 @@ galaxies:
       - {name: ha, rest: 6562.8 Angstrom}
       - {name: nii, rest: 6583.45 Angstrom}
     name: disk
-  - type: cone
     geometry: own
+  - type: cone
     name: cone
+    geometry: own
     rnodes: [0.5, 2, 4]
     density:
       ptraits: {type: uniform}
@@ -57,7 +57,7 @@ observations:
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
-  scale: [1, 1, 1]
+  oversampling: [1, 1, 1]
   dtype: float64
   fft_dtype: float64
 params:

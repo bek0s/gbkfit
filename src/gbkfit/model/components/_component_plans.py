@@ -52,9 +52,9 @@ _BRIGHT = 0.05
 # Where the grid of the extra outputs of the components is (see
 # ComponentPlans.extra)
 _ON_THE_GRID = (
-    "On the pixels of the observation (finer by its option scale), along "
-    "the line of sight if it has a depth axis (z = 0 at the plane of the "
-    "galaxy, away from the viewer), or else in an image.")
+    "On the pixels of the observation (finer by its option oversampling), "
+    "along the line of sight if it has a depth axis (z = 0 at the plane of "
+    "the galaxy, away from the viewer), or else in an image.")
 
 # The titles and the descriptions of the extra outputs of each component,
 # by name, and of their totals over the components of a galaxy (see

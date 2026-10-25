@@ -167,10 +167,10 @@ class PixelBrightness(Observable):
             scene: 'Scene',
             foreground: 'Foreground',
             instrument: Instrument,
-            scale: Sequence[int],
+            oversampling: Sequence[int],
             dtype: np.dtype,
             fft_dtype: np.dtype,
-            weights: 'Weights | None',
+            pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelBrightnessPlan':
         # The cube of an image has one channel
@@ -182,7 +182,7 @@ class PixelBrightness(Observable):
             rota=self.rota(),
             rest=None,
             medium=None,
-            scale=tuple(scale) + (1,),
+            oversampling=tuple(oversampling) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
             lsf=None,
@@ -191,7 +191,7 @@ class PixelBrightness(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelBrightnessPlan(
-            dcube, driver, scene, foreground, dtype, weights, flux_scale)
+            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
 
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):

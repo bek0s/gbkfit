@@ -29,7 +29,7 @@ PROPERTIES = dict(
 CASES = dict(
     pixel_brightness=(
         dict(type='pixel_brightness', size=[16, 12], rval=[150, 2],
-             scale=[2, 2], psf=dict(type='gauss', sigma=1)),
+             oversampling=[2, 2], psf=dict(type='gauss', sigma=1)),
         dict(components=[DISK]),
         (12, 16), None),
     pixel_spectra=(

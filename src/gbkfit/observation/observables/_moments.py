@@ -151,7 +151,7 @@ def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
 
 def spectra_dcube(
         observable: 'PixelMoments | RegionMoments',
-        scale: Sequence[int],
+        oversampling: Sequence[int],
         instrument: Instrument,
         dtype: np.dtype,
         fft_dtype: np.dtype,
@@ -173,7 +173,7 @@ def spectra_dcube(
         rest=observable.spec_rest(),
         medium=observable.spec_medium(),
         convention=observable.spec_convention(),
-        scale=tuple(scale) + (1,),
+        oversampling=tuple(oversampling) + (1,),
         primary_beam=instrument.primary_beam(),
         psf=instrument.psf(),
         lsf=instrument.lsf(),

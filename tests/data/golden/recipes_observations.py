@@ -352,15 +352,15 @@ CASES: list[dict[str, Any]] = [
         name='instrument_full',
         doc="A cube seen through a Moffat PSF whose alpha varies with "
             "velocity, an LSF whose sigma does, and a primary beam; "
-            "oversampled, median filtered, with weights of the azimuth in "
-            "the disk, smoothed.",
-        galaxies=[dict(components=[_thin_disk(name='gas')])],
+            "oversampled, median filtered, with pixel weights of the azimuth "
+            "in the disk, smoothed.",
+        galaxies=[dict(components=[_thin_disk(name='gas', geometry='own')])],
         observations=[_sky(
             dict(type='pixel_spectra', size=[16, 16, 32],
                  step=[0.75, 0.75, 25], smooth_weights=True,
                  median_size=3),
-            scale=[2, 2, 1],
-            weights=dict(component='gas', traits=dict(
+            oversampling=[2, 2, 1],
+            pixel_weights=dict(component='gas', traits=dict(
                 type='azimuth_power', power=1)),
             instrument=dict(
                 psf=dict(type='moffat', beta=2.5, alpha=dict(

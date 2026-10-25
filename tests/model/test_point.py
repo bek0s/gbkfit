@@ -62,13 +62,13 @@ def test_point_in_an_image(driver, line_of_sight):
         rtol=1e-4, atol=1e-6)
 
 
-@pytest.mark.parametrize('scale', [1, 2, 3])
-def test_point_flux_does_not_depend_on_oversampling(driver, scale):
-    # The model is drawn on a grid of pixels scale times smaller, and
+@pytest.mark.parametrize('n', [1, 2, 3])
+def test_point_flux_does_not_depend_on_oversampling(driver, n):
+    # The model is drawn on a grid of pixels n times smaller, and
     # averaged back to the pixels of the image: as for the disks, which
     # are surface brightness, the flux of the point does not change
     image = dict(type='pixel_brightness', size=[10, 8], step=[0.5, 0.5],
-                 scale=[scale, scale])
+                 oversampling=[n, n])
     result = evaluate(
         driver, BAND_POINT, image, dict(xpos=0.25, ypos=1.25, flux=3))
     assert result.sum() * PIXEL_AREA == pytest.approx(3, rel=1e-6)
@@ -80,12 +80,12 @@ def mean_and_variance(values, positions):
     return mean, np.sum(values * (positions - mean) ** 2) / np.sum(values)
 
 
-@pytest.mark.parametrize('scale', [1, 2, 3])
-def test_point_with_a_psf_does_not_depend_on_oversampling(driver, scale):
+@pytest.mark.parametrize('n', [1, 2, 3])
+def test_point_with_a_psf_does_not_depend_on_oversampling(driver, n):
     # The psf is drawn on the oversampled grid at its pixel size: the
     # image of a point is the psf (variance sigma^2), at any oversampling
     image = dict(type='pixel_brightness', size=[32, 32], step=[0.5, 0.5],
-                 scale=[scale, scale], psf=dict(type='gauss', sigma=2.0))
+                 oversampling=[n, n], psf=dict(type='gauss', sigma=2.0))
     result = evaluate(
         driver, BAND_POINT, image, dict(xpos=0.25, ypos=0.25, flux=1))
     position = (np.arange(32) - 15.5) * 0.5
@@ -95,13 +95,13 @@ def test_point_with_a_psf_does_not_depend_on_oversampling(driver, scale):
         assert variance == pytest.approx(2.0 ** 2, rel=0.01)
 
 
-@pytest.mark.parametrize('scale', [1, 2, 3])
-def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, scale):
+@pytest.mark.parametrize('n', [1, 2, 3])
+def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, n):
     # The lsf is drawn on the oversampled channels at their width: the
     # spectrum of a point has the variance of the line, the lsf and a
     # channel (10^2 / 12), at any oversampling
     scube = dict(type='pixel_spectra', size=[4, 4, 101], step=[0.5, 0.5, 10],
-                 scale=[1, 1, scale], lsf=dict(type='gauss', sigma=30))
+                 oversampling=[1, 1, n], lsf=dict(type='gauss', sigma=30))
     cube = evaluate(driver, LINE_POINT, scube, dict(
         xpos=0.25, ypos=0.25, flux=1, vsys=0, disp=10))
     velocity = (np.arange(101) - 50) * 10

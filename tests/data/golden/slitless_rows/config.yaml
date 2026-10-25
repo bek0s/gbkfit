@@ -51,7 +51,7 @@ observations:
       weight: 1.0
     sky_sampling: 1
     resampled: false
-  scale: [1, 1]
+  oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
 params:

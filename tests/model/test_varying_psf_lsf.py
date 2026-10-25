@@ -28,12 +28,12 @@ SIZE, STEP = (33, 32, 40), (1, 1, 12)
 VELOCITIES = (np.arange(SIZE[2]) - 19.5) * STEP[2]
 
 
-def spectra(driver, psf=None, lsf=None, scale=(1, 1, 1)):
+def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
     """The spectra of the galaxy seen with the PSF and the LSF."""
     group = ObservationGroup([galaxy_parser.load(GALAXY)], [
         observation_parser.load(dict(
             type='sky',
-            scale=list(scale),
+            oversampling=list(oversampling),
             line_of_sight=dict(type='flat'),
             instrument=dict(psf=psf, lsf=lsf),
             observable=dict(type='pixel_spectra', size=list(SIZE),
@@ -51,9 +51,9 @@ def table(low, high):
 @pytest.mark.parametrize('psf, lsf', [
     (table(1.3, 1.3), table(17, 17)), (table(1.3, 1.3), 17),
     (1.3, table(17, 17)), (table(1.3, 1.3), None), (None, table(17, 17))])
-@pytest.mark.parametrize('scale', [(1, 1, 1), (2, 2, 3)])
+@pytest.mark.parametrize('oversampling', [(1, 1, 1), (2, 2, 3)])
 def test_tables_of_one_value_are_the_constant_psf_and_lsf(
-        driver, psf, lsf, scale):
+        driver, psf, lsf, oversampling):
     # The convolutions along y and x, and along z, give what the 3D FFT
     # of a constant PSF and LSF gives
     def kernels(psf_sigma, lsf_sigma):
@@ -62,10 +62,10 @@ def test_tables_of_one_value_are_the_constant_psf_and_lsf(
             else dict(type='gauss', sigma=psf_sigma),
             lsf=None if lsf_sigma is None
             else dict(type='gauss', sigma=lsf_sigma))
-    varying = spectra(driver, **kernels(psf, lsf), scale=scale)
+    varying = spectra(driver, **kernels(psf, lsf), oversampling=oversampling)
     constant = spectra(driver, **kernels(
         None if psf is None else 1.3, None if lsf is None else 17),
-        scale=scale)
+        oversampling=oversampling)
     np.testing.assert_allclose(
         varying, constant, atol=2e-6 * np.abs(constant).max())
 

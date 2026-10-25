@@ -5,8 +5,8 @@ galaxies:
 - redshift: 0.25
   components:
   - type: disk
-    geometry: own
     name: stars
+    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -18,8 +18,8 @@ galaxies:
       bands: [sdss_r]
       unit: MJy/sr
   - type: disk
-    geometry: own
     name: dust
+    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -50,7 +50,7 @@ observations:
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: null
   observable: {type: pixel_brightness, median_size: null}
-  scale: [1, 1]
+  oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
 params:

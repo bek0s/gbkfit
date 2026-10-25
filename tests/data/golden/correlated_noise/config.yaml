@@ -31,9 +31,8 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 1.2, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: pixel_spectra, smooth_weights: false,
-    median_size: null}
-  scale: [1, 1, 1]
+  observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
+  oversampling: [1, 1, 1]
   dtype: float64
   fft_dtype: float64
 params:
