@@ -13,9 +13,10 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._detail import dump_geometry, dump_name
+from .._native import NativeComponentPlan, emission_setup
 from .._nodal import (
-    MAX_TRAITS, NodalComponentPlan, TraitTable, emission_setup,
-    parse_component_rnode_args, with_default_height_traits)
+    MAX_TRAITS, TraitTable, parse_component_rnode_args,
+    with_default_height_traits)
 from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, LineCatalogue, Lines
@@ -197,7 +198,7 @@ def cone_plan(
         opacity_ratios: np.ndarray | None,
         data_unit: DataUnit | None,
         redshift: float
-) -> NodalComponentPlan:
+) -> NativeComponentPlan:
     """
     Return the plan of a cone component made of the given cone (see
     disks._detail.disk_plan for the arguments); a cone has no line
@@ -206,6 +207,6 @@ def cone_plan(
     emission = emission_setup(
         lines, bands, unit, spectral, names, band, emits, data_unit,
         redshift, ())
-    return NodalComponentPlan(
+    return NativeComponentPlan(
         driver, cone.plan(driver, emission.nlines, dtype), emission,
         opacity_ratios)

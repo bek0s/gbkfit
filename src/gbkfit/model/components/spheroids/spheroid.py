@@ -20,8 +20,8 @@ from gbkfit.utils.parseutils import ConfigError
 from ...mass._numerics import sersic_density_table, sersic_tables
 from ...mass.shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 from .._detail import dump_geometry, dump_name, geometry_desc
-from .._nodal import (
-    NodalComponentPlan, NodalPlan, ParamBuffer, emission_setup,
+from .._native import (
+    NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
     evaluate_native, make_bands)
 from .._units import DataUnit
 from ..base import Component, FieldsLayout, FrameParams, NativeGrid
@@ -453,16 +453,16 @@ class Spheroid(Component):
             opacity_ratios: np.ndarray | None,
             data_unit: DataUnit | None,
             redshift: float
-    ) -> NodalComponentPlan:
+    ) -> NativeComponentPlan:
         emission = emission_setup(
             None, self._bands, self.emission().unit(), spectral, lines,
             band, emits, data_unit, redshift, ())
-        return NodalComponentPlan(
+        return NativeComponentPlan(
             driver, SpheroidPlan(self, driver, dtype), emission,
             opacity_ratios)
 
 
-class SpheroidPlan(NodalPlan):
+class SpheroidPlan(NativePlan):
     """
     The evaluation of a Spheroid on a driver and dtype: its native
     description, and the values of its geometric parameters and of the

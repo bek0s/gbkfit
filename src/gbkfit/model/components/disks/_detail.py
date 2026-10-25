@@ -13,9 +13,10 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._detail import dump_geometry, dump_name, geometry_desc
+from .._native import EmissionSetup, NativeComponentPlan, emission_setup
 from .._nodal import (
-    MAX_TRAITS, EmissionSetup, NodalComponentPlan, TraitTable,
-    emission_setup, parse_component_rnode_args, with_default_height_traits)
+    MAX_TRAITS, TraitTable, parse_component_rnode_args,
+    with_default_height_traits)
 from .._units import DataUnit
 from ..base import Component
 from ..geometries import Geometry
@@ -369,10 +370,10 @@ def disk_plan(
         emission, opacity_ratios)
 
 
-class DiskComponentPlan(NodalComponentPlan):
+class DiskComponentPlan(NativeComponentPlan):
     """
     The evaluation of a component made of one disk (see
-    NodalComponentPlan), whose galaxy can take the plan of its disk.
+    NativeComponentPlan), whose galaxy can take the plan of its disk.
     """
 
     def __init__(

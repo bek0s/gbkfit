@@ -10,9 +10,9 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
+from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import (
-    NodalPlan, NodalTraits, ParamBuffer, TraitParams, evaluate_native,
-    fill_param_values, native_traits, subring_radii)
+    NodalTraits, TraitParams, fill_param_values, native_traits, subring_radii)
 from ..base import FrameParams, NativeGrid
 from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
 from ..geometries import GEOMETRY_PARAMS
@@ -293,7 +293,7 @@ class NodalDisk(abc.ABC):
         pass
 
 
-class DiskPlan(NodalPlan):
+class DiskPlan(NativePlan):
     """
     The evaluation of a disk on a driver and dtype: the native description
     of the disk, and its parameter values (geometry and traits, and the

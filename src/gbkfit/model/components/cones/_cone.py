@@ -12,9 +12,8 @@ import numpy as np
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from .._nodal import (
-    NodalPlan, NodalTraits, ParamBuffer, evaluate_native, native_traits,
-    subring_radii)
+from .._native import NativePlan, ParamBuffer, evaluate_native
+from .._nodal import NodalTraits, native_traits, subring_radii
 from ..base import FieldsLayout, FrameParams, NativeGrid
 from ..traits import Trait
 
@@ -123,7 +122,7 @@ class NodalCone(abc.ABC):
         return float(self._rnodes[-1])
 
     @abc.abstractmethod
-    def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> NodalPlan:
+    def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> NativePlan:
         """
         Plan the evaluation of the cone on the given driver and dtype,
         which owns the memory it needs. nlines is the number of emission
@@ -141,7 +140,7 @@ class SmoothCone(NodalCone):
         return SmoothConePlan(self, driver, nlines, dtype)
 
 
-class SmoothConePlan(NodalPlan):
+class SmoothConePlan(NativePlan):
     """
     The evaluation of a SmoothCone on a driver and dtype: the native
     description of the cone, and its parameter values (geometry and traits,

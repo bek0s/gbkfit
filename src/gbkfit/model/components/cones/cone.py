@@ -12,7 +12,7 @@ from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
-from .._nodal import make_bands, make_lines
+from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band, LineCatalogue
