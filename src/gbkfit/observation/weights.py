@@ -17,7 +17,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
-    from ._scene import Scene
+    from gbkfit.model import Scene
 
 
 __all__ = [

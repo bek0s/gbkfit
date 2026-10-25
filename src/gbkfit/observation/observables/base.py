@@ -14,7 +14,8 @@ from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..noise import Noise
     from ..weights import Weights
@@ -436,6 +437,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             instrument: Instrument,
             oversampling: Sequence[int],
@@ -453,7 +455,11 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         driver : Driver
             The driver it is evaluated on.
         scene : Scene
-            What is seen: galaxies along a line of sight.
+            What is seen: the galaxies, and the components of each whose
+            light is seen.
+        line_of_sight : LineOfSight
+            The line of sight of the observation, along which it plans the
+            scene (see LineOfSight.plan_scene).
         foreground : Foreground
             What the light meets before the telescope.
         instrument : Instrument

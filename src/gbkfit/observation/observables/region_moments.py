@@ -18,7 +18,8 @@ from .base import ModelData, Observable
 if TYPE_CHECKING:
     import scipy.sparse
 
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..weights import Weights
 
@@ -299,6 +300,7 @@ spec_medium, method : optional
             self,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             instrument: Instrument,
             oversampling: Sequence[int],
@@ -313,8 +315,8 @@ spec_medium, method : optional
         dcube = _moments.spectra_dcube(
             self, oversampling, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
-            self, self._weights, dcube, driver, scene, foreground, dtype,
-            flux_scale)
+            self, self._weights, dcube, driver, scene, line_of_sight,
+            foreground, dtype, flux_scale)
 
 
 class RegionMomentsPlan(_detail.DCubePlanBase):
@@ -326,12 +328,14 @@ class RegionMomentsPlan(_detail.DCubePlanBase):
             dcube: _dcube.DCube,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             dtype: np.dtype,
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None, flux_scale)
+            dcube, driver, scene, line_of_sight, foreground, dtype, None,
+            flux_scale)
         self._sums = RegionSumsPlan(weights, driver, dtype)
         nregions = self._sums.nregions()
         # The spectra of the regions, as a cube of one row of regions

@@ -16,7 +16,8 @@ from ._uv_transforms import UVTransform, uv_transforms
 from .base import HostModelData, ModelData, Observable
 
 if TYPE_CHECKING:
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..noise import Noise
     from ..weights import Weights
@@ -329,6 +330,7 @@ class Visibilities(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             instrument: Instrument,
             oversampling: Sequence[int],
@@ -374,7 +376,7 @@ class Visibilities(Observable):
             _EPS[np.dtype(dtype)] if self._eps is None else self._eps)
         return VisibilitiesPlan(
             transform, abs(self.step()[0] * self.step()[1]), reversed_, dcube,
-            driver, scene, foreground, dtype, flux_scale)
+            driver, scene, line_of_sight, foreground, dtype, flux_scale)
 
 
 class VisibilitiesPlan(_detail.DCubePlanBase):
@@ -401,12 +403,14 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
             dcube: _dcube.DCube,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             dtype: np.dtype,
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, None, flux_scale)
+            dcube, driver, scene, line_of_sight, foreground, dtype, None,
+            flux_scale)
         self._transform = transform
         self._area = area
         self._reversed = reversed_

@@ -12,7 +12,8 @@ from . import _dcube, _detail
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..noise import Noise
     from ..weights import Weights
@@ -186,6 +187,7 @@ class PixelSpectra(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             instrument: Instrument,
             oversampling: Sequence[int],
@@ -212,7 +214,8 @@ class PixelSpectra(Observable):
             fft_dtype=fft_dtype,
             median_size=self._median_size)
         return PixelSpectraPlan(
-            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
+            dcube, driver, scene, line_of_sight, foreground, dtype,
+            pixel_weights, flux_scale)
 
 
 class PixelSpectraPlan(_detail.DCubePlanBase):

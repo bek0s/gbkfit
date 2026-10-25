@@ -14,7 +14,8 @@ from . import _dcube, _detail
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..noise import Noise
     from ..weights import Weights
@@ -217,6 +218,7 @@ class SlitSpectra(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             instrument: Instrument,
             oversampling: Sequence[int],
@@ -248,7 +250,8 @@ class SlitSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return SlitSpectraPlan(
-            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
+            dcube, driver, scene, line_of_sight, foreground, dtype,
+            pixel_weights, flux_scale)
 
 
 class SlitSpectraPlan(_detail.DCubePlanBase):

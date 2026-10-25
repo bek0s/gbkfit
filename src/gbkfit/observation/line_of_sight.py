@@ -15,13 +15,12 @@ from typing import Any, Self
 import numpy as np
 
 from gbkfit.driver import Driver
-from gbkfit.model import Galaxy, LineOpacity
-from gbkfit.model.components._transfer import MAX_SUBCHANNELS
+from gbkfit.model import (
+    MAX_SUBCHANNELS, AdditiveScenePlan, DepthUnit, Galaxy, LineOpacity,
+    Scene, ScenePlan, TransferScenePlan)
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._scene import (
-    AdditiveScenePlan, DepthUnit, Scene, ScenePlan, TransferScenePlan)
 
 
 __all__ = [
@@ -179,11 +178,17 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
             smoothing: float | None
     ) -> ScenePlan:
         """
-        Plan the evaluation of a scene along this line of sight (see
-        Scene.plan): here, each galaxy adds its light to the image or the
-        spectral cube, dimmed by its own opacity (see AdditiveScenePlan).
+        Plan the evaluation of a scene along this line of sight, on a driver
+        and dtype, on the grid of an image (no spectral axis) or a spectral
+        cube, for an instrument that smooths the spectra of the model by
+        the given dispersion (km/s; None for an image), against which the
+        resolution of the light is checked: here, each galaxy adds its
+        light to the image or the spectral cube, dimmed by its own opacity,
+        on the depth axis of the largest disk of the scene (see
+        AdditiveScenePlan).
         """
-        return AdditiveScenePlan(scene, driver, grid, dtype, smoothing)
+        depth = self.depth_axis(grid.spatial(), max(scene.bounding_radii()))
+        return AdditiveScenePlan(scene, driver, grid, depth, dtype, smoothing)
 
 
 def _check_no_line_opacity(component: Component) -> None:
@@ -390,8 +395,12 @@ class Transfer(LineOfSight):
             dtype: np.dtype,
             smoothing: float | None
     ) -> TransferScenePlan:
+        # (each galaxy on the depth axis of its largest disk)
+        depths = [
+            self.depth_axis(grid.spatial(), radius)
+            for radius in scene.bounding_radii()]
         return TransferScenePlan(
-            scene, driver, grid, dtype, self._slab, self._subchannels,
+            scene, driver, grid, depths, dtype, self._slab, self._subchannels,
             smoothing)
 
 

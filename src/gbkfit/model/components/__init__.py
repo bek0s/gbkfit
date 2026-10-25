@@ -9,6 +9,7 @@ from .particles import *
 from .parts import *
 from .points import *
 from .roles import *
+from .scenes import *
 
 from . import cones, disks, traits
 from .cones import Cone

@@ -635,10 +635,9 @@ class ObservationSky(Observation):
         scale = self.flux_scale()
         one = scale is not None and scale[1].axis is None
         plan = self._observable.plan(
-            driver, scene, self._foreground, self._instrument,
-            self._oversampling, self._dtype, self._fft_dtype,
-            self._pixel_weights,
-            scale[0] if one else None)
+            driver, scene, self._line_of_sight, self._foreground,
+            self._instrument, self._oversampling, self._dtype,
+            self._fft_dtype, self._pixel_weights, scale[0] if one else None)
         if scale is None or one:
             return plan
         return _FluxScaledPlan(plan, driver, *scale, self._dtype)

@@ -14,7 +14,8 @@ from . import _dcube, _detail, _moments
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..weights import Weights
 
@@ -291,6 +292,7 @@ class PixelMoments(Observable):
             self,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             instrument: Instrument,
             oversampling: Sequence[int],
@@ -307,8 +309,8 @@ class PixelMoments(Observable):
             self, oversampling, instrument, dtype, fft_dtype,
             self._median_size)
         return PixelMomentsPlan(
-            self, dcube, driver, scene, foreground, dtype, pixel_weights,
-            flux_scale)
+            self, dcube, driver, scene, line_of_sight, foreground, dtype,
+            pixel_weights, flux_scale)
 
 
 class PixelMomentsPlan(_detail.DCubePlanBase):
@@ -319,13 +321,15 @@ class PixelMomentsPlan(_detail.DCubePlanBase):
             dcube: _dcube.DCube,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             dtype: np.dtype,
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ):
         super().__init__(
-            dcube, driver, scene, foreground, dtype, pixel_weights, flux_scale)
+            dcube, driver, scene, line_of_sight, foreground, dtype,
+            pixel_weights, flux_scale)
         self._moments = _moments.MomentsPlan(
             driver, moments.size(), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)

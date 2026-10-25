@@ -22,7 +22,8 @@ from ._dcube import DCube, cube_extra
 from .base import HostModelData, ModelData, Observable, ObservablePlan
 
 if TYPE_CHECKING:
-    from .._scene import Scene
+    from gbkfit.model import Scene
+    from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..noise import Noise
     from ..weights import Weights
@@ -267,11 +268,11 @@ def flux_per_area(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
 class DCubePlanBase(ObservablePlan):
     """
     The evaluation of an observable made from a DCube: the plan of the cube,
-    the plan of the scene (what an observation sees) on its high-res grid
-    (see _model_grid), that of the pixel weights of the data, if any,
-    which fill the weight cube of the DCube, and the name of the parameter
-    of the flux scale of the observation, if one value (see
-    ObservationSky), which scales the flux of the cube.
+    the plan of the scene (what an observation sees) along its line of
+    sight on its high-res grid (see _model_grid), that of the pixel
+    weights of the data, if any, which fill the weight cube of the DCube,
+    and the name of the parameter of the flux scale of the observation, if
+    one value (see ObservationSky), which scales the flux of the cube.
 
     It evaluates the model on the cube, records and masks it (see
     DCubePlan.evaluate), and measures the data items from its low-res
@@ -290,6 +291,7 @@ class DCubePlanBase(ObservablePlan):
             dcube: DCube,
             driver: Driver,
             scene: 'Scene',
+            line_of_sight: 'LineOfSight',
             foreground: 'Foreground',
             dtype: np.dtype,
             pixel_weights: 'Weights | None',
@@ -324,7 +326,8 @@ class DCubePlanBase(ObservablePlan):
         # an image has none)
         smoothing = None if grid.spectral_axis is None \
             else dcube.spectral_smoothing()
-        self._model_plan = scene.plan(driver, grid, dtype, smoothing)
+        self._model_plan = line_of_sight.plan_scene(
+            scene, driver, grid, dtype, smoothing)
 
     def _model_grid(self) -> gridutils.Grid:
         """Return the grid the model is evaluated on: the high-res grid."""

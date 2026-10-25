@@ -7,12 +7,12 @@ from astropy.coordinates import SkyCoord
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
-from gbkfit.model import Galaxy
+from gbkfit.model import DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._group_plan import GroupPlan
-from ._scene import DepthUnit, SeenGalaxies
+from ._scene import SeenGalaxies
 from .observation import Observation
 
 
