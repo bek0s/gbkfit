@@ -49,7 +49,8 @@ __all__ = [
 
 
 FORMAT = 'gbkfit-project'
-FORMAT_VERSION = 1
+# (2: the configurations of 2026-10-25 on; gbkfit.migration rewrites 1)
+FORMAT_VERSION = 2
 MARKER = 'gbkfit-project.yaml'
 
 # The folders of the pieces, by the sections of the configurations that

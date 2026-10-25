@@ -66,16 +66,17 @@ def test_describe_unknown():
         "'rnmx' (did you mean 'rnmax'?), 'zzz'")
 
 
-def test_unknown_options_are_warnings_or_errors_in_strict_mode(caplog):
+def test_unknown_options_are_errors_or_warnings_in_lenient_mode(caplog):
     def parse():
         return parseutils.parse_options(
             dict(rnmax=1, rnmx=2), optional={'rnmin', 'rnmax'})
-    assert parse() == dict(rnmax=1)
-    assert "'rnmx' (did you mean 'rnmax'?)" in caplog.text
-    with parseutils.strict_mode():
-        with pytest.raises(parseutils.ConfigError, match="'rnmx'"):
-            parse()
-    assert parse() == dict(rnmax=1)
+    with pytest.raises(
+            parseutils.UnknownNamesError,
+            match=r"'rnmx' \(did you mean 'rnmax'\?\)"):
+        parse()
+    with parseutils.strict_mode(False):
+        assert parse() == dict(rnmax=1)
+    assert "'rnmx' (did you mean 'rnmax'?); they are ignored" in caplog.text
 
 
 class Shape(parseutils.TypedSerializable):
@@ -171,7 +172,7 @@ def test_options_for_callable_must_fit_its_parameters(options, message):
 
 
 def test_warnings_have_the_path_of_the_configuration(caplog):
-    with parseutils.config_path('shapes'):
+    with parseutils.strict_mode(False), parseutils.config_path('shapes'):
         shape_parser.load([dict(type='circle', radius=1, colour='red')])
     assert "shapes[0] [circle]: unknown options: 'colour'" in caplog.text
 

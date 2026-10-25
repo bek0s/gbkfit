@@ -104,8 +104,8 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
     # = -3.5 arcsec from the reference pixel: V = 2 exp(-2 pi i b . (s -
     # p)), per km/s of the channel of 0 km/s (without a unit of the data),
     # of the part of its line (of dispersion 5 km/s) in it
-    point = dict(components=[dict(type='point', emission=dict(
-        type='lines', dispersion=dict(type='uniform')))])
+    point = dict(components=[dict(
+        type='point', emission=dict(type='lines'))])
     result = visibilities(driver, point, dict(
         xpos=4.5, ypos=-3.5, flux=2, vsys=0, disp=5))
     channel = list(VELOCITIES).index(0)

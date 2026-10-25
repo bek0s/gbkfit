@@ -310,13 +310,13 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
             type='pixel_spectra', rest='6562.8 Angstrom')))
 
 
-def test_pixel_brightness_has_no_rest(tmp_path, caplog):
+def test_pixel_brightness_has_no_rest(tmp_path):
     # An image has no spectral axis: rest is an unknown option
     fits.writeto(tmp_path / 'image.fits', np.ones((8, 20)))
-    dataset_parser.load(dict(
-        type='pixel_brightness', data=str(tmp_path / 'image.fits'),
-        rest='6562.8 Angstrom'))
-    assert "unknown options" in caplog.text and "'rest'" in caplog.text
+    with pytest.raises(ConfigError, match="unknown options: 'rest'"):
+        dataset_parser.load(dict(
+            type='pixel_brightness', data=str(tmp_path / 'image.fits'),
+            rest='6562.8 Angstrom'))
 
 
 def test_data_error_is_a_number_or_a_file():
@@ -466,15 +466,16 @@ def test_noise_correlation_along_the_channels():
         correlation.spectral, np.exp(-0.5 * np.arange(-4, 5) ** 2))
 
 
-def test_noise_correlations_only_where_the_data_have_them(tmp_path, caplog):
+def test_noise_correlations_only_where_the_data_have_them(tmp_path):
     import astropy.units as u
     from gbkfit.instrument import LSFGauss, PSFGauss, SpectralTable
     fits.writeto(tmp_path / 'data.fits', np.ones((8, 20)))
     # An image has no spectral axis: the option is not one of its own
-    dataset_parser.load(dict(
-        type='pixel_brightness', data=str(tmp_path / 'data.fits'),
-        spectral_correlation=dict(type='gauss', sigma=10)))
-    assert "unknown options: 'spectral_correlation'" in caplog.text
+    with pytest.raises(
+            ConfigError, match="unknown options: 'spectral_correlation'"):
+        dataset_parser.load(dict(
+            type='pixel_brightness', data=str(tmp_path / 'data.fits'),
+            spectral_correlation=dict(type='gauss', sigma=10)))
     image = DatasetPixelBrightness(
         Data(np.ones((8, 20)), spectral_correlation=LSFGauss(10)))
     with pytest.raises(ConfigError, match="no spectral axis"):

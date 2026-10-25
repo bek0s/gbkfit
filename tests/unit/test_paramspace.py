@@ -109,9 +109,6 @@ EVALUATION_CASES = dict(
     spread_fitting_properties=(
         make_pdescs(v=3), {'v': {'*value': [1, 2, 3], 'min': 0}},
         {'v': [1, 2, 3]}),
-    unknown_keys_are_ignored=(
-        make_pdescs(a=S), {'a': 1, 'old': 2, 'old[0]': 3},
-        {'a': 1}),
 )
 
 
@@ -329,11 +326,13 @@ def test_constants_cannot_have_the_names_of_parameters():
             make_pdescs(a=S), {'a': 1}, constants=dict(a=1))
 
 
-def test_unknown_parameters_are_errors_in_strict_mode():
+def test_unknown_parameters_are_errors_or_ignored_in_lenient_mode():
     from gbkfit.utils import parseutils
-    with parseutils.strict_mode():
-        with pytest.raises(Exception, match=r"unknown parameters: 'old'"):
-            ParamSpace(make_pdescs(a=S), {'a': 1, 'old': 2})
+    properties = {'a': 1, 'old': 2, 'old[0]': 3}
+    with pytest.raises(Exception, match=r"unknown parameters: 'old'"):
+        ParamSpace(make_pdescs(a=S), properties)
+    with parseutils.strict_mode(False):
+        assert evaluate(make_pdescs(a=S), properties) == {'a': 1}
 
 
 def load_moded_params(properties, modes):

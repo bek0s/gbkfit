@@ -18,6 +18,7 @@ import numpy as np
 import ruamel.yaml
 
 import gbkfit.fitting
+import gbkfit.migration
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.outputs
@@ -175,8 +176,8 @@ def prepare_config(
     Raises
     ------
     ConfigError
-        If a required section is missing, or a section is of the wrong
-        type.
+        If a required section is missing, a section is of the wrong type,
+        or an item has an old form (see gbkfit.migration).
     """
     config = {} if config is None else dict(config)
     known = required + optional
@@ -199,7 +200,23 @@ def prepare_config(
                 raise ConfigError(
                     f"section '{s}' must be a dictionary or a list")
             config[s] = iterutils.listify(config[s])
+    _refuse_old_forms(config)
     return json.loads(json.dumps(config))
+
+
+def _refuse_old_forms(config: dict[str, Any]) -> None:
+    """
+    Refuse the old forms of the items of the sections of a configuration
+    (see gbkfit.migration.refuse_old_forms).
+    """
+    for section in ('galaxies', 'observations'):
+        for i, item in enumerate(config.get(section, [])):
+            with parseutils.config_path(section, i):
+                gbkfit.migration.refuse_old_forms(section, item)
+    for section in ('params', 'fitter'):
+        if section in config:
+            with parseutils.config_path(section):
+                gbkfit.migration.refuse_old_forms(section, config[section])
 
 
 def make_output_dir(

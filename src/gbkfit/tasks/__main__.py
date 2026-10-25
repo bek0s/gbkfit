@@ -2,14 +2,14 @@
 Run a task of GBKFIT in a process of its own, for the programs that start
 tasks (e.g. a server that runs jobs):
 
-    python -m gbkfit.tasks [--strict] [--verbose] TASK [OPTIONS]
+    python -m gbkfit.tasks [--lenient] [--verbose] TASK [OPTIONS]
 
 TASK is the name of a task function: eval, fit, resume, bootstrap, plot,
-or one of prep_* (see gbkfit.tasks.prep). OPTIONS are its arguments by
-name, as a JSON object. The log goes to stderr (and to the run of the
-task). An error in a configuration is reported without a traceback (with
-one if --verbose), with exit status 1; invalid arguments exit with
-status 2.
+migrate, or one of prep_* (see gbkfit.tasks.prep). OPTIONS are its
+arguments by name, as a JSON object. The log goes to stderr (and to the
+run of the task). An error in a configuration is reported without a
+traceback (with one if --verbose), with exit status 1; invalid arguments
+exit with status 2.
 """
 
 import argparse
@@ -36,6 +36,7 @@ _TASKS = dict(
     resume=('fit', 'resume'),
     bootstrap=('fit', 'bootstrap'),
     plot=('plot', 'plot'),
+    migrate=('migrate', 'migrate'),
 ) | {name: ('prep', name) for name in (
     'prep_lsf_muse', 'prep_pixel_brightness', 'prep_pixel_moments',
     'prep_pixel_spectra', 'prep_psf_casa_beams', 'prep_psf_muse',
@@ -59,9 +60,9 @@ def _make_parser() -> argparse.ArgumentParser:
         prog='python -m gbkfit.tasks',
         description="Run a task of GBKFIT.")
     parser.add_argument(
-        '--strict', action='store_true',
-        help="treat unknown configuration options, sections and "
-             "parameters as errors instead of warnings")
+        '--lenient', action='store_true',
+        help="ignore unknown configuration options, sections and "
+             "parameters with a warning, instead of failing")
     parser.add_argument(
         '--verbose', action='store_true', help="enable verbose logging")
     parser.add_argument(
@@ -109,7 +110,7 @@ def main() -> None:
     _configure_logging(logging.DEBUG if args.verbose else logging.INFO)
     _log.debug(f"running task {args.task} with options {args.options}")
     try:
-        with parseutils.strict_mode(args.strict):
+        with parseutils.strict_mode(not args.lenient):
             task()
     except ConfigError as e:
         if args.verbose:

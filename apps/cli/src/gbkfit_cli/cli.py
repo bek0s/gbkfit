@@ -210,9 +210,9 @@ def _make_parser() -> argparse.ArgumentParser:
 
     parser_common_config = argparse.ArgumentParser(add_help=False)
     parser_common_config.add_argument(
-        '--strict', action='store_true',
-        help="treat unknown configuration options, sections and "
-             "parameters as errors instead of warnings")
+        '--lenient', action='store_true',
+        help="ignore unknown configuration options, sections and "
+             "parameters with a warning, instead of failing")
 
     #
     # Create parser for eval task
@@ -522,6 +522,22 @@ def _make_parser() -> argparse.ArgumentParser:
              "ones)")
 
     #
+    # Create parser for migrate task
+    #
+
+    parser_migrate = parsers_task.add_parser('migrate', parents=[
+        parser_common],
+        help="rewrite configurations in the current format")
+    parser_migrate.add_argument(
+        'path', type=str,
+        help="a configuration file, or the folder of a project (rewritten "
+             "in place)")
+    parser_migrate.add_argument(
+        'output', type=str, nargs='?',
+        help="the file to write a configuration file to; by default the "
+             "file itself")
+
+    #
     # Parse arguments and run the appropriate task
     #
 
@@ -531,7 +547,7 @@ def _make_parser() -> argparse.ArgumentParser:
 def _run_eval(args: argparse.Namespace) -> None:
     """Run the eval task."""
     import gbkfit.tasks.eval
-    with parseutils.strict_mode(args.strict):
+    with parseutils.strict_mode(not args.lenient):
         gbkfit.tasks.eval.eval_(
             args.mode, args.config, args.profile,
             args.output_dir, args.output_dir_mode)
@@ -608,7 +624,7 @@ def _run_fit(args: argparse.Namespace) -> None:
         raise ConfigError(
             "give a configuration, or the output directory of a fit to "
             "resume (--resume), not both")
-    with parseutils.strict_mode(args.strict):
+    with parseutils.strict_mode(not args.lenient):
         if args.resume is not None:
             gbkfit.tasks.fit.resume(args.resume)
         elif args.bootstrap is not None:
@@ -628,6 +644,12 @@ def _run_plot(args: argparse.Namespace) -> None:
         args.posterior_params)
 
 
+def _run_migrate(args: argparse.Namespace) -> None:
+    """Run the migrate task."""
+    import gbkfit.tasks.migrate
+    gbkfit.tasks.migrate.migrate(args.path, args.output)
+
+
 def main() -> None:
     """
     Run gbkfit-cli: parse the command line, and run its task. Errors in
@@ -645,7 +667,9 @@ def main() -> None:
     _log.debug(
         f"cli has been called with the following arguments: {vars(args)}")
 
-    tasks = dict(eval=_run_eval, prep=_run_prep, fit=_run_fit, plot=_run_plot)
+    tasks = dict(
+        eval=_run_eval, prep=_run_prep, fit=_run_fit, plot=_run_plot,
+        migrate=_run_migrate)
     try:
         tasks[args.task](args)
     except ConfigError as e:

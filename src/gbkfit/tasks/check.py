@@ -2,7 +2,8 @@
 Check a configuration without running its task: set it up as its task
 would (a fit if it has the section 'fitter', else an evaluation; see
 gbkfit.tasks.fit and gbkfit.tasks.eval), and collect its problems: its
-warnings (e.g. unknown options) and its error, if any, each with its
+warnings, its unknown options (errors, all of them: the check loads
+past them, which a task does not), and its error, if any, each with its
 path in the configuration (e.g. to show them in place in an editor).
 """
 
@@ -11,7 +12,7 @@ from collections.abc import Mapping
 from typing import Any, Literal, NamedTuple
 
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, UnknownNamesError
 from . import _detail, eval as eval_task, fit as fit_task
 
 
@@ -60,13 +61,14 @@ def check(config: str, texts: Mapping[str, str] | None = None) -> Checked:
     Returns
     -------
     Checked
-        The warnings, then the error, if any.
+        The warnings and the unknown names, then the error, if any.
     """
     warnings = _Warnings()
     logger = logging.getLogger('gbkfit')
     logger.addHandler(warnings)
     problems, sources = [], {}
     try:
+        # (lenient, to list every unknown name)
         with parseutils.strict_mode(False):
             file = _detail.read_config(
                 config, eval_task._REQUIRED,
@@ -85,7 +87,10 @@ def check(config: str, texts: Mapping[str, str] | None = None) -> Checked:
 
 
 class _Warnings(logging.Handler):
-    """The warnings about a configuration logged (see parseutils.warn)."""
+    """
+    The warnings about a configuration logged (see parseutils.warn), and
+    its unknown names, as errors (see parseutils.report_unknown).
+    """
 
     def __init__(self) -> None:
         super().__init__(logging.WARNING)
@@ -93,7 +98,9 @@ class _Warnings(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         if (error := getattr(record, 'config_problem', None)) is not None:
-            self.problems.append(_problem('warning', error))
+            severity = 'error' if isinstance(error, UnknownNamesError) \
+                else 'warning'
+            self.problems.append(_problem(severity, error))
 
 
 def _problem(

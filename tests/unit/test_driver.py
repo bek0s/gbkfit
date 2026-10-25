@@ -34,8 +34,7 @@ def test_unknown_driver_options_are_reported():
     # take)
     from gbkfit.driver import driver_parser
     from gbkfit.utils import parseutils
-    with parseutils.strict_mode(), pytest.raises(
-            parseutils.ConfigError, match="device"):
+    with pytest.raises(parseutils.ConfigError, match="device"):
         driver_parser.load(dict(type='host', device=1))
 
 

@@ -457,9 +457,8 @@ def test_psf_beam_options_are_checked(info, message):
 def test_unknown_options_of_points_are_reported(parser):
     # (they used to be ignored silently)
     from gbkfit.utils import parseutils
-    with parseutils.strict_mode():
-        with pytest.raises(parseutils.ConfigError, match="'sigma'"):
-            parser.load(dict(type='point', sigma=2))
+    with pytest.raises(parseutils.ConfigError, match="'sigma'"):
+        parser.load(dict(type='point', sigma=2))
 
 
 def test_psfs_from_files_in_python(tmp_path):

@@ -23,9 +23,10 @@ def test_the_problems_of_a_configuration_have_their_paths(tmp_path):
     filename = tmp_path / 'config.yaml'
     yaml.dump(config, filename)
     path = ['galaxies', 0, 'components', 0]
-    (warning, error) = check(str(filename)).problems
-    assert (warning.severity, warning.path) == ('warning', path)
-    assert "'rnmx' (did you mean 'rnmax'?)" in warning.message
+    # (an unknown option is an error, and the check goes on past it)
+    (unknown, error) = check(str(filename)).problems
+    assert (unknown.severity, unknown.path) == ('error', path)
+    assert "'rnmx' (did you mean 'rnmax'?)" in unknown.message
     assert (error.severity, error.path) == ('error', path)
     # (a text in place of the file: fixed, and then without problems)
     component['rnmax'] = component.pop('rnmx')

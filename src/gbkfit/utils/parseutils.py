@@ -51,16 +51,20 @@ def make_typed_desc(
     return f'{label} {desc}' if label else desc
 
 
-# Whether unknown options are errors (strict) or warnings
-_strict = contextvars.ContextVar('strict', default=False)
+# Whether unknown options are errors (strict, the default) or warnings
+# (lenient)
+_strict = contextvars.ContextVar('strict', default=True)
 
 
 @contextlib.contextmanager
 def strict_mode(strict: bool = True) -> Iterator[None]:
     """
-    Make unknown options errors instead of warnings, in the block.
+    Make unknown options errors (strict, the default) or warnings
+    (lenient), in the block.
 
-    This also applies to unknown sections and parameters.
+    This also applies to unknown sections and parameters. Lenient mode
+    leaves them out with a warning, e.g. to load a configuration with an
+    option of a newer version of GBKFIT.
 
     Parameters
     ----------
@@ -115,8 +119,8 @@ def describe_unknown(unknown: Iterable, known: Iterable[str]) -> str:
 
 def report_unknown(message: str, unknown: Iterable, known: Iterable[str]):
     """
-    Report unknown names: a warning that they are ignored, or an error in
-    strict mode.
+    Report unknown names: an error, or in lenient mode a warning that they
+    are ignored (see strict_mode).
 
     Parameters
     ----------
@@ -129,13 +133,14 @@ def report_unknown(message: str, unknown: Iterable, known: Iterable[str]):
 
     Raises
     ------
-    ConfigError
-        In strict mode.
+    UnknownNamesError
+        Unless in lenient mode.
     """
-    message = f"{message}: {describe_unknown(unknown, known)}"
+    error = UnknownNamesError(
+        f"{message}: {describe_unknown(unknown, known)}")
     if is_strict():
-        raise ConfigError(message)
-    warn(f"{message}; they will be ignored")
+        raise error
+    _log_problem(error, "they are ignored (lenient mode)")
 
 
 def warn(message: str) -> None:
@@ -152,12 +157,20 @@ def warn(message: str) -> None:
     message : str
         The warning.
     """
+    _log_problem(ConfigError(message))
+
+
+def _log_problem(error: 'ConfigError', note: str | None = None) -> None:
+    """
+    Log a problem of the part of the configuration being loaded as a
+    warning (see warn), with a note after it in the log only.
+    """
     # (an error raised here would get the path of each config_path block
     # around it, from the innermost out)
-    located = ConfigError(message)
     for segments, context in reversed(_location.get()):
-        _add_location(located, segments, context)
-    _log.warning(str(located), extra=dict(config_problem=located))
+        _add_location(error, segments, context)
+    text = str(error) if note is None else f"{error}; {note}"
+    _log.warning(text, extra=dict(config_problem=error))
 
 
 class ConfigError(RuntimeError):
@@ -193,6 +206,13 @@ class ConfigError(RuntimeError):
         if self.context:
             path = f'{path} [{self.context}]' if path else self.context
         return f'{path}: {self.message}' if path else self.message
+
+
+class UnknownNamesError(ConfigError):
+    """
+    An error of unknown names in a configuration: options, sections or
+    parameters (see report_unknown).
+    """
 
 
 # The parts of the configuration being loaded (see config_path): the
@@ -349,8 +369,8 @@ def parse_options(
     Raises
     ------
     ConfigError
-        If a required option is missing, or an option is unknown in strict
-        mode.
+        If a required option is missing, or an option is unknown (unless
+        in lenient mode, see strict_mode).
     """
     required = iterutils.setify(required)
     optional = iterutils.setify(optional)
@@ -470,7 +490,7 @@ def parse_options_for_callable(
     ------
     ConfigError
         If a required option is missing, an option does not match its
-        type, or an option is unknown in strict mode.
+        type, or an option is unknown (unless in lenient mode).
     """
     ignore_params = iterutils.setify(ignore_params)
     rename_params = rename_params or {}

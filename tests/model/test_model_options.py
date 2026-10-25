@@ -86,30 +86,23 @@ def with_dust(kind):
     return [component | dict(name='stars'), DUST | dict(name='dust')]
 
 
-def strict_load(info):
-    """Load a configuration, with unknown options as errors."""
-    with parseutils.strict_mode():
-        return config_group_plan(info)
-
-
 def load_error(info):
     """The error message of loading a bad configuration."""
     with pytest.raises(parseutils.ConfigError) as error:
-        strict_load(info)
+        config_group_plan(info)
     return str(error.value)
 
 
 def galaxy_error(info):
     """The error message of loading a bad galaxy."""
     with pytest.raises(parseutils.ConfigError) as error:
-        with parseutils.strict_mode():
-            galaxy_parser.load(info)
+        galaxy_parser.load(info)
     return str(error.value)
 
 
 @pytest.mark.parametrize('kind', OBSERVATIONS)
 def test_observation_loads(kind):
-    strict_load(config(kind))
+    config_group_plan(config(kind))
 
 
 @pytest.mark.parametrize('info', [dict(), dict(components=[])])
@@ -166,7 +159,8 @@ def test_opacity_cannot_be_selected(kind):
 
 @pytest.mark.parametrize('kind', GRID_KINDS)
 def test_grids_have_depth_options(kind):
-    strict_load(config(kind, with_dust(kind), GRID | dict(depth=DEPTH)))
+    config_group_plan(
+        config(kind, with_dust(kind), GRID | dict(depth=DEPTH)))
 
 
 @pytest.mark.parametrize('kind', FLAT_KINDS)
@@ -214,7 +208,7 @@ def test_depth_axis(depth, axis):
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
-def test_unknown_trait_options_are_errors_in_strict_mode(name):
+def test_unknown_trait_options_are_errors(name):
     component = COMPONENTS[name]
     density = component['density'] | dict(ptraits=dict(EXPONENTIAL, foo=1))
     message = galaxy_error(dict(components=[
@@ -224,9 +218,9 @@ def test_unknown_trait_options_are_errors_in_strict_mode(name):
 
 
 @pytest.mark.parametrize('name', COMPONENTS)
-def test_unknown_options_are_warnings(name, caplog):
+def test_unknown_options_are_warnings_in_lenient_mode(name, caplog):
     info = dict(components=COMPONENTS[name] | dict(foo=1))
-    with caplog.at_level(logging.WARNING):
+    with parseutils.strict_mode(False), caplog.at_level(logging.WARNING):
         galaxy_parser.load(info)
     assert "'foo'" in caplog.text
 

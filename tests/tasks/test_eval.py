@@ -232,8 +232,8 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
 
 
 def test_unknown_options(tmp_path):
-    # A misspelt option is a warning that suggests the right one, or an
-    # error with --strict
+    # A misspelt option is an error that suggests the right one, or a
+    # warning with --lenient
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     component = config['galaxies'][0]['components'][0]
     component['rnmx'] = component['rnmax']
@@ -241,12 +241,13 @@ def test_unknown_options(tmp_path):
 
     options = eval_options('model', 'config.yaml')
     result = run_task(tmp_path, 'eval', options)
-    assert result.returncode == 0
-    assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
-    result = run_task(tmp_path, 'eval', options, '--strict')
     assert result.returncode != 0
     assert "galaxies[0].components[0]" in result.stderr
     assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
+    result = run_task(tmp_path, 'eval', options, '--lenient')
+    assert result.returncode == 0
+    assert "'rnmx' (did you mean 'rnmax'?); they are ignored" in \
+        result.stderr
 
 
 def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):

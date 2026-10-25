@@ -1630,15 +1630,16 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
             type='nodewise', nodes=(subrnodes * KPC_PER_ARCSEC).tolist()),
         vertical=dict(type='sech2' if thick else 'thin')))
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, brightness)
+    nodewise_properties = dict(mass_gas_log_sigma=np.log10(sigma))
+    if thick:
+        nodewise_properties |= dict(mass_gas_hz=KPC_PER_ARCSEC)
     np.testing.assert_allclose(
         evaluate(
             driver, following, line_of_sight,
             properties | halo_properties | dict(mass_gas_upsilon=upsilon)),
         evaluate(
             driver, nodewise, line_of_sight,
-            properties | halo_properties | dict(
-                mass_gas_log_sigma=np.log10(sigma),
-                mass_gas_hz=KPC_PER_ARCSEC)),
+            properties | halo_properties | nodewise_properties),
         rtol=1e-5, atol=1e-7)
 
 

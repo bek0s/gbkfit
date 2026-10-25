@@ -65,11 +65,11 @@ def test_values_at_the_subnodes_are_used_as_they_are(evaluate_cases, type_):
         type_, rnodes, dict(type='nw_uniform', direction='tan', sampling='subrings'))
     subrnodes = group(at_subnodes).constants()['subrnodes']
     interpolated = interpolation.InterpolatorLinear(rnodes, curve)(subrnodes)
+    properties = PROPERTIES | (dict(ht_s=1) if type_ == 'mcdisk' else {})
     expected, _ = evaluate_cases(
-        [case(at_rnodes)], PROPERTIES | dict(ht_s=1, vpt_vt=curve))
+        [case(at_rnodes)], properties | dict(vpt_vt=curve))
     actual, _ = evaluate_cases(
-        [case(at_subnodes)],
-        PROPERTIES | dict(ht_s=1, vpt_vt=interpolated.tolist()))
+        [case(at_subnodes)], properties | dict(vpt_vt=interpolated.tolist()))
     # The host adds the clouds of a thick disk in any order (float32)
     rtol = 1e-4 if type_ == 'mcdisk' else 0
     np.testing.assert_allclose(

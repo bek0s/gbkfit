@@ -5,6 +5,7 @@ fields of the light of the emitters, which the march reads.
 
 import numpy as np
 import pytest
+from modelutils import observation_group
 
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import DepthGroup
@@ -174,19 +175,25 @@ def cubes_of(evaluate_cases, driver, components, properties, **observation):
         observable=dict(
             type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10])
     ) | observation
-    names = {component['name'] for component in components}
-    properties = {
-        key: value for key, value in properties.items()
-        if key.split('_')[0] in names}
     models = []
     for kind in ('grid', 'transfer'):
         case = dict(
             observation, driver=dict(type=driver.type()),
             line_of_sight=dict(type=kind),
             galaxy=dict(components=components))
-        data, _ = evaluate_cases([case], properties)
+        data, _ = evaluate_cases([case], of_model([case], properties))
         models.append(next(iter(data[0].values()))['d'])
     return models
+
+
+def of_model(cases, properties):
+    """
+    Those of the properties that the model of cases has (the tests share
+    properties between models with and without some components or
+    heights).
+    """
+    pdescs = observation_group(cases).pdescs()
+    return {key: value for key, value in properties.items() if key in pdescs}
 
 
 def assert_same_model(actual, desired):
@@ -410,7 +417,7 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
             observable=dict(
                 type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
             galaxy=dict(components=components))
-        data, extra = evaluate_cases([case], properties)
+        data, extra = evaluate_cases([case], of_model([case], properties))
         models.append((data[0]['spectra']['d'], extra))
     (cube, extra), *others = models
     for other_cube, other_extra in others:
@@ -438,7 +445,8 @@ def galaxies_model(
     The model data of an observation of several galaxies through
     radiative transfer (a spectral cube by default), front to back in the
     given order (that of the galaxies if None), and its extras (none
-    without with_extras: the evaluation of fits).
+    without with_extras: the evaluation of fits). The galaxies take those
+    of the properties that they have (see of_model).
     """
     import gbkfit.params
     from gbkfit.observation import ObservationGroup, observation_parser
@@ -454,7 +462,9 @@ def galaxies_model(
         galaxy_parser.load(galaxies),
         observation_parser.load([observation]), depth_order)
     plan = group.plan(driver)
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    pdescs = group.pdescs()
+    params = gbkfit.params.ParamSpace(pdescs, {
+        key: value for key, value in properties.items() if key in pdescs})
     extra = Extras() if with_extras else None
     data = plan.model_h(params.evaluate(), extra)
     return next(iter(data[0].values()))['d'], extra

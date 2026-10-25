@@ -11,7 +11,7 @@ import astropy.units as u
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import group_plan
+from modelutils import group_plan, split_case
 
 
 C = astropy.constants.c.to_value('km/s')
@@ -198,9 +198,11 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     """The model of an observation with options (e.g. its lines)."""
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
+    _, observation, _ = split_case(dict(
+        driver=None, galaxy=galaxy, observable=observable,
+        line_of_sight=FLAT))
     observation = observation_parser.load(
-        copy.deepcopy(dict(
-            type='sky', observable=observable, line_of_sight=FLAT) | options))
+        copy.deepcopy(observation | options))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(galaxy))], [observation])
     plan = group.plan(driver)
@@ -286,8 +288,9 @@ def test_line_selection_round_trip():
     from gbkfit.observation import observation_parser
     info = dict(
         type='sky',
-        observable=scube('6562.8 Angstrom'), line_of_sight=FLAT,
-        lines=['ha'])
+        observable={key: value for key, value in scube(
+            '6562.8 Angstrom').items() if key not in INSTRUMENT},
+        line_of_sight=FLAT, lines=['ha'])
     dumped = observation_parser.dump(
         observation_parser.load(dict(info)))
     assert dumped['lines'] == ['ha']

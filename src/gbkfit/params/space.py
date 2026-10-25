@@ -855,7 +855,7 @@ class ParamSpace(parseutils.Serializable):
                 element_name(*e) for e in self._elements if e not in keys_of]:
             errors.append(f"these parameters have no value: {missing}")
         if unknown_keys:
-            # In strict mode, an error among the others
+            # (unless in lenient mode, an error among the others)
             try:
                 parseutils.report_unknown(
                     "unknown parameters", unknown_keys, self._pdescs)
