@@ -12,6 +12,7 @@
 #include <gbkfit/constants.hpp>
 #include <gbkfit/gmodel/cone.hpp>
 #include <gbkfit/gmodel/disk.hpp>
+#include <gbkfit/gmodel/spheroid.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
 
 #include "gbkfit/bindings/arrays.hpp"
@@ -103,6 +104,25 @@ struct ConeArrays
     Array<Device, const int, nb::ndim<1>> vpt_directions;
 };
 
+// The arrays that describe a spheroid: its geometry, its extent, the
+// terms of its density and their table, if any (see
+// gbkfit::SpheroidArgs). They are created once, and their values are
+// updated in place before each evaluation.
+template<typename T, typename Device>
+struct SpheroidArrays
+{
+    using Values = Array<Device, const T, nb::ndim<1>>;
+
+    Values xpos;
+    Values ypos;
+    Values posa;
+    Values incl;
+    T rmax;
+    Values terms;
+    Values table;
+    Values table_range;
+};
+
 // The arrays of an emitter of the march of radiative transfer (see
 // gbkfit::TransferEmitter): its fields, those of a volume (of shape
 // (nslots, nz, ny, nx), with j, v and s in the first three slots, and
@@ -133,6 +153,7 @@ struct GModel
 {
     using Disk = DiskArrays<T, Device>;
     using Cone = ConeArrays<T, Device>;
+    using Spheroid = SpheroidArrays<T, Device>;
     using Traits = TraitSetArrays<T, Device>;
     using Values = typename Disk::Values;
     using Ints = typename Traits::Ints;
@@ -205,6 +226,38 @@ struct GModel
                 rdata_scale, image_scale);
         // (a cone writes three fields: j, v and s)
         Kernels::gmodel_smcone_evaluate(
+                a, g, make_fields_args(true, 0, g, fields, 3));
+    }
+
+    static void
+    smspheroid_evaluate(
+            const Spheroid& spheroid,
+            std::array<int, 3> spat_size,
+            std::array<T, 3> spat_step,
+            std::array<T, 3> spat_zero,
+            T spat_rota, int slab_zero,
+            int spec_size, T spec_step, T spec_zero,
+            Lines lines,
+            ConstData opacity, Ratios opacity_ratios,
+            Data image, Data scube,
+            Data rdata, Data rdata_cmp,
+            Data ordata, Data ordata_cmp,
+            Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data fields,
+            T rdata_scale, T image_scale)
+    {
+        const typename Kernels::DeviceScope scope(
+                spheroid.terms.device_id());
+        const auto a = make_spheroid_args(spheroid);
+        const auto g = make_grid_args(
+                true, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
+                spec_size, spec_step, spec_zero, lines,
+                opacity, opacity_ratios,
+                image, scube, rdata, rdata_cmp,
+                ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                rdata_scale, image_scale);
+        // (a spheroid writes three fields: j, v and s)
+        Kernels::gmodel_smspheroid_evaluate(
                 a, g, make_fields_args(true, 0, g, fields, 3));
     }
 
@@ -526,6 +579,24 @@ struct GModel
                 nb::arg("spt").none() = nb::none(),
                 nb::arg("vpt_directions").noconvert().none() = nb::none());
 
+        nb::class_<Spheroid>(m, ("Spheroid" + suffix).c_str())
+                .def("__init__", [](
+                        Spheroid* self, Values xpos, Values ypos,
+                        Values posa, Values incl, T rmax, Values terms,
+                        Values table, Values table_range) {
+                    new (self) Spheroid{
+                            xpos, ypos, posa, incl, rmax, terms, table,
+                            table_range};
+                },
+                nb::arg("xpos").noconvert(),
+                nb::arg("ypos").noconvert(),
+                nb::arg("posa").noconvert(),
+                nb::arg("incl").noconvert(),
+                nb::arg("rmax"),
+                nb::arg("terms").noconvert(),
+                nb::arg("table").noconvert().none() = nb::none(),
+                nb::arg("table_range").noconvert().none() = nb::none());
+
         nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
                 .def("__init__", [](
                         Emitter* self, bool layer, bool line_opacity,
@@ -576,6 +647,11 @@ struct GModel
             cls.def_static(
                     "smcone_evaluate", &smcone_evaluate, ReleaseGil(), args...);
         }, evaluate_args(nb::arg("cone")));
+        std::apply([&](auto&&... args) {
+            cls.def_static(
+                    "smspheroid_evaluate", &smspheroid_evaluate, ReleaseGil(),
+                    args...);
+        }, evaluate_args(nb::arg("spheroid")));
         std::apply([&](auto&&... args) {
             cls.def_static(
                     "mcdisk_evaluate", &mcdisk_evaluate, ReleaseGil(), args...);
@@ -821,8 +897,40 @@ private:
         return a;
     }
 
-    // The grid that a disk or a cone (thick, or a thin disk) is evaluated
-    // on, its lines, the opacity that dims it and the outputs (see
+    // The arguments of a spheroid (see gbkfit::SpheroidArgs)
+    static SpheroidArgs<T>
+    make_spheroid_args(const Spheroid& spheroid)
+    {
+        SpheroidArgs<T> a;
+        require(spheroid.xpos.shape(0) == 1 && spheroid.ypos.shape(0) == 1
+                && spheroid.posa.shape(0) == 1
+                && spheroid.incl.shape(0) == 1,
+                "the geometry of a spheroid needs one value of each "
+                "parameter");
+        a.xpos = spheroid.xpos.data();
+        a.ypos = spheroid.ypos.data();
+        a.posa = spheroid.posa.data();
+        a.incl = spheroid.incl.data();
+        require(spheroid.rmax > 0, "rmax must be greater than zero");
+        a.rmax = spheroid.rmax;
+        require(spheroid.terms.shape(0) % 3 == 0,
+                "terms needs three values for each term");
+        a.nterms = int(spheroid.terms.shape(0) / 3);
+        a.terms = spheroid.terms.data();
+        require(spheroid.table.is_valid() == spheroid.table_range.is_valid()
+                && (!spheroid.table.is_valid()
+                    || (spheroid.table.shape(0) >= 2
+                        && spheroid.table_range.shape(0) == 3)),
+                "a table needs at least two values, and its range three");
+        a.ntable = spheroid.table.is_valid()
+                ? int(spheroid.table.shape(0)) : 0;
+        a.table = data(spheroid.table);
+        a.table_range = data(spheroid.table_range);
+        return a;
+    }
+
+    // The grid that a disk, a cone or a spheroid (thick, or a thin disk) is
+    // evaluated on, its lines, the opacity that dims it and the outputs (see
     // gbkfit::GridArgs)
     static GridArgs<T>
     make_grid_args(

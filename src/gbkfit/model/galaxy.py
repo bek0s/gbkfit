@@ -25,6 +25,7 @@ from .components.lines import Band, LineCatalogue
 from .components.particles import Particles
 from .components.points import Point
 from .components.roles import BandEmission
+from .components.spheroids import Spheroid
 from .distance import Distance, distance_parser
 from .gravity import Gravity, gravity_parser
 from .mass import MassComponent, MassModel, mass_component_parser
@@ -40,6 +41,7 @@ __all__ = [
 component_parser = parseutils.TypedParser(Component, [
     Disk,
     Cone,
+    Spheroid,
     Point,
     Particles])
 

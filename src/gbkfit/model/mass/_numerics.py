@@ -212,6 +212,41 @@ def sersic_tables(n: float) -> SphericalTables:
     return _spherical_tables(r[keep], density[keep])
 
 
+# The tables of the density of Sersic profiles (see sersic_density_table):
+# from the radius _SERSIC_R_MIN, with the Gauss-Legendre nodes of the
+# integral that deprojects the density (to about 1e-7 of the peak, relative,
+# within 1e-8 of it)
+_SERSIC_DENSITY_NNODES = 64
+
+
+def sersic_density_table(
+        n: float, size: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Return the table of the spherical deprojection f of the Sersic profile
+    of index n, of the surface density exp(-b (R^(1/n) - 1)) (1 at the
+    effective radius, 1): ln f at size radii u, geometric from
+    _SERSIC_R_MIN to where the surface density falls below e^-40 (as
+    sersic_tables, by its integral, with fewer nodes), and its range: ln u
+    of the first radius, the step of ln u, and the slope of ln f in ln u
+    at the first radius (the power law of f below it).
+    """
+    b = sersic_b(n)
+    u_max = (1 + 40 / b) ** n
+    u = np.geomspace(_SERSIC_R_MIN, u_max, size)
+    x, w = np.polynomial.legendre.leggauss(_SERSIC_DENSITY_NNODES)
+    t_max = np.arccosh(np.maximum(u_max / u, 1))[:, None]
+    cosh_t = np.cosh((x + 1) / 2 * t_max)
+    surface = np.exp(-b * ((u[:, None] * cosh_t) ** (1 / n) - 1))
+    integral = np.sum(
+        w / 2 * t_max * surface * cosh_t ** (1 / n - 1), axis=1)
+    log_f = np.log(np.maximum(
+        b / (n * np.pi) * u ** (1 / n - 1) * integral, 1e-300))
+    step = np.log(u[1] / u[0])
+    slope = (log_f[1] - log_f[0]) / step
+    return log_f, np.array([np.log(u[0]), step, slope])
+
+
 def spherical_potential(
         density: Callable[[np.ndarray], np.ndarray],
         enclosed_mass: Callable[[np.ndarray], np.ndarray],

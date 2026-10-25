@@ -376,8 +376,10 @@ class DiskPlan(NodalPlan):
         params = self._write_params(params, lines)
         evaluate_native(
             lambda kwargs: self._impl_evaluate(params, kwargs, out_extra),
-            self._driver, self._dtype, self._disk._traits, grid, outputs,
-            out_extra, density_key, self._lines_d, rdata_scale, image_scale)
+            self._driver, self._dtype, grid, outputs, out_extra,
+            density_key, self._lines_d, rdata_scale, image_scale,
+            velocity=bool(self._disk.traits('vpt')),
+            dispersion=bool(self._disk.traits('dpt')))
 
     def _fields_lines(self) -> int:
         """

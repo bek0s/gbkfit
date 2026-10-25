@@ -309,6 +309,25 @@ gmodel_smcone_evaluate(
     }
 }
 
+template<typename T, bool HasOpacity, bool HasFields>
+void
+gmodel_smspheroid_evaluate(
+        const SpheroidArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    // Parallelization: per 2d spatial position (see gmodel_smdisk_evaluate)
+    #pragma omp parallel for collapse(2) schedule(dynamic, 16)
+    for(int y = 0; y < g.spat_size[1]; ++y) {
+    for(int x = 0; x < g.spat_size[0]; ++x) {
+    for(int z = 0; z < g.spat_size[2]; ++z) {
+
+    gbkfit::gmodel_smspheroid_evaluate_voxel<add<T>, HasOpacity, HasFields>(
+            x, y, z, a, g, f);
+
+    }
+    }
+    }
+}
+
 template<typename T> void
 gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
 {
@@ -593,6 +612,21 @@ struct Wrapper
             k::gmodel_smcone_evaluate<T, true, false>(a, g, f);
         else
             k::gmodel_smcone_evaluate<T, false, false>(a, g, f);
+    }
+
+    // (the kernels of the fields, of spheroids dimmed by opacity, and of
+    // the others)
+    static void
+    gmodel_smspheroid_evaluate(
+            const SpheroidArgs<T>& a, const GridArgs<T>& g,
+            const FieldsArgs<T>& f) {
+        namespace k = kernels;
+        if (f.fields)
+            k::gmodel_smspheroid_evaluate<T, false, true>(a, g, f);
+        else if (g.opacity)
+            k::gmodel_smspheroid_evaluate<T, true, false>(a, g, f);
+        else
+            k::gmodel_smspheroid_evaluate<T, false, false>(a, g, f);
     }
 
     static void

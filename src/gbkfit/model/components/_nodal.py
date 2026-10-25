@@ -6,7 +6,7 @@ the traits on their nodes and the parameters of the traits
 their parameter values in one buffer (ParamBuffer), their traits in the
 native kernels (native_traits) and the maps of their extra outputs
 (ExtraMaps, evaluate_native); and the plan of a component made of one
-(NodalComponentPlan).
+(NodalComponentPlan). The spheroids, without nodes, share the plans.
 """
 
 import abc
@@ -570,29 +570,30 @@ def evaluate_native(
         evaluate: Callable[[dict[str, Any]], None],
         driver: Driver,
         dtype: np.dtype,
-        traits: NodalTraits,
         grid: NativeGrid,
         outputs: dict[str, DeviceArray | None],
         out_extra: dict[str, Any] | None,
         density_key: str,
         lines: DeviceArray | None,
         rdata_scale: float,
-        image_scale: float
+        image_scale: float,
+        *,
+        velocity: bool,
+        dispersion: bool
 ) -> None:
     """
-    Evaluate a component on radial nodes of the given traits (see
-    NodalPlan.evaluate): call evaluate with the keyword arguments of its
-    native evaluation function (the grid, the outputs, the device memory
-    of its lines and the scales), with the maps of its extra outputs if
-    they are wanted (see ExtraMaps), which then go to out_extra.
+    Evaluate a component natively (see NodalPlan.evaluate): call evaluate
+    with the keyword arguments of its native evaluation function (the
+    grid, the outputs, the device memory of its lines and the scales),
+    with the maps of its extra outputs if they are wanted (see ExtraMaps),
+    which then go to out_extra: its density, and its velocity and
+    dispersion if it has them (velocity and dispersion).
     """
     maps = None
     if out_extra is not None:
         maps = ExtraMaps(
-            driver, dtype, grid,
-            density=bool(traits.traits('rpt')),
-            velocity=bool(traits.traits('vpt')),
-            dispersion=bool(traits.traits('dpt')),
+            driver, dtype, grid, density=True, velocity=velocity,
+            dispersion=dispersion,
             opacity=outputs.get('opacity') is not None)
     evaluate(
         grid | outputs | (maps.native() if maps is not None else {})
@@ -603,9 +604,9 @@ def evaluate_native(
 
 class NodalPlan(abc.ABC):
     """
-    The evaluation of a component on radial nodes on a driver and dtype,
-    which owns the memory it needs: what the plan of its component needs
-    of it (see NodalComponentPlan).
+    The evaluation of a component on radial nodes (or of a spheroid) on a
+    driver and dtype, which owns the memory it needs: what the plan of its
+    component needs of it (see NodalComponentPlan).
     """
 
     @abc.abstractmethod
@@ -790,15 +791,15 @@ def emission_setup(
 
 class NodalComponentPlan(ComponentPlan):
     """
-    The evaluation of a component made of one disk or cone: the plan of
-    the disk or cone (see NodalPlan), which adds its light to the outputs,
-    dimmed by the opacity with the given ratios (see Component.plan), or
-    its optical depth to a cube of opacity. Its light is that of its lines
-    (where each is on the spectral axis at its systemic velocity), or in
-    an image, that of its band, of their fluxes (see EmissionSetup). With
-    line opacity and a unit, the fields of the opacity of each line are
-    times its scale to brightness temperature, as its coefficients are
-    1/S in 1/K.
+    The evaluation of a component made of one disk, cone or spheroid: its
+    plan (see NodalPlan), which adds its light to the outputs, dimmed by
+    the opacity with the given ratios (see Component.plan), or its optical
+    depth to a cube of opacity. Its light is that of its lines (where each
+    is on the spectral axis at its systemic velocity), or in an image,
+    that of its band, of their fluxes (see EmissionSetup). With line
+    opacity and a unit, the fields of the opacity of each line are times
+    its scale to brightness temperature, as its coefficients are 1/S in
+    1/K.
     """
 
     def __init__(

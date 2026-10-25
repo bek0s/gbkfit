@@ -193,8 +193,10 @@ class SmoothConePlan(NodalPlan):
         evaluate_native(
             lambda kwargs: self._backend.smcone_evaluate(
                 self._native_cone, **kwargs),
-            self._driver, self._dtype, self._cone._traits, grid, outputs,
-            out_extra, density_key, self._lines_d, rdata_scale, image_scale)
+            self._driver, self._dtype, grid, outputs, out_extra,
+            density_key, self._lines_d, rdata_scale, image_scale,
+            velocity=bool(self._cone.traits('vpt')),
+            dispersion=bool(self._cone.traits('dpt')))
 
     def fields_layout(self) -> FieldsLayout:
         # (a cone fills the voxels with j, v and s)

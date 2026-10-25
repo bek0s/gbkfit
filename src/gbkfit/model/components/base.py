@@ -237,6 +237,14 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return 0.0
 
+    def extent_cut(self, params: ParamValues) -> tuple[str, float] | None:
+        """
+        Return the option that bounds its extent (e.g. 'rmax'), if one
+        does, and the share of its light that it cuts at the values of its
+        parameters; None here.
+        """
+        return None
+
     def density_disk(self) -> 'NodalDisk | None':
         """
         Return its disk, if it is made of one: the mass of its galaxy can

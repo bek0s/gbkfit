@@ -263,10 +263,18 @@ class ComponentPlans:
         whose zmax cuts more than 1% of its profile at a ring, and for
         each vertical distortion trait whose zmax limits its displacement
         somewhere (at a ring, at azimuths around it): zmax then shapes the
-        disk, rather than holding it (see RHTrait and ZPTrait).
+        disk, rather than holding it (see RHTrait and ZPTrait); and for
+        each component whose extent cuts more than 1% of its light (see
+        Component.extent_cut).
         """
         components = self._component_set.components()
         for i, plan in self.plans.items():
+            extent = components[i].extent_cut(params[i])
+            if extent is not None and extent[1] > _MAX_CUT:
+                option, cut = extent
+                _log.warning(
+                    f"{_label(components, i)}: its {option} cuts "
+                    f"{cut:.1%} of its light: {option} shapes it; raise it")
             disk = components[i].density_disk()
             if disk is None or not disk.traits('rht'):
                 continue
