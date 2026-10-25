@@ -411,6 +411,24 @@ def test_a_pool_evaluates_batches_as_the_objective_does(driver):
     assert pooled.best()[1] == pytest.approx(alone.best()[1], rel=1e-12)
 
 
+def test_a_pool_takes_placements_of_its_copies(driver):
+    # (that of the objective takes the objective itself; one of other
+    # drivers of its observation, by its name, gives the same values)
+    objective = mock_objective(driver, name='image')
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    xs = np.random.default_rng(3).uniform(
+        [-1, -1, 30, 45, 0.8, 3], [1, 1, 50, 65, 1.2, 5], (4, 6))
+    host = DriverHost()
+    with EvaluationPool(
+            objective, [(driver, {}), (driver, dict(image=host))]) as pool:
+        own, moved = pool.copies()
+        assert own is objective
+        assert moved.group_plan().observation_drivers() == (host,)
+        np.testing.assert_allclose(
+            FitProblem(objective, params, pool=pool).chi2_batch(xs),
+            FitProblem(objective, params).chi2_batch(xs), rtol=1e-5)
+
+
 @pytest.mark.parametrize('fitter', [
     dict(type='lmfit.least_squares'), dict(type='cmaes')])
 def test_a_fit_with_a_pool_is_the_fit_without(driver, fitter):

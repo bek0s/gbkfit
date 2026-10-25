@@ -309,3 +309,55 @@ def test_mocks_and_plans_with_other_data_evaluate_again(driver):
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
         np.testing.assert_array_equal(got, want)
     assert counts == dict(galaxy=3, a=4, b=4)
+
+
+def test_observations_on_two_drivers_evaluate_at_once(driver):
+    # Each in a thread of its driver, as on one driver: a on the host, b
+    # on the driver (or on another host driver), with the extra outputs
+    # in the order of one driver
+    import threading
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.model import Extras
+    alone = {
+        'host': two_observations(DriverHost()),
+        'driver': two_observations(driver)}
+    split = alone['host'].group().plan(
+        DriverHost(), dict(b=driver if driver.type() != 'host'
+                           else DriverHost()))
+    threads = []
+
+    def recording(evaluate):
+        def evaluated(*args):
+            threads.append(threading.current_thread().name)
+            return evaluate(*args)
+        return evaluated
+    for part in split._plans:
+        part.evaluate = recording(part.evaluate)
+    extras = dict(split=Extras(), alone=Extras())
+    a, b = spectra(split.model_h(TWO_PARAMS, extras['split']))
+    np.testing.assert_array_equal(
+        a, spectra(alone['host'].model_h(TWO_PARAMS))[0])
+    np.testing.assert_array_equal(
+        b, spectra(alone['driver'].model_h(TWO_PARAMS, extras['alone']))[1])
+    assert len(set(threads)) == 2
+    assert all(name.startswith('gbkfit-driver') for name in threads)
+    assert [(x.name, x.ids) for x in extras['split']] \
+        == [(x.name, x.ids) for x in extras['alone']]
+
+
+def test_an_error_on_one_of_two_drivers_is_raised(driver):
+    from gbkfit.driver.drivers.host import DriverHost
+    plan = two_observations(driver).group().plan(
+        driver, dict(b=DriverHost()))
+    counts = counted(plan)
+    evaluate = plan._plans[1].evaluate
+
+    def failing(*args):
+        raise RuntimeError("b failed")
+    plan._plans[1].evaluate = failing
+    with pytest.raises(RuntimeError, match="b failed"):
+        plan.model_h(TWO_PARAMS)
+    assert counts['a'] == 1
+    plan._plans[1].evaluate = evaluate
+    plan.model_h(TWO_PARAMS)
+    assert counts == dict(galaxy=1, a=1, b=1)

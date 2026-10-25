@@ -4,6 +4,8 @@ stage of each galaxy and the plan of each observation, each on its
 driver, with the memory of their models.
 """
 
+import concurrent.futures
+import contextvars
 import copy
 import threading
 from collections.abc import Iterable, Sequence
@@ -50,6 +52,11 @@ class GroupPlan:
     its last evaluation (see model_d): e.g. a fitter that moves the noise
     of an observation, or the offset of its frame, evaluates no other
     model again.
+
+    The observations on one driver evaluate their models one after the
+    other; those on different drivers (e.g. one on each GPU, for models
+    too big for one) at the same time, each driver in a thread of its own,
+    after the stages of the galaxies.
 
     Parameters
     ----------
@@ -107,6 +114,15 @@ class GroupPlan:
         self._model_lasts = tuple(
             _LastValues(group.model_params(i))
             for i in range(len(observations)))
+        # The observations on each driver, and the threads of the drivers
+        # when there are several (see model_d)
+        on_driver: dict[int, list[int]] = {}
+        for i, driver in enumerate(self._observation_drivers):
+            on_driver.setdefault(id(driver), []).append(i)
+        self._on_drivers = tuple(tuple(on) for on in on_driver.values())
+        self._executor = None if len(self._on_drivers) == 1 \
+            else concurrent.futures.ThreadPoolExecutor(
+                len(self._on_drivers), thread_name_prefix='gbkfit-driver')
         self._init_evaluations()
 
     def _init_evaluations(self) -> None:
@@ -260,6 +276,12 @@ class GroupPlan:
         of its mass, and what it gives its components), whose parameters
         are its own. NaN is never the value of the last evaluation.
 
+        After the stages of the galaxies, the observations on each driver
+        are evaluated one after the other, and those on different drivers
+        at the same time, each driver in a thread of its own (the extra
+        outputs of each observation go to out_extra after, in their
+        order); an error of one is raised once all are done.
+
         Parameters
         ----------
         params : dict
@@ -279,23 +301,71 @@ class GroupPlan:
             shares its memory: hold its lock while reading them, see
             lock).
         """
-        group = self._group
         with (self._lock, self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
                 states = self._galaxy_states(params, out_extra)
-            for i, (plan, last) in enumerate(
-                    zip(self._plans, self._model_lasts)):
-                model = None if out_extra is not None else last.get(params)
-                if model is None:
-                    model = plan.evaluate(
-                        group.moved(i, params),
-                        [states[g] for g in group.seen_galaxies(i)],
-                        None if out_extra is None else out_extra.scoped(
-                            observation=group.observation_label(i)))
-                    last.keep(params, model)
-                self._d_model_data[i] = model
+            if self._executor is None:
+                for i in range(len(self._plans)):
+                    self._evaluate_model(i, params, states, out_extra)
+            else:
+                self._evaluate_models_at_once(params, states, out_extra)
         return self._d_model_data
+
+    def _evaluate_model(
+            self,
+            index: int,
+            params: ParamValues,
+            states: Sequence[GalaxyState],
+            out_extra: Extras | None
+    ) -> None:
+        """
+        Evaluate the model of the observation of the given index, in the
+        states of the galaxies (see model_d).
+        """
+        group = self._group
+        last = self._model_lasts[index]
+        model = None if out_extra is not None else last.get(params)
+        if model is None:
+            model = self._plans[index].evaluate(
+                group.moved(index, params),
+                [states[g] for g in group.seen_galaxies(index)],
+                None if out_extra is None else out_extra.scoped(
+                    observation=group.observation_label(index)))
+            last.keep(params, model)
+        self._d_model_data[index] = model
+
+    def _evaluate_models_at_once(
+            self,
+            params: ParamValues,
+            states: Sequence[GalaxyState],
+            out_extra: Extras | None
+    ) -> None:
+        """
+        Evaluate the models of the observations on each driver one after
+        the other, in a thread of the driver, with the context of the
+        caller (e.g. the paths of configuration errors); the extra outputs
+        of each observation go to out_extra after all are done, in their
+        order (see model_d).
+        """
+        extras = [
+            None if out_extra is None else Extras() for _ in self._plans]
+
+        def evaluate(indices: tuple[int, ...]) -> None:
+            for i in indices:
+                self._evaluate_model(i, params, states, extras[i])
+        futures = [
+            self._executor.submit(
+                contextvars.copy_context().run, evaluate, indices)
+            for indices in self._on_drivers]
+        concurrent.futures.wait(futures)
+        for future in futures:
+            future.result()
+        if out_extra is not None:
+            for extras_i in extras:
+                for x in extras_i:
+                    out_extra.add(
+                        x.name, x.value, x.title, x.description, **x.ids)
 
     def model_h(
             self,
