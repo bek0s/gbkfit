@@ -13,16 +13,19 @@ import scipy.stats
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
-    EvaluationLog, EvaluationPool, FitControl, FitParamPrior, FitProblem,
-    PriorGauss, PriorGaussTrunc, PriorHalfCauchy, PriorHalfGauss,
-    PriorLogUniform, PriorScipy, PriorSine, PriorUniform)
+    EvaluationLog, EvaluationPool, FitControl, FitParamBounded,
+    FitParamPrior, FitProblem)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
     ObservationSky, PixelBrightness)
-from gbkfit.params import ParamEvaluationError, ParamSpace
+from gbkfit.params import (
+    FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
+    PriorGauss, PriorGaussTrunc,
+    PriorHalfCauchy, PriorHalfGauss, PriorLogUniform, PriorScipy, PriorSine,
+    PriorTruncated, PriorUniform)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -89,7 +92,9 @@ def test_fitter_configs_round_trip():
     PriorUniform(-1, 3), PriorLogUniform(0.1, 10), PriorGauss(1, 2),
     PriorGaussTrunc(1, 2, 0, 2), PriorSine(20, 85), PriorHalfGauss(2),
     PriorHalfCauchy(0.5), PriorScipy('lognorm', dict(s=0.5, scale=2)),
-    PriorScipy('beta', dict(a=2, b=5))])
+    PriorScipy('beta', dict(a=2, b=5)),
+    PriorTruncated(PriorGauss(1, 2), 0, math.inf),
+    PriorTruncated(PriorSine(0, 90), 30, 60)])
 def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
     # (over the whole support: the half-Cauchy has 1% of its mass beyond
     # 60 scales)
@@ -102,6 +107,7 @@ def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
         below, _ = scipy.integrate.quad(
             lambda x: math.exp(prior.log_pdf(x)), lo, float(prior.ppf(u)))
         assert below == pytest.approx(u, rel=1e-6)
+        assert prior.cdf(prior.ppf(u)) == pytest.approx(u, rel=1e-9)
     assert prior.log_pdf(prior.minimum() - 1) == -np.inf or \
         prior.minimum() == -np.inf
 
@@ -128,16 +134,15 @@ def test_the_residuals_of_half_priors_have_a_slope_at_0(prior, slope):
 
 
 def test_priors_load_from_their_configs_and_round_trip():
-    info = dict(
+    element = FreeElement.load(dict(
         prior=dict(type='gauss_trunc', mean=0, std=1, min=-1, max=2),
-        value=0.5)
-    param = FitParamPrior.load(info)
-    assert isinstance(param.prior(), PriorGaussTrunc)
-    assert (param.minimum(), param.maximum(), param.value()) == (-1, 2, 0.5)
-    assert param.dump() == info
-    assert FitParamPrior.load(param.dump()).dump() == info
-    from gbkfit.fitting import prior_parser
-    for info in (dict(type='half_gauss', std=2.0),
+        value=0.5))
+    assert isinstance(element.prior(), PriorGaussTrunc)
+    assert (element.minimum(), element.maximum(), element.value()) == (
+        -1, 2, 0.5)
+    from gbkfit.params import prior_parser
+    for info in (dict(type='gauss_trunc', mean=0, std=1, min=-1, max=2),
+                 dict(type='half_gauss', std=2.0),
                  dict(type='half_cauchy', scale=0.5)):
         assert prior_parser.dump(prior_parser.load(info)) == info
 
@@ -145,7 +150,7 @@ def test_priors_load_from_their_configs_and_round_trip():
 def test_priors_of_scipy_distributions():
     # A log-normal prior on a mass of 10^10.5 Msun, to 0.2 dex: its
     # chi-square is 0 at its most probable value, scale exp(-s^2)
-    from gbkfit.fitting import prior_parser
+    from gbkfit.params import prior_parser
     s, scale = 0.2 * math.log(10), 10 ** 10.5
     prior = PriorScipy('lognorm', dict(s=s, scale=scale))
     x = np.array([1e10, 10 ** 10.5, 1e11])
@@ -166,13 +171,39 @@ def test_priors_of_scipy_distributions():
         PriorScipy('lognorm', dict(shape=1))
 
 
-def test_min_and_max_without_a_prior_are_a_uniform_prior():
-    param = FitParamPrior.load(dict(min=-2, max=5, value=1))
-    assert isinstance(param.prior(), PriorUniform)
-    assert (param.minimum(), param.maximum()) == (-2, 5)
-    with pytest.raises(ConfigError, match="not both"):
-        FitParamPrior.load(dict(
-            prior=dict(type='gauss', mean=0, std=1), min=-2, max=5))
+def test_free_elements_mean_the_same_for_every_fitter():
+    # Bounds without a prior: flat for optimizers, uniform for samplers
+    bounded = FreeElement.load(dict(min=-2, max=5, value=1))
+    assert FitParamBounded.of(bounded, {}).prior() is None
+    prior = FitParamPrior.of(bounded, {}).prior()
+    assert isinstance(prior, PriorUniform)
+    assert (prior.minimum(), prior.maximum()) == (-2, 5)
+    # A prior with bounds is cut to them, for both
+    cut = FreeElement.load(dict(
+        prior=dict(type='gauss', mean=0, std=1), min=-2, max=5, value=1))
+    for param in (FitParamBounded.of(cut, {}), FitParamPrior.of(cut, {})):
+        assert isinstance(param.prior(), PriorTruncated)
+        assert (param.minimum(), param.maximum()) == (-2, 5)
+    with pytest.raises(ConfigError, match="needs a prior, or both"):
+        FitParamPrior.of(FreeElement.load(dict(min=0, value=1)), {})
+    with pytest.raises(ConfigError, match="needs option 'value'"):
+        FitParamBounded.of(FreeElement.load(dict(min=0, max=1)), {})
+
+
+def test_the_tuning_of_an_element_or_else_of_its_fitter():
+    # (each fitter reads its own; the others ignore it)
+    from gbkfit.fitting.fitters.cmaes import FitParamCMAES
+    from gbkfit.fitting.fitters.grid import FitParamGrid
+    element = FreeElement.load(dict(value=1, min=0, max=4, sigma=0.3))
+    assert FitParamCMAES.of(element, dict(sigma=1)).sigma() == 0.3
+    assert FitParamGrid.of(element, dict(n=5)).values().size == 5
+    with pytest.raises(ConfigError, match="a grid needs option 'n'"):
+        FitParamGrid.of(element, {})
+    # (a property of another fitter is known; a typo is not)
+    with pytest.raises(
+            ConfigError, match=r"'sigmaa' \(did you mean 'sigma'\?\)"):
+        ParamSpace(
+            dict(a=ParamScalarDesc()), dict(a=dict(value=1, n=5, sigmaa=1)))
 
 
 def test_lmfit_recovers_the_parameters_and_their_errors(driver):
@@ -627,12 +658,12 @@ def test_a_stopped_grid_keeps_the_points_it_evaluated():
 
 def test_least_squares_take_priors_with_residuals_only():
     from gbkfit.fitting.fitparams import FitParamLeastSquares
-    info = dict(
-        value=1.0, min=0, max=3, prior=dict(type='gauss', mean=1, std=0.5))
-    assert FitParamLeastSquares.load(info).dump() == info
+    element = FreeElement.load(dict(
+        value=1.0, min=0, max=3, prior=dict(type='gauss', mean=1, std=0.5)))
+    assert FitParamLeastSquares.of(element, {}).prior().has_residual()
     with pytest.raises(ConfigError, match="least squares cannot take"):
-        FitParamLeastSquares.load(dict(
-            value=2, prior=dict(type='log_uniform', min=1, max=10)))
+        FitParamLeastSquares.of(FreeElement.load(dict(
+            value=2, prior=dict(type='log_uniform', min=1, max=10))), {})
 
 
 

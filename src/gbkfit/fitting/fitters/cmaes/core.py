@@ -4,7 +4,8 @@ The CMA-ES fitter (pycma).
 
 import math
 import typing
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, Self
 
 import cma
 import numpy as np
@@ -12,9 +13,9 @@ import numpy as np
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
-from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
+from gbkfit.params import FreeElement, Prior
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -42,8 +43,9 @@ class FitParamCMAES(FitParamBounded):
     prior : Prior, optional
         The prior (see FitParamBounded).
     sigma : float, optional
-        The standard deviation of the first search (by default, a quarter
-        of the width of the bounds; required without both bounds).
+        The standard deviation of the first search (by default, that of
+        the fitter, or else a quarter of the width of the bounds; required
+        without both bounds).
 
     Raises
     ------
@@ -52,8 +54,16 @@ class FitParamCMAES(FitParamBounded):
         or sigma is not positive or is missing without both bounds.
     """
 
-    def dump(self) -> dict[str, Any]:
-        return super().dump() | dict(sigma=self._sigma)
+    @classmethod
+    def of(
+            cls, element: FreeElement, defaults: Mapping[str, Any]
+    ) -> Self:
+        bounded = FitParamBounded.of(element, defaults)
+        sigma = element.sigma()
+        return cls(
+            bounded.value(), bounded.minimum(), bounded.maximum(),
+            bounded.prior(),
+            defaults.get('sigma') if sigma is None else sigma)
 
     def __init__(
             self,
@@ -85,11 +95,11 @@ class FitterCMAES(Fitter):
     with optional restarts of growing populations (IPOP or BIPOP).
 
     The free elements take a value, optional min and max, and sigma (see
-    FitParamCMAES). CMA-ES works on the values scaled by their sigma, so
-    that each starts with a search of standard deviation 1. Each
-    generation is evaluated as a batch; values that the parameters
-    cannot take (e.g. outside their valid range) get an infinite
-    chi-square.
+    FitParamCMAES; the option sigma of the fitter is the default). CMA-ES
+    works on the values scaled by their sigma, so that each starts with a
+    search of standard deviation 1. Each generation is evaluated as a
+    batch; values that the parameters cannot take (e.g. outside their
+    valid range) get an infinite chi-square.
 
     Parameters
     ----------
@@ -107,6 +117,9 @@ class FitterCMAES(Fitter):
         The change of the chi-square below which a run stops.
     tolx : float, optional
         The step (in units of sigma) below which a run stops.
+    sigma : float, optional
+        The sigma of the free elements without their own (see
+        FitParamCMAES).
     verbose : bool, optional
         Whether pycma prints its progress.
     seed : int, optional
@@ -117,7 +130,8 @@ class FitterCMAES(Fitter):
     Raises
     ------
     ConfigError
-        If a number is not positive (restarts: negative).
+        If a number is not positive (restarts: negative), or sigma is not
+        finite.
     """
 
     @staticmethod
@@ -136,7 +150,8 @@ class FitterCMAES(Fitter):
             type=self.type(), popsize=self._popsize,
             restarts=self._restarts, bipop=self._bipop,
             maxfevals=self._maxfevals, tolfun=self._tolfun,
-            tolx=self._tolx, verbose=self._verbose) | self.dump_common()
+            tolx=self._tolx, sigma=self._sigma,
+            verbose=self._verbose) | self.dump_common()
 
     def __init__(
             self,
@@ -146,6 +161,7 @@ class FitterCMAES(Fitter):
             maxfevals: int | None = None,
             tolfun: float = 1e-6,
             tolx: float = 1e-6,
+            sigma: float | None = None,
             verbose: bool = False,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
@@ -153,10 +169,12 @@ class FitterCMAES(Fitter):
         super().__init__(seed, uncertainty)
         for name, value in dict(
                 popsize=popsize, maxfevals=maxfevals, tolfun=tolfun,
-                tolx=tolx).items():
+                tolx=tolx, sigma=sigma).items():
             if value is not None and not value > 0:
                 raise ConfigError(
                     f"option '{name}' must be positive; it is {value}")
+        if sigma is not None and not math.isfinite(sigma):
+            raise ConfigError(f"option 'sigma' must be finite; it is {sigma}")
         if restarts < 0:
             raise ConfigError(
                 f"option 'restarts' cannot be negative; it is {restarts}")
@@ -166,7 +184,11 @@ class FitterCMAES(Fitter):
         self._maxfevals = maxfevals
         self._tolfun = tolfun
         self._tolx = tolx
+        self._sigma = sigma
         self._verbose = verbose
+
+    def _tuning(self) -> dict[str, Any]:
+        return {} if self._sigma is None else dict(sigma=self._sigma)
 
     def _run(
             self,

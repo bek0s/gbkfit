@@ -16,7 +16,7 @@ __all__ = [
 
 
 class _LogDensity(Protocol):
-    """A prior: anything with the log of its density (e.g. fitting.Prior)."""
+    """A prior: anything with the log of its density (e.g. params.Prior)."""
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray: ...
 
@@ -40,7 +40,7 @@ def information_gain(
     samples : ArrayLike
         The posterior samples of the parameter.
     prior : Prior
-        Its prior (anything with log_pdf, e.g. gbkfit.fitting.Prior).
+        Its prior (anything with log_pdf, e.g. gbkfit.params.Prior).
     weights : ArrayLike, optional
         The weights of the samples (of nested samplers).
 

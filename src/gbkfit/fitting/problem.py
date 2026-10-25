@@ -15,9 +15,9 @@ import numpy.typing as npt
 
 from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
-from gbkfit.fitting.joint_priors import joint_prior_residuals
+from gbkfit.params.joint_priors import joint_prior_residuals
 from gbkfit.fitting.pool import EvaluationPool
-from gbkfit.fitting.priors import Prior
+from gbkfit.params.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues

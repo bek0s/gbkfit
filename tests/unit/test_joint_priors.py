@@ -6,7 +6,7 @@ parameter space keeps them.
 import numpy as np
 import pytest
 
-from gbkfit.fitting import joint_prior_residuals
+from gbkfit.params import joint_prior_residuals
 from gbkfit.params import ParamScalarDesc, ParamSpace, ParamVectorDesc
 from gbkfit.utils.parseutils import ConfigError
 

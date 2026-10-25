@@ -80,12 +80,13 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     A fitter: it finds the free values of a parameter space that fit the
     data of an objective, and works out their uncertainty.
 
-    Each fitter reads the free property of each element (see
-    ParamSpace.free_properties) into its class of FitParam (see
-    fit_param_class): e.g. initial values and bounds for optimizers, and
-    priors for samplers. After its run, the fitter evaluates each
-    solution, and computes its covariance and Laplace posterior (see
-    UncertaintyOptions).
+    Each fitter reads each free element (see ParamSpace.free_elements)
+    into its class of FitParam (see fit_param_class): e.g. initial values
+    and bounds for optimizers, and priors for samplers. Some fitters take
+    a default of their tuning of the elements (e.g. the sigma of CMA-ES),
+    for the elements without their own (see FreeElement). After its run,
+    the fitter evaluates each solution, and computes its covariance and
+    Laplace posterior (see UncertaintyOptions).
 
     Parameters
     ----------
@@ -146,7 +147,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
 
     def load_fit_params(self, params: ParamSpace) -> dict[str, FitParam]:
         """
-        Load the options of the free elements from their free properties.
+        Read the free elements into the options of the fitter (see
+        FitParam.of), with its default tuning (see _tuning).
 
         Parameters
         ----------
@@ -164,11 +166,20 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             If the properties of an element are invalid for the fitter.
         """
         cls = self.fit_param_class()
+        defaults = self._tuning()
         fit_params = {}
-        for name, info in params.free_properties().items():
+        for name, element in params.free_elements().items():
             with parseutils.config_path(name):
-                fit_params[name] = cls.load(info)
+                fit_params[name] = cls.of(element, defaults)
         return fit_params
+
+    def _tuning(self) -> dict[str, Any]:
+        """
+        Return the default tuning of the free elements, by the name of
+        the property (e.g. {'sigma': 5}; see FreeElement): none by
+        default.
+        """
+        return {}
 
     def fit(
             self,

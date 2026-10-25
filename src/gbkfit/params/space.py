@@ -10,6 +10,7 @@ import dataclasses
 import enum
 import graphlib
 import logging
+import math
 import numbers
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, TypeAlias
@@ -23,12 +24,15 @@ from gbkfit.params._keys import (
     InvalidKeyError, Key, element_name, element_names, parse_key)
 from gbkfit.params.modes import ParamMode, param_mode_parser
 from gbkfit.params.pdescs import ParamDesc
+from gbkfit.params.priors import (
+    Prior, PriorTruncated, PriorUniform, prior_parser)
 from gbkfit.params.solves import Solve, solve_parser
 from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'FreeElement',
     'ParamEvaluationError',
     'ParamFunctions',
     'ParamKind',
@@ -79,6 +83,153 @@ class ParamFunctions(abc.ABC):
         Return the value of each name (a function or a number) at the
         values of the parameters, by name.
         """
+
+
+class FreeElement:
+    """
+    The properties of a free element: the same for every fitter.
+
+    A fitter tries values within the bounds and the support of the
+    prior; a prior with bounds is cut to them (see PriorTruncated), and
+    without a prior an element is flat within its bounds (optimizers add
+    no prior to the cost; samplers take the uniform prior of the bounds,
+    see proper_prior). The tuning of some fitters is here too: each
+    fitter reads its own and ignores the others, so that the properties
+    suit every fitter.
+
+    Parameters
+    ----------
+    value : float, optional
+        The starting value (optimizers need it; walkers start around
+        it, see width).
+    minimum, maximum : float, optional
+        The bounds (config: min, max; by default none).
+    prior : Prior, optional
+        The prior.
+    sigma : float, optional
+        The width of the first search of CMA-ES.
+    width : float, optional
+        The width of the box around the value where the walkers of emcee
+        and zeus start.
+    n : int, optional
+        The number of values of a grid, evenly spaced from the minimum to
+        the maximum.
+
+    Raises
+    ------
+    ConfigError
+        If the bounds, with the support of the prior, are empty, the
+        value is not finite or not within them, sigma or width is not
+        finite and positive, or n is not an integer of at least 2.
+    """
+
+    @classmethod
+    def load(cls, info: Mapping[str, Any]) -> 'FreeElement':
+        info = dict(info)
+        if isinstance(info.get('prior'), Mapping):
+            info['prior'] = parseutils.load_option(
+                prior_parser.load, info, 'prior')
+        return cls(**parseutils.parse_options_for_callable(
+            info, cls.__init__,
+            rename_params=dict(minimum='min', maximum='max')))
+
+    def __init__(
+            self,
+            value: float | None = None,
+            minimum: float = -math.inf,
+            maximum: float = math.inf,
+            prior: Prior | None = None,
+            sigma: float | None = None,
+            width: float | None = None,
+            n: int | None = None
+    ):
+        if not minimum < maximum:
+            raise ConfigError(
+                f"the bounds must not be empty; they are [{minimum}, "
+                f"{maximum}]")
+        if prior is not None and (
+                minimum > prior.minimum() or maximum < prior.maximum()):
+            prior = PriorTruncated(prior, minimum, maximum)
+        if prior is not None:
+            minimum, maximum = prior.minimum(), prior.maximum()
+        if value is not None:
+            if not math.isfinite(value):
+                raise ConfigError(
+                    f"option 'value' must be finite; it is {value}")
+            if not minimum <= value <= maximum:
+                raise ConfigError(
+                    f"option 'value' ({value}) must be in the range "
+                    f"[{minimum}, {maximum}]")
+        for name, option in (('sigma', sigma), ('width', width)):
+            if option is not None and not (
+                    math.isfinite(option) and option > 0):
+                raise ConfigError(
+                    f"option '{name}' must be finite and positive; it is "
+                    f"{option}")
+        if n is not None and (
+                isinstance(n, bool) or not isinstance(n, int) or n < 2):
+            raise ConfigError(
+                f"option 'n' must be an integer of at least 2 (a fixed "
+                f"value is not free); it is {n!r}")
+        self._value = None if value is None else float(value)
+        self._minimum = float(minimum)
+        self._maximum = float(maximum)
+        self._prior = prior
+        self._sigma = sigma
+        self._width = width
+        self._n = n
+
+    def value(self) -> float | None:
+        """Return the starting value, if any."""
+        return self._value
+
+    def minimum(self) -> float:
+        """
+        Return the lowest value the fitters may try: the lower bound, or
+        that of the support of the prior, whichever is higher.
+        """
+        return self._minimum
+
+    def maximum(self) -> float:
+        """
+        Return the highest value the fitters may try: the upper bound, or
+        that of the support of the prior, whichever is lower.
+        """
+        return self._maximum
+
+    def prior(self) -> Prior | None:
+        """Return the prior (cut to the bounds), if any."""
+        return self._prior
+
+    def proper_prior(self) -> Prior:
+        """
+        Return the prior, or else the uniform prior of the bounds (of the
+        samplers, which need a proper one).
+
+        Raises
+        ------
+        ConfigError
+            If there is no prior, and a bound is missing.
+        """
+        if self._prior is not None:
+            return self._prior
+        if not (math.isfinite(self._minimum) and math.isfinite(self._maximum)):
+            raise ConfigError(
+                "a sampler needs a prior, or both options 'min' and 'max' "
+                "(a uniform prior)")
+        return PriorUniform(self._minimum, self._maximum)
+
+    def sigma(self) -> float | None:
+        """Return the width of the first search of CMA-ES, if any."""
+        return self._sigma
+
+    def width(self) -> float | None:
+        """Return the width of the box of the starts of walkers, if any."""
+        return self._width
+
+    def n(self) -> int | None:
+        """Return the number of values of a grid, if any."""
+        return self._n
 
 
 class ParamEvaluationError(RuntimeError):
@@ -162,10 +313,11 @@ class ParamSpace(parseutils.Serializable):
     - a number: the elements are fixed to it
     - a string: an expression of other parameters and constants, which
       ties the elements to it (e.g. 'hi_vpt_vt': 'vmax * 0.9')
-    - a dict: the elements are free, and the dict holds the options of
-      the fitter (e.g. {'value': 1, 'min': 0, 'max': 2}); the values of
-      the attributes whose names start with '*' are lists, spread over
-      the elements (e.g. {'*value': [1, 2, 3], 'min': 0})
+    - a dict: the elements are free, and the dict holds their
+      properties, the same for every fitter (e.g. {'value': 1, 'min': 0,
+      'max': 2}; see FreeElement); the values of the attributes whose
+      names start with '*' are lists, spread over the elements (e.g.
+      {'*value': [1, 2, 3], 'min': 0})
     - a dict of 'solve' alone: the elements are solved at each evaluation
       of an objective, from the data, by the solve (e.g. {'solve': {'type':
       'gaussian', 'mean': 1, 'sigma': 0.5, 'minimum': 0}}; see Solve), in
@@ -222,7 +374,7 @@ class ParamSpace(parseutils.Serializable):
     priors : Sequence of dict, optional
         The priors on several parameters at once, as their configurations
         (e.g. {'type': 'gauss', 'expr': 'vt * 0.9', ...}), which the
-        fitters read (see gbkfit.fitting.JointPrior), as they read the
+        fitters read (see JointPrior), as they read the
         options of the free elements in the properties.
     derived : Mapping of str to str, optional
         The expressions of the derived values, by name, in order.
@@ -370,6 +522,7 @@ class ParamSpace(parseutils.Serializable):
         self._kinds: dict[_Element, ParamKind] = {}
         self._fixed: dict[_Element, float] = {}
         self._free: dict[_Element, dict[str, Any]] = {}
+        self._free_parsed: dict[_Element, FreeElement] = {}
         self._solves: dict[_Element, Solve] = {}
         self._assignments: list[_Assignment] = []
         errors = self._check_names()
@@ -485,11 +638,21 @@ class ParamSpace(parseutils.Serializable):
 
     def free_properties(self) -> dict[str, dict[str, Any]]:
         """
-        Return the properties of the free elements, by element name, in
-        the order in which evaluate takes their values.
+        Return the properties of the free elements as given (e.g. to show
+        them), by element name, in the order in which evaluate takes their
+        values.
         """
         return {
             element_name(*e): copy.deepcopy(self._free[e])
+            for e in self._free_elements}
+
+    def free_elements(self) -> dict[str, FreeElement]:
+        """
+        Return the free elements (their properties for the fitters), by
+        element name, in the order in which evaluate takes their values.
+        """
+        return {
+            element_name(*e): self._free_parsed[e]
             for e in self._free_elements}
 
     def solves(self) -> dict[str, Solve]:
@@ -941,8 +1104,14 @@ class ParamSpace(parseutils.Serializable):
             self._solves.update(dict.fromkeys(elements, solve))
         elif isinstance(value, Mapping):
             kind = ParamKind.FREE
+            try:
+                with parseutils.config_path(key):
+                    free = FreeElement.load(value)
+            except ConfigError as e:
+                raise ValueError(e.message) from None
             self._free.update(
                 {e: copy.deepcopy(dict(value)) for e in elements})
+            self._free_parsed.update(dict.fromkeys(elements, free))
         else:
             raise ValueError(f"invalid value: {value!r}")
         self._kinds.update(dict.fromkeys(elements, kind))

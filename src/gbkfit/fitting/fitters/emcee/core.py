@@ -2,6 +2,7 @@
 The emcee MCMC sampler.
 """
 
+import math
 import typing
 from typing import Any, Literal
 
@@ -12,7 +13,6 @@ from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
-from gbkfit.fitting.priors import Prior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils.parseutils import ConfigError
@@ -58,6 +58,10 @@ class FitterEmcee(Fitter):
         emcee's DESnookerMove: in emcee 3.1.6 its step is not along a unit
         vector, and it samples correlated posteriors too narrowly, by 12%
         on a 10-parameter fit.)
+    width : float, optional
+        The width of the box of the starts of the walkers around the
+        values of the free elements without their own (see
+        FitParamWalkers).
     seed : int, optional
         The seed of the random numbers.
     uncertainty : UncertaintyOptions, optional
@@ -67,7 +71,8 @@ class FitterEmcee(Fitter):
     ------
     ConfigError
         If nwalkers, nsteps or thin is not positive, burnin is not in
-        [0, nsteps), or thin keeps no step after the burn-in.
+        [0, nsteps), thin keeps no step after the burn-in, or width is
+        not finite and positive.
     """
 
     @staticmethod
@@ -84,8 +89,8 @@ class FitterEmcee(Fitter):
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), nwalkers=self._nwalkers, nsteps=self._nsteps,
-            burnin=self._burnin, thin=self._thin, moves=self._moves
-        ) | self.dump_common()
+            burnin=self._burnin, thin=self._thin, moves=self._moves,
+            width=self._width) | self.dump_common()
 
     def __init__(
             self,
@@ -94,6 +99,7 @@ class FitterEmcee(Fitter):
             burnin: int | None = None,
             thin: int = 1,
             moves: Literal['de', 'stretch'] = 'de',
+            width: float | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
@@ -103,6 +109,9 @@ class FitterEmcee(Fitter):
             if value is not None and not value > 0:
                 raise ConfigError(
                     f"option '{name}' must be positive; it is {value}")
+        if width is not None and not (math.isfinite(width) and width > 0):
+            raise ConfigError(
+                f"option 'width' must be finite and positive; it is {width}")
         if burnin is not None and not 0 <= burnin < nsteps:
             raise ConfigError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")
@@ -116,6 +125,10 @@ class FitterEmcee(Fitter):
         self._burnin = burnin
         self._thin = thin
         self._moves = moves
+        self._width = width
+
+    def _tuning(self) -> dict[str, Any]:
+        return {} if self._width is None else dict(width=self._width)
 
     def _run(
             self,

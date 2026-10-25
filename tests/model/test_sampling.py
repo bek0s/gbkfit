@@ -134,7 +134,7 @@ def evaluate_curve(component, free):
     pdescs = obs_group.pdescs() | dict(
         vmax=ParamScalarDesc(), rt=ParamScalarDesc())
     space = ParamSpace(pdescs, PROPERTIES | dict(
-        vmax=dict(val=100), rt=dict(val=1),
+        vmax=dict(value=100), rt=dict(value=1),
         vpt_vt='vmax * 2 / np.pi * np.arctan(subrnodes / rt)'),
         constants=obs_group.constants())
     extra = Extras()

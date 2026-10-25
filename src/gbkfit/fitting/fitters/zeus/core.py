@@ -3,6 +3,7 @@ The zeus ensemble slice sampler.
 """
 
 import contextlib
+import math
 import random
 import typing
 from collections.abc import Iterator
@@ -83,6 +84,10 @@ class FitterZeus(Fitter):
     light_mode : bool, optional
         Do not widen the slices after zeus has tuned their scale: fewer
         evaluations, for posteriors that are nearly Gaussian.
+    width : float, optional
+        The width of the box of the starts of the walkers around the
+        values of the free elements without their own (see
+        FitParamWalkers).
     seed : int, optional
         The seed of the random numbers (zeus draws the global ones of
         NumPy and of the module random, which it seeds for the run, and
@@ -95,7 +100,8 @@ class FitterZeus(Fitter):
     ConfigError
         If nwalkers is not even and positive, nsteps or thin is not
         positive, burnin is not in [0, nsteps), thin keeps no step after
-        the burn-in, or the moves are 'global' without a burn-in.
+        the burn-in, the moves are 'global' without a burn-in, or width is
+        not finite and positive.
     """
 
     @staticmethod
@@ -113,7 +119,7 @@ class FitterZeus(Fitter):
         return dict(
             type=self.type(), nwalkers=self._nwalkers, nsteps=self._nsteps,
             burnin=self._burnin, thin=self._thin, moves=self._moves,
-            light_mode=self._light_mode
+            light_mode=self._light_mode, width=self._width
         ) | self.dump_common()
 
     def __init__(
@@ -124,6 +130,7 @@ class FitterZeus(Fitter):
             thin: int = 1,
             moves: Literal['differential', 'global'] = 'differential',
             light_mode: bool = False,
+            width: float | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
@@ -137,6 +144,9 @@ class FitterZeus(Fitter):
             raise ConfigError(
                 f"option 'nwalkers' must be even (zeus moves two halves of "
                 f"the walkers in turn); it is {nwalkers}")
+        if width is not None and not (math.isfinite(width) and width > 0):
+            raise ConfigError(
+                f"option 'width' must be finite and positive; it is {width}")
         if burnin is not None and not 0 <= burnin < nsteps:
             raise ConfigError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")
@@ -155,6 +165,10 @@ class FitterZeus(Fitter):
         self._thin = thin
         self._moves = moves
         self._light_mode = light_mode
+        self._width = width
+
+    def _tuning(self) -> dict[str, Any]:
+        return {} if self._width is None else dict(width=self._width)
 
     def _stages(self) -> list[tuple[Any, int]]:
         """

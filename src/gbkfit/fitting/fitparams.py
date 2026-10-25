@@ -1,7 +1,8 @@
 """
-The options of the free elements for the fitters: each fitter loads the
-free property of each element (see ParamSpace.free_properties) into an
-object of its class of them.
+The options of the free elements for each kind of fitter: what a kind of
+fitter needs of the properties of an element (see FreeElement), and
+what it works out from them. Each fitter reads the free elements into
+its class of them (see Fitter.load_fit_params).
 """
 
 import abc
@@ -13,8 +14,7 @@ from typing import Any, Self, TypeAlias
 
 import numpy as np
 
-from gbkfit.fitting.priors import Prior, PriorUniform, prior_parser
-from gbkfit.utils import parseutils
+from gbkfit.params import FreeElement, Prior
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -38,6 +38,17 @@ def _check_value(value: float, minimum: float, maximum: float) -> None:
             f"{maximum}]")
 
 
+def _value(element: FreeElement) -> float:
+    """
+    Return the starting value of a free element for an optimizer; raise
+    ConfigError if it has none.
+    """
+    if (value := element.value()) is None:
+        raise ConfigError(
+            "an optimizer needs option 'value' (where it starts)")
+    return value
+
+
 def _scale(minimum: float, maximum: float, width: float) -> float:
     """
     Return the typical scale of a value in a range (see FitParam.scale):
@@ -50,18 +61,31 @@ def _scale(minimum: float, maximum: float, width: float) -> float:
     return 0.01 * width if math.isfinite(width) else 1.0
 
 
-class FitParam(parseutils.Serializable, abc.ABC):
-    """
-    The options of a free element for a fitter.
-
-    The config names the minimum and maximum 'min' and 'max'.
-    """
+class FitParam(abc.ABC):
+    """The options of a free element for a fitter."""
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'FitParam':
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__,
-            rename_params=dict(minimum='min', maximum='max')))
+    @abc.abstractmethod
+    def of(
+            cls, element: FreeElement, defaults: Mapping[str, Any]
+    ) -> Self:
+        """
+        Return the options of a free element for the fitters of this
+        class.
+
+        Parameters
+        ----------
+        element : FreeElement
+            The element.
+        defaults : Mapping
+            The tuning of the fitter, for the elements without their own
+            (e.g. {'sigma': 5}; see Fitter.load_fit_params).
+
+        Raises
+        ------
+        ConfigError
+            If the element lacks what the fitters need (e.g. a value).
+        """
 
     @abc.abstractmethod
     def minimum(self) -> float:
@@ -118,24 +142,12 @@ class FitParamBounded(FitParam):
     """
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'FitParamBounded':
-        info = dict(info)
-        if isinstance(info.get('prior'), Mapping):
-            info['prior'] = parseutils.load_option(
-                prior_parser.load, info, 'prior')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__,
-            rename_params=dict(minimum='min', maximum='max')))
-
-    def dump(self) -> dict[str, Any]:
-        info: dict[str, Any] = dict(value=self._value)
-        if math.isfinite(self._bounds[0]):
-            info['min'] = self._bounds[0]
-        if math.isfinite(self._bounds[1]):
-            info['max'] = self._bounds[1]
-        if self._prior is not None:
-            info['prior'] = prior_parser.dump(self._prior)
-        return info
+    def of(
+            cls, element: FreeElement, defaults: Mapping[str, Any]
+    ) -> Self:
+        return cls(
+            _value(element), element.minimum(), element.maximum(),
+            element.prior())
 
     def __init__(
             self,
@@ -144,7 +156,6 @@ class FitParamBounded(FitParam):
             maximum: float = math.inf,
             prior: Prior | None = None
     ):
-        self._bounds = (float(minimum), float(maximum))
         self._prior = prior
         if prior is not None:
             minimum = max(minimum, prior.minimum())
@@ -219,7 +230,8 @@ class FitParamPrior(FitParam):
     The options of a free element for a sampler: its prior, and an
     optional value (e.g. where to start).
 
-    In a config, min and max without a prior give a uniform prior.
+    Without a prior, an element has the uniform prior of its bounds
+    (see FreeElement.proper_prior).
 
     Parameters
     ----------
@@ -235,28 +247,10 @@ class FitParamPrior(FitParam):
     """
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'FitParamPrior':
-        info = dict(info)
-        has_range = 'min' in info or 'max' in info
-        if info.get('prior') is not None and has_range:
-            raise ConfigError(
-                "give either option 'prior', or options 'min' and 'max' "
-                "(a uniform prior), not both")
-        if isinstance(info.get('prior'), Mapping):
-            info['prior'] = parseutils.load_option(
-                prior_parser.load, info, 'prior')
-        elif has_range:
-            if 'min' not in info or 'max' not in info:
-                raise ConfigError(
-                    "a uniform prior needs both options 'min' and 'max'")
-            info['prior'] = PriorUniform(info.pop('min'), info.pop('max'))
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
-
-    def dump(self) -> dict[str, Any]:
-        info: dict[str, Any] = dict(prior=prior_parser.dump(self._prior))
-        if self._value is not None:
-            info['value'] = self._value
-        return info
+    def of(
+            cls, element: FreeElement, defaults: Mapping[str, Any]
+    ) -> Self:
+        return cls(element.proper_prior(), element.value())
 
     def __init__(self, prior: Prior, value: float | None = None):
         if value is not None:
@@ -300,12 +294,12 @@ class FitParamWalkers(FitParamPrior):
     Parameters
     ----------
     prior : Prior
-        The prior (in a config, min and max without a prior give a
-        uniform one).
+        The prior.
     value : float, optional
         The centre of the box of the walkers.
     width : float, optional
-        The width of the box of the walkers (needs a value).
+        The width of the box of the walkers (needs a value; by default
+        that of the fitter, if any, see FitterEmcee).
 
     Raises
     ------
@@ -314,11 +308,14 @@ class FitParamWalkers(FitParamPrior):
         given without a value, or is not positive.
     """
 
-    def dump(self) -> dict[str, Any]:
-        info = super().dump()
-        if self._width is not None:
-            info['width'] = self._width
-        return info
+    @classmethod
+    def of(
+            cls, element: FreeElement, defaults: Mapping[str, Any]
+    ) -> Self:
+        width = element.width()
+        return cls(
+            element.proper_prior(), element.value(),
+            defaults.get('width') if width is None else width)
 
     def __init__(
             self,

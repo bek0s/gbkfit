@@ -254,7 +254,7 @@ def _set_up(cfg: dict[str, Any], root: str) -> _Setup:
         with parseutils.config_path('params', 'properties'):
             fitter.load_fit_params(params)
         with parseutils.config_path('params'):
-            gbkfit.fitting.joint_prior_residuals(params)
+            gbkfit.params.joint_prior_residuals(params)
     return _Setup(drivers, group_plan, objective, fitter, params)
 
 

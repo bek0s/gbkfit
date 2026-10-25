@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import scipy.linalg
 
-from gbkfit.params import ParamSpace, ParamValues
+from .space import ParamSpace, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 

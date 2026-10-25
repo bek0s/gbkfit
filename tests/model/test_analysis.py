@@ -146,7 +146,7 @@ def test_structure_functions_are_the_mean_over_pairs_of_pixels():
 def test_the_information_gain_of_a_gaussian_posterior():
     # D(N(0, 1) || prior): of a Gaussian prior of 10, ln 10 + 1 / 200 -
     # 1 / 2; of a uniform prior over [-10, 10], ln 20 - ln(2 pi e) / 2
-    from gbkfit.fitting import PriorGauss, PriorUniform
+    from gbkfit.params import PriorGauss, PriorUniform
     samples = np.random.default_rng(7).normal(size=20000)
     assert information_gain(samples, PriorGauss(0, 10)) == pytest.approx(
         np.log(10) + 1 / 200 - 0.5, abs=0.03)

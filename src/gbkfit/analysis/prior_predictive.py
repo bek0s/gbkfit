@@ -7,7 +7,6 @@ import dataclasses
 
 import numpy as np
 
-from gbkfit.fitting import FitParamPrior
 from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError, ParamSpace
 
@@ -49,8 +48,8 @@ def prior_predictive(
 ) -> PriorPredictive:
     """
     Return a prior predictive check of a fit before it runs: the models at
-    ndraws values of the free elements drawn from their priors (their
-    free properties, as samplers read them: see FitParamPrior), each with
+    ndraws values of the free elements drawn from their priors (as
+    samplers read them: see FreeElement.proper_prior), each with
     noise of the errors of the data (none without errors), as data they
     predict; their percentiles at each value of the data, and the share of
     the data within them.
@@ -75,12 +74,12 @@ def prior_predictive(
     Raises
     ------
     ConfigError
-        If a free element has no prior.
+        If a free element has no prior, and a bound is missing.
     ValueError
         If no draw can be evaluated.
     """
-    priors = [FitParamPrior.load(info).prior()
-              for info in params.free_properties().values()]
+    priors = [element.proper_prior()
+              for element in params.free_elements().values()]
     rng = np.random.default_rng(seed)
     datasets = objective.datasets()
     chi2 = np.full(ndraws, np.inf)

@@ -119,6 +119,10 @@ class FitterMultiStart(Fitter):
         """Return the local fitter."""
         return self._local
 
+    def _tuning(self) -> dict[str, Any]:
+        # (that of the local fitter)
+        return self._local._tuning()
+
     def _run(
             self,
             problem: FitProblem,

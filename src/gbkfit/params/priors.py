@@ -1,6 +1,7 @@
 """
-The priors of the free parameters of a fit: one probability distribution
-for each free element, independent of the others.
+The priors of the free elements of the parameters: one probability
+distribution for each free element, independent of the others (see
+FreeElement).
 """
 
 import abc
@@ -27,6 +28,7 @@ __all__ = [
     'PriorLogUniform',
     'PriorScipy',
     'PriorSine',
+    'PriorTruncated',
     'PriorUniform',
     'prior_parser'
 ]
@@ -103,6 +105,23 @@ class Prior(parseutils.TypedSerializable, abc.ABC):
         -------
         np.ndarray
             The log-density of each value (-inf outside the support).
+        """
+
+    @abc.abstractmethod
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the cumulative distribution function.
+
+        Parameters
+        ----------
+        x : ArrayLike
+            The values.
+
+        Returns
+        -------
+        np.ndarray
+            The probability of a value at most each value (0 below the
+            support, 1 above it).
         """
 
     @abc.abstractmethod
@@ -232,6 +251,11 @@ class PriorUniform(Prior):
     def residual(self, x: npt.ArrayLike) -> np.ndarray:
         return np.zeros_like(np.asarray(x, dtype=float))
 
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        return np.clip(
+            (x - self._minimum) / (self._maximum - self._minimum), 0, 1)
+
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
         return self._minimum + u * (self._maximum - self._minimum)
@@ -289,6 +313,10 @@ class PriorLogUniform(Prior):
         inside = (x >= self._minimum) & (x <= self._maximum)
         with np.errstate(divide='ignore', invalid='ignore'):
             return np.where(inside, 2 * np.log(x / self._minimum), np.inf)
+
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.clip(np.asarray(x, dtype=float), self._minimum, self._maximum)
+        return np.log(x / self._minimum) / self._log_ratio
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
@@ -365,6 +393,11 @@ class PriorSine(Prior):
         x = np.asarray(x, dtype=float)
         return np.sign(x - 90) * np.sqrt(self.chi2(x))
 
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.clip(np.asarray(x, dtype=float), self._minimum, self._maximum)
+        return (self._cos_min - np.cos(np.radians(x))) \
+            / (self._cos_min - self._cos_max)
+
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
         return np.degrees(np.arccos(
@@ -429,6 +462,9 @@ class PriorGauss(Prior):
 
     def residual(self, x: npt.ArrayLike) -> np.ndarray:
         return (np.asarray(x, dtype=float) - self._mean) / self._std
+
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        return scipy.special.ndtr(self.residual(x))
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         return self._mean + self._std * scipy.special.ndtri(
@@ -514,6 +550,9 @@ class PriorGaussTrunc(Prior):
     def residual(self, x: npt.ArrayLike) -> np.ndarray:
         return (np.asarray(x, dtype=float) - self._mean) / self._std
 
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        return np.asarray(self._dist.cdf(np.asarray(x, dtype=float)))
+
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         return np.asarray(self._dist.ppf(np.asarray(u, dtype=float)))
 
@@ -571,6 +610,10 @@ class PriorHalfGauss(Prior):
 
     def residual(self, x: npt.ArrayLike) -> np.ndarray:
         return np.asarray(x, dtype=float) / self._std
+
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.maximum(np.asarray(x, dtype=float), 0)
+        return 2 * scipy.special.ndtr(x / self._std) - 1
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
@@ -637,6 +680,10 @@ class PriorHalfCauchy(Prior):
     def residual(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)
         return np.sign(x) * np.sqrt(2 * np.log1p((x / self._scale) ** 2))
+
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.maximum(np.asarray(x, dtype=float), 0)
+        return 2 / np.pi * np.arctan(x / self._scale)
 
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         u = np.asarray(u, dtype=float)
@@ -738,8 +785,92 @@ class PriorScipy(Prior):
     def chi2(self, x: npt.ArrayLike) -> np.ndarray:
         return -2 * (self.log_pdf(x) - self._max_log_pdf)
 
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        return np.asarray(self._frozen.cdf(x), dtype=float)
+
     def ppf(self, u: npt.ArrayLike) -> np.ndarray:
         return np.asarray(self._frozen.ppf(u), dtype=float)
+
+
+class PriorTruncated(Prior):
+    """
+    A prior cut to a range, and normalised in it: of a free element with
+    a prior and bounds (min, max; see FreeElement). It is not a type of
+    the configurations, whose priors are cut by the bounds of their
+    elements.
+
+    Its chi-square and residual are those of the prior it cuts, inside
+    the range.
+
+    Parameters
+    ----------
+    prior : Prior
+        The prior.
+    minimum, maximum : float
+        The range (may be infinite); the support is the part of that of
+        the prior within it.
+
+    Raises
+    ------
+    ConfigError
+        If the range holds none of the probability of the prior.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'truncated'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(
+            type=self.type(), prior=prior_parser.dump(self._prior),
+            min=self._minimum, max=self._maximum)
+
+    def __init__(self, prior: Prior, minimum: float, maximum: float):
+        self._prior = prior
+        self._minimum = max(float(minimum), prior.minimum())
+        self._maximum = min(float(maximum), prior.maximum())
+        self._cdf_minimum = float(prior.cdf(self._minimum))
+        self._mass = float(prior.cdf(self._maximum)) - self._cdf_minimum
+        if not (self._minimum < self._maximum and self._mass > 0):
+            raise ConfigError(
+                f"the bounds [{minimum}, {maximum}] hold none of the "
+                f"probability of the prior")
+
+    def prior(self) -> Prior:
+        """Return the prior that it cuts."""
+        return self._prior
+
+    def minimum(self) -> float:
+        return self._minimum
+
+    def maximum(self) -> float:
+        return self._maximum
+
+    def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        return np.where(
+            inside, self._prior.log_pdf(x) - math.log(self._mass), -np.inf)
+
+    def chi2(self, x: npt.ArrayLike) -> np.ndarray:
+        x = np.asarray(x, dtype=float)
+        inside = (x >= self._minimum) & (x <= self._maximum)
+        return np.where(inside, self._prior.chi2(x), np.inf)
+
+    def has_residual(self) -> bool:
+        return self._prior.has_residual()
+
+    def residual(self, x: npt.ArrayLike) -> np.ndarray:
+        return self._prior.residual(x)
+
+    def cdf(self, x: npt.ArrayLike) -> np.ndarray:
+        return np.clip(
+            (self._prior.cdf(x) - self._cdf_minimum) / self._mass, 0, 1)
+
+    def ppf(self, u: npt.ArrayLike) -> np.ndarray:
+        u = np.asarray(u, dtype=float)
+        x = self._prior.ppf(self._cdf_minimum + u * self._mass)
+        return np.clip(x, self._minimum, self._maximum)
 
 
 prior_parser = parseutils.TypedParser(Prior)
