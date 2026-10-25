@@ -218,3 +218,94 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
     few = image(1032, 0.512)
     assert few.sum() > 0
     assert many.sum() == pytest.approx(few.sum(), rel=0.01)
+
+
+
+def two_observations(driver):
+    """
+    A plan of two spectral cubes of a disk, 'a' and 'b' (which fits the
+    offset of its frame).
+    """
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import (
+        Flat, ObservationGroup, ObservationSky, PixelSpectra)
+    return ObservationGroup(
+        [galaxy_parser.load(line_disk(dict(type='arctan', direction='tan')))],
+        [ObservationSky(
+            PixelSpectra(size=(16, 16, 11), step=(1, 1, 20)), Flat(),
+            name=name, offsets=dict(position=name == 'b'))
+         for name in ('a', 'b')]).plan(driver)
+
+
+def counted(plan):
+    """
+    Return the counts of the evaluations of the stage of the galaxy and
+    of the models of the observations of a plan of two_observations.
+    """
+    counts = dict(galaxy=0, a=0, b=0)
+
+    def counting(name, evaluate):
+        def evaluated(*args):
+            counts[name] += 1
+            return evaluate(*args)
+        return evaluated
+    for name, part in zip(('galaxy', 'a', 'b'), plan._stages + plan._plans):
+        part.evaluate = counting(name, part.evaluate)
+    return counts
+
+
+TWO_PARAMS = dict(
+    vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4, vpt_rt=2,
+    vpt_vt=150, dpt_a=20, b_dx=0, b_dy=0)
+
+
+def spectra(models):
+    """Copies of the spectra of the models of observations."""
+    return [model['spectra']['d'].copy() for model in models]
+
+
+def test_evaluations_skip_what_reads_no_changed_parameter(driver):
+    # The offset of the frame of b moves b only: the galaxy and a are not
+    # evaluated again, and the models are those of a new plan
+    plan = two_observations(driver)
+    counts = counted(plan)
+    before = spectra(plan.model_h(TWO_PARAMS))
+    moved = TWO_PARAMS | dict(b_dx=0.5)
+    after = spectra(plan.model_h(moved))
+    assert counts == dict(galaxy=1, a=1, b=2)
+    for got, want in zip(
+            after, spectra(two_observations(driver).model_h(moved))):
+        np.testing.assert_array_equal(got, want)
+    np.testing.assert_array_equal(after[0], before[0])
+    assert not np.array_equal(after[1], before[1])
+    # (the disk moves them all; extra outputs evaluate all, as NaN does)
+    plan.model_h(moved | dict(pt_s=3))
+    assert counts == dict(galaxy=2, a=2, b=3)
+    from gbkfit.model import Extras
+    plan.model_h(moved | dict(pt_s=3), Extras())
+    assert counts == dict(galaxy=3, a=3, b=4)
+    plan.model_h(moved | dict(pt_s=np.nan))
+    plan.model_h(moved | dict(pt_s=np.nan))
+    assert counts == dict(galaxy=5, a=5, b=6)
+
+
+def test_mocks_and_plans_with_other_data_evaluate_again(driver):
+    # Mocks write their draws over the models; plans with other data share
+    # the models (of data of the same unit), and the last evaluations
+    from gbkfit.observation import NoiseGauss
+    noise = NoiseGauss(rms=1.0)
+    first = two_observations(driver).with_data([
+        mock for mock, in two_observations(driver).mock(
+            TWO_PARAMS, noise, seed=1)])
+    counts = counted(first)
+    models = spectra(first.model_h(TWO_PARAMS))
+    mocks = first.mock(TWO_PARAMS, noise, seed=2)
+    for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
+        np.testing.assert_array_equal(got, want)
+    assert counts == dict(galaxy=1, a=2, b=2)
+    second = first.with_data([mock for mock, in mocks])
+    assert second._plans == first._plans
+    second.model_h(TWO_PARAMS | dict(vpt_vt=100))
+    for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
+        np.testing.assert_array_equal(got, want)
+    assert counts == dict(galaxy=3, a=4, b=4)

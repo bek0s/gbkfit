@@ -6,7 +6,7 @@ driver, with the memory of their models.
 
 import copy
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
@@ -44,6 +44,12 @@ class GroupPlan:
     Plans of the group on other drivers have their own memory and lock
     (see ObservationGroup.plan); plans of it with other data share them
     (see with_data).
+
+    An evaluation skips the stage of a galaxy, or the model of an
+    observation, when the parameters it reads have exactly the values of
+    its last evaluation (see model_d): e.g. a fitter that moves the noise
+    of an observation, or the offset of its frame, evaluates no other
+    model again.
 
     Parameters
     ----------
@@ -94,6 +100,13 @@ class GroupPlan:
                 stages.append(galaxy.plan_stage(group.sky_origin(), driver))
         self._stages = tuple(stages)
         self._lock = threading.RLock()
+        # The last evaluation of the stage of each galaxy, and of the model
+        # of each observation (see model_d)
+        self._stage_lasts = tuple(
+            _LastValues(mapping.values()) for mapping in group.mappings())
+        self._model_lasts = tuple(
+            _LastValues(group.model_params(i))
+            for i in range(len(observations)))
         self._init_evaluations()
 
     def _init_evaluations(self) -> None:
@@ -148,9 +161,10 @@ class GroupPlan:
         them, in a bootstrap), and with them the memory of their models,
         on their devices, and its lock (see lock): evaluated at the same time
         (e.g. in two threads), they wait for each other (plans on other
-        drivers do not, see ObservationGroup.plan). A copy whose
-        observations have other parameters (e.g. a likelihood of data that
-        they had none of) has plans of its own.
+        drivers do not, see ObservationGroup.plan). They share their last
+        evaluations too (see model_d). A copy whose observations have other
+        parameters (e.g. a likelihood of data that they had none of) has
+        plans of its own.
 
         Raises
         ------
@@ -165,15 +179,20 @@ class GroupPlan:
             return type(self)(
                 group, self._galaxy_drivers, self._observation_drivers)
         plans = []
-        for i, (plan, new, old, driver) in enumerate(zip(
-                self._plans, news, olds, self._observation_drivers)):
+        lasts = []
+        for i, (plan, last, new, old, driver) in enumerate(zip(
+                self._plans, self._model_lasts, news, olds,
+                self._observation_drivers)):
             if not _same_unit(new.data_unit(), old.data_unit()):
                 with parseutils.config_path('observations', i):
                     plan = new.plan(driver, group.seen_by(i))
+                last = _LastValues(group.model_params(i))
             plans.append(plan)
+            lasts.append(last)
         copied = copy.copy(self)
         copied._group = group
         copied._plans = tuple(plans)
+        copied._model_lasts = tuple(lasts)
         copied._init_evaluations()
         return copied
 
@@ -207,16 +226,22 @@ class GroupPlan:
         Evaluate the stage of each galaxy: its mass, and what it gives its
         components (see GalaxyStage.evaluate); its extra outputs go to
         out_extra, if given, with the label of the galaxy as the id
-        'galaxy'.
+        'galaxy'. Without them, the state of a galaxy whose parameters have
+        the values of its last evaluation is that of its last evaluation.
         """
         group = self._group
-        return [
-            stage.evaluate(
-                {name: params[full] for name, full in mapping.items()},
-                None if out_extra is None
-                else out_extra.scoped(galaxy=group.galaxy_label(g)))
-            for g, (stage, mapping) in enumerate(
-                zip(self._stages, group.mappings()))]
+        states = []
+        for g, (stage, last, mapping) in enumerate(zip(
+                self._stages, self._stage_lasts, group.mappings())):
+            state = None if out_extra is not None else last.get(params)
+            if state is None:
+                state = stage.evaluate(
+                    {name: params[full] for name, full in mapping.items()},
+                    None if out_extra is None
+                    else out_extra.scoped(galaxy=group.galaxy_label(g)))
+                last.keep(params, state)
+            states.append(state)
+        return states
 
     def model_d(
             self,
@@ -226,6 +251,14 @@ class GroupPlan:
         """
         Evaluate the model data of the observations, on their drivers,
         with BLAS on one thread (see threadutils.single_threaded_blas).
+
+        Without extra outputs, an observation whose parameters (see
+        ObservationGroup.model_params) have exactly the values of its last
+        evaluation (by this plan, or by one with other data that shares
+        its plans, see with_data) keeps the model data of that evaluation,
+        which nothing else writes; so does the stage of a galaxy (the state
+        of its mass, and what it gives its components), whose parameters
+        are its own. NaN is never the value of the last evaluation.
 
         Parameters
         ----------
@@ -251,12 +284,17 @@ class GroupPlan:
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
                 states = self._galaxy_states(params, out_extra)
-            for i, plan in enumerate(self._plans):
-                self._d_model_data[i] = plan.evaluate(
-                    group.moved(i, params),
-                    [states[g] for g in group.seen_galaxies(i)],
-                    None if out_extra is None else out_extra.scoped(
-                        observation=group.observation_label(i)))
+            for i, (plan, last) in enumerate(
+                    zip(self._plans, self._model_lasts)):
+                model = None if out_extra is not None else last.get(params)
+                if model is None:
+                    model = plan.evaluate(
+                        group.moved(i, params),
+                        [states[g] for g in group.seen_galaxies(i)],
+                        None if out_extra is None else out_extra.scoped(
+                            observation=group.observation_label(i)))
+                    last.keep(params, model)
+                self._d_model_data[i] = model
         return self._d_model_data
 
     def model_h(
@@ -356,9 +394,15 @@ class GroupPlan:
         streams = np.random.SeedSequence(seed).spawn(len(observations))
         with self._lock:
             states = self._galaxy_states(params, None)
-            return [
-                self._mock(i, params, states, noise, stream, nmocks, nsamples)
-                for i, (noise, stream) in enumerate(zip(noises, streams))]
+            try:
+                return [
+                    self._mock(
+                        i, params, states, noise, stream, nmocks, nsamples)
+                    for i, (noise, stream) in enumerate(zip(noises, streams))]
+            finally:
+                # (the draws overwrite the model data of the observations)
+                for last in self._model_lasts:
+                    last.forget()
 
     def _mock(
             self,
@@ -396,6 +440,56 @@ class GroupPlan:
                 key: Data(item['d'], error=errors[key], **options[key])
                 for key, item in draw.items()})
             for draw in draws[:nmocks]]
+
+
+class _LastValues:
+    """
+    The last evaluation of a stage of the evaluations of a group plan
+    (the stage of a galaxy, or the model of an observation; see
+    GroupPlan.model_d): the values of the parameters of the given names,
+    which it reads, and what it gave.
+    """
+
+    def __init__(self, names: Iterable[str]):
+        self._names = tuple(names)
+        self._values: dict[str, Any] | None = None
+        self._result: Any = None
+
+    def get(self, params: ParamValues) -> Any:
+        """
+        Return what the stage gave at its last evaluation if the values of
+        its parameters are the same (see _same); else None.
+        """
+        if self._values is None or not all(
+                _same(params[name], value)
+                for name, value in self._values.items()):
+            return None
+        return self._result
+
+    def keep(self, params: ParamValues, result: Any) -> None:
+        """
+        Keep what the stage gave at the values of its parameters (copies
+        of them).
+        """
+        self._values = {
+            name: params[name] if np.isscalar(params[name])
+            else np.array(params[name]) for name in self._names}
+        self._result = result
+
+    def forget(self) -> None:
+        """Forget the last evaluation (e.g. its memory was overwritten)."""
+        self._values = None
+        self._result = None
+
+
+def _same(a: Any, b: Any) -> bool:
+    """
+    Check whether two values of a parameter are the same: equal, element
+    by element for arrays; NaN is not the same as itself.
+    """
+    if np.isscalar(a) and np.isscalar(b):
+        return bool(a == b)
+    return np.array_equal(a, b)
 
 
 class _GroupFunctions(ParamFunctions):

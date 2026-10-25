@@ -470,6 +470,25 @@ class ObservationGroup:
         """
         return self._frames[index].moved(params)
 
+    def model_params(self, index: int) -> tuple[str, ...]:
+        """
+        Return the names of the parameters that the model of the
+        observation of the given index reads: those of the galaxies it
+        sees and their separations (see DepthGroup), and its own but those
+        of its likelihood, which only the comparison with its data reads
+        (e.g. those of a fitted noise; see Likelihood.pdescs).
+        """
+        observation = self._observations[index]
+        seen = self._seen_galaxies[index]
+        likelihood = observation.likelihood()
+        own = observation.pdescs().keys() - (
+            set() if likelihood is None else likelihood.pdescs().keys())
+        return (
+            tuple(name for g in seen for name in self._mappings[g].values())
+            + tuple(self._separations[g] for g in seen
+                    if g in self._separations)
+            + tuple(sorted(own)))
+
 
 # Warn of observations whose origins are further apart on the sky (deg),
 # or whose frames turn by more (deg; see _alignments)
