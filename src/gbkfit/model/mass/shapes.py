@@ -34,9 +34,9 @@ def _flattened_nodes() -> tuple[np.ndarray, np.ndarray]:
     geometric widths towards both ends (where the profile can have a cusp,
     and where a flat spheroid changes on the scale q).
     """
-    x, w = np.polynomial.legendre.leggauss(16)
+    x, w = np.polynomial.legendre.leggauss(8)
     half = np.pi / 4
-    widths = np.concatenate(([0], np.geomspace(1e-10, half, 40)))
+    widths = np.concatenate(([0], np.geomspace(1e-4, half, 10)))
     edges = np.concatenate((widths, np.pi / 2 - widths[::-1][1:]))
     lo, hi = edges[:-1, None], edges[1:, None]
     return (((hi - lo) * x + hi + lo) / 2).ravel(), ((hi - lo) * w / 2).ravel()
@@ -273,8 +273,9 @@ class ShapeFlattened(SpheroidShape):
     (e.g. a Sersic profile of the effective radius re). Its circular
     velocity in its plane (Binney & Tremaine 2008, 2.132) is v^2(R) = 4
     pi G int_0^R rho_sph(m) m^2 dm / sqrt(R^2 - e^2 m^2), e^2 = 1 - q^2,
-    computed by quadrature (to about 1e-10 of the integral of the
-    profile). Its forces anywhere (Binney & Tremaine 2008, 2.140, with x =
+    computed by quadrature (160 nodes: to about 1e-8 for Sersic and halo
+    profiles, cusps too, and 1e-6 for Gaussians, down to q = 0.05). Its
+    forces anywhere (Binney & Tremaine 2008, 2.140, with x =
     (1 + u)^-1/2): F_R = -4 pi G R int_0^1 rho_sph(m) x^2 dx / (1 - e^2
     x^2)^(1/2) and F_z = -4 pi G z int_0^1 rho_sph(m) x^2 dx / (1 - e^2
     x^2)^(3/2), m^2 = x^2 (R^2 + z^2 / (1 - e^2 x^2)), by the same

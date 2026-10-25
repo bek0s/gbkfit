@@ -13,7 +13,8 @@ from ._detail import (
     Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors
 from .base import (
-    Component, ComponentPlan, FieldsLayout, FrameParams, NativeGrid)
+    Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
+    NativeGrid)
 from .geometries import Geometry
 from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from .roles import BandEmission, Emission, LineEmission, emission_parser
@@ -237,7 +238,8 @@ class PointPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             fields: DeviceArray,
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         # A layer at its depth: at the pixels around it, its share of its
         # light, its velocity and dispersion (none in a band), and its
@@ -260,7 +262,8 @@ class PointPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         driver = self._driver
         image = outputs.get('image')
@@ -375,7 +378,7 @@ class Point(Component):
         """Check whether its depth along the line of sight is a parameter."""
         return self._depth
 
-    def thick(self) -> bool:
+    def thick(self, seen_by: 'type[Emission]') -> bool:
         return False
 
     def frame_params(self) -> FrameParams:

@@ -14,7 +14,8 @@ from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import NodalTraits, native_traits, subring_radii
-from ..base import FieldsLayout, FrameParams, NativeGrid
+from ..base import (
+    ComponentState, FieldsLayout, FrameParams, NativeGrid)
 from ..traits import Trait
 
 
@@ -186,7 +187,8 @@ class SmoothConePlan(NativePlan):
             density_key: str,
             lines: np.ndarray | None = None,
             rdata_scale: float = 1.0,
-            image_scale: float = 1.0
+            image_scale: float = 1.0,
+            state: ComponentState | None = None
     ) -> None:
         self._write_params(params, lines)
         evaluate_native(

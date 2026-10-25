@@ -456,6 +456,22 @@ struct Unprojected
     }
 };
 
+// The velocity dispersion on the line of sight of a velocity ellipsoid of
+// the dispersions srad, stan and sver along the radial, tangential and
+// vertical directions of the cylinder of an axisymmetric component, at the
+// azimuth theta, seen at the inclination incl (radians): sqrt(stan^2
+// cos^2(theta) sin^2(incl) + srad^2 sin^2(theta) sin^2(incl) + sver^2
+// cos^2(incl))
+template<typename T> constexpr T
+gmodel_ellipsoid_dispersion(T srad, T stan, T sver, T theta, T incl)
+{
+    const T sin_incl = std::sin(incl);
+    const T rad = srad * std::sin(theta) * sin_incl;
+    const T tan = stan * std::cos(theta) * sin_incl;
+    const T ver = sver * std::cos(incl);
+    return std::sqrt(rad * rad + tan * tan + ver * ver);
+}
+
 // Whether the dispersion of a disk is anisotropic: its dispersion traits
 // have directions, or the dispersion of its equilibrium is along z only
 // (see gmodel_disk_dispersion)
@@ -521,11 +537,7 @@ gmodel_disk_dispersion(
         }
 
         // The velocity ellipsoid on the line of sight
-        const T sin_incl = std::sin(incl);
-        const T rad = srad * std::sin(theta) * sin_incl;
-        const T tan = stan * std::cos(theta) * sin_incl;
-        const T ver = sver * std::cos(incl);
-        return std::sqrt(rad * rad + tan * tan + ver * ver);
+        return gmodel_ellipsoid_dispersion(srad, stan, sver, theta, incl);
     }
 }
 
@@ -1450,19 +1462,65 @@ gmodel_spheroid_sky_point(
     transform_posa(xn, yn, posa);
 }
 
+// The value of the plane p of the Jeans tables of a spheroid at the point
+// (i + tr, j + tz) of them (see SpheroidArgs::jeans), bilinear
+template<typename T> constexpr T
+gmodel_spheroid_jeans_value(
+        const SpheroidArgs<T>& a, int p, int i, int j, T tr, T tz)
+{
+    const T* plane = a.jeans + p * a.jeans_nr * a.jeans_nz;
+    const T* row0 = plane + i * a.jeans_nz;
+    const T* row1 = row0 + a.jeans_nz;
+    return (1 - tr) * ((1 - tz) * row0[j] + tz * row0[j + 1])
+            + tr * ((1 - tz) * row1[j] + tz * row1[j + 1]);
+}
+
+// The mean velocity and the dispersion on the line of sight of the stars
+// of a spheroid at the point (x, y, z) of its frame, seen at the
+// inclination incl (radians; see SpheroidArgs::jeans)
+template<typename T> constexpr void
+gmodel_spheroid_kinematics(
+        T x, T y, T z, T incl, const SpheroidArgs<T>& a,
+        T& velocity, T& dispersion)
+{
+    const T R = std::sqrt(x * x + y * y);
+    const T theta = std::atan2(y, x);
+    // (the position in the tables, in points, at their nearest point
+    // beyond them: e.g. at the centre, R = 0)
+    const T pr = std::min(std::max(
+            (std::log(R) - a.jeans_range[0]) / a.jeans_range[1], T{0}),
+            T(a.jeans_nr - 1));
+    const T pz = std::min(std::max(
+            (std::log(std::abs(z)) - a.jeans_range[2]) / a.jeans_range[3],
+            T{0}), T(a.jeans_nz - 1));
+    if (std::isnan(pr) || std::isnan(pz))
+    {
+        velocity = dispersion = T(NAN);
+        return;
+    }
+    const int i = std::min(int(pr), a.jeans_nr - 2);
+    const int j = std::min(int(pz), a.jeans_nz - 2);
+    const T tr = pr - i;
+    const T tz = pz - j;
+    const T vphi = gmodel_spheroid_jeans_value(a, 0, i, j, tr, tz);
+    const T srad = gmodel_spheroid_jeans_value(a, 1, i, j, tr, tz);
+    const T stan = gmodel_spheroid_jeans_value(a, 2, i, j, tr, tz);
+    const T sver = gmodel_spheroid_jeans_value(a, 3, i, j, tr, tz);
+    velocity = a.vsys[0] + vphi * std::cos(theta) * std::sin(incl);
+    dispersion = gmodel_ellipsoid_dispersion(srad, stan, sver, theta, incl);
+}
+
 // Write the light of a point of a spheroid (rvalue; with opacity, orvalue
-// after it) at (x, y, z) of the grid g: to its pixel of the image (with
-// AddFunT, see gmodel_light_write), and to its maps and fields. A
-// spheroid without kinematics has no velocity and dispersion (0).
+// after it), of the given velocity and dispersion, at (x, y, z) of the
+// grid g: to its pixel of the image or its spectrum of the spectral cube
+// (with AddFunT, see gmodel_light_write), and to its maps and fields.
 template<auto AddFunT, bool HasFields, typename T>
 constexpr void
 gmodel_spheroid_light_write(
-        int x, int y, int z, T rvalue, T orvalue,
+        int x, int y, int z, T rvalue, T orvalue, T vvalue, T dvalue,
         const VoxelOpacity<T>* opacity,
         const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
-    const T vvalue = 0;
-    const T dvalue = 0;
     gmodel_light_write<AddFunT>(
             x, y, rvalue, orvalue, vvalue, dvalue, opacity, g);
     const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
@@ -1472,7 +1530,10 @@ gmodel_spheroid_light_write(
 }
 
 // Evaluate the voxel (x, y, z) of a smooth spheroid: its density (see
-// SPHEROID_SUBGRID) times the depth of the voxel is its light. AddFunT
+// SPHEROID_SUBGRID) times the depth of the voxel is its light, with its
+// kinematics, if any (see SpheroidArgs::jeans; in the voxels near the
+// centre, the mean velocity and the dispersion of the velocities of the
+// points of their mean density). AddFunT
 // adds the light of the voxel to the pixel of its spaxel, which the other
 // voxels of the spaxel add to too: it must be atomic if they are evaluated
 // in parallel. Only this voxel writes to its other outputs. HasOpacity is
@@ -1496,9 +1557,16 @@ gmodel_smspheroid_evaluate_voxel(
             + g.spat_step[1] * g.spat_step[1]
             + g.spat_step[2] * g.spat_step[2]);
     const T rn = std::sqrt(xn * xn + yn * yn + zn * zn);
+    const bool moves = a.jeans != nullptr;
     T rvalue = 0;
+    T vvalue = 0;
+    T dvalue = 0;
     if (rn < SPHEROID_CENTRE_VOXELS<T> * diagonal)
     {
+        // (and the first two moments of the velocities of the sub-points,
+        // weighted by their density)
+        T sum_v = 0;
+        T sum_v2 = 0;
         constexpr int n = SPHEROID_SUBGRID;
         for (int i = 0; i < n; ++i)
         for (int j = 0; j < n; ++j)
@@ -1510,13 +1578,29 @@ gmodel_smspheroid_evaluate_voxel(
                     y + (j + T{0.5}) / n - T{0.5},
                     z + (k + T{0.5}) / n - T{0.5},
                     posa, incl, a, g, xs, ys, zs);
-            rvalue += gmodel_spheroid_density(xs, ys, zs, a);
+            const T density = gmodel_spheroid_density(xs, ys, zs, a);
+            rvalue += density;
+            if (moves && density)
+            {
+                T v, s;
+                gmodel_spheroid_kinematics(xs, ys, zs, incl, a, v, s);
+                sum_v += density * v;
+                sum_v2 += density * (v * v + s * s);
+            }
+        }
+        if (moves && rvalue)
+        {
+            vvalue = sum_v / rvalue;
+            dvalue = std::sqrt(std::max(sum_v2 / rvalue - vvalue * vvalue,
+                                        T{0}));
         }
         rvalue /= n * n * n;
     }
     else
     {
         rvalue = gmodel_spheroid_density(xn, yn, zn, a);
+        if (moves && rvalue)
+            gmodel_spheroid_kinematics(xn, yn, zn, incl, a, vvalue, dvalue);
     }
     if (!rvalue)
         return;
@@ -1532,7 +1616,8 @@ gmodel_smspheroid_evaluate_voxel(
                     opacity, g.nopacity, g.opacity_ratios)
             : rvalue;
     gmodel_spheroid_light_write<AddFunT, HasFields>(
-            x, y, z, rvalue, orvalue, HasOpacity ? &opacity : nullptr, g, f);
+            x, y, z, rvalue, orvalue, vvalue, dvalue,
+            HasOpacity ? &opacity : nullptr, g, f);
 }
 
 // Evaluate the pixel (x, y) of the projection of a smooth spheroid, on a
@@ -1575,7 +1660,8 @@ gmodel_smspheroid_evaluate_pixel(
     if (!rvalue)
         return;
     gmodel_spheroid_light_write<AddFunT, false, T>(
-            x, y, 0, rvalue, rvalue, nullptr, g, FieldsArgs<T>{});
+            x, y, 0, rvalue, rvalue, T{0}, T{0}, nullptr, g,
+            FieldsArgs<T>{});
 }
 
 // The polar traits of the set of a DiskTraitsArgs at its point j, in the

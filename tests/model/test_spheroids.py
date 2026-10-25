@@ -1,8 +1,9 @@
 """
 Tests for the spheroids (Spheroid): their light in images against the
 exact projections of their profiles, the mean density near the centre
-of a cusp, and their options; and the mass that follows their light
-(mass.MassLightSpheroid).
+of a cusp, and their options; the mass that follows their light
+(mass.MassLightSpheroid); and their Jeans kinematics (JeansKinematics),
+against exact and independent solutions, and in spectral cubes of stars.
 """
 
 import numpy as np
@@ -420,3 +421,205 @@ def test_a_mass_follows_components_of_its_kind(mass, message):
     with pytest.raises(ConfigError, match=message):
         galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
+
+
+# A round Gaussian of stars of dispersion S arcsec, of Jeans kinematics,
+# around a point mass of 10^LOG_M Msun (its own mass left out): isotropic
+# (beta_z = 0) and without rotation, the exact sigma^2(r) = G M [1 / r -
+# sqrt(pi / 2) / s exp(r^2 / (2 s^2)) erfc(r / (sqrt(2) s))], s in kpc
+S = 10
+LOG_M = 10
+STARS_EMISSION = dict(type='stars')
+JEANS_SPHEROID = dict(
+    type='spheroid', name='stars', rmax=40, emission=STARS_EMISSION,
+    profile=dict(type='mge', ngauss=1), kinematics=dict(type='jeans'))
+JEANS_PROPERTIES = dict(
+    xpos=0, ypos=0, posa=30, incl=60, vsys=1000, stars_i0=[1],
+    stars_sigma=[S], stars_q=[1], stars_beta_z=0, stars_kappa=0,
+    mass_bh_log_m=LOG_M, distance=10)
+
+
+def jeans_galaxy(spheroid=JEANS_SPHEROID):
+    """A galaxy of a spheroid of Jeans kinematics around a point mass."""
+    return galaxy_parser.load(dict(
+        components=[spheroid],
+        mass=[dict(type='point', name='bh')], distance=DISTANCE))
+
+
+def gaussian_sigma(r, s):
+    """The exact sigma (km/s) at r (kpc) of a Gaussian (s, kpc) above."""
+    return np.sqrt(G * 10 ** LOG_M * (
+        1 / r - np.sqrt(np.pi / 2) / s * np.exp(r ** 2 / (2 * s ** 2))
+        * scipy.special.erfc(r / (np.sqrt(2) * s))))
+
+
+def table_points(tables):
+    """The radii and heights (arcsec) of the nodes of Jeans tables."""
+    shape = tables.sigma_z.shape
+    R = np.exp(tables.lnr_zero + tables.lnr_step * np.arange(shape[0]))
+    z = np.exp(tables.lnz_zero + tables.lnz_step * np.arange(shape[1]))
+    return np.meshgrid(R, z, indexing='ij')
+
+
+def test_the_jeans_tables_of_a_gaussian_around_a_point_mass_are_exact():
+    galaxy = jeans_galaxy()
+    state = galaxy.plan_stage().evaluate(JEANS_PROPERTIES)
+    tables = state.states[0]
+    kpc = state.mass.kpc_per_arcsec
+    R, z = table_points(tables)
+    r = np.hypot(R, z) * kpc
+    exact = gaussian_sigma(r, S * kpc)
+    within = r < 3 * S * kpc
+    for sigma in (tables.sigma_z, tables.sigma_r, tables.sigma_phi):
+        np.testing.assert_allclose(sigma[within], exact[within], rtol=3e-3)
+    assert not tables.vphi.any()
+
+
+def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
+    # The Jeans equations at a few points, by adaptive quadrature: nu
+    # sigma_z^2 = int_z^inf nu G M z' / r'^3 dz', and R d(nu sigma_z^2)/dR
+    # by central differences of it
+    q, beta_z, kappa = 0.6, 0.3, 0.8
+    properties = JEANS_PROPERTIES | dict(
+        stars_q=[q], stars_beta_z=beta_z, stars_kappa=kappa)
+    state = jeans_galaxy().plan_stage().evaluate(properties)
+    tables = state.states[0]
+    k = state.mass.kpc_per_arcsec
+    gm = G * 10 ** LOG_M
+    s = S * k
+
+    def nu(R, z):
+        return np.exp(-(R ** 2 + z ** 2 / q ** 2) / (2 * s ** 2))
+
+    def nu_sz2(R, z):
+        return scipy.integrate.quad(
+            lambda x: nu(R, x) * gm * x / np.hypot(R, x) ** 3, z, np.inf,
+            epsrel=1e-12, limit=200)[0]
+    # (where R << z, near the point mass, it cannot rotate so: NaN)
+    R, z = table_points(tables)
+    b = 1 / (1 - beta_z)
+    points = (20, 40), (40, 10), (40, 40), (50, 30), (55, 52)
+    expected = []
+    for i, j in points:
+        Rk, zk = R[i, j] * k, z[i, j] * k
+        h = 1e-4 * Rk
+        I = nu_sz2(Rk, zk)
+        dI = Rk * (nu_sz2(Rk + h, zk) - nu_sz2(Rk - h, zk)) / (2 * h)
+        vphi2 = (b * (dI + I) + Rk * nu(Rk, zk) * gm * Rk
+                 / np.hypot(Rk, zk) ** 3) / nu(Rk, zk)
+        sz2 = I / nu(Rk, zk)
+        rotation = vphi2 - b * sz2
+        vphi = kappa * np.sqrt(rotation) if rotation >= 0 else np.nan
+        expected.append((
+            vphi, np.sqrt(b * sz2), np.sqrt(vphi2 - vphi ** 2),
+            np.sqrt(sz2)))
+    index = tuple(np.transpose(points))
+    model = np.transpose([
+        tables.vphi[index], tables.sigma_r[index],
+        tables.sigma_phi[index], tables.sigma_z[index]])
+    assert np.isnan(np.array(expected)).any()
+    np.testing.assert_allclose(model, expected, rtol=3e-3)
+
+
+def stars_cube(driver, spheroid, line_of_sight='grid'):
+    """
+    A case of a spectral cube of the stars of a spheroid (lines: [stars]),
+    of 32 by 32 pixels of 2 arcsec and 181 channels of 10 km/s, with a
+    depth axis of voxels of 1 arcsec.
+    """
+    los = dict(type='grid', depth=dict(step=1)) \
+        if line_of_sight == 'grid' else dict(type=line_of_sight)
+    return dict(
+        driver=dict(type=driver.type()),
+        observable=dict(
+            type='pixel_spectra', size=[32, 32, 181], step=[2, 2, 10],
+            dtype='float64'),
+        line_of_sight=los, lines=['stars'],
+        galaxy=dict(components=[spheroid], mass=[dict(
+            type='point', name='bh')], distance=DISTANCE))
+
+
+def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
+        driver, evaluate_cases):
+    # Each line of sight of the round Gaussian around a point mass
+    # (isotropic, no rotation): its mean velocity vsys, and its dispersion
+    # that of the light-weighted mean of sigma^2 along it (int nu sigma^2
+    # dz / int nu dz, with nu sigma^2 = G M [nu / r - sqrt(pi / 2) / s
+    # erfc(r / (sqrt(2) s))]), up to the channels (their width^2 / 12)
+    # and the voxels
+    properties = JEANS_PROPERTIES | dict(vsys=0)
+    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    data, _ = evaluate_cases([stars_cube(driver, spheroid)], properties)
+    cube = data[0]['spectra']['d']
+    velocity = (np.arange(181) - 90) * 10.0
+    pixels = (np.arange(32) - 15.5) * 2
+    galaxy = jeans_galaxy()
+    kpc = galaxy.plan_stage().mass(properties).kpc_per_arcsec
+    s, gm = S * kpc, G * 10 ** LOG_M
+    for ix in (19, 21, 24, 27):
+        spectrum = cube[:, 15, ix]
+        total = spectrum.sum()
+        mean = (spectrum * velocity).sum() / total
+        variance = (spectrum * (velocity - mean) ** 2).sum() / total \
+            - 10.0 ** 2 / 12
+        R = np.hypot(pixels[ix], pixels[15]) * kpc
+
+        def nu(z):
+            return np.exp(-(R ** 2 + z ** 2) / (2 * s ** 2))
+
+        def nu_sigma2(z):
+            r = np.hypot(R, z)
+            return gm * (nu(z) / r - np.sqrt(np.pi / 2) / s
+                         * scipy.special.erfc(r / (np.sqrt(2) * s)))
+        expected = scipy.integrate.quad(nu_sigma2, 0, np.inf)[0] \
+            / scipy.integrate.quad(nu, 0, np.inf)[0]
+        assert mean == pytest.approx(0, abs=0.05)
+        assert np.sqrt(variance) == pytest.approx(
+            np.sqrt(expected), rel=5e-3)
+
+
+@pytest.mark.parametrize('change, message', [
+    # (a cube sees the stars only when its lines name them)
+    (dict(lines=None), "it sees none"),
+    # (in a cube, their velocities change along the line of sight)
+    (dict(line_of_sight='flat'), "needs a line of sight with a depth axis"),
+    # (a cube needs their kinematics)
+    (dict(kinematics=None), "with kinematics only"),
+])
+def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
+                                           change, message):
+    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    if 'kinematics' in change:
+        del spheroid['kinematics']
+    case = stars_cube(
+        driver, spheroid, change.get('line_of_sight', 'grid'))
+    if 'lines' in change:
+        del case['lines']
+    properties = {
+        name: value for name, value in JEANS_PROPERTIES.items()
+        if 'kinematics' not in change
+        or name not in ('vsys', 'stars_beta_z', 'stars_kappa')}
+    with pytest.raises(ConfigError, match=message):
+        evaluate_cases([case], properties)
+
+
+def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
+    # (as band light: its projection, without a depth axis)
+    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    case = image(driver, spheroid, 'float64', flat=True)
+    case['galaxy'] |= dict(
+        mass=[dict(type='point', name='bh')], distance=DISTANCE)
+    data, _ = evaluate_cases([case], JEANS_PROPERTIES)
+    # (the light of the Gaussian within the image, 64 pixels wide)
+    flux = data[0]['brightness']['d'].sum() * STEP ** 2
+    within = scipy.special.erf(64 * STEP / 2 / (np.sqrt(2) * S)) ** 2
+    assert flux == pytest.approx(2 * np.pi * S ** 2 * within, rel=1e-3)
+
+
+def test_no_line_is_named_stars():
+    with pytest.raises(ConfigError, match="no line can be named 'stars'"):
+        galaxy_parser.load(dict(components=[dict(
+            type='disk', rnodes=[0, 1, 2],
+            density=dict(ptraits=dict(type='exponential')),
+            emission=dict(type='lines', lines=[
+                dict(name='stars', rest='656.28 nm')]))]))

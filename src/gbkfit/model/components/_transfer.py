@@ -17,7 +17,7 @@ from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._component_plans import ComponentPlans
 from ._units import DataUnit
-from .base import DepthAxis, NativeGrid, OpacityCubes
+from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
 from .lines import Band
 
 if TYPE_CHECKING:
@@ -300,6 +300,7 @@ class TransferPlan:
             self,
             params: Sequence[ParamValues],
             given: Sequence[dict[int, ParamValues]],
+            states: Sequence[dict[int, ComponentState]],
             outputs: dict[str, DeviceArray | None],
             out_extra: Sequence[Extras] | None,
             march_extra: Extras | None,
@@ -310,8 +311,9 @@ class TransferPlan:
         """
         Add the light of the emitters that reaches the viewer to the
         output array, the 'image' or the 'scube' in outputs, with the
-        parameters of each galaxy (params) and those that it gives its
-        components (given, see GalaxyStage.given), at the given
+        parameters of each galaxy (params), those that it gives its
+        components (given, see GalaxyStage.given) and their states
+        (states, see GalaxyStage.states), at the given
         positions along the line of sight (arcsec, away from the viewer,
         from any origin; all at one if None), dimmed by the opacity in
         front of the galaxies and their own, and add their own to that in
@@ -357,7 +359,8 @@ class TransferPlan:
             lines_h[self._rows[key]] = self._plan(key).line_values(
                 values[m][i])
             if self._layouts[key].layer:
-                self._evaluate_fields(values, key, grids[m], extras)
+                self._evaluate_fields(
+                    values, states, key, grids[m], extras)
         driver.mem_copy_h2d(lines_h, lines_d)
 
         image = outputs.get('image') is not None
@@ -394,7 +397,8 @@ class TransferPlan:
             for key in self._keys:
                 m = key[0]
                 if not self._layouts[key].layer:
-                    self._evaluate_fields(values, key, slab_grids[m], extra)
+                    self._evaluate_fields(
+                        values, states, key, slab_grids[m], extra)
                 if resolution is not None and self._layouts[key].line_opacity:
                     resolution.add(key, driver.mem_copy_d2h(_view(
                         self._fields[key],
@@ -493,6 +497,7 @@ class TransferPlan:
     def _evaluate_fields(
             self,
             values: list[dict[int, ParamValues]],
+            states: Sequence[dict[int, ComponentState]],
             key: tuple[int, int],
             grid: NativeGrid,
             extras: list[dict[int, dict[str, Any]]] | None
@@ -500,14 +505,16 @@ class TransferPlan:
         """
         Write the fields of the emitter of the given key (the index of its
         galaxy and its own) on the grid (the whole grid of a layer, or a
-        slab of a volume); with extras, its extra outputs go to the item
-        of its galaxy, by its index.
+        slab of a volume), with its values and state (if any) in those of
+        its galaxy; with extras, its extra outputs go to the item of its
+        galaxy, by its index.
         """
         m, i = key
         extra = {} if extras is not None else None
         self._plan(key).evaluate_fields(
             values[m][i], grid,
-            _view(self._fields[key], self._layouts[key].shape(grid)), extra)
+            _view(self._fields[key], self._layouts[key].shape(grid)), extra,
+            states[m].get(i))
         if extras is not None:
             extras[m].setdefault(i, {}).update(extra)
 

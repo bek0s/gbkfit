@@ -19,7 +19,7 @@ from ..mass import MassContext, MassModel
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
-    from .base import ComponentStage
+    from .base import ComponentStage, ComponentState
 
 
 __all__ = [
@@ -61,12 +61,14 @@ class GalaxyMass:
 class GalaxyState:
     """
     A galaxy in one evaluation, for all its observations (see
-    GalaxyStage.evaluate): its mass (None without mass), and what it
-    gives each component that takes anything from it, by the index of the
-    component (see ComponentStage.given).
+    GalaxyStage.evaluate): its mass (None without mass), what it gives
+    each component that takes anything from it, by the index of the
+    component (see ComponentStage.given), and the state of each
+    component that has one (see ComponentStage.state).
     """
     mass: GalaxyMass | None
     given: dict[int, ParamValues]
+    states: dict[int, 'ComponentState']
 
 
 class GalaxyStage:
@@ -171,7 +173,9 @@ class GalaxyStage:
         mass = self.mass(params, values)
         if out_extra is not None and mass is not None:
             self._warn_geometry(values)
-        return GalaxyState(mass, self.given(values, mass, out_extra))
+        return GalaxyState(
+            mass, self.given(values, mass, out_extra),
+            self.states(values, mass))
 
     def values(self, params: ParamValues) -> dict[int, ParamValues]:
         """
@@ -240,6 +244,22 @@ class GalaxyStage:
                 values[i], mass, None if out_extra is None
                 else out_extra.scoped(component=self._labels[i]))
             for i, stage in self._stages.items()}
+
+    def states(
+            self,
+            values: dict[int, ParamValues],
+            mass: GalaxyMass | None
+    ) -> dict[int, 'ComponentState']:
+        """
+        Return the state of each component that has one, by its index (see
+        ComponentStage.state), at the values of their parameters (see
+        values) and in the mass of the galaxy (see mass; None without
+        mass).
+        """
+        states = {
+            i: stage.state(values[i], mass)
+            for i, stage in self._stages.items()}
+        return {i: state for i, state in states.items() if state is not None}
 
     def _warn_geometry(self, values: dict[int, ParamValues]) -> None:
         """

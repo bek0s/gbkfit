@@ -145,7 +145,7 @@ class Cone(Component):
         """Return its sides."""
         return self._cone.sides()
 
-    def thick(self) -> bool:
+    def thick(self, seen_by: 'type[Emission]') -> bool:
         return True
 
     def frame_params(self) -> FrameParams:

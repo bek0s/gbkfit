@@ -178,5 +178,5 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
         None, None, None, None)
     plan.evaluate(
-        dict(xpos=0.5, ypos=0.5, flux=2), {}, dict(image=image), None)
+        dict(xpos=0.5, ypos=0.5, flux=2), {}, {}, dict(image=image), None)
     assert driver.mem_copy_d2h(image).sum() == 2

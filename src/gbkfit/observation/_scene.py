@@ -8,8 +8,9 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
 from gbkfit.model import (
-    Band, BandEmission, DataUnit, DepthUnit, DustOpacity, Emission, Galaxy,
-    LineOpacity, Scene, named_components)
+    STARS, Band, BandEmission, DataUnit, DepthUnit, DustOpacity, Emission,
+    Galaxy, LineEmission, LineOpacity, Scene, StarsEmission,
+    named_components)
 from gbkfit.utils import parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -57,7 +58,9 @@ def make_scene(
     and of the unit of its data, if any (see Observable.data_unit). The
     names of the components it sees (all those with that emission, in its
     band, if None) are qualified by the names of their galaxies
-    ('galaxy.component') when it sees several (see named_components).
+    ('galaxy.component') when it sees several (see named_components). A
+    spectral cube sees the light of stars (see StarsEmission) too when its
+    lines name it (STARS).
 
     Raises
     ------
@@ -74,8 +77,15 @@ def make_scene(
     galaxies, order = seen.galaxies, seen.order
     kind = "an image, which sees the components that emit in a band" \
         if emission is BandEmission else \
-        "a spectral cube, which sees the components that emit lines"
-    emitters = _select_emitters(galaxies, components, emission, band, kind)
+        "a spectral cube, which sees the components that emit lines (and " \
+        f"stars, when its lines name {STARS!r})"
+    # (the types of emission it sees: a cube whose lines name the stars
+    # sees them, and only them if they are all it names)
+    types = (emission,)
+    if emission is LineEmission and lines is not None and STARS in lines:
+        types = (StarsEmission,) if set(lines) == {STARS} \
+            else (LineEmission, StarsEmission)
+    emitters = _select_emitters(galaxies, components, types, band, kind)
     if not any(emitters):
         raise ConfigError(f"the observation is {kind}; it sees none")
     _check_lines(galaxies, emitters, lines)
@@ -94,7 +104,7 @@ def make_scene(
         for i in sorted(set(galaxy_emitters) | set(galaxy_absorbers)):
             component = galaxy.components()[i]
             try:
-                line_of_sight.check(component)
+                line_of_sight.check(component, emission)
             except ConfigError as e:
                 raise ConfigError(
                     f"component {_label(galaxy, i)}: {e}") from e
@@ -126,19 +136,19 @@ def _label(galaxy: Galaxy, index: int) -> str:
 def _select_emitters(
         galaxies: Sequence[Galaxy],
         names: Sequence[str] | None,
-        emission: type,
+        types: tuple[type[Emission], ...],
         band: Band | None,
         kind: str
 ) -> list[list[int]]:
     """
     Return the indices of the components of each galaxy whose light is
     seen: those of the given names (qualified when there are several
-    galaxies), or all those whose emission is of the given type, in the
-    given band (see Emission.emits_in), in their order. kind describes the
-    observation in messages.
+    galaxies), or all those whose emission is of one of the given types,
+    in the given band (see Emission.emits_in), in their order. kind
+    describes the observation in messages.
     """
     def seen(cmp):
-        return isinstance(cmp.emission(), emission) \
+        return isinstance(cmp.emission(), types) \
             and cmp.emission().emits_in(band)
     if names is None:
         return [
@@ -152,7 +162,7 @@ def _select_emitters(
     selected = [[] for _ in galaxies]
     for name in names:
         g, i = known[name]
-        if not isinstance(galaxies[g].components()[i].emission(), emission):
+        if not isinstance(galaxies[g].components()[i].emission(), types):
             raise ConfigError(
                 f"the component {name!r} is selected, but the observation "
                 f"is {kind}")

@@ -25,14 +25,19 @@ from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
 from .._detail import dump_geometry, dump_name, geometry_desc
+from .._needs import Need, NeedsForces, NeedsMass
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
     evaluate_native, make_bands)
 from .._units import DataUnit, mass_per_unit
-from ..base import Component, FieldsLayout, FrameParams, NativeGrid
+from ..base import (
+    Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
-from ..roles import BandEmission, Emission, emission_parser
+from ..roles import (
+    STARS, BandEmission, Emission, LineEmission, emission_parser)
+from ._jeans import (
+    JeansKinematics, JeansTables, jeans_kinematics_parser, table_shape)
 from ._stage import SpheroidStage
 
 
@@ -417,25 +422,31 @@ light_profile_parser = parseutils.TypedParser(LightProfile, [
     LightMGE])
 
 
-# The geometric parameters of a spheroid: its centre, and unless it is a
-# sphere, the orientation of its axis
+# The geometric parameters of a spheroid: its centre, the orientation of
+# its axis unless it is a sphere without kinematics, and with kinematics,
+# its systemic velocity
 GEOMETRY_PDESCS = dict(
     xpos=ParamScalarDesc(),
     ypos=ParamScalarDesc(),
     posa=ParamScalarDesc(),
-    incl=ParamScalarDesc())
+    incl=ParamScalarDesc(),
+    vsys=ParamScalarDesc())
 
 
 class Spheroid(Component):
     """
     A spheroid of stars: the density of its light profile, laid out in
-    its shape (unless the profile has its own axis ratios, see LightMGE).
-    Its axis is the spin axis of a disk of its posa and incl; a sphere has
-    none (no posa or incl). It emits in bands: it is seen by images.
+    its shape (unless the profile has its own axis ratios, see LightMGE),
+    and its kinematics, if any (see JeansKinematics; with a systemic
+    velocity vsys). Its axis is the spin axis of a disk of its posa and
+    incl; a sphere without kinematics has none (no posa or incl). It emits
+    in bands, seen by images, or as stars (see StarsEmission), seen by
+    images and by the spectral cubes that ask for them, with kinematics.
 
     On a grid without a depth axis (e.g. the line of sight flat), it is
-    its projection on the sky, exactly, to any radius. On a grid with a
-    depth axis (where dust can dim it), it is evaluated at every voxel,
+    its projection on the sky, exactly, to any radius; its kinematics need
+    one. On a grid with a depth axis (where dust can dim it, or for its
+    kinematics), it is evaluated at every voxel,
     within the sphere of radius rmax around its centre: each term of the
     profile (see LightProfile) up to its spheroidal radius m = rmax /
     max(1, q), the largest spheroid of its axis ratio q in the sphere; a
@@ -458,6 +469,8 @@ class Spheroid(Component):
         Its shape (see mass.shapes): a sphere (the default), or flattened
         of the axis ratio q (a parameter), with the face-on projection of
         the sphere; none for a profile with its own axis ratios.
+    kinematics : JeansKinematics, optional
+        How its stars move; none by default.
     geometry : Geometry, 'galaxy' or 'own', optional
         The geometry whose centre and axis it shares: that of its galaxy
         (by default), a named one (not a loose or tilted one), or none
@@ -488,6 +501,8 @@ class Spheroid(Component):
         parseutils.load_option_and_update_info(
             spheroid_shape_parser, info, 'shape')
         parseutils.load_option_and_update_info(
+            jeans_kinematics_parser, info, 'kinematics')
+        parseutils.load_option_and_update_info(
             emission_parser, info, 'emission', required=True,
             catalogue=catalogue)
         return cls(**parseutils.parse_options_for_callable(
@@ -500,6 +515,9 @@ class Spheroid(Component):
             rmax=self._rmax)
         if self._profile.takes_shape():
             info.update(shape=spheroid_shape_parser.dump(self._shape))
+        if self._kinematics is not None:
+            info.update(kinematics=jeans_kinematics_parser.dump(
+                self._kinematics))
         info.update(emission=emission_parser.dump(self.emission()))
         return info
 
@@ -509,6 +527,7 @@ class Spheroid(Component):
             rmax: float,
             emission: Emission,
             shape: SpheroidShape | None = None,
+            kinematics: JeansKinematics | None = None,
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
@@ -536,12 +555,17 @@ class Spheroid(Component):
         self._profile = profile
         self._rmax = float(rmax)
         self._shape = shape
-        spherical = shape is not None and shape.spherical()
+        self._kinematics = kinematics
+        axis = kinematics is not None \
+            or not (shape is not None and shape.spherical())
         self._geometry_pdescs = {
             name: pdesc for name, pdesc in GEOMETRY_PDESCS.items()
-            if not spherical or name in ('xpos', 'ypos')}
+            if name in ('xpos', 'ypos')
+            or (name in ('posa', 'incl') and axis)
+            or (name == 'vsys' and kinematics is not None)}
         own = self._geometry_pdescs | profile.pdescs() \
-            | (shape.pdescs() if shape is not None else {})
+            | (shape.pdescs() if shape is not None else {}) \
+            | (kinematics.pdescs() if kinematics is not None else {})
         self._bands = make_bands(own, emission)
         self._pdescs = own | self._bands.pdescs()
 
@@ -553,17 +577,57 @@ class Spheroid(Component):
         """Return its shape; none for a profile with its axis ratios."""
         return self._shape
 
+    def kinematics(self) -> JeansKinematics | None:
+        """Return its kinematics, if any."""
+        return self._kinematics
+
     def rmax(self) -> float:
         """Return the radius (arcsec) beyond which it has no light."""
         return self._rmax
 
-    def thick(self) -> bool:
-        return False
+    def axis_ratio(self, params: ParamValues) -> float:
+        """
+        Return the axis ratio of its shape at the values of its parameters
+        (1 for a sphere, or a profile with its own axis ratios).
+        """
+        shape = self._shape
+        return params['q'] if shape is not None and not shape.spherical() \
+            else 1.0
+
+    def light(self, params: ParamValues) -> tuple[
+            np.ndarray, tuple[float, float],
+            tuple[np.ndarray, np.ndarray] | None]:
+        """
+        Return its light at the values of its parameters, as _jeans.light
+        takes it: the terms of its profile, their function and its table.
+        """
+        profile = self._profile
+        return (profile.terms(params, self.axis_ratio(params)),
+                profile.function(params),
+                profile.table(params) if profile.ntable() else None)
+
+    def thick(self, seen_by: 'type[Emission]') -> bool:
+        # (an image is its projection; in a spectral cube, its velocities
+        # change along the line of sight)
+        return issubclass(seen_by, LineEmission)
 
     def frame_params(self) -> FrameParams:
-        posa = 'posa' if 'posa' in self._geometry_pdescs else None
-        incl = 'incl' if 'incl' in self._geometry_pdescs else None
-        return FrameParams('xpos', 'ypos', None, posa, incl)
+        names = [
+            name if name in self._geometry_pdescs else None
+            for name in ('vsys', 'posa', 'incl')]
+        return FrameParams('xpos', 'ypos', *names)
+
+    def uses_mass(self) -> bool:
+        return self._kinematics is not None
+
+    def needs(self) -> tuple[Need, ...]:
+        if self._kinematics is None:
+            return ()
+        label = f"the jeans kinematics of the spheroid {self.name()!r}"
+        return (
+            NeedsMass(f"{label} need the mass of its galaxy"),
+            NeedsForces(f"{label} take the forces of its gravity off its "
+                        f"plane"))
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
@@ -572,10 +636,8 @@ class Spheroid(Component):
         return self._rmax
 
     def extent_cut(self, params: ParamValues) -> tuple[str, float]:
-        shape = self._shape
-        q = params['q'] if shape is not None and not shape.spherical() \
-            else 1.0
-        return 'rmax', self._profile.cut(params, q, self._rmax)
+        return 'rmax', self._profile.cut(
+            params, self.axis_ratio(params), self._rmax)
 
     def density_kind(self) -> 'type[SpheroidDensity]':
         return SpheroidDensity
@@ -587,9 +649,8 @@ class Spheroid(Component):
             followed: bool,
             label: str
     ) -> SpheroidStage | None:
-        # (it takes nothing from its galaxy: it has a part only when the
-        # mass follows it)
-        if not followed:
+        # (it has a part when the mass follows it, or for its kinematics)
+        if not followed and self._kinematics is None:
             return None
         return SpheroidStage(self, mass_per_unit(self.emission()))
 
@@ -605,35 +666,56 @@ class Spheroid(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> NativeComponentPlan:
+        if lines is not None and STARS in lines and self._kinematics is None:
+            raise ConfigError(
+                "a spectral cube sees the stars of a spheroid with "
+                "kinematics only (e.g. kinematics: {type: jeans})")
         emission = emission_setup(
             None, self._bands, self.emission().unit(), spectral, lines,
             band, emits, data_unit, redshift, ())
         return NativeComponentPlan(
-            driver, SpheroidPlan(self, driver, dtype), emission,
-            opacity_ratios)
+            driver, SpheroidPlan(self, driver, emission.nlines, dtype),
+            emission, opacity_ratios)
 
 
 class SpheroidPlan(NativePlan):
     """
     The evaluation of a Spheroid on a driver and dtype: its native
     description, and the values of its geometric parameters, of the terms
-    of its profile and their function (and table, if any) in one buffer
-    (see ParamBuffer), written at each evaluation: those of its density on
-    a grid with a depth axis, and those of its projection on a grid
-    without one.
+    of its profile and their function (and table, if any), and of the
+    tables of its kinematics, if any (from its state, see JeansTables), in
+    one buffer (see ParamBuffer), written at each evaluation: those of its
+    density on a grid with a depth axis, and those of its projection on a
+    grid without one.
     """
 
-    def __init__(self, spheroid: Spheroid, driver: Driver, dtype: np.dtype):
+    def __init__(
+            self, spheroid: Spheroid, driver: Driver, nlines: int,
+            dtype: np.dtype
+    ):
+        """
+        nlines is the number of the lines it adds to spectral cubes (0
+        without them; see the native GridArgs::lines).
+        """
         profile = spheroid.profile()
         ntable = profile.ntable()
         sizes = dict.fromkeys(GEOMETRY_PDESCS, 1) \
             | dict(terms=3 * profile.nterms(), function=2)
         if ntable:
             sizes |= dict(table=ntable, table_range=3)
+        jeans_shape = (0, 0)
+        if spheroid.kinematics() is not None:
+            jeans_shape = table_shape()
+            sizes |= dict(jeans=4 * math.prod(jeans_shape), jeans_range=4)
+        native = tuple(sizes)
+        sizes |= dict(lines=3 * nlines)
         buffer = ParamBuffer(driver, dtype, sizes)
         self._native_spheroid = driver.native_class('Spheroid', dtype)(
-            **{name: buffer.device(name) for name in sizes},
-            rmax=spheroid.rmax())
+            **{name: buffer.device(name) for name in native},
+            rmax=spheroid.rmax(), jeans_shape=jeans_shape)
+        self._lines_h = buffer.host('lines').reshape(nlines, 3)
+        self._lines_d = buffer.device('lines').reshape(nlines, 3) \
+            if nlines else None
         self._spheroid = spheroid
         self._driver = driver
         self._dtype = dtype
@@ -649,37 +731,44 @@ class SpheroidPlan(NativePlan):
             density_key: str,
             lines: np.ndarray | None = None,
             rdata_scale: float = 1.0,
-            image_scale: float = 1.0
+            image_scale: float = 1.0,
+            state: ComponentState | None = None
     ) -> None:
         # (without a depth axis, the z axis of the grid has size 1 and step
         # 0, see NativeGrid)
         projected = grid['spat_step'][2] == 0
-        self._write_params(params, projected)
+        self._write_params(params, projected, lines, state)
+        moves = self._spheroid.kinematics() is not None
         evaluate_native(
             lambda kwargs: self._backend.smspheroid_evaluate(
                 self._native_spheroid, projected=projected, **kwargs),
             self._driver, self._dtype, grid, outputs, out_extra,
-            density_key, None, rdata_scale, image_scale,
-            velocity=False, dispersion=False)
+            density_key, self._lines_d, rdata_scale, image_scale,
+            velocity=moves, dispersion=moves)
 
     def fields_layout(self) -> FieldsLayout:
         # (a spheroid fills the voxels with j, v and s)
         return FieldsLayout(layer=False, nslots=3)
 
-    def _write_params(self, params: ParamValues, projected: bool) -> None:
+    def _write_params(
+            self,
+            params: ParamValues,
+            projected: bool,
+            lines: np.ndarray | None,
+            state: ComponentState | None
+    ) -> None:
         """
         Write the parameter values into the host memory: the geometry (a
-        sphere has posa and incl 0), the terms of the profile, or of its
-        projection, their function and table, and copy them to the device
-        at once.
+        sphere without kinematics has posa and incl 0), the terms of the
+        profile, or of its projection, their function and table, the values
+        of the lines, if given, and the tables of its kinematics, if any
+        (its state), and copy them to the device at once.
         """
         buffer = self._buffer
         spheroid = self._spheroid
         for name in GEOMETRY_PDESCS:
             buffer.host(name)[:] = params.get(name, 0.0)
-        shape = spheroid.shape()
-        q = params['q'] if shape is not None and not shape.spherical() \
-            else 1.0
+        q = spheroid.axis_ratio(params)
         profile = spheroid.profile()
         terms = profile.projected_terms(params, q, params.get('incl', 0.0)) \
             if projected else profile.terms(params, q)
@@ -689,4 +778,17 @@ class SpheroidPlan(NativePlan):
             table, table_range = profile.table(params)
             buffer.host('table')[:] = table
             buffer.host('table_range')[:] = table_range
+        if lines is not None:
+            self._lines_h[:] = lines
+        if spheroid.kinematics() is not None:
+            if not isinstance(state, JeansTables):
+                raise ValueError(
+                    "the plan of a spheroid with kinematics needs its "
+                    "tables (its state, see JeansTables)")
+            buffer.host('jeans')[:] = np.stack((
+                state.vphi, state.sigma_r, state.sigma_phi,
+                state.sigma_z)).ravel()
+            buffer.host('jeans_range')[:] = (
+                state.lnr_zero, state.lnr_step, state.lnz_zero,
+                state.lnz_step)
         buffer.copy_to_device()

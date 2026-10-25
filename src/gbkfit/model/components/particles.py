@@ -18,7 +18,8 @@ from ._detail import (
     Fluxes, disk_to_sky, dump_geometry, dump_name, geometry_desc)
 from ._units import DataUnit
 from .base import (
-    Component, ComponentPlan, FieldsLayout, FrameParams, NativeGrid)
+    Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
+    NativeGrid)
 from .geometries import Geometry
 from .lines import Band, LineCatalogue, LinePlacement
 from .points import band_light, line_light
@@ -212,7 +213,8 @@ class ParticlesPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         driver = self._driver
         image = outputs.get('image')
@@ -278,7 +280,8 @@ class ParticlesPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             fields: DeviceArray,
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         # The particles of each voxel as one line, of their moments: their
         # light j, its mean velocity v and its dispersion s (that of their
@@ -435,7 +438,7 @@ class Particles(Component):
         """Return the file of its table."""
         return self._file
 
-    def thick(self) -> bool:
+    def thick(self, seen_by: 'type[Emission]') -> bool:
         return False
 
     def frame_params(self) -> FrameParams:

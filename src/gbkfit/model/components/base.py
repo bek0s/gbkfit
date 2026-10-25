@@ -9,7 +9,7 @@ from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .geometries import Geometry
 from .lines import Band
-from .roles import Emission, LineEmission, Opacity
+from .roles import STARS, Emission, LineEmission, Opacity, StarsEmission
 
 if TYPE_CHECKING:
     from ..extras import Extras
@@ -24,6 +24,7 @@ __all__ = [
     'Component',
     'ComponentPlan',
     'ComponentStage',
+    'ComponentState',
     'DepthAxis',
     'FieldsLayout',
     'FrameParams',
@@ -188,10 +189,12 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         return self._opacity
 
     @abc.abstractmethod
-    def thick(self) -> bool:
+    def thick(self, seen_by: type[Emission]) -> bool:
         """
         Check whether it is thick: whether it needs a line of sight with a
-        depth axis.
+        depth axis, seen by an observation of emission of the given type
+        (see Observable.emission: BandEmission for an image, LineEmission
+        for a spectral cube).
         """
         pass
 
@@ -208,9 +211,14 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     def line_names(self) -> tuple[str, ...]:
-        """Return the names of its emission lines, if any."""
+        """
+        Return the names of its emission lines, if any, or of its light of
+        stars (STARS; see StarsEmission).
+        """
         if isinstance(self._emission, LineEmission):
             return self._emission.lines().names()
+        if isinstance(self._emission, StarsEmission):
+            return (STARS,)
         return ()
 
     def needs(self) -> tuple['Need', ...]:
@@ -354,6 +362,15 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         pass
 
 
+class ComponentState:
+    """
+    What the stage of a galaxy computes for one of its components in an
+    evaluation besides the values of parameters, which the plan of the
+    component reads (see ComponentStage.state): the base of such states
+    (e.g. the tables of the Jeans equations of a spheroid).
+    """
+
+
 class ComponentStage(abc.ABC):
     """
     The part of a component in the stage of its galaxy (see GalaxyStage):
@@ -398,6 +415,16 @@ class ComponentStage(abc.ABC):
         """
         pass
 
+    def state(
+            self, values: ParamValues, mass: 'GalaxyMass | None'
+    ) -> ComponentState | None:
+        """
+        Return its state at the values of its parameters (see values) in
+        the mass of its galaxy (None without mass), which its plans read
+        (see ComponentPlan.evaluate_emission); none here.
+        """
+        return None
+
     def rings(self, values: ParamValues) -> list[tuple[float, ...]]:
         """
         Return its rings that the gravity of its galaxy takes as concentric
@@ -426,7 +453,8 @@ class ComponentPlan(abc.ABC):
             params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         """
         Add the light of the component to the outputs.
@@ -447,6 +475,8 @@ class ComponentPlan(abc.ABC):
             opacity_ratios (see Component.plan).
         out_extra : dict, optional
             Where its extra outputs (on the host) go, if wanted.
+        state : ComponentState, optional
+            Its state in the evaluation (see ComponentStage.state).
         """
         pass
 
@@ -461,7 +491,8 @@ class ComponentPlan(abc.ABC):
             params: ParamValues,
             grid: NativeGrid,
             fields: DeviceArray,
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         """
         Write the fields of its light that the march of radiative transfer
@@ -481,6 +512,8 @@ class ComponentPlan(abc.ABC):
             FieldsLayout.shape).
         out_extra : dict, optional
             Where its extra outputs (on the host) go, if wanted.
+        state : ComponentState, optional
+            Its state in the evaluation (see ComponentStage.state).
         """
         pass
 

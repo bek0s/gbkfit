@@ -105,7 +105,8 @@ struct ConeArrays
 };
 
 // The arrays that describe a spheroid: its geometry, its extent, the
-// terms of its density, their function and its table, if any (see
+// terms of its density, their function and its table, if any, and the
+// tables of its kinematics, if any, of the given shape (see
 // gbkfit::SpheroidArgs). They are created once, and their values are
 // updated in place before each evaluation.
 template<typename T, typename Device>
@@ -117,11 +118,15 @@ struct SpheroidArrays
     Values ypos;
     Values posa;
     Values incl;
+    Values vsys;
     T rmax;
     Values terms;
     Values function;
     Values table;
     Values table_range;
+    Values jeans;
+    Values jeans_range;
+    std::array<int, 2> jeans_shape;
 };
 
 // The arrays of an emitter of the march of radiative transfer (see
@@ -264,6 +269,8 @@ struct GModel
                                && !fields.is_valid()),
                 "the projection of a spheroid is evaluated on a grid "
                 "without a depth axis, into an image, without opacity");
+        require(!scube.is_valid() || spheroid.jeans.is_valid(),
+                "a spheroid in a spectral cube needs its kinematics");
         Kernels::gmodel_smspheroid_evaluate(
                 a, g, make_fields_args(!projected, 0, g, fields, 3));
     }
@@ -589,22 +596,28 @@ struct GModel
         nb::class_<Spheroid>(m, ("Spheroid" + suffix).c_str())
                 .def("__init__", [](
                         Spheroid* self, Values xpos, Values ypos,
-                        Values posa, Values incl, T rmax, Values terms,
-                        Values function, Values table,
-                        Values table_range) {
+                        Values posa, Values incl, Values vsys, T rmax,
+                        Values terms, Values function, Values table,
+                        Values table_range, Values jeans,
+                        Values jeans_range, std::array<int, 2> jeans_shape) {
                     new (self) Spheroid{
-                            xpos, ypos, posa, incl, rmax, terms, function,
-                            table, table_range};
+                            xpos, ypos, posa, incl, vsys, rmax, terms,
+                            function, table, table_range, jeans, jeans_range,
+                            jeans_shape};
                 },
                 nb::arg("xpos").noconvert(),
                 nb::arg("ypos").noconvert(),
                 nb::arg("posa").noconvert(),
                 nb::arg("incl").noconvert(),
+                nb::arg("vsys").noconvert(),
                 nb::arg("rmax"),
                 nb::arg("terms").noconvert(),
                 nb::arg("function").noconvert(),
                 nb::arg("table").noconvert().none() = nb::none(),
-                nb::arg("table_range").noconvert().none() = nb::none());
+                nb::arg("table_range").noconvert().none() = nb::none(),
+                nb::arg("jeans").noconvert().none() = nb::none(),
+                nb::arg("jeans_range").noconvert().none() = nb::none(),
+                nb::arg("jeans_shape") = std::array<int, 2>{0, 0});
 
         nb::class_<Emitter>(m, ("TransferEmitter" + suffix).c_str())
                 .def("__init__", [](
@@ -914,13 +927,15 @@ private:
         SpheroidArgs<T> a;
         require(spheroid.xpos.shape(0) == 1 && spheroid.ypos.shape(0) == 1
                 && spheroid.posa.shape(0) == 1
-                && spheroid.incl.shape(0) == 1,
+                && spheroid.incl.shape(0) == 1
+                && spheroid.vsys.shape(0) == 1,
                 "the geometry of a spheroid needs one value of each "
                 "parameter");
         a.xpos = spheroid.xpos.data();
         a.ypos = spheroid.ypos.data();
         a.posa = spheroid.posa.data();
         a.incl = spheroid.incl.data();
+        a.vsys = spheroid.vsys.data();
         require(spheroid.rmax > 0, "rmax must be greater than zero");
         a.rmax = spheroid.rmax;
         require(spheroid.terms.shape(0) % 3 == 0,
@@ -939,6 +954,19 @@ private:
                 ? int(spheroid.table.shape(0)) : 0;
         a.table = data(spheroid.table);
         a.table_range = data(spheroid.table_range);
+        const auto [nr, nz] = spheroid.jeans_shape;
+        require(spheroid.jeans.is_valid() == spheroid.jeans_range.is_valid()
+                && (!spheroid.jeans.is_valid()
+                    || (nr >= 2 && nz >= 2
+                        && spheroid.jeans.shape(0) == size_t(4 * nr * nz)
+                        && spheroid.jeans_range.shape(0) == 4)),
+                "the tables of the kinematics need at least two radii and "
+                "two heights, four planes of their shape, and their range "
+                "four values");
+        a.jeans_nr = spheroid.jeans.is_valid() ? nr : 0;
+        a.jeans_nz = spheroid.jeans.is_valid() ? nz : 0;
+        a.jeans = data(spheroid.jeans);
+        a.jeans_range = data(spheroid.jeans_range);
         a.projected = projected;
         return a;
     }

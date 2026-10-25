@@ -22,9 +22,9 @@ from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ._detail import Fluxes, systemic_velocity
 from ._units import DataUnit, OpacityScales, band_factors, line_factors
-from .base import ComponentPlan, FieldsLayout, NativeGrid
+from .base import ComponentPlan, ComponentState, FieldsLayout, NativeGrid
 from .lines import Band, Bands, LinePlacement, Lines
-from .roles import BandEmission, Emission, LineEmission
+from .roles import STARS, BandEmission, Emission, LineEmission
 
 
 _log = logging.getLogger(__name__)
@@ -191,7 +191,8 @@ class NativePlan(abc.ABC):
             density_key: str,
             lines: np.ndarray | None = None,
             rdata_scale: float = 1.0,
-            image_scale: float = 1.0
+            image_scale: float = 1.0,
+            state: ComponentState | None = None
     ) -> None:
         """
         Add the component to the outputs. grid has the grid of the native
@@ -205,7 +206,8 @@ class NativePlan(abc.ABC):
         outputs (e.g. 'bdata' for light, 'odata' for dust; see ExtraMaps).
         lines has the offset, scale and flux of each emission line (an
         array of shape (nlines, 3); see the native GridArgs), if the plan
-        has lines.
+        has lines, and state the state of the component in the evaluation
+        (see ComponentStage.state), if it has one.
         """
         pass
 
@@ -296,9 +298,16 @@ def emission_setup(
         return EmissionSetup()
     if lines is None:
         ratio = bands.ratio_name(band)
-        return EmissionSetup(fluxes=Fluxes(
+        fluxes = Fluxes(
             1, [(0, ratio)] if ratio is not None else [],
-            band_factors(unit, data_unit, band, redshift)))
+            band_factors(unit, data_unit, band, redshift))
+        if names is not None and STARS in names:
+            # (the light of stars in a spectral cube: one line, without a
+            # rest, of the flux of its band; see StarsEmission)
+            return EmissionSetup(
+                nlines=1, fluxes=fluxes,
+                lines=LinePlacement(np.ones(1), spectral))
+        return EmissionSetup(fluxes=fluxes)
     # (and the row of the line of each trait of line opacity among the
     # lines it evaluates)
     selected = lines.select(names)
@@ -368,7 +377,8 @@ class NativeComponentPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             outputs: dict[str, DeviceArray | None],
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         lines = self.line_values(params) if self._lines is not None \
             else None
@@ -383,7 +393,7 @@ class NativeComponentPlan(ComponentPlan):
             ordata=outputs.get('obdata'))
         self._plan.evaluate(
             params, grid, plan_outputs, out_extra, 'bdata', lines,
-            image_scale=self._image_scale(params))
+            image_scale=self._image_scale(params), state=state)
 
     def fields_layout(self) -> FieldsLayout:
         return self._plan.fields_layout()
@@ -393,11 +403,13 @@ class NativeComponentPlan(ComponentPlan):
             params: ParamValues,
             grid: NativeGrid,
             fields: DeviceArray,
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         self._driver.mem_fill(fields, 0)
         self._plan.evaluate(
-            params, grid, dict(fields=fields), out_extra, 'bdata')
+            params, grid, dict(fields=fields), out_extra, 'bdata',
+            state=state)
         if self._opacity_scales is not None:
             # (the fields of line opacity follow those of the light, its
             # velocity and its dispersion: one for each line)

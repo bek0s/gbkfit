@@ -9,6 +9,7 @@ from ...extras import Extras
 from ...mass import SpheroidDensity
 from .._stage import GalaxyMass
 from ..base import ComponentStage
+from ._jeans import JeansTables, jeans_tables
 
 if TYPE_CHECKING:
     from .spheroid import Spheroid
@@ -25,7 +26,8 @@ class SpheroidStage(ComponentStage):
     its density, which the mass of the galaxy follows (see
     mass.MassLightSpheroid), of the given mass surface density of one unit
     of its light (Msun/kpc^2; see _units.mass_per_unit), if its emission
-    has a unit.
+    has a unit; and its state, the tables of its Jeans kinematics, if it
+    has them (see JeansTables).
     """
 
     def __init__(self, spheroid: 'Spheroid', mass_per_unit: float | None):
@@ -51,3 +53,13 @@ class SpheroidStage(ComponentStage):
             out_extra: Extras | None
     ) -> ParamValues:
         return {}
+
+    def state(
+            self, values: ParamValues, mass: GalaxyMass | None
+    ) -> JeansTables | None:
+        spheroid = self._spheroid
+        if spheroid.kinematics() is None:
+            return None
+        return jeans_tables(
+            values, spheroid.light(values), spheroid.rmax(), mass.field,
+            mass.kpc_per_arcsec)

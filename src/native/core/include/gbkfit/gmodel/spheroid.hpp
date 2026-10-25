@@ -12,11 +12,12 @@ namespace gbkfit {
 template<typename T>
 struct SpheroidArgs
 {
-    // The geometry: one value each
+    // The geometry: one value each (vsys with kinematics only)
     const T* xpos = nullptr;
     const T* ypos = nullptr;
     const T* posa = nullptr;
     const T* incl = nullptr;
+    const T* vsys = nullptr;
 
     // The radius (arcsec) of the sphere around the centre that holds the
     // density (see terms)
@@ -41,6 +42,21 @@ struct SpheroidArgs
     int ntable = 0;
     const T* table = nullptr;
     const T* table_range = nullptr;
+
+    // Its kinematics (optional): the tables of its Jeans equations, at the
+    // radii R = exp(jeans_range[0] + i jeans_range[1]) and the heights |z|
+    // = exp(jeans_range[2] + j jeans_range[3]) (arcsec) for i in [0,
+    // jeans_nr) and j in [0, jeans_nz): <v_phi>, sigma_R, sigma_phi and
+    // sigma_z (km/s), one plane after the other (jeans[(p jeans_nr + i)
+    // jeans_nz + j] of plane p), bilinear in ln R and ln |z|, and at the
+    // nearest point of the tables beyond them. Each point moves with a
+    // Gaussian distribution of velocities, of the mean vsys + <v_phi>
+    // cos(theta) sin(incl) and the dispersion of the velocity ellipsoid
+    // on the line of sight (see gmodel_ellipsoid_dispersion).
+    int jeans_nr = 0;
+    int jeans_nz = 0;
+    const T* jeans = nullptr;
+    const T* jeans_range = nullptr;
 
     // Whether it is evaluated as its projection on the sky, on a grid
     // without a depth axis, of the surface density of the sum of its

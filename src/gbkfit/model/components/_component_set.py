@@ -25,7 +25,7 @@ from ._functions import GalaxyFunctions
 from ._stage import GalaxyStage
 from ._transfer import LineResolution
 from ._units import DataUnit
-from .base import Component, DepthAxis, OpacityCubes
+from .base import Component, ComponentState, DepthAxis, OpacityCubes
 from .geometries import Geometry
 from .lines import Band
 
@@ -456,13 +456,15 @@ class ComponentSetPlan:
             self,
             params: ParamValues,
             given: dict[int, ParamValues],
+            states: dict[int, ComponentState],
             outputs: dict[str, DeviceArray | None],
             out_extra: Extras | None
     ) -> LineResolution | None:
         """
         Add the light of the emitters to the output array, the 'image' or
-        the 'scube' in outputs, with the parameters of the galaxy and those
-        that it gives its components (see GalaxyStage.given). The extra
+        the 'scube' in outputs, with the parameters of the galaxy, those
+        that it gives its components (see GalaxyStage.given) and their
+        states (see GalaxyStage.states). The extra
         outputs of each component have its name, or its position, as the
         id 'component' (e.g. 'disk' or 'component0'), and their totals
         none (see ComponentPlans.add_extras). With extra outputs, a
@@ -503,7 +505,8 @@ class ComponentSetPlan:
         outputs = outputs | dict(bdata=bdata, odata=odata, obdata=obdata)
         for i in plans.emitters:
             extra = {} if extras is not None else None
-            plans.plans[i].evaluate_emission(values[i], grid, outputs, extra)
+            plans.plans[i].evaluate_emission(
+                values[i], grid, outputs, extra, states.get(i))
             if extras is not None:
                 extras.setdefault(i, {}).update(extra)
 

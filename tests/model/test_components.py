@@ -6,7 +6,7 @@ and traits), and their errors.
 
 import numpy as np
 import pytest
-from gbkfit.model import galaxy_parser
+from gbkfit.model import BandEmission, LineEmission, galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.observation import Depth, Grid
 from gbkfit.utils import gridutils
@@ -156,7 +156,8 @@ def test_height_traits_must_match_polar_traits(name, htraits):
 def test_a_smooth_disk_without_height_traits_is_thin(name, htraits):
     galaxy = galaxy_parser.load(dict(components=[
         part_info(name, 'density', htraits=htraits)]))
-    assert not galaxy.components()[0].thick()
+    for seen_by in (BandEmission, LineEmission):
+        assert not galaxy.components()[0].thick(seen_by)
 
 
 @pytest.mark.parametrize('name, message', [
@@ -228,7 +229,7 @@ def test_thick_disk_with_several_velocity_traits(name):
         np.float32, (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
         None, None, None, None)
-    plan.evaluate(params, {}, dict(scube=scube), None)
+    plan.evaluate(params, {}, {}, dict(scube=scube), None)
     assert scube.sum() > 0
 
 

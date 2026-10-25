@@ -16,8 +16,8 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.model import (
-    MAX_SUBCHANNELS, AdditiveScenePlan, DepthUnit, Galaxy, LineOpacity,
-    Scene, ScenePlan, TransferScenePlan)
+    MAX_SUBCHANNELS, AdditiveScenePlan, DepthUnit, Emission, Galaxy,
+    LineOpacity, Scene, ScenePlan, TransferScenePlan)
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -137,9 +137,12 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def check(self, component: Component) -> None:
+    def check(
+            self, component: Component, seen_by: 'type[Emission]'
+    ) -> None:
         """
-        Check that a component can be seen along this line of sight.
+        Check that a component can be seen along this line of sight, by an
+        observation of emission of the given type (see Component.thick).
 
         Raises
         ------
@@ -217,13 +220,15 @@ class Flat(LineOfSight):
     ) -> None:
         return None
 
-    def check(self, component: Component) -> None:
+    def check(
+            self, component: Component, seen_by: 'type[Emission]'
+    ) -> None:
         _check_no_line_opacity(component)
         if component.opacity() is not None:
             raise ConfigError(
                 "a component with opacity needs a line of sight with a "
                 "depth axis (grid or transfer)")
-        if component.thick():
+        if component.thick(seen_by):
             raise ConfigError(
                 "a thick component needs a line of sight with a depth axis "
                 "(grid or transfer)")
@@ -268,7 +273,9 @@ class Grid(LineOfSight):
     ) -> DepthAxis:
         return self._depth.axis(grid, bounding_radius)
 
-    def check(self, component: Component) -> None:
+    def check(
+            self, component: Component, seen_by: 'type[Emission]'
+    ) -> None:
         _check_no_line_opacity(component)
 
 
@@ -369,7 +376,9 @@ class Transfer(LineOfSight):
     ) -> DepthAxis:
         return self._depth.axis(grid, bounding_radius)
 
-    def check(self, component: Component) -> None:
+    def check(
+            self, component: Component, seen_by: 'type[Emission]'
+    ) -> None:
         pass
 
     def check_order(

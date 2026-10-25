@@ -62,7 +62,7 @@ def evaluate_fields(driver, component, params, grid):
     fields = driver.mem_alloc_d(
         plan.fields_layout().shape(grid), np.float32)
     extra = {}
-    plan.evaluate_fields(params, grid, fields, extra)
+    plan.evaluate_fields(params, grid, fields, extra, None)
     return driver.mem_copy_d2h(fields), extra
 
 
@@ -105,7 +105,7 @@ def test_a_thin_disk_is_a_layer_where_its_plane_crosses(driver):
     image = driver.mem_alloc_d((24, 24), np.float32)
     driver.mem_fill(image, 0)
     component_plan(driver, component).evaluate_emission(
-        params, grid, dict(image=image), None)
+        params, grid, dict(image=image), None, None)
     np.testing.assert_array_equal(j, driver.mem_copy_d2h(image))
     # The plane of the disk is at the depth |x| tan(incl) from the plane
     # of the sky (x along its minor axis), even beyond the depth axis

@@ -172,7 +172,7 @@ class Disk(Component):
         """Return its clouds, if it is made of clouds."""
         return self._clouds
 
-    def thick(self) -> bool:
+    def thick(self, seen_by: 'type[Emission]') -> bool:
         return self._density.thick()
 
     def frame_params(self) -> FrameParams:

@@ -13,7 +13,7 @@ from gbkfit.params import (
 from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import (
     NodalTraits, TraitParams, fill_param_values, native_traits, subring_radii)
-from ..base import FrameParams, NativeGrid
+from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
 from ..geometries import GEOMETRY_PARAMS
 from ..parts import Equilibrium
@@ -369,7 +369,8 @@ class DiskPlan(NativePlan):
             density_key: str,
             lines: np.ndarray | None = None,
             rdata_scale: float = 1.0,
-            image_scale: float = 1.0
+            image_scale: float = 1.0,
+            state: ComponentState | None = None
     ) -> None:
         if self._disk.equilibrium() is not None:
             self._buffer.host('deq')[:] = params[EQUILIBRIUM_DISPERSION]

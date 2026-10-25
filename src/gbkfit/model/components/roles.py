@@ -10,6 +10,7 @@ from typing import Any, Self
 import astropy.units
 
 from gbkfit.utils import iterutils, parseutils, unitutils
+from gbkfit.utils.parseutils import ConfigError
 from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
@@ -22,9 +23,16 @@ __all__ = [
     'Emission',
     'LineEmission',
     'Opacity',
+    'STARS',
+    'StarsEmission',
     'emission_parser',
     'opacity_parser'
 ]
+
+
+# The name of the light of stars in the lines that a spectral cube sees
+# (see StarsEmission), which no emission line can have
+STARS = 'stars'
 
 
 def _load_line(info: Any, catalogue: LineCatalogue) -> Line:
@@ -189,6 +197,10 @@ class LineEmission(Emission):
             unit: str | astropy.units.UnitBase | None = None
     ):
         self._lines = Lines(lines)
+        if STARS in self._lines.names():
+            raise ConfigError(
+                f"no line can be named {STARS!r}: that is the light of "
+                f"stars (see StarsEmission)")
         self._unit = _parse_unit(unit)
         if self._unit is not None:
             _units.check_line_unit(self._unit, self._lines.names())
@@ -323,6 +335,35 @@ class BandEmission(Emission):
         return (band.wavelength().to_value(astropy.units.um) / (1 + redshift),)
 
 
+class StarsEmission(BandEmission):
+    """
+    The light of stars: light in bands, seen by images as BandEmission,
+    and its distribution of velocities, seen by the spectral cubes that
+    ask for it, those whose lines name it ('stars'): one line on an axis
+    of velocities (without a rest), at the velocity and of the dispersion
+    of the kinematics of its component, of the flux of its light in the
+    band of the cube, if known (as an image takes it). Spectral cubes of
+    gas do not see it.
+
+    Parameters
+    ----------
+    bands : Sequence of Band, optional
+        The bands (see BandEmission).
+    unit : str or astropy.units.UnitBase, optional
+        The physical unit of the density (see BandEmission).
+
+    Raises
+    ------
+    ConfigError
+        If there are no bands, their names repeat, or the unit is not one
+        of bands (see _units.check_band_unit).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'stars'
+
+
 def _parse_unit(
         unit: str | astropy.units.UnitBase | None
 ) -> astropy.units.UnitBase | None:
@@ -386,7 +427,8 @@ class DustOpacity(Opacity):
 
 emission_parser = parseutils.TypedParser(Emission, [
     LineEmission,
-    BandEmission])
+    BandEmission,
+    StarsEmission])
 
 # (the disks register their line opacity, LineOpacity)
 opacity_parser = parseutils.TypedParser(Opacity, [
