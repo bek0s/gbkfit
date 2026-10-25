@@ -90,10 +90,12 @@ WARP = dict(name='disk', tilted=True, rnodes=RNODES)
      "no component uses the geometries ['other']"),
     ([WARP, WARP], [disk('hi', geometry='disk')],
      "the geometries must have different names"),
-    ([WARP], [disk('hi', geometry='disk', tilted=True)],
-     "the warps of a component are those of its geometry 'disk'"),
+    ([WARP], [disk('hi', geometry='disk', tilted=False)],
+     "the warps of a component are those of the geometry 'disk', which "
+     "differ"),
     ([WARP], [disk('hi', geometry='disk', rnodes=RNODES)],
-     "the rings of a component are those of its warped geometry"),
+     "the rings of a component are those of the geometry 'disk', which is "
+     "warped"),
     ([dict(name='disk', loose=True, rnodes=RNODES)],
      [point('nucleus', 'disk')],
      "a point has one centre"),
@@ -108,3 +110,56 @@ def test_geometry_errors(geometries, components, message):
     with pytest.raises(Exception) as error:
         galaxy_parser.load(dict(geometries=geometries, components=components))
     assert message in str(error.value)
+
+
+# A gas disk, a biconical outflow along its axis and a nuclear point
+GAS = dict(type='disk', name='gas', rnodes=RNODES, **PARTS)
+OUTFLOW = dict(
+    type='cone', name='outflow', rnodes=[1, 3, 6],
+    density=dict(
+        ptraits=dict(type='exponential'),
+        htraits=dict(type='gauss', zmax=1)),
+    kinematics=dict(
+        vptraits=dict(type='uniform', direction='out'),
+        dptraits=dict(type='uniform')),
+    emission=LINES)
+NUCLEUS = dict(type='point', name='nucleus', emission=LINES)
+
+
+def test_the_components_share_the_geometry_of_their_galaxy():
+    # (a point its centre and systemic velocity, which has no plane); one
+    # of its own keeps its own parameters, named after it
+    shared = galaxy_parser.load(dict(components=[GAS, OUTFLOW, NUCLEUS]))
+    geometry = {'xpos', 'ypos', 'vsys', 'posa', 'incl'}
+    assert geometry <= set(shared.pdescs())
+    assert not any(name.endswith(('_xpos', '_posa', '_vsys'))
+                   for name in shared.pdescs())
+    own = galaxy_parser.load(dict(components=[
+        GAS, OUTFLOW | dict(geometry='own'), NUCLEUS]))
+    assert set(own.pdescs()) - set(shared.pdescs()) == {
+        f'outflow_{name}' for name in geometry}
+    assert galaxy_parser.dump(own)['components'][1]['geometry'] == 'own'
+    assert 'geometry' not in galaxy_parser.dump(own)['components'][0]
+
+
+def test_a_warped_galaxy_geometry_is_shared_by_its_disks():
+    # (whose rings are its rings)
+    warp = dict(tilted=True, rnodes=RNODES)
+    gas = {key: value for key, value in GAS.items() if key != 'rnodes'}
+    galaxy = galaxy_parser.load(dict(
+        geometry=warp, components=[gas, NUCLEUS]))
+    assert galaxy.pdescs()['posa'].size() == len(RNODES)
+    assert galaxy.constants()['rnodes'] == tuple(RNODES)
+    assert galaxy_parser.dump(galaxy)['geometry'] == warp | dict(loose=False)
+    with pytest.raises(Exception, match="give it geometry 'own'"):
+        galaxy_parser.load(dict(geometry=warp, components=[gas, OUTFLOW]))
+
+
+def test_a_warped_galaxy_geometry_is_given_to_its_components():
+    # (in Python: a component whose geometry is 'galaxy' does not know its
+    # rings)
+    from gbkfit.model import Galaxy, Geometry, component_parser
+    warp = Geometry(tilted=True, rnodes=RNODES)
+    disk = component_parser.load(dict(GAS))
+    with pytest.raises(Exception, match="give it to its component 'gas'"):
+        Galaxy(disk, geometry=warp)

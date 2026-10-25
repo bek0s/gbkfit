@@ -5,6 +5,7 @@ galaxies:
 - redshift: 0.25
   components:
   - type: disk
+    geometry: own
     name: stars
     loose: false
     tilted: false
@@ -17,6 +18,7 @@ galaxies:
       bands: [sdss_r]
       unit: MJy/sr
   - type: disk
+    geometry: own
     name: dust
     loose: false
     tilted: false

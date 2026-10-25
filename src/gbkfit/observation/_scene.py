@@ -12,8 +12,8 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import (
-    Band, BandEmission, DataUnit, DustOpacity, Emission, Extras, Galaxy,
-    GalaxyState, LineOpacity)
+    Band, BandEmission, DataUnit, DustOpacity, Emission, Extras,
+    FrameParams, Galaxy, GalaxyState, LineOpacity)
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
@@ -144,6 +144,20 @@ class Scene:
         return {
             own: mapping[full]
             for own, full in self._galaxies[g].component_params(i).items()}
+
+    def frame_params(self, name: str) -> FrameParams:
+        """
+        Return the parameters that place the component of the given name
+        in a frame (see Component.frame_params), by their names among those
+        of the observation group. Raise ConfigError if no component has the
+        name.
+        """
+        g, i = _named_components(self._galaxies, [name])[name]
+        galaxy = self._galaxies[g]
+        names = galaxy.component_params(i)
+        return FrameParams(*(
+            None if own is None else self._mappings[g][names[own]]
+            for own in galaxy.components()[i].frame_params()))
 
     def plan(
             self,

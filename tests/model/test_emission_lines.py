@@ -269,8 +269,8 @@ def test_unknown_lines_are_errors(driver, lines, message):
 def test_a_component_must_have_a_selected_line(driver):
     co_lines = [dict(name='co32', rest='345.79599 GHz')]
     galaxy = dict(components=[
-        with_lines(COMPONENT, LINES) | dict(name='gas'),
-        with_lines(COMPONENT, co_lines) | dict(name='co')])
+        with_lines(COMPONENT, LINES) | dict(name='gas', geometry='own'),
+        with_lines(COMPONENT, co_lines) | dict(name='co', geometry='own')])
     properties = {f'{name}_{key}': value for name in ('gas', 'co')
                   for key, value in PROPERTIES.items()}
     with pytest.raises(Exception, match="has none of the selected lines"):

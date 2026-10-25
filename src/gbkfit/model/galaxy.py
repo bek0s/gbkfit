@@ -53,16 +53,21 @@ class Galaxy(parseutils.Serializable):
     traits.VPTraitMass), which takes its disks as concentric and flat
     (see GalaxyStage).
 
-    Its parameters are those of its components, each prefixed by its name
-    when there are several ('disk_pt_a'), and those of its geometries
-    ('{geometry}_posa'), its distance ('distance'), its mass
-    ('mass_{name}_*') and its gravity ('gravity_*'). A name prefixes them
-    all when there are several galaxies (see ObservationGroup), whose
-    order along the line of sight the ObservationGroup gives (see its
-    option depth_order).
+    Its components share its geometry by default: one centre, systemic
+    velocity and plane (see Geometry), whose parameters are its own
+    ('posa'); a component can have its own instead (its option geometry
+    'own') or share a named one. Its parameters are those of its
+    geometries ('posa', '{geometry}_posa'), of its components, each
+    prefixed by its name when there are several ('disk_pt_a'), its
+    distance ('distance'), its mass ('mass_{name}_*') and its gravity
+    ('gravity_*'). A name prefixes them all when there are several
+    galaxies (see ObservationGroup), whose order along the line of sight
+    the ObservationGroup gives (see its option depth_order).
 
-    In configurations, its option geometries lists the geometries that
-    its components name (see Geometry).
+    In configurations, its option geometries lists the named geometries
+    that its components name, and its option geometry is its own (e.g.
+    geometry: {tilted: true, rnodes: [...]}, which its components share
+    with their option geometry 'galaxy', the default).
 
     Parameters
     ----------
@@ -95,6 +100,11 @@ class Galaxy(parseutils.Serializable):
         tells how far its light is dimmed.
     name : str, optional
         Its name; required when there are several galaxies.
+    geometry : Geometry, optional
+        Its geometry, without a name: by default flat (not warped), of all
+        the geometric parameters of the components that share it (see
+        Component.geometry). The components that share a warped one hold
+        it themselves (their rings are its rings).
 
     Raises
     ------
@@ -133,7 +143,11 @@ class Galaxy(parseutils.Serializable):
         ConfigError
             If the configuration has an error.
         """
-        _detail.load_geometries(info, ('components',))
+        if info.get('geometry') is not None:
+            info['geometry'] = parseutils.load_option(
+                geometry_parser.load, info, 'geometry')
+        _detail.load_geometries(
+            info, ('components',), info.get('geometry') or Geometry())
         components = info.get('components')
         parseutils.load_option_and_update_info(
             component_parser, info, 'components',
@@ -150,7 +164,9 @@ class Galaxy(parseutils.Serializable):
 
     def dump(self) -> dict[str, Any]:
         info = dict(name=self._name) if self._name is not None else {}
-        geometries = self.geometries()
+        if self.geometry() != Geometry():
+            info.update(geometry=geometry_parser.dump(self.geometry()))
+        geometries = [g for g in self.geometries() if g.name() is not None]
         if geometries:
             info.update(geometries=geometry_parser.dump(geometries))
         if self.components():
@@ -173,7 +189,8 @@ class Galaxy(parseutils.Serializable):
             distance: Distance | None = None,
             redshift: float | None = None,
             name: str | None = None,
-            gravity: Gravity | None = None
+            gravity: Gravity | None = None,
+            geometry: Geometry | None = None
     ):
         parseutils.check_name(name)
         if redshift is not None and not redshift > -1:
@@ -183,7 +200,7 @@ class Galaxy(parseutils.Serializable):
         mass = iterutils.tuplify(mass)
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(
-            components, distance, mass_model, gravity)
+            components, distance, mass_model, gravity, geometry)
         if redshift is None:
             _check_redshift_not_needed(self._component_set.components())
         self._pdescs = self._component_set.pdescs()
@@ -206,8 +223,15 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.mappings()[index]
 
+    def geometry(self) -> Geometry:
+        """Return its geometry, which its components share by default."""
+        return self._component_set.geometry()
+
     def geometries(self) -> list[Geometry]:
-        """Return the geometries of its components, each once."""
+        """
+        Return the geometries that its components share, each once (with
+        its own, if they share it).
+        """
         return self._component_set.geometries()
 
     def mass(self) -> tuple[MassComponent, ...]:

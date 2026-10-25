@@ -16,16 +16,18 @@ from gbkfit.params import ParamSpace
 from gbkfit.utils.parseutils import ConfigError
 
 
-# A disk and a point, which an offset moves together
+# A disk and a point off its centre (each of its own geometry), which an
+# offset moves together
 GALAXY = dict(components=[
-    dict(type='disk', name='disk', loose=False, tilted=False,
+    dict(type='disk', name='disk', geometry='own', loose=False, tilted=False,
          rnodes=list(range(0, 12)),
          density=dict(ptraits=dict(type='exponential')),
          kinematics=dict(
              vptraits=dict(type='arctan', direction='tan'),
              dptraits=dict(type='uniform')),
          emission=dict(type='lines')),
-    dict(type='point', name='core', emission=dict(type='lines'))])
+    dict(type='point', name='core', geometry='own',
+         emission=dict(type='lines'))])
 
 PARAMS = dict(
     disk_vsys=0, disk_xpos=0, disk_ypos=0, disk_posa=30, disk_incl=60,

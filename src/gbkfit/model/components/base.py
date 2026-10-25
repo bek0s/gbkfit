@@ -1,5 +1,5 @@
 import abc
-from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
 
 import numpy as np
 
@@ -26,6 +26,7 @@ __all__ = [
     'ComponentStage',
     'DepthAxis',
     'FieldsLayout',
+    'FrameParams',
     'NativeGrid',
     'OpacityCubes'
 ]
@@ -97,6 +98,20 @@ class FieldsLayout(NamedTuple):
         return (self.nslots,) + planes
 
 
+class FrameParams(NamedTuple):
+    """
+    The parameters of a component that place it in a frame, by their
+    names among its own (see Component.pdescs; None for those it does not
+    have): its centre (x, y), its systemic velocity (vsys), and the
+    orientation of its plane or axis (posa, incl).
+    """
+    x: str | None
+    y: str | None
+    vsys: str | None
+    posa: str | None
+    incl: str | None
+
+
 class Component(parseutils.TypedSerializable, abc.ABC):
     """
     A component of a galaxy: a shape (the subclass) with roles, the light
@@ -108,8 +123,11 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     name : str, optional
         Its name, which prefixes its parameters in its galaxy (required
         when its galaxy has several components).
-    geometry : Geometry, optional
-        A geometry that it shares with other components.
+    geometry : Geometry, 'galaxy' or 'own'
+        The geometry that it shares with other components: that of its
+        galaxy ('galaxy'; or the Geometry itself, which a warped one must
+        be, see Galaxy), a named one, or none ('own': its geometric
+        parameters are its own).
     emission : Emission, optional
         The light it emits.
     opacity : Opacity, optional
@@ -118,8 +136,8 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     Raises
     ------
     ConfigError
-        If the name is not valid (see parseutils.check_name), or it has
-        neither emission nor opacity.
+        If the name is not valid (see parseutils.check_name), the geometry
+        is not one of the above, or it has neither emission nor opacity.
 
     Notes
     -----
@@ -131,11 +149,16 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     def __init__(
             self,
             name: str | None,
-            geometry: Geometry | None,
+            geometry: Geometry | Literal['galaxy', 'own'],
             emission: Emission | None,
             opacity: Opacity | None
     ):
         parseutils.check_name(name)
+        if not isinstance(geometry, Geometry) \
+                and geometry not in ('galaxy', 'own'):
+            raise ConfigError(
+                f"geometry must be 'galaxy', 'own' or a geometry; it is "
+                f"{geometry!r}")
         if emission is None and opacity is None:
             raise ConfigError(
                 "a component needs emission, opacity or both")
@@ -148,9 +171,13 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """Return its name, if any."""
         return self._name
 
-    def geometry(self) -> Geometry | None:
-        """Return the geometry it shares, if any."""
+    def geometry(self) -> Geometry | Literal['galaxy', 'own']:
+        """Return the geometry it shares, 'galaxy' or 'own'."""
         return self._geometry
+
+    @abc.abstractmethod
+    def frame_params(self) -> FrameParams:
+        """Return its parameters that place it in a frame."""
 
     def emission(self) -> Emission | None:
         """Return the light it emits, if any."""

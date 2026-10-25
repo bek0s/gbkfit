@@ -35,7 +35,7 @@ MASS = [
     dict(type='point', name='bh'),
     dict(type='spheroid', name='halo', profile=dict(type='nfw'))]
 PARAMS = dict(
-    gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0,
     gas_pt_a=1, gas_pt_s=4, gas_ht_s=0.5, gas_dpt_a=10, distance=10,
     mass_bh_log_m=10, mass_halo_log_m=12, mass_halo_c=8)
 

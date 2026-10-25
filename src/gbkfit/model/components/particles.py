@@ -4,7 +4,7 @@ of them (see Particles).
 """
 
 import os.path
-from typing import Any
+from typing import Any, Literal
 
 import astropy.table
 import numpy as np
@@ -14,9 +14,11 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._detail import Fluxes, disk_to_sky, dump_geometry, dump_name
+from ._detail import (
+    Fluxes, disk_to_sky, dump_geometry, dump_name, geometry_desc)
 from ._units import DataUnit
-from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
+from .base import (
+    Component, ComponentPlan, FieldsLayout, FrameParams, NativeGrid)
 from .geometries import Geometry
 from .lines import Band, LineCatalogue, LinePlacement
 from .points import band_light, line_light
@@ -356,9 +358,10 @@ class Particles(Component):
         numpy file (npz) of its columns.
     emission : Emission
         The light it emits.
-    geometry : Geometry, optional
-        A geometry whose centre, position angle, inclination and systemic
-        velocity it shares (not a loose or tilted one).
+    geometry : Geometry, 'galaxy' or 'own', optional
+        The geometry whose centre, position angle, inclination and systemic
+        velocity it shares: that of its galaxy (by default), a named one
+        (not a loose or tilted one), or none ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
@@ -399,13 +402,15 @@ class Particles(Component):
             self,
             file: str,
             emission: Emission,
-            geometry: Geometry | None = None,
+            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
-        if geometry is not None and (geometry.loose() or geometry.tilted()):
+        if isinstance(geometry, Geometry) and (
+                geometry.loose() or geometry.tilted()):
             raise ConfigError(
-                f"particles have one centre and orientation, but their "
-                f"geometry {geometry.name()!r} is loose or tilted")
+                f"particles have one centre and orientation, but "
+                f"{geometry_desc(geometry)} is loose or tilted; give them "
+                f"geometry 'own'")
         super().__init__(name, geometry, emission, None)
         self._file = file
         self._particles = read_particles(file)
@@ -432,6 +437,10 @@ class Particles(Component):
 
     def thick(self) -> bool:
         return False
+
+    def frame_params(self) -> FrameParams:
+        vsys = 'vsys' if self._lines is not None else None
+        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs

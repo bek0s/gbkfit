@@ -155,9 +155,10 @@ def test_point_round_trip():
         type='point', name='agn', emission=dict(
             type='lines', lines=[dict(name='ha', rest='6562.8 Angstrom')]))])
     galaxy = galaxy_parser.load(copy.deepcopy(info))
-    # A named component prefixes its parameters with its name
+    # A named component prefixes its parameters with its name, but those of
+    # the geometry of its galaxy, which it shares (its centre and vsys)
     assert set(galaxy.pdescs()) == {
-        'agn_xpos', 'agn_ypos', 'agn_flux', 'agn_vsys', 'agn_disp'}
+        'xpos', 'ypos', 'agn_flux', 'vsys', 'agn_disp'}
     dumped = galaxy_parser.dump(galaxy)
     assert galaxy_parser.dump(galaxy_parser.load(dumped)) == dumped
 

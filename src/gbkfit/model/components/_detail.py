@@ -94,11 +94,21 @@ def dump_name(component: 'Component') -> dict[str, Any]:
 
 def dump_geometry(component: 'Component') -> dict[str, Any]:
     """
-    Return the geometry option of a component: the name of its geometry,
-    or none if it has its own.
+    Return the geometry option of a component: 'own', the name of its
+    geometry, or none for that of its galaxy (the default).
     """
     geometry = component.geometry()
-    return dict(geometry=geometry.name()) if geometry is not None else {}
+    if geometry == 'own':
+        return dict(geometry='own')
+    if geometry == 'galaxy' or geometry.name() is None:
+        return {}
+    return dict(geometry=geometry.name())
+
+
+def geometry_desc(geometry: 'Geometry') -> str:
+    """Describe a geometry, for messages."""
+    return "the geometry of its galaxy" if geometry.name() is None \
+        else f"the geometry {geometry.name()!r}"
 
 
 def parse_nodes(
@@ -160,15 +170,16 @@ def parse_nodes(
 
 
 def load_geometries(
-        info: dict[str, Any], keys: tuple[str, ...]
+        info: dict[str, Any], keys: tuple[str, ...], geometry: 'Geometry'
 ) -> None:
     """
     Load the geometries of the configuration of a galaxy (its option
     geometries), in place: the geometry option of each of its components
     (those of the options keys, e.g. 'components') becomes the geometry
-    of that name, and the option geometries goes. Raise ConfigError for
-    an unknown geometry, repeated names, or a geometry that no component
-    uses.
+    of that name, that of the galaxy (geometry) if it is 'galaxy' or not
+    given, or stays 'own', and the option geometries goes. Raise
+    ConfigError for an unknown geometry, one without a name, repeated
+    names, or a geometry that no component uses.
     """
     from .geometries import geometry_parser
     infos = info.pop('geometries', None)
@@ -177,6 +188,10 @@ def load_geometries(
     with parseutils.config_path('geometries'):
         geometries = geometry_parser.load(iterutils.listify(infos))
     names = [geometry.name() for geometry in geometries]
+    if None in names:
+        raise ConfigError(
+            "the geometries of geometries need names (that of the galaxy "
+            "is its option geometry)", ['geometries', names.index(None)])
     if repeated := sorted({n for n in names if names.count(n) > 1}):
         raise ConfigError(
             f"the geometries must have different names; repeated: "
@@ -191,8 +206,11 @@ def load_geometries(
         components = [dict(item) for item in value] if is_list \
             else [dict(value)]
         for i, component in enumerate(components):
-            name = component.get('geometry')
-            if name is None:
+            name = component.get('geometry', 'galaxy')
+            if name == 'galaxy':
+                component['geometry'] = geometry
+                continue
+            if name == 'own':
                 continue
             if name not in by_name:
                 path = (key, i) if is_list else (key,)
@@ -207,10 +225,13 @@ def load_geometries(
 
 
 def geometry_params(component: 'Component') -> tuple[str, ...]:
-    """Return the geometric parameters of a component, of its pdescs."""
+    """
+    Return the geometric parameters of a component (see GEOMETRY_PARAMS):
+    those that place it in a frame (see Component.frame_params).
+    """
     from .geometries import GEOMETRY_PARAMS
-    pdescs = component.pdescs()
-    return tuple(name for name in GEOMETRY_PARAMS if name in pdescs)
+    frame = set(component.frame_params()) - {None}
+    return tuple(name for name in GEOMETRY_PARAMS if name in frame)
 
 
 def shared_params(

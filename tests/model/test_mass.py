@@ -1604,7 +1604,7 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
     thick = line_of_sight == 'grid'
     disk = with_traits(
         DISK, ptraits=dict(type='nw_uniform'), vptraits=dict(type='mass'))
-    disk |= dict(type='disk', name='hi')
+    disk |= dict(type='disk', name='hi', geometry='own')
     properties = {
         f'hi_{name}': value for name, value in DISK_PROPERTIES.items()
         if name != 'pt_s'} | dict(hi_pt_a=brightness)
@@ -1665,9 +1665,9 @@ def test_disk_follows_a_component_without_light():
     opacity = np.append(np.linspace(1, 0.2, 10), 0)
     upsilon = 2e8
     stars = with_traits(DISK, vptraits=dict(type='mass')) \
-        | dict(type='disk', name='stars')
+        | dict(type='disk', name='stars', geometry='own')
     dust = dict(
-        type='disk', name='dust', loose=False, tilted=False,
+        type='disk', name='dust', geometry='own', loose=False, tilted=False,
         rnodes=rnodes, rstep=DISK['rstep'],
         density=dict(
             ptraits=dict(type='nw_uniform'),
@@ -1904,7 +1904,8 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
     # the pressure does not see: the support of the density of the disk
     disk = with_traits(
         DISK, vptraits=dict(type='mass', pressure_support=mode),
-        htraits=dict(type='sech2', zmax=8)) | dict(type='disk', name='gas')
+        htraits=dict(type='sech2', zmax=8)) \
+        | dict(type='disk', name='gas', geometry='own')
     mass = [
         dict(type='disk', name='hi', surface=dict(
             type='component', component='gas'),
@@ -2122,7 +2123,7 @@ def test_the_gravity_warns_of_a_disk_far_from_flat(caplog, tilt, warns):
     # rings changes its circular velocity by about 0.2%, one of 30 by
     # about 1.5%, and a warning says so (with extras)
     disk = with_traits(DISK, vptraits=dict(type='mass')) | dict(
-        type='disk', tilted=True)
+        type='disk', geometry='own', tilted=True)
     galaxy = galaxy_parser.load(dict(
         components=[disk], mass=copy.deepcopy(MASS),
         distance=copy.deepcopy(DISTANCE)))

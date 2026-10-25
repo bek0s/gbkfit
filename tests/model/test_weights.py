@@ -46,7 +46,7 @@ def config(driver, observable, weights, component=None):
 
 
 PROPERTIES = dict(
-    gas_vsys=0, gas_xpos=1, gas_ypos=-2, gas_posa=30, gas_incl=60,
+    vsys=0, xpos=1, ypos=-2, posa=30, incl=60,
     gas_pt_a=1, gas_pt_s=4, gas_vpt_vt=100, gas_dpt_a=20)
 
 

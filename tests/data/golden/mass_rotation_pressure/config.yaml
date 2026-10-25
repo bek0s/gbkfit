@@ -4,6 +4,7 @@ driver: {type: host}
 galaxies:
 - components:
   - type: disk
+    geometry: own
     name: gas
     loose: false
     tilted: false

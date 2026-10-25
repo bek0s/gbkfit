@@ -461,6 +461,13 @@ def galaxies_model(
         galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
     if depth_order is None:
         depth_order = [galaxy['name'] for galaxy in galaxies]
+    # (the components have their own geometries, after which the tests
+    # name their parameters)
+    galaxies = [
+        galaxy | dict(components=[
+            dict(geometry='own') | component
+            for component in galaxy['components']])
+        for galaxy in galaxies]
     group = ObservationGroup(
         galaxy_parser.load(galaxies),
         observation_parser.load([observation]), depth_order)

@@ -37,11 +37,20 @@ def test_one_component_needs_no_name():
 
 
 def test_names_prefix_the_parameters_and_constants():
+    # (but those of the geometry of the galaxy, which they share, and of
+    # their own geometries)
     galaxy = load_galaxy(
         [disk(name='disk'), disk(name='bulge'), dust(name='dust')])
     names = set(galaxy.pdescs())
-    assert {'disk_xpos', 'bulge_pt_s', 'dust_pt_a'} <= names
-    assert not {'xpos', 'pt_a'} & names
+    assert {'xpos', 'disk_pt_a', 'bulge_pt_s', 'dust_pt_a'} <= names
+    assert not {'disk_xpos', 'pt_a'} & names
+    galaxy = load_galaxy(
+        [disk(name='disk', geometry='own'), disk(name='bulge')])
+    names = set(galaxy.pdescs())
+    assert {'xpos', 'disk_xpos', 'disk_pt_a'} <= names
+    assert 'bulge_xpos' not in names
+    galaxy = load_galaxy(
+        [disk(name='disk'), disk(name='bulge'), dust(name='dust')])
     assert set(galaxy.constants()) == {
         'disk_rnodes', 'disk_subrnodes', 'bulge_rnodes', 'bulge_subrnodes',
         'dust_rnodes', 'dust_subrnodes'}
@@ -154,14 +163,14 @@ def extra_outputs(group_, prefixes):
 
 def test_names_name_the_extra_outputs():
     group_ = group(
-        [galaxy(components=[disk(THIN, name='disk')])],
+        [galaxy(components=[disk(THIN, name='disk', geometry='own')])],
         [observation(name='hi')])
     extra = extra_outputs(group_, ['disk_'])
     assert {('bdata', 'hi', 'galaxy0', 'disk'), ('dcube_lo', 'hi')} <= extra
 
 
 def test_galaxy_names_prefix_the_extra_outputs():
-    components = [disk(THIN, name='disk')]
+    components = [disk(THIN, name='disk', geometry='own')]
     group_ = group(
         [galaxy('north', components), galaxy('south', components)],
         [observation(['north', 'south'], name='hi')])

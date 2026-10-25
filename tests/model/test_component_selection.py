@@ -34,10 +34,10 @@ def disk(name, density=THIN):
 
 GALAXY = dict(components=[disk('ha'), disk('co')])
 
+# (the geometry of the galaxy, which its components share)
 PROPERTIES = dict(
-    ha_vsys=0, ha_xpos=0.3, ha_ypos=-0.6, ha_posa=50, ha_incl=60,
+    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
     ha_pt_a=1, ha_pt_s=4, ha_vpt_rt=2, ha_vpt_vt=150, ha_dpt_a=20,
-    co_vsys=0, co_xpos=0.3, co_ypos=-0.6, co_posa=50, co_incl=60,
     co_pt_a=2, co_pt_s=2, co_vpt_rt=2, co_vpt_vt=150, co_dpt_a=8)
 
 SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10])
@@ -64,7 +64,7 @@ def test_an_observation_sees_its_components(driver):
     [ha] = evaluate(driver, GALAXY, [observation(['ha'])], PROPERTIES)
     alone = dict(GALAXY, components=[disk('ha')])
     [expected] = evaluate(driver, alone, [observation()], {
-        k: v for k, v in PROPERTIES.items() if k.startswith('ha_')})
+        k: v for k, v in PROPERTIES.items() if not k.startswith('co_')})
     np.testing.assert_array_equal(ha, expected)
 
 
@@ -86,9 +86,7 @@ def test_components_with_opacity_always_absorb(driver):
         rnodes=list(range(0, 14)), density=THICK, opacity=dict(type='dust'))
     galaxy = dict(components=emitters + [dust])
     properties = PROPERTIES | dict(
-        ha_ht_s=1, co_ht_s=0.5, dust_xpos=0.3, dust_ypos=-0.6,
-        dust_posa=50, dust_incl=60, dust_pt_a=0.3, dust_pt_s=4,
-        dust_ht_s=0.5)
+        ha_ht_s=1, co_ht_s=0.5, dust_pt_a=0.3, dust_pt_s=4, dust_ht_s=0.5)
     ha, co, both = evaluate(driver, galaxy, [
         observation(['ha'], name='muse', line_of_sight=GRID),
         observation(['co'], name='alma', line_of_sight=GRID),

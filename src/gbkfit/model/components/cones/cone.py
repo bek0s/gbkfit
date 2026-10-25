@@ -3,20 +3,23 @@ The cone component: shells around an apex, with traits.
 """
 
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._nodal import make_bands, make_lines
 from .._units import DataUnit
-from ..base import Component, ComponentPlan
+from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band, LineCatalogue
 from ..parts import Density, Kinematics
 from ..roles import Emission, Opacity
+from .._detail import geometry_desc
+from ..geometries import Geometry
 from . import _cone, _detail
 
 
@@ -64,6 +67,10 @@ class Cone(Component):
     interp : str, optional
         How its node-wise parameters are interpolated between its radii:
         'linear', 'akima' or 'pchip'.
+    geometry : Geometry, 'galaxy' or 'own', optional
+        The geometry whose apex, axis and systemic velocity it shares: that
+        of its galaxy (by default), a named one (not a loose or tilted
+        one), or none ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
@@ -107,9 +114,16 @@ class Cone(Component):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
+            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
-        super().__init__(name, None, emission, opacity)
+        if isinstance(geometry, Geometry) and (
+                geometry.loose() or geometry.tilted()):
+            raise ConfigError(
+                f"a cone has one apex and axis, but "
+                f"{geometry_desc(geometry)} is loose or tilted; give it "
+                f"geometry 'own'")
+        super().__init__(name, geometry, emission, opacity)
         self._density = density
         self._kinematics = kinematics
         self._cone = _detail.make_cone(
@@ -133,6 +147,9 @@ class Cone(Component):
 
     def thick(self) -> bool:
         return True
+
+    def frame_params(self) -> FrameParams:
+        return self._cone.frame_params()
 
     def pdescs(self) -> dict[str, ParamDesc]:
         lines = self._lines.pdescs() if self._lines is not None else {}

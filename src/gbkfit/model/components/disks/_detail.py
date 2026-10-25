@@ -12,7 +12,7 @@ from gbkfit.driver import Driver
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
-from .._detail import dump_geometry, dump_name
+from .._detail import dump_geometry, dump_name, geometry_desc
 from .._nodal import (
     MAX_TRAITS, EmissionSetup, NodalComponentPlan, TraitTable,
     emission_setup, parse_component_rnode_args, with_default_height_traits)
@@ -92,6 +92,8 @@ def dump_disk_component(
     without what its geometry (if any) gives.
     """
     geometry = component.geometry()
+    if not isinstance(geometry, Geometry):
+        geometry = None
     info = dict(type=component.type()) | dump_name(component) \
         | dump_geometry(component)
     if geometry is None:
@@ -152,17 +154,20 @@ def make_disk(
     rings = dict(rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
                  rnodes=rnodes)
     if geometry is not None:
-        if given := [k for k, v in dict(
-                loose=loose, tilted=tilted).items() if v is not None]:
+        warps = dict(loose=geometry.loose(), tilted=geometry.tilted())
+        if differ := [k for k, v in dict(loose=loose, tilted=tilted).items()
+                      if v is not None and v != warps[k]]:
             raise ConfigError(
-                f"the warps of a component are those of its geometry "
-                f"{geometry.name()!r}; remove {given}")
-        loose, tilted = geometry.loose(), geometry.tilted()
+                f"the warps of a component are those of "
+                f"{geometry_desc(geometry)}, which differ: {differ}; remove "
+                f"them, or give the component geometry 'own'")
+        loose, tilted = warps['loose'], warps['tilted']
         if geometry.rnodes() is not None:
             if given := [k for k, v in rings.items() if v is not None]:
                 raise ConfigError(
-                    f"the rings of a component are those of its warped "
-                    f"geometry {geometry.name()!r}; remove {given}")
+                    f"the rings of a component are those of "
+                    f"{geometry_desc(geometry)}, which is warped; remove "
+                    f"{given}, or give the component geometry 'own'")
             rings = dict(rings, rnodes=geometry.rnodes())
     node_args = parse_component_rnode_args(
         **rings, rstep=rstep, interp=interp)

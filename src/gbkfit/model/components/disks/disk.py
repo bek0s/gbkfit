@@ -4,7 +4,7 @@ clouds (see Clouds).
 """
 
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import numpy as np
 
@@ -16,7 +16,7 @@ from .. import traits
 from .._needs import Need
 from .._nodal import make_bands, make_lines
 from .._units import DataUnit
-from ..base import Component, ComponentPlan
+from ..base import Component, ComponentPlan, FrameParams
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
@@ -82,8 +82,10 @@ class Disk(Component):
         'linear', 'akima' or 'pchip'.
     clouds : Clouds, optional
         Its clouds, if it is made of clouds; by default, it is smooth.
-    geometry : Geometry, optional
-        A geometry that it shares with other components (see Geometry).
+    geometry : Geometry, 'galaxy' or 'own', optional
+        The geometry that it shares: that of its galaxy (by default; a
+        warped one itself), a named one, or none ('own'; see
+        Component).
     name : str, optional
         Its name (see Component).
 
@@ -137,7 +139,7 @@ class Disk(Component):
             rstep: float | None = None,
             interp: str = 'linear',
             clouds: Clouds | None = None,
-            geometry: Geometry | None = None,
+            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         super().__init__(name, geometry, emission, opacity)
@@ -150,7 +152,8 @@ class Disk(Component):
         self._clouds = clouds
         self._disk = _detail.make_disk(
             density, kinematics, emission, opacity, zptraits, sptraits,
-            geometry=geometry, loose=loose, tilted=tilted, rnmin=rnmin,
+            geometry=geometry if isinstance(geometry, Geometry) else None,
+            loose=loose, tilted=tilted, rnmin=rnmin,
             rnmax=rnmax, rnsep=rnsep, rnlen=rnlen, rnodes=rnodes,
             rstep=rstep, interp=interp, clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
@@ -170,6 +173,9 @@ class Disk(Component):
 
     def thick(self) -> bool:
         return self._density.thick()
+
+    def frame_params(self) -> FrameParams:
+        return self._disk.frame_params()
 
     def pdescs(self) -> dict[str, ParamDesc]:
         lines = self._lines.pdescs() if self._lines is not None else {}

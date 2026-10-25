@@ -28,10 +28,6 @@ __all__ = [
 # face-on light (see ImageMaps.warn_inclination)
 _EDGE_ON_WARNING = 80.0
 
-# The parameters of the geometry of a disk, by their names in it
-_GEOMETRY = ('xpos', 'ypos', 'posa', 'incl')
-
-
 class _ImageTrait(NamedTuple):
     """
     An image trait of a disk: the trait, the names of its parameters in
@@ -107,13 +103,13 @@ class ImageMaps:
         """
         values = {}
         for image in self._traits:
-            geometry = _geometry(self._disk, params, image.radii)
-            x, y, _ = disk_to_sky(
-                image.x, image.y, 0, *(geometry[p] for p in _GEOMETRY))
+            xpos, ypos, posa, incl = _geometry(
+                self._disk, params, image.radii)
+            x, y, _ = disk_to_sky(image.x, image.y, 0, xpos, ypos, posa, incl)
             own = {name: params[full] for name, full in image.names.items()
                    if name not in image.trait.image_params()}
             values[image.names['m']] = image.trait.face_on(
-                own, x, y, geometry['incl'], self._sky_origin)
+                own, x, y, incl, self._sky_origin)
         return values
 
     def warn_inclination(self, params: ParamValues) -> None:
@@ -123,7 +119,7 @@ class ImageMaps:
         the image says little of the face-on light, which the deprojection
         stretches by 1 / cos(incl) along the minor axis.
         """
-        incl = np.max(params['incl'])
+        incl = np.max(params[self._disk.frame_params().incl])
         if incl > _EDGE_ON_WARNING:
             parseutils.warn(
                 f"the disk of {self._label!r} is at the inclination "
@@ -135,18 +131,19 @@ class ImageMaps:
 
 def _geometry(
         disk: 'NodalDisk', params: ParamValues, radii: np.ndarray
-) -> dict[str, np.ndarray | float]:
+) -> tuple[np.ndarray | float, ...]:
     """
-    Return the geometry of a disk (see _GEOMETRY) at the given radii (in
-    its plane, arcsec), from the values of its parameters: their values, or
-    those at its nodes interpolated with its interpolation, at the radii
-    within its first node and its last.
+    Return the centre (xpos, ypos), the position angle and the inclination
+    of a disk at the given radii (in its plane, arcsec), from the values of
+    its parameters: their values, or those at its nodes interpolated with
+    its interpolation, at the radii within its first node and its last.
     """
+    frame = disk.frame_params()
     rnodes = np.asarray(disk.rnodes())
     clipped = np.clip(radii, rnodes[0], rnodes[-1])
-    geometry = {}
-    for name in _GEOMETRY:
+    geometry = []
+    for name in (frame.x, frame.y, frame.posa, frame.incl):
         value = np.asarray(params[name], dtype=float)
-        geometry[name] = value if value.ndim == 0 \
-            else disk.interp()(rnodes, value)(clipped)
-    return geometry
+        geometry.append(value if value.ndim == 0
+                        else disk.interp()(rnodes, value)(clipped))
+    return tuple(geometry)

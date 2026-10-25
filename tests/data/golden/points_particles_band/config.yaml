@@ -4,9 +4,11 @@ driver: {type: host}
 galaxies:
 - components:
   - type: point
+    geometry: own
     name: nucleus
     emission: {type: band}
   - type: particles
+    geometry: own
     name: stars
     file: particles.npz
     emission: {type: band}

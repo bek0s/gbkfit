@@ -5,6 +5,7 @@ galaxies:
 - name: front
   components:
   - type: disk
+    geometry: own
     name: gas
     loose: false
     tilted: false
@@ -17,6 +18,7 @@ galaxies:
       dptraits: {type: uniform}
     emission: {type: lines}
   - type: disk
+    geometry: own
     name: dust
     loose: false
     tilted: false
@@ -28,6 +30,7 @@ galaxies:
 - name: back
   components:
   - type: disk
+    geometry: own
     name: gas
     loose: false
     tilted: false

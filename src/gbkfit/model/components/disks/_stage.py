@@ -49,10 +49,6 @@ _EQUILIBRIUM_DESCRIPTION = (
     "surface density, surface_density, Msun/kpc^2), and the velocity "
     "dispersion that holds it up (sigma, km/s).")
 
-# The parameters of the geometry of a ring (see DiskStage.rings)
-_RING_GEOMETRY = ('xpos', 'ypos', 'posa', 'incl')
-
-
 def plan_disk_stage(
         disk: NodalDisk,
         emission: Emission | None,
@@ -227,8 +223,10 @@ class DiskStage(ComponentStage):
                 or disk.equilibrium() is not None):
             return []
         radii = np.asarray(disk.rnodes())
+        frame = disk.frame_params()
         geometry = np.broadcast_arrays(radii, *(
-            np.asarray(values[name], dtype=float) for name in _RING_GEOMETRY))
+            np.asarray(values[name], dtype=float)
+            for name in (frame.x, frame.y, frame.posa, frame.incl)))
         return list(zip(*geometry))
 
     def _given_rotation(

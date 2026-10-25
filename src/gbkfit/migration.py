@@ -260,10 +260,45 @@ class _DiskTypes(Rule):
         return changes
 
 
+class _OwnGeometries(Rule):
+    """
+    The components of a galaxy share its geometry by default (2026-10-25),
+    whose parameters are named plainly (e.g. posa); they had their own
+    (e.g. disk_posa). The components that would change get the option
+    geometry 'own', which keeps the model and the names of its
+    parameters: those of galaxies of several components, those with
+    names (which prefix their parameters) and the warped ones (loose or
+    tilted, their own warps). There is no old form to find: the
+    configuration of the old default is valid (its parameters are then
+    unknown, and named so).
+    """
+
+    def find(
+            self, section: str, item: Mapping[str, Any]
+    ) -> ConfigError | None:
+        return None
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for galaxy_path, galaxy in _items(config, 'galaxies'):
+            components = list(_components(galaxy))
+            for path, component in components:
+                if 'geometry' in component:
+                    continue
+                if len(components) > 1 or 'name' in component \
+                        or component.get('loose') or component.get('tilted'):
+                    component['geometry'] = 'own'
+                    changes.append(Change(
+                        galaxy_path + path, "geometry: own (its own, as "
+                        "before; the default is now that of its galaxy)"))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
     _DiskTypes(),
+    _OwnGeometries(),
 )
 
 

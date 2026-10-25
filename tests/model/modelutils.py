@@ -10,7 +10,9 @@ def split_case(case):
     sight, an observable (with the primary beam, psf and lsf of the
     instrument, and the scale and dtype of the observation), an optional
     name, which names the galaxy, and the optional lines or band that the
-    observation sees.
+    observation sees. The components of the galaxy have their own
+    geometries (geometry 'own', unless they give one), whose parameters
+    the cases name after them.
     """
     case = dict(case)
     driver = case.pop('driver')
@@ -29,6 +31,10 @@ def split_case(case):
         if key in case:
             observation[key] = case.pop(key)
     galaxy = dict(case.pop('galaxy'))
+    components = galaxy.get('components', [])
+    galaxy['components'] = [
+        dict(geometry='own') | component for component in (
+            components if isinstance(components, list) else [components])]
     name = case.pop('name', None)
     if name is not None:
         galaxy['name'] = name

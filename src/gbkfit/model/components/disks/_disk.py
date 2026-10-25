@@ -13,7 +13,7 @@ from gbkfit.params import (
 from .._nodal import (
     NodalPlan, NodalTraits, ParamBuffer, TraitParams, evaluate_native,
     fill_param_values, native_traits, subring_radii)
-from ..base import NativeGrid
+from ..base import FrameParams, NativeGrid
 from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
 from ..geometries import GEOMETRY_PARAMS
 from ..parts import Equilibrium
@@ -157,6 +157,11 @@ class NodalDisk(abc.ABC):
         them.
         """
         return self._traits.values(kind, params)
+
+    def frame_params(self) -> FrameParams:
+        """Return its parameters that place it in a frame."""
+        vsys = 'vsys' if 'vsys' in self._geometry_pdescs else None
+        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs

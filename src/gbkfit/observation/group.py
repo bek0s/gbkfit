@@ -38,11 +38,6 @@ class DepthGroup(NamedTuple):
     galaxies: tuple[str, ...]
 
 
-# The parameters of the components that place them in the frame of an
-# observation: their centre (x, y) and systemic velocity (v)
-_FRAME_PARAMS = dict(x='xpos', y='ypos', v='vsys')
-
-
 class _Frame(NamedTuple):
     """
     How an observation moves what it sees into its frame (see
@@ -258,13 +253,14 @@ class ObservationGroup:
         Return the frame of an observation that sees the galaxies of the
         given indices, with the given alignment (see _Frame).
         """
-        names = {key: [] for key in _FRAME_PARAMS}
+        names = dict(x=[], y=[], v=[])
         for g in seen:
             galaxy, mapping = self._galaxies[g], self._mappings[g]
-            for i in range(len(galaxy.components())):
+            for i, component in enumerate(galaxy.components()):
                 params = galaxy.component_params(i)
-                for key, own in _FRAME_PARAMS.items():
-                    name = mapping[params[own]] if own in params else None
+                frame = component.frame_params()
+                for key, own in zip('xyv', (frame.x, frame.y, frame.vsys)):
+                    name = None if own is None else mapping[params[own]]
                     if name is not None and name not in names[key]:
                         names[key].append(name)
         # (and the centres of what the observation adds, e.g. its lens)

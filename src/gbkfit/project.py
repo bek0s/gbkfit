@@ -68,7 +68,9 @@ TEMPLATES = {
     'galaxies': """\
 # A galaxy: here a thin disk with an exponential surface brightness, an
 # arctan rotation curve and a uniform velocity dispersion, seen in an
-# emission line. Its parameters are named after its component (disk_*).
+# emission line. Its parameters are named after its component (disk_*),
+# but those of the geometry of the galaxy, which its components share
+# (xpos, ypos, vsys, posa, incl).
 components:
 - type: disk
   name: disk
@@ -101,11 +103,11 @@ instrument:
 # Parameters: fixed values, and free ones (value, min, max). Setups list
 # layers of them; a later layer replaces each parameter it gives.
 properties:
-  disk_xpos: 0
-  disk_ypos: 0
-  disk_vsys: 0
-  disk_posa: {value: 30, min: 0, max: 180}
-  disk_incl: {value: 60, min: 5, max: 85}
+  xpos: 0
+  ypos: 0
+  vsys: 0
+  posa: {value: 30, min: 0, max: 180}
+  incl: {value: 60, min: 5, max: 85}
   disk_pt_a: 1
   disk_pt_s: 5
   disk_vpt_rt: 3

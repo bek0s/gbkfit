@@ -18,7 +18,7 @@ from ..gravity import Gravity, GravityNewton
 from ..mass import MassModel
 from . import _units
 from ._component_plans import ComponentPlans
-from ._detail import shared_params
+from ._detail import geometry_desc, shared_params
 from ._functions import GalaxyFunctions
 from ._stage import GalaxyStage
 from ._transfer import LineResolution
@@ -127,63 +127,103 @@ def _component_prefixes(components: Sequence[Component]) -> list[str]:
     return parseutils.item_prefixes(names, 'components', 'cmp', False)
 
 
-def _geometries(components: Sequence[Component]) -> list[Geometry]:
+def _shared_geometries(
+        components: Sequence[Component], geometry: Geometry
+) -> list[Geometry | None]:
     """
-    Return the geometries of the components, each once, in the order of
-    the components. Raise ConfigError if two differ but have one name, or
-    one has the name of a component.
+    Return the geometry that each component shares (see
+    Component.geometry): that of the galaxy (geometry), a named one, or
+    None for its own. Raise ConfigError if the geometry of the galaxy has
+    a name, or is warped and a component takes it as 'galaxy' (a warped
+    geometry is given to the components themselves, whose rings it
+    makes), or a component holds a geometry without a name that is not
+    that of the galaxy.
     """
-    geometries = list(dict.fromkeys(
-        cmp.geometry() for cmp in components
-        if cmp.geometry() is not None))
-    names = [geometry.name() for geometry in geometries]
+    if geometry.name() is not None:
+        raise ConfigError(
+            f"the geometry of a galaxy has no name; it is "
+            f"{geometry.name()!r}")
+    shared = []
+    for cmp in components:
+        choice = cmp.geometry()
+        if choice == 'own':
+            shared.append(None)
+        elif choice == 'galaxy':
+            if geometry.loose() or geometry.tilted():
+                raise ConfigError(
+                    f"the geometry of the galaxy is warped: give it to its "
+                    f"component {cmp.name()!r} itself (or geometry 'own')")
+            shared.append(geometry)
+        elif choice.name() is None and choice != geometry:
+            raise ConfigError(
+                f"the component {cmp.name()!r} has a geometry without a "
+                f"name that is not that of its galaxy; name it")
+        else:
+            shared.append(choice)
+    return shared
+
+
+def _geometries(shared: Sequence[Geometry | None]) -> list[Geometry]:
+    """
+    Return the geometries that components share (see _shared_geometries),
+    each once, in the order of the components. Raise ConfigError if two
+    differ but have one name.
+    """
+    geometries = list(dict.fromkeys(g for g in shared if g is not None))
+    names = [g.name() for g in geometries]
     if repeated := sorted({n for n in names if names.count(n) > 1}):
         raise ConfigError(
             f"the components have different geometries of the names "
             f"{repeated}")
-    if repeated := sorted(set(names) & {cmp.name() for cmp in components}):
-        raise ConfigError(
-            f"the geometries and the components must have different names; "
-            f"repeated: {repeated}")
     return geometries
 
 
 def _merge_params(
-        components: Sequence[Component], prefixes: Sequence[str]
+        components: Sequence[Component],
+        prefixes: Sequence[str],
+        shared: Sequence[Geometry | None]
 ) -> tuple[dict[str, ParamDesc], tuple[dict[str, str], ...]]:
     """
     Return the parameters of the components, and for each component the
     names of its parameters in them (see iterutils.merge_with_prefixes):
     prefixed (see _component_prefixes), except those they share through
-    their geometries (see Geometry), which are named after their geometry
-    (e.g. disk_posa), and come first. Raise ConfigError if those names are
-    taken, or the components have a shared parameter of different sizes.
+    their geometries (see _shared_geometries), which are named after their
+    geometry (e.g. disk_posa; plainly, e.g. posa, for that of the galaxy),
+    and come first. Raise ConfigError if a geometry has the name of a
+    component, those names are taken, or the components have a shared
+    parameter of different sizes.
     """
-    shared = {
+    geometries = _geometries(shared)
+    if repeated := sorted(
+            ({g.name() for g in geometries} - {None})
+            & {c.name() for c in components}):
+        raise ConfigError(
+            f"the geometries and the components must have different names; "
+            f"repeated: {repeated}")
+    names_of = {
         geometry: shared_params(geometry, [
-            cmp for cmp in components if cmp.geometry() == geometry])
-        for geometry in _geometries(components)}
-    names = [
-        shared[cmp.geometry()] if cmp.geometry() is not None else ()
-        for cmp in components]
+            cmp for cmp, g in zip(components, shared) if g == geometry])
+        for geometry in geometries}
+    names = [() if g is None else names_of[g] for g in shared]
     params, mappings = iterutils.merge_with_prefixes(
         [{name: pdesc for name, pdesc in cmp.pdescs().items()
           if name not in cmp_names}
          for cmp, cmp_names in zip(components, names)], prefixes)
     mappings = [dict(mapping) for mapping in mappings]
     geometry_params = {}
-    for cmp, cmp_names, mapping in zip(components, names, mappings):
+    for cmp, geometry, cmp_names, mapping in zip(
+            components, shared, names, mappings):
         pdescs = cmp.pdescs()
         for name in cmp_names:
             if name not in pdescs:
                 continue
-            full_name = f'{cmp.geometry().name()}_{name}'
+            full_name = name if geometry.name() is None \
+                else f'{geometry.name()}_{name}'
             pdesc = geometry_params.setdefault(full_name, pdescs[name])
             if pdesc.size() != pdescs[name].size():
                 raise ConfigError(
-                    f"the components of the geometry "
-                    f"{cmp.geometry().name()!r} have {name} of different "
-                    f"sizes")
+                    f"the components of {geometry_desc(geometry)} have "
+                    f"{name} of different sizes")
             mapping[name] = full_name
     if taken := sorted(geometry_params.keys() & params.keys()):
         raise ConfigError(
@@ -193,18 +233,21 @@ def _merge_params(
 
 
 def _constants(
-        components: Sequence[Component], prefixes: Sequence[str]
+        components: Sequence[Component],
+        prefixes: Sequence[str],
+        shared: Sequence[Geometry | None]
 ) -> dict[str, Any]:
     """
     Return the constants of the components (see Component.constants),
-    prefixed, and the radial nodes of the warped geometries (e.g.
-    disk_rnodes).
+    prefixed, and the radial nodes of the warped geometries they share
+    (e.g. disk_rnodes; rnodes for that of the galaxy).
     """
     constants, _ = iterutils.merge_with_prefixes(
         [cmp.constants() for cmp in components], prefixes)
     return constants | {
-        f'{geometry.name()}_rnodes': geometry.rnodes()
-        for geometry in _geometries(components)
+        'rnodes' if geometry.name() is None else f'{geometry.name()}_rnodes':
+            geometry.rnodes()
+        for geometry in _geometries(shared)
         if geometry.rnodes() is not None}
 
 
@@ -232,15 +275,19 @@ class ComponentSet:
             components: Component | Sequence[Component],
             distance: Distance | None = None,
             mass_model: MassModel | None = None,
-            gravity: Gravity | None = None
+            gravity: Gravity | None = None,
+            geometry: Geometry | None = None
     ):
         components = iterutils.tuplify(components)
         if not components and mass_model is None:
             raise ConfigError("a galaxy needs at least one component, or mass")
         _units.check_line_units_agree(components)
         self._components = components
+        self._geometry = Geometry() if geometry is None else geometry
+        self._shared = _shared_geometries(components, self._geometry)
         self._prefixes = _component_prefixes(components)
-        params, self._mappings = _merge_params(components, self._prefixes)
+        params, self._mappings = _merge_params(
+            components, self._prefixes, self._shared)
         self._params = _with_mass_params(
             params, components, distance, mass_model, gravity)
         self._distance = distance
@@ -250,9 +297,16 @@ class ComponentSet:
     def components(self) -> tuple[Component, ...]:
         return self._components
 
+    def geometry(self) -> Geometry:
+        """Return the geometry of the galaxy."""
+        return self._geometry
+
     def geometries(self) -> list[Geometry]:
-        """Return the geometries of the components, each once."""
-        return _geometries(self._components)
+        """
+        Return the geometries that the components share, each once (with
+        that of the galaxy, if they share it).
+        """
+        return _geometries(self._shared)
 
     def distance(self) -> Distance | None:
         return self._distance
@@ -279,7 +333,7 @@ class ComponentSet:
         return self._params
 
     def constants(self) -> dict[str, Any]:
-        return _constants(self._components, self._prefixes)
+        return _constants(self._components, self._prefixes, self._shared)
 
     def plan_stage(
             self,

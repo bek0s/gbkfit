@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 import astropy.units
 import numpy as np
@@ -9,9 +9,11 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ._detail import Fluxes, dump_geometry, dump_name, systemic_velocity
+from ._detail import (
+    Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors
-from .base import Component, ComponentPlan, FieldsLayout, NativeGrid
+from .base import (
+    Component, ComponentPlan, FieldsLayout, FrameParams, NativeGrid)
 from .geometries import Geometry
 from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from .roles import BandEmission, Emission, LineEmission, emission_parser
@@ -22,12 +24,13 @@ __all__ = [
 ]
 
 
-def _check_geometry(geometry: Geometry | None) -> None:
+def _check_geometry(geometry: Geometry | Literal['galaxy', 'own']) -> None:
     """Raise ConfigError if the geometry of a point is loose."""
-    if geometry is not None and geometry.loose():
+    if isinstance(geometry, Geometry) and geometry.loose():
         raise ConfigError(
-            f"a point has one centre, but its geometry "
-            f"{geometry.name()!r} is loose (a centre for each ring)")
+            f"a point has one centre, but {geometry_desc(geometry)} is "
+            f"loose (a centre for each ring); give the point geometry "
+            f"'own'")
 
 
 def point_pdescs(spectral: bool, depth: bool) -> dict[str, ParamScalarDesc]:
@@ -312,9 +315,10 @@ class Point(Component):
         'depth' (arcsec, away from the viewer, from the plane of the sky
         through the centre of its galaxy); by default, it is in that plane
         (e.g. a nucleus).
-    geometry : Geometry, optional
-        A geometry whose centre (and systemic velocity) it shares (not a
-        loose one).
+    geometry : Geometry, 'galaxy' or 'own', optional
+        The geometry whose centre (and systemic velocity) it shares: that
+        of its galaxy (by default), a named one (not a loose one), or none
+        ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
@@ -352,7 +356,7 @@ class Point(Component):
             self,
             emission: Emission,
             depth: bool = False,
-            geometry: Geometry | None = None,
+            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         _check_geometry(geometry)
@@ -373,6 +377,10 @@ class Point(Component):
 
     def thick(self) -> bool:
         return False
+
+    def frame_params(self) -> FrameParams:
+        vsys = 'vsys' if 'vsys' in self._pdescs else None
+        return FrameParams('xpos', 'ypos', vsys, None, None)
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return self._pdescs

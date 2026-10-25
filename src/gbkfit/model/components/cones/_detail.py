@@ -12,7 +12,7 @@ from gbkfit.driver import Driver
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
-from .._detail import dump_name
+from .._detail import dump_geometry, dump_name
 from .._nodal import (
     MAX_TRAITS, NodalComponentPlan, TraitTable, emission_setup,
     parse_component_rnode_args, with_default_height_traits)
@@ -104,7 +104,8 @@ def dump_cone_component(
         kinematics: Kinematics | None
 ) -> dict[str, Any]:
     """Return the configuration of a cone component made of the given cone."""
-    info = dict(type=component.type()) | dump_name(component) | dict(
+    info = dict(type=component.type()) | dump_name(component) \
+        | dump_geometry(component) | dict(
         sides=cone.sides(), rnodes=list(cone.rnodes()), rstep=cone.rstep(),
         interp=cone.interp().type(), density=density.dump())
     if kinematics is not None:

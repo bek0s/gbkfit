@@ -36,7 +36,7 @@ GAS = dict(
     kinematics=dict(vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
 GAS_PARAMS = dict(
-    gas_xpos=0, gas_ypos=0, gas_posa=30, gas_incl=60, gas_vsys=0,
+    xpos=0, ypos=0, posa=30, incl=60, vsys=0,
     gas_pt_a=1, gas_pt_s=4, gas_dpt_a=10)
 
 
@@ -162,7 +162,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
     profile = ObservationProfile(['vcirc'], np.array([2.0, 6.0]) * u.arcsec)
     group = ObservationGroup(galaxy, [image, profile])
     params = dict(
-        stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
+        xpos=0, ypos=0, posa=30, incl=60,
         stars_pt_a=1, stars_pt_s=4, distance=10, mass_stellar_upsilon=1e8)
     assert np.all(group.plan().model_h(params)[1]['vcirc']['d'] > 0)
     ObservationGroup(galaxy, image)

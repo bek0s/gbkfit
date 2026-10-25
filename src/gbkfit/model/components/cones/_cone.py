@@ -15,7 +15,7 @@ from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from .._nodal import (
     NodalPlan, NodalTraits, ParamBuffer, evaluate_native, native_traits,
     subring_radii)
-from ..base import FieldsLayout, NativeGrid
+from ..base import FieldsLayout, FrameParams, NativeGrid
 from ..traits import Trait
 
 
@@ -106,6 +106,11 @@ class NodalCone(abc.ABC):
 
     def traits(self, kind: str) -> tuple[Trait, ...]:
         return self._traits.traits(kind)
+
+    def frame_params(self) -> FrameParams:
+        """Return its parameters that place it in a frame."""
+        vsys = 'vsys' if 'vsys' in self._geometry_pdescs else None
+        return FrameParams('xpos', 'ypos', vsys, 'posa', 'incl')
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs

@@ -35,12 +35,13 @@ LINES = [dict(name='ha', rest='6562.8 Angstrom'),
 GALAXY = dict(components=[
     component('gas', lines=LINES), component('stars')])
 
-PROPERTIES = {
+# (the geometry of the galaxy, which its components share)
+PROPERTIES = dict(vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60) | {
     f'{name}_{key}': value
     for name in ('gas', 'stars')
     for key, value in dict(
-        vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60, pt_a=1, pt_s=3,
-        vpt_rt=2, vpt_vt=150, dpt_a=20).items()} | dict(gas_nii_ratio=0.3)
+        pt_a=1, pt_s=3, vpt_rt=2, vpt_vt=150, dpt_a=20).items()} \
+    | dict(gas_nii_ratio=0.3)
 
 APERTURES = dict(type='apertures', apertures=[
     dict(type='circle', x=1, y=0, radius=2), dict(type='field')])

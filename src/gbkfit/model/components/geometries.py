@@ -1,6 +1,7 @@
 """
 Geometries that components share: their centre, orientation and systemic
-velocity, possibly warped.
+velocity, possibly warped. A galaxy has one, which its components share
+by default (see Component.geometry); others are named.
 """
 
 from collections.abc import Sequence
@@ -29,7 +30,8 @@ class Geometry(parseutils.Serializable):
     """
     A geometry that components share: some or all of their geometric
     parameters (see GEOMETRY_PARAMS), which are then parameters of the
-    geometry, named after it (e.g. disk_posa), instead of each component.
+    geometry instead of each component: named after it (e.g. disk_posa),
+    or plainly (e.g. posa) for that of a galaxy, which has no name.
 
     The components that use a geometry (see Component.geometry) take its
     warps and, if it is warped, its rings: their geometric parameters
@@ -40,8 +42,9 @@ class Geometry(parseutils.Serializable):
 
     Parameters
     ----------
-    name : str
-        Its name, which prefixes its parameters.
+    name : str, optional
+        Its name, which prefixes its parameters; none for the geometry of
+        a galaxy.
     params : Sequence of str, optional
         The geometric parameters it shares; by default, all those of the
         components that use it.
@@ -63,16 +66,17 @@ class Geometry(parseutils.Serializable):
     """
 
     def dump(self) -> dict[str, Any]:
+        name = {} if self._name is None else dict(name=self._name)
         params = {} if self._params is None else dict(
             params=list(self._params))
         rnodes = {} if self._rnodes is None else dict(
             rnodes=list(self._rnodes))
-        return dict(name=self._name) | params | dict(
+        return name | params | dict(
             loose=self._loose, tilted=self._tilted) | rnodes
 
     def __init__(
             self,
-            name: str,
+            name: str | None = None,
             params: Sequence[str] | None = None,
             loose: bool = False,
             tilted: bool = False,
@@ -83,8 +87,6 @@ class Geometry(parseutils.Serializable):
             rnodes: Sequence[float] | None = None
     ):
         parseutils.check_name(name)
-        if name is None:
-            raise ConfigError("a geometry needs a name")
         if params is not None:
             params = tuple(params)
             if not params:
@@ -122,8 +124,8 @@ class Geometry(parseutils.Serializable):
             self._name, self._params, self._loose, self._tilted,
             self._rnodes)
 
-    def name(self) -> str:
-        """Return its name."""
+    def name(self) -> str | None:
+        """Return its name; none for the geometry of a galaxy."""
         return self._name
 
     def params(self) -> tuple[str, ...] | None:

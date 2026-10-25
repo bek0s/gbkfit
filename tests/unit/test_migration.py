@@ -110,4 +110,19 @@ def test_the_old_disk_types_are_refused_and_migrated():
     migration.migrate(config)
     assert [c['type'] for c in components] == ['disk', 'disk', 'cone']
     assert components[1] == dict(
-        type='disk', name='b', clouds=dict(cflux=1e-3, seed=2))
+        type='disk', name='b', clouds=dict(cflux=1e-3, seed=2),
+        geometry='own')
+
+
+@pytest.mark.parametrize('components, owns', [
+    # (several components, a named one, a warped one; not one of the
+    # galaxy alone, whose parameters keep their names)
+    ([dict(type='disk', name='a'), dict(type='point', name='b')],
+     [True, True]),
+    ([dict(type='disk', name='a')], [True]),
+    ([dict(type='disk', tilted=True)], [True]),
+    ([dict(type='disk', loose=False)], [False]),
+    ([dict(type='disk', name='a', geometry='g')], [False])])
+def test_old_components_keep_their_own_geometries(components, owns):
+    migration.migrate(dict(galaxies=[dict(components=components)]))
+    assert [c.get('geometry') == 'own' for c in components] == owns

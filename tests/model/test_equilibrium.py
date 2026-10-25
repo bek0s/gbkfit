@@ -170,7 +170,7 @@ def test_self_gravitating_equilibrium_in_its_own_mass_disk():
     # at its subnodes (exact for its exponential there)
     disk = with_kinematics(
         DISK, equilibrium='self_gravitating', equilibrium_density='gas') \
-        | dict(name='gas')
+        | dict(name='gas', geometry='own')
     balanced = galaxy(
         disk, mass=[dict(
             type='disk', name='gas', surface=dict(type='component',
@@ -242,7 +242,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
     # against its radius is the isothermal slab of the self-gravitating
     # equilibrium: sigma^2 = 2 sqrt(3) G Sigma h, to about h / rd
     disk = with_kinematics(DISK, equilibrium='jeans') | dict(
-        name='gas', density=dict(
+        name='gas', geometry='own', density=dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=2)))
     balanced = galaxy(

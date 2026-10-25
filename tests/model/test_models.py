@@ -14,6 +14,7 @@ change of the models.
 
 import numpy as np
 import pytest
+from modelutils import split_case
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
@@ -212,10 +213,11 @@ def test_model(driver, name, evaluate_cases, ndarrays_regression):
 
 @pytest.mark.parametrize('name', CASES)
 def test_galaxy_dump_and_load(driver, name, evaluate_cases):
-    # A dumped galaxy loads back to the same galaxy
+    # A dumped galaxy loads back to the same galaxy (as the cases load it)
     case, properties = CASES[name]
     case = dict(case, driver=dict(type=driver.type()))
-    info = galaxy_parser.dump(galaxy_parser.load(case['galaxy']))
+    galaxy, _, _ = split_case(case)
+    info = galaxy_parser.dump(galaxy_parser.load(galaxy))
     assert galaxy_parser.dump(galaxy_parser.load(info)) == info
     modes = MODES.get(name)
     data, _ = evaluate_cases([case], properties, modes)

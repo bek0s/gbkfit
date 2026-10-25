@@ -30,9 +30,6 @@ __all__ = [
 ]
 
 
-# The parameters of the geometry of a disk that place its plane
-GEOMETRY = ('xpos', 'ypos', 'posa', 'incl')
-
 # The axes of a disk, and the azimuth of each (radians, in its plane)
 _AXES = dict(major=0.0, minor=np.pi / 2)
 
@@ -277,11 +274,10 @@ def plan_weights(
     spatial grid of its model. Raise ConfigError unless their component is
     a disk of the scene.
     """
-    params = scene.component_params(weights.component())
-    if missing := [name for name in GEOMETRY if name not in params]:
+    frame = scene.frame_params(weights.component())
+    names = dict(xpos=frame.x, ypos=frame.y, posa=frame.posa, incl=frame.incl)
+    if missing := [role for role, name in names.items() if name is None]:
         raise ConfigError(
             f"weights need the plane of a disk; the component "
             f"{weights.component()!r} has no {missing}")
-    return WeightsPlan(
-        weights, {name: params[name] for name in GEOMETRY}, grid, driver,
-        dtype)
+    return WeightsPlan(weights, names, grid, driver, dtype)

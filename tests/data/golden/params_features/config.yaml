@@ -26,6 +26,7 @@ galaxies:
       dptraits: {type: uniform}
     emission: {type: lines}
   - type: point
+    geometry: own
     name: nucleus
     emission: {type: lines}
 pdescs:
