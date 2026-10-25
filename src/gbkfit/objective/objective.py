@@ -525,15 +525,18 @@ class Objective:
     ) -> None:
         """
         Evaluate the models (with the solved elements at 1), the solved
-        values and the residuals.
+        values and the residuals, under the lock of the plan of the models
+        (see GroupPlan.lock).
         """
         self.prepare()
-        models = self._group_plan.model_d(self._unscaled(params), out_extra)
-        with self._group_plan.timers().measure('objective_residual_eval'):
-            scales = self._solve(models, params)
-            for comparison_, model, scales_ in zip(
-                    self._comparisons, models, scales):
-                comparison_.evaluate(model, params, weighted, scales_)
+        group_plan = self._group_plan
+        with group_plan.lock():
+            models = group_plan.model_d(self._unscaled(params), out_extra)
+            with group_plan.timers().measure('objective_residual_eval'):
+                scales = self._solve(models, params)
+                for comparison_, model, scales_ in zip(
+                        self._comparisons, models, scales):
+                    comparison_.evaluate(model, params, weighted, scales_)
 
     def _unscaled(self, params: ParamValues) -> ParamValues:
         """

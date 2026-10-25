@@ -133,6 +133,29 @@ def test_objectives_evaluate_in_several_threads_at_once(driver):
             np.testing.assert_array_equal(got, want)
 
 
+def test_copies_with_other_data_evaluate_in_two_threads_at_once(driver):
+    # (they share the plans of the models and their memory, and so their
+    # lock: each evaluation, from the models to the residuals, is whole)
+    rng = np.random.default_rng(4)
+    objective, params = make_objective(
+        driver, Data(rng.normal(0.1, 1, (24, 32))))
+    other = objective.datasets()[0].with_data(
+        dict(brightness=rng.normal(0.1, 1, (24, 32))))
+    copy = objective.with_data([other])
+    assert copy.group_plan().lock() is objective.group_plan().lock()
+    # (without it, a few of 20 points mix the models of the two)
+    points = [params | dict(incl=incl) for incl in (30, 45, 60, 75)] * 5
+
+    def evaluate(objective_):
+        return [objective_.residuals(point) for point in points]
+    expected = [evaluate(objective), evaluate(copy)]
+    with concurrent.futures.ThreadPoolExecutor(2) as executor:
+        results = list(executor.map(evaluate, [objective, copy]))
+    for residuals, wanted in zip(results, expected):
+        for got, want in zip(residuals, wanted):
+            np.testing.assert_array_equal(got, want)
+
+
 def test_a_copy_on_another_driver_gives_the_same_values(driver):
     data = Data(np.random.default_rng(3).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(DriverHost(), data)
@@ -313,7 +336,8 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     truth = ParamSpace(objective.pdescs(), DISK).evaluate()
     compact = ParamSpace(
         objective.pdescs(), DISK | dict(pt_s=0.1)).evaluate()
-    compact_moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
+    compact_moment1 = \
+        objective.group_plan().model_h(compact)[0]['moment1']['d']
     without = np.isnan(compact_moment1)
     has_data = dataset['moment1'].mask() != 0
     residuals = objective.residual_nddata_h(compact, False)[0]

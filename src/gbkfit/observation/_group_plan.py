@@ -5,6 +5,7 @@ driver, with the memory of their models.
 """
 
 import copy
+import threading
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, Self
 
@@ -41,10 +42,11 @@ class GroupPlan:
     It evaluates the models of the observations (see model_d) and their
     mock data (see mock).
 
-    Its evaluations write the memory of its plans, so one thread at a
-    time evaluates it. Plans of the group on other drivers have their own
-    memory (see ObservationGroup.plan); plans of it with other data share
-    it (see with_data).
+    Its evaluations write the memory of its plans, under its lock (see
+    lock): threads that evaluate it at the same time wait for each other.
+    Plans of the group on other drivers have their own memory and lock
+    (see ObservationGroup.plan); plans of it with other data share them
+    (see with_data).
 
     Parameters
     ----------
@@ -94,6 +96,7 @@ class GroupPlan:
             with parseutils.config_path('galaxies', g):
                 stages.append(galaxy.plan_stage(group.sky_origin(), driver))
         self._stages = tuple(stages)
+        self._lock = threading.RLock()
         self._init_evaluations()
 
     def _init_evaluations(self) -> None:
@@ -126,6 +129,17 @@ class GroupPlan:
         """Return the times of the steps of its evaluations."""
         return self._timers
 
+    def lock(self) -> threading.RLock:
+        """
+        Return the lock of the memory of its plans, which its plans with
+        other data share (see with_data). Its evaluations hold it; who
+        reads the model data on the devices (see model_d) holds it until
+        done with them (e.g. an objective, from the evaluation of the
+        models to their residuals), as the next evaluation of a plan that
+        shares them overwrites them.
+        """
+        return self._lock
+
     def with_data(self, datasets: Sequence[Dataset]) -> Self:
         """
         Return a plan of the group with other data (see
@@ -135,11 +149,11 @@ class GroupPlan:
         data, only on their unit (see Observation.data_unit): the copy
         shares the plans of those whose data keep their unit (e.g. all of
         them, in a bootstrap), and with them the memory of their models,
-        on their devices. So the two must not be evaluated at the same
-        time (e.g. in two threads; plans on other drivers can, see
-        ObservationGroup.plan). A copy whose observations have other
-        parameters (e.g. a likelihood of data that they had none of) has
-        plans of its own.
+        on their devices, and its lock (see lock): evaluated at the same time
+        (e.g. in two threads), they wait for each other (plans on other
+        drivers do not, see ObservationGroup.plan). A copy whose
+        observations have other parameters (e.g. a likelihood of data that
+        they had none of) has plans of its own.
 
         Raises
         ------
@@ -231,10 +245,12 @@ class GroupPlan:
         -------
         list of ModelData
             The model data of each observation, on its driver; they are
-            overwritten by the next evaluation.
+            overwritten by the next evaluation (of it, or of a plan that
+            shares its memory: hold its lock while reading them, see
+            lock).
         """
         group = self._group
-        with (self._timers.measure('model_eval'),
+        with (self._lock, self._timers.measure('model_eval'),
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
                 states = self._galaxy_states(params, out_extra)
@@ -267,7 +283,13 @@ class GroupPlan:
             The model data of each observation (see ModelData), copied to
             the host; they are overwritten by the next evaluation.
         """
-        self.model_d(params, out_extra)
+        with self._lock:
+            self.model_d(params, out_extra)
+            self._copy_to_host()
+        return self._h_model_data
+
+    def _copy_to_host(self) -> None:
+        """Copy the model data of the last evaluation to the host."""
         with self._timers.measure('model_d2h'):
             for i, driver in enumerate(self._observation_drivers):
                 for key, d_item in self._d_model_data[i].items():
@@ -276,7 +298,6 @@ class GroupPlan:
                         if d_array is not None:
                             h_item[k] = driver.mem_copy_d2h(
                                 d_array, h_item[k])
-        return self._h_model_data
 
     def mock(
             self,
@@ -326,8 +347,7 @@ class GroupPlan:
             not suit the data of its observation (see Noise.draw), or
             nmocks or nsamples (needed) is below 1 or 2.
         """
-        group = self._group
-        observations = group.observations()
+        observations = self._group.observations()
         noises = list(noises) if isinstance(noises, Sequence) \
             else [noises] * len(observations)
         if len(noises) != len(observations):
@@ -336,31 +356,49 @@ class GroupPlan:
                 f"{len(noises)} noises")
         if nmocks < 1:
             raise ConfigError(f"nmocks must be at least 1; it is {nmocks}")
-        states = self._galaxy_states(params, None)
         streams = np.random.SeedSequence(seed).spawn(len(observations))
-        mocks = []
-        for i, (obs, plan, noise, stream) in enumerate(zip(
-                observations, self._plans, noises, streams)):
-            with parseutils.config_path('observations', i):
-                exact = plan.has_exact_errors()
-                if not exact and nsamples < 2:
-                    raise ConfigError(
-                        f"the errors of measured data are the scatter of "
-                        f"nsamples draws, at least 2; nsamples is {nsamples}")
-                draws, errors = plan.mock(
-                    group.moved(i, params),
-                    [states[g] for g in group.seen_galaxies(i)],
-                    noise, np.random.default_rng(stream),
-                    nmocks + (0 if exact else nsamples))
-            if errors is None:
-                errors = _scatter(draws[nmocks:])
-            options = _mock_options(obs, noise, exact)
-            mocks.append([
-                obs.dataset({
-                    key: Data(item['d'], error=errors[key], **options[key])
-                    for key, item in draw.items()})
-                for draw in draws[:nmocks]])
-        return mocks
+        with self._lock:
+            states = self._galaxy_states(params, None)
+            return [
+                self._mock(i, params, states, noise, stream, nmocks, nsamples)
+                for i, (noise, stream) in enumerate(zip(noises, streams))]
+
+    def _mock(
+            self,
+            index: int,
+            params: ParamValues,
+            states: Sequence[GalaxyState],
+            noise: Noise,
+            stream: np.random.SeedSequence,
+            nmocks: int,
+            nsamples: int
+    ) -> list[Dataset]:
+        """
+        Draw the mock datasets of the observation of the given index (see
+        mock), in the states of the galaxies, with the random numbers of
+        the stream.
+        """
+        group = self._group
+        observation, plan = group.observations()[index], self._plans[index]
+        with parseutils.config_path('observations', index):
+            exact = plan.has_exact_errors()
+            if not exact and nsamples < 2:
+                raise ConfigError(
+                    f"the errors of measured data are the scatter of "
+                    f"nsamples draws, at least 2; nsamples is {nsamples}")
+            draws, errors = plan.mock(
+                group.moved(index, params),
+                [states[g] for g in group.seen_galaxies(index)],
+                noise, np.random.default_rng(stream),
+                nmocks + (0 if exact else nsamples))
+        if errors is None:
+            errors = _scatter(draws[nmocks:])
+        options = _mock_options(observation, noise, exact)
+        return [
+            observation.dataset({
+                key: Data(item['d'], error=errors[key], **options[key])
+                for key, item in draw.items()})
+            for draw in draws[:nmocks]]
 
 
 class _GroupFunctions(ParamFunctions):
