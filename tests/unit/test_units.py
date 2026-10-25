@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 
 from gbkfit.model.components._units import (
-    BandFactors, DataUnit, LineFactors, flux_per_area, line_factors,
-    mass_per_unit)
+    BandFactors, DataUnit, LineFactors, line_factors, mass_per_unit)
 from gbkfit.model.components.lines import Band
+from gbkfit.observation.observables._detail import flux_per_area
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.unitutils import format_unit, parse_unit

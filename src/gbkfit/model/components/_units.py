@@ -35,7 +35,6 @@ __all__ = [
     'check_band_unit',
     'check_line_unit',
     'check_line_units_agree',
-    'flux_per_area',
     'is_hi_unit',
     'line_factor',
     'line_factors',
@@ -159,21 +158,6 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
                     f"{label!r}: give it one unit, or emit it from a "
                     f"component of its own")
             seen.setdefault(line, (unit, label))
-
-
-def flux_per_area(unit: u.UnitBase) -> u.UnitBase:
-    """
-    Return the unit of light per arcsec^2 whose sums over the area of
-    regions are data of the given unit, a flux (e.g. Jy, 1e-20
-    erg/s/cm2/Angstrom, Jy km/s). Raise ConfigError if the unit is per
-    beam or per solid angle (the light of a pixel, not of a region).
-    """
-    if unitutils.spatial_unit(unit) != u.dimensionless_unscaled:
-        raise ConfigError(
-            f"the data of regions are fluxes, sums over their pixels: their "
-            f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
-            f"'Jy km/s'); {unitutils.format_unit(unit)!r} is not")
-    return unit / u.arcsec ** 2
 
 
 def mass_per_unit(emission: 'Emission | None') -> float | None:

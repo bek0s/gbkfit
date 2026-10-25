@@ -7,10 +7,8 @@ from astropy.table import Table
 
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
-from gbkfit.model import Extras, LineCatalogue
-from gbkfit.model.components._functions import GalaxyFunctions
-from gbkfit.model.components._stage import GalaxyState
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import (
+    DataUnit, Extras, GalaxyFunctions, GalaxyState, LineCatalogue)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError

@@ -7,8 +7,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import LineEmission
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import DataUnit, LineEmission
 from . import _dcube, _detail
 from .base import FluxScale, ModelData, Observable
 

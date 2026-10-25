@@ -7,9 +7,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import LineEmission
-from gbkfit.model.components._stage import GalaxyState
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import DataUnit, GalaxyState, LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError

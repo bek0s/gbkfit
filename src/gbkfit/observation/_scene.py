@@ -12,15 +12,14 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import (
-    Band, BandEmission, DustOpacity, Emission, Extras, Galaxy, LineOpacity)
+    Band, BandEmission, DataUnit, DustOpacity, Emission, Extras, Galaxy,
+    GalaxyState, LineOpacity)
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import (
     IMAGE_SPECTRAL_AXIS, ComponentSetPlan)
-from gbkfit.model.components._stage import GalaxyState
 from gbkfit.model.components.traits import RPTraitImage
 from gbkfit.model.components._transfer import (
     LineResolution, TransferPlan, warn_resolution)
-from gbkfit.model.components._units import DataUnit
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError

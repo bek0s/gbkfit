@@ -8,7 +8,7 @@ from astropy.table import Table
 
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import DataUnit
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError

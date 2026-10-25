@@ -6,8 +6,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import BandEmission
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import BandEmission, DataUnit
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail

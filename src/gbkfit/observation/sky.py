@@ -9,11 +9,10 @@ import numpy.typing as npt
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
-from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import (
+    Band, BandEmission, DataUnit, Extras, GalaxyState, LineCatalogue,
+    band_parser)
 from gbkfit.model.components.roles import load_band
-from gbkfit.model import Extras
-from gbkfit.model.components._stage import GalaxyState
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import gridutils, parseutils, unitutils

@@ -12,12 +12,10 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import Extras
-from gbkfit.model.components._stage import GalaxyState
-from gbkfit.model.components._units import DataUnit, flux_per_area
+from gbkfit.model import DataUnit, Extras, GalaxyState
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from ..weights import plan_weights
 from ._dcube import DCube, cube_extra
@@ -249,6 +247,21 @@ def region_data_unit(
         return result
     return result._replace(
         unit=flux_per_area(result.unit), beam=None, beam_spectral=None)
+
+
+def flux_per_area(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
+    """
+    Return the unit of light per arcsec^2 whose sums over the area of
+    regions are data of the given unit, a flux (e.g. Jy, 1e-20
+    erg/s/cm2/Angstrom, Jy km/s). Raise ConfigError if the unit is per
+    beam or per solid angle (the light of a pixel, not of a region).
+    """
+    if unitutils.spatial_unit(unit) != astropy.units.dimensionless_unscaled:
+        raise ConfigError(
+            f"the data of regions are fluxes, sums over their pixels: their "
+            f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
+            f"'Jy km/s'); {unitutils.format_unit(unit)!r} is not")
+    return unit / astropy.units.arcsec ** 2
 
 
 class DCubePlanBase(ObservablePlan):

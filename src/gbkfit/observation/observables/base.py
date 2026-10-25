@@ -8,9 +8,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import Emission, Extras
-from gbkfit.model.components._stage import GalaxyState
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import DataUnit, Emission, Extras, GalaxyState
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError

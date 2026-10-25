@@ -1,3 +1,6 @@
+from ._functions import GalaxyFunctions
+from ._stage import GalaxyMass, GalaxyStage, GalaxyState
+from ._units import DataUnit
 from .base import *
 from .extinction import *
 from .geometries import *

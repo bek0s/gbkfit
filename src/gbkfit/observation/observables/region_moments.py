@@ -7,8 +7,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import LineEmission
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import DataUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError

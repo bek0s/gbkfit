@@ -13,10 +13,7 @@ import numpy as np
 
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
-from gbkfit.model import Extras
-from gbkfit.model.components._functions import GalaxyFunctions
-from gbkfit.model.components._stage import GalaxyState
-from gbkfit.model.components._units import DataUnit
+from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
 from gbkfit.params import ParamFunctions, ParamValues
 from gbkfit.utils import parseutils, threadutils, timeutils
