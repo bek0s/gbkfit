@@ -283,6 +283,24 @@ gmodel_smspheroid_evaluate(
             atomic_add<T>, HasOpacity, HasFields>(x, y, z, a, g, f);
 }
 
+template<typename T>
+__global__ void
+gmodel_smspheroid_evaluate_projected(
+        GBKFIT_GRID_CONSTANT const SpheroidArgs<T> a,
+        GBKFIT_GRID_CONSTANT const GridArgs<T> g)
+{
+    // Parallelization: per 2d spatial position
+    const int nthreads = g.spat_size[0] * g.spat_size[1];
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= nthreads)
+        return;
+
+    int x, y;
+    index_1d_to_2d(x, y, tid, g.spat_size[0]);
+
+    gbkfit::gmodel_smspheroid_evaluate_pixel<atomic_add<T>>(x, y, a, g);
+}
+
 template<typename T> __global__ void
 gmodel_opacity_accumulate(int size_x, int size_y, int size_z, T* opacity)
 {

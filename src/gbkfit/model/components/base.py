@@ -239,9 +239,9 @@ class Component(parseutils.TypedSerializable, abc.ABC):
 
     def extent_cut(self, params: ParamValues) -> tuple[str, float] | None:
         """
-        Return the option that bounds its extent (e.g. 'rmax'), if one
-        does, and the share of its light that it cuts at the values of its
-        parameters; None here.
+        Return the option that bounds its extent on a grid with a depth
+        axis (e.g. 'rmax'), if one does, and the share of its light that it
+        cuts at the values of its parameters; None here.
         """
         return None
 

@@ -1328,32 +1328,49 @@ gmodel_smcone_evaluate_voxel(
 // of n > 1), but not its mean over a voxel, which also keeps the light of
 // a profile that peaks within a voxel. (Where the two meet, the light of a
 // profile that is curved there differs, by the curvature times the square
-// of the voxel: far enough from the centre that it is small.) Below the
-// first point of its table, the density of a spheroid falls along its
-// slope down to SPHEROID_TABLE_DEPTH below it in ln u, and stays there
-// (at the centre, u = 0).
+// of the voxel: far enough from the centre that it is small.) The pixels
+// of its projection do the same, over SPHEROID_SUBGRID^2 parts within as
+// many pixel diagonals. Below the first point of its table, the table of
+// a spheroid follows its slope down to SPHEROID_TABLE_DEPTH below it in
+// ln u, and stays there (at the centre, u = 0).
 constexpr int SPHEROID_SUBGRID = 8;
 template<typename T> constexpr T SPHEROID_CENTRE_VOXELS = 3;
 template<typename T> constexpr T SPHEROID_TABLE_DEPTH = 14;
 
-// The table of the density of a spheroid at u (see SpheroidArgs::table)
+// The table T of a spheroid at ln u (see SpheroidArgs::table):
+// -infinity beyond its last point
 template<typename T> constexpr T
-gmodel_spheroid_table(T u, const SpheroidArgs<T>& a)
+gmodel_spheroid_table(T lnu, const SpheroidArgs<T>& a)
 {
     const T zero = a.table_range[0];
     const T step = a.table_range[1];
     const T slope = a.table_range[2];
     // (the position in the table, in points; NaN for a u of NaN, which
     // the density then is)
-    const T p = (std::log(u) - zero) / step;
+    const T p = (lnu - zero) / step;
     if (!(p >= 0))
-        return std::exp(a.table[0] + slope * std::max(
-                p * step, -SPHEROID_TABLE_DEPTH<T>));
+        return a.table[0] + slope * std::max(
+                p * step, -SPHEROID_TABLE_DEPTH<T>);
     if (p >= a.ntable - 1)
-        return p == a.ntable - 1 ? std::exp(a.table[a.ntable - 1]) : T{0};
+        return p == a.ntable - 1 ? a.table[a.ntable - 1] : -T(INFINITY);
     const int i = int(p);
     const T t = p - i;
-    return std::exp(a.table[i] + t * (a.table[i + 1] - a.table[i]));
+    return a.table[i] + t * (a.table[i + 1] - a.table[i]);
+}
+
+// The function f of the terms of a spheroid at u (see
+// SpheroidArgs::function), with its table or without one (T = 0)
+template<typename T> constexpr T
+gmodel_spheroid_function(T u, bool table, const SpheroidArgs<T>& a)
+{
+    const T c = a.function[0];
+    const T p = a.function[1];
+    // (a Gaussian without logarithms; else ln u once, for T and u^p)
+    if (!table && p == 2)
+        return std::exp(-c * u * u);
+    const T lnu = std::log(u);
+    const T t = table ? gmodel_spheroid_table(lnu, a) : T{0};
+    return std::exp(t - c * std::exp(p * lnu));
 }
 
 // The density of a spheroid at the point (x, y, z) of its frame (see
@@ -1373,10 +1390,25 @@ gmodel_spheroid_density(T x, T y, T z, const SpheroidArgs<T>& a)
         const T m = std::sqrt(R2 + z * z / (q * q));
         if (m > a.rmax / std::max(T{1}, q))
             continue;
-        const T u = m / term[1];
-        density += term[0] * (a.ntable
-                ? gmodel_spheroid_table(u, a)
-                : std::exp(-u * u / 2));
+        density += term[0] * gmodel_spheroid_function(
+                m / term[1], a.ntable > 0, a);
+    }
+    return density;
+}
+
+// The surface density of the projection of a spheroid at the point (x,
+// y) of the sky, x along its major axis and y along its minor axis (see
+// SpheroidArgs::projected)
+template<typename T> constexpr T
+gmodel_spheroid_surface_density(T x, T y, const SpheroidArgs<T>& a)
+{
+    T density = 0;
+    for (int k = 0; k < a.nterms; ++k)
+    {
+        const T* term = a.terms + 3 * k;
+        const T m = std::sqrt(x * x + y * y / (term[2] * term[2]));
+        density += term[0] * gmodel_spheroid_function(
+                m / term[1], false, a);
     }
     return density;
 }
@@ -1400,9 +1432,47 @@ gmodel_spheroid_point(
     transform_cpos_posa_incl(xn, yn, zn, a.xpos[0], a.ypos[0], posa, incl);
 }
 
+// The point of the projection of a spheroid at (x, y) of the grid g (in
+// pixels), along its major and minor axes, at the given posa (radians):
+// that of its frame (see gmodel_spheroid_point) before its inclination
+template<typename T> constexpr void
+gmodel_spheroid_sky_point(
+        T x, T y, T posa,
+        const SpheroidArgs<T>& a, const GridArgs<T>& g, T& xn, T& yn)
+{
+    // image-to-world transform
+    xn = g.spat_zero[0] + x * g.spat_step[0];
+    yn = g.spat_zero[1] + y * g.spat_step[1];
+    transform_rh_rotate_z(xn, yn, xn, yn, g.spat_rota * DEG_TO_RAD<T>);
+
+    // world-to-projection transform
+    transform_cpos(xn, yn, a.xpos[0], a.ypos[0]);
+    transform_posa(xn, yn, posa);
+}
+
+// Write the light of a point of a spheroid (rvalue; with opacity, orvalue
+// after it) at (x, y, z) of the grid g: to its pixel of the image (with
+// AddFunT, see gmodel_light_write), and to its maps and fields. A
+// spheroid without kinematics has no velocity and dispersion (0).
+template<auto AddFunT, bool HasFields, typename T>
+constexpr void
+gmodel_spheroid_light_write(
+        int x, int y, int z, T rvalue, T orvalue,
+        const VoxelOpacity<T>* opacity,
+        const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    const T vvalue = 0;
+    const T dvalue = 0;
+    gmodel_light_write<AddFunT>(
+            x, y, rvalue, orvalue, vvalue, dvalue, opacity, g);
+    const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
+    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
+    if (HasFields)
+        gmodel_volume_fields_write(idx, rvalue, vvalue, dvalue, g, f);
+}
+
 // Evaluate the voxel (x, y, z) of a smooth spheroid: its density (see
-// SPHEROID_SUBGRID) times the depth of the voxel is its light. A
-// spheroid without kinematics has no velocity and dispersion (0). AddFunT
+// SPHEROID_SUBGRID) times the depth of the voxel is its light. AddFunT
 // adds the light of the voxel to the pixel of its spaxel, which the other
 // voxels of the spaxel add to too: it must be atomic if they are evaluated
 // in parallel. Only this voxel writes to its other outputs. HasOpacity is
@@ -1451,8 +1521,6 @@ gmodel_smspheroid_evaluate_voxel(
     if (!rvalue)
         return;
     rvalue *= g.spat_step[2];
-    const T vvalue = 0;
-    const T dvalue = 0;
 
     // The opacity in front of the light, and the light that it lets
     // through (that of the image)
@@ -1463,14 +1531,51 @@ gmodel_smspheroid_evaluate_voxel(
             ? rvalue * gmodel_attenuation(
                     opacity, g.nopacity, g.opacity_ratios)
             : rvalue;
-    gmodel_light_write<AddFunT>(
-            x, y, rvalue, orvalue, vvalue, dvalue,
-            HasOpacity ? &opacity : nullptr, g);
+    gmodel_spheroid_light_write<AddFunT, HasFields>(
+            x, y, z, rvalue, orvalue, HasOpacity ? &opacity : nullptr, g, f);
+}
 
-    const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
-    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
-    if (HasFields)
-        gmodel_volume_fields_write(idx, rvalue, vvalue, dvalue, g, f);
+// Evaluate the pixel (x, y) of the projection of a smooth spheroid, on a
+// grid without a depth axis: its surface density (see SPHEROID_SUBGRID) is
+// its light. Only this pixel writes to its outputs.
+template<auto AddFunT, typename T>
+constexpr void
+gmodel_smspheroid_evaluate_pixel(
+        int x, int y, const SpheroidArgs<T>& a, const GridArgs<T>& g)
+{
+    const T posa = a.posa[0] * DEG_TO_RAD<T>;
+    T xn, yn;
+    gmodel_spheroid_sky_point<T>(x, y, posa, a, g, xn, yn);
+
+    // The surface density: the mean over the pixel near the centre, or
+    // that at the centre of the pixel
+    const T diagonal = std::sqrt(
+            g.spat_step[0] * g.spat_step[0]
+            + g.spat_step[1] * g.spat_step[1]);
+    T rvalue = 0;
+    if (std::sqrt(xn * xn + yn * yn) < SPHEROID_CENTRE_VOXELS<T> * diagonal)
+    {
+        constexpr int n = SPHEROID_SUBGRID;
+        for (int i = 0; i < n; ++i)
+        for (int j = 0; j < n; ++j)
+        {
+            T xs, ys;
+            gmodel_spheroid_sky_point<T>(
+                    x + (i + T{0.5}) / n - T{0.5},
+                    y + (j + T{0.5}) / n - T{0.5},
+                    posa, a, g, xs, ys);
+            rvalue += gmodel_spheroid_surface_density(xs, ys, a);
+        }
+        rvalue /= n * n;
+    }
+    else
+    {
+        rvalue = gmodel_spheroid_surface_density(xn, yn, a);
+    }
+    if (!rvalue)
+        return;
+    gmodel_spheroid_light_write<AddFunT, false, T>(
+            x, y, 0, rvalue, rvalue, nullptr, g, FieldsArgs<T>{});
 }
 
 // The polar traits of the set of a DiskTraitsArgs at its point j, in the

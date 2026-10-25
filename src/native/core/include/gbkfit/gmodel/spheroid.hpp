@@ -26,18 +26,29 @@ struct SpheroidArgs
     // the scale s and the axis ratio q in terms[3k], terms[3k + 1] and
     // terms[3k + 2] (its height over its width): a f(m / s), m^2 = R^2 +
     // z^2 / q^2, up to m = rmax / max(1, q), the largest spheroid of its
-    // shape in the sphere of radius rmax. f is the table if there is one
-    // (see SpheroidArgs::table), and a Gaussian, exp(-u^2 / 2), if not.
+    // shape in the sphere of radius rmax. f(u) = exp(T(ln u) - c u^p),
+    // with c and p in function[0] and function[1], and T the table (see
+    // table), or 0 without one: e.g. a Gaussian, exp(-u^2 / 2), of c =
+    // 1/2 and p = 2.
     int nterms = 0;
     const T* terms = nullptr;
+    const T* function = nullptr;
 
-    // The table of f (optional): ln f at ln u = table_range[0] + i *
+    // The table T (optional): at ln u = table_range[0] + i *
     // table_range[1] for i in [0, ntable), linear in between; below its
-    // first point, ln f falls along the slope table_range[2] (a power law
-    // of u), and beyond its last one, f is 0
+    // first point, along the slope table_range[2] (a power law of u), and
+    // beyond its last one, -infinity (f is 0)
     int ntable = 0;
     const T* table = nullptr;
     const T* table_range = nullptr;
+
+    // Whether it is evaluated as its projection on the sky, on a grid
+    // without a depth axis, of the surface density of the sum of its
+    // terms, each a f(m / s), m^2 = x^2 + y^2 / q^2 (x along the major axis
+    // of the projection, y along its minor axis; q is that of the
+    // projection), without a table and to any radius; or else on the
+    // voxels of a grid with a depth axis
+    bool projected = false;
 };
 
 } // namespace gbkfit

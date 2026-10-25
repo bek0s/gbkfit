@@ -236,12 +236,18 @@ template<typename T> void
 Wrapper<T>::gmodel_smspheroid_evaluate(
         const SpheroidArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
+    namespace k = kernels;
+    if (a.projected) {
+        launch("gmodel_smspheroid_evaluate_projected",
+                g.spat_size[0] * g.spat_size[1],
+                k::gmodel_smspheroid_evaluate_projected<T>, a, g);
+        return;
+    }
     // (see gmodel_smdisk_evaluate)
     const long long n = 1LL * g.spat_size[0] * g.spat_size[1]
             * g.spat_size[2];
     // (the kernels of the fields, of spheroids dimmed by opacity, and of
     // the others)
-    namespace k = kernels;
     launch("gmodel_smspheroid_evaluate", n,
             f.fields ? k::gmodel_smspheroid_evaluate<T, 0, 1>
             : g.opacity ? k::gmodel_smspheroid_evaluate<T, 1, 0>

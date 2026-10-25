@@ -105,7 +105,7 @@ struct ConeArrays
 };
 
 // The arrays that describe a spheroid: its geometry, its extent, the
-// terms of its density and their table, if any (see
+// terms of its density, their function and its table, if any (see
 // gbkfit::SpheroidArgs). They are created once, and their values are
 // updated in place before each evaluation.
 template<typename T, typename Device>
@@ -119,6 +119,7 @@ struct SpheroidArrays
     Values incl;
     T rmax;
     Values terms;
+    Values function;
     Values table;
     Values table_range;
 };
@@ -231,7 +232,7 @@ struct GModel
 
     static void
     smspheroid_evaluate(
-            const Spheroid& spheroid,
+            const Spheroid& spheroid, bool projected,
             std::array<int, 3> spat_size,
             std::array<T, 3> spat_step,
             std::array<T, 3> spat_zero,
@@ -248,17 +249,23 @@ struct GModel
     {
         const typename Kernels::DeviceScope scope(
                 spheroid.terms.device_id());
-        const auto a = make_spheroid_args(spheroid);
+        const auto a = make_spheroid_args(spheroid, projected);
         const auto g = make_grid_args(
-                true, spat_size, spat_step, spat_zero, spat_rota, slab_zero,
+                !projected, spat_size, spat_step, spat_zero, spat_rota,
+                slab_zero,
                 spec_size, spec_step, spec_zero, lines,
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
                 rdata_scale, image_scale);
-        // (a spheroid writes three fields: j, v and s)
+        // (a spheroid on voxels writes three fields: j, v and s)
+        require(!projected || (spat_size[2] == 1 && spat_step[2] == 0
+                               && !opacity.is_valid() && !scube.is_valid()
+                               && !fields.is_valid()),
+                "the projection of a spheroid is evaluated on a grid "
+                "without a depth axis, into an image, without opacity");
         Kernels::gmodel_smspheroid_evaluate(
-                a, g, make_fields_args(true, 0, g, fields, 3));
+                a, g, make_fields_args(!projected, 0, g, fields, 3));
     }
 
     static void
@@ -583,10 +590,11 @@ struct GModel
                 .def("__init__", [](
                         Spheroid* self, Values xpos, Values ypos,
                         Values posa, Values incl, T rmax, Values terms,
-                        Values table, Values table_range) {
+                        Values function, Values table,
+                        Values table_range) {
                     new (self) Spheroid{
-                            xpos, ypos, posa, incl, rmax, terms, table,
-                            table_range};
+                            xpos, ypos, posa, incl, rmax, terms, function,
+                            table, table_range};
                 },
                 nb::arg("xpos").noconvert(),
                 nb::arg("ypos").noconvert(),
@@ -594,6 +602,7 @@ struct GModel
                 nb::arg("incl").noconvert(),
                 nb::arg("rmax"),
                 nb::arg("terms").noconvert(),
+                nb::arg("function").noconvert(),
                 nb::arg("table").noconvert().none() = nb::none(),
                 nb::arg("table_range").noconvert().none() = nb::none());
 
@@ -651,7 +660,7 @@ struct GModel
             cls.def_static(
                     "smspheroid_evaluate", &smspheroid_evaluate, ReleaseGil(),
                     args...);
-        }, evaluate_args(nb::arg("spheroid")));
+        }, evaluate_args(nb::arg("spheroid"), nb::arg("projected")));
         std::apply([&](auto&&... args) {
             cls.def_static(
                     "mcdisk_evaluate", &mcdisk_evaluate, ReleaseGil(), args...);
@@ -897,9 +906,10 @@ private:
         return a;
     }
 
-    // The arguments of a spheroid (see gbkfit::SpheroidArgs)
+    // The arguments of a spheroid, evaluated as its projection or not (see
+    // gbkfit::SpheroidArgs)
     static SpheroidArgs<T>
-    make_spheroid_args(const Spheroid& spheroid)
+    make_spheroid_args(const Spheroid& spheroid, bool projected)
     {
         SpheroidArgs<T> a;
         require(spheroid.xpos.shape(0) == 1 && spheroid.ypos.shape(0) == 1
@@ -917,6 +927,9 @@ private:
                 "terms needs three values for each term");
         a.nterms = int(spheroid.terms.shape(0) / 3);
         a.terms = spheroid.terms.data();
+        require(spheroid.function.shape(0) == 2,
+                "function needs two values: c and p");
+        a.function = spheroid.function.data();
         require(spheroid.table.is_valid() == spheroid.table_range.is_valid()
                 && (!spheroid.table.is_valid()
                     || (spheroid.table.shape(0) >= 2
@@ -926,6 +939,7 @@ private:
                 ? int(spheroid.table.shape(0)) : 0;
         a.table = data(spheroid.table);
         a.table_range = data(spheroid.table_range);
+        a.projected = projected;
         return a;
     }
 

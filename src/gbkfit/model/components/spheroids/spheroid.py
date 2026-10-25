@@ -10,6 +10,7 @@ import math
 from typing import Any, Literal, Self
 
 import numpy as np
+import numpy.typing as npt
 import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver
@@ -17,7 +18,8 @@ from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from ...mass._numerics import sersic_density_table, sersic_tables
+from ...mass._numerics import (
+    sersic_b, sersic_density_table, sersic_tables)
 from ...mass.shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
 from .._detail import dump_geometry, dump_name, geometry_desc
 from .._native import (
@@ -45,9 +47,11 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
     of terms, each a function of its own spheroidal radius m, m^2 = R^2 +
     z^2 / q^2 (R the distance from the axis of the spheroid and z the
     height along it, arcsec; q the axis ratio of the term, its height over
-    its width): an amplitude times f(m / s), of the scale s, where f is a
-    Gaussian exp(-u^2 / 2), or one function of the profile, tabled (see
-    table).
+    its width): an amplitude times f(m / s), of the scale s, f(u) =
+    exp(T(ln u) - c u^p), with c and p of the profile (see function) and
+    T its table (see table), or 0 without one. Seen on the sky, a term
+    projects to a term of the axis ratio q' (see projected_terms) of the
+    function exp(-c u^p): its profile is a sum of Sersic profiles.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -75,7 +79,15 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
     def ntable(self) -> int:
         """
         Return the number of points of the table of its function (see
-        table); 0 if its terms are Gaussians.
+        table); 0 without one.
+        """
+        pass
+
+    @abc.abstractmethod
+    def function(self, params: ParamValues) -> tuple[float, float]:
+        """
+        Return c and p of the function of its terms at the values of its
+        parameters (see LightProfile).
         """
         pass
 
@@ -92,6 +104,19 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
+    def projected_terms(
+            self, params: ParamValues, q: float, incl: float
+    ) -> np.ndarray:
+        """
+        Return the terms of its projection on the sky at the inclination
+        incl (degrees; see terms): the amplitude (the surface density, in
+        the unit of the emission), the scale and the projected axis ratio
+        q' of each, q'^2 = cos^2(incl) + q^2 sin^2(incl), of the function
+        exp(-c u^p) (without the table).
+        """
+        pass
+
+    @abc.abstractmethod
     def cut(self, params: ParamValues, q: float, rmax: float) -> float:
         """
         Return the share of its light that the sphere of radius rmax
@@ -103,16 +128,15 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
 
     def table(self, params: ParamValues) -> tuple[np.ndarray, np.ndarray]:
         """
-        Return the table of its function f at the values of its
-        parameters (see the native SpheroidArgs::table): ln f at ln u =
-        zero + i * step for the ntable points i, and the range (zero,
-        step, slope), where slope is that of ln f in ln u below the
-        first point.
+        Return the table T of its function at the values of its
+        parameters (see the native SpheroidArgs::table): T at ln u = zero
+        + i * step for the ntable points i, and the range (zero, step,
+        slope), where slope is that of T in ln u below the first point.
 
         Raises
         ------
         NotImplementedError
-            If its terms are Gaussians (see ntable).
+            If it has no table (see ntable).
         """
         raise NotImplementedError(
             f"the light profile '{self.type()}' has no table")
@@ -126,7 +150,8 @@ class LightSersic(LightProfile):
     half of its light is) and the index n, with b(n) exact; laid out in a
     shape (see Spheroid). Its density, infinite at the centre for n > 1,
     is computed numerically (see mass._numerics.sersic_density_table),
-    for n in [0.3, 12].
+    for n in [0.3, 12]: f(u) = exp(T(ln u) - b u^(1/n)), the table T of
+    ln f + b u^(1/n) is smooth. Its projection is exact.
     """
 
     @staticmethod
@@ -152,6 +177,10 @@ class LightSersic(LightProfile):
     def ntable(self) -> int:
         return _SERSIC_TABLE_SIZE
 
+    def function(self, params: ParamValues) -> tuple[float, float]:
+        n = float(params['n'])
+        return sersic_b(n), 1 / n
+
     def terms(self, params: ParamValues, q: float) -> np.ndarray:
         # The face-on surface brightness ie at re is that of the density
         # ie / re f(r / re), with f the deprojection of exp(-b (u^(1/n) -
@@ -160,6 +189,17 @@ class LightSersic(LightProfile):
         with np.errstate(divide='ignore', invalid='ignore'):
             return _checked_terms(
                 np.array([[params['ie'] / (re * q), re, q]]))
+
+    def projected_terms(
+            self, params: ParamValues, q: float, incl: float
+    ) -> np.ndarray:
+        # ie exp(-b (u^(1/n) - 1)) = ie e^b exp(-b u^(1/n)), of q' (the
+        # projection of rho_sph(m) / q is Sigma_sph(m') / q')
+        b = sersic_b(float(params['n']))
+        qp = _projected_ratio(q, incl)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return _checked_terms(np.array([[
+                params['ie'] * np.exp(b) / qp, params['re'], qp]]))
 
     def cut(self, params: ParamValues, q: float, rmax: float) -> float:
         tables = sersic_tables(float(params['n']))
@@ -178,8 +218,15 @@ _SERSIC_TABLE_SIZE = 512
 
 @functools.lru_cache(maxsize=64)
 def _sersic_table(n: float) -> tuple[np.ndarray, np.ndarray]:
-    """Return the table of the Sersic profile of index n (see table)."""
-    return sersic_density_table(n, _SERSIC_TABLE_SIZE)
+    """
+    Return the table of the Sersic profile of index n (see table): ln f
+    + b u^(1/n), of f its deprojection (see
+    mass._numerics.sersic_density_table).
+    """
+    log_f, (zero, step, _) = sersic_density_table(n, _SERSIC_TABLE_SIZE)
+    u = np.exp(zero + step * np.arange(len(log_f)))
+    table = log_f + sersic_b(n) * u ** (1 / n)
+    return table, np.array([zero, step, (table[1] - table[0]) / step])
 
 
 class LightMGE(LightProfile):
@@ -245,6 +292,9 @@ class LightMGE(LightProfile):
     def ntable(self) -> int:
         return 0
 
+    def function(self, params: ParamValues) -> tuple[float, float]:
+        return 0.5, 2.0
+
     def terms(self, params: ParamValues, q: float) -> np.ndarray:
         i0, sigma, ratio = (
             np.asarray(params[name], dtype=float)
@@ -253,6 +303,17 @@ class LightMGE(LightProfile):
             return _checked_terms(np.stack(
                 (i0 / (np.sqrt(2 * np.pi) * sigma * ratio), sigma, ratio),
                 axis=-1))
+
+    def projected_terms(
+            self, params: ParamValues, q: float, incl: float
+    ) -> np.ndarray:
+        i0, sigma, ratio = (
+            np.asarray(params[name], dtype=float)
+            for name in ('i0', 'sigma', 'q'))
+        qp = _projected_ratio(ratio, incl)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return _checked_terms(
+                np.stack((i0 / qp, sigma, qp), axis=-1))
 
     def cut(self, params: ParamValues, q: float, rmax: float) -> float:
         # The share of the light of a 3d Gaussian beyond x dispersions,
@@ -267,6 +328,17 @@ class LightMGE(LightProfile):
                 + np.sqrt(2 / np.pi) * x * np.exp(-x ** 2 / 2)
             light = i0 * sigma ** 2
             return float(np.sum(light * beyond) / np.sum(light))
+
+
+def _projected_ratio(q: npt.ArrayLike, incl: float) -> np.ndarray:
+    """
+    Return the axis ratio q' of the projection of a spheroid of the axis
+    ratio q at the inclination incl (degrees): q'^2 = cos^2(incl) + q^2
+    sin^2(incl), complete the square of m^2 along the line of sight
+    (face-on 1, edge-on q).
+    """
+    i = np.radians(incl)
+    return np.sqrt(np.cos(i) ** 2 + np.asarray(q) ** 2 * np.sin(i) ** 2)
 
 
 def _checked_terms(terms: np.ndarray) -> np.ndarray:
@@ -297,26 +369,30 @@ GEOMETRY_PDESCS = dict(
 
 class Spheroid(Component):
     """
-    A spheroid of stars, evaluated at every voxel of a grid with a depth
-    axis: the density of its light profile, laid out in its shape (unless
-    the profile has its own axis ratios, see LightMGE), within the sphere
-    of radius rmax around its centre: each term of the profile (see
-    LightProfile) up to its spheroidal radius m = rmax / max(1, q), the
-    largest spheroid of its axis ratio q in the sphere. Its axis is the
-    spin axis of a disk of its posa and incl; a sphere has none (no posa
-    or incl). It emits in bands: it is seen by images. The voxels near its
-    centre hold the mean of its density over them (where it can be
-    infinite, e.g. a Sersic profile of n > 1), the others the density at
-    their centre.
+    A spheroid of stars: the density of its light profile, laid out in
+    its shape (unless the profile has its own axis ratios, see LightMGE).
+    Its axis is the spin axis of a disk of its posa and incl; a sphere has
+    none (no posa or incl). It emits in bands: it is seen by images.
+
+    On a grid without a depth axis (e.g. the line of sight flat), it is
+    its projection on the sky, exactly, to any radius. On a grid with a
+    depth axis (where dust can dim it), it is evaluated at every voxel,
+    within the sphere of radius rmax around its centre: each term of the
+    profile (see LightProfile) up to its spheroidal radius m = rmax /
+    max(1, q), the largest spheroid of its axis ratio q in the sphere; a
+    warning says when that cuts more than 1% of its light. The voxels
+    (or pixels) near its centre hold the mean of its density over them
+    (where it can be infinite, e.g. a Sersic profile of n > 1), the
+    others the density at their centre.
 
     Parameters
     ----------
     profile : LightProfile
         Its light profile.
     rmax : float
-        The radius (arcsec) of the sphere around its centre that holds its
-        light: it sets the depth axis of the grids that see it (see
-        Component.bounding_radius).
+        How far it is drawn on a grid with a depth axis: the radius
+        (arcsec) of the sphere around its centre that holds its light
+        there, which sets the depth axis (see Component.bounding_radius).
     emission : Emission
         The light it emits, in bands (BandEmission).
     shape : SpheroidShape, optional
@@ -423,7 +499,7 @@ class Spheroid(Component):
         return self._rmax
 
     def thick(self) -> bool:
-        return True
+        return False
 
     def frame_params(self) -> FrameParams:
         posa = 'posa' if 'posa' in self._geometry_pdescs else None
@@ -465,16 +541,18 @@ class Spheroid(Component):
 class SpheroidPlan(NativePlan):
     """
     The evaluation of a Spheroid on a driver and dtype: its native
-    description, and the values of its geometric parameters and of the
-    terms of its profile (and their table, if any) in one buffer (see
-    ParamBuffer), written at each evaluation.
+    description, and the values of its geometric parameters, of the terms
+    of its profile and their function (and table, if any) in one buffer
+    (see ParamBuffer), written at each evaluation: those of its density on
+    a grid with a depth axis, and those of its projection on a grid
+    without one.
     """
 
     def __init__(self, spheroid: Spheroid, driver: Driver, dtype: np.dtype):
         profile = spheroid.profile()
         ntable = profile.ntable()
         sizes = dict.fromkeys(GEOMETRY_PDESCS, 1) \
-            | dict(terms=3 * profile.nterms())
+            | dict(terms=3 * profile.nterms(), function=2)
         if ntable:
             sizes |= dict(table=ntable, table_range=3)
         buffer = ParamBuffer(driver, dtype, sizes)
@@ -498,10 +576,13 @@ class SpheroidPlan(NativePlan):
             rdata_scale: float = 1.0,
             image_scale: float = 1.0
     ) -> None:
-        self._write_params(params)
+        # (without a depth axis, the z axis of the grid has size 1 and step
+        # 0, see NativeGrid)
+        projected = grid['spat_step'][2] == 0
+        self._write_params(params, projected)
         evaluate_native(
             lambda kwargs: self._backend.smspheroid_evaluate(
-                self._native_spheroid, **kwargs),
+                self._native_spheroid, projected=projected, **kwargs),
             self._driver, self._dtype, grid, outputs, out_extra,
             density_key, None, rdata_scale, image_scale,
             velocity=False, dispersion=False)
@@ -510,11 +591,12 @@ class SpheroidPlan(NativePlan):
         # (a spheroid fills the voxels with j, v and s)
         return FieldsLayout(layer=False, nslots=3)
 
-    def _write_params(self, params: ParamValues) -> None:
+    def _write_params(self, params: ParamValues, projected: bool) -> None:
         """
         Write the parameter values into the host memory: the geometry (a
-        sphere has posa and incl 0), the terms of the profile and their
-        table, and copy them to the device at once.
+        sphere has posa and incl 0), the terms of the profile, or of its
+        projection, their function and table, and copy them to the device
+        at once.
         """
         buffer = self._buffer
         spheroid = self._spheroid
@@ -524,7 +606,10 @@ class SpheroidPlan(NativePlan):
         q = params['q'] if shape is not None and not shape.spherical() \
             else 1.0
         profile = spheroid.profile()
-        buffer.host('terms')[:] = profile.terms(params, q).ravel()
+        terms = profile.projected_terms(params, q, params.get('incl', 0.0)) \
+            if projected else profile.terms(params, q)
+        buffer.host('terms')[:] = terms.ravel()
+        buffer.host('function')[:] = profile.function(params)
         if profile.ntable():
             table, table_range = profile.table(params)
             buffer.host('table')[:] = table

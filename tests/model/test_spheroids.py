@@ -21,17 +21,20 @@ GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 STEP = 0.5
 
 
-def image(driver, spheroid, dtype='float32', size=64):
+def image(driver, spheroid, dtype='float32', size=64, flat=False):
     """
     A case of an image of size by size pixels of STEP arcsec of a
-    spheroid, with a depth axis of voxels of 0.25 arcsec.
+    spheroid, with a depth axis of voxels of 0.25 arcsec, or without one
+    (flat).
     """
+    line_of_sight = dict(type='flat') if flat \
+        else dict(type='grid', depth=dict(step=0.25))
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_brightness', size=[size, size], step=[STEP, STEP],
             dtype=dtype),
-        line_of_sight=dict(type='grid', depth=dict(step=0.25)),
+        line_of_sight=line_of_sight,
         galaxy=dict(components=[spheroid]))
 
 
@@ -111,6 +114,57 @@ def test_an_mge_spheroid_projects_exactly(driver, evaluate_cases):
     flux = model.sum() * STEP ** 2
     total = sum(2 * np.pi * a * s ** 2 for a, s in zip(i0, sigma))
     assert flux == pytest.approx(total, rel=3e-3)
+
+
+@pytest.mark.parametrize('profile, properties', [
+    (dict(type='sersic'), dict(ie=2, re=3, n=4, q=0.6)),
+    (dict(type='mge', ngauss=2), dict(i0=[3, 1], sigma=[0.8, 2.5],
+                                      q=[0.9, 0.4])),
+])
+def test_without_a_depth_axis_a_spheroid_is_its_exact_projection(
+        driver, evaluate_cases, caplog, profile, properties):
+    # Sigma_sph(m') / q' of each term (see the tests above), to any radius:
+    # rmax cuts nothing, and warns of nothing. The pixels within 3 pixel
+    # diagonals of the centre hold their mean (where n = 4 peaks).
+    shape = dict(shape=dict(type='flattened')) \
+        if profile['type'] == 'sersic' else {}
+    spheroid = dict(
+        type='spheroid', profile=profile, rmax=1, emission=BAND) | shape
+    data, _ = evaluate_cases(
+        [image(driver, spheroid, 'float64', flat=True)],
+        GEOMETRY | properties)
+    major, minor, projected = sky_frame(**GEOMETRY)
+    if profile['type'] == 'sersic':
+        qp = projected(0.6)
+        b = _numerics.sersic_b(4)
+        m = np.sqrt(major ** 2 + (minor / qp) ** 2)
+        expected = 2 * np.exp(-b * ((m / 3) ** (1 / 4) - 1)) / qp
+    else:
+        expected = sum(
+            a / projected(qk) * np.exp(
+                -(major ** 2 + (minor / projected(qk)) ** 2) / (2 * s ** 2))
+            for a, s, qk in zip(
+                properties['i0'], properties['sigma'], properties['q']))
+    away = np.hypot(major, minor) > 3 * np.hypot(STEP, STEP)
+    np.testing.assert_allclose(
+        data[0]['brightness']['d'][away], expected[away], rtol=1e-9)
+    assert 'its rmax cuts' not in caplog.text
+
+
+def test_with_and_without_a_depth_axis_a_spheroid_agrees(
+        driver, evaluate_cases):
+    # Its voxels, summed along the line of sight, and its projection
+    spheroid = dict(
+        type='spheroid', profile=dict(type='sersic'),
+        shape=dict(type='flattened'), rmax=21, emission=BAND)
+    properties = GEOMETRY | dict(ie=2, re=3, n=1, q=0.6)
+    (grid,), _ = evaluate_cases(
+        [image(driver, spheroid, size=96)], properties)
+    (flat,), _ = evaluate_cases(
+        [image(driver, spheroid, size=96, flat=True)], properties)
+    grid, flat = grid['brightness']['d'], flat['brightness']['d']
+    bright = flat > 1e-2 * flat.max()
+    np.testing.assert_allclose(grid[bright], flat[bright], rtol=5e-3)
 
 
 @pytest.mark.parametrize('dtype', ['float32', 'float64'])
