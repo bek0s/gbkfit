@@ -190,7 +190,7 @@ def test_the_geometry_of_a_model_is_found(driver):
     # The position angle of the analysis is that of the models (posa), and
     # the axis ratio of a thin disk cos(incl)
     galaxy = dict(components=[dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 21)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 21)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(vptraits=dict(type='arctan', direction='tan'),
                         dptraits=dict(type='uniform')),

@@ -3,7 +3,7 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: smdisk
+  - type: disk
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -15,7 +15,7 @@ galaxies:
       dptraits: {type: uniform}
     emission: {type: lines}
     name: gas
-  - type: smdisk
+  - type: disk
     name: dust
     loose: false
     tilted: false

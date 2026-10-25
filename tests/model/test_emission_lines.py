@@ -20,7 +20,7 @@ FLAT = dict(type='flat')
 GRID = dict(type='grid')
 
 COMPONENT = dict(
-    type='smdisk', loose=False, tilted=False,
+    type='disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
@@ -114,7 +114,7 @@ def test_lines_of_a_monte_carlo_disk_share_the_clouds(driver):
     # With the same clouds, the flux of the cube is (1 + ratio) times that
     # of one line
     component = dict(
-        COMPONENT, type='mcdisk', cflux=1e-2, density=dict(
+        COMPONENT, type='disk', clouds=dict(cflux=1e-2), density=dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=8)))
     properties = PROPERTIES | dict(ht_s=1)

@@ -17,7 +17,7 @@ _C_KMS = 299792.458
 def _thin_disk(**options: Any) -> dict[str, Any]:
     """A thin disk of rings, emitting lines, with the given options."""
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 13)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 13)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             vptraits=dict(type='arctan', direction='tan'),
@@ -88,7 +88,7 @@ _GRISM = dict(
 def _band_disk() -> dict[str, Any]:
     """A small thin disk emitting in a band (no kinematics), for images."""
     return dict(
-        type='smdisk', loose=False, tilted=False,
+        type='disk', loose=False, tilted=False,
         rnodes=[round(0.1 * i, 1) for i in range(13)],
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))

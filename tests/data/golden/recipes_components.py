@@ -32,7 +32,7 @@ _LSF = dict(type='gauss', sigma=20)
 def _disk(**options: Any) -> dict[str, Any]:
     """A disk of rings to 8 arcsec that emits lines, with the given options."""
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=_ROTATION, emission=_LINES) | options
 
@@ -113,7 +113,7 @@ _DISK_TRIAL = dict(
 def _thick_disk(name: str, **roles: Any) -> dict[str, Any]:
     """A thick disk of rings to 8 arcsec, of the given roles, unmoving."""
     return dict(
-        type='smdisk', name=name, loose=False, tilted=False,
+        type='disk', name=name, loose=False, tilted=False,
         rnodes=list(range(0, 9)), density=_THICK) | roles
 
 
@@ -148,7 +148,7 @@ _MCDISK_CUBE = dict(
     doc="A thick Monte Carlo disk of clouds of a fixed seed in a cube, "
         "float64, on a grid.",
     galaxies=[dict(components=[
-        _disk(type='mcdisk', cflux=1e-4, seed=7, density=_THICK)])],
+        _disk(type='disk', clouds=dict(cflux=1e-4, seed=7), density=_THICK)])],
     observations=[
         _cube([24, 24, 40], [0.8, 0.8, 15], 'grid')],
     truth=_DISK_TRUTH | dict(ht_s=0.5),
@@ -242,7 +242,7 @@ _BLOBS_MAPS_SELECTION = dict(
 # --- A5: a disk and an outflow cone, in two lines ----------------------------
 
 _CONE = dict(
-    type='smcone', name='cone', rnodes=[0.5, 2, 4],
+    type='cone', name='cone', rnodes=[0.5, 2, 4],
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
@@ -366,7 +366,7 @@ def _write_image(folder: pathlib.Path) -> None:
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.utils import fitsutils
     galaxy = dict(components=[dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))])
     observation = dict(

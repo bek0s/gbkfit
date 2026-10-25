@@ -19,7 +19,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 DISK = dict(
-    type='smdisk', loose=False, tilted=False,
+    type='disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(ptraits=dict(type='exponential')))
 

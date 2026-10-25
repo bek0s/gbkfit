@@ -19,7 +19,7 @@ def disk(dptraits, thick=False):
     if thick:
         density['htraits'] = dict(type='sech2', zmax=8)
     return dict(
-        type='smdisk', loose=False, tilted=False,
+        type='disk', loose=False, tilted=False,
         rnodes=list(range(0, 21, 2)), density=density,
         kinematics=dict(
             vptraits=dict(type='uniform', direction='tan'),
@@ -115,7 +115,7 @@ def test_dispersion_directions_are_checked(options, message):
 
 def test_a_cone_has_isotropic_dispersion_only():
     cone = dict(
-        type='smcone', rnodes=[4, 10],
+        type='cone', rnodes=[4, 10],
         density=dict(
             ptraits=dict(type='uniform'),
             htraits=dict(type='gauss', zmax=1.5)),

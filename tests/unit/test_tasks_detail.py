@@ -9,7 +9,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(
-    type='smdisk', loose=False, tilted=False, rnmin=0, rnmax=4, rnsep=1,
+    type='disk', loose=False, tilted=False, rnmin=0, rnmax=4, rnsep=1,
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))])
 
@@ -93,7 +93,7 @@ def test_observations_use_the_drivers_of_the_configuration():
 # A galaxy with mass, seen as a spectral cube
 MASSIVE = dict(
     components=[dict(
-        type='smdisk', loose=False, tilted=False, rnmin=0, rnmax=4,
+        type='disk', loose=False, tilted=False, rnmin=0, rnmax=4,
         rnsep=1, density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             vptraits=dict(type='mass'), dptraits=dict(type='uniform')),

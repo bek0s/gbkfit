@@ -185,7 +185,7 @@ class ConfigError(RuntimeError):
         The path to the part of the configuration with the error: option
         names and list indices (e.g. models[0].components[1]).
     context : str, optional
-        The type of that part (e.g. 'smdisk'), if any.
+        The type of that part (e.g. 'disk'), if any.
     """
 
     def __init__(
@@ -244,7 +244,7 @@ def config_path(
         The option names and list indices to add.
     context : str, optional
         The type of the part of the configuration loaded in the block
-        (e.g. 'smdisk'), for the errors in that part itself (not in its
+        (e.g. 'disk'), for the errors in that part itself (not in its
         options).
     """
     token = _location.set(_location.get() + ((segments, context),))
@@ -742,7 +742,7 @@ class TypedSerializable(Serializable, abc.ABC):
         Returns
         -------
         str
-            The type (e.g. 'smdisk').
+            The type (e.g. 'disk').
         """
 
 

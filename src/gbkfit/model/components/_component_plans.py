@@ -18,7 +18,7 @@ from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._units import DataUnit
 from .base import DepthAxis, NativeGrid, OpacityCubes
-from .disks._disk import Disk, DiskPlan
+from .disks._disk import NodalDisk, DiskPlan
 from .extinction import ExtinctionLaw
 from .lines import Band
 from .roles import DustOpacity
@@ -590,7 +590,7 @@ def _same_wavelength(a: float | None, b: float | None) -> bool:
 
 
 def _height_cuts(
-        disk: Disk, params: ParamValues
+        disk: NodalDisk, params: ParamValues
 ) -> list[tuple[int, float, float]]:
     """
     Return, for each density height trait of a disk (with its
@@ -614,7 +614,7 @@ def _height_cuts(
 
 
 def _limited_displacements(
-        disk: Disk, plan: DiskPlan, params: ParamValues
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues
 ) -> list[tuple[int, float]]:
     """
     Return, for each vertical distortion trait of a disk (with its plan
@@ -640,7 +640,7 @@ def _limited_displacements(
 
 
 def _at_radii(
-        disk: Disk, values: float | np.ndarray, radii: np.ndarray
+        disk: NodalDisk, values: float | np.ndarray, radii: np.ndarray
 ) -> np.ndarray:
     """
     Return the values of a parameter of a trait of a disk at the given

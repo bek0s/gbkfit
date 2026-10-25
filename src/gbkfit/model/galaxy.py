@@ -18,8 +18,8 @@ from .components._stage import GalaxyStage
 from .components._transfer import TransferMember
 from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
-from .components.cones import SMCone
-from .components.disks import MCDisk, SMDisk
+from .components.cones import Cone
+from .components.disks import Disk
 from .components.geometries import Geometry, geometry_parser
 from .components.lines import Band, LineCatalogue
 from .components.particles import Particles
@@ -38,9 +38,8 @@ __all__ = [
 
 
 component_parser = parseutils.TypedParser(Component, [
-    SMDisk,
-    MCDisk,
-    SMCone,
+    Disk,
+    Cone,
     Point,
     Particles])
 

@@ -31,7 +31,7 @@ TRAIT_PROPERTIES = dict(
 
 
 def disk(name, **options):
-    return dict(type='smdisk', name=name, **PARTS, **options)
+    return dict(type='disk', name=name, **PARTS, **options)
 
 
 def point(name, geometry):

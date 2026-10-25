@@ -21,7 +21,7 @@ from gbkfit.observation import (
 def component(name, **emission):
     """A thin disk that emits lines, with the given emission options."""
     return dict(
-        type='smdisk', name=name, loose=False, tilted=False,
+        type='disk', name=name, loose=False, tilted=False,
         rnodes=list(range(0, 14)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(

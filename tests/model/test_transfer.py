@@ -20,17 +20,21 @@ DISK_PARAMS = dict(
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 
-def disk(type_, thick=True, **options):
-    """The configuration of a disk of gas, thick or thin."""
+def disk(kind='smooth', thick=True):
+    """
+    The configuration of a disk of gas, thick or thin, smooth or of
+    clouds.
+    """
     density = dict(ptraits=dict(type='exponential'))
     if thick:
         density.update(htraits=dict(type='sech2', zmax=8))
+    clouds = dict(clouds=dict(cflux=1e-3)) if kind == 'clouds' else {}
     return dict(
-        type=type_, loose=False, tilted=False, rnmin=0, rnmax=10, rnsep=1,
+        type='disk', loose=False, tilted=False, rnmin=0, rnmax=10, rnsep=1,
         density=density,
         kinematics=dict(
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
-        emission=dict(type='lines')) | options
+        emission=dict(type='lines')) | clouds
 
 
 def native_grid(size):
@@ -62,17 +66,16 @@ def evaluate_fields(driver, component, params, grid):
     return driver.mem_copy_d2h(fields), extra
 
 
-@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+@pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
 def test_the_fields_of_a_thick_disk_are_its_light_and_kinematics(
         driver, disk_type):
-    options = dict(cflux=1e-3) if disk_type == 'mcdisk' else {}
     (j, v, s, *_), extra = evaluate_fields(
-        driver, disk(disk_type, **options), DISK_PARAMS,
+        driver, disk(disk_type), DISK_PARAMS,
         native_grid((24, 24, 24)))
     on = extra['bdata'] != 0
     np.testing.assert_allclose(j, extra['bdata'], rtol=1e-5)
     np.testing.assert_allclose(v[on], extra['vdata'][on], atol=1e-3)
-    if disk_type == 'smdisk':
+    if disk_type == 'smooth':
         np.testing.assert_allclose(s[on], extra['ddata'][on], rtol=1e-6)
     else:
         # The line of the clouds of a voxel is as wide as the sum of
@@ -87,7 +90,7 @@ def test_the_clouds_keep_their_dispersion_at_a_large_systemic_velocity(
     # would lose it in the moments of velocities of 3000)
     params = DISK_PARAMS | dict(vsys=3000, vpt_vt=0, dpt_a=10)
     (j, v, s, _), _ = evaluate_fields(
-        driver, disk('mcdisk', cflux=1e-3), params, native_grid((24, 24, 24)))
+        driver, disk('clouds'), params, native_grid((24, 24, 24)))
     on = j != 0
     np.testing.assert_allclose(v[on], 3000, rtol=1e-6)
     np.testing.assert_allclose(s[on], 10, rtol=1e-4)
@@ -96,7 +99,7 @@ def test_the_clouds_keep_their_dispersion_at_a_large_systemic_velocity(
 def test_a_thin_disk_is_a_layer_where_its_plane_crosses(driver):
     params = DISK_PARAMS | dict(xpos=0, ypos=0, posa=0)
     grid = native_grid((24, 24, 8))
-    component = disk('smdisk', thick=False)
+    component = disk(thick=False)
     (j, v, s, position), extra = evaluate_fields(
         driver, component, params, grid)
     image = driver.mem_alloc_d((24, 24), np.float32)
@@ -137,14 +140,14 @@ THICK = dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
 THIN = dict(ptraits=dict(type='exponential'))
 GAS = dict(
-    type='smdisk', name='gas', loose=False, tilted=False, rnmin=0, rnmax=10,
+    type='disk', name='gas', loose=False, tilted=False, rnmin=0, rnmax=10,
     rnsep=1, density=THICK, kinematics=KINEMATICS, emission=LINES)
 DUST = dict(
-    type='smdisk', name='dust', loose=False, tilted=False, rnmin=0,
+    type='disk', name='dust', loose=False, tilted=False, rnmin=0,
     rnmax=10, rnsep=1, density=THICK, opacity=dict(type='dust'))
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
 OUTFLOW = dict(
-    type='smcone', name='outflow', rnodes=[1, 3, 6],
+    type='cone', name='outflow', rnodes=[1, 3, 6],
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
@@ -255,7 +258,7 @@ def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
         driver, evaluate_cases):
     # The clouds of a voxel become one line of their flux, mean velocity
     # and width: the moments of each spaxel are kept
-    gas = GAS | dict(type='mcdisk', cflux=1e-3)
+    gas = GAS | dict(type='disk', clouds=dict(cflux=1e-3))
     grid, transfer = cubes_of(
         evaluate_cases, driver, [gas, DUST], PROPERTIES,
         observable=dict(
@@ -295,14 +298,14 @@ def transfer_cube(evaluate_cases, driver, components, properties):
     return data[0]['spectra']['d']
 
 
-@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+@pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
 def test_line_opacity_saturates_at_the_source_function(
         driver, evaluate_cases, disk_type):
     # Each voxel's optical depth at each channel is its light there over S
     # (a uniform coefficient 1/S), so the light of each channel is S (1 -
     # exp(-I / S)), I that without line opacity, whatever the geometry
-    gas = GAS | (dict(type='mcdisk', cflux=1e-3) if disk_type == 'mcdisk'
-                 else {})
+    gas = GAS | (
+        dict(clouds=dict(cflux=1e-3)) if disk_type == 'clouds' else {})
     thin = transfer_cube(evaluate_cases, driver, [gas], PROPERTIES)
     source = thin.max() / 3
     for coefficient, expected in (
@@ -391,13 +394,13 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
         group_plan([case])
 
 
-@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+@pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
 def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
     # A thick disk with line opacity, a thin disk, a point, a cone and
     # dust, on the depth axis at once, a plane at a time, and in slabs of
     # 7 planes
     gas = line_opacity(GAS, dict(type='uniform')) | (
-        dict(type='mcdisk', cflux=1e-3) if disk_type == 'mcdisk' else {})
+        dict(clouds=dict(cflux=1e-3)) if disk_type == 'clouds' else {})
     components = [
         gas, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN), OUTFLOW]
     properties = PROPERTIES | dict(gas_op_a=0.5) | {

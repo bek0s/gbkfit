@@ -18,7 +18,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 # A disk and a point, which an offset moves together
 GALAXY = dict(components=[
-    dict(type='smdisk', name='disk', loose=False, tilted=False,
+    dict(type='disk', name='disk', loose=False, tilted=False,
          rnodes=list(range(0, 12)),
          density=dict(ptraits=dict(type='exponential')),
          kinematics=dict(

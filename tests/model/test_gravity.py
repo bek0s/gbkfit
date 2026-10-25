@@ -23,7 +23,7 @@ KPC = 3.0856775814913673e19
 # A thick disk that rotates in the mass of its galaxy, held up by the
 # central equilibrium
 DISK = dict(
-    type='smdisk', name='gas', loose=False, tilted=False,
+    type='disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
     density=dict(
         ptraits=dict(type='exponential'),

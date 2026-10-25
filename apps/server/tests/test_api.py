@@ -127,7 +127,7 @@ def test_projects_and_pieces_are_created_from_templates(client):
     path = client.post('/api/v1/pieces', json=dict(
         project='new', folder='galaxies', name='disk')).json()
     assert path == 'new/galaxies/disk.yaml'
-    assert 'smdisk' in client.get(f'/api/v1/files/{path}').text
+    assert 'type: disk' in client.get(f'/api/v1/files/{path}').text
     assert client.post('/api/v1/pieces', json=dict(
         project='new', folder='galaxies', name='disk')).status_code == 400
     assert sorted(client.get('/api/v1/projects').json()) == ['new', 'study']

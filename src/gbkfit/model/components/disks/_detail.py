@@ -1,5 +1,5 @@
 """
-Helpers shared by the disk components (SMDisk, MCDisk).
+Helpers of the disk component (Disk).
 """
 
 from collections.abc import Sequence
@@ -23,6 +23,8 @@ from ..lines import Band, Bands, LineCatalogue, Lines
 from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk
+from .clouds import CloudDisk, Clouds
+from .smooth import SmoothDisk
 from .opacity import LineOpacity
 from ..parts import Density, Kinematics, density_parser, kinematics_parser
 
@@ -81,7 +83,7 @@ def load_disk_component(
 
 def dump_disk_component(
         component: Component,
-        disk: _disk.Disk,
+        disk: _disk.NodalDisk,
         density: Density,
         kinematics: Kinematics | None
 ) -> dict[str, Any]:
@@ -91,7 +93,7 @@ def dump_disk_component(
     """
     geometry = component.geometry()
     info = dict(type=component.type()) | dump_name(component) \
-        | dump_geometry(component) | disk.options()
+        | dump_geometry(component)
     if geometry is None:
         info.update(loose=disk.loose(), tilted=disk.tilted())
     if geometry is None or geometry.rnodes() is None:
@@ -114,7 +116,6 @@ def dump_disk_component(
 
 
 def make_disk(
-        disk_class: type[_disk.Disk],
         density: Density,
         kinematics: Kinematics | None,
         emission: Emission | None,
@@ -131,16 +132,15 @@ def make_disk(
         rnodes: Sequence[float] | None,
         rstep: float | None,
         interp: str,
-        **disk_options: float
-) -> _disk.Disk:
+        clouds: Clouds | None
+) -> _disk.NodalDisk:
     """
-    Return the disk of a disk component, of class disk_class, made of its
-    parts (see SMDisk for the options). With a geometry, its warps and, if
-    it is warped, its rings are those of the geometry, which the component
-    must not give. A thick disk (with density height traits) takes the
-    default height traits of its velocity and dispersion traits where it
-    has none. disk_options are the options of the type of disk (e.g. cflux
-    and seed of a CloudDisk).
+    Return the disk of a disk component, made of its parts (see Disk for
+    the options): smooth, or made of its clouds. With a geometry, its
+    warps and, if it is warped, its rings are those of the geometry, which
+    the component must not give. A thick disk (with density height
+    traits) takes the default height traits of its velocity and dispersion
+    traits where it has none.
 
     Raises
     ------
@@ -177,12 +177,14 @@ def make_disk(
         opacity, emission)
     if opacity_traits:
         traits_.update(opt=opacity_traits)
-    return disk_class(
-        **disk_options,
+    options = dict(
         loose=bool(loose), tilted=bool(tilted), **node_args,
         traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
         opacity_lines=opacity_lines,
         equilibrium=None if kinematics is None else kinematics.equilibrium())
+    if clouds is None:
+        return SmoothDisk(**options)
+    return CloudDisk(clouds, **options)
 
 
 def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
@@ -331,7 +333,7 @@ def _disk_traits(
 
 
 def disk_plan(
-        disk: _disk.Disk,
+        disk: _disk.NodalDisk,
         lines: Lines | None,
         bands: Bands | None,
         unit: astropy.units.UnitBase | None,

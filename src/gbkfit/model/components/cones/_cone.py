@@ -1,6 +1,6 @@
 """
-The cones: shells around an apex, with traits (Cone), evaluated smoothly
-(SmoothCone).
+The cones: shells around an apex, with traits (NodalCone), evaluated
+smoothly (SmoothCone).
 """
 
 import abc
@@ -20,7 +20,7 @@ from ..traits import Trait
 
 
 __all__ = [
-    'Cone',
+    'NodalCone',
     'SIDES',
     'SmoothCone',
     'SmoothConePlan',
@@ -50,7 +50,7 @@ GEOMETRY_PDESCS = dict(
         minimum=0, maximum=90))
 
 
-class Cone(abc.ABC):
+class NodalCone(abc.ABC):
     """
     A cone: its sides, its radial nodes (shells, spheres around its apex)
     and its traits (see traits), whose parameters are those of its traits
@@ -127,7 +127,7 @@ class Cone(abc.ABC):
         pass
 
 
-class SmoothCone(Cone):
+class SmoothCone(NodalCone):
     """A cone evaluated smoothly: on the voxels of its grid."""
 
     def plan(

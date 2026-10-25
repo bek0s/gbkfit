@@ -21,7 +21,7 @@ from .._stage import GalaxyMass
 from ..base import ComponentStage
 from ..roles import Emission
 from ..traits import PressureSupport
-from ._disk import EQUILIBRIUM_DISPERSION, Disk, DiskPlan
+from ._disk import EQUILIBRIUM_DISPERSION, NodalDisk, DiskPlan
 from ._profiles import (
     DiskDensity, density_waves, jeans_dispersions, pressure_support,
     rms_heights, rotation)
@@ -54,7 +54,7 @@ _RING_GEOMETRY = ('xpos', 'ypos', 'posa', 'incl')
 
 
 def plan_disk_stage(
-        disk: Disk,
+        disk: NodalDisk,
         emission: Emission | None,
         driver: Driver,
         sky_origin: tuple[float, float] | None,
@@ -84,16 +84,16 @@ class DiskStage(ComponentStage):
     the mass of the galaxy can follow (see DiskDensity), and what the
     galaxy gives it (see given): the circular velocity of the mass at the
     radii of the parameters of its velocity trait 'mass' (see
-    Disk.circular_velocity_params), with its pressure support where its
-    traits ask for it (see Disk.pressure_supported_params), and at each
+    NodalDisk.circular_velocity_params), with its pressure support where its
+    traits ask for it (see NodalDisk.pressure_supported_params), and at each
     height, where they ask for it (the velocity height trait 'mass', see
-    Disk.rotation_factor_params); the dispersion of its vertical
+    NodalDisk.rotation_factor_params); the dispersion of its vertical
     equilibrium at its subnodes, if it has one (see Kinematics): in the
     circular velocity of the mass ('central'; without mass, that of its
     rotation), in the vertical force of the mass ('jeans'), or in the
     surface density of a mass component ('self_gravitating'); and the
     tables of its density waves (the traits 'spiral', see
-    Disk.wave_params), in its rotation, at its subnodes.
+    NodalDisk.wave_params), in its rotation, at its subnodes.
 
     Its profiles are sampled on the given driver and in float64, whatever
     the drivers and dtypes of the observations (pressure support and
@@ -103,7 +103,7 @@ class DiskStage(ComponentStage):
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     label : str
         The name of its component, or its position (e.g. 'component0'),
@@ -128,7 +128,7 @@ class DiskStage(ComponentStage):
 
     def __init__(
             self,
-            disk: Disk,
+            disk: NodalDisk,
             label: str,
             driver: Driver,
             sky_origin: tuple[float, float] | None,
@@ -393,7 +393,7 @@ def _central_dispersion(
 
 
 def _jeans_dispersion(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,

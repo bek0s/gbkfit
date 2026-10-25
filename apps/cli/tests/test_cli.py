@@ -34,7 +34,7 @@ def test_eval_writes_a_run(tmp_path):
     config = dict(
         driver=dict(type='host'),
         galaxies=[dict(components=[dict(
-            type='smdisk', loose=False, tilted=False, rnodes=list(range(8)),
+            type='disk', loose=False, tilted=False, rnodes=list(range(8)),
             density=dict(ptraits=dict(type='exponential')),
             emission=dict(type='band'))])],
         observations=[dict(

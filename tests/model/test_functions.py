@@ -22,7 +22,7 @@ KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 # in that gravity, with jeans pressure support, and its dispersion with
 # that of its central equilibrium
 GAS = dict(
-    type='smdisk', name='gas', loose=False, tilted=False,
+    type='disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
     density=dict(
         ptraits=dict(type='exponential'),
@@ -41,7 +41,7 @@ PARAMS = dict(
 
 # A disk without mass: its rotation of arctan traits
 DISK = dict(
-    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 21, 2)),
+    type='disk', loose=False, tilted=False, rnodes=list(range(0, 21, 2)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
         vptraits=dict(type='arctan', direction='tan'),

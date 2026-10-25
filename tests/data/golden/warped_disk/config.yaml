@@ -3,7 +3,7 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: smdisk
+  - type: disk
     loose: true
     tilted: true
     rnodes: [0, 4, 8, 12, 16]

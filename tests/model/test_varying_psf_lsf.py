@@ -15,7 +15,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(
-    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
+    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
         vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),

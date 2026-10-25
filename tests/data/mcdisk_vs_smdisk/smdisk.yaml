@@ -1,7 +1,7 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: smdisk
+  - type: disk
     loose: false
     tilted: false
     rnmin: 0

@@ -1,7 +1,7 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: smdisk
+  - type: disk
     name: disk
     loose: false
     tilted: false
@@ -15,7 +15,7 @@ galaxies:
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}
-  - type: smcone
+  - type: cone
     name: outflow
     rnodes: [0.5, 2, 4, 6]
     density:

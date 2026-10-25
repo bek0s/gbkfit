@@ -70,7 +70,7 @@ TEMPLATES = {
 # arctan rotation curve and a uniform velocity dispersion, seen in an
 # emission line. Its parameters are named after its component (disk_*).
 components:
-- type: smdisk
+- type: disk
   name: disk
   loose: false
   tilted: false

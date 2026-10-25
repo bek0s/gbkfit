@@ -14,7 +14,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 yaml = ruamel.yaml.YAML(typ='safe')
 
-GALAXY = dict(components=[dict(type='smdisk', name='disk')])
+GALAXY = dict(components=[dict(type='disk', name='disk')])
 OBSERVATION = dict(data=dict(data='data/ngc1313/hi.fits'))
 FITTER = dict(type='nautilus', n_live=2000)
 PRIOR = dict(type='gauss', expr='disk_incl', mean=60, std=10)

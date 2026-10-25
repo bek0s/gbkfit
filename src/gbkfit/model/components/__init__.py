@@ -11,5 +11,5 @@ from .points import *
 from .roles import *
 
 from . import cones, disks, traits
-from .cones import SMCone
-from .disks import MCDisk, SMDisk, LineOpacity
+from .cones import Cone
+from .disks import Clouds, Disk, LineOpacity

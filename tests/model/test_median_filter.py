@@ -21,7 +21,7 @@ def disk(emission):
         vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'))
     return galaxy_parser.load(dict(components=[dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type=emission))
         | (dict(kinematics=kinematics) if emission == 'lines' else {})]))

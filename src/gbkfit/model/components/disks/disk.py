@@ -1,69 +1,45 @@
+"""
+The disk component: a disk of rings with traits, smooth or made of
+clouds (see Clouds).
+"""
+
 from collections.abc import Sequence
 from typing import Any, Self
 
 import numpy as np
 
 from gbkfit.driver import Driver
-from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import gridutils
+from gbkfit.params import ParamDesc
+from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._needs import Need
 from .._nodal import make_bands, make_lines
 from .._units import DataUnit
-from ..base import Component, ComponentPlan, FieldsLayout
+from ..base import Component, ComponentPlan
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import Emission, Opacity
 from . import _detail, _disk, _stage
+from .clouds import Clouds
 from ..parts import Density, Kinematics
 
 
 __all__ = [
-    'SMDisk'
+    'Disk'
 ]
 
 
-class SmoothDisk(_disk.Disk):
-    """A disk evaluated smoothly: on the pixels or voxels of its grid."""
-
-    def plan(
-            self,
-            driver: Driver,
-            nlines: int,
-            dtype: np.dtype,
-            opacity_rows: Sequence[int] | None = None
-    ) -> _disk.DiskPlan:
-        return SmoothDiskPlan(self, driver, nlines, dtype, opacity_rows)
-
-
-class SmoothDiskPlan(_disk.DiskPlan):
-    """The evaluation of a SmoothDisk."""
-
-    def fields_layout(self) -> FieldsLayout:
-        # (a thin disk is a layer where its plane crosses each line of
-        # sight; a thick one fills the voxels with j, v, s and its line
-        # opacity)
-        if self._disk.traits('rht'):
-            nk = self._fields_lines()
-            return FieldsLayout(
-                layer=False, nslots=3 + nk, line_opacity=nk > 0)
-        return FieldsLayout(layer=True, nslots=4)
-
-    def _impl_evaluate(
-            self,
-            params: ParamValues,
-            grid_and_outputs: dict[str, Any],
-            out_extra: dict[str, Any] | None
-    ) -> None:
-        self._backend.smdisk_evaluate(self._native_disk, **grid_and_outputs)
-
-
-class SMDisk(Component):
+class Disk(Component):
     """
-    A disk evaluated smoothly: at every pixel of the grid (a thin disk,
-    whose light is where its plane crosses the line of sight of the pixel
-    on a grid with a depth axis), or at every voxel of a grid with a depth
-    axis (a thick disk, with density height traits).
+    A disk of rings, whose properties are the traits of its parts (see
+    traits). A smooth disk is evaluated at every pixel of the grid (a
+    thin disk, whose light is where its plane crosses the line of sight
+    of the pixel on a grid with a depth axis), or at every voxel of a grid
+    with a depth axis (a thick disk, with density height traits). A disk
+    of clouds is a sample of the smooth one: clouds drawn at random from
+    its density (see Clouds; thick disks only), on a grid with a depth
+    axis.
 
     Parameters
     ----------
@@ -104,6 +80,8 @@ class SMDisk(Component):
     interp : str, optional
         How its node-wise parameters are interpolated between its radii:
         'linear', 'akima' or 'pchip'.
+    clouds : Clouds, optional
+        Its clouds, if it is made of clouds; by default, it is smooth.
     geometry : Geometry, optional
         A geometry that it shares with other components (see Geometry).
     name : str, optional
@@ -114,12 +92,13 @@ class SMDisk(Component):
     ConfigError
         If the options are not valid (e.g. the rings), conflict with its
         geometry, or its parts and roles do not go together (e.g. lines
-        without kinematics, or opacity or zptraits on a thin disk).
+        without kinematics, or opacity, zptraits or clouds on a thin
+        disk).
     """
 
     @staticmethod
     def type() -> str:
-        return 'smdisk'
+        return 'disk'
 
     @classmethod
     def load(
@@ -127,11 +106,18 @@ class SMDisk(Component):
             info: dict[str, Any],
             catalogue: LineCatalogue | None = None
     ) -> Self:
+        info = dict(info)
+        if info.get('clouds') is not None:
+            info['clouds'] = parseutils.load_option(
+                Clouds.load, info, 'clouds')
         return cls(**_detail.load_disk_component(cls, info, catalogue))
 
     def dump(self) -> dict[str, Any]:
-        return _detail.dump_disk_component(
+        info = _detail.dump_disk_component(
             self, self._disk, self._density, self._kinematics)
+        if self._clouds is not None:
+            info['clouds'] = self._clouds.dump()
+        return info
 
     def __init__(
             self,
@@ -150,17 +136,23 @@ class SMDisk(Component):
             rnodes: Sequence[float] | None = None,
             rstep: float | None = None,
             interp: str = 'linear',
+            clouds: Clouds | None = None,
             geometry: Geometry | None = None,
             name: str | None = None
     ):
         super().__init__(name, geometry, emission, opacity)
+        if clouds is not None and not density.thick():
+            raise ConfigError(
+                "a disk of clouds needs density height traits (it is "
+                "thick)")
         self._density = density
         self._kinematics = kinematics
+        self._clouds = clouds
         self._disk = _detail.make_disk(
-            SmoothDisk, density, kinematics, emission, opacity, zptraits,
-            sptraits, geometry=geometry, loose=loose, tilted=tilted,
-            rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
-            rnodes=rnodes, rstep=rstep, interp=interp)
+            density, kinematics, emission, opacity, zptraits, sptraits,
+            geometry=geometry, loose=loose, tilted=tilted, rnmin=rnmin,
+            rnmax=rnmax, rnsep=rnsep, rnlen=rnlen, rnodes=rnodes,
+            rstep=rstep, interp=interp, clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
         self._bands = make_bands(self._disk.pdescs(), emission)
 
@@ -171,6 +163,10 @@ class SMDisk(Component):
     def kinematics(self) -> Kinematics | None:
         """Return its kinematics, if any."""
         return self._kinematics
+
+    def clouds(self) -> Clouds | None:
+        """Return its clouds, if it is made of clouds."""
+        return self._clouds
 
     def thick(self) -> bool:
         return self._density.thick()
@@ -193,7 +189,7 @@ class SMDisk(Component):
     def bounding_radius(self) -> float:
         return self._disk.bounding_radius()
 
-    def density_disk(self) -> _disk.Disk:
+    def density_disk(self) -> _disk.NodalDisk:
         return self._disk
 
     def plan_stage(

@@ -32,7 +32,7 @@ from gbkfit.utils.parseutils import ConfigError
 # A disk that extends beyond the image: a disk that ends inside the data
 # makes the chi-square jump as its edge crosses pixels
 GALAXY = dict(components=[dict(
-    type='smdisk', loose=False, tilted=False,
+    type='disk', loose=False, tilted=False,
     rnodes=list(np.arange(0.5, 30)),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))])

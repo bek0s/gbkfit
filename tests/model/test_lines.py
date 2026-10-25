@@ -25,7 +25,7 @@ def line_flux(driver, evaluate_cases, dispersion):
             type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
-            type='smdisk', loose=False, tilted=False,
+            type='disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             density=dict(ptraits=dict(type='exponential')),
             kinematics=dict(
@@ -75,7 +75,7 @@ def lines_config(lines, catalogue=None):
     """
     config = dict(
         galaxies=[dict(components=[dict(
-            type='smdisk', rnodes=[0, 2, 4],
+            type='disk', rnodes=[0, 2, 4],
             density=dict(ptraits=dict(type='exponential')),
             kinematics=dict(
                 vptraits=dict(type='arctan', direction='tan'),
@@ -213,7 +213,7 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
                 rval=[0, 0, centre], rest='1420.405751768 MHz'),
             line_of_sight=dict(type='flat'),
             galaxy=dict(components=[dict(
-                type='smdisk', loose=False, tilted=False,
+                type='disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),
                 density=dict(ptraits=dict(type='uniform')),
                 kinematics=dict(

@@ -28,7 +28,7 @@ PARAMS = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=3, vpt_rt=2,
     vpt_vt=150, dpt_a=30)
 GALAXY = dict(components=dict(
-    type='smdisk', rnodes=list(range(0, 11)),
+    type='disk', rnodes=list(range(0, 11)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
         vptraits=dict(type='arctan', direction='tan'),

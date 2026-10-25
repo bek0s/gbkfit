@@ -18,7 +18,7 @@ from ...mass.units import G
 from .._nodal import subring_radii
 from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
-from ._disk import Disk, DiskPlan
+from ._disk import NodalDisk, DiskPlan
 
 
 __all__ = [
@@ -161,7 +161,10 @@ def _azimuthal_mean_pieces(
 
 
 def _edges(
-        disk: Disk, params: ParamValues, kinds: Sequence[str], r: np.ndarray
+        disk: NodalDisk,
+        params: ParamValues,
+        kinds: Sequence[str],
+        r: np.ndarray
 ) -> np.ndarray | None:
     """
     Return the azimuths (degrees) at which the polar traits of the given
@@ -183,7 +186,7 @@ def _edges(
     return edges[:, :np.max(np.sum(~np.isnan(edges), axis=1), initial=0)]
 
 
-def _axisymmetric(disk: Disk, kinds: Sequence[str]) -> bool:
+def _axisymmetric(disk: NodalDisk, kinds: Sequence[str]) -> bool:
     """
     Check whether the polar traits of the given kinds of a disk all have
     the same value at every azimuth (see RPTrait.axisymmetric).
@@ -192,7 +195,7 @@ def _axisymmetric(disk: Disk, kinds: Sequence[str]) -> bool:
         trait.axisymmetric() for kind in kinds for trait in disk.traits(kind))
 
 
-def _isotropic(disk: Disk) -> bool:
+def _isotropic(disk: NodalDisk) -> bool:
     """
     Check whether the dispersion of a disk is the same along every
     direction: its dispersion polar traits and the dispersion of its
@@ -208,7 +211,7 @@ def _isotropic(disk: Disk) -> bool:
 
 
 def _dispersions(
-        disk: Disk,
+        disk: NodalDisk,
         values: np.ndarray,
         balanced: np.ndarray | float,
         directions: Sequence[str]
@@ -235,12 +238,12 @@ def _dispersions(
     return result
 
 
-def _with_given(disk: Disk, params: ParamValues) -> ParamValues:
+def _with_given(disk: NodalDisk, params: ParamValues) -> ParamValues:
     """
     Return the values of the parameters of a disk with those that its
-    model gives it (see Disk.circular_velocity_params) as NaN, if left
+    model gives it (see NodalDisk.circular_velocity_params) as NaN, if left
     out: its profiles do not depend on them; but the tables of its
-    density waves as 0 (see Disk.wave_params): its profiles take their
+    density waves as 0 (see NodalDisk.wave_params): its profiles take their
     azimuthal means, which are 0 whatever their tables.
     """
     nsubrnodes = len(disk.subrnodes())
@@ -255,7 +258,7 @@ def _with_given(disk: Disk, params: ParamValues) -> ParamValues:
 
 
 def _selected(
-        disk: Disk, plan: DiskPlan, params: ParamValues, r: np.ndarray,
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray,
         theta: np.ndarray
 ) -> np.ndarray:
     """
@@ -269,7 +272,7 @@ def _selected(
 
 
 def _at_midplane(
-        disk: Disk, plan: DiskPlan, params: ParamValues, kind: str,
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues, kind: str,
         r: np.ndarray
 ) -> np.ndarray:
     """
@@ -284,7 +287,7 @@ def _at_midplane(
 
 
 def _at_heights(
-        disk: Disk, plan: DiskPlan, params: ParamValues, kind: str,
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues, kind: str,
         r: np.ndarray, z: np.ndarray
 ) -> np.ndarray:
     """
@@ -300,7 +303,7 @@ def _at_heights(
 
 
 def _surface_densities(
-        disk: Disk, plan: DiskPlan, params: ParamValues, r: np.ndarray
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray
 ) -> np.ndarray:
     """
     Return the azimuthal mean of each density polar trait of a disk where
@@ -341,7 +344,7 @@ class _VerticalProfile:
     @classmethod
     def of(
             cls,
-            disk: Disk,
+            disk: NodalDisk,
             plan: DiskPlan,
             params: ParamValues,
             radii: np.ndarray
@@ -395,7 +398,7 @@ class _VerticalProfile:
 
 
 def rms_heights(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray
@@ -412,7 +415,7 @@ def rms_heights(
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
@@ -437,7 +440,7 @@ def rms_heights(
 
 
 def jeans_dispersions(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,
@@ -453,7 +456,7 @@ def jeans_dispersions(
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
@@ -482,7 +485,7 @@ def jeans_dispersions(
 
 
 def rotation(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray
@@ -495,7 +498,7 @@ def rotation(
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
@@ -526,7 +529,7 @@ def rotation(
 
 
 def density_waves(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues
 ) -> ParamValues:
@@ -540,7 +543,7 @@ def density_waves(
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
@@ -568,7 +571,7 @@ def density_waves(
 
 
 def _density_without_waves(
-        disk: Disk, plan: DiskPlan, params: ParamValues, r: np.ndarray
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray
 ) -> np.ndarray:
     """
     Return the azimuthal mean of the sum of the density polar traits of a
@@ -591,7 +594,7 @@ def _density_without_waves(
 
 
 def dispersion(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,
@@ -609,7 +612,7 @@ def dispersion(
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
@@ -657,7 +660,7 @@ def dispersion(
 
 
 def pressure_support(
-        disk: Disk,
+        disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
         radii: np.ndarray,
@@ -696,7 +699,7 @@ def pressure_support(
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
@@ -824,13 +827,13 @@ class DiskDensity:
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk.
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see Disk.pdescs): those
-        that the model gives it (see Disk.circular_velocity_params) can be
+        The values of the parameters of the disk (see NodalDisk.pdescs): those
+        that the model gives it (see NodalDisk.circular_velocity_params) can be
         left out, since its density does not depend on them.
     kpc_per_arcsec : float
         The length of an arcsec in the disk.
@@ -841,7 +844,7 @@ class DiskDensity:
 
     def __init__(
             self,
-            disk: Disk,
+            disk: NodalDisk,
             plan: DiskPlan,
             params: ParamValues,
             kpc_per_arcsec: float,

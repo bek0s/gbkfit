@@ -13,7 +13,7 @@ from modelutils import group_plan
 
 
 DISK = dict(
-    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)))
+    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)))
 
 # The density of a thick exponential disk
 THICK_DENSITY = dict(
@@ -106,13 +106,13 @@ def face_on_optical_depth(
     along the depth axis.
     """
     dust = dict(
-        DISK, type=disk_type, name='dust',
+        DISK, type='disk', name='dust',
         density=dict(
             ptraits=list(ptraits),
             htraits=[dict(type='sech2', zmax=8)] * len(ptraits)),
         opacity=DUST)
-    if disk_type == 'mcdisk':
-        dust['cflux'] = 1e-4
+    if disk_type == 'clouds':
+        dust['clouds'] = dict(cflux=1e-4)
     stars = dict(DISK, name='stars', density=THICK_DENSITY, emission=BAND)
     case = dict(
         driver=dict(type=driver.type()),
@@ -138,10 +138,10 @@ def test_dust_density_gives_the_face_on_optical_depth(
     radius = np.hypot(x, y)
     expected = 0.5 * np.exp(-radius / 4)
     inside = radius < 10
-    smdisk = face_on_optical_depth(driver, evaluate_cases, 'smdisk')
+    smdisk = face_on_optical_depth(driver, evaluate_cases, 'smooth')
     np.testing.assert_allclose(smdisk[inside], expected[inside], rtol=1e-2)
     # The clouds of the Monte Carlo disk add up to the same optical depth
-    mcdisk = face_on_optical_depth(driver, evaluate_cases, 'mcdisk')
+    mcdisk = face_on_optical_depth(driver, evaluate_cases, 'clouds')
     np.testing.assert_allclose(
         mcdisk[inside].sum(), smdisk[inside].sum(), rtol=1e-2)
 
@@ -157,7 +157,7 @@ def test_monte_carlo_opacity_mixtures(driver, evaluate_cases):
     smdisk, mcdisk = (
         face_on_optical_depth(
             driver, evaluate_cases, disk_type, ptraits, properties)
-        for disk_type in ('smdisk', 'mcdisk'))
+        for disk_type in ('smooth', 'clouds'))
     np.testing.assert_allclose(mcdisk.sum(), smdisk.sum(), rtol=1e-2)
 
 

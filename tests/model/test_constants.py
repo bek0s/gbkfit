@@ -24,7 +24,7 @@ def disk(vptraits, density=None, **options):
     if density is None:
         density = dict(ptraits=EXPONENTIAL)
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=RNODES,
+        type='disk', loose=False, tilted=False, rnodes=RNODES,
         density=density,
         kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines')) | options
@@ -62,7 +62,7 @@ def test_names_of_constants():
     galaxy0 = spectral_cube(
         [disk(vptraits, thick, name='gas'),
          disk(vptraits, thick, name='ring', rnodes=[0, 5, 10]),
-         dict(type='smdisk', name='dust', loose=False, tilted=False,
+         dict(type='disk', name='dust', loose=False, tilted=False,
               rnodes=[0, 1], density=thick, opacity=dict(type='dust'))],
         dict(type='grid')) | dict(name='g0')
     galaxy1 = spectral_cube(

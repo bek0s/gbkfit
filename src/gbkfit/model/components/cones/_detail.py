@@ -1,5 +1,5 @@
 """
-Helpers of the cone components (SMCone).
+Helpers of the cone component (Cone).
 """
 
 from collections.abc import Sequence
@@ -99,7 +99,7 @@ def load_cone_component(
 
 def dump_cone_component(
         component: Component,
-        cone: _cone.Cone,
+        cone: _cone.NodalCone,
         density: Density,
         kinematics: Kinematics | None
 ) -> dict[str, Any]:
@@ -119,7 +119,7 @@ def dump_cone_component(
 
 
 def make_cone(
-        cone_class: type[_cone.Cone],
+        cone_class: type[_cone.NodalCone],
         density: Density,
         kinematics: Kinematics | None,
         emission: Emission | None,
@@ -133,10 +133,10 @@ def make_cone(
         rnodes: Sequence[float] | None,
         rstep: float | None,
         interp: str
-) -> _cone.Cone:
+) -> _cone.NodalCone:
     """
     Return the cone of a cone component, of class cone_class, made of its
-    parts (see SMCone for the options). It takes the default height
+    parts (see Cone for the options). It takes the default height
     traits of its velocity and dispersion traits where it has none.
 
     Raises
@@ -183,7 +183,7 @@ def make_cone(
 
 
 def cone_plan(
-        cone: _cone.Cone,
+        cone: _cone.NodalCone,
         lines: Lines | None,
         bands: Bands | None,
         unit: astropy.units.UnitBase | None,

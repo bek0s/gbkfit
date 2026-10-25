@@ -26,11 +26,11 @@ def disk(type_, rnodes, vptraits, thick=False, **options):
     Carlo disk always is.
     """
     density = dict(ptraits=dict(type='exponential'))
-    if thick or type_ == 'mcdisk':
+    if thick or type_ == 'clouds':
         density['htraits'] = dict(type='sech2', zmax=8)
-    mcdisk_options = dict(cflux=1e-3) if type_ == 'mcdisk' else {}
+    mcdisk_options = dict(clouds=dict(cflux=1e-3)) if type_ == 'clouds' else {}
     return dict(
-        type=type_, loose=False, tilted=False, rnodes=rnodes,
+        type='disk', loose=False, tilted=False, rnodes=rnodes,
         density=density,
         kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines'), **mcdisk_options, **options)
@@ -54,7 +54,7 @@ def group(component):
     return observation_group([case(component)])
 
 
-@pytest.mark.parametrize('type_', ['smdisk', 'mcdisk'])
+@pytest.mark.parametrize('type_', ['smooth', 'clouds'])
 def test_values_at_the_subnodes_are_used_as_they_are(evaluate_cases, type_):
     # A curve given at the nodes gives the same model as its values
     # interpolated to the subnodes, given at the subnodes
@@ -65,20 +65,20 @@ def test_values_at_the_subnodes_are_used_as_they_are(evaluate_cases, type_):
         type_, rnodes, dict(type='nw_uniform', direction='tan', sampling='subrings'))
     subrnodes = group(at_subnodes).constants()['subrnodes']
     interpolated = interpolation.InterpolatorLinear(rnodes, curve)(subrnodes)
-    properties = PROPERTIES | (dict(ht_s=1) if type_ == 'mcdisk' else {})
+    properties = PROPERTIES | (dict(ht_s=1) if type_ == 'clouds' else {})
     expected, _ = evaluate_cases(
         [case(at_rnodes)], properties | dict(vpt_vt=curve))
     actual, _ = evaluate_cases(
         [case(at_subnodes)], properties | dict(vpt_vt=interpolated.tolist()))
     # The host adds the clouds of a thick disk in any order (float32)
-    rtol = 1e-4 if type_ == 'mcdisk' else 0
+    rtol = 1e-4 if type_ == 'clouds' else 0
     np.testing.assert_allclose(
         actual[0]['spectra']['d'], expected[0]['spectra']['d'], rtol=rtol)
 
 
 def test_node_wise_parameters_have_a_value_for_each_subnode():
     component = disk(
-        'smdisk', [0, 20], dict(type='nw_harmonic', direction='tan', order=1,
+        'smooth', [0, 20], dict(type='nw_harmonic', direction='tan', order=1,
                                 sampling='subrings'),
         rstep=0.5)
     obs_group = group(component)
@@ -93,10 +93,10 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     # Node-wise values given at the nodes are interpolated to the subnodes
     # with the interpolation of the disk, and linearly between them, up to
     # its last node (the disk is closed); off the disk, the traits are NaN
-    from gbkfit.model import BandEmission, Density, SMDisk
+    from gbkfit.model import BandEmission, Density, Disk
     from gbkfit.model.components import traits
     rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
-    component = SMDisk(
+    component = Disk(
         Density(traits.RPTraitNWUniform()), emission=BandEmission(),
         loose=False, tilted=False, rnodes=rnodes, rstep=1.0,
         interp='akima')
@@ -117,7 +117,7 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
 
 def test_flaring_at_the_subnodes():
     galaxy = galaxy_parser.load(dict(components=[dict(
-        type='smdisk', loose=False, tilted=False, rnodes=[0, 20],
+        type='disk', loose=False, tilted=False, rnodes=[0, 20],
         rstep=0.5,
         density=dict(
             ptraits=dict(type='exponential'),
@@ -149,9 +149,9 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
     # up to its linear interpolation between the subnodes
     rnodes = [0, 20]
     analytical = disk(
-        'smdisk', rnodes, dict(type='arctan', direction='tan'), rstep=0.1)
+        'smooth', rnodes, dict(type='arctan', direction='tan'), rstep=0.1)
     at_subnodes = disk(
-        'smdisk', rnodes, dict(type='nw_uniform', direction='tan', sampling='subrings'),
+        'smooth', rnodes, dict(type='nw_uniform', direction='tan', sampling='subrings'),
         rstep=0.1)
     _, extra = evaluate_cases(
         [case(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
@@ -162,7 +162,7 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
 
 def test_sampling_is_dumped():
     galaxy = galaxy_parser.load(dict(components=[disk(
-        'smdisk', [0, 20],
+        'smooth', [0, 20],
         dict(type='nw_uniform', direction='tan', sampling='subrings'))]))
     info = galaxy_parser.dump(galaxy)
     assert info['components'][0]['kinematics']['vptraits'] == [dict(
@@ -171,7 +171,7 @@ def test_sampling_is_dumped():
     assert galaxy_parser.dump(galaxy) == info
     # The default is not dumped
     galaxy = galaxy_parser.load(dict(components=[disk(
-        'smdisk', [0, 20], dict(type='nw_uniform', direction='tan'))]))
+        'smooth', [0, 20], dict(type='nw_uniform', direction='tan'))]))
     info = galaxy_parser.dump(galaxy)
     assert info['components'][0]['kinematics']['vptraits'] == [
         dict(type='nw_uniform', direction='tan')]
@@ -186,7 +186,7 @@ def test_sampling_is_dumped():
      "sampling is 'subrings', but rnodes is False: the trait has no "
      "node-wise parameters")])
 def test_invalid_sampling_is_rejected(part, traits, message):
-    component = disk('smdisk', [0, 20], dict(type='arctan', direction='tan'), thick=True)
+    component = disk('smooth', [0, 20], dict(type='arctan', direction='tan'), thick=True)
     component[part] |= traits
     with pytest.raises(Exception, match=message):
         galaxy_parser.load(dict(components=[component]))

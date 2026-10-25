@@ -29,7 +29,7 @@ TRAIT_KINDS = (
 
 # The values that the galaxy of a disk in vertical equilibrium gives its
 # plans with its parameters: the dispersion of the equilibrium at its
-# subnodes (km/s; see Disk.equilibrium)
+# subnodes (km/s; see NodalDisk.equilibrium)
 EQUILIBRIUM_DISPERSION = 'equilibrium_dispersion'
 
 
@@ -38,7 +38,7 @@ def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
     return {key: ParamVectorDesc(nnodes) if nw else ParamScalarDesc()}
 
 
-class Disk(abc.ABC):
+class NodalDisk(abc.ABC):
 
     def __init__(
             self,
@@ -157,13 +157,6 @@ class Disk(abc.ABC):
         them.
         """
         return self._traits.values(kind, params)
-
-    def options(self) -> dict[str, Any]:
-        """
-        Return the options of this type of disk, besides those of all
-        disks.
-        """
-        return {}
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
@@ -304,7 +297,7 @@ class DiskPlan(NodalPlan):
 
     def __init__(
             self,
-            disk: Disk,
+            disk: NodalDisk,
             driver: Driver,
             nlines: int,
             dtype: np.dtype,
@@ -406,7 +399,7 @@ class DiskPlan(NodalPlan):
         Parameters
         ----------
         params : ParamValues
-            The parameters of the disk (see Disk.pdescs).
+            The parameters of the disk (see NodalDisk.pdescs).
         kind : str
             The kind of the polar traits: 'rpt', 'vpt', 'dpt', 'zpt' or
             'spt' (see TRAIT_KINDS).
@@ -452,7 +445,7 @@ class DiskPlan(NodalPlan):
         Parameters
         ----------
         params : ParamValues
-            The parameters of the disk (see Disk.pdescs).
+            The parameters of the disk (see NodalDisk.pdescs).
         kind : str
             The kind of the height traits: 'rht', 'vht' or 'dht' (see
             TRAIT_KINDS).

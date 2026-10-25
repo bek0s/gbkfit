@@ -16,7 +16,7 @@ from .disks._disk import TRAIT_KINDS
 from .traits import RPTraitImage, map_cell_centres
 
 if TYPE_CHECKING:
-    from .disks._disk import Disk
+    from .disks._disk import NodalDisk
 
 
 __all__ = [
@@ -59,7 +59,7 @@ class ImageMaps:
 
     Parameters
     ----------
-    disk : Disk
+    disk : NodalDisk
         The disk, with image traits.
     label : str
         The name of its component, or its position, for the messages.
@@ -75,7 +75,7 @@ class ImageMaps:
 
     def __init__(
             self,
-            disk: 'Disk',
+            disk: 'NodalDisk',
             label: str,
             sky_origin: tuple[float, float] | None
     ):
@@ -134,7 +134,7 @@ class ImageMaps:
 
 
 def _geometry(
-        disk: 'Disk', params: ParamValues, radii: np.ndarray
+        disk: 'NodalDisk', params: ParamValues, radii: np.ndarray
 ) -> dict[str, np.ndarray | float]:
     """
     Return the geometry of a disk (see _GEOMETRY) at the given radii (in

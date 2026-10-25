@@ -3,7 +3,7 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: smdisk
+  - type: disk
     name: gas
     loose: false
     tilted: false

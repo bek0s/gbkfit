@@ -1,5 +1,5 @@
 """
-Tests for the cones (SMCone): their light, the velocity of each voxel,
+Tests for the cones (Cone): their light, the velocity of each voxel,
 their walls and sides, and the dust that dims them.
 """
 
@@ -18,7 +18,7 @@ LINES = dict(type='lines')
 # at 30 degrees from the axis) touch neither its axis nor the plane of its
 # apex
 HOLLOW = dict(
-    type='smcone', rnodes=[4, 10],
+    type='cone', rnodes=[4, 10],
     density=dict(ptraits=UNIFORM, htraits=dict(type='gauss', zmax=1.5)))
 HOLLOW_PROPERTIES = dict(wall=30, pt_a=1, ht_s=0.5)
 
@@ -133,7 +133,7 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     # between them as the cone interpolates it.
     rnodes = [4, 6, 8, 10]
     cone = dict(
-        type='smcone', rnodes=rnodes, emission=BAND,
+        type='cone', rnodes=rnodes, emission=BAND,
         density=dict(ptraits=UNIFORM, htraits=dict(
             type='uniform', zmax=2, rnodes=True)))
     _, extra = evaluate_cases([image(driver, cone)], GEOMETRY | dict(
@@ -158,7 +158,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
     # disk the cone flows out of): its far side (positive) is behind all
     # the dust of each line of sight, its near side in front of it
     dust = dict(
-        type='smdisk', name='dust', loose=False, tilted=False,
+        type='disk', name='dust', loose=False, tilted=False,
         rnodes=list(range(0, 13)), opacity=dict(type='dust'),
         density=dict(
             ptraits=dict(type='exponential'),

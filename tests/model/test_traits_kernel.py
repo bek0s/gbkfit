@@ -109,7 +109,7 @@ def thick_disk(name, traits_, **roles):
     (by kind) and roles.
     """
     disk = dict(
-        type='smdisk', name=name, loose=False, tilted=False, rnodes=RNODES,
+        type='disk', name=name, loose=False, tilted=False, rnodes=RNODES,
         **roles)
     for kind, trait in traits_.items():
         part, option, _ = KINDS[kind]

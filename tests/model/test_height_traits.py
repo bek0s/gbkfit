@@ -17,7 +17,7 @@ from modelutils import group_plan
 
 
 DISK = dict(
-    type='smdisk', loose=False, tilted=False,
+    type='disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(
         ptraits=dict(type='exponential'),
@@ -279,7 +279,7 @@ def mean_depth(bdata):
     return (z * light).sum() / light.sum()
 
 
-@pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
+@pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
 def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     # A face-on disk whose midplane a vertical distortion lifts by 12:
     # beyond the zmax of its density (8, above the midplane) but within
@@ -287,9 +287,9 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     # holds it: each column keeps its light (exactly for the clouds; the
     # smooth disk samples its profile at the centres of the voxels)
     component = DISK | dict(
-        type=disk_type, zptraits=dict(type='nw_uniform', zmax=20))
-    if disk_type == 'mcdisk':
-        component |= dict(cflux=1e-3)
+        type='disk', zptraits=dict(type='nw_uniform', zmax=20))
+    if disk_type == 'clouds':
+        component |= dict(clouds=dict(cflux=1e-3))
     plan = observe(driver, component)
     properties = PROPERTIES | dict(incl=0)
     flat = flux(plan, properties | dict(zpt_a=[0] * 14))

@@ -7,7 +7,7 @@ galaxies:
     tilted: true
     rnodes: [0, 1.5, 3, 5, 7, 9.5, 12]
   components:
-  - type: smdisk
+  - type: disk
     name: cold
     geometry: disk
     density:
@@ -16,7 +16,7 @@ galaxies:
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}
-  - type: smdisk
+  - type: disk
     name: warm
     geometry: disk
     density:

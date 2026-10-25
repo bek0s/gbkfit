@@ -17,7 +17,7 @@ def image_case(driver, observable, **component):
     with the given options (an exponential density by default).
     """
     disk = dict(
-        type='smdisk', density=dict(ptraits=EXPONENTIAL), emission=BAND)
+        type='disk', density=dict(ptraits=EXPONENTIAL), emission=BAND)
     return dict(
         driver=dict(type=driver.type()),
         observable=observable,
@@ -33,7 +33,7 @@ def spectral_cube_case(driver, **component):
             type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
-            type='smdisk',
+            type='disk',
             rnodes=list(range(0, 12)),
             density=dict(ptraits=EXPONENTIAL),
             kinematics=dict(
@@ -64,14 +64,14 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
     depth axis rotated by rota, and with the given PSF.
     """
     component = dict(
-        type=disk, loose=False, tilted=False,
+        type='disk', loose=False, tilted=False,
         rnodes=list(range(0, 16, 2)),
         density=dict(ptraits=EXPONENTIAL, htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=LINES)
-    if disk == 'mcdisk':
-        component['cflux'] = 2e-5
+    if disk == 'clouds':
+        component['clouds'] = dict(cflux=2e-5)
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
@@ -81,7 +81,7 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
         galaxy=dict(components=[component]))
 
 
-@pytest.mark.parametrize('disk', ['smdisk', 'mcdisk'])
+@pytest.mark.parametrize('disk', ['smooth', 'clouds'])
 def test_grid_rotation(driver, evaluate_cases, disk):
     # rota rotates the grid on the sky, counterclockwise like a position
     # angle, so a grid rotated by rota sees a centred disk with position

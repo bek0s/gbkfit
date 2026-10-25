@@ -1,1 +1,1 @@
-from .smcone import *
+from .cone import *

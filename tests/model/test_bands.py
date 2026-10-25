@@ -13,7 +13,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 DISK = dict(
-    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)))
+    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)))
 
 STARS = dict(
     DISK, name='stars', density=dict(ptraits=dict(type='exponential')),

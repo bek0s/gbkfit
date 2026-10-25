@@ -11,7 +11,7 @@ def test_mixture_blobs_are_tables_of_their_galaxy():
     # A density and a dispersion mixture: two tables, of the columns of
     # their blobs as the galaxy names them, of the empty blob
     disk = dict(
-        type='smdisk', loose=False, tilted=False, rnodes=[0, 5, 10],
+        type='disk', loose=False, tilted=False, rnodes=[0, 5, 10],
         density=dict(ptraits=[
             dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)]),
         kinematics=dict(

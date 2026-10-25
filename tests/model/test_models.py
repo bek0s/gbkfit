@@ -30,11 +30,13 @@ DUST = dict(type='dust')
 
 
 def smdisk(**options):
-    return dict(type='smdisk', rnodes=RNODES, **options)
+    return dict(type='disk', rnodes=RNODES, **options)
 
 
-def mcdisk(**options):
-    return dict(type='mcdisk', rnodes=RNODES, cflux=1e-3, **options)
+def mcdisk(seed=0, **options):
+    return dict(
+        type='disk', rnodes=RNODES, clouds=dict(cflux=1e-3, seed=seed),
+        **options)
 
 
 # A galaxy seen by each kind of observation, and its parameter properties

@@ -21,7 +21,7 @@ def line_disk(vptraits, **options):
     traits and options.
     """
     return dict(components=[dict(
-        type='smdisk', loose=False, tilted=False,
+        type='disk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
@@ -68,7 +68,7 @@ plan = group_plan([dict(
     observable=dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
     line_of_sight=dict(type='grid'),
     galaxy=dict(components=[dict(
-        type='smdisk', loose=False, tilted=False,
+        type='disk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
         density=dict(
             ptraits=dict(type='exponential'),
@@ -109,7 +109,7 @@ FLAT_OBSERVATIONS = dict(
              pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=100, dpt_a=10)),
     image=(
         dict(components=[dict(
-            type='smdisk', loose=False, tilted=False,
+            type='disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             density=dict(ptraits=dict(type='exponential')),
             emission=dict(type='band'))]),
@@ -154,7 +154,7 @@ def test_incompatible_observations_are_rejected_before_evaluation(
     # (spectral cubes) those that emit lines; the plan of the group of an
     # observation that sees none is rejected before any evaluation
     component = dict(
-        type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
+        type='disk', loose=False, tilted=False, rnodes=[0, 1, 2],
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type=emission))
     if emission == 'lines':
@@ -205,7 +205,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
             observable=dict(type='pixel_brightness', size=[64, 64]),
             line_of_sight=dict(type='grid', depth=depth),
             galaxy=dict(components=[dict(
-                type='smdisk', loose=False, tilted=False,
+                type='disk', loose=False, tilted=False,
                 rnodes=list(range(0, 30)),
                 density=dict(
                     ptraits=dict(type='exponential'),

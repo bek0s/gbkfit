@@ -30,19 +30,20 @@ DUST = dict(type='dust')
 
 # Each kind of disk component, with its required options
 COMPONENTS = dict(
-    band_smdisk_thin=dict(type='smdisk', density=THIN, emission=BAND),
-    band_smdisk_thick=dict(type='smdisk', density=THICK, emission=BAND),
+    band_smdisk_thin=dict(type='disk', density=THIN, emission=BAND),
+    band_smdisk_thick=dict(type='disk', density=THICK, emission=BAND),
     band_mcdisk=dict(
-        type='mcdisk', cflux=1e-3, density=THICK, emission=BAND),
+        type='disk', clouds=dict(cflux=1e-3), density=THICK, emission=BAND),
     lines_smdisk_thin=dict(
-        type='smdisk', density=THIN, kinematics=KINEMATICS, emission=LINES),
+        type='disk', density=THIN, kinematics=KINEMATICS, emission=LINES),
     lines_smdisk_thick=dict(
-        type='smdisk', density=THICK, kinematics=KINEMATICS, emission=LINES),
+        type='disk', density=THICK, kinematics=KINEMATICS, emission=LINES),
     lines_mcdisk=dict(
-        type='mcdisk', cflux=1e-3, density=THICK, kinematics=KINEMATICS,
-        emission=LINES),
-    dust_smdisk=dict(type='smdisk', density=THICK, opacity=DUST),
-    dust_mcdisk=dict(type='mcdisk', cflux=1e-3, density=THICK, opacity=DUST))
+        type='disk', clouds=dict(cflux=1e-3), density=THICK,
+        kinematics=KINEMATICS, emission=LINES),
+    dust_smdisk=dict(type='disk', density=THICK, opacity=DUST),
+    dust_mcdisk=dict(
+        type='disk', clouds=dict(cflux=1e-3), density=THICK, opacity=DUST))
 
 # The required trait options of each part of a disk
 PART_TRAITS = dict(
@@ -159,10 +160,10 @@ def test_a_smooth_disk_without_height_traits_is_thin(name, htraits):
 
 
 @pytest.mark.parametrize('name, message', [
-    ('band_mcdisk', "a Monte Carlo disk needs density height traits"),
-    ('lines_mcdisk', "a Monte Carlo disk needs density height traits"),
+    ('band_mcdisk', "a disk of clouds needs density height traits"),
+    ('lines_mcdisk', "a disk of clouds needs density height traits"),
     ('dust_smdisk', "a disk with opacity needs density height traits"),
-    ('dust_mcdisk', "a Monte Carlo disk needs density height traits")])
+    ('dust_mcdisk', "a disk of clouds needs density height traits")])
 def test_thick_components_need_height_traits(name, message):
     assert message in component_error(name, density=THIN)
 

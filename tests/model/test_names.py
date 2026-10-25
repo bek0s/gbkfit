@@ -16,13 +16,13 @@ THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
 
 def disk(density=THICK, **options):
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
+        type='disk', loose=False, tilted=False, rnodes=[0, 1, 2],
         density=density, emission=dict(type='band'), **options)
 
 
 def dust(**options):
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
+        type='disk', loose=False, tilted=False, rnodes=[0, 1, 2],
         density=THICK, opacity=dict(type='dust'), **options)
 
 

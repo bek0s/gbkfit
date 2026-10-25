@@ -97,3 +97,17 @@ def test_a_project_is_migrated_across_its_pieces(tmp_path):
     assert study.piece('params', 'flux') == dict(kmos_flux_scale=1)
     assert yaml.load(tmp_path / 'study' / project.MARKER)['version'] == \
         project.FORMAT_VERSION
+
+
+def test_the_old_disk_types_are_refused_and_migrated():
+    components = [
+        dict(type='smdisk', name='a'),
+        dict(type='mcdisk', name='b', cflux=1e-3, seed=2),
+        dict(type='smcone', name='c')]
+    config = dict(galaxies=[dict(components=components)])
+    with pytest.raises(ConfigError, match="type 'smdisk' is now type 'disk'"):
+        _detail.prepare_config(config, optional=('galaxies',))
+    migration.migrate(config)
+    assert [c['type'] for c in components] == ['disk', 'disk', 'cone']
+    assert components[1] == dict(
+        type='disk', name='b', clouds=dict(cflux=1e-3, seed=2))

@@ -16,7 +16,7 @@ from modelutils import group_plan, observation_group
 H, RMAX, VT, RT, DISP = 3.0, 30.0, 200.0, 2.0, 20.0
 GEOMETRY = dict(xpos=0.4, ypos=-0.3, posa=40, incl=60, vsys=0)
 DISK = dict(components=[dict(
-    type='smdisk', loose=False, tilted=False,
+    type='disk', loose=False, tilted=False,
     rnodes=list(range(0, int(RMAX) + 1)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(

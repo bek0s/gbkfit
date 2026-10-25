@@ -29,7 +29,7 @@ def disk_config(vptraits, ptraits=None):
     traits (by default, an exponential).
     """
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=RNODES,
+        type='disk', loose=False, tilted=False, rnodes=RNODES,
         density=dict(ptraits=ptraits or dict(type='exponential')),
         kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
@@ -109,7 +109,7 @@ def test_cones_take_no_flows_of_the_plane_of_a_disk():
     for trait in (dict(type='bar'), dict(type='wedge', direction='tan')):
         with pytest.raises(ConfigError, match="a cone does not take"):
             component_parser.load(dict(
-                type='smcone', rnodes=RNODES,
+                type='cone', rnodes=RNODES,
                 density=dict(
                     ptraits=dict(type='uniform'),
                     htraits=dict(type='gauss', zmax=1.5)),
@@ -250,7 +250,7 @@ def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
     # spiral), in the light of a disk without kinematics: k = -2 / (R
     # tan(20 degrees)), and f its integral by the trapezoid rule
     component = dict(
-        type='smdisk', loose=False, tilted=False, rnodes=RNODES,
+        type='disk', loose=False, tilted=False, rnodes=RNODES,
         density=dict(ptraits=[
             dict(type='exponential'),
             dict(type='spiral', order=2, wavenumber='given')]),

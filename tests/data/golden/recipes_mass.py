@@ -28,7 +28,7 @@ def _disk(
         rings: dict[str, Any] = _RINGS, **options: Any
 ) -> dict[str, Any]:
     """A thin exponential disk that emits lines, of the given traits."""
-    return dict(type='smdisk', name=name) | rings | dict(
+    return dict(type='disk', name=name) | rings | dict(
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             vptraits=vptraits, dptraits=dptraits or dict(type='uniform')),
@@ -299,7 +299,7 @@ def _c6_gas() -> dict[str, Any]:
 
 
 _C6_DUST = dict(
-    type='smdisk', name='dust', loose=False, tilted=False,
+    type='disk', name='dust', loose=False, tilted=False,
     rnodes=list(range(0, 11)),
     density=dict(
         ptraits=dict(type='exponential'),

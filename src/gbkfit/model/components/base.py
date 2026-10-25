@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from ._needs import Need
     from ._stage import GalaxyMass
     from ._units import DataUnit
-    from .disks._disk import Disk, DiskPlan
+    from .disks._disk import NodalDisk, DiskPlan
 
 
 __all__ = [
@@ -210,7 +210,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return 0.0
 
-    def density_disk(self) -> 'Disk | None':
+    def density_disk(self) -> 'NodalDisk | None':
         """
         Return its disk, if it is made of one: the mass of its galaxy can
         follow the density of the disk (see mass.SurfaceComponent and

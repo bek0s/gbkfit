@@ -13,7 +13,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 KINEMATICS = dict(
     vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform'))
 THIN_DISK = dict(
-    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 12)),
+    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     density=dict(ptraits=dict(type='exponential')), kinematics=KINEMATICS,
     emission=dict(type='lines'))
 THICK_DISK = THIN_DISK | dict(density=dict(

@@ -1,3 +1,3 @@
-from .mcdisk import *
+from .clouds import Clouds
+from .disk import Disk
 from .opacity import *
-from .smdisk import *

@@ -33,7 +33,7 @@ def disk(unit=None, lines=('hi21',), thick=False):
     if thick:
         density.update(htraits=dict(type='sech2', zmax=30))
     return dict(
-        type='smdisk', rnodes=list(range(0, 121, 20)), density=density,
+        type='disk', rnodes=list(range(0, 121, 20)), density=density,
         kinematics=dict(
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=emission)
@@ -133,7 +133,7 @@ def test_light_in_bands_with_a_unit_needs_the_redshift():
     # Images see it dimmed by the redshift: that of the galaxy, which it
     # must give when the component has no systemic velocity
     stars = dict(
-        type='smdisk', rnodes=list(range(0, 121, 20)),
+        type='disk', rnodes=list(range(0, 121, 20)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band', unit='Jy/arcsec2'))
     with pytest.raises(ConfigError, match="give the galaxy its redshift"):

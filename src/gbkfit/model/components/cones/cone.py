@@ -1,3 +1,7 @@
+"""
+The cone component: shells around an apex, with traits.
+"""
+
 from collections.abc import Sequence
 from typing import Any, Self
 
@@ -17,13 +21,13 @@ from . import _cone, _detail
 
 
 __all__ = [
-    'SMCone'
+    'Cone'
 ]
 
 
-class SMCone(Component):
+class Cone(Component):
     """
-    A cone evaluated smoothly: at every voxel of a grid with a depth axis.
+    A cone, evaluated at every voxel of a grid with a depth axis.
     Its walls are around the mid-surface at the angle wall (a parameter)
     from its axis, on one side of its apex or both; its traits are
     functions of the distance from the apex and the azimuth around the
@@ -74,7 +78,7 @@ class SMCone(Component):
 
     @staticmethod
     def type() -> str:
-        return 'smcone'
+        return 'cone'
 
     @classmethod
     def load(

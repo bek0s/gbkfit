@@ -38,7 +38,13 @@ __all__ = [
 # The sections whose items are pieces of projects
 _SECTIONS = ('galaxies', 'observations', 'params', 'fitter')
 
+# (round trip, keeping comments; flow collections are rewritten within
+# the width, and null stays null)
 _yaml = ruamel.yaml.YAML()
+_yaml.representer.add_representer(
+    type(None),
+    lambda representer, _: representer.represent_scalar(
+        'tag:yaml.org,2002:null', 'null'))
 
 
 class Change(NamedTuple):
@@ -207,9 +213,57 @@ class _FluxScales(Rule):
         return changes
 
 
+class _DiskTypes(Rule):
+    """
+    One disk replaced the smooth disk and the disk of clouds, and the cone
+    the smooth cone (2026-10-25): the component types 'smdisk' and
+    'smcone' are 'disk' and 'cone', and 'mcdisk' is 'disk' with its cflux
+    and seed in its option clouds.
+    """
+
+    _NEW = dict(smdisk='disk', mcdisk='disk', smcone='cone')
+
+    def find(
+            self, section: str, item: Mapping[str, Any]
+    ) -> ConfigError | None:
+        if section != 'galaxies':
+            return None
+        for path, component in _components(item):
+            if (old := component.get('type')) not in self._NEW:
+                continue
+            new = f"type '{self._NEW[old]}'"
+            if old == 'mcdisk':
+                clouds = dict(cflux=component.get('cflux'))
+                if 'seed' in component:
+                    clouds['seed'] = component['seed']
+                new += f" with clouds: {clouds}"
+            return ConfigError(
+                f"type '{old}' is now {new}", path + ['type'])
+        return None
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for galaxy_path, galaxy in _items(config, 'galaxies'):
+            for path, component in _components(galaxy):
+                if (old := component.get('type')) not in self._NEW:
+                    continue
+                component['type'] = self._NEW[old]
+                message = f"type {old} -> {self._NEW[old]}"
+                if old == 'mcdisk' and 'cflux' in component:
+                    clouds = dict(cflux=component['cflux'])
+                    if 'seed' in component:
+                        clouds['seed'] = component.pop('seed')
+                    _rename(component, 'cflux', 'clouds')
+                    component['clouds'] = clouds
+                    message += ", cflux and seed -> clouds"
+                changes.append(Change(galaxy_path + path, message))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
+    _DiskTypes(),
 )
 
 
@@ -358,6 +412,22 @@ def _items(
         for i, item in enumerate(value):
             if isinstance(item, MutableMapping):
                 yield [section, i], item
+
+
+def _components(
+        galaxy: Mapping[str, Any]
+) -> Iterator[tuple[list[str | int], MutableMapping[str, Any]]]:
+    """
+    Yield the components of a galaxy that are dictionaries, with their
+    paths in it.
+    """
+    components = galaxy.get('components')
+    if isinstance(components, MutableMapping):
+        yield ['components'], components
+    elif isinstance(components, list):
+        for i, component in enumerate(components):
+            if isinstance(component, MutableMapping):
+                yield ['components', i], component
 
 
 def _rename(mapping: MutableMapping[str, Any], old: str, new: str) -> None:

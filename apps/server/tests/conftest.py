@@ -13,7 +13,7 @@ yaml = ruamel.yaml.YAML(typ='safe')
 
 PIECES = {
     'galaxies/disk.yaml': dict(components=[dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(8)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(8)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))]),
     'observations/image.yaml': dict(

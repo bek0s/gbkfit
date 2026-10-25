@@ -1,8 +1,8 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: mcdisk
-    cflux: 0.0001
+  - type: disk
+    clouds: {cflux: 0.0001}
     loose: false
     tilted: false
     rnmin: 0

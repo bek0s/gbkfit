@@ -12,7 +12,7 @@ from gbkfit.utils import gridutils
 
 
 DISK = dict(
-    type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 8)),
+    type='disk', loose=False, tilted=False, rnodes=list(range(0, 8)),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))
 LINE_DISK = DISK | dict(

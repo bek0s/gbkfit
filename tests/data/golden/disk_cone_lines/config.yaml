@@ -3,7 +3,7 @@
 driver: {type: host}
 galaxies:
 - components:
-  - type: smdisk
+  - type: disk
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]
@@ -18,7 +18,7 @@ galaxies:
       - {name: ha, rest: 6562.8 Angstrom}
       - {name: nii, rest: 6583.45 Angstrom}
     name: disk
-  - type: smcone
+  - type: cone
     name: cone
     rnodes: [0.5, 2, 4]
     density:

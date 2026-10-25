@@ -4,7 +4,7 @@ driver: {type: host}
 galaxies:
 - redshift: 0.25
   components:
-  - type: smdisk
+  - type: disk
     name: stars
     loose: false
     tilted: false
@@ -16,7 +16,7 @@ galaxies:
       type: band
       bands: [sdss_r]
       unit: MJy/sr
-  - type: smdisk
+  - type: disk
     name: dust
     loose: false
     tilted: false

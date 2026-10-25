@@ -56,7 +56,7 @@ DPT_DIRECTION_VER = 3
 
 # Where the values of the node-wise parameters of a trait are given: at
 # the radial nodes of its disk, which interpolates them to the subnodes,
-# or at the subnodes themselves (see _disk.Disk)
+# or at the subnodes themselves (see _disk.NodalDisk)
 SAMPLINGS = ('rnodes', 'subrings')
 SAMPLING_DEFAULT = 'rnodes'
 

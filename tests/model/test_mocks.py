@@ -15,7 +15,7 @@ from modelutils import group_plan
 
 def disk(emission):
     return dict(
-        type='smdisk', loose=False, tilted=False, rnodes=list(range(0, 10)),
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 10)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             vptraits=dict(type='arctan', direction='tan'),
