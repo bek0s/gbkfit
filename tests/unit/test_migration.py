@@ -11,8 +11,7 @@ import sys
 import pytest
 import ruamel.yaml
 
-from gbkfit import migration, project
-from gbkfit.tasks import _detail
+from gbkfit import migration, project, setup
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -35,7 +34,7 @@ OBSERVATION = dict(
 def test_old_forms_are_refused_with_their_new_form(options, path, message):
     config = dict(observations=[OBSERVATION | options])
     with pytest.raises(ConfigError, match=message) as error:
-        _detail.prepare_config(config, optional=('observations',))
+        setup._prepare_config(config, (), ('observations',))
     assert error.value.path == ['observations', 0, path]
     assert "gbkfit-cli migrate rewrites it" in error.value.message
 
@@ -109,7 +108,7 @@ def test_the_old_disk_types_are_refused_and_migrated():
         dict(type='smcone', name='c')]
     config = dict(galaxies=[dict(components=components)])
     with pytest.raises(ConfigError, match="type 'smdisk' is now type 'disk'"):
-        _detail.prepare_config(config, optional=('galaxies',))
+        setup._prepare_config(config, (), ('galaxies',))
     migration.migrate(config)
     assert [c['type'] for c in components] == ['disk', 'disk', 'cone']
     assert components[1] == dict(

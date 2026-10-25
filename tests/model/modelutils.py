@@ -72,16 +72,17 @@ def group_plan(cases):
 def config_group(config):
     """
     An ObservationGroup of the galaxies and observations of a config,
-    loaded as the tasks load them.
+    loaded as gbkfit.load loads them.
     """
-    from gbkfit.tasks import _detail
-    return _detail.load_observation_group(config)
+    from gbkfit import setup
+    return setup._load_observation_group(config)
 
 
 def config_group_plan(config):
     """
     A plan of the ObservationGroup of a config (see config_group) on its
-    drivers, as the tasks load it.
+    drivers, as gbkfit.load loads it.
     """
-    from gbkfit.tasks import _detail
-    return _detail.load_group_plan(config, config_group(config))
+    from gbkfit import setup
+    return setup._load_group_plan(
+        config, config_group(config), setup._load_drivers(config))

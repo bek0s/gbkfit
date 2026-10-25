@@ -288,14 +288,13 @@ def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):
 def test_the_outputs_have_the_solved_scales(driver):
     # The model in the outputs is that which the residuals compare (times
     # the solved scales), and the scales are an image
-    from gbkfit.tasks.eval import Evaluation
+    from gbkfit import Setup
     spectra = model(driver)
     error = 1e-3 * spectra.max()
     obj, params = objective(driver, 2 * spectra, error)
-    evaluation = Evaluation(obj.group_plan(), params, obj)
+    setup = Setup(obj.group_plan(), params, obj, None, None)
     outputs = {
-        x.kind: x.value
-        for x in evaluation.outputs(evaluation.values()).values()}
+        x.kind: x.value for x in setup.outputs(setup.values()).values()}
     scales = best_scales(spectra, 2 * spectra, error)
     np.testing.assert_allclose(
         outputs['model'].data, spectra * scales, rtol=1e-5,
@@ -309,13 +308,12 @@ def test_the_scales_of_slitless_rows_scale_their_rows():
     # Slitless spectra dispersed along x (the golden case slitless_rows: 24
     # rows of 32 pixels) have a solved scale for each row, which scales its
     # row in the model of the outputs
-    from gbkfit.tasks import eval as eval_task
-    evaluation = eval_task.load(str(GOLDEN / 'slitless_rows' / 'config.yaml'))
-    unscaled = evaluation.group_plan.model_h(
-        evaluation.params.evaluate())[0]['spectra']['d'].copy()
+    import gbkfit
+    setup = gbkfit.load(str(GOLDEN / 'slitless_rows' / 'config.yaml'))
+    unscaled = setup.group_plan.model_h(
+        setup.params.evaluate())[0]['spectra']['d'].copy()
     outputs = {
-        x.kind: x.value for x in evaluation.outputs(
-            evaluation.values()).values()}
+        x.kind: x.value for x in setup.outputs(setup.values()).values()}
     scales = outputs['flux_scale']
     assert scales.shape == (24,)
     np.testing.assert_allclose(

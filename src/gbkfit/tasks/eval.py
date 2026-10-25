@@ -2,100 +2,33 @@
 The eval task: evaluate the galaxies of a configuration, or its objective
 (the residuals against the data), or draw mock data of its observations,
 and write the outputs. Programs that evaluate a configuration themselves
-(e.g. at other values of its parameters) set it up with load.
+(e.g. at other values of its parameters) set it up with gbkfit.load.
 """
 
 import logging
 import os
-from collections.abc import Mapping, Sequence
 from typing import Any, Literal, NamedTuple
 
 import pandas as pd
 
-from gbkfit.objective import Objective
 import gbkfit.outputs
+import gbkfit.setup
 from gbkfit.observation import (
     GroupPlan, Likelihood, Noise, likelihood_parser, noise_parser,
     observation_parser)
-from gbkfit.params import ParamSpace, ParamValues
+from gbkfit.params import ParamValues
+from gbkfit.setup import ConfigFile
 from gbkfit.utils import iterutils, numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
-from ._detail import Output
 
 
 __all__ = [
-    'Evaluation',
-    'Output',
-    'eval_',
-    'load'
+    'eval_'
 ]
 
 
 _log = logging.getLogger(__name__)
-
-
-class Evaluation(NamedTuple):
-    """
-    What evaluates a configuration (see load): the plan of the
-    observations of its galaxies (see ObservationGroup.plan), its
-    parameters, and its objective, if every observation has data (else
-    None).
-    """
-    group_plan: GroupPlan
-    params: ParamSpace
-    objective: Objective | None
-
-    def values(
-            self, free: Mapping[str, float] | Sequence[float] | None = None
-    ) -> ParamValues:
-        """
-        Return the values of the parameters at those of the free elements
-        (see ParamSpace.evaluate), with those of the solved elements that
-        the objective solves there (see Objective.solved); without an
-        objective, their values without data.
-        """
-        values = self.params.evaluate(free)
-        if self.objective is None or not self.objective.solves():
-            return values
-        self.objective.chi2(values)
-        return self.params.evaluate(free, self.objective.solved())
-
-    def outputs(
-            self,
-            values: ParamValues,
-            data: bool = False,
-            extra: bool = False
-    ) -> dict[str, Output]:
-        """
-        Return the outputs of an evaluation, as the task writes them (see
-        eval_), by their paths in a run.
-
-        Parameters
-        ----------
-        values : ParamValues
-            The values of the parameters, with those of the solved
-            elements (see values).
-        data : bool, optional
-            Whether to add the data of the observations ('data', 'error'
-            and 'data_image'), which do not change with the values.
-        extra : bool, optional
-            Whether to add the extra outputs of the models ('extra'; e.g.
-            their cubes at high resolution).
-
-        Returns
-        -------
-        dict
-            The outputs: the models ('model', and their images,
-            'model_image'), and with the objective the residuals too
-            ('residual', 'wresidual' and 'residual_image').
-        """
-        residuals = self.objective is not None
-        outputs = _detail.evaluation_outputs(
-            self.group_plan, self.objective, values, True, residuals, extra)
-        if data:
-            outputs |= _detail.data_outputs(self.group_plan)
-        return outputs
 
 
 class _Mock(NamedTuple):
@@ -182,107 +115,62 @@ def eval_(
         _log.info(f"output will be stored under directory: {run.path}")
         _detail.write_config(run, 'config.yaml', 'config', cfg, root)
         _detail.write_setup(run, file)
-        _eval(mode, cfg, root, profile_iters, run)
+        with gbkfit.setup.load(file) as setup:
+            _eval(mode, cfg, root, setup, profile_iters, run)
 
 
-def load(config: str) -> Evaluation:
-    """
-    Read a configuration file, and set up the observations of its galaxies,
-    its parameters, and its objective if every observation has data, to
-    evaluate them (e.g. at other values of the parameters; see
-    ParamSpace.evaluate, Evaluation.outputs and GroupPlan.model_h).
-
-    Parameters
-    ----------
-    config : str
-        The configuration file (see eval_), or that of a fit (see
-        gbkfit.tasks.fit.fit; its sections of the fit are left out).
-
-    Returns
-    -------
-    Evaluation
-        The observations, the parameters and the objective.
-
-    Raises
-    ------
-    ConfigError
-        If the configuration is invalid.
-    """
-    file = _read_config(config, _OPTIONAL + _FIT)
-    with parseutils.paths_relative_to(file.root):
-        group_plan, params = _set_up(file.config)
-    objective = None
-    if all(obs.data() is not None
-           for obs in group_plan.group().observations()):
-        _log.info("setting up objective...")
-        objective = Objective(group_plan, params.solves())
-    return Evaluation(group_plan, params, objective)
-
-
-# The sections of the configurations of the task, and those of fits, which
-# load reads too (without them)
+# The sections of the configurations of the task
 _REQUIRED = ('galaxies', 'observations', 'params')
 _OPTIONAL = (
     'driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order', 'mock')
-_FIT = ('fitter', 'parallel', 'bootstrap')
 
 
-def _read_config(
-        config: str, optional: tuple[str, ...] = _OPTIONAL
-) -> _detail.ConfigFile:
+def _read_config(config: str) -> ConfigFile:
     """Read the configuration of an evaluation."""
     _log.info(f"reading configuration from file: {config}...")
-    return _detail.read_config(config, _REQUIRED, optional)
-
-
-def _set_up(cfg: dict[str, Any]) -> tuple[GroupPlan, ParamSpace]:
-    """
-    Set up the plan of the observations and the parameters of a
-    configuration (with the paths relative to its root).
-    """
-    _log.info("setting up galaxies and observations...")
-    group = _detail.load_observation_group(cfg)
-    group_plan = _detail.load_group_plan(cfg, group)
-    _log.info("setting up params...")
-    params = _detail.load_params(
-        cfg, group.pdescs(), group.constants(), group_plan.plan_functions())
-    return group_plan, params
+    return gbkfit.setup.read_config(config, _REQUIRED, _OPTIONAL)
 
 
 def _eval(
         mode: Literal['model', 'objective', 'mock'],
         cfg: dict[str, Any],
         root: str,
+        setup: gbkfit.setup.Setup,
         profile_iters: int,
         run: gbkfit.outputs.RunWriter
 ) -> None:
-    """Evaluate a configuration, and write the outputs (see eval_)."""
-    with parseutils.paths_relative_to(root):
-        group_plan, params = _set_up(cfg)
-        objective = None
-        if mode == 'objective':
-            _log.info("setting up objective...")
-            objective = Objective(group_plan, params.solves())
-        mock = None
-        if mode == 'mock':
-            with parseutils.config_path('mock'):
-                mock = _load_mock(
-                    cfg['mock'], group_plan.group().nobservations())
+    """
+    Evaluate the setup of a configuration, and write the outputs (see
+    eval_).
+    """
+    group_plan, params = setup.group_plan, setup.params
+    # (in the mode 'model', the solved elements take their values without
+    # data)
+    objective = setup.objective if mode == 'objective' else None
+    if mode == 'objective' and objective is None:
+        raise ConfigError(
+            "the mode 'objective' needs data for every observation")
+    mock = None
+    if mode == 'mock':
+        with parseutils.paths_relative_to(root), \
+                parseutils.config_path('mock'):
+            mock = _load_mock(cfg['mock'], group_plan.group().nobservations())
 
     _log.info("calculating model parameters...")
-    param_values = Evaluation(group_plan, params, objective).values()
+    param_values = setup.values() if objective is not None \
+        else params.evaluate()
     run.write('params.json', 'params', dict(
         params=param_values, eparams=params.element_values(param_values),
         derived=params.derived_values(param_values)))
 
     _log.info("evaluating...")
-    outputs = _detail.evaluation_outputs(
+    outputs = gbkfit.outputs.evaluation_outputs(
         group_plan, objective, param_values, True, mode == 'objective')
     if objective is not None:
-        outputs |= _detail.data_outputs(group_plan)
+        outputs |= gbkfit.outputs.data_outputs(group_plan)
         _log.info(f"chi-square: {objective.chi2(param_values)}")
     _log.info("storing outputs to the filesystem...")
-    _detail.write_outputs(run, outputs)
+    gbkfit.outputs.write_outputs(run, outputs)
     if mock is not None:
         _log.info(f"drawing {mock.nmocks} mock datasets...")
         _write_mocks(cfg, root, group_plan, param_values, mock, run)

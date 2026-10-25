@@ -1,8 +1,7 @@
 """
 The worker of a live session (see sessions): a process that sets up a
-configuration once (see gbkfit.tasks.eval.load), and then evaluates its
-models at the values of its free parameters that it reads, until its
-input ends:
+configuration once (see gbkfit.load), and then evaluates its models at
+the values of its free parameters that it reads, until its input ends:
 
     python -m gbkfit_server.services.worker CONFIG
 
@@ -26,8 +25,8 @@ import numpy as np
 from gbkfit_server.services import frames
 
 
-# The kinds of the outputs (see gbkfit.tasks.eval.Evaluation.outputs) of
-# the data, sent once, and of each evaluation
+# The kinds of the outputs (see gbkfit.Setup.outputs) of the data, sent
+# once, and of each evaluation
 _DATA = ('data', 'data_image')
 _RESULT = ('model', 'model_image', 'residual', 'residual_image')
 
@@ -38,22 +37,22 @@ def main() -> None:
     # imports, as the library is imported here) goes to stderr
     out = os.fdopen(os.dup(1), 'wb')
     os.dup2(2, 1)
+    from gbkfit import load
     from gbkfit.tasks import log_handler
-    from gbkfit.tasks.eval import load
     from gbkfit.utils.parseutils import ConfigError
 
     logger = logging.getLogger('gbkfit')
     logger.setLevel(logging.INFO)
     logger.addHandler(log_handler())
     try:
-        evaluation = load(sys.argv[1])
+        setup = load(sys.argv[1])
     except ConfigError as e:
         _write(out, frames.encode(dict(type='error', message=str(e))))
         sys.exit(1)
-    params, objective = evaluation.params, evaluation.objective
+    params, objective = setup.params, setup.objective
     free = params.free_properties()
     values = {name: info.get('value') for name, info in free.items()}
-    outputs = evaluation.outputs(params.evaluate(values), data=True)
+    outputs = setup.outputs(params.evaluate(values), data=True)
     _write(out, frames.array_frame(
         dict(type='ready', free=free, data=objective is not None),
         _arrays(outputs, _DATA)))
@@ -64,7 +63,7 @@ def main() -> None:
                 raise ValueError(f"no free elements {sorted(unknown)}")
             values |= header['values']
             param_values = params.evaluate(values)
-            outputs = evaluation.outputs(param_values)
+            outputs = setup.outputs(param_values)
             chi2 = None if objective is None \
                 else objective.chi2(param_values)
             _write(out, frames.array_frame(
@@ -79,9 +78,8 @@ def _arrays(
 ) -> list[tuple[dict[str, Any], np.ndarray]]:
     """
     Return the arrays of the outputs of the given kinds (see
-    gbkfit.tasks.eval.Evaluation.outputs), each with its kind, title and
-    ids (e.g. observation and item); not those of other values (e.g.
-    tables).
+    gbkfit.Setup.outputs), each with its kind, title and ids (e.g.
+    observation and item); not those of other values (e.g. tables).
     """
     arrays = []
     for output in outputs.values():

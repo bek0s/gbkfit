@@ -115,7 +115,7 @@ def test_the_best_fit_so_far_starts_at_it(tmp_path):
     # of a parameter given as offsets (a mode) too: the elements it starts
     # at are those of the best point of the progress (a few evaluations of
     # the golden case of the features of the parameters)
-    from gbkfit.tasks import eval as eval_task
+    import gbkfit
     golden = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
     config = yaml.load(golden / 'params_features' / 'config.yaml')
     config |= dict(
@@ -128,7 +128,7 @@ def test_the_best_fit_so_far_starts_at_it(tmp_path):
     run = outputs.open(tmp_path / 'fit')
     progress = pathlib.Path(run.filename(run.product('progress')))
     best = json.loads(progress.read_text().splitlines()[-1])['best']
-    params = eval_task.load(run.filename(run.product('best_config'))).params
+    params = gbkfit.load(run.filename(run.product('best_config'))).params
     assert params.element_values(params.evaluate()) == pytest.approx(
         params.element_values(params.evaluate(best)))
 

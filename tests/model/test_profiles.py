@@ -202,13 +202,13 @@ def test_profiles_refuse_what_they_cannot_measure():
 
 
 def test_outputs_of_profiles_are_tables():
-    from gbkfit.tasks import _detail
+    import gbkfit.outputs
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc, name='rc')
     data = observation.dataset({'vcirc': Data(
         [100.0, 150.0], error=[5.0, 5.0], unit='km/s')})
     plan = ObservationGroup(mass_galaxy(), observation.with_data(data)).plan()
     # (with the extra outputs of the gravity of a galaxy of mass alone)
-    outputs = _detail.evaluation_outputs(
+    outputs = gbkfit.outputs.evaluation_outputs(
         plan, Objective(plan), PARAMS, True, True)
     assert {
         f'observations/rc/{kind}/vcirc.ecsv'

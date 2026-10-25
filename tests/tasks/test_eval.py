@@ -12,8 +12,8 @@ import pytest
 import ruamel.yaml
 from astropy.io import fits
 
+import gbkfit
 from gbkfit import outputs, project
-from gbkfit.tasks.eval import load
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -171,10 +171,10 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
 def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     # (at the values of its parameters here, as the task does)
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    evaluation = load(str(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
-    assert evaluation.objective is None
-    values = evaluation.params.evaluate()
-    model = evaluation.group_plan.model_h(values)[0]['spectra']['d']
+    setup = gbkfit.load(str(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml'))
+    assert setup.objective is None
+    values = setup.params.evaluate()
+    model = setup.group_plan.model_h(values)[0]['spectra']['d']
     expected = array(run_eval('model', config, tmp_path / 'model'), 'model')
     np.testing.assert_array_equal(model, expected)
     # With data (the model plus 1, with errors of 2), its outputs have the
@@ -186,8 +186,8 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
         step=observation['observable'].pop('step'))
     observation['observable'].pop('size')
     yaml.dump(config, tmp_path / 'data.yaml')
-    evaluation = load(str(tmp_path / 'data.yaml'))
-    outputs = evaluation.outputs(evaluation.params.evaluate(), data=True)
+    setup = gbkfit.load(str(tmp_path / 'data.yaml'))
+    outputs = setup.outputs(setup.params.evaluate(), data=True)
     kinds = {output.kind for output in outputs.values()}
     assert {'model', 'data', 'error', 'residual', 'wresidual'} <= kinds
     assert 'extra' not in kinds

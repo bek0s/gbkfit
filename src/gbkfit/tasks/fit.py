@@ -13,14 +13,13 @@ import signal
 import threading
 import time
 from collections.abc import Iterator
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal
 
-import gbkfit.driver
 import gbkfit.fitting
-import gbkfit.objective
 import gbkfit.outputs
-import gbkfit.observation
 import gbkfit.params
+import gbkfit.setup
+from gbkfit.setup import ConfigFile, Setup
 from gbkfit.utils import numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail, _progress
@@ -106,7 +105,8 @@ def fit(
         if evaluation_log:
             log = gbkfit.fitting.EvaluationLog(run.filename(_EVALUATIONS))
             run.record(_EVALUATIONS, 'evaluations', 'bin')
-        _fit(file.config, file.root, run, log)
+        with gbkfit.setup.load(file) as setup:
+            _fit(file.config, file.root, setup, run, log)
 
 
 def resume(output_dir: str) -> None:
@@ -136,8 +136,9 @@ def resume(output_dir: str) -> None:
         log = gbkfit.fitting.EvaluationLog.resume(evaluations)
     except ValueError as e:
         raise ConfigError(str(e)) from e
-    with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
-        _fit(file.config, file.root, run, log)
+    with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run), \
+            gbkfit.setup.load(file) as setup:
+        _fit(file.config, file.root, setup, run, log)
 
 
 def bootstrap(output_dir: str, config: str) -> None:
@@ -169,18 +170,20 @@ def bootstrap(output_dir: str, config: str) -> None:
         output_dir, 'bootstrap', 'config', 'fit_result')
     file = _read_config(config_file)
     _log.info(f"reading the configuration of the bootstrap: {config}...")
-    bootstrap_cfg = _detail.read_config(config, ('bootstrap',)).config
-    setup = _set_up(file.config, file.root)
-    options = _load_bootstrap(bootstrap_cfg, setup)
+    bootstrap_cfg = gbkfit.setup.read_config(
+        config, ('bootstrap',), ()).config
     with open(result_file) as f:
         result = json.load(f)
     best = result['solutions'][0]
-    with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
-        boot = _bootstrap(setup, best['elements'], options)
-        result['bootstrap'] = boot.info()
-        run.write(_RESULT, 'fit_result', result)
-        run.write('fit/bootstrap.ecsv', 'bootstrap', boot.table())
-        run.write('fit/bootstrap.yaml', 'bootstrap_config', bootstrap_cfg)
+    with gbkfit.setup.load(file) as setup:
+        options = _load_bootstrap(bootstrap_cfg, setup)
+        with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
+            boot = _bootstrap(setup, best['elements'], options)
+            result['bootstrap'] = boot.info()
+            run.write(_RESULT, 'fit_result', result)
+            run.write('fit/bootstrap.ecsv', 'bootstrap', boot.table())
+            run.write(
+                'fit/bootstrap.yaml', 'bootstrap_config', bootstrap_cfg)
     _log.info(f"bootstrap:\n{_bootstrap_summary(best, boot)}")
 
 
@@ -209,57 +212,17 @@ def _products_of_fit(output_dir: str, action: str, *kinds: str) -> list[str]:
     return files
 
 
-def _read_config(config: str) -> _detail.ConfigFile:
+def _read_config(config: str) -> ConfigFile:
     """Read the configuration of a fit."""
     _log.info(f"reading configuration from file: {config}...")
-    return _detail.read_config(
+    return gbkfit.setup.read_config(
         config, ('galaxies', 'observations', 'params', 'fitter'),
         ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
          'parallel', 'bootstrap'))
 
 
-class _Setup(NamedTuple):
-    """
-    What a fit is set up from its configuration: its drivers, the plan of
-    its observations and its objective, its fitter and its parameters.
-    """
-    drivers: dict[str | None, gbkfit.driver.Driver]
-    group_plan: gbkfit.observation.GroupPlan
-    objective: gbkfit.objective.Objective
-    fitter: gbkfit.fitting.Fitter
-    params: gbkfit.params.ParamSpace
-
-
-def _set_up(cfg: dict[str, Any], root: str) -> _Setup:
-    """
-    Set up a fit from its configuration: its observations and objective,
-    its fitter and its parameters, checked for the fitter.
-    """
-    with parseutils.paths_relative_to(root):
-        _log.info("setting up galaxies and observations...")
-        drivers = _detail.load_drivers(cfg)
-        group = _detail.load_observation_group(cfg)
-        group_plan = _detail.load_group_plan(cfg, group, drivers)
-        _log.info("setting up fitter...")
-        with parseutils.config_path('fitter'):
-            fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
-        _log.info("setting up params...")
-        params = _detail.load_params(
-            cfg, group.pdescs(), group.constants(),
-            group_plan.plan_functions())
-        _log.info("setting up objective...")
-        objective = gbkfit.objective.Objective(group_plan, params.solves())
-        # Check the free properties for the fitter, and the priors on
-        # several parameters, before the fit starts
-        with parseutils.config_path('params', 'properties'):
-            fitter.load_fit_params(params)
-        with parseutils.config_path('params'):
-            gbkfit.params.joint_prior_residuals(params)
-    return _Setup(drivers, group_plan, objective, fitter, params)
-
-
 def _load_bootstrap(
-        cfg: dict[str, Any], setup: _Setup
+        cfg: dict[str, Any], setup: Setup
 ) -> gbkfit.fitting.BootstrapOptions | None:
     """
     Load the options of the bootstrap of a configuration (its section
@@ -274,7 +237,7 @@ def _load_bootstrap(
 
 
 def _bootstrap(
-        setup: _Setup,
+        setup: Setup,
         start: dict[str, float],
         options: gbkfit.fitting.BootstrapOptions
 ) -> gbkfit.fitting.Bootstrap:
@@ -316,15 +279,15 @@ def _bootstrap_summary(
 def _fit(
         cfg: dict[str, Any],
         root: str,
+        setup: Setup,
         run: gbkfit.outputs.RunWriter,
         log: gbkfit.fitting.EvaluationLog | None
 ) -> None:
-    """Fit a configuration, and write the outputs to its run (see fit)."""
-    setup = _set_up(cfg, root)
-    group_plan, objective, fitter, params = \
-        setup.group_plan, setup.objective, setup.fitter, setup.params
-    with parseutils.paths_relative_to(root):
-        pool = _detail.load_pool(cfg, objective, setup.drivers)
+    """
+    Fit the setup of a configuration, and write the outputs to its run (see
+    fit).
+    """
+    params = setup.params
     options = _load_bootstrap(cfg, setup)
 
     _log.info("model-fitting started")
@@ -341,17 +304,15 @@ def _fit(
     run.record('logs/progress.jsonl', 'progress', 'jsonl')
     best = _progress.BestValues(write_best)
     control = gbkfit.fitting.FitControl()
-    with pool or contextlib.nullcontext(), _stop_on_interrupt(control), \
+    with _stop_on_interrupt(control), \
             _progress.console_progress(_log) as console:
-        result = fitter.fit(
-            objective, params, (console, progress, best), control, log, pool)
+        result = setup.fit((console, progress, best), control, log)
     _log.info(f"model-fitting completed (elapsed time: {result.time:.1f} s)")
 
     _log.info(f"saving result under '{run.path}'...")
     result.write(run)
-    outputs = _detail.data_outputs(group_plan) | _detail.evaluation_outputs(
-        group_plan, objective, result.best().values, True, True)
-    _detail.write_outputs(run, outputs)
+    gbkfit.outputs.write_outputs(
+        run, setup.outputs(result.best().values, data=True, extra=True))
     _write_config(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
         result.best().elements)

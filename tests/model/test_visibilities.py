@@ -167,10 +167,11 @@ def test_the_outputs_have_the_dirty_images(driver):
     # Of the data, the model and the data minus the model (on the grid,
     # from the highest frequency), and the dirty beam
     from gbkfit.objective import Objective
-    from gbkfit.tasks import _detail
+    import gbkfit.outputs
     plan, params = observation_of_data(driver, 0.5)
-    outputs = _detail.data_outputs(plan) | _detail.evaluation_outputs(
-        plan, Objective(plan), params, True, True)
+    outputs = gbkfit.outputs.data_outputs(plan) \
+        | gbkfit.outputs.evaluation_outputs(
+            plan, Objective(plan), params, True, True)
     images = {
         (x.kind, x.ids['image']): x.value.data for x in outputs.values()
         if x.kind.endswith('_image')}

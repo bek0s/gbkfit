@@ -1,19 +1,19 @@
 """
 Check a configuration without running its task: set it up as its task
-would (a fit if it has the section 'fitter', else an evaluation; see
-gbkfit.tasks.fit and gbkfit.tasks.eval), and collect its problems: its
-warnings, its unknown options (errors, all of them: the check loads
-past them, which a task does not), and its error, if any, each with its
-path in the configuration (e.g. to show them in place in an editor).
+would (see gbkfit.load; a fit if it has the section 'fitter'), and
+collect its problems: its warnings, its unknown options (errors, all of
+them: the check loads past them, which a task does not), and its error,
+if any, each with its path in the configuration (e.g. to show them in
+place in an editor).
 """
 
 import logging
 from collections.abc import Mapping
 from typing import Any, Literal, NamedTuple
 
+import gbkfit.setup
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, UnknownNamesError
-from . import _detail, eval as eval_task, fit as fit_task
 
 
 __all__ = [
@@ -70,15 +70,9 @@ def check(config: str, texts: Mapping[str, str] | None = None) -> Checked:
     try:
         # (lenient, to list every unknown name)
         with parseutils.strict_mode(False):
-            file = _detail.read_config(
-                config, eval_task._REQUIRED,
-                eval_task._OPTIONAL + eval_task._FIT, texts)
+            file = gbkfit.setup.read_config(config, texts=texts)
             sources = file.sources
-            if 'fitter' in file.config:
-                fit_task._set_up(file.config, file.root)
-            else:
-                with parseutils.paths_relative_to(file.root):
-                    eval_task._set_up(file.config)
+            gbkfit.setup.load(file).close()
     except ConfigError as e:
         problems.append(_problem('error', e))
     finally:

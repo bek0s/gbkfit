@@ -40,10 +40,13 @@ import pathlib
 import sys
 import tempfile
 from collections.abc import Callable, Mapping
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
+
+if TYPE_CHECKING:
+    from gbkfit.setup import Setup
 
 
 HERE = pathlib.Path(__file__).parent
@@ -145,17 +148,14 @@ def recipes() -> dict[str, Case]:
 
 # --- Making the data -------------------------------------------------------
 
-def _load(config: dict[str, Any], root: pathlib.Path, driver: str):
+def _load(config: dict[str, Any], root: pathlib.Path, driver: str) -> 'Setup':
     """
-    Return the plan of the observation group and the parameters of a
-    configuration whose relative paths are relative to root, on a driver,
-    as the tasks load them.
+    Set up a configuration whose relative paths are relative to root, on a
+    driver (see gbkfit.load).
     """
-    from gbkfit.tasks import eval as eval_task
-    from gbkfit.utils import parseutils
-    config = dict(config, driver=dict(type=driver))
-    with parseutils.paths_relative_to(str(root)):
-        return eval_task._set_up(config)
+    import gbkfit
+    return gbkfit.load(
+        dict(config, root=str(root), driver=dict(type=driver)))
 
 
 def _rebased(info: Any, prefix: str) -> Any:
@@ -217,10 +217,11 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     if case.prepare is not None:
         case.prepare(folder)
     sections = dict(galaxies=case.galaxies) | case.sections
-    group_plan, params = _load(
+    setup = _load(
         sections | dict(
             observations=case.observations,
             params=dict(properties=case.truth)), folder, 'host')
+    group_plan, params = setup.group_plan, setup.params
     likelihoods = case.likelihoods or [None] * len(case.observations)
     # (their files, e.g. error maps or the modules of user likelihoods,
     # are in the folder of the case)
@@ -314,20 +315,18 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     chi-square of the priors on several parameters, if any.
     """
     from gbkfit.fitting.problem import FitProblem
-    from gbkfit.objective import Objective
-    from gbkfit.tasks import _detail
-    from gbkfit.tasks import eval as eval_task
-    file = _detail.read_config(
-        str(folder / 'config.yaml'), eval_task._REQUIRED,
-        eval_task._OPTIONAL)
-    group_plan, params = _load(file.config, pathlib.Path(file.root), driver)
+    from gbkfit.setup import read_config
+    file = read_config(str(folder / 'config.yaml'))
+    setup = _load(file.config, pathlib.Path(file.root), driver)
+    group_plan, params = setup.group_plan, setup.params
     values = params.evaluate()
     golden: dict[str, Any] = dict(model=[
         {key: {part: summary(array) for part, array in item.items()
                if array is not None}
          for key, item in model.items()}
         for model in group_plan.model_h(values)])
-    with Objective(group_plan, params.solves()) as objective:
+    with setup:
+        objective = setup.objective
         chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         golden['objective'] = dict(
             chi2=chi2, log_likelihood=log_likelihood,
