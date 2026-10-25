@@ -5,8 +5,8 @@ spherical components (MassSpherical).
 
 import abc
 import dataclasses
-from collections.abc import Callable, Collection, Mapping
-from typing import Any, Protocol
+from collections.abc import Callable, Collection, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Protocol
 
 import numpy as np
 import numpy.typing as npt
@@ -15,12 +15,18 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
 from .units import G
 
+if TYPE_CHECKING:
+    from .profiles import SpheroidProfile
+    from .shapes import SpheroidShape
+
 
 __all__ = [
     'ComponentDensity',
+    'DiskDensity',
     'MassComponent',
     'MassContext',
     'MassSpherical',
+    'SpheroidDensity',
     'forces_in_plane'
 ]
 
@@ -53,12 +59,28 @@ def forces_in_plane(
 
 class ComponentDensity(Protocol):
     """
-    The density of a component of a galaxy, which mass disks follow (see
+    The density of a component of a galaxy, which mass components follow
+    (see MassComponent.followed_kind), in the units of the component: of
+    one kind, that of a disk (DiskDensity) or of a spheroid
+    (SpheroidDensity).
+    """
+
+    def mass_per_unit(self) -> float | None:
+        """
+        Return the mass surface density (Msun/kpc^2) of one unit of the
+        density, if the component has a physical unit (e.g. of the HI in
+        it); None without one.
+        """
+        ...
+
+
+class DiskDensity(ComponentDensity, Protocol):
+    """
+    The density of a disk of a galaxy, which mass disks follow (see
     surfaces.SurfaceComponent and vertical.VerticalComponent): its
-    azimuthal mean, a sum of terms (e.g.
-    one for each density polar trait), each a surface
-    density times the pdf of the height, between the inner and the outer
-    edge of the component; in kpc, and in the units of the component.
+    azimuthal mean, a sum of terms (e.g. one for each density polar
+    trait), each a surface density times the pdf of the height, between
+    the inner and the outer edge of the component; in kpc.
     """
 
     def knots(self, rstep: float | None) -> np.ndarray:
@@ -88,13 +110,41 @@ class ComponentDensity(Protocol):
         """
         ...
 
+
+class SpheroidDensity:
+    """
+    The density of a spheroid of a galaxy, which mass spheroids follow
+    (see spheroids.MassLightSpheroid): a sum of terms, each a spherical
+    profile laid out in a shape, in kpc, of the total mass of its light
+    (in the units of the component times kpc^2: its density times kpc^2
+    gives the mass per unit of the light, see mass_per_unit).
+
+    Parameters
+    ----------
+    terms : Sequence of tuple
+        Its terms: the shape (SpheroidShape), the profile (SpheroidProfile)
+        and the values of the parameters of both of each.
+    mass_per_unit : float, optional
+        The mass surface density (Msun/kpc^2) of one unit of the density;
+        none without a physical unit.
+    """
+
+    def __init__(
+            self,
+            terms: Sequence[tuple['SpheroidShape', 'SpheroidProfile',
+                                  ParamValues]],
+            mass_per_unit: float | None
+    ):
+        self._terms = tuple(terms)
+        self._mass_per_unit = mass_per_unit
+
+    def terms(self) -> tuple[tuple[
+            'SpheroidShape', 'SpheroidProfile', ParamValues], ...]:
+        """Return its terms."""
+        return self._terms
+
     def mass_per_unit(self) -> float | None:
-        """
-        Return the mass surface density (Msun/kpc^2) of one unit of the
-        density, if the component has a physical unit (e.g. of the HI in
-        it); None without one.
-        """
-        ...
+        return self._mass_per_unit
 
 
 @dataclasses.dataclass(frozen=True)
@@ -185,6 +235,14 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         it follows (see ComponentDensity); none here.
         """
         return ()
+
+    @classmethod
+    def followed_kind(cls) -> type[ComponentDensity] | None:
+        """
+        Return the kind of the densities that it follows (e.g.
+        DiskDensity), if it can follow any; none here.
+        """
+        return None
 
     def spherical(self) -> bool:
         """Check whether it is spherically symmetric; not here."""
@@ -289,7 +347,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         """
         Check whether it gives its density, in a galaxy whose thick
         components (those whose densities have pdfs of the height, see
-        ComponentDensity.thick) have the given names; here, it does not.
+        DiskDensity.thick) have the given names; here, it does not.
         """
         return False
 

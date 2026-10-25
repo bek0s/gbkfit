@@ -23,7 +23,7 @@ from ..roles import Emission
 from ..traits import PressureSupport
 from ._disk import EQUILIBRIUM_DISPERSION, NodalDisk, DiskPlan
 from ._profiles import (
-    DiskDensity, density_waves, jeans_dispersions, pressure_support,
+    NodalDiskDensity, density_waves, jeans_dispersions, pressure_support,
     rms_heights, rotation)
 
 
@@ -77,7 +77,7 @@ class DiskStage(ComponentStage):
     """
     The part of a disk in the stage of its galaxy (see GalaxyStage): the
     face-on light of its image traits (see ImageMaps), its density, which
-    the mass of the galaxy can follow (see DiskDensity), and what the
+    the mass of the galaxy can follow (see NodalDiskDensity), and what the
     galaxy gives it (see given): the circular velocity of the mass at the
     radii of the parameters of its velocity trait 'mass' (see
     NodalDisk.circular_velocity_params), with its pressure support where its
@@ -152,8 +152,8 @@ class DiskStage(ComponentStage):
 
     def density(
             self, values: ParamValues, kpc_per_arcsec: float
-    ) -> DiskDensity:
-        return DiskDensity(
+    ) -> NodalDiskDensity:
+        return NodalDiskDensity(
             self._disk, self._plan, values, kpc_per_arcsec,
             self._mass_per_unit)
 

@@ -19,7 +19,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import ComponentDensity, MassContext
+from .base import DiskDensity, MassContext
 
 
 __all__ = [
@@ -75,7 +75,7 @@ class DiskVertical(parseutils.TypedSerializable, abc.ABC):
     def thin_given(self, thick: Collection[str]) -> bool:
         """
         Check whether the disk is thin, in a galaxy whose thick components
-        (see ComponentDensity.thick) have the given names: as thin is, but
+        (see DiskDensity.thick) have the given names: as thin is, but
         known when the galaxy is made.
         """
         pass
@@ -478,7 +478,7 @@ class VerticalComponent(DiskVertical):
 
     def _shape_knots(
             self, context: MassContext
-    ) -> tuple[ComponentDensity, np.ndarray, np.ndarray, np.ndarray]:
+    ) -> tuple[DiskDensity, np.ndarray, np.ndarray, np.ndarray]:
         """
         Return the density of the component, and the subnodes at which it
         takes the shape, those with density (kpc), with the surface

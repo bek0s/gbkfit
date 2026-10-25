@@ -1,15 +1,19 @@
 """
 Tests for the spheroids (Spheroid): their light in images against the
 exact projections of their profiles, the mean density near the centre
-of a cusp, and their options.
+of a cusp, and their options; and the mass that follows their light
+(mass.MassLightSpheroid).
 """
 
 import numpy as np
 import pytest
+import scipy.integrate
 import scipy.special
 
-from gbkfit.model import Spheroid, component_parser, galaxy_parser
-from gbkfit.model.mass import _numerics
+from gbkfit.model import (
+    MassSpheroid, ProfileSersic, ShapeFlattened, Spheroid, component_parser,
+    galaxy_parser)
+from gbkfit.model.mass import G, _numerics
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -275,3 +279,144 @@ def test_invalid_spheroids_are_refused(options, message):
         | options
     with pytest.raises(ConfigError, match=message):
         Spheroid.load(info)
+
+
+# A galaxy of a bulge (a spheroid) whose mass follows its light, at a
+# distance
+BULGE = dict(
+    type='spheroid', name='bulge', rmax=10, emission=BAND,
+    profile=dict(type='sersic'), shape=dict(type='flattened'))
+STARS = dict(type='light_spheroid', name='stars', component='bulge')
+DISTANCE = dict(type='direct', cosmology='Planck18')
+BULGE_PROPERTIES = dict(
+    xpos=0, ypos=0, posa=30, incl=60, bulge_ie=2, bulge_re=1.5, bulge_n=3,
+    bulge_q=0.6, mass_stars_upsilon=4e6, distance=8)
+
+
+def bulge_mass(bulge, properties):
+    """
+    The mass of a galaxy of the given bulge whose mass follows its light
+    (STARS): the mass at the given values, and its component.
+    """
+    galaxy = galaxy_parser.load(dict(
+        components=[bulge], mass=[STARS], distance=DISTANCE))
+    mass = galaxy.plan_stage().mass(properties)
+    return mass, mass.model.components()[0]
+
+
+def test_the_mass_of_a_sersic_spheroid_is_that_of_its_light():
+    # upsilon (Msun/kpc^2 per unit, without a unit) times its light, 2 pi
+    # n re^2 ie e^b b^-2n Gamma(2n) arcsec^2, in kpc: the mass spheroid of
+    # that Sersic profile and shape, to any radius
+    mass, stars = bulge_mass(BULGE, BULGE_PROPERTIES)
+    kpc = mass.kpc_per_arcsec
+    upsilon = BULGE_PROPERTIES['mass_stars_upsilon']
+    light = sersic_light(3, 2, 1.5)
+    same = MassSpheroid('same', ProfileSersic(), ShapeFlattened())
+    values = dict(
+        log_m=np.log10(upsilon * light * kpc ** 2), re=1.5 * kpc, n=3,
+        q=0.6)
+    R = np.array([0.01, 0.05, 0.2, 1.0])
+    z = np.array([0.0, 0.03, 0.1, 0.5])
+    own = dict(upsilon=upsilon)
+    np.testing.assert_allclose(
+        stars.vcirc2(R, own, mass.context),
+        same.vcirc2(R, values, mass.context), rtol=1e-12)
+    for mine, theirs in zip(
+            stars.forces(R, z, own, mass.context),
+            same.forces(R, z, values, mass.context)):
+        np.testing.assert_allclose(mine, theirs, rtol=1e-12)
+    total = stars.enclosed_mass(np.array([1e4]), own, mass.context)[0]
+    assert total == pytest.approx(upsilon * light * kpc ** 2, rel=1e-6)
+
+
+def test_the_mass_of_an_mge_is_that_of_its_gaussians():
+    # A round Gaussian of the mass M of its light: G M(<r) / r, with the
+    # mass within r from the density by quadrature, and its potential
+    # -G M erf(r / (sqrt(2) sigma)) / r; and a flattened one of the same
+    # mass in all
+    bulge = BULGE | dict(profile=dict(type='mge', ngauss=2))
+    del bulge['shape']
+    properties = {
+        name: value for name, value in BULGE_PROPERTIES.items()
+        if not name.startswith('bulge_')} | dict(
+        bulge_i0=[3, 1], bulge_sigma=[0.5, 2], bulge_q=[1, 0.5])
+    mass, stars = bulge_mass(bulge, properties)
+    kpc = mass.kpc_per_arcsec
+    upsilon = properties['mass_stars_upsilon']
+    own = dict(upsilon=upsilon)
+    masses = [upsilon * 2 * np.pi * i0 * (s * kpc) ** 2
+              for i0, s in ((3, 0.5), (1, 2))]
+    shape, profile, values = mass.context.density('bulge').terms()[0]
+    r = np.array([0.005, 0.02, 0.1])
+    within = [scipy.integrate.quad(
+        lambda x: 4 * np.pi * x ** 2 * float(profile.density(
+            np.array(x), values, mass.context)), 0, radius)[0]
+        for radius in r]
+    np.testing.assert_allclose(
+        upsilon * shape.vcirc2(r, profile, values, mass.context),
+        G * upsilon * np.array(within) / r, rtol=1e-8)
+    sigma = 0.5 * kpc
+    np.testing.assert_allclose(
+        upsilon * profile.potential(r, values, mass.context),
+        -G * masses[0] * scipy.special.erf(r / (np.sqrt(2) * sigma)) / r,
+        rtol=1e-12)
+    total = stars.enclosed_mass(np.array([1e3]), own, mass.context)[0]
+    assert total == pytest.approx(sum(masses), rel=1e-6)
+
+
+def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
+    # The same rotation as in the mass spheroid of the same profile
+    from gbkfit.observation import (
+        ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
+    from gbkfit.params import ParamSpace
+    disk = dict(
+        type='disk', name='gas', rnodes=list(range(0, 13, 2)),
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
+            vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+        emission=dict(type='lines'))
+    disk_properties = dict(vsys=0, gas_pt_a=1, gas_pt_s=4, gas_dpt_a=15)
+
+    def evaluate(mass, properties):
+        galaxy = galaxy_parser.load(dict(
+            components=[BULGE, disk], mass=[mass], distance=DISTANCE))
+        group = ObservationGroup([galaxy], [ObservationSky(
+            PixelSpectra(size=(24, 24, 41), step=(1, 1, 10)),
+            line_of_sight_parser.load(dict(type='flat')))])
+        params = ParamSpace(
+            group.pdescs(), light | disk_properties | properties)
+        return group.plan(driver).model_h(params.evaluate())[0][
+            'spectra']['d']
+    upsilon = BULGE_PROPERTIES['mass_stars_upsilon']
+    light = {name: value for name, value in BULGE_PROPERTIES.items()
+             if name != 'mass_stars_upsilon'}
+    mass, _ = bulge_mass(BULGE, BULGE_PROPERTIES)
+    total = sersic_light(3, 2, 1.5) * mass.kpc_per_arcsec ** 2
+    followed = evaluate(STARS, dict(mass_stars_upsilon=upsilon))
+    same = evaluate(
+        dict(type='spheroid', name='same', profile=dict(type='sersic'),
+             shape=dict(type='flattened')),
+        dict(mass_same_log_m=np.log10(upsilon * total),
+             mass_same_re=1.5 * mass.kpc_per_arcsec, mass_same_n=3,
+             mass_same_q=0.6))
+    np.testing.assert_allclose(
+        followed, same, rtol=1e-5, atol=1e-6 * same.max())
+
+
+@pytest.mark.parametrize('mass, message', [
+    (dict(type='light_spheroid', name='stars', component='gas'),
+     "follows the density of a spheroid, but 'gas' is a disk: the mass "
+     "that follows it is of the type 'disk'"),
+    (dict(type='disk', name='stars', surface=dict(
+        type='component', component='bulge'), vertical=dict(type='sech2')),
+     "follows the density of a disk, but 'bulge' is a spheroid: the mass "
+     "that follows it is of the type 'light_spheroid'"),
+])
+def test_a_mass_follows_components_of_its_kind(mass, message):
+    disk = dict(
+        type='disk', name='gas', rnodes=[0, 2, 4],
+        density=dict(ptraits=dict(type='exponential')), emission=BAND)
+    with pytest.raises(ConfigError, match=message):
+        galaxy_parser.load(dict(
+            components=[BULGE, disk], mass=[mass], distance=DISTANCE))

@@ -1,7 +1,7 @@
 """
 The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
-(see mass.ComponentDensity), for its pressure support (see
+(see mass.DiskDensity), for its pressure support (see
 traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
 for its vertical equilibrium (see parts.Kinematics); its rotation, for
 its density waves (see traits.VPTraitSpiral); and its rotation and
@@ -22,7 +22,7 @@ from ._disk import NodalDisk, DiskPlan
 
 
 __all__ = [
-    'DiskDensity',
+    'NodalDiskDensity',
     'dispersion',
     'jeans_dispersions',
     'pressure_support',
@@ -420,7 +420,7 @@ def rms_heights(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see DiskDensity).
+        The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
 
@@ -461,7 +461,7 @@ def jeans_dispersions(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see DiskDensity).
+        The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
     vertical_force : callable
@@ -503,7 +503,7 @@ def rotation(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see DiskDensity).
+        The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
     """
@@ -548,7 +548,7 @@ def density_waves(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see DiskDensity), with
+        The values of the parameters of the disk (see NodalDiskDensity), with
         those that its galaxy gives its velocity traits 'mass', if any.
     """
     params = _with_given(disk, params)
@@ -617,7 +617,7 @@ def dispersion(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see DiskDensity).
+        The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
     equilibrium : np.ndarray, optional
@@ -704,7 +704,7 @@ def pressure_support(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see DiskDensity).
+        The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
     mode : str
@@ -816,10 +816,10 @@ def pressure_support(
     return support[:, 0] if heights is None else support
 
 
-class DiskDensity:
+class NodalDiskDensity:
     """
     The density of a disk for the mass components that follow it (see
-    mass.ComponentDensity): the azimuthal means of its density polar
+    mass.DiskDensity): the azimuthal means of its density polar
     traits, where its selection traits keep it, and its density height
     traits, as it evaluates them with the given values of its
     parameters, in kpc. Its rings are taken flat (coplanar and

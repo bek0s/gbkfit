@@ -2,11 +2,13 @@
 Spheroids (e.g. a bulge, or a dark matter halo): a profile (see profiles
 and halos) of a shape (see shapes), a sphere or a flattened spheroid; a
 halo can respond to the gravity of the baryons (see responses: e.g.
-contracted adiabatically), or be given by its dark matter fraction.
+contracted adiabatically), or be given by its dark matter fraction. And
+the mass that follows the light of a spheroid of the galaxy
+(MassLightSpheroid).
 """
 
 import math
-from collections.abc import Collection, Sequence
+from collections.abc import Callable, Collection, Sequence
 from typing import Any
 
 import numpy as np
@@ -17,7 +19,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import MassComponent, MassContext
+from .base import MassComponent, MassContext, SpheroidDensity
 from .halos import (
     ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
     ProfileNFW, ProfileNFWTruncated, ProfilePseudoIsothermal, ProfileZhao)
@@ -29,6 +31,7 @@ from .units import G
 
 __all__ = [
     'DarkFraction',
+    'MassLightSpheroid',
     'MassSpheroid',
     'dark_fraction_parser',
     'spheroid_profile_parser'
@@ -423,3 +426,165 @@ class MassSpheroid(MassComponent):
         value = scipy.optimize.brentq(
             excess, lower, upper, xtol=1e-14, rtol=4 * np.finfo(float).eps)
         return dict(params) | {name: value}
+
+
+class MassLightSpheroid(MassComponent):
+    """
+    The mass of a spheroid of the galaxy (see components.Spheroid) that
+    follows its light, to any radius (rmax only bounds how far its light
+    is drawn): upsilon times the light of each term of its profile, its
+    density, circular velocity, forces and potential those of the term
+    (see SpheroidDensity; exactly, or as the shapes give them, see
+    shapes).
+
+    upsilon is the mass per unit of its light, as of the mass disks that
+    follow disks (see surfaces.SurfaceComponent): without a unit of its
+    emission, in Msun/kpc^2 per unit of its surface brightness; with one,
+    in Msun/pc^2 per unit (a mass-to-light ratio, in its first band).
+
+    Parameters
+    ----------
+    name : str
+        Its name (see MassComponent).
+    component : str
+        The name of the spheroid of its galaxy that it follows.
+
+    Raises
+    ------
+    ConfigError
+        If the name or the name of the component is not valid.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'light_spheroid'
+
+    def dump(self) -> dict[str, Any]:
+        return super().dump() | dict(component=self._component)
+
+    def __init__(self, name: str, component: str):
+        super().__init__(name)
+        parseutils.check_name(component)
+        self._component = component
+
+    def component(self) -> str:
+        """Return the name of the spheroid it follows."""
+        return self._component
+
+    def followed_components(self) -> tuple[str, ...]:
+        return (self._component,)
+
+    @classmethod
+    def followed_kind(cls) -> 'type[SpheroidDensity]':
+        return SpheroidDensity
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(upsilon=ParamScalarDesc(
+            desc="the mass per unit of the light of the spheroid (see "
+                 "MassLightSpheroid)", minimum=0))
+
+    def vcirc2(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self._sum(
+            lambda shape, profile, values: shape.vcirc2(
+                R, profile, values, context), params, context)
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self._sum(
+            lambda shape, profile, values: shape.enclosed_mass(
+                r, profile, values, context), params, context)
+
+    def density(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self._sum(
+            lambda shape, profile, values: shape.density(
+                R, z, profile, values, context), params, context)
+
+    def gives_density(self, thick: Collection[str]) -> bool:
+        return True
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (that of the profile of each term, whatever its shape, see
+        # MassSpheroid.surface_density)
+        return self._sum(
+            lambda shape, profile, values: profile.surface_density(
+                R, values, context), params, context)
+
+    def forces(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> tuple[np.ndarray, np.ndarray]:
+        forces = [
+            shape.forces(R, z, profile, values, context)
+            for shape, profile, values in self._terms(context)]
+        scale = self._upsilon(params, context)
+        return (scale * sum(force[0] for force in forces),
+                scale * sum(force[1] for force in forces))
+
+    def potential(
+            self,
+            R: npt.ArrayLike,
+            z: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        return self._sum(
+            lambda shape, profile, values: shape.potential(
+                R, z, profile, values, context), params, context)
+
+    def _terms(self, context: MassContext) -> tuple[tuple[
+            SpheroidShape, SpheroidProfile, ParamValues], ...]:
+        """Return the terms of the density of the spheroid it follows."""
+        density = context.density(self._component)
+        if not isinstance(density, SpheroidDensity):
+            raise ValueError(
+                f"the mass component {self.name()!r} follows the density of "
+                f"a spheroid, but that of {self._component!r} is not one")
+        return density.terms()
+
+    def _upsilon(self, params: ParamValues, context: MassContext) -> float:
+        """
+        Return the mass of one unit of the mass of the light of its terms
+        (see SpheroidDensity): upsilon, times the mass of a unit of the
+        density if it has a physical unit.
+        """
+        upsilon = params['upsilon']
+        mass = context.density(self._component).mass_per_unit()
+        return upsilon if mass is None else upsilon * mass
+
+    def _sum(
+            self,
+            of_term: Callable[
+                [SpheroidShape, SpheroidProfile, ParamValues], np.ndarray],
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        """
+        Return the sum over its terms of what of_term gives of each, times
+        upsilon (see _upsilon).
+        """
+        return self._upsilon(params, context) * sum(
+            of_term(shape, profile, values)
+            for shape, profile, values in self._terms(context))

@@ -253,7 +253,7 @@ class RPTrait(PTrait, abc.ABC):
         """
         Check whether its value is the same at every azimuth (at each
         radius): then the azimuthal means of it that the gravity of its
-        galaxy takes are its value at one azimuth (see DiskDensity and
+        galaxy takes are its value at one azimuth (see NodalDiskDensity and
         pressure_support).
         """
 
@@ -422,7 +422,7 @@ class SPTrait(PTrait, abc.ABC):
         Check whether its value is the same at every azimuth (at each
         radius): then the azimuthal means of the density it selects, which
         the gravity of its galaxy takes, can be its value at one azimuth
-        (see DiskDensity and pressure_support).
+        (see NodalDiskDensity and pressure_support).
         """
 
 

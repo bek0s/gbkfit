@@ -12,6 +12,7 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from ...mass import DiskDensity
 from .. import traits
 from .._needs import Need
 from .._native import make_bands, make_lines
@@ -197,6 +198,9 @@ class Disk(Component):
 
     def density_disk(self) -> _disk.NodalDisk:
         return self._disk
+
+    def density_kind(self) -> 'type[DiskDensity]':
+        return DiskDensity
 
     def plan_stage(
             self,

@@ -1466,7 +1466,7 @@ def test_disk_densities_are_azimuthal_means(driver):
     # circular velocity that the disk takes from its galaxy is not needed
     from gbkfit.model import Disk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-    from gbkfit.model.components.disks._profiles import DiskDensity
+    from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = Disk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         density=dict(ptraits=[
@@ -1484,7 +1484,7 @@ def test_disk_densities_are_azimuthal_means(driver):
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
         None, None, 0.0)
-    density = DiskDensity(
+    density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array(component.density_disk().subrnodes())
     selected = radius < 18
@@ -1502,7 +1502,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
     # of the map where it is selected, against 2^21 azimuths per circle
     from gbkfit.model import Disk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-    from gbkfit.model.components.disks._profiles import DiskDensity
+    from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = Disk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         density=dict(ptraits=[
@@ -1519,7 +1519,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float32), None, None, True,
         None, None, 0.0)
-    density = DiskDensity(
+    density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array(component.density_disk().subrnodes())
     theta = (np.arange(2 ** 21) + 0.5) * 360 / 2 ** 21
@@ -1548,7 +1548,7 @@ def test_disk_densities_see_small_blobs(driver):
     # the rings, whose mean is a s erf(pi R / (s sqrt(2))) / (R sqrt(2 pi))
     from gbkfit.model import Disk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-    from gbkfit.model.components.disks._profiles import DiskDensity
+    from gbkfit.model.components.disks._profiles import NodalDiskDensity
     component = Disk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         density=dict(ptraits=[
@@ -1567,7 +1567,7 @@ def test_disk_densities_see_small_blobs(driver):
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
         None, None, 0.0)
-    density = DiskDensity(
+    density = NodalDiskDensity(
         component.density_disk(), plan.disk_plan(), params, KPC_PER_ARCSEC)
     radius = np.array([10, 10.002, 15, 15.005, 15.02])
 
@@ -1650,7 +1650,7 @@ def test_disks_follow_components_of_their_galaxy():
              vertical=dict(type='component', component='hi', rstep=None))]
     loaded = mass_component_parser.load(copy.deepcopy(mass))
     assert mass_component_parser.dump(loaded) == mass
-    with pytest.raises(ConfigError, match="follows the component 'hi'"):
+    with pytest.raises(ConfigError, match="has no component 'hi'"):
         disk_galaxy('smooth', dict(type='mass'), mass, DISTANCE)
 
 

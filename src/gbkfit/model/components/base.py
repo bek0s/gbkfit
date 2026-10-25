@@ -253,6 +253,14 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return None
 
+    def density_kind(self) -> 'type[ComponentDensity] | None':
+        """
+        Return the kind of the density that it gives the mass of its
+        galaxy to follow (e.g. mass.DiskDensity; see
+        mass.MassComponent.followed_kind), if any; none here.
+        """
+        return None
+
     def plan_stage(
             self,
             driver: Driver,

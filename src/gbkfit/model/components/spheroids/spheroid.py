@@ -20,16 +20,20 @@ from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ...mass._numerics import (
     sersic_b, sersic_density_table, sersic_tables)
-from ...mass.shapes import ShapeSphere, SpheroidShape, spheroid_shape_parser
+from ...mass import SpheroidDensity
+from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
+from ...mass.shapes import (
+    ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
 from .._detail import dump_geometry, dump_name, geometry_desc
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
     evaluate_native, make_bands)
-from .._units import DataUnit
+from .._units import DataUnit, mass_per_unit
 from ..base import Component, FieldsLayout, FrameParams, NativeGrid
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import BandEmission, Emission, emission_parser
+from ._stage import SpheroidStage
 
 
 __all__ = [
@@ -126,6 +130,23 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def mass_terms(
+            self,
+            params: ParamValues,
+            shape: SpheroidShape | None,
+            kpc_per_arcsec: float
+    ) -> list[tuple[SpheroidShape, SpheroidProfile, ParamValues]]:
+        """
+        Return the terms of its density that the mass of the galaxy
+        follows (see mass.SpheroidDensity), at the values of its
+        parameters, laid out in the given shape (none for a profile that
+        takes none), in a galaxy of the given length of an arcsec (kpc):
+        the shape, the profile and the values of their parameters of each,
+        of the total mass of its light (that times kpc^2), to any radius.
+        """
+        pass
+
     def table(self, params: ParamValues) -> tuple[np.ndarray, np.ndarray]:
         """
         Return the table T of its function at the values of its
@@ -206,6 +227,24 @@ class LightSersic(LightProfile):
         scale = max(1.0, q) * np.float64(params['re'])
         with np.errstate(divide='ignore', invalid='ignore'):
             return float(1 - tables.mass(rmax / scale))
+
+    def mass_terms(
+            self,
+            params: ParamValues,
+            shape: SpheroidShape | None,
+            kpc_per_arcsec: float
+    ) -> list[tuple[SpheroidShape, SpheroidProfile, ParamValues]]:
+        # (a Sersic profile of the mass of its light, 2 pi n re^2 ie e^b
+        # b^-2n Gamma(2n), in kpc)
+        n, re = float(params['n']), params['re']
+        b = sersic_b(n)
+        light = 2 * np.pi * n * re ** 2 * params['ie'] * np.exp(b) \
+            * b ** (-2 * n) * scipy.special.gamma(2 * n)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            log_m = np.log10(light * kpc_per_arcsec ** 2)
+        values = dict(log_m=log_m, re=re * kpc_per_arcsec, n=n) \
+            | {name: params[name] for name in shape.pdescs()}
+        return [(shape, ProfileSersic(), values)]
 
     def table(self, params: ParamValues) -> tuple[np.ndarray, np.ndarray]:
         return _sersic_table(float(params['n']))
@@ -328,6 +367,26 @@ class LightMGE(LightProfile):
                 + np.sqrt(2 / np.pi) * x * np.exp(-x ** 2 / 2)
             light = i0 * sigma ** 2
             return float(np.sum(light * beyond) / np.sum(light))
+
+    def mass_terms(
+            self,
+            params: ParamValues,
+            shape: SpheroidShape | None,
+            kpc_per_arcsec: float
+    ) -> list[tuple[SpheroidShape, SpheroidProfile, ParamValues]]:
+        # (a flattened spherical Gaussian of the mass of its light, 2 pi i0
+        # sigma^2, in kpc, of each)
+        flattened, gaussian = ShapeFlattened(), ProfileGaussian()
+        terms = []
+        for i0, sigma, q in zip(*(
+                np.asarray(params[name], dtype=float)
+                for name in ('i0', 'sigma', 'q'))):
+            with np.errstate(divide='ignore', invalid='ignore'):
+                log_m = np.log10(
+                    2 * np.pi * i0 * (sigma * kpc_per_arcsec) ** 2)
+            terms.append((flattened, gaussian, dict(
+                log_m=log_m, sigma=sigma * kpc_per_arcsec, q=q)))
+        return terms
 
 
 def _projected_ratio(q: npt.ArrayLike, incl: float) -> np.ndarray:
@@ -517,6 +576,22 @@ class Spheroid(Component):
         q = params['q'] if shape is not None and not shape.spherical() \
             else 1.0
         return 'rmax', self._profile.cut(params, q, self._rmax)
+
+    def density_kind(self) -> 'type[SpheroidDensity]':
+        return SpheroidDensity
+
+    def plan_stage(
+            self,
+            driver: Driver,
+            sky_origin: tuple[float, float] | None,
+            followed: bool,
+            label: str
+    ) -> SpheroidStage | None:
+        # (it takes nothing from its galaxy: it has a part only when the
+        # mass follows it)
+        if not followed:
+            return None
+        return SpheroidStage(self, mass_per_unit(self.emission()))
 
     def plan(
             self,

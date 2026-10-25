@@ -182,6 +182,72 @@ class ProfileSersic(SpheroidProfile):
                 _numerics.sersic_tables(float(params['n'])))
 
 
+class ProfileGaussian(SpheroidProfile):
+    """
+    A spherical Gaussian of total mass 10^log_m (Msun) and dispersion
+    sigma (kpc): the density M / ((2 pi)^(3/2) sigma^3) exp(-r^2 / (2
+    sigma^2)), its enclosed mass M (erf(x / sqrt(2)) - sqrt(2 / pi) x
+    exp(-x^2 / 2)) and its potential -G M erf(x / sqrt(2)) / r (x = r /
+    sigma), exactly: a Gaussian of a multi-Gaussian expansion that a
+    mass follows (see spheroids.MassLightSpheroid). Not a profile of
+    configurations, nor public.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'gaussian'
+
+    def pdescs(self) -> dict[str, ParamDesc]:
+        return dict(
+            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
+            sigma=ParamScalarDesc(desc="the dispersion (kpc)", minimum=0))
+
+    def density(
+            self,
+            r: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        mass, sigma = 10 ** params['log_m'], params['sigma']
+        return mass / ((2 * np.pi) ** 1.5 * sigma ** 3) * np.exp(
+            -np.asarray(r, dtype=float) ** 2 / (2 * sigma ** 2))
+
+    def enclosed_mass(
+            self,
+            r: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        mass, sigma = 10 ** params['log_m'], params['sigma']
+        x = np.asarray(r, dtype=float) / sigma
+        return mass * (scipy.special.erf(x / np.sqrt(2))
+                       - np.sqrt(2 / np.pi) * x * np.exp(-x ** 2 / 2))
+
+    def surface_density(
+            self,
+            R: npt.ArrayLike,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        mass, sigma = 10 ** params['log_m'], params['sigma']
+        return mass / (2 * np.pi * sigma ** 2) * np.exp(
+            -np.asarray(R, dtype=float) ** 2 / (2 * sigma ** 2))
+
+    def potential(
+            self,
+            r: np.ndarray,
+            params: ParamValues,
+            context: MassContext
+    ) -> np.ndarray:
+        # (at r = 0, its limit -G M sqrt(2 / pi) / sigma)
+        mass, sigma = 10 ** params['log_m'], params['sigma']
+        r = np.asarray(r, dtype=float)
+        inner = np.divide(
+            scipy.special.erf(r / (np.sqrt(2) * sigma)), r,
+            out=np.full_like(r, np.sqrt(2 / np.pi) / sigma), where=r > 0)
+        return -G * mass * inner
+
+
 class ProfileNodewise(SpheroidProfile):
     """
     The spherical deprojection of a projected density given at radial

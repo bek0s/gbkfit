@@ -12,7 +12,7 @@ import numpy.typing as npt
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import MassComponent, MassContext, forces_in_plane
+from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
 from .surfaces import DiskSurface, disk_surface_parser
 from .vertical import DiskVertical, disk_vertical_parser
 
@@ -129,6 +129,10 @@ class MassDisk(MassComponent):
 
     def followed_components(self) -> tuple[str, ...]:
         return self._followed
+
+    @classmethod
+    def followed_kind(cls) -> 'type[DiskDensity]':
+        return DiskDensity
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._surface.pdescs() | self._vertical.pdescs()

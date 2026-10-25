@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from gbkfit.model import component_parser, galaxy_parser
-from gbkfit.model.components.disks._profiles import DiskDensity
+from gbkfit.model.components.disks._profiles import NodalDiskDensity
 from gbkfit.model.components.traits import RPTraitSpiral, VPTraitSpiral
 from gbkfit.utils.parseutils import ConfigError
 
@@ -213,7 +213,7 @@ def test_the_density_of_a_spiral_wave(driver):
 def test_the_gravity_takes_no_density_of_a_spiral_wave(driver):
     # (its azimuthal mean is 0, whatever its tables)
     wave_disk = disk(WAVE_VPTRAITS, WAVE_PTRAITS)
-    density = DiskDensity(
+    density = NodalDiskDensity(
         wave_disk, wave_disk.plan(driver, 0, np.float64), WAVE_VALUES, 1.0)
     radii = np.array([0.5, 3.0, 7.5])
     np.testing.assert_allclose(

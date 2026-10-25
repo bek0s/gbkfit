@@ -206,7 +206,7 @@ def axisymmetry_cases():
     """
     Every type of the polar traits whose azimuthal means the gravity of
     a galaxy and the rotation of a disk take (density, dispersion,
-    selection and velocity; see DiskDensity and _profiles.rotation), and
+    selection and velocity; see NodalDiskDensity and _profiles.rotation), and
     harmonics also of order 0.
     """
     for kind in ('pt', 'dpt', 'spt', 'vpt'):

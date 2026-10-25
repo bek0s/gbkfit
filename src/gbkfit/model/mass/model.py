@@ -16,7 +16,7 @@ from gbkfit.utils.parseutils import ConfigError
 from .base import MassComponent, MassContext
 from .disks import MassDisk
 from .points import MassPoint
-from .spheroids import MassSpheroid
+from .spheroids import MassLightSpheroid, MassSpheroid
 from .tables import MassTable
 from .user import MassUser
 
@@ -32,6 +32,7 @@ mass_component_parser = parseutils.TypedParser(MassComponent, [
     MassPoint,
     MassDisk,
     MassSpheroid,
+    MassLightSpheroid,
     MassTable,
     MassUser])
 

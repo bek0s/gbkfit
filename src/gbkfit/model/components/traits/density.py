@@ -897,7 +897,7 @@ class RPTraitSpiral(RPTrait):
     azimuthal mean of the sum of its other density polar traits), 0 where
     there is no wave. It is negative between the arms (with e <= 1, the
     density of the disk stays positive), and its azimuthal mean is 0, so
-    that the gravity of its galaxy does not take it (see DiskDensity).
+    that the gravity of its galaxy does not take it (see NodalDiskDensity).
     Its velocities are the velocity trait 'spiral' (see VPTraitSpiral).
     The Monte Carlo disks draw its clouds as those of a harmonic in each
     ring (see RPTraitNWHarmonic), of the phase f of the ring. With a given

@@ -15,7 +15,9 @@ from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
 from ..extras import Extras
 from ..gravity import Gravity, GravityNewton
-from ..mass import MassModel
+from ..mass import (
+    ComponentDensity, DiskDensity, MassComponent, MassModel, SpheroidDensity,
+    mass_component_parser)
 from . import _units
 from ._component_plans import ComponentPlans
 from ._detail import geometry_desc, shared_params
@@ -53,8 +55,8 @@ def _with_mass_params(
     Raise ConfigError if the distance or the gravity is given without mass
     (their only user), the mass has no distance, a component needs what
     the galaxy does not give (see Component.needs: e.g. the mass), a mass
-    component follows a component that is not a disk of the galaxy (see
-    Component.density_disk), the gravity does not take the mass model (see
+    component follows a component whose density it cannot follow (see
+    Component.density_kind), the gravity does not take the mass model (see
     Gravity.check_mass_model) or does not give the shares of a dark
     fraction, or the names of the parameters repeat.
     """
@@ -76,15 +78,12 @@ def _with_mass_params(
         raise ConfigError(
             "the mass of a galaxy needs its distance (e.g. distance: "
             "{type: direct})")
-    disks = [cmp.name() for cmp in components
-             if cmp.density_disk() is not None]
+    kinds = {cmp.name(): cmp.density_kind() for cmp in components
+             if cmp.density_kind() is not None}
     for mass_component in mass_model.components():
         for name in mass_component.followed_components():
-            if name not in disks:
-                raise ConfigError(
-                    f"the mass component {mass_component.name()!r} follows "
-                    f"the component {name!r}, which is not a disk of its "
-                    f"galaxy; its disks: {disks}")
+            if kinds.get(name) is not mass_component.followed_kind():
+                raise ConfigError(_follow_error(mass_component, name, kinds))
     # (of density height traits, as the densities that mass disks follow:
     # see DiskDensity.thick)
     thick = [cmp.name() for cmp in components
@@ -109,6 +108,33 @@ def _with_mass_params(
             f"the names of parameters of the components: {repeated}; rename "
             f"the components")
     return params | taken
+
+
+# The kinds of the densities that the mass can follow, in words
+_KINDS = {DiskDensity: 'a disk', SpheroidDensity: 'a spheroid'}
+
+
+def _follow_error(
+        mass_component: MassComponent,
+        name: str,
+        kinds: dict[str, type[ComponentDensity]]
+) -> str:
+    """
+    Return the message of the error of a mass component that follows the
+    component of the given name, which is not one that it can follow,
+    with the kinds of the densities of the components that the mass can
+    follow, by their names.
+    """
+    wanted = _KINDS[mass_component.followed_kind()]
+    head = (f"the mass component {mass_component.name()!r} follows the "
+            f"density of {wanted}")
+    if name not in kinds:
+        return (f"{head}, but its galaxy has no component {name!r} whose "
+                f"density the mass can follow; those it can: {list(kinds)}")
+    types = [cls.type() for cls in mass_component_parser.registered_classes()
+             .values() if cls.followed_kind() is kinds[name]]
+    return (f"{head}, but {name!r} is {_KINDS[kinds[name]]}: the mass that "
+            f"follows it is of the type {' or '.join(map(repr, types))}")
 
 
 def _component_prefixes(components: Sequence[Component]) -> list[str]:
