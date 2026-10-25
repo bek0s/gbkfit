@@ -130,8 +130,8 @@ def check_velocities(
     if spec_rest is None and spec_convention is None:
         raise ConfigError(
             "the velocities of moment maps need their convention: give "
-            "spec_rest (e.g. 'hi21' for the radio velocities of HI, or "
-            "'6562.8 Angstrom' for optical ones), or spec_convention "
+            "spec_rest (e.g. '1420.405752 MHz' for the radio velocities of "
+            "HI, or '6562.8 Angstrom' for optical ones), or spec_convention "
             "'relativistic'")
 
 
