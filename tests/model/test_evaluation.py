@@ -12,7 +12,7 @@ import sys
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 def line_disk(vptraits, **options):
@@ -42,16 +42,16 @@ def nodewise_relative_case(driver):
 
 
 def test_evaluation_does_not_modify_params(driver):
-    group = observation_group([nodewise_relative_case(driver)])
-    params = gbkfit.params.ParamSpace(group.pdescs(), dict(
+    plan = group_plan([nodewise_relative_case(driver)])
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45,
         pt_a=1, pt_s=4, dpt_a=10,
         vpt_vt=[100] + [10] * 11),
         modes=dict(vpt_vt=gbkfit.params.ParamModeOffsets()))
     values = params.evaluate()
     values_before = copy.deepcopy(values)
-    first = copy.deepcopy(group.model_h(values)[0]['spectra']['d'])
-    second = group.model_h(values)[0]['spectra']['d']
+    first = copy.deepcopy(plan.model_h(values)[0]['spectra']['d'])
+    second = plan.model_h(values)[0]['spectra']['d']
     np.testing.assert_array_equal(values['vpt_vt'], values_before['vpt_vt'])
     np.testing.assert_array_equal(first, second)
 
@@ -62,8 +62,8 @@ _THICK_DISK_SCRIPT = """
 import sys
 import gbkfit.params
 import numpy as np
-from modelutils import observation_group
-group = observation_group([dict(
+from modelutils import group_plan
+plan = group_plan([dict(
     driver=dict(type='host'),
     observable=dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
     line_of_sight=dict(type='grid'),
@@ -76,10 +76,10 @@ group = observation_group([dict(
         kinematics=dict(
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))])
-params = gbkfit.params.ParamSpace(group.pdescs(), dict(
+params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, pt_a=1, pt_s=4, ht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
-np.save(sys.argv[1], group.model_h(params.evaluate())[0]['spectra']['d'])
+np.save(sys.argv[1], plan.model_h(params.evaluate())[0]['spectra']['d'])
 """
 
 
@@ -131,11 +131,12 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
         steps = (step, step, 10)[:len(size)]
         return ObservationSky(observable_parser.load(dict(
             type=observable_type, size=list(size), step=list(steps))),
-            Flat(), driver)
+            Flat())
 
     def evaluate(group, i):
         params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-        return group.model_h(params.evaluate())[i][key]['d'].copy()
+        return group.plan(driver).model_h(
+            params.evaluate())[i][key]['d'].copy()
 
     shared = ObservationGroup(
         [galaxy_parser.load(galaxy_info)], [observation(1), observation(0.5)])
@@ -150,8 +151,8 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
 def test_incompatible_observations_are_rejected_before_evaluation(
         observable, emission):
     # An image sees the components that emit in a band, and the others
-    # (spectral cubes) those that emit lines; the group of an observation
-    # that sees none is rejected before any evaluation
+    # (spectral cubes) those that emit lines; the plan of the group of an
+    # observation that sees none is rejected before any evaluation
     component = dict(
         type='smdisk', loose=False, tilted=False, rnodes=[0, 1, 2],
         density=dict(ptraits=dict(type='exponential')),
@@ -164,7 +165,7 @@ def test_incompatible_observations_are_rejected_before_evaluation(
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[component]))
     with pytest.raises(Exception, match="it sees none"):
-        observation_group([case])
+        group_plan([case])
 
 
 def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
@@ -172,17 +173,17 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     # their range: a negative power of a negative number within -rt) makes
     # the spectra NaN, so that it is seen, instead of picking channels
     # out of the cube
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()),
         observable=dict(
             type='pixel_spectra', size=[16, 16, 21], step=[1, 1, 10]),
         line_of_sight=dict(type='flat'),
         galaxy=line_disk(
             dict(type='courteau', direction='tan'), rnodes=list(range(0, 8))))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), dict(
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4,
         vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10))
-    cube = group.model_h(params.evaluate())[0]['spectra']['d']
+    cube = plan.model_h(params.evaluate())[0]['spectra']['d']
     nan = np.isnan(cube)
     assert nan.any() and np.isfinite(cube[~nan]).all()
     # The spectra of the spaxels within -rt are NaN
@@ -199,7 +200,7 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
 
     def image(depth_size, depth_step):
         depth = dict(extent=depth_size * depth_step, step=depth_step)
-        group = observation_group([dict(
+        plan = group_plan([dict(
             driver=dict(type=driver.type()),
             observable=dict(type='pixel_brightness', size=[64, 64]),
             line_of_sight=dict(type='grid', depth=depth),
@@ -210,9 +211,9 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
                     ptraits=dict(type='exponential'),
                     htraits=dict(type='sech2', zmax=8)),
                 emission=dict(type='band'))]))])
-        params = gbkfit.params.ParamSpace(group.pdescs(), dict(
+        params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
             xpos=0, ypos=0, posa=0, incl=30, pt_a=1, pt_s=6, ht_s=1))
-        return group.model_h(params.evaluate())[0]['brightness']['d']
+        return plan.model_h(params.evaluate())[0]['brightness']['d']
     many = image(528384, 0.001)
     few = image(1032, 0.512)
     assert few.sum() > 0

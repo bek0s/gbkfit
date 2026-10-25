@@ -64,12 +64,11 @@ def evaluate_mmaps(driver, observable, **properties):
             vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))
-    group = ObservationGroup(
-        [galaxy], [ObservationSky(observable, Flat(), driver)])
+    group = ObservationGroup([galaxy], [ObservationSky(observable, Flat())])
     params = ParamSpace(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
-    return group.model_h(params.evaluate())[0]
+    return group.plan(driver).model_h(params.evaluate())[0]
 
 
 def test_higher_moments_of_a_gaussian_line(driver):

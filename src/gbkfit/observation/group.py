@@ -1,25 +1,18 @@
 import copy
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
-import numpy as np
 from astropy.coordinates import SkyCoord
 
-from gbkfit.dataset import Data, Dataset
+from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
-from gbkfit.model import Extras, Galaxy
-from gbkfit.model.components._functions import GalaxyFunctions
-from gbkfit.model.components._stage import GalaxyState
-from gbkfit.model.components._units import DataUnit
-from gbkfit.model.mass.units import G
-from gbkfit.params import (
-    ParamDesc, ParamFunctions, ParamScalarDesc, ParamValues)
-from gbkfit.utils import iterutils, parseutils, threadutils, timeutils
+from gbkfit.model import Galaxy
+from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
+from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from ._group_plan import GroupPlan
 from ._scene import DepthUnit, SeenGalaxies
-from .noise import Noise
-from .observables import HostModelData, ModelData
 from .observation import Observation
 
 
@@ -87,17 +80,6 @@ class _Frame(NamedTuple):
         return moved
 
 
-def _same_unit(a: DataUnit | None, b: DataUnit | None) -> bool:
-    """
-    Return whether two units of the light of data are the same (see
-    DataUnit, whose beams can be arrays, one for each spectral point).
-    """
-    if a is None or b is None:
-        return a is b
-    return all(np.array_equal(x, y) if isinstance(x, np.ndarray)
-               else x == y for x, y in zip(a, b))
-
-
 class ObservationGroup:
     """
     Galaxies and the observations of them, evaluated together.
@@ -130,10 +112,10 @@ class ObservationGroup:
     The observations that are not on the sky see the parameters as they
     are.
 
-    The plans of the observations are made here, once (copies of the
-    group with other data share them; see with_data). The stage of each
-    galaxy is evaluated once for all the observations of it (see
-    Galaxy.plan_stage).
+    The group describes the galaxies and the observations; its
+    evaluation is planned on devices by plan (see GroupPlan), where the
+    stage of each galaxy is evaluated once for all the observations of
+    it.
 
     Parameters
     ----------
@@ -159,8 +141,7 @@ class ObservationGroup:
         depth_order names unknown galaxies or repeats them, has a group of
         fewer than two galaxies, or of the name of a galaxy or an
         observation, every observation of a galaxy has offsets of position
-        or of velocity, or what an observation sees does not go with it
-        (see Observation.plan).
+        or of velocity.
     """
 
     def __init__(
@@ -190,7 +171,7 @@ class ObservationGroup:
             raise ConfigError(
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
-        # (as given, for copies; see with_driver)
+        # (as given, for copies; see with_data)
         self._given_depth_order = \
             None if depth_order is None else tuple(depth_order)
         self._depth_order = _depth_order(
@@ -238,40 +219,18 @@ class ObservationGroup:
         first = _first_on_sky(self._observations)
         self._sky_origin = None if first is None \
             else self._observations[first].sky_origin()
-        plans = []
         seen = []
         for i, observation in enumerate(self._observations):
             with parseutils.config_path('observations', i):
                 seen.append(self._seen(i, observation))
-                plans.append(observation.plan(self._seen_by(seen[-1])))
-        self._plans = tuple(plans)
         # The indices of the galaxies that each observation sees
-        self._seen_galaxies = tuple(seen)
-        stages = []
-        for g, galaxy in enumerate(self._galaxies):
-            with parseutils.config_path('galaxies', g):
-                stages.append(galaxy.plan_stage(self._sky_origin))
-        self._stages = tuple(stages)
+        self._seen_galaxies = tuple(tuple(indices) for indices in seen)
         self._frames = tuple(
             self._frame(seen, observation, alignment)
             for seen, observation, alignment in zip(
                 seen, self._observations, _alignments(self._observations)))
         _check_offsets(self._galaxies, self._observations, seen)
         _warn_unused_masses(self._galaxies, self._observations, seen)
-        self._init_evaluations()
-
-    def _init_evaluations(self) -> None:
-        """
-        Make what its evaluations write: the model data of each observation
-        on the host and the device, and the times of the steps.
-        """
-        self._h_model_data = [
-            {key: dict(d=None, m=None, w=None) for key in obs.keys()}
-            for obs in self._observations]
-        self._d_model_data = [dict() for _ in self._observations]
-        # The times of the steps of its evaluations (and of those of the
-        # objectives of its data)
-        self._timers = timeutils.Timers()
 
     def _seen(self, i: int, observation: Observation) -> list[int]:
         """Return the indices of the galaxies that observation i sees."""
@@ -316,12 +275,13 @@ class ObservationGroup:
             tuple(names['x']), tuple(names['y']), tuple(names['v']),
             alignment, observation.offset_params())
 
-    def _seen_by(self, seen: list[int]) -> SeenGalaxies:
+    def seen_by(self, index: int) -> SeenGalaxies:
         """
-        Return the galaxies of the given indices as an observation sees
-        them: in the depth order of those of them in it (a group of which
-        it sees one galaxy is that galaxy).
+        Return the galaxies that the observation of the given index sees,
+        as it sees them: in the depth order of those of them in it (a
+        group of which it sees one galaxy is that galaxy).
         """
+        seen = self._seen_galaxies[index]
         order = None
         if self._depth_order is not None:
             order = []
@@ -339,32 +299,80 @@ class ObservationGroup:
             tuple(self._galaxy_labels[j] for j in seen),
             None if order is None else tuple(order), self._sky_origin)
 
-    def with_driver(self, driver: Driver) -> Self:
+    def plan(
+            self,
+            driver: Driver | None = None,
+            drivers: Mapping[str, Driver] | None = None
+    ) -> 'GroupPlan':
         """
-        Return a group of the same galaxies and observations, all on
-        another driver (see Galaxy.with_driver and
-        Observation.with_driver), with its own plans on it.
+        Plan the evaluation of the group on devices (see GroupPlan): the
+        stage of each galaxy and the model of each observation, each on
+        its driver (see placement).
+
+        Parameters
+        ----------
+        driver : Driver, optional
+            The driver of the galaxies and the observations; the host by
+            default.
+        drivers : Mapping of str to Driver, optional
+            Other drivers of some of them, by their labels (see
+            galaxy_label and observation_label): e.g. {'halpha': gpu0,
+            'hi': gpu1}.
+
+        Returns
+        -------
+        GroupPlan
+            The plan.
+
+        Raises
+        ------
+        ConfigError
+            If drivers names unknown galaxies or observations, or what an
+            observation sees does not go with it (see Observation.plan), or
+            a galaxy cannot plan its stage (see Galaxy.plan_stage).
         """
-        return type(self)(
-            [galaxy.with_driver(driver) for galaxy in self._galaxies],
-            [obs.with_driver(driver) for obs in self._observations],
-            self._given_depth_order)
+        return GroupPlan(self, *self.placement(driver, drivers))
+
+    def placement(
+            self,
+            driver: Driver | None = None,
+            drivers: Mapping[str, Driver] | None = None
+    ) -> tuple[tuple[Driver, ...], tuple[Driver, ...]]:
+        """
+        Return the driver of each galaxy and of each observation: the
+        given one (the host by default), or another one of their label
+        (see plan).
+
+        Raises
+        ------
+        ConfigError
+            If drivers names unknown galaxies or observations, or a label
+            that is of a galaxy and of an observation.
+        """
+        if driver is None:
+            # (imported here: the host driver needs its native module)
+            from gbkfit.driver.drivers.host import DriverHost
+            driver = DriverHost()
+        drivers = dict(drivers or {})
+        galaxies, observations = self._galaxy_labels, self._observation_labels
+        if unknown := sorted(drivers.keys() - {*galaxies, *observations}):
+            raise ConfigError(
+                f"there are drivers of unknown galaxies or observations "
+                f"{unknown}; the galaxies are {galaxies} and the "
+                f"observations {observations}")
+        if both := sorted(drivers.keys() & set(galaxies) & set(observations)):
+            raise ConfigError(
+                f"there are drivers of {both}, which are labels of a galaxy "
+                f"and of an observation; name them apart")
+        return (
+            tuple(drivers.get(label, driver) for label in galaxies),
+            tuple(drivers.get(label, driver) for label in observations))
 
     def with_data(self, datasets: Sequence[Dataset]) -> Self:
         """
         Return a group of the same galaxies and observations, with other
         data: one dataset for each observation (e.g. those of a bootstrap;
         see Observation.with_data), under its likelihood.
-
-        The plans of the observations do not depend on the values of their
-        data, only on their unit (see Observation.data_unit): the copy
-        shares the plans of those whose data keep their unit (e.g. all of
-        them, in a bootstrap), and with them the memory of their models,
-        on their devices. So the two must not be evaluated at the same
-        time (e.g. in two threads; copies on other drivers can, see
-        with_driver). A copy whose observations have other parameters
-        (e.g. a likelihood of data that they had none of) has plans of its
-        own.
 
         Raises
         ------
@@ -385,13 +393,6 @@ class ObservationGroup:
                 self._galaxies, observations, self._given_depth_order)
         group = copy.copy(self)
         group._observations = tuple(observations)
-        group._plans = tuple(
-            plan if _same_unit(new.data_unit(), old.data_unit())
-            else new.plan(self._seen_by(seen))
-            for plan, seen, new, old in zip(
-                self._plans, self._seen_galaxies, observations,
-                self._observations))
-        group._init_evaluations()
         return group
 
     def galaxies(self) -> tuple[Galaxy, ...]:
@@ -425,232 +426,49 @@ class ObservationGroup:
         """Return the constants of the galaxies, prefixed."""
         return self._constants
 
-    def timers(self) -> timeutils.Timers:
-        """Return the times of the steps of the evaluations of the group."""
-        return self._timers
-
-    def plan_functions(self) -> ParamFunctions:
+    def galaxy_label(self, index: int) -> str:
         """
-        Plan the functions of the galaxies, for the derived values of the
-        parameters (see ParamSpace): those of each galaxy (see
-        Galaxy.plan_functions), prefixed as its parameters (e.g.
-        'north_vcirc'), and the gravitational constant G ((km/s)^2 kpc /
-        Msun). They have their own stages and plans, apart from those of
-        the evaluations of the group (which may run at the same time).
-
-        Returns
-        -------
-        ParamFunctions
-            The functions.
+        Return the id of the galaxy of the given index in the extra
+        outputs: its name, or 'galaxy{index}'.
         """
-        return _GroupFunctions(
-            [galaxy.plan_functions(self._sky_origin)
-             for galaxy in self._galaxies],
-            self._mappings, self._prefixes)
+        return self._galaxy_labels[index]
 
-    def _galaxy_states(
-            self,
-            params: ParamValues,
-            out_extra: Extras | None
-    ) -> list[GalaxyState]:
+    def mappings(self) -> tuple[dict[str, str], ...]:
         """
-        Evaluate the stage of each galaxy: its mass, and what it gives its
-        components (see GalaxyStage.evaluate); its extra outputs go to
-        out_extra, if given, with the label of the galaxy as the id
-        'galaxy'.
+        Return the names of the parameters of each galaxy among those of
+        the group, by its own names.
         """
-        return [
-            stage.evaluate(
-                {name: params[full] for name, full in mapping.items()},
-                None if out_extra is None else out_extra.scoped(galaxy=label))
-            for stage, mapping, label in zip(
-                self._stages, self._mappings, self._galaxy_labels)]
+        return tuple(self._mappings)
 
-    def model_d(
-            self,
-            params: ParamValues,
-            out_extra: Extras | None = None
-    ) -> list[ModelData]:
+    def prefixes(self) -> tuple[str, ...]:
         """
-        Evaluate the model data of the observations, on their drivers,
-        with BLAS on one thread (see threadutils.single_threaded_blas).
-
-        Parameters
-        ----------
-        params : dict
-            The parameters of the galaxies, prefixed (see pdescs).
-        out_extra : Extras, optional
-            Where the extra outputs go, if wanted: those of each
-            observation with its label as the id 'observation' (see
-            observation_label), and those of the stage of each galaxy
-            (e.g. its rotation tables, see GalaxyStage.evaluate) with its
-            name, or 'galaxy{i}', as the id 'galaxy'.
-
-        Returns
-        -------
-        list of ModelData
-            The model data of each observation, on its driver; they are
-            overwritten by the next evaluation.
+        Return the prefix of the parameters of each galaxy (its name and
+        '_', or none for one galaxy without a name).
         """
-        with (self._timers.measure('model_eval'),
-              threadutils.single_threaded_blas()):
-            with self._timers.measure('model_gravity'):
-                states = self._galaxy_states(params, out_extra)
-            for i, plan in enumerate(self._plans):
-                self._d_model_data[i] = plan.evaluate(
-                    self._frames[i].moved(params),
-                    [states[g] for g in self._seen_galaxies[i]],
-                    None if out_extra is None else out_extra.scoped(
-                        observation=self._observation_labels[i]))
-        return self._d_model_data
+        return tuple(self._prefixes)
 
-    def mock(
-            self,
-            params: ParamValues,
-            noises: Noise | Sequence[Noise],
-            nmocks: int = 1,
-            nsamples: int = 100,
-            seed: int | None = None
-    ) -> list[list[Dataset]]:
+    def sky_origin(self) -> tuple[float, float] | None:
         """
-        Draw mock data of the observations: their model data measured
-        from what their instruments record of the model plus noise (see
-        ObservablePlan.mock), with their errors.
-
-        The data that are what the instrument records plus the noise (e.g.
-        spectra) have its dispersion as their errors, and declare its
-        correlation; those measured from them (e.g. moments) the scatter
-        of their values over nsamples other draws (the standard deviation,
-        of the values that are finite in at least two draws; the others
-        are missing). The mock data have the unit and the beam of the
-        data of their observation, if it has data.
-
-        Parameters
-        ----------
-        params : dict
-            The parameters of the galaxies, prefixed (see pdescs).
-        noises : Noise or Sequence of Noise
-            The noise of the data of every observation, or of each.
-        nmocks : int, optional
-            The number of mock datasets of each observation.
-        nsamples : int, optional
-            The number of draws of the errors of measured data.
-        seed : int, optional
-            The seed of the random numbers; the same seed gives the same
-            mock data. By default, the mock data differ from run to run.
-
-        Returns
-        -------
-        list of list of Dataset
-            The mock datasets of each observation, in the units of its
-            model.
-
-        Raises
-        ------
-        ConfigError
-            If there is not one noise per observation, or one, a noise does
-            not suit the data of its observation (see Noise.draw), or
-            nmocks or nsamples (needed) is below 1 or 2.
+        Return the RA and Dec (degrees) of the origin of the frame of the
+        parameters of the galaxies: that of the first observation on the
+        sky (see the class); None if none is.
         """
-        noises = list(noises) if isinstance(noises, Sequence) \
-            else [noises] * len(self._observations)
-        if len(noises) != len(self._observations):
-            raise ConfigError(
-                f"there are {len(self._observations)} observations, but "
-                f"{len(noises)} noises")
-        if nmocks < 1:
-            raise ConfigError(f"nmocks must be at least 1; it is {nmocks}")
-        states = self._galaxy_states(params, None)
-        streams = np.random.SeedSequence(seed).spawn(len(self._observations))
-        mocks = []
-        for i, (obs, plan, noise, stream) in enumerate(zip(
-                self._observations, self._plans, noises, streams)):
-            with parseutils.config_path('observations', i):
-                exact = plan.has_exact_errors()
-                if not exact and nsamples < 2:
-                    raise ConfigError(
-                        f"the errors of measured data are the scatter of "
-                        f"nsamples draws, at least 2; nsamples is {nsamples}")
-                draws, errors = plan.mock(
-                    self._frames[i].moved(params),
-                    [states[g] for g in self._seen_galaxies[i]],
-                    noise, np.random.default_rng(stream),
-                    nmocks + (0 if exact else nsamples))
-            if errors is None:
-                errors = _scatter(draws[nmocks:])
-            options = _mock_options(obs, noise, exact)
-            mocks.append([
-                obs.dataset({
-                    key: Data(item['d'], error=errors[key], **options[key])
-                    for key, item in draw.items()})
-                for draw in draws[:nmocks]])
-        return mocks
+        return self._sky_origin
 
-    def model_h(
-            self,
-            params: ParamValues,
-            out_extra: Extras | None = None
-    ) -> list[dict[str, dict[str, np.ndarray | None]]]:
+    def seen_galaxies(self, index: int) -> tuple[int, ...]:
         """
-        Evaluate the model data of the observations, on the host.
-
-        Parameters
-        ----------
-        params : dict
-            The parameters of the galaxies, prefixed (see pdescs).
-        out_extra : Extras, optional
-            Where the extra outputs go, if wanted (see model_d).
-
-        Returns
-        -------
-        list of dict
-            The model data of each observation (see ModelData), copied to
-            the host; they are overwritten by the next evaluation.
+        Return the indices of the galaxies that the observation of the
+        given index sees.
         """
-        self.model_d(params, out_extra)
-        with self._timers.measure('model_d2h'):
-            for i, obs in enumerate(self._observations):
-                driver = obs.driver()
-                for key, d_item in self._d_model_data[i].items():
-                    h_item = self._h_model_data[i][key]
-                    for k, d_array in d_item.items():
-                        if d_array is not None:
-                            h_item[k] = driver.mem_copy_d2h(
-                                d_array, h_item[k])
-        return self._h_model_data
+        return self._seen_galaxies[index]
 
-
-class _GroupFunctions(ParamFunctions):
-    """
-    The functions of the galaxies of a group (see
-    ObservationGroup.plan_functions): those of each galaxy, the mapping of
-    its parameters to those of the group, and its prefix.
-    """
-
-    def __init__(
-            self,
-            functions: Sequence[GalaxyFunctions],
-            mappings: Sequence[dict[str, str]],
-            prefixes: Sequence[str]
-    ):
-        self._functions = tuple(functions)
-        self._mappings = tuple(mappings)
-        self._prefixes = tuple(prefixes)
-
-    def names(self) -> tuple[str, ...]:
-        return ('G',) + tuple(
-            f'{prefix}{name}'
-            for functions, prefix in zip(self._functions, self._prefixes)
-            for name in functions.names())
-
-    def bind(self, values: ParamValues) -> dict[str, Any]:
-        bound: dict[str, Any] = dict(G=G)
-        for functions, mapping, prefix in zip(
-                self._functions, self._mappings, self._prefixes):
-            own = functions.bind(
-                {name: values[full] for name, full in mapping.items()})
-            bound |= {f'{prefix}{name}': value for name, value in own.items()}
-        return bound
+    def moved(self, index: int, params: ParamValues) -> ParamValues:
+        """
+        Return the parameters as the observation of the given index sees
+        them: the centres and systemic velocities of what it sees moved
+        into its frame (see the class).
+        """
+        return self._frames[index].moved(params)
 
 
 # Warn of observations whose origins are further apart on the sky (deg),
@@ -768,49 +586,6 @@ def _check_offsets(
                     f"every observation of galaxy {galaxy.name() or g} has "
                     f"offsets of {kind}; one needs none, whose frame places "
                     f"the galaxy")
-
-
-def _mock_options(
-        observation: Observation, noise: Noise, exact: bool
-) -> dict[str, dict[str, Any]]:
-    """
-    Return the options of the mock data of each data item of an
-    observation (see ObservationGroup.mock): the unit and the beam of its
-    data, if any, and the correlation of the noise of those that are what
-    the instrument records plus the noise (exact errors).
-    """
-    spatial, spectral = noise.correlations() if exact else (None, None)
-    if spatial == 'instrument':
-        # (only observations on the sky draw noise correlated by their
-        # instrument; see Noise.draw)
-        spatial = observation.instrument().psf()
-    data = observation.data()
-    return {
-        key: dict(
-            spatial_correlation=spatial, spectral_correlation=spectral)
-        | ({} if data is None else dict(
-            unit=data[key].unit(), beam=data[key].beam()))
-        for key in observation.keys()}
-
-
-def _scatter(draws: Sequence[HostModelData]) -> dict[str, np.ndarray]:
-    """
-    Return the scatter of the values of each data item over draws of
-    them: the standard deviation of the values that are finite in at
-    least two draws (NaN for the others).
-    """
-    scatter = {}
-    for key in draws[0]:
-        values = np.stack([draw[key]['d'] for draw in draws])
-        finite = np.isfinite(values)
-        count = finite.sum(axis=0)
-        values = np.where(finite, values, 0)
-        with np.errstate(divide='ignore', invalid='ignore'):
-            mean = values.sum(axis=0) / count
-            variance = np.where(
-                finite, (values - mean) ** 2, 0).sum(axis=0) / (count - 1)
-        scatter[key] = np.where(count >= 2, np.sqrt(variance), np.nan)
-    return scatter
 
 
 def _depth_order(

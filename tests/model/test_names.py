@@ -148,7 +148,7 @@ def extra_outputs(group_, prefixes):
     params = gbkfit.params.ParamSpace(
         group_.pdescs(), properties, constants=group_.constants())
     extra = Extras()
-    group_.model_h(params.evaluate(), extra)
+    group_.plan().model_h(params.evaluate(), extra)
     return {(x.name, *x.ids.values()) for x in extra}
 
 

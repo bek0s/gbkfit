@@ -12,7 +12,7 @@ from gbkfit.math import interpolation
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.params.space import ParamSpace
-from modelutils import observation_group
+from modelutils import group_plan, observation_group
 
 
 PROPERTIES = dict(
@@ -138,7 +138,7 @@ def evaluate_curve(component, free):
         vpt_vt='vmax * 2 / np.pi * np.arctan(subrnodes / rt)'),
         constants=obs_group.constants())
     extra = Extras()
-    obs_group.model_h(space.evaluate(free), extra)
+    group_plan([case(component)]).model_h(space.evaluate(free), extra)
     return extra.get('vdata', component='component0').data
 
 

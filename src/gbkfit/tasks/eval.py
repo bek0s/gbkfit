@@ -15,7 +15,7 @@ import pandas as pd
 from gbkfit.objective import Objective
 import gbkfit.outputs
 from gbkfit.observation import (
-    Likelihood, Noise, ObservationGroup, likelihood_parser, noise_parser,
+    GroupPlan, Likelihood, Noise, likelihood_parser, noise_parser,
     observation_parser)
 from gbkfit.params import ParamSpace, ParamValues
 from gbkfit.utils import iterutils, numutils, parseutils
@@ -37,11 +37,12 @@ _log = logging.getLogger(__name__)
 
 class Evaluation(NamedTuple):
     """
-    What evaluates a configuration (see load): the observations of its
-    galaxies, its parameters, and its objective, if every observation
-    has data (else None).
+    What evaluates a configuration (see load): the plan of the
+    observations of its galaxies (see ObservationGroup.plan), its
+    parameters, and its objective, if every observation has data (else
+    None).
     """
-    group: ObservationGroup
+    group_plan: GroupPlan
     params: ParamSpace
     objective: Objective | None
 
@@ -91,9 +92,9 @@ class Evaluation(NamedTuple):
         """
         residuals = self.objective is not None
         outputs = _detail.evaluation_outputs(
-            self.group, self.objective, values, True, residuals, extra)
+            self.group_plan, self.objective, values, True, residuals, extra)
         if data:
-            outputs |= _detail.data_outputs(self.group)
+            outputs |= _detail.data_outputs(self.group_plan)
         return outputs
 
 
@@ -128,7 +129,7 @@ def eval_(
     The mode 'mock' writes the models (as 'model'), and mock data of the
     observations: their models measured from what their instruments
     record of the models plus noise, with their errors (see
-    ObservationGroup.mock). Each mock k is the files of the data of each
+    GroupPlan.mock). Each mock k is the files of the data of each
     observation (in mocks/<k>/observations/<observation>/, kind
     'mock_data') and a configuration that fits them (mocks/<k>/
     config.yaml, 'mock_config'): the configuration with each observation
@@ -139,7 +140,7 @@ def eval_(
       (see Noise);
     - nmocks (1), nsamples (100) and seed (none): the number of mocks,
       the number of draws of the errors of measured data (e.g. moments),
-      and the seed of the random numbers (see ObservationGroup.mock);
+      and the seed of the random numbers (see GroupPlan.mock);
     - likelihood (optional): the likelihood of the mock data of every
       observation, or a list of one (or null) for each, in the mock
       configurations; by default that of its data, if it has data, or
@@ -189,7 +190,7 @@ def load(config: str) -> Evaluation:
     Read a configuration file, and set up the observations of its galaxies,
     its parameters, and its objective if every observation has data, to
     evaluate them (e.g. at other values of the parameters; see
-    ParamSpace.evaluate, Evaluation.outputs and ObservationGroup.model_h).
+    ParamSpace.evaluate, Evaluation.outputs and GroupPlan.model_h).
 
     Parameters
     ----------
@@ -209,12 +210,13 @@ def load(config: str) -> Evaluation:
     """
     file = _read_config(config, _OPTIONAL + _FIT)
     with parseutils.paths_relative_to(file.root):
-        group, params = _set_up(file.config)
+        group_plan, params = _set_up(file.config)
     objective = None
-    if all(obs.data() is not None for obs in group.observations()):
+    if all(obs.data() is not None
+           for obs in group_plan.group().observations()):
         _log.info("setting up objective...")
-        objective = Objective(group, params.solves())
-    return Evaluation(group, params, objective)
+        objective = Objective(group_plan, params.solves())
+    return Evaluation(group_plan, params, objective)
 
 
 # The sections of the configurations of the task, and those of fits, which
@@ -233,17 +235,18 @@ def _read_config(
     return _detail.read_config(config, _REQUIRED, optional)
 
 
-def _set_up(cfg: dict[str, Any]) -> tuple[ObservationGroup, ParamSpace]:
+def _set_up(cfg: dict[str, Any]) -> tuple[GroupPlan, ParamSpace]:
     """
-    Set up the observations and the parameters of a configuration (with
-    the paths relative to its root).
+    Set up the plan of the observations and the parameters of a
+    configuration (with the paths relative to its root).
     """
     _log.info("setting up galaxies and observations...")
     group = _detail.load_observation_group(cfg)
+    group_plan = _detail.load_group_plan(cfg, group)
     _log.info("setting up params...")
     params = _detail.load_params(
-        cfg, group.pdescs(), group.constants(), group.plan_functions())
-    return group, params
+        cfg, group.pdescs(), group.constants(), group_plan.plan_functions())
+    return group_plan, params
 
 
 def _eval(
@@ -255,47 +258,48 @@ def _eval(
 ) -> None:
     """Evaluate a configuration, and write the outputs (see eval_)."""
     with parseutils.paths_relative_to(root):
-        group, params = _set_up(cfg)
+        group_plan, params = _set_up(cfg)
         objective = None
         if mode == 'objective':
             _log.info("setting up objective...")
-            objective = Objective(group, params.solves())
+            objective = Objective(group_plan, params.solves())
         mock = None
         if mode == 'mock':
             with parseutils.config_path('mock'):
-                mock = _load_mock(cfg['mock'], group.nobservations())
+                mock = _load_mock(
+                    cfg['mock'], group_plan.group().nobservations())
 
     _log.info("calculating model parameters...")
-    param_values = Evaluation(group, params, objective).values()
+    param_values = Evaluation(group_plan, params, objective).values()
     run.write('params.json', 'params', dict(
         params=param_values, eparams=params.element_values(param_values),
         derived=params.derived_values(param_values)))
 
     _log.info("evaluating...")
     outputs = _detail.evaluation_outputs(
-        group, objective, param_values, True, mode == 'objective')
+        group_plan, objective, param_values, True, mode == 'objective')
     if objective is not None:
-        outputs |= _detail.data_outputs(group)
+        outputs |= _detail.data_outputs(group_plan)
         _log.info(f"chi-square: {objective.chi2(param_values)}")
     _log.info("storing outputs to the filesystem...")
     _detail.write_outputs(run, outputs)
     if mock is not None:
         _log.info(f"drawing {mock.nmocks} mock datasets...")
-        _write_mocks(cfg, root, group, param_values, mock, run)
+        _write_mocks(cfg, root, group_plan, param_values, mock, run)
 
     if profile_iters > 0:
         _log.info("running performance test...")
         # Time the profiled evaluations only (the first evaluation, above,
         # also warmed up the drivers)
-        group.timers().clear()
+        group_plan.timers().clear()
         for _ in range(profile_iters):
             if objective is None:
-                group.model_d(param_values)
+                group_plan.model_d(param_values)
             else:
                 objective.chi2(param_values)
         time_stats = numutils.nativify({
             name: stats.to_dict()
-            for name, stats in group.timers().stats().items()})
+            for name, stats in group_plan.timers().stats().items()})
         _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
         run.write('timings.json', 'timings', time_stats)
 
@@ -336,17 +340,19 @@ def _load_mock(info: dict[str, Any], nobservations: int) -> _Mock:
 def _write_mocks(
         cfg: dict[str, Any],
         root: str,
-        group: ObservationGroup,
+        group_plan: GroupPlan,
         values: ParamValues,
         mock: _Mock,
         run: gbkfit.outputs.RunWriter
 ) -> None:
     """
-    Draw the mock data of the observations of a group at the parameter
-    values, and write their files and configurations (see eval_).
+    Draw the mock data of the observations of a plan of a group at the
+    parameter values, and write their files and configurations (see
+    eval_).
     """
+    group = group_plan.group()
     with parseutils.config_path('mock'):
-        datasets = group.mock(
+        datasets = group_plan.mock(
             values, mock.noises, mock.nmocks, mock.nsamples, mock.seed)
     sections = {k: v for k, v in cfg.items() if k != 'mock'}
     for k in range(mock.nmocks):

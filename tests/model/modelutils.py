@@ -39,25 +39,43 @@ def split_case(case):
 
 
 def observation_group(cases):
-    """
-    An ObservationGroup of cases of the tests (see split_case); each
-    observation has the driver of its case.
-    """
-    from gbkfit.driver import driver_parser
+    """An ObservationGroup of cases of the tests (see split_case)."""
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
-    galaxies, observations, drivers = zip(
-        *[split_case(case) for case in cases])
+    galaxies, observations, _ = zip(*[split_case(case) for case in cases])
     return ObservationGroup(
         galaxy_parser.load(list(galaxies)),
-        observation_parser.load(list(observations), drivers=[
-            {None: driver_parser.load(driver)} for driver in drivers]))
+        observation_parser.load(list(observations)))
+
+
+def group_plan(cases):
+    """
+    A plan of the ObservationGroup of cases of the tests (see split_case
+    and observation_group): each observation on the driver of its case,
+    the galaxies on the host.
+    """
+    from gbkfit.driver import driver_parser
+    from gbkfit.driver.drivers.host import DriverHost
+    from gbkfit.observation import GroupPlan
+    drivers = [split_case(case)[2] for case in cases]
+    return GroupPlan(
+        observation_group(cases), [DriverHost()] * len(cases),
+        [driver_parser.load(driver) for driver in drivers])
 
 
 def config_group(config):
     """
-    An ObservationGroup of the drivers, galaxies and observations of a
-    config, loaded as the tasks load them.
+    An ObservationGroup of the galaxies and observations of a config,
+    loaded as the tasks load them.
     """
     from gbkfit.tasks import _detail
     return _detail.load_observation_group(config)
+
+
+def config_group_plan(config):
+    """
+    A plan of the ObservationGroup of a config (see config_group) on its
+    drivers, as the tasks load it.
+    """
+    from gbkfit.tasks import _detail
+    return _detail.load_group_plan(config, config_group(config))

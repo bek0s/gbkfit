@@ -43,37 +43,36 @@ PROPERTIES = dict(
 SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10])
 
 
-def observation(driver, components=None, **options):
+def observation(components=None, **options):
     info = dict(type='sky', observable=SCUBE, line_of_sight=FLAT)
     if components is not None:
         info['components'] = components
-    return observation_parser.load(
-        copy.deepcopy(info | options), drivers={None: driver})
+    return observation_parser.load(copy.deepcopy(info | options))
 
 
-def evaluate(galaxy, observations, properties):
+def evaluate(driver, galaxy, observations, properties):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(galaxy))], observations)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     return [data['spectra']['d'].copy()
-            for data in group.model_h(params.evaluate())]
+            for data in group.plan(driver).model_h(params.evaluate())]
 
 
 def test_an_observation_sees_its_components(driver):
     # The model of one component of a galaxy is that of a galaxy of that
     # component alone
-    [ha] = evaluate(GALAXY, [observation(driver, ['ha'])], PROPERTIES)
+    [ha] = evaluate(driver, GALAXY, [observation(['ha'])], PROPERTIES)
     alone = dict(GALAXY, components=[disk('ha')])
-    [expected] = evaluate(alone, [observation(driver)], {
+    [expected] = evaluate(driver, alone, [observation()], {
         k: v for k, v in PROPERTIES.items() if k.startswith('ha_')})
     np.testing.assert_array_equal(ha, expected)
 
 
 def test_observations_of_different_components_add_up(driver):
-    ha, co, both = evaluate(GALAXY, [
-        observation(driver, ['ha'], name='muse'),
-        observation(driver, ['co'], name='alma'),
-        observation(driver, name='all')], PROPERTIES)
+    ha, co, both = evaluate(driver, GALAXY, [
+        observation(['ha'], name='muse'),
+        observation(['co'], name='alma'),
+        observation(name='all')], PROPERTIES)
     np.testing.assert_allclose(ha + co, both, rtol=1e-5, atol=1e-7)
     assert ha.sum() > 0 and co.sum() > 0
 
@@ -90,15 +89,15 @@ def test_components_with_opacity_always_absorb(driver):
         ha_ht_s=1, co_ht_s=0.5, dust_xpos=0.3, dust_ypos=-0.6,
         dust_posa=50, dust_incl=60, dust_pt_a=0.3, dust_pt_s=4,
         dust_ht_s=0.5)
-    ha, co, both = evaluate(galaxy, [
-        observation(driver, ['ha'], name='muse', line_of_sight=GRID),
-        observation(driver, ['co'], name='alma', line_of_sight=GRID),
-        observation(driver, name='all', line_of_sight=GRID)], properties)
+    ha, co, both = evaluate(driver, galaxy, [
+        observation(['ha'], name='muse', line_of_sight=GRID),
+        observation(['co'], name='alma', line_of_sight=GRID),
+        observation(name='all', line_of_sight=GRID)], properties)
     np.testing.assert_allclose(
         ha + co, both, rtol=1e-4, atol=1e-6 * both.max())
     clear = evaluate(
-        dict(components=emitters),
-        [observation(driver, ['ha'], line_of_sight=GRID)],
+        driver, dict(components=emitters),
+        [observation(['ha'], line_of_sight=GRID)],
         {k: v for k, v in properties.items() if not k.startswith('dust')})
     assert ha.sum() < 0.99 * clear[0].sum()
 
@@ -109,11 +108,11 @@ def test_components_with_opacity_always_absorb(driver):
     ([], "at least one")])
 def test_invalid_selections(driver, components, message):
     with pytest.raises(Exception, match=message):
-        evaluate(GALAXY, [observation(driver, components)], PROPERTIES)
+        evaluate(driver, GALAXY, [observation(components)], PROPERTIES)
 
 
-def test_selection_round_trip(driver):
-    dumped = observation_parser.dump(observation(driver, ['co']))
+def test_selection_round_trip():
+    dumped = observation_parser.dump(observation(['co']))
     assert dumped['components'] == ['co']
-    assert 'components' not in observation_parser.dump(observation(driver))
+    assert 'components' not in observation_parser.dump(observation())
     assert observation_parser.load(dumped).components() == ('co',)

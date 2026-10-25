@@ -373,7 +373,7 @@ def test_a_uniform_coefficient_is_not_discouraged(caplog):
      'transfer', "needs emission lines")])
 def test_line_opacity_errors(driver, component, line_of_sight, message):
     from gbkfit.utils.parseutils import ConfigError
-    from modelutils import observation_group
+    from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
         line_of_sight=dict(type=line_of_sight),
@@ -381,7 +381,7 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
             type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
         galaxy=dict(components=[component]))
     with pytest.raises(ConfigError, match=message):
-        observation_group([case])
+        group_plan([case])
 
 
 @pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])
@@ -452,11 +452,11 @@ def galaxies_model(
         depth_order = [galaxy['name'] for galaxy in galaxies]
     group = ObservationGroup(
         galaxy_parser.load(galaxies),
-        observation_parser.load([observation], drivers=[{None: driver}]),
-        depth_order)
+        observation_parser.load([observation]), depth_order)
+    plan = group.plan(driver)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
     extra = Extras() if with_extras else None
-    data = group.model_h(params.evaluate(), extra)
+    data = plan.model_h(params.evaluate(), extra)
     return next(iter(data[0].values()))['d'], extra
 
 

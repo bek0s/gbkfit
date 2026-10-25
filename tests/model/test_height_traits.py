@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 from gbkfit.model import Extras
 from gbkfit.utils.parseutils import ConfigError
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 DISK = dict(
@@ -36,16 +36,16 @@ SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 20])
 
 def observe(driver, component):
     """A spectral cube of a galaxy of the component, on a grid."""
-    return observation_group([dict(
+    return group_plan([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
         line_of_sight=dict(type='grid'),
         galaxy=dict(components=[component]))])
 
 
 def evaluate(driver, component, properties):
-    group = observe(driver, component)
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
+    plan = observe(driver, component)
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    return plan.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
 def with_density(**traits):
@@ -177,11 +177,11 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     # (the velocity height traits have the same factors)
     component, properties = with_second(
         'd', dict(type='uniform'), height, dict(dpt1_a=5), values)
-    group = observe(driver, component)
+    plan = observe(driver, component)
     params = gbkfit.params.ParamSpace(
-        group.pdescs(), properties | dict(incl=0))
+        plan.group().pdescs(), properties | dict(incl=0))
     extra = Extras()
-    group.model_h(params.evaluate(), extra)
+    plan.model_h(params.evaluate(), extra)
     ddata = extra.get('ddata', component='component0')
     coords = ddata.coords
     nz = ddata.data.shape[0]
@@ -199,22 +199,24 @@ def observe_depth(driver, component, depth):
     A spectral cube of a galaxy of the component, on a grid of the given
     depth axis (the options of Depth).
     """
-    return observation_group([dict(
+    return group_plan([dict(
         driver=dict(type=driver.type()), observable=copy.deepcopy(SCUBE),
         line_of_sight=dict(type='grid', depth=depth),
         galaxy=dict(components=[component]))])
 
 
-def evaluate_with(group, properties, out_extra=None):
-    """The spectral cube of a group of one observation."""
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    return group.model_h(
+def evaluate_with(plan, properties, out_extra=None):
+    """The spectral cube of a plan of a group of one observation."""
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    return plan.model_h(
         params.evaluate(), out_extra)[0]['spectra']['d'].copy()
 
 
-def flux(group, properties, out_extra=None):
-    """The total of the spectral cube of a group of one observation."""
-    return evaluate_with(group, properties, out_extra).sum()
+def flux(plan, properties, out_extra=None):
+    """
+    The total of the spectral cube of a plan of a group of one observation.
+    """
+    return evaluate_with(plan, properties, out_extra).sum()
 
 
 def test_the_depth_axis_holds_the_density_up_to_zmax(driver, caplog):
@@ -288,11 +290,11 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
         type=disk_type, zptraits=dict(type='nw_uniform', zmax=20))
     if disk_type == 'mcdisk':
         component |= dict(cflux=1e-3)
-    group = observe(driver, component)
+    plan = observe(driver, component)
     properties = PROPERTIES | dict(incl=0)
-    flat = flux(group, properties | dict(zpt_a=[0] * 14))
+    flat = flux(plan, properties | dict(zpt_a=[0] * 14))
     extra = Extras()
-    lifted = flux(group, properties | dict(zpt_a=[12] * 14), extra)
+    lifted = flux(plan, properties | dict(zpt_a=[12] * 14), extra)
     np.testing.assert_allclose(lifted, flat, rtol=1e-5)
     bdata = extra.get('bdata', component='component0')
     assert mean_depth(bdata) == pytest.approx(12, abs=0.05)
@@ -302,12 +304,12 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     # past the parameters, a lift of 30 stops at 20, and a warning says so
     with pytest.raises(ConfigError, match="outside its valid range"):
         gbkfit.params.ParamSpace(
-            group.pdescs(), properties | dict(zpt_a=[30] * 14))
-    at_zmax = evaluate_with(group, properties | dict(zpt_a=[20] * 14))
+            plan.group().pdescs(), properties | dict(zpt_a=[30] * 14))
+    at_zmax = evaluate_with(plan, properties | dict(zpt_a=[20] * 14))
     values = gbkfit.params.ParamSpace(
-        group.pdescs(), properties | dict(zpt_a=[20] * 14)).evaluate()
+        plan.group().pdescs(), properties | dict(zpt_a=[20] * 14)).evaluate()
     caplog.set_level(logging.WARNING)
-    limited = group.model_h(
+    limited = plan.model_h(
         values | dict(zpt_a=np.full(14, 30.0)), Extras())[0]['spectra']['d']
     assert 'zmax shapes the disk' in caplog.text
     np.testing.assert_allclose(
@@ -337,10 +339,10 @@ def test_outward_speeds_of_a_thick_disk_leave_both_faces(driver):
     properties = {
         key: value for key, value in PROPERTIES.items()
         if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_vo=40, incl=0)
-    group = observe(driver, disk)
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    plan = observe(driver, disk)
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
     extra = Extras()
-    group.model_h(params.evaluate(), extra)
+    plan.model_h(params.evaluate(), extra)
     vdata = extra.get('vdata', component='component0')
     coords = vdata.coords
     nz = vdata.data.shape[0]
@@ -362,10 +364,10 @@ def test_speeds_away_from_the_plane_leave_both_faces(driver):
     properties = {
         key: value for key, value in PROPERTIES.items()
         if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_va=40, incl=0)
-    group = observe(driver, disk)
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    plan = observe(driver, disk)
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
     extra = Extras()
-    group.model_h(params.evaluate(), extra)
+    plan.model_h(params.evaluate(), extra)
     vdata = extra.get('vdata', component='component0')
     coords = vdata.coords
     nz = vdata.data.shape[0]

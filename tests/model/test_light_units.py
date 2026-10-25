@@ -57,9 +57,10 @@ def model(
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=components))], [ObservationSky(
             observable, line_of_sight_parser.load(dict(type=line_of_sight)),
-            driver, data=data)])
+            data=data)])
+    plan = group.plan(driver)
     space = ParamSpace(group.pdescs(), params)
-    return group.model_h(space.evaluate())[0]['spectra']['d'].copy()
+    return plan.model_h(space.evaluate())[0]['spectra']['d'].copy()
 
 
 def per_kelvin(vsys):

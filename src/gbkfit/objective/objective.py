@@ -7,7 +7,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Extras
 from gbkfit.objective.comparisons import Comparison, comparison
-from gbkfit.observation import FluxScale, ObservationGroup
+from gbkfit.observation import FluxScale, GroupPlan, ObservationGroup
 from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
@@ -35,7 +35,8 @@ class _Solved(NamedTuple):
 class Objective:
     """
     The comparison of the models of a group of observations with their
-    data, each under its likelihood.
+    data, each under its likelihood, on the drivers of a plan of the
+    group (see ObservationGroup.plan).
 
     Each observation has a comparison of its kind of likelihood (see
     Comparison): its residuals, of each value of its data, and the terms
@@ -66,8 +67,8 @@ class Objective:
 
     Parameters
     ----------
-    group : ObservationGroup
-        The observations, each with data.
+    group_plan : GroupPlan
+        The plan of the observations, each with data.
     solves : Mapping, optional
         The solve of each solved element of the parameters, by element
         name (see ParamSpace.solves); none by default.
@@ -83,18 +84,22 @@ class Objective:
 
     def __init__(
             self,
-            group: ObservationGroup,
+            group_plan: GroupPlan,
             solves: Mapping[str, Solve] | None = None
     ):
+        group = group_plan.group()
         observations = group.observations()
         if missing := [
                 i for i, obs in enumerate(observations) if obs.data() is None]:
             raise ConfigError(
                 f"every observation of an objective needs data; these have "
                 f"none: {missing}")
+        self._group_plan = group_plan
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)
-        self._comparisons = tuple(comparison(obs) for obs in observations)
+        self._comparisons = tuple(
+            comparison(obs, driver) for obs, driver in zip(
+                observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
         self._solved = _solved(group, self._comparisons, self._solves)
         # The observations with solved elements
@@ -129,24 +134,34 @@ class Objective:
         """Return the observations."""
         return self._group
 
-    def with_driver(self, driver: Driver) -> 'Objective':
+    def group_plan(self) -> GroupPlan:
+        """Return the plan of the observations."""
+        return self._group_plan
+
+    def with_driver(
+            self,
+            driver: Driver,
+            drivers: Mapping[str, Driver] | None = None
+    ) -> 'Objective':
         """
-        Return a copy of it with all its work on another driver: its
-        models (see ObservationGroup.with_driver) and its residuals. The
-        copy shares the data; its memory is its own. Copies on several
-        devices evaluate several points at once.
+        Return a copy of it with its work on other drivers: its models
+        (see ObservationGroup.plan, which takes the drivers) and their
+        residuals. The copy shares the data; its memory is its own.
+        Copies on several devices evaluate several points at once (see
+        EvaluationPool).
         """
-        return Objective(self._group.with_driver(driver), self._solves)
+        return Objective(self._group.plan(driver, drivers), self._solves)
 
     def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
         Return a copy of it with other data of its observations (e.g. those
-        of a bootstrap; see ObservationGroup.with_data). The comparisons of
-        the copy share what they can with its own (see Comparison.share):
-        e.g. the refits of a bootstrap work out the whitening of correlated
-        noise once.
+        of a bootstrap), whose plan shares what it can with its own (see
+        GroupPlan.with_data). The comparisons of the copy share what they
+        can with its own (see Comparison.share): e.g. the refits of a
+        bootstrap work out the whitening of correlated noise once.
         """
-        objective = Objective(self._group.with_data(datasets), self._solves)
+        objective = Objective(
+            self._group_plan.with_data(datasets), self._solves)
         for new, old in zip(objective._comparisons, self._comparisons):
             new.share(old)
         return objective
@@ -191,8 +206,9 @@ class Objective:
             shape = tuple(
                 1 if scale.axis in (None, k) else n
                 for k, n in enumerate(self._datasets[i].shape()))
+            driver = self._group_plan.observation_drivers()[i]
             (self._h_scales[i],
-             self._d_scales[i]) = observation.driver().mem_alloc_s(
+             self._d_scales[i]) = driver.mem_alloc_s(
                 shape, observation.dtype())
         self._prepared = True
 
@@ -219,7 +235,7 @@ class Objective:
             The chi-square.
         """
         self._update_residual_d(params, True, out_extra)
-        with self._group.timers().measure('objective_residual_sum_eval'):
+        with self._group_plan.timers().measure('objective_residual_sum_eval'):
             chi2 = sum(comparison_.chi2() for comparison_ in self._comparisons)
         return float(chi2 + sum(
             np.sum(residuals ** 2) for residuals in self._solve_residuals()))
@@ -497,7 +513,7 @@ class Objective:
     ) -> None:
         """Evaluate the residuals, and copy them to the host."""
         self._update_residual_d(params, weighted, out_extra)
-        with self._group.timers().measure('objective_residual_d2h'):
+        with self._group_plan.timers().measure('objective_residual_d2h'):
             for comparison_ in self._comparisons:
                 comparison_.copy_to_host()
 
@@ -512,8 +528,8 @@ class Objective:
         values and the residuals.
         """
         self.prepare()
-        models = self._group.model_d(self._unscaled(params), out_extra)
-        with self._group.timers().measure('objective_residual_eval'):
+        models = self._group_plan.model_d(self._unscaled(params), out_extra)
+        with self._group_plan.timers().measure('objective_residual_eval'):
             scales = self._solve(models, params)
             for comparison_, model, scales_ in zip(
                     self._comparisons, models, scales):
@@ -562,7 +578,7 @@ class Objective:
                  else solved.indices] = solution.values
         for i in self._scaled:
             observation = self._group.observations()[i]
-            observation.driver().mem_copy_h2d(
+            self._group_plan.observation_drivers()[i].mem_copy_h2d(
                 self._h_scales[i], self._d_scales[i])
             _, scale = observation.flux_scale()
             scales[i] = dict.fromkeys(scale.items, self._d_scales[i])

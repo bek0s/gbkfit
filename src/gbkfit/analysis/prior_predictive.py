@@ -92,7 +92,7 @@ def prior_predictive(
         except ParamEvaluationError:
             continue
         chi2[k] = objective.chi2(values)
-        models = objective.group().model_h(values)
+        models = objective.group_plan().model_h(values)
         for i, (dataset, model) in enumerate(zip(datasets, models)):
             for key, item in model.items():
                 error = dataset[key].error()

@@ -93,11 +93,11 @@ def lines_config(lines, catalogue=None):
 
 
 def test_configurations_name_lines_of_the_catalogue():
-    from modelutils import config_group
-    group = config_group(lines_config(
+    from modelutils import config_group_plan
+    plan = config_group_plan(lines_config(
         ['halpha', 'mine', dict(name='other', rest='5000 Angstrom')],
         dict(mine='4000 Angstrom')))
-    component, = group.galaxies()[0].components()
+    component, = plan.group().galaxies()[0].components()
     lines = component.emission().lines().lines()
     assert [line.name() for line in lines] == ['halpha', 'mine', 'other']
     assert [line.rest().to_value('Angstrom') for line in lines] \
@@ -105,10 +105,10 @@ def test_configurations_name_lines_of_the_catalogue():
 
 
 def test_configurations_name_known_lines():
-    from modelutils import config_group
+    from modelutils import config_group_plan
     from gbkfit.utils.parseutils import ConfigError
     with pytest.raises(ConfigError) as error:
-        config_group(lines_config(['halpha', 'oi6300']))
+        config_group_plan(lines_config(['halpha', 'oi6300']))
     assert "there is no line 'oi6300' in the catalogue" in str(error.value)
     assert "emission.lines[1]" in str(error.value)
 

@@ -10,7 +10,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 import scipy.signal
-from modelutils import observation_group
+from modelutils import group_plan
 
 from gbkfit.instrument import (
     Instrument, PrimaryBeamAiry, PrimaryBeamGauss, instrument_parser)
@@ -46,12 +46,12 @@ C = 299792.458
 def evaluate(
         driver, observable, galaxy=GALAXY, properties=PROPERTIES,
         key='brightness'):
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0][key]['d'].copy()
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    return plan.model_h(params.evaluate())[0][key]['d'].copy()
 
 
 @pytest.mark.parametrize('beam_class', [PrimaryBeamGauss, PrimaryBeamAiry])
@@ -216,13 +216,12 @@ def test_primary_beam_image_is_placed_by_its_ra_and_dec():
 def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
     # The image of the primary beam of an observation goes to a file named
     # with the prefix of the dump, which can be dumped again (overwrite)
-    from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.instrument import PrimaryBeamImage
     from gbkfit.observation import Flat, ObservationSky, observation_parser
     from gbkfit.observation.observables import PixelBrightness
     beam = PrimaryBeamImage(np.ones((8, 8)))
     observation = ObservationSky(
-        PixelBrightness(size=(8, 8)), Flat(), DriverHost(),
+        PixelBrightness(size=(8, 8)), Flat(),
         instrument=Instrument(primary_beam=beam))
     prefix = str(tmp_path / 'out_')
     for _ in range(2):

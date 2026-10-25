@@ -198,7 +198,7 @@ class ParamSpace(parseutils.Serializable):
     velocity of a mass model at 2.2 disk scale lengths): expressions, by
     name, that can also use the functions of the models (e.g.
     'vcirc(2.2 * mass_stars_rd)'; see ParamFunctions and
-    ObservationGroup.plan_functions), and the derived values before them.
+    GroupPlan.plan_functions), and the derived values before them.
     They are evaluated after the parameters (see derived_values), so the
     properties cannot read them; the priors on several parameters can
     (see expression), and the fitters report them (see FitSolution).

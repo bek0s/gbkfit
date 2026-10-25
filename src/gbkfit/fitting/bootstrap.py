@@ -328,7 +328,7 @@ def bootstrap(
     schemes = options.schemes(group.nobservations())
     models = [
         {key: item['d'].copy() for key, item in model.items()}
-        for model in group.model_h(values)]
+        for model in objective.group_plan().model_h(values)]
     noises = [
         {key: obs.likelihood().noise(key, dataset[key].error(), values)
          for key in dataset}

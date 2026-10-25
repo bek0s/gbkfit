@@ -9,7 +9,7 @@ import gbkfit.dataset
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 from gbkfit.dataset import Data
 from gbkfit.dataset import DatasetRegionMoments
@@ -40,11 +40,11 @@ SPECTRAL = dict(spec_size=101, spec_step=5)
 
 def evaluate(driver, observable):
     """The model data of an observable of the tests, by data item."""
-    group = observation_group([
+    plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
              line_of_sight=FLAT, observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
-    data = group.model_h(params.evaluate())[0]
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
 
@@ -154,15 +154,14 @@ def test_region_moments_observation_from_data(tmp_path):
 
 
 
-def test_region_moments_observation_dumps_its_bins_with_the_prefix(driver, tmp_path):
+def test_region_moments_observation_dumps_its_bins_with_the_prefix(tmp_path):
     # Without data, the bins are options of the observable: their file is
     # named with the prefix of the dump, which can be dumped again
     from gbkfit.observation import (
         Flat, ObservationSky, RegionMoments, observation_parser)
     observation = ObservationSky(RegionMoments(
         RegionsBins(np.arange(16).reshape(4, 4) % 3), spec_size=11,
-        spec_convention='relativistic'),
-        Flat(), driver)
+        spec_convention='relativistic'), Flat())
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
         dumped = observation_parser.dump(
@@ -187,11 +186,11 @@ def test_region_moments_objective_residual(driver):
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [ObservationSky(observable, Flat(), driver, instrument=instrument)])
+        [ObservationSky(observable, Flat(), instrument=instrument)])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     model = {
-        key: value['d'].copy()
-        for key, value in group.model_h(params.evaluate())[0].items()}
+        key: value['d'].copy() for key, value in
+        group.plan(driver).model_h(params.evaluate())[0].items()}
     dataset = DatasetRegionMoments({
         int(key.removeprefix('moment')):
             Data(value + 1, error=np.full_like(value, 2))
@@ -199,8 +198,9 @@ def test_region_moments_objective_residual(driver):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [ObservationSky(
-            observable, Flat(), driver, instrument=instrument,
+            observable, Flat(), instrument=instrument,
             data=dataset, likelihood=LikelihoodGaussian(missing_residual=3))])
-    residual = Objective(group).residual_nddata_h(params.evaluate(), False)
+    residual = Objective(group.plan(driver)).residual_nddata_h(
+        params.evaluate(), False)
     for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(residual[0][key], -0.5, rtol=1e-4)

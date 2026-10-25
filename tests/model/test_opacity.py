@@ -9,7 +9,7 @@ import gbkfit.model
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 DISK = dict(
@@ -55,15 +55,15 @@ def spectral_cube_case(driver, with_opacity):
 
 def evaluate(driver, with_opacity, opacity, times=1):
     """Evaluate a thick disk (with or without dust) several times."""
-    obs_group = observation_group([spectral_cube_case(driver, with_opacity)])
+    plan = group_plan([spectral_cube_case(driver, with_opacity)])
     properties = dict(PROPERTIES, dust_pt_a=opacity)
     if not with_opacity:
         properties = {
             k: v for k, v in properties.items() if not k.startswith('dust_')}
-    params = gbkfit.params.ParamSpace(obs_group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
     values = params.evaluate()
     return [
-        copy.deepcopy(obs_group.model_h(values)[0]['spectra']['d'])
+        copy.deepcopy(plan.model_h(values)[0]['spectra']['d'])
         for _ in range(times)]
 
 
@@ -442,4 +442,4 @@ def test_dust_of_a_law_needs_named_lines(driver):
     case['galaxy']['components'][1]['opacity'] = dict(
         type='dust', law=dict(type='ccm'))
     with pytest.raises(ConfigError, match="must name its lines"):
-        observation_group([case])
+        group_plan([case])

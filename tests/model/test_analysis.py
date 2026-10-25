@@ -6,7 +6,7 @@ disturbed one, and a model of GBKFIT.
 
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 import gbkfit.params
 from gbkfit.analysis import (
@@ -195,7 +195,7 @@ def test_the_geometry_of_a_model_is_found(driver):
         kinematics=dict(vptraits=dict(type='arctan', direction='tan'),
                         dptraits=dict(type='uniform')),
         emission=dict(type='lines'))])
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_moments', size=[41, 41], spec_size=161,
@@ -203,8 +203,8 @@ def test_the_geometry_of_a_model_is_found(driver):
                         spec_convention='relativistic'))])
     values = dict(vsys=0, xpos=0, ypos=0, posa=40, incl=60, pt_a=1, pt_s=4,
                   vpt_rt=2, vpt_vt=150, dpt_a=20)
-    params = gbkfit.params.ParamSpace(group.pdescs(), values)
-    v = group.model_h(params.evaluate())[0]['moment1']['d']
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), values)
+    v = plan.model_h(params.evaluate())[0]['moment1']['d']
     x, y = grid()
     assert kinematic_pa(v, x, y, (20, 20)).pa == pytest.approx(40, abs=0.5)
     rings = kinemetry(v, x, y, (20, 20), radii=[6, 10, 14])
@@ -213,14 +213,14 @@ def test_the_geometry_of_a_model_is_found(driver):
     # On a map rotated on the sky, at the sky positions of its pixels (in
     # its pixel axes, 25 degrees less)
     from gbkfit.utils import gridutils
-    observation = group.observations()[0]
-    rotated = observation_group([dict(
+    observation = plan.group().observations()[0]
+    rotated = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'),
         observable=observation.observable().dump() | dict(rota=25))])
     v = rotated.model_h(params.evaluate())[0]['moment1']['d']
     sky_x, sky_y = gridutils.sky_positions(
-        rotated.observations()[0].observable().grid())
+        rotated.group().observations()[0].observable().grid())
     assert kinematic_pa(v, sky_x, sky_y, (0, 0)).pa == pytest.approx(
         40, abs=0.5)
     assert kinematic_pa(v, x, y, (20, 20)).pa == pytest.approx(15, abs=0.5)

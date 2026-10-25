@@ -142,9 +142,9 @@ def recipes() -> dict[str, Case]:
 
 def _load(config: dict[str, Any], root: pathlib.Path, driver: str):
     """
-    Return the observation group and the parameters of a configuration
-    whose relative paths are relative to root, on a driver, as the tasks
-    load them.
+    Return the plan of the observation group and the parameters of a
+    configuration whose relative paths are relative to root, on a driver,
+    as the tasks load them.
     """
     from gbkfit.tasks import eval as eval_task
     from gbkfit.utils import parseutils
@@ -212,7 +212,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     if case.prepare is not None:
         case.prepare(folder)
     sections = dict(galaxies=case.galaxies) | case.sections
-    group, params = _load(
+    group_plan, params = _load(
         sections | dict(
             observations=case.observations,
             params=dict(properties=case.truth)), folder, 'host')
@@ -224,10 +224,11 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
         likelihoods = [
             None if info is None else likelihood_parser.load(info)
             for info in likelihoods]
-    datasets = group.mock(
+    datasets = group_plan.mock(
         params.evaluate(), noises, nsamples=case.nsamples, seed=case.seed)
     data_options = case.data_options or [{}] * len(case.observations)
     prefix = str(folder) + os.sep
+    group = group_plan.group()
     observations = []
     for i, observation in enumerate(group.observations()):
         mocked = observation.with_data(datasets[i][0], likelihoods[i])
@@ -287,14 +288,14 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     file = _detail.read_config(
         str(folder / 'config.yaml'), eval_task._REQUIRED,
         eval_task._OPTIONAL)
-    group, params = _load(file.config, pathlib.Path(file.root), driver)
+    group_plan, params = _load(file.config, pathlib.Path(file.root), driver)
     values = params.evaluate()
     golden: dict[str, Any] = dict(model=[
         {key: {part: summary(array) for part, array in item.items()
                if array is not None}
          for key, item in model.items()}
-        for model in group.model_h(values)])
-    with Objective(group, params.solves()) as objective:
+        for model in group_plan.model_h(values)])
+    with Objective(group_plan, params.solves()) as objective:
         chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
         golden['objective'] = dict(
             chi2=chi2, log_likelihood=log_likelihood,

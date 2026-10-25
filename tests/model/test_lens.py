@@ -41,11 +41,11 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
         from gbkfit.observation import ObservationGroup, ObservationSky
         observation = ObservationSky(
             observation.observable(), observation.line_of_sight(),
-            observation.driver(), foreground=foreground,
-            instrument=observation.instrument(), name='obs')
+            foreground=foreground, instrument=observation.instrument(),
+            name='obs')
         group = ObservationGroup(group.galaxies(), [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    data = group.model_h(params.evaluate())[0]
+    data = group.plan(driver).model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
 
@@ -333,20 +333,20 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
         line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))])
     plain = group.observations()[0]
     reference = ObservationSky(
-        plain.observable(), plain.line_of_sight(), plain.driver(),
-        name='reference')
+        plain.observable(), plain.line_of_sight(), name='reference')
     observation = ObservationSky(
-        plain.observable(), plain.line_of_sight(), plain.driver(),
+        plain.observable(), plain.line_of_sight(),
         foreground=Foreground(Lens((40, 40), (0.5, 0.5), LensSIE())),
         name='obs', offsets=dict(position=True))
-    group = ObservationGroup(group.galaxies(), [reference, observation])
+    plan = ObservationGroup(
+        group.galaxies(), [reference, observation]).plan(driver)
     lens = dict(theta_e=3.0, q=0.8, pa=20, y=0.3)
     images = []
     for x, offset in ((1.5, 0.0), (0.0, 1.5)):
         properties = PROPERTIES | dict(xpos=x, obs_dx=offset, obs_dy=0) \
             | lens_params(**lens, x=x)
-        params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-        images.append(group.model_h(params.evaluate())[1]['brightness'][
+        params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+        images.append(plan.model_h(params.evaluate())[1]['brightness'][
             'd'].copy())
     np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
 

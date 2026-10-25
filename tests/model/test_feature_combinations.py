@@ -95,15 +95,14 @@ def test_feature_combinations(driver, name, lens):
         foreground = Foreground(Lens((40, 40), (0.5, 0.5), LensDeflectionMap(
             np.ones((40, 40)), -np.ones((40, 40)))))
     observation = ObservationSky(
-        observable_parser.load(info), Flat(), driver,
-        foreground=foreground,
+        observable_parser.load(info), Flat(), foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
         components=['gas'], scale=SCALES[name])
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     extra = Extras()
-    data = group.model_h(params.evaluate(), extra)[0]
+    data = group.plan(driver).model_h(params.evaluate(), extra)[0]
     observable = observation.observable()
     assert set(data) == set(observable.keys())
     for key, value in data.items():

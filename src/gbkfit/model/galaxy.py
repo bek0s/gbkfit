@@ -2,13 +2,12 @@
 Galaxies: their components and their mass, at one distance.
 """
 
-import copy
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import Any, Self
 
 import numpy as np
 
-from gbkfit.driver import Driver, driver_by_name
+from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -95,11 +94,6 @@ class Galaxy(parseutils.Serializable):
         default; required (0 for none) when a component emits in bands
         with a unit and has no systemic velocity, as nothing else then
         tells how far its light is dimmed.
-    driver : Driver, optional
-        Where its own computations run: its stage, in float64, once for
-        all the observations of it, whatever their drivers (see
-        plan_stage); by default, the host. (In its configuration, the
-        name of a driver; see load.)
     name : str, optional
         Its name; required when there are several galaxies.
 
@@ -117,17 +111,10 @@ class Galaxy(parseutils.Serializable):
     def load(
             cls,
             info: dict[str, Any],
-            catalogue: LineCatalogue | None = None,
-            drivers: Mapping[str | None, Driver] | None = None
+            catalogue: LineCatalogue | None = None
     ) -> Self:
         """
         Load a galaxy from its configuration.
-
-        Its option driver is not a driver but the name of one of the
-        drivers of the configuration, which declares them at its top
-        level. A galaxy with mass can leave it out when there is one
-        driver, and has the host when there are none; a galaxy without
-        mass needs no driver.
 
         Parameters
         ----------
@@ -136,9 +123,6 @@ class Galaxy(parseutils.Serializable):
         catalogue : LineCatalogue, optional
             The catalogue of the lines that the emission of its components
             names (see Emission.load); that of GBKFIT by default.
-        drivers : Mapping of str to Driver, optional
-            The drivers of the configuration, by name; the one unnamed
-            driver of a configuration has the name None.
 
         Returns
         -------
@@ -148,13 +132,8 @@ class Galaxy(parseutils.Serializable):
         Raises
         ------
         ConfigError
-            If the configuration has an error, or the driver is not one
-            of the drivers.
+            If the configuration has an error.
         """
-        if 'driver' in info or info.get('mass'):
-            with parseutils.config_path('driver'):
-                info['driver'] = driver_by_name(
-                    info.get('driver'), drivers or {}, 'galaxy')
         _detail.load_geometries(info, ('components',))
         components = info.get('components')
         parseutils.load_option_and_update_info(
@@ -194,7 +173,6 @@ class Galaxy(parseutils.Serializable):
             mass: MassComponent | Sequence[MassComponent] | None = None,
             distance: Distance | None = None,
             redshift: float | None = None,
-            driver: Driver | None = None,
             name: str | None = None,
             gravity: Gravity | None = None
     ):
@@ -210,13 +188,8 @@ class Galaxy(parseutils.Serializable):
         if redshift is None:
             _check_redshift_not_needed(self._component_set.components())
         self._pdescs = self._component_set.pdescs()
-        if driver is None:
-            # (imported here: the host driver needs its native module)
-            from gbkfit.driver.drivers.host import DriverHost
-            driver = DriverHost()
         self._mass = mass
         self._gravity = gravity
-        self._driver = driver
         self._name = name
 
     def name(self) -> str | None:
@@ -267,20 +240,6 @@ class Galaxy(parseutils.Serializable):
         """Return its redshift (0 if not given)."""
         return 0.0 if self._redshift is None else self._redshift
 
-    def driver(self) -> Driver:
-        """Return the driver of its own computations (its gravity)."""
-        return self._driver
-
-    def with_driver(self, driver: Driver) -> Self:
-        """
-        Return a copy of it whose gravity is evaluated on another driver;
-        the copy shares the rest (e.g. copies of an objective on several
-        devices; see Objective.with_driver).
-        """
-        galaxy = copy.copy(self)
-        galaxy._driver = driver
-        return galaxy
-
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name (see the class)."""
         return self._pdescs
@@ -293,10 +252,12 @@ class Galaxy(parseutils.Serializable):
         return self._component_set.constants()
 
     def plan_stage(
-            self, sky_origin: tuple[float, float] | None = None
+            self,
+            sky_origin: tuple[float, float] | None = None,
+            driver: Driver | None = None
     ) -> GalaxyStage:
         """
-        Plan the stage of the galaxy on its driver, in float64, evaluated
+        Plan the stage of the galaxy on a driver, in float64, evaluated
         once for all the observations of it: its mass, and what it gives
         its components (e.g. the circular velocity of its mass at the radii
         of the components it moves; see GalaxyStage), which its plans on
@@ -308,6 +269,9 @@ class Galaxy(parseutils.Serializable):
             The RA and Dec (degrees) of the origin of the frame of its
             parameters (see ObservationGroup), which its image traits need
             (see traits.RPTraitImage).
+        driver : Driver, optional
+            The driver where its components sample their profiles (the
+            rest of the stage runs on the host); the host by default.
 
         Returns
         -------
@@ -320,13 +284,15 @@ class Galaxy(parseutils.Serializable):
             If it has image traits, but there is no sky origin.
         """
         return self._component_set.plan_stage(
-            self._driver, self.redshift(), sky_origin)
+            _or_host(driver), self.redshift(), sky_origin)
 
     def plan_functions(
-            self, sky_origin: tuple[float, float] | None = None
+            self,
+            sky_origin: tuple[float, float] | None = None,
+            driver: Driver | None = None
     ) -> GalaxyFunctions:
         """
-        Plan the functions of the galaxy on its driver, in float64, for
+        Plan the functions of the galaxy on a driver, in float64, for
         the derived values of its parameters (see ParamSpace): the
         circular velocity of its mass, and the rotation and dispersion of
         its disks, at any radius (see GalaxyFunctions). They have their
@@ -337,6 +303,9 @@ class Galaxy(parseutils.Serializable):
         sky_origin : tuple of float, optional
             The RA and Dec (degrees) of the origin of the frame of its
             parameters, which its image traits need (see plan_stage).
+        driver : Driver, optional
+            The driver where its components sample their profiles (see
+            plan_stage); the host by default.
 
         Returns
         -------
@@ -349,7 +318,7 @@ class Galaxy(parseutils.Serializable):
             If it has image traits, but there is no sky origin.
         """
         return self._component_set.plan_functions(
-            self._driver, self.redshift(), sky_origin)
+            _or_host(driver), self.redshift(), sky_origin)
 
     def plan(
             self,
@@ -425,6 +394,15 @@ class Galaxy(parseutils.Serializable):
 
 
 galaxy_parser = parseutils.BasicParser(Galaxy)
+
+
+def _or_host(driver: Driver | None) -> Driver:
+    """Return the driver, or the host driver if None."""
+    if driver is not None:
+        return driver
+    # (imported here: the host driver needs its native module)
+    from gbkfit.driver.drivers.host import DriverHost
+    return DriverHost()
 
 
 def _check_redshift_not_needed(components: Sequence[Component]) -> None:

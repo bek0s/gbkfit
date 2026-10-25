@@ -130,7 +130,7 @@ class FitProblem:
             raise ValueError(
                 "the objective must solve the solved elements of the "
                 "parameters, with their solves: make it with "
-                "Objective(group, params.solves())")
+                "Objective(group_plan, params.solves())")
         names = tuple(params.free_properties())
         if not names:
             raise ValueError("no parameter is free")

@@ -57,9 +57,10 @@ def evaluate(driver, galaxy_, properties):
     from gbkfit.params import ParamSpace
     group = ObservationGroup([galaxy_], [ObservationSky(
         PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
-        line_of_sight_parser.load(dict(type='grid')), driver)])
+        line_of_sight_parser.load(dict(type='grid')))])
     params = ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
+    return group.plan(driver).model_h(
+        params.evaluate())[0]['spectra']['d'].copy()
 
 
 @pytest.mark.parametrize('disk_type', ['smdisk', 'mcdisk'])

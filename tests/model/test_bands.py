@@ -6,7 +6,7 @@ band.
 
 import numpy as np
 import pytest
-from modelutils import config_group, observation_group
+from modelutils import config_group_plan, group_plan
 
 from gbkfit.model import LineCatalogue
 from gbkfit.utils.parseutils import ConfigError
@@ -73,7 +73,7 @@ def test_light_in_each_band(driver, evaluate_cases, emitter):
     ('sdss_i', "it sees none")])
 def test_images_see_components_in_their_band(driver, band, message):
     with pytest.raises(ConfigError, match=message):
-        observation_group([image_case(driver, [STARS], band)])
+        group_plan([image_case(driver, [STARS], band)])
 
 
 def test_only_images_have_a_band(driver):
@@ -88,7 +88,7 @@ def test_only_images_have_a_band(driver):
                 dptraits=dict(type='uniform')))]),
         band='sdss_r')
     with pytest.raises(ConfigError, match="only images have a band"):
-        observation_group([case])
+        group_plan([case])
 
 
 @pytest.mark.parametrize('redshift', [0, 0.5])
@@ -135,9 +135,9 @@ def test_configurations_name_bands():
             type='sky',
             observable=dict(type='pixel_brightness', size=[8, 8]),
             line_of_sight=dict(type='flat'), band='mine')])
-    group = config_group(config)
-    observation, = group.observations()
+    plan = config_group_plan(config)
+    observation, = plan.group().observations()
     assert observation.band().name() == 'mine'
-    component, = group.galaxies()[0].components()
+    component, = plan.group().galaxies()[0].components()
     assert component.emission().bands().names() == ('sdss_g', 'mine')
-    assert 'stars_mine_ratio' in group.pdescs()
+    assert 'stars_mine_ratio' in plan.group().pdescs()

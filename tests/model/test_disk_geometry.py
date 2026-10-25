@@ -228,7 +228,7 @@ def test_a_centre_that_is_not_a_number_gives_nan(driver, loose):
     # range, if the parameters let one through) puts every point of the
     # disk in its first ring, of NaN light: it is seen (and no ring
     # beyond the last node is read), flat or loose and tilted
-    from modelutils import observation_group
+    from modelutils import group_plan
     case = spectral_cube_case(driver, loose=loose, tilted=loose)
     nodes = 12 if loose else 1
     params = dict(
@@ -238,17 +238,17 @@ def test_a_centre_that_is_not_a_number_gives_nan(driver, loose):
     if not loose:
         params = {k: v[0] if isinstance(v, np.ndarray) else v
                   for k, v in params.items()}
-    group = observation_group([case])
-    assert np.all(np.isnan(group.model_h(params)[0]['spectra']['d']))
+    plan = group_plan([case])
+    assert np.all(np.isnan(plan.model_h(params)[0]['spectra']['d']))
 
 
 def test_an_azimuth_that_is_not_finite_selects_nothing(driver):
     # The selection by azimuth of a centre at an infinite angle selects no
     # point (its angles are wrapped without a loop: it ends)
-    from modelutils import observation_group
+    from modelutils import group_plan
     case = spectral_cube_case(driver, sptraits=dict(type='azrange'))
     params = dict(
         vsys=0, xpos=0, ypos=0, posa=0, incl=45, pt_a=1, pt_s=4,
         vpt_vt=100, dpt_a=10, spt_p=np.inf, spt_s=90)
-    group = observation_group([case])
-    assert not np.any(group.model_h(params)[0]['spectra']['d'])
+    plan = group_plan([case])
+    assert not np.any(plan.model_h(params)[0]['spectra']['d'])

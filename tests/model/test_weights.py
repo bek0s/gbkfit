@@ -5,7 +5,7 @@ the azimuth of each pixel in the plane of a disk.
 
 import numpy as np
 import pytest
-from modelutils import config_group
+from modelutils import config_group_plan
 
 from gbkfit.model import Extras
 from gbkfit.observation import WeightAzimuthPower, WeightAzimuthRange
@@ -55,13 +55,14 @@ def test_weights_follow_the_plane_of_the_disk(driver):
     # the line-of-sight velocity of a flat rotation curve, v sin(incl)
     # |cos(theta)|, as the disk kernels make it
     import gbkfit.params
-    group = config_group(config(
+    plan = config_group_plan(config(
         driver,
         dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20]),
         dict(component='gas', traits=dict(type='azimuth_power', power=1))))
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES).evaluate()
+    params = gbkfit.params.ParamSpace(
+        plan.group().pdescs(), PROPERTIES).evaluate()
     extra = Extras()
-    weights = group.model_h(params, extra)[0]['spectra']['w']
+    weights = plan.model_h(params, extra)[0]['spectra']['w']
     velocity = extra.get('vdata', component='gas').data
     disk = np.isfinite(velocity)
     assert disk.sum() > 100
@@ -84,4 +85,4 @@ def test_weights_are_checked(driver, observable, component, message):
     weights = dict(
         component='gas', traits=dict(type='azimuth_range', half_width=20))
     with pytest.raises(ConfigError, match=message):
-        config_group(config(driver, observable, weights, component))
+        config_group_plan(config(driver, observable, weights, component))

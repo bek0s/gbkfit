@@ -1342,12 +1342,11 @@ def with_traits(component, **traits):
 
 
 def disk_galaxy(
-        disk_type, vptraits, mass=None, distance=None, thick=False,
-        driver=None):
+        disk_type, vptraits, mass=None, distance=None, thick=False):
     """
     A galaxy of a disk (DISK) of the given type and velocity polar
     traits, thick (of sech2 height traits) if thick, with the given mass
-    and distance, and the given driver of its gravity (the host if None).
+    and distance.
     """
     disk = with_traits(DISK, vptraits=vptraits) | dict(type=disk_type)
     if thick:
@@ -1359,8 +1358,7 @@ def disk_galaxy(
         info |= dict(mass=copy.deepcopy(mass))
     if distance is not None:
         info |= dict(distance=copy.deepcopy(distance))
-    return galaxy_parser.load(
-        info, drivers={None: driver} if driver is not None else None)
+    return galaxy_parser.load(info)
 
 
 def mass_model(mass):
@@ -1378,9 +1376,10 @@ def evaluate(driver, galaxy, line_of_sight, properties):
     from gbkfit.params import ParamSpace
     group = ObservationGroup([galaxy], [ObservationSky(
         PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
-        line_of_sight_parser.load(dict(type=line_of_sight)), driver)])
+        line_of_sight_parser.load(dict(type=line_of_sight)))])
     params = ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
+    return group.plan(driver).model_h(
+        params.evaluate())[0]['spectra']['d'].copy()
 
 
 @pytest.mark.parametrize('line_of_sight, disk_type', [
@@ -2097,18 +2096,18 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
     # (pressure support samples the profiles of the disk on that driver)
     galaxy = disk_galaxy(
         'smdisk', dict(type='mass', pressure_support='jeans'), MASS,
-        DISTANCE, driver=driver)
-    assert galaxy.driver() is driver
+        DISTANCE)
     group = ObservationGroup([galaxy], [
         ObservationSky(
             PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
-            line_of_sight_parser.load(dict(type='flat')), obs_driver,
-            dtype=dtype)
-        for obs_driver, dtype in ((DriverHost(), 'float32'),
-                                  (driver, 'float64'))])
+            line_of_sight_parser.load(dict(type='flat')), dtype=dtype,
+            name=name)
+        for name, dtype in (('single', 'float32'), ('double', 'float64'))])
     params = ParamSpace(
         group.pdescs(), DISK_PROPERTIES | MASS_PROPERTIES).evaluate()
-    single, double = group.model_h(params)
+    plan = group.plan(driver, dict(single=DriverHost()))
+    assert plan.galaxy_drivers() == (driver,)
+    single, double = plan.model_h(params)
     assert len(calls) == 1
     assert np.isfinite(single['spectra']['d']).all()
     np.testing.assert_allclose(

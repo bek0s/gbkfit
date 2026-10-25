@@ -7,7 +7,7 @@ import pytest
 
 from gbkfit import outputs
 from gbkfit.model import Extras
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 @pytest.fixture
@@ -44,11 +44,12 @@ def evaluate_cases():
     import gbkfit.params
 
     def evaluate(cases, properties, modes=None):
-        group = observation_group(cases)
+        plan = group_plan(cases)
+        group = plan.group()
         params = gbkfit.params.ParamSpace(
             group.pdescs(), properties, constants=group.constants(),
             modes=modes)
         extra = Extras()
-        data = group.model_h(params.evaluate(), extra)
+        data = plan.model_h(params.evaluate(), extra)
         return data, extra
     return evaluate

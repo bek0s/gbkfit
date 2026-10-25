@@ -220,11 +220,11 @@ def _read_config(config: str) -> _detail.ConfigFile:
 
 class _Setup(NamedTuple):
     """
-    What a fit is set up from its configuration: its drivers, its
-    observations and objective, its fitter and its parameters.
+    What a fit is set up from its configuration: its drivers, the plan of
+    its observations and its objective, its fitter and its parameters.
     """
     drivers: dict[str | None, gbkfit.driver.Driver]
-    group: gbkfit.observation.ObservationGroup
+    group_plan: gbkfit.observation.GroupPlan
     objective: gbkfit.objective.Objective
     fitter: gbkfit.fitting.Fitter
     params: gbkfit.params.ParamSpace
@@ -238,22 +238,24 @@ def _set_up(cfg: dict[str, Any], root: str) -> _Setup:
     with parseutils.paths_relative_to(root):
         _log.info("setting up galaxies and observations...")
         drivers = _detail.load_drivers(cfg)
-        group = _detail.load_observation_group(cfg, drivers)
+        group = _detail.load_observation_group(cfg)
+        group_plan = _detail.load_group_plan(cfg, group, drivers)
         _log.info("setting up fitter...")
         with parseutils.config_path('fitter'):
             fitter = gbkfit.fitting.fitter_parser.load(cfg['fitter'])
         _log.info("setting up params...")
         params = _detail.load_params(
-            cfg, group.pdescs(), group.constants(), group.plan_functions())
+            cfg, group.pdescs(), group.constants(),
+            group_plan.plan_functions())
         _log.info("setting up objective...")
-        objective = gbkfit.objective.Objective(group, params.solves())
+        objective = gbkfit.objective.Objective(group_plan, params.solves())
         # Check the free properties for the fitter, and the priors on
         # several parameters, before the fit starts
         with parseutils.config_path('params', 'properties'):
             fitter.load_fit_params(params)
         with parseutils.config_path('params'):
             gbkfit.fitting.joint_prior_residuals(params)
-    return _Setup(drivers, group, objective, fitter, params)
+    return _Setup(drivers, group_plan, objective, fitter, params)
 
 
 def _load_bootstrap(
@@ -319,8 +321,8 @@ def _fit(
 ) -> None:
     """Fit a configuration, and write the outputs to its run (see fit)."""
     setup = _set_up(cfg, root)
-    group, objective, fitter, params = \
-        setup.group, setup.objective, setup.fitter, setup.params
+    group_plan, objective, fitter, params = \
+        setup.group_plan, setup.objective, setup.fitter, setup.params
     with parseutils.paths_relative_to(root):
         pool = _detail.load_pool(cfg, objective, setup.drivers)
     options = _load_bootstrap(cfg, setup)
@@ -347,8 +349,8 @@ def _fit(
 
     _log.info(f"saving result under '{run.path}'...")
     result.write(run)
-    outputs = _detail.data_outputs(group) | _detail.evaluation_outputs(
-        group, objective, result.best().values, True, True)
+    outputs = _detail.data_outputs(group_plan) | _detail.evaluation_outputs(
+        group_plan, objective, result.best().values, True, True)
     _detail.write_outputs(run, outputs)
     _write_config(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,

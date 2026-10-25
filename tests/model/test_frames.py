@@ -49,12 +49,11 @@ def moments(driver, offsets=None, origin=ORIGIN, **values):
             PixelMoments(size=(32, 32), rval=rval, spec_size=81,
                          spec_step=5, orders=(0, 1),
                          spec_convention='relativistic'),
-            Flat(), driver, name=name, offsets=offsets if name == 'b'
-            else None)
+            Flat(), name=name, offsets=offsets if name == 'b' else None)
         for name, rval in (('a', ORIGIN), ('b', origin))]
     group = ObservationGroup([galaxy_parser.load(GALAXY)], observations)
     params = ParamSpace(group.pdescs(), PARAMS | values)
-    return group.model_h(params.evaluate())[1]
+    return group.plan(driver).model_h(params.evaluate())[1]
 
 
 def test_offsets_move_all_that_an_observation_sees(driver):

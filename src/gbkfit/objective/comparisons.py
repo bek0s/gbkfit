@@ -29,7 +29,7 @@ _Model = Mapping[str, Mapping[str, DeviceArray | None]]
 class Comparison(abc.ABC):
     """
     The comparison of the model of an observation with its data, under its
-    likelihood, on the device of the observation (see Objective): the
+    likelihood, on the driver of its model (see Objective): the
     residual of each value of its data items, one item after the other,
     and the terms of the chi-square beyond them (e.g. the noise residuals
     of a fitted noise).
@@ -46,10 +46,13 @@ class Comparison(abc.ABC):
     ----------
     observation : Observation
         The observation, with data.
+    driver : Driver
+        The driver of its model.
     """
 
-    def __init__(self, observation: Observation):
+    def __init__(self, observation: Observation, driver: Driver):
         self._observation = observation
+        self._driver = driver
         self._dataset = observation.data()
         self._reset_memory()
 
@@ -115,7 +118,7 @@ class Comparison(abc.ABC):
         """
         if self._prepared:
             return
-        driver = self._observation.driver()
+        driver = self._driver
         dtype = self._observation.dtype()
         shape = self._dataset.shape()
         npix = int(np.prod(shape))
@@ -159,7 +162,7 @@ class Comparison(abc.ABC):
         Parameters
         ----------
         model : Mapping
-            The model of the observation (see ObservationGroup.model_d).
+            The model of the observation (see GroupPlan.model_d).
         params : ParamValues
             The parameters, prefixed (see Objective.pdescs).
         weighted : bool
@@ -212,7 +215,7 @@ class Comparison(abc.ABC):
         """
         self._backend.residual_sum(
             self._d_residual_vector, True, self._d_residual_sum)
-        self._observation.driver().mem_copy_d2h(
+        self._driver.mem_copy_d2h(
             self._d_residual_sum, self._h_residual_sum)
         return float(self._h_residual_sum[0]) + self._terms_chi2()
 
@@ -225,7 +228,7 @@ class Comparison(abc.ABC):
 
     def copy_to_host(self) -> None:
         """Copy the residuals of the last evaluation to the host."""
-        self._observation.driver().mem_copy_d2h(
+        self._driver.mem_copy_d2h(
             self._d_residual_vector, self._h_residual_vector)
 
     def residual_vector_h(self) -> np.ndarray:
@@ -265,7 +268,7 @@ class Comparison(abc.ABC):
         """
         if key not in scales:
             return model[key]['d']
-        driver = self._observation.driver()
+        driver = self._driver
         if key not in self._d_scaled:
             self._d_scaled[key] = driver.mem_alloc_d(
                 self._dataset.shape(), self._observation.dtype())
@@ -381,6 +384,8 @@ class ComparisonGaussian(Comparison):
     ----------
     observation : Observation
         The observation, with data, of a Gaussian likelihood.
+    driver : Driver
+        The driver of its model.
 
     Raises
     ------
@@ -389,8 +394,8 @@ class ComparisonGaussian(Comparison):
         or of its last axes, or the item has values outside it.
     """
 
-    def __init__(self, observation: Observation):
-        super().__init__(observation)
+    def __init__(self, observation: Observation, driver: Driver):
+        super().__init__(observation, driver)
         likelihood = observation.likelihood()
         keys = observation.keys()
         # The weight of each data item, and the residual of the values the
@@ -555,7 +560,7 @@ class ComparisonGaussian(Comparison):
             weighted: bool,
             scales: Mapping[str, DeviceArray]
     ) -> None:
-        driver = self._observation.driver()
+        driver = self._driver
         scaled = {
             key: self._scaled(model, key, scales)
             for key in self._observation.keys()}
@@ -612,7 +617,7 @@ class ComparisonGaussian(Comparison):
         the model, of the data mask and of the item, and of the noise of
         the value.
         """
-        driver = self._observation.driver()
+        driver = self._driver
         if (key, axis) not in self._d_scale_sums:
             shape = tuple(
                 1 if k == axis else n
@@ -664,7 +669,7 @@ class ComparisonGaussian(Comparison):
         Evaluate the noise residuals, with the weights of the data items
         if weighted (as the residuals).
         """
-        driver = self._observation.driver()
+        driver = self._driver
         for j, (key, noise) in enumerate(self._noise.items()):
             weight = self._weights[key] if weighted else 1.0
             self._backend.noise_sum(
@@ -695,10 +700,12 @@ class ComparisonUser(Comparison):
     ----------
     observation : Observation
         The observation, with data, of a user likelihood.
+    driver : Driver
+        The driver of its model.
     """
 
-    def __init__(self, observation: Observation):
-        super().__init__(observation)
+    def __init__(self, observation: Observation, driver: Driver):
+        super().__init__(observation, driver)
         self._likelihood: LikelihoodUser = observation.likelihood()
         # The chi-square of a function of the log-likelihood
         self._chi2 = 0.0
@@ -713,7 +720,7 @@ class ComparisonUser(Comparison):
             weighted: bool,
             scales: Mapping[str, DeviceArray]
     ) -> None:
-        driver = self._observation.driver()
+        driver = self._driver
         self._chi2 = 0.0
         for key in self._observation.keys():
             item = self._dataset[key]
@@ -739,15 +746,15 @@ class ComparisonUser(Comparison):
         return self._chi2
 
 
-def comparison(observation: Observation) -> Comparison:
+def comparison(observation: Observation, driver: Driver) -> Comparison:
     """
     Return the comparison of an observation with its data, of the kind of
-    its likelihood.
+    its likelihood, on the driver of its model.
     """
     likelihood = observation.likelihood()
     for kind, cls in _COMPARISONS:
         if isinstance(likelihood, kind):
-            return cls(observation)
+            return cls(observation, driver)
     raise TypeError(
         f"no comparison of the likelihood {type(likelihood).__name__}")
 

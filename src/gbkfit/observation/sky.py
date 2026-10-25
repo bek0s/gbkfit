@@ -7,7 +7,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.dataset import Data, Dataset
-from gbkfit.driver import DeviceArray, Driver, driver_by_name
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import Band, BandEmission, LineCatalogue, band_parser
 from gbkfit.model.components._units import DataUnit
@@ -115,9 +115,6 @@ class ObservationSky(Observation):
     line_of_sight : LineOfSight
         How it treats the line of sight: Flat() (the plane of the sky) or
         Grid() (a depth axis).
-    driver : Driver, optional
-        Where the model is evaluated; by default, the host. (In its
-        configuration, the name of a driver; see load.)
     foreground : Foreground, optional
         What the light meets before the telescope; nothing by default.
     instrument : Instrument, optional
@@ -218,16 +215,12 @@ class ObservationSky(Observation):
     def load(
             cls,
             info: dict[str, Any],
-            drivers: Mapping[str | None, Driver] | None = None,
             catalogue: LineCatalogue | None = None
     ) -> 'ObservationSky':
         """
         Load an observation from its configuration.
 
-        Its option driver is not a driver but the name of one of the
-        drivers of the configuration, which declares them at its top
-        level. It can be left out when there is one driver, and the
-        observation has the host when there are none. Its band is the name
+        Its band is the name
         of a band of the catalogue, or a band (its name and wavelength).
         Its data can have the option outliers, {size, nsigma}: the data
         are screened for outliers as they are read, which are masked (see
@@ -241,9 +234,6 @@ class ObservationSky(Observation):
         ----------
         info : dict
             The configuration.
-        drivers : Mapping of str to Driver, optional
-            The drivers of the configuration, by name; the one unnamed
-            driver of a configuration has the name None.
         catalogue : LineCatalogue, optional
             The catalogue of the names of bands; that of GBKFIT by
             default.
@@ -257,13 +247,9 @@ class ObservationSky(Observation):
         ------
         ConfigError
             If the configuration has an error (e.g. the options of flux
-            scales of before 2026-10-25, see _refuse_old_options), or the
-            driver is not one of the drivers.
+            scales of before 2026-10-25, see _refuse_old_options).
         """
         _refuse_old_options(info)
-        with parseutils.config_path('driver'):
-            info['driver'] = driver_by_name(
-                info.get('driver'), drivers or {}, 'observation')
         if info.get('band') is not None:
             with parseutils.config_path('band'):
                 info['band'] = load_band(
@@ -307,8 +293,7 @@ class ObservationSky(Observation):
             overwrite: bool = False
     ) -> dict[str, Any]:
         """
-        Dump the observation to its configuration, without its driver,
-        which configurations declare at their top level (see load).
+        Dump the observation to its configuration.
 
         Parameters
         ----------
@@ -361,7 +346,6 @@ class ObservationSky(Observation):
             self,
             observable: Observable,
             line_of_sight: LineOfSight,
-            driver: Driver | None = None,
             foreground: Foreground | None = None,
             instrument: Instrument | None = None,
             galaxies: Sequence[str] | None = None,
@@ -378,11 +362,17 @@ class ObservationSky(Observation):
             fft_dtype: str = 'float64',
             name: str | None = None
     ):
-        # (the second argument was the driver before the line of sight)
+        # (the second argument was the driver before the line of sight, and
+        # the third until the driver left the observations, 2026-10-25)
         if not isinstance(line_of_sight, LineOfSight):
             raise TypeError(
                 f"line_of_sight must be a LineOfSight (e.g. Flat() or "
                 f"Grid()); it is {line_of_sight!r}")
+        if foreground is not None and not isinstance(foreground, Foreground):
+            raise TypeError(
+                f"foreground must be a Foreground; it is {foreground!r} (the "
+                f"driver of an observation is given to its group: see "
+                f"ObservationGroup.plan)")
         if components is not None:
             components = tuple(components)
             check_component_names(components)
@@ -426,7 +416,7 @@ class ObservationSky(Observation):
         self._offsets = offsets
         self._scale = scale
         super().__init__(
-            observable.keys(), driver, galaxies, data, likelihood, name,
+            observable.keys(), galaxies, data, likelihood, name,
             observable.model_can_lack_values())
         observable.check_instrument(instrument)
         if data is not None:
@@ -525,8 +515,8 @@ class ObservationSky(Observation):
             self, data: Dataset, likelihood: Likelihood | None = None
     ) -> Self:
         return type(self)(
-            self._observable, self._line_of_sight, self._driver,
-            self._foreground, self._instrument, self._galaxies,
+            self._observable, self._line_of_sight, self._foreground,
+            self._instrument, self._galaxies,
             self._components, self._lines, self._band, self._weights,
             self._flux_scale, self._offsets, data,
             likelihood if likelihood is not None else self._likelihood,
@@ -577,24 +567,27 @@ class ObservationSky(Observation):
 
     def images(
             self,
+            driver: Driver,
             values: Mapping[str, np.ndarray],
             weights: Mapping[str, np.ndarray] | None,
             units: Mapping[str, astropy.units.UnitBase | None] | None
     ) -> dict[str, gridutils.GridData]:
         """
         Return the images of values of its data items that its observable
-        makes (see Observable.images), on its driver.
+        makes (see Observable.images), on a driver.
         """
-        return self._observable.images(self._driver, values, weights, units)
+        return self._observable.images(driver, values, weights, units)
 
     def psf_images(
-            self, weights: Mapping[str, np.ndarray] | None
+            self,
+            driver: Driver,
+            weights: Mapping[str, np.ndarray] | None
     ) -> dict[str, gridutils.GridData]:
         """
         Return the images of the PSF of its data that its observable makes
-        (see Observable.psf_images), on its driver.
+        (see Observable.psf_images), on a driver.
         """
-        return self._observable.psf_images(self._driver, weights)
+        return self._observable.psf_images(driver, weights)
 
     def scale(self) -> tuple[int, ...]:
         """Return the oversampling of the model along each axis."""
@@ -608,14 +601,16 @@ class ObservationSky(Observation):
         """Return the floating type of the FFT convolutions of the model."""
         return self._fft_dtype
 
-    def plan(self, seen: SeenGalaxies) -> ObservablePlan:
+    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
-        Plan the evaluation of what it sees (see ObservationGroup): the
-        scene of the galaxies it sees, along its line of sight (see
+        Plan the evaluation of what it sees (see ObservationGroup.plan):
+        the scene of the galaxies it sees, along its line of sight (see
         make_scene), as its observable.
 
         Parameters
         ----------
+        driver : Driver
+            The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxies it sees.
 
@@ -641,12 +636,12 @@ class ObservationSky(Observation):
         scale = self.flux_scale()
         one = scale is not None and scale[1].axis is None
         plan = self._observable.plan(
-            self._driver, scene, self._foreground, self._instrument,
+            driver, scene, self._foreground, self._instrument,
             self._scale, self._dtype, self._fft_dtype, self._weights,
             scale[0] if one else None)
         if scale is None or one:
             return plan
-        return _FluxScaledPlan(plan, self._driver, *scale, self._dtype)
+        return _FluxScaledPlan(plan, driver, *scale, self._dtype)
 
 
 def _check_offsets(

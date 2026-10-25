@@ -23,7 +23,7 @@ import gbkfit.params
 import gbkfit.instrument
 from gbkfit.model.components import traits
 from gbkfit.utils import funcutils
-from modelutils import config_group
+from modelutils import config_group_plan
 
 
 DATA_DIR = pathlib.Path(__file__).parents[1] / 'data'
@@ -119,10 +119,11 @@ def test_config_roundtrip(config):
     properties = info['params']['properties']
 
     def evaluate(config_):
-        group = config_group(config_)
+        plan = config_group_plan(config_)
         params = gbkfit.params.ParamSpace(
-            group.pdescs(), properties, constants=group.constants())
-        return group.model_h(params.evaluate())
+            plan.group().pdescs(), properties,
+            constants=plan.group().constants())
+        return plan.model_h(params.evaluate())
 
     data = [{k: dict(v) for k, v in item.items()} for item in evaluate(info)]
     data_dumped = evaluate(dumped)

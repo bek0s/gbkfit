@@ -51,13 +51,15 @@ def mock_objective(
     """
     def group(dataset, likelihood=None):
         observation = ObservationSky(
-            PixelBrightness.from_data(dataset), Flat(), driver,
+            PixelBrightness.from_data(dataset), Flat(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
             likelihood=likelihood, name=name)
-        return ObservationGroup(galaxy_parser.load(GALAXY), observation)
+        return ObservationGroup(
+            galaxy_parser.load(GALAXY), observation).plan(driver)
     shape = (32, 32)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
-    model = image.model_h(ParamSpace(image.pdescs(), TRUE).evaluate())[0]
+    model = image.model_h(
+        ParamSpace(image.group().pdescs(), TRUE).evaluate())[0]
     model = model['brightness']['d']
     sigma = 0.01 * model.max()
     noise = np.random.default_rng(seed).normal(0, sigma, shape)
@@ -942,11 +944,12 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
 
     def group(dataset):
         observation = ObservationSky(
-            PixelBrightness.from_data(dataset), Flat(), DriverHost(),
+            PixelBrightness.from_data(dataset), Flat(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
-        return ObservationGroup(galaxy_parser.load(GALAXY), observation)
+        return ObservationGroup(
+            galaxy_parser.load(GALAXY), observation).plan(DriverHost())
     image = group(DatasetPixelBrightness(Data(np.zeros((48, 48)))))
-    values = ParamSpace(image.pdescs(), TRUE).evaluate()
+    values = ParamSpace(image.group().pdescs(), TRUE).evaluate()
     peak = image.model_h(values)[0]['brightness']['d'].max()
     noise = NoiseGauss(rms=0.01 * peak, spatial_correlation='instrument')
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))

@@ -37,9 +37,10 @@ def objective(driver, data, likelihood):
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), driver,
-            data=dataset, likelihood=likelihood)])
-    return Objective(group), ParamSpace(group.pdescs(), PARAMS).evaluate()
+            line_of_sight_parser.load(dict(type='flat')), data=dataset,
+            likelihood=likelihood)])
+    return (Objective(group.plan(driver)),
+            ParamSpace(group.pdescs(), PARAMS).evaluate())
 
 
 def noisy_cube(rng, mask):
@@ -64,7 +65,8 @@ def test_cubes_have_the_chi2_of_the_product_of_their_correlations(driver):
     data = noisy_cube(rng, mask)
     obj, params = objective(
         driver, data, LikelihoodGaussian(white_floor=0.05))
-    model = obj.group().model_h(params)[0]['spectra']['d'].astype(float)
+    model = obj.group_plan().model_h(
+        params)[0]['spectra']['d'].astype(float)
     kept = mask[0] != 0
     r = ((model - data.data()) / data.error())[:, kept]
     y, x = np.nonzero(kept)
@@ -104,7 +106,8 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), driver,
-            data=dataset, flux_scale='one', name='obs')])
+            line_of_sight_parser.load(dict(type='flat')), data=dataset,
+            flux_scale='one', name='obs')])
     with pytest.raises(ConfigError, match="its correlated noise"):
-        Objective(group, dict(obs_flux_scale=SolveGaussian(1, 0.5, 0)))
+        Objective(group.plan(driver),
+                  dict(obs_flux_scale=SolveGaussian(1, 0.5, 0)))

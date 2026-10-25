@@ -9,7 +9,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 import scipy.special
-from modelutils import observation_group
+from modelutils import group_plan
 
 from gbkfit.dataset import UVCoverage
 from gbkfit.utils import gridutils
@@ -44,12 +44,12 @@ GRID = dict(size=[32, 28], step=1, rval=[150, -30])
 
 
 def evaluate(driver, galaxy, observable, properties):
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    data = group.model_h(params.evaluate())[0]
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
 
@@ -133,8 +133,8 @@ def test_the_pixels_of_visibilities_are_not_oversampled(driver):
 
 def observation_of_data(driver, offset):
     """
-    An observation group of visibilities whose data are those of the
-    model plus offset in each part, of error 1, and its parameters.
+    The plan of an observation group of visibilities whose data are those
+    of the model plus offset in each part, of error 1, and its parameters.
     """
     from gbkfit.dataset import Data, DatasetVisibilities
     from gbkfit.model import galaxy_parser
@@ -147,18 +147,19 @@ def observation_of_data(driver, offset):
         Data(model.real + offset, error=error),
         Data(model.imag + offset, error=error), COVERAGE)
     observation = ObservationSky(
-        Visibilities.from_data(dataset, **GRID), Flat(), driver, data=dataset)
+        Visibilities.from_data(dataset, **GRID), Flat(), data=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
-    return group, ParamSpace(group.pdescs(), DISK_PROPERTIES).evaluate()
+    return (group.plan(driver),
+            ParamSpace(group.pdescs(), DISK_PROPERTIES).evaluate())
 
 
 def test_the_residuals_are_those_of_both_parts(driver):
     # Data 0.5 above the model in each part, of error 1: chi2 = 0.25 for
     # each part of each visibility
     from gbkfit.objective import Objective
-    group, params = observation_of_data(driver, 0.5)
+    plan, params = observation_of_data(driver, 0.5)
     nvalues = COVERAGE.nchannels() * COVERAGE.nrows()
-    assert Objective(group).chi2(params) == pytest.approx(
+    assert Objective(plan).chi2(params) == pytest.approx(
         0.25 * 2 * nvalues, rel=1e-4)
 
 
@@ -167,9 +168,9 @@ def test_the_outputs_have_the_dirty_images(driver):
     # from the highest frequency), and the dirty beam
     from gbkfit.objective import Objective
     from gbkfit.tasks import _detail
-    group, params = observation_of_data(driver, 0.5)
-    outputs = _detail.data_outputs(group) | _detail.evaluation_outputs(
-        group, Objective(group), params, True, True)
+    plan, params = observation_of_data(driver, 0.5)
+    outputs = _detail.data_outputs(plan) | _detail.evaluation_outputs(
+        plan, Objective(plan), params, True, True)
     images = {
         (x.kind, x.ids['image']): x.value.data for x in outputs.values()
         if x.kind.endswith('_image')}
@@ -187,8 +188,8 @@ def test_mock_visibilities_are_the_model_plus_the_noise(driver):
     # Of rms 0.1 in each part, independent: their errors are 0.1, and
     # (mock - model) / 0.1 has a mean of 0 and a dispersion of 1
     from gbkfit.observation import NoiseGauss
-    group, params = observation_of_data(driver, 0)
-    [[dataset]] = group.mock(params, NoiseGauss(rms=0.1), seed=1)
+    plan, params = observation_of_data(driver, 0)
+    [[dataset]] = plan.mock(params, NoiseGauss(rms=0.1), seed=1)
     model = visibilities(driver, DISK, DISK_PROPERTIES)
     z = {}
     for key, part in (('re', model.real), ('im', model.imag)):
@@ -201,7 +202,7 @@ def test_mock_visibilities_are_the_model_plus_the_noise(driver):
 def test_the_noise_of_visibilities_is_not_correlated_on_the_sky(driver):
     from gbkfit.instrument import PSFGauss
     from gbkfit.observation import NoiseGauss
-    group, params = observation_of_data(driver, 0)
+    plan, params = observation_of_data(driver, 0)
     noise = NoiseGauss(rms=0.1, spatial_correlation=PSFGauss(sigma=1))
     with pytest.raises(ConfigError, match="not on the sky"):
-        group.mock(params, noise, seed=1)
+        plan.mock(params, noise, seed=1)

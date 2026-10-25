@@ -8,7 +8,7 @@ import copy
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan, observation_group
 
 
 # A thin exponential disk of scale length H and central brightness 1, to
@@ -55,11 +55,11 @@ def evaluate(driver, galaxy, properties, line_of_sight='flat'):
     """
     if isinstance(line_of_sight, str):
         line_of_sight = dict(type=line_of_sight)
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=line_of_sight, observable=CUBE)])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['spectra']['d'].astype(float)
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    return plan.model_h(params.evaluate())[0]['spectra']['d'].astype(float)
 
 
 def moments(cube):
@@ -120,18 +120,19 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     particles = dict(components=[dict(
         type='particles', file=disk_particles(tmp_path / 'disk.npz'),
         emission=dict(type='lines'))])
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type='host'), galaxy=particles,
         line_of_sight=dict(type='flat'), observable=CUBE)])
-    values = gbkfit.params.ParamSpace(group.pdescs(), GEOMETRY).evaluate()
-    peak = group.model_h(values)[0]['spectra']['d'].max()
-    mock = group.mock(values, NoiseGauss(rms=0.01 * peak), seed=2)[0][0]
+    values = gbkfit.params.ParamSpace(
+        plan.group().pdescs(), GEOMETRY).evaluate()
+    peak = plan.model_h(values)[0]['spectra']['d'].max()
+    mock = plan.mock(values, NoiseGauss(rms=0.01 * peak), seed=2)[0][0]
     disk = observation_group([dict(
         driver=dict(type='host'), galaxy=DISK,
         line_of_sight=dict(type='flat'),
         observable=CUBE | dict(scale=[4, 4, 1]))])
     objective = Objective(ObservationGroup(
-        disk.galaxies(), disk.observations()[0].with_data(mock)))
+        disk.galaxies(), disk.observations()[0].with_data(mock)).plan())
     properties = DISK_PROPERTIES | dict(
         posa=dict(value=30, min=0, max=90),
         incl=dict(value=50, min=20, max=80),
@@ -157,13 +158,13 @@ def test_particles_in_an_image(driver, tmp_path):
     galaxy = dict(components=[dict(
         type='particles', file=str(tmp_path / 'three.npz'),
         emission=dict(type='band'))])
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'), observable=dict(
             type='pixel_brightness', size=[10, 8], step=[0.5, 0.5]))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), dict(
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
         xpos=0, ypos=0, posa=0, incl=0))
-    image = group.model_h(params.evaluate())[0]['brightness']['d']
+    image = plan.model_h(params.evaluate())[0]['brightness']['d']
     assert image.sum() * 0.25 == pytest.approx(5)
     assert np.count_nonzero(image) == 2
 

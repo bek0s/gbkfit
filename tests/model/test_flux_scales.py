@@ -9,7 +9,7 @@ import pathlib
 import numpy as np
 import pytest
 import scipy.stats
-from modelutils import config_group
+from modelutils import config_group_plan
 
 from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
 from gbkfit.fitting import FitProblem
@@ -42,39 +42,39 @@ SOLVE = dict(type='gaussian', mean=1, sigma=SIGMA, minimum=0)
 GOLDEN = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
 
 
-def group(driver, data, error, likelihood=None):
+def group_plan(driver, data, error, likelihood=None):
     """
-    The observations of a disk seen in data with the given errors, named
-    'obs', with a flux scale per spectrum, under a likelihood (Gaussian
-    by default).
+    The plan of the observations of a disk seen in data with the given
+    errors, named 'obs', with a flux scale per spectrum, under a
+    likelihood (Gaussian by default).
     """
     dataset = DatasetPixelSpectra(
         Data(data, error=np.full_like(data, error)), step=STEP)
     return ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
-            line_of_sight_parser.load(dict(type='flat')), driver,
-            data=dataset, likelihood=likelihood, flux_scale='per_spectrum',
-            name='obs')])
+            line_of_sight_parser.load(dict(type='flat')), data=dataset,
+            likelihood=likelihood, flux_scale='per_spectrum', name='obs')]
+    ).plan(driver)
 
 
 def objective(driver, data, error, scale=None, likelihood=None, **values):
     """
-    The objective of a disk seen in data (see group), and its parameters
-    (PARAMS and the given values), of the given flux scale (solved by
-    SOLVE by default).
+    The objective of a disk seen in data (see group_plan), and its
+    parameters (PARAMS and the given values), of the given flux scale
+    (solved by SOLVE by default).
     """
-    group_ = group(driver, data, error, likelihood)
+    plan = group_plan(driver, data, error, likelihood)
     scale = dict(solve=SOLVE) if scale is None else scale
     params = ParamSpace(
-        group_.pdescs(), PARAMS | dict(obs_flux_scale=scale) | values)
-    return Objective(group_, params.solves()), params
+        plan.group().pdescs(), PARAMS | dict(obs_flux_scale=scale) | values)
+    return Objective(plan, params.solves()), params
 
 
 def model(driver):
     """The spectra of the disk, of a flux scale of 1."""
     obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
-    return obj.group().model_h(params.evaluate())[0]['spectra']['d'] \
+    return obj.group_plan().model_h(params.evaluate())[0]['spectra']['d'] \
         .astype(float)
 
 
@@ -119,10 +119,10 @@ def test_a_flux_scale_of_one_value_scales_the_flux(driver):
         dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20])]
 
     def evaluate(flux_scale):
-        group_ = config_group(config(driver, observables, flux_scale))
+        plan = config_group_plan(config(driver, observables, flux_scale))
         scale = dict(first_flux_scale=2) if flux_scale else {}
-        data = group_.model_h(
-            ParamSpace(group_.pdescs(), PARAMS | scale).evaluate())
+        data = plan.model_h(
+            ParamSpace(plan.group().pdescs(), PARAMS | scale).evaluate())
         return (
             data[0]['moment0']['d'].copy(), data[0]['moment1']['d'].copy(),
             data[1]['spectra']['d'].copy())
@@ -145,16 +145,19 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
                 PixelMoments.from_data(
                     dataset, spec_size=21, spec_step=20,
                     spec_convention='relativistic'),
-                line_of_sight_parser.load(dict(type='flat')), driver,
-                data=dataset, flux_scale='one', name='obs',
-                likelihood=LikelihoodGaussian(missing_residual=3))])
+                line_of_sight_parser.load(dict(type='flat')), data=dataset,
+                flux_scale='one', name='obs',
+                likelihood=LikelihoodGaussian(missing_residual=3))]
+        ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
     model = blank.model_h(ParamSpace(
-        blank.pdescs(), PARAMS | dict(obs_flux_scale=1)).evaluate())[0]
+        blank.group().pdescs(), PARAMS | dict(obs_flux_scale=1)
+    ).evaluate())[0]
     scaled = moments(
         2 * model['moment0']['d'], np.nan_to_num(model['moment1']['d']))
     params = ParamSpace(
-        scaled.pdescs(), PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
+        scaled.group().pdescs(),
+        PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
     obj = Objective(scaled, params.solves())
     obj.chi2(params.evaluate())
     assert obj.solved()['obs_flux_scale'] == pytest.approx(2, rel=1e-6)
@@ -184,7 +187,7 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     # (fitted, the same scales give the same model as solved)
     values = params.evaluate() | dict(obs_flux_scale=found.ravel())
     np.testing.assert_allclose(
-        fixed.group().model_h(values)[0]['spectra']['d'],
+        fixed.group_plan().model_h(values)[0]['spectra']['d'],
         spectra * found, rtol=1e-6, atol=1e-9 * spectra.max())
 
 
@@ -270,9 +273,9 @@ def test_the_old_options_of_flux_scales_say_the_new_form(options, message):
 def test_only_flux_scales_of_gaussian_likelihoods_are_solved(
         driver, tmp_path):
     spectra = model(driver)
-    group_ = group(driver, spectra, 1.0)
+    plan = group_plan(driver, spectra, 1.0)
     with pytest.raises(ConfigError, match=r"cannot: \['vsys'\]"):
-        Objective(group_, dict(vsys=SolveGaussian(0, 10)))
+        Objective(plan, dict(vsys=SolveGaussian(0, 10)))
     (tmp_path / 'like.py').write_text(
         "def like(key, data, model, error, mask, params):\n"
         "    return model - data\n")
@@ -283,17 +286,17 @@ def test_only_flux_scales_of_gaussian_likelihoods_are_solved(
     # (and a fit needs an objective that solves those of its parameters)
     obj, params = objective(driver, spectra, 1.0, vsys=dict(value=0))
     with pytest.raises(ValueError, match="must solve the solved elements"):
-        FitProblem(Objective(obj.group()), params)
+        FitProblem(Objective(obj.group_plan()), params)
 
 
 def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):
     obj, params = objective(driver, np.zeros(SIZE[::-1]), 1.0, scale=1)
     noise = noise_parser.load(dict(type='gauss', rms=1.0))
-    obj.group().mock(params.evaluate(), noise, nsamples=2, seed=1)
+    obj.group_plan().mock(params.evaluate(), noise, nsamples=2, seed=1)
     values = params.evaluate() | dict(
         obs_flux_scale=np.full(SIZE[0] * SIZE[1], 2.0))
     with pytest.raises(ConfigError, match="of 1 only"):
-        obj.group().mock(values, noise, nsamples=2, seed=1)
+        obj.group_plan().mock(values, noise, nsamples=2, seed=1)
 
 
 def test_the_outputs_have_the_solved_scales(driver):
@@ -303,7 +306,7 @@ def test_the_outputs_have_the_solved_scales(driver):
     spectra = model(driver)
     error = 1e-3 * spectra.max()
     obj, params = objective(driver, 2 * spectra, error)
-    evaluation = Evaluation(obj.group(), params, obj)
+    evaluation = Evaluation(obj.group_plan(), params, obj)
     outputs = {
         x.kind: x.value
         for x in evaluation.outputs(evaluation.values()).values()}
@@ -322,7 +325,7 @@ def test_the_scales_of_slitless_rows_scale_their_rows():
     # row in the model of the outputs
     from gbkfit.tasks import eval as eval_task
     evaluation = eval_task.load(str(GOLDEN / 'slitless_rows' / 'config.yaml'))
-    unscaled = evaluation.group.model_h(
+    unscaled = evaluation.group_plan.model_h(
         evaluation.params.evaluate())[0]['spectra']['d'].copy()
     outputs = {
         x.kind: x.value for x in evaluation.outputs(

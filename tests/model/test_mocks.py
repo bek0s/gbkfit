@@ -10,7 +10,7 @@ import pytest
 
 from gbkfit.model import Extras
 from gbkfit.observation import NoiseGauss, NoisePoisson
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 def disk(emission):
@@ -39,20 +39,21 @@ RECORDED = dict(
                    dx=[0, 2.99792458e5 / 120])))
 
 
-def group_of(driver, observable):
+def plan_of(driver, observable):
     emission = 'band' if observable['type'] == 'pixel_brightness' \
         else 'lines'
-    return observation_group([dict(
+    return group_plan([dict(
         driver=dict(type=driver.type()), galaxy=dict(
             components=[disk(emission)]),
         line_of_sight=dict(type='flat'), observable=observable)])
 
 
-def evaluate(group):
+def evaluate(plan):
     """The model data of the observation and its parameters."""
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES).evaluate()
+    params = gbkfit.params.ParamSpace(
+        plan.group().pdescs(), PROPERTIES).evaluate()
     extra = Extras()
-    data = group.model_h(params, extra)[0]
+    data = plan.model_h(params, extra)[0]
     return {k: v['d'].copy() for k, v in data.items()}, extra, params
 
 
@@ -61,9 +62,9 @@ def test_poisson_mocks_have_the_errors_of_their_signal(driver, name):
     # The errors of the mock data are the dispersion of the counts of
     # the model, sqrt(model gain) / gain; where it has none (0), the data
     # are missing (an error of 0 cannot be fitted)
-    group = group_of(driver, dict(type=name) | RECORDED[name])
-    model, _, params = evaluate(group)
-    [mock] = group.mock(params, NoisePoisson(gain=1e4), seed=1)[0]
+    plan = plan_of(driver, dict(type=name) | RECORDED[name])
+    model, _, params = evaluate(plan)
+    [mock] = plan.mock(params, NoisePoisson(gain=1e4), seed=1)[0]
     for key, value in model.items():
         bright = value > 0
         np.testing.assert_allclose(
@@ -74,15 +75,15 @@ def test_poisson_mocks_have_the_errors_of_their_signal(driver, name):
 
 @pytest.mark.parametrize('name', list(RECORDED))
 def test_recorded_data_have_the_noise_as_their_error(driver, name):
-    group = group_of(driver, dict(type=name) | RECORDED[name])
-    model, _, params = evaluate(group)
-    mocks = group.mock(params, NoiseGauss(rms=0.01), nmocks=2, seed=1)[0]
+    plan = plan_of(driver, dict(type=name) | RECORDED[name])
+    model, _, params = evaluate(plan)
+    mocks = plan.mock(params, NoiseGauss(rms=0.01), nmocks=2, seed=1)[0]
     for key, value in model.items():
         residual = mocks[0][key].data() - value
         assert residual.std() == pytest.approx(0.01, rel=0.05)
         np.testing.assert_allclose(mocks[0][key].error(), 0.01)
         assert not np.array_equal(mocks[0][key].data(), mocks[1][key].data())
-    again = group.mock(params, NoiseGauss(rms=0.01), nmocks=1, seed=1)[0]
+    again = plan.mock(params, NoiseGauss(rms=0.01), nmocks=1, seed=1)[0]
     for key in model:
         np.testing.assert_array_equal(again[0][key].data(), mocks[0][key].data())
 
@@ -93,23 +94,23 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
     # declares the correlation: a fit of it whitens its residuals
     from gbkfit.dataset import Data
     from gbkfit.objective import Objective
-    group = group_of(driver, dict(
+    plan = plan_of(driver, dict(
         type='pixel_spectra', psf=dict(type='gauss', sigma=1.5))
         | RECORDED['pixel_spectra'])
-    model, _, params = evaluate(group)
-    observation = group.observations()[0]
+    model, _, params = evaluate(plan)
+    observation = plan.group().observations()[0]
     data = observation.dataset({'spectra': Data(
         model['spectra'], error=np.full_like(model['spectra'], 0.01),
         unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
-    group = group.with_data([data])
-    [mock] = group.mock(
+    plan = plan.with_data([data])
+    [mock] = plan.mock(
         params, NoiseGauss(rms=0.01, spatial_correlation='instrument'),
         seed=1)[0]
     assert mock['spectra'].unit() == data['spectra'].unit()
     assert mock['spectra'].beam() == data['spectra'].beam()
     assert mock['spectra'].spatial_correlation() \
         == observation.instrument().psf()
-    with Objective(group.with_data([mock])) as objective:
+    with Objective(plan.with_data([mock])) as objective:
         assert objective.nindependent() < objective.nresiduals()
 
 
@@ -120,12 +121,12 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
     # scatter of the mock moments, where the model is bright (the moments
     # of noisy spectra are biased, so their mean is not the moments of
     # the model)
-    group = group_of(driver, dict(
+    plan = plan_of(driver, dict(
         type='pixel_moments', size=[16, 17], spec_size=31, spec_step=20,
         flux_floor=1e-4, method=method, spec_convention='relativistic'))
-    model, extra, params = evaluate(group)
+    model, extra, params = evaluate(plan)
     peak = extra.get('dcube_lo').data.max()
-    mocks = group.mock(
+    mocks = plan.mock(
         params, NoiseGauss(rms=0.05 * peak), nmocks=100, seed=2)[0]
     bright = model['moment0'] > 0.2 * model['moment0'].max()
     assert bright.sum() > 30

@@ -1,5 +1,4 @@
 import abc
-import copy
 from collections.abc import Mapping, Sequence
 from typing import Self
 
@@ -27,8 +26,8 @@ __all__ = [
 class Observation(parseutils.TypedSerializable, abc.ABC):
     """
     Data of galaxies, and how the model of the galaxies gives them: what
-    an observation group evaluates (see ObservationGroup), and an
-    objective compares with the data under its likelihood (see
+    the plan of an observation group evaluates (see ObservationGroup.plan),
+    and an objective compares with the data under its likelihood (see
     Objective). Its kind says where the data are measured and how the
     model gives them (e.g. on the sky, through an instrument; see
     ObservationSky).
@@ -42,8 +41,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
     ----------
     keys : Sequence of str
         The names of its data items (e.g. 'spectra').
-    driver : Driver, optional
-        Where its model is evaluated; by default, the host.
     galaxies : Sequence of str, optional
         The names of the galaxies it sees; required only when there are
         several (see ObservationGroup).
@@ -77,7 +74,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
     def __init__(
             self,
             keys: Sequence[str],
-            driver: Driver | None = None,
             galaxies: Sequence[str] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
@@ -94,10 +90,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
                 raise ConfigError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
                 parseutils.check_name(galaxy)
-        if driver is None:
-            # (imported here: the host driver needs its native module)
-            from gbkfit.driver.drivers.host import DriverHost
-            driver = DriverHost()
         if data is None and likelihood is not None:
             raise ConfigError("a likelihood needs data")
         if data is not None:
@@ -124,7 +116,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
                     "such a value, the option missing_residual (e.g. 3; see "
                     "LikelihoodGaussian)")
         self._keys = keys
-        self._driver = driver
         self._galaxies = galaxies
         self._data = data
         self._likelihood = likelihood
@@ -138,20 +129,6 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
     def galaxies(self) -> tuple[str, ...] | None:
         """Return the names of the galaxies it sees, if given."""
         return self._galaxies
-
-    def driver(self) -> Driver:
-        """Return the driver its model is evaluated on."""
-        return self._driver
-
-    def with_driver(self, driver: Driver) -> Self:
-        """
-        Return a copy of it whose model is evaluated on another driver;
-        the copy shares the rest, its data too (e.g. copies of an
-        objective on several devices; see Objective.with_driver).
-        """
-        observation = copy.copy(self)
-        observation._driver = driver
-        return observation
 
     def data(self) -> Dataset | None:
         """Return the data, if any."""
@@ -256,7 +233,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
     ) -> Self:
         """
         Return a copy of it with other data (e.g. mock data; see
-        ObservationGroup.mock).
+        GroupPlan.mock).
 
         Parameters
         ----------
@@ -269,7 +246,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         Returns
         -------
         Observation
-            The copy, whose model is evaluated on its driver.
+            The copy.
 
         Raises
         ------
@@ -279,12 +256,14 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def plan(self, seen: SeenGalaxies) -> ObservablePlan:
+    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
-        Plan the evaluation of its model (see ObservationGroup).
+        Plan the evaluation of its model (see ObservationGroup.plan).
 
         Parameters
         ----------
+        driver : Driver
+            The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxies it sees.
 
@@ -320,17 +299,20 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
 
     def images(
             self,
+            driver: Driver,
             values: Mapping[str, np.ndarray],
             weights: Mapping[str, np.ndarray] | None,
             units: Mapping[str, astropy.units.UnitBase | None] | None
     ) -> dict[str, gridutils.GridData]:
         """
         Return images of values of its data items, as outputs (e.g. the
-        dirty images of visibilities; see Observable.images), made on its
+        dirty images of visibilities; see Observable.images), made on a
         driver; here, none.
 
         Parameters
         ----------
+        driver : Driver
+            The driver they are made on.
         values : Mapping
             The values of each data item (e.g. those of the data, of the
             model, or of the data minus the model), NaN where they have
@@ -349,15 +331,19 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         return {}
 
     def psf_images(
-            self, weights: Mapping[str, np.ndarray] | None
+            self,
+            driver: Driver,
+            weights: Mapping[str, np.ndarray] | None
     ) -> dict[str, gridutils.GridData]:
         """
         Return images of the PSF of its data (e.g. the dirty beam of
         visibilities; see Observable.psf_images), which its images are
-        seen through, made on its driver; here, none.
+        seen through, made on a driver; here, none.
 
         Parameters
         ----------
+        driver : Driver
+            The driver they are made on.
         weights : Mapping, optional
             The weights of the values of each data item (see images).
 

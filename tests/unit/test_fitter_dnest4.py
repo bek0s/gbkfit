@@ -163,14 +163,16 @@ def blob_objective():
 
     def group(dataset):
         return ObservationGroup(galaxy_parser.load(GALAXY), ObservationSky(
-            PixelBrightness.from_data(dataset), Flat(), DriverHost(),
-            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset))
+            PixelBrightness.from_data(dataset), Flat(),
+            instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
+        ).plan(DriverHost())
     shape = (16, 16)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
     truth = {k: v for k, v in PROPERTIES.items() if not isinstance(v, dict)}
     truth |= dict(pt_a=1.0, pt1_r=[3, 5, 5], pt1_t=[30, 0, 0],
                   pt1_a=[1, 0, 0])
-    model = image.model_h(ParamSpace(image.pdescs(), truth).evaluate())[0]
+    model = image.model_h(
+        ParamSpace(image.group().pdescs(), truth).evaluate())[0]
     model = model['brightness']['d']
     sigma = 0.02 * model.max()
     noise = np.random.default_rng(1).normal(0, sigma, shape)

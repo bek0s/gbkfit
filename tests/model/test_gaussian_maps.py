@@ -8,7 +8,7 @@ import copy
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 from gbkfit.observation.observables._moments import MomentsPlan
 
@@ -28,12 +28,12 @@ PROPERTIES = dict(
 
 
 def evaluate(driver, observable):
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=GALAXY,
         line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
-    data = group.model_h(params.evaluate())[0]
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
 

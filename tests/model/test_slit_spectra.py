@@ -8,7 +8,7 @@ import gbkfit.model
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 GALAXY = dict(components=[dict(
@@ -26,11 +26,11 @@ PROPERTIES = dict(
 
 
 def evaluate(driver, observable):
-    group = observation_group([
+    plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
              line_of_sight=dict(type='flat'), observable=observable)])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
-    data = group.model_h(params.evaluate())[0]
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    data = plan.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
 
@@ -75,11 +75,11 @@ def test_slit_spectra_objective_residual(driver):
     from gbkfit.observation import (
         Flat, ObservationGroup, ObservationSky, observable_parser)
     observation = ObservationSky(
-        observable_parser.load(copy.deepcopy(observable)), Flat(), driver,
+        observable_parser.load(copy.deepcopy(observable)), Flat(),
         data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
-    objective = Objective(group)
+    objective = Objective(group.plan(driver))
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)

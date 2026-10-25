@@ -11,7 +11,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
 from gbkfit.utils import gridutils, parseutils
-from modelutils import config_group
+from modelutils import config_group_plan
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -89,7 +89,7 @@ def with_dust(kind):
 def strict_load(info):
     """Load a configuration, with unknown options as errors."""
     with parseutils.strict_mode():
-        return config_group(info)
+        return config_group_plan(info)
 
 
 def load_error(info):

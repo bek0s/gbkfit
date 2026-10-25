@@ -47,7 +47,7 @@ def mass_galaxy(**info):
 
 def model(group, params):
     return {key: item['d'].copy()
-            for key, item in group.model_h(params)[0].items()}
+            for key, item in group.plan().model_h(params)[0].items()}
 
 
 def test_rotation_curve_of_a_mass_model():
@@ -68,7 +68,7 @@ def test_rotation_curve_of_a_mass_model():
     # Data of the model have no residuals
     data = observation.dataset({'vcirc': Data(vcirc(radii), error=np.ones(3))})
     objective = Objective(
-        ObservationGroup(galaxy, observation.with_data(data)))
+        ObservationGroup(galaxy, observation.with_data(data)).plan())
     assert objective.chi2(PARAMS) == pytest.approx(0, abs=1e-20)
 
 
@@ -164,7 +164,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
     params = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
         stars_pt_a=1, stars_pt_s=4, distance=10, mass_stellar_upsilon=1e8)
-    assert np.all(group.model_h(params)[1]['vcirc']['d'] > 0)
+    assert np.all(group.plan().model_h(params)[1]['vcirc']['d'] > 0)
     ObservationGroup(galaxy, image)
     warnings = [record for record in caplog.records
                 if 'only derived values can use it' in record.message]
@@ -175,7 +175,7 @@ def test_mock_profiles():
     galaxy = mass_galaxy()
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc)
     group = ObservationGroup(galaxy, observation)
-    (mock,), = group.mock(PARAMS, NoiseGauss(rms=5.0), seed=1)
+    (mock,), = group.plan().mock(PARAMS, NoiseGauss(rms=5.0), seed=1)
     assert isinstance(mock, DatasetProfile)
     np.testing.assert_array_equal(mock['vcirc'].error(), [5, 5])
     assert np.all(np.abs(mock['vcirc'].data() - model(group, PARAMS)['vcirc'])
@@ -188,12 +188,14 @@ def test_profiles_refuse_what_they_cannot_measure():
     with pytest.raises(ConfigError, match="not a function of radii"):
         ObservationProfile(['vrot'], radii)
     with pytest.raises(ConfigError, match="has no functions"):
-        ObservationGroup(galaxy, ObservationProfile(['vcirc_disk'], radii))
+        ObservationGroup(
+            galaxy, ObservationProfile(['vcirc_disk'], radii)).plan()
     with pytest.raises(ConfigError, match="physical lengths"):
-        ObservationGroup(galaxy, ObservationProfile(['rotation_gas'], radii))
+        ObservationGroup(
+            galaxy, ObservationProfile(['rotation_gas'], radii)).plan()
     with pytest.raises(ConfigError, match="must be on its disk"):
         ObservationGroup(galaxy, ObservationProfile(
-            ['rotation_gas'], [1.0, 30.0] * u.arcsec))
+            ['rotation_gas'], [1.0, 30.0] * u.arcsec)).plan()
     with pytest.raises(ConfigError, match="give them in km / s"):
         ObservationProfile(data=DatasetProfile(
             {'vcirc': Data(np.ones(2), unit='m/s')}, radii))
@@ -204,10 +206,10 @@ def test_outputs_of_profiles_are_tables():
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc, name='rc')
     data = observation.dataset({'vcirc': Data(
         [100.0, 150.0], error=[5.0, 5.0], unit='km/s')})
-    group = ObservationGroup(mass_galaxy(), observation.with_data(data))
+    plan = ObservationGroup(mass_galaxy(), observation.with_data(data)).plan()
     # (with the extra outputs of the gravity of a galaxy of mass alone)
     outputs = _detail.evaluation_outputs(
-        group, Objective(group), PARAMS, True, True)
+        plan, Objective(plan), PARAMS, True, True)
     assert {
         f'observations/rc/{kind}/vcirc.ecsv'
         for kind in ('model', 'residual', 'wresidual')} <= set(outputs)
@@ -277,7 +279,7 @@ def test_rotation_curve_of_sparc(tmp_path):
     params = dict(
         distance=10, mass_gas_upsilon=1, mass_disk_upsilon=0.5,
         mass_halo_log_m=11.5, mass_halo_c=10, rc_incl=60)
-    objective = Objective(ObservationGroup(galaxy, observation))
+    objective = Objective(ObservationGroup(galaxy, observation).plan())
     radii = np.array([0.5, 1.0, 2.0, 4.0])
     halo = galaxy.plan_functions().bind(params)['vcirc_halo'](radii)
     gas = np.array([-3.0, 5.0, 12.0, 20.0])

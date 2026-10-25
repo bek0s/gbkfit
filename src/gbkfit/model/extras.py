@@ -49,14 +49,14 @@ class Extras:
 
     Each part of the model adds its own outputs to a view of the extras
     scoped to the ids of what it evaluates (see scoped), which adds them
-    to each output; e.g. the observation group gives each observation
-    extras.scoped(observation=...), and the observation gives each of its
-    galaxies a view scoped to it too.
+    to each output; e.g. the plan of an observation group gives each
+    observation extras.scoped(observation=...), and the observation gives
+    each of its galaxies a view scoped to it too.
 
     Examples
     --------
     >>> extras = Extras()
-    >>> group.model_h(values, extras)
+    >>> group.plan().model_h(values, extras)
     >>> extras.get('vdata', component='disk')
     """
 

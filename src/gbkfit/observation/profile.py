@@ -6,7 +6,7 @@ import numpy as np
 from astropy.table import Table
 
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
-from gbkfit.driver import Driver, driver_by_name
+from gbkfit.driver import Driver
 from gbkfit.model import Extras, LineCatalogue
 from gbkfit.model.components._functions import GalaxyFunctions
 from gbkfit.model.components._stage import GalaxyState
@@ -64,10 +64,10 @@ class ObservationProfile(Observation):
     chi-square of the data and their errors deprojected at incl (e.g. the
     fits of SPARC of Li et al. 2018).
 
-    It sees one galaxy. Its model is evaluated on the host, in float64,
-    and copied to its driver, from the state of the galaxy that the
-    observation group evaluates for all the observations of the galaxy
-    (see GalaxyState).
+    It sees one galaxy. Its model is evaluated in float64, from the state
+    of the galaxy that is evaluated once for all the observations of the
+    galaxy (see GalaxyState), with the profiles of the disks sampled on
+    its driver, and copied to its driver.
 
     In its configuration (type 'profile'), the data have the form of
     DatasetProfile (no type); without data, it has its functions, its
@@ -88,7 +88,7 @@ class ObservationProfile(Observation):
         The inclination (degrees) at which its rotation velocities were
         deprojected: its parameter '{name}_incl' is then the inclination
         of the galaxy (degrees), and its name is required.
-    driver, galaxies, data, likelihood, name
+    galaxies, data, likelihood, name
         See Observation.
 
     Raises
@@ -111,22 +111,16 @@ class ObservationProfile(Observation):
     def load(
             cls,
             info: dict[str, Any],
-            drivers: Mapping[str | None, Driver] | None = None,
             catalogue: LineCatalogue | None = None
     ) -> 'ObservationProfile':
         """
-        Load a profile observation from its configuration.
-
-        Its option driver is the name of one of the drivers of the
-        configuration (see ObservationSky.load). The catalogue is not
-        used (a profile has no lines).
+        Load a profile observation from its configuration. The catalogue is
+        not used (a profile has no lines).
 
         Parameters
         ----------
         info : dict
             The configuration.
-        drivers : Mapping of str to Driver, optional
-            The drivers of the configuration, by name.
         catalogue : LineCatalogue, optional
             Unused.
 
@@ -138,12 +132,8 @@ class ObservationProfile(Observation):
         Raises
         ------
         ConfigError
-            If the configuration has an error, or the driver is not one
-            of the drivers.
+            If the configuration has an error.
         """
-        with parseutils.config_path('driver'):
-            info['driver'] = driver_by_name(
-                info.get('driver'), drivers or {}, 'observation')
         if info.get('data') is not None:
             with parseutils.config_path('data'):
                 info['data'] = DatasetProfile.load(dict(info['data']))
@@ -166,8 +156,7 @@ class ObservationProfile(Observation):
             overwrite: bool = False
     ) -> dict[str, Any]:
         """
-        Dump the observation to its configuration, without its driver,
-        which configurations declare at their top level (see load).
+        Dump the observation to its configuration.
 
         Parameters
         ----------
@@ -210,7 +199,6 @@ class ObservationProfile(Observation):
             radii: u.Quantity | None = None,
             distance: u.Quantity | None = None,
             inclination: float | None = None,
-            driver: Driver | None = None,
             galaxies: Sequence[str] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
@@ -268,7 +256,7 @@ class ObservationProfile(Observation):
             else float(inclination)
         # (slopes have no values where the galaxy has no density)
         super().__init__(
-            keys, driver, galaxies, data, likelihood, name,
+            keys, galaxies, data, likelihood, name,
             model_can_lack_values=any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys))
 
@@ -330,8 +318,7 @@ class ObservationProfile(Observation):
     ) -> Self:
         _check_data(data, self.keys(), self._radii, self._distance)
         return type(self)(
-            inclination=self._inclination, driver=self._driver,
-            galaxies=self._galaxies, data=data,
+            inclination=self._inclination, galaxies=self._galaxies, data=data,
             likelihood=likelihood if likelihood is not None
             else self._likelihood, name=self._name)
 
@@ -350,14 +337,16 @@ class ObservationProfile(Observation):
             radius=self._radii,
             value=values if unit is None else values * unit))
 
-    def plan(self, seen: SeenGalaxies) -> ObservablePlan:
+    def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
-        Plan the evaluation of its model (see ObservationGroup): the
+        Plan the evaluation of its model (see ObservationGroup.plan): the
         functions of the galaxy it sees at its radii (see
         GalaxyFunctions).
 
         Parameters
         ----------
+        driver : Driver
+            The driver it is evaluated on.
         seen : SeenGalaxies
             The galaxy it sees.
 
@@ -374,7 +363,7 @@ class ObservationProfile(Observation):
         """
         galaxy, mapping, label = \
             seen.galaxies[0], seen.mappings[0], seen.labels[0]
-        functions = galaxy.plan_functions(seen.sky_origin)
+        functions = galaxy.plan_functions(seen.sky_origin, driver)
         if missing := [k for k in self.keys() if k not in functions.names()]:
             raise ConfigError(
                 f"galaxy {label} has no functions {missing}; its functions "
@@ -409,8 +398,7 @@ class ObservationProfile(Observation):
                 tuple(k for k in self.keys()
                       if GalaxyFunctions.family(k) in _ROTATIONS))
         return _ProfilePlan(
-            functions, mapping, self.keys(), arcsec, kpc, inclination,
-            self._driver)
+            functions, mapping, self.keys(), arcsec, kpc, inclination, driver)
 
 
 def _check_data(

@@ -36,11 +36,11 @@ def make_objective(driver, data, likelihood=None, name=None, **values):
     """
     dataset = DatasetPixelBrightness(data)
     observation = ObservationSky(
-        PixelBrightness.from_data(dataset), Flat(), driver, data=dataset,
+        PixelBrightness.from_data(dataset), Flat(), data=dataset,
         likelihood=likelihood, name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     params = ParamSpace(group.pdescs(), PROPERTIES | values).evaluate()
-    return Objective(group), params
+    return Objective(group.plan(driver)), params
 
 
 def test_totals_agree_with_the_residuals(driver):
@@ -87,7 +87,7 @@ def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
     from gbkfit.analysis import prior_predictive
     rng = np.random.default_rng(5)
     empty, values = make_objective(driver, Data(np.zeros((24, 32))))
-    model = empty.group().model_h(values)[0]['brightness']['d']
+    model = empty.group_plan().model_h(values)[0]['brightness']['d']
     error = np.full(model.shape, 0.01 * model.max())
     data = Data(model + rng.normal(0, 1, model.shape) * error, error=error)
     objective, _ = make_objective(driver, data)
@@ -137,7 +137,7 @@ def test_a_copy_on_another_driver_gives_the_same_values(driver):
     data = Data(np.random.default_rng(3).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(DriverHost(), data)
     copy = objective.with_driver(driver)
-    assert copy.group().observations()[0].driver() is driver
+    assert copy.group_plan().observation_drivers() == (driver,)
     assert copy.datasets()[0] is objective.datasets()[0]
     assert copy.chi2(params) == pytest.approx(
         objective.chi2(params), rel=1e-5)
@@ -164,7 +164,7 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(
             upper_limits=dict(brightness=dict(limit=0.01, error=0.2))))
-    model = objective.group().model_h(params)[0]['brightness']['d']
+    model = objective.group_plan().model_h(params)[0]['brightness']['d']
     residuals = objective.residuals(params).reshape(24, 32)
     z = (0.01 - model[:, :8].astype(float)) / 0.2
     np.testing.assert_allclose(
@@ -210,7 +210,7 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(noise=noise), 'obs',
         obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
-    model = objective.group().model_h(params)[0]['brightness']['d']
+    model = objective.group_plan().model_h(params)[0]['brightness']['d']
     offsets = []
     for f, j in [(1.0, 0.0), (1.7, 0.3), (0.6, 1.2)]:
         point = params | dict(
@@ -266,11 +266,10 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
 
 def test_an_observation_without_data_is_an_error(driver):
     dataset = DatasetPixelBrightness(Data(np.ones((24, 32))))
-    observation = ObservationSky(
-        PixelBrightness.from_data(dataset), Flat(), driver)
+    observation = ObservationSky(PixelBrightness.from_data(dataset), Flat())
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
     with pytest.raises(ConfigError, match="needs data"):
-        Objective(group)
+        Objective(group.plan(driver))
 
 
 KINEMATICS = dict(components=[dict(
@@ -295,12 +294,14 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         likelihood = None if dataset is None \
             else LikelihoodGaussian(missing_residual=3)
         observation = ObservationSky(
-            observable, Flat(), driver, data=dataset, likelihood=likelihood)
-        return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
+            observable, Flat(), data=dataset, likelihood=likelihood)
+        return ObservationGroup(
+            galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1, 2],
         spec_convention='relativistic')))
-    model = image.model_h(ParamSpace(image.pdescs(), DISK).evaluate())[0]
+    model = image.model_h(
+        ParamSpace(image.group().pdescs(), DISK).evaluate())[0]
     errors = dict(moment0=0.01, moment1=5.0, moment2=5.0)
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full(
@@ -312,7 +313,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     truth = ParamSpace(objective.pdescs(), DISK).evaluate()
     compact = ParamSpace(
         objective.pdescs(), DISK | dict(pt_s=0.1)).evaluate()
-    compact_moment1 = objective.group().model_h(compact)[0]['moment1']['d']
+    compact_moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
     without = np.isnan(compact_moment1)
     has_data = dataset['moment1'].mask() != 0
     residuals = objective.residual_nddata_h(compact, False)[0]
@@ -335,13 +336,15 @@ def test_values_the_model_lacks_take_no_noise(driver):
             missing_residual=3, noise=dict(
                 moment1=dict(scale=True, scale_minimum=0.1)))
         observation = ObservationSky(
-            observable, Flat(), driver, data=dataset, likelihood=likelihood,
+            observable, Flat(), data=dataset, likelihood=likelihood,
             name='obs')
-        return ObservationGroup(galaxy_parser.load(KINEMATICS), observation)
+        return ObservationGroup(
+            galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1],
         spec_convention='relativistic')))
-    model = image.model_h(ParamSpace(image.pdescs(), DISK).evaluate())[0]
+    model = image.model_h(
+        ParamSpace(image.group().pdescs(), DISK).evaluate())[0]
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full((24, 24), 5.0))
         for order in (0, 1)})
@@ -350,7 +353,7 @@ def test_values_the_model_lacks_take_no_noise(driver):
     objective = Objective(group(observable, dataset))
     compact = ParamSpace(objective.pdescs(), DISK | dict(
         pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
-    moment1 = objective.group().model_h(compact)[0]['moment1']['d']
+    moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
     has = ~np.isnan(moment1) & (dataset['moment1'].mask() != 0)
     assert np.any(np.isnan(moment1) & (dataset['moment1'].mask() != 0))
     objective.chi2(compact)
@@ -384,7 +387,7 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
         driver, data, LikelihoodGaussian(
             weights=2.0, noise=noise, white_floor=0.05), 'obs',
         obs_noise_scale_brightness=1.3, obs_noise_jitter_brightness=0.2)
-    model = objective.group().model_h(params)[0]['brightness']['d']
+    model = objective.group_plan().model_h(params)[0]['brightness']['d']
     sigma = np.hypot(1.3 * data.error(), 0.2)
     kept = data.mask() != 0
     r = (2 * (model - data.data()) / sigma)[kept]
@@ -503,14 +506,14 @@ def test_copies_with_other_data_share_the_plans_of_the_models(driver):
     rng = np.random.default_rng(12)
     data = Data(rng.normal(0, 1, (24, 32)))
     objective, params = make_objective(driver, data)
-    group = objective.group()
+    group_plan = objective.group_plan()
     other = objective.datasets()[0].with_data(
         dict(brightness=rng.normal(0, 1, (24, 32))))
-    copy = group.with_data([other])
-    assert copy._plans[0] is group._plans[0]
+    copy = group_plan.with_data([other])
+    assert copy._plans[0] is group_plan._plans[0]
     np.testing.assert_array_equal(
         copy.model_h(params)[0]['brightness']['d'],
-        group.model_h(params)[0]['brightness']['d'])
+        group_plan.model_h(params)[0]['brightness']['d'])
 
 
 USER_LIKELIHOODS = '''

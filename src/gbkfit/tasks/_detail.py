@@ -25,7 +25,8 @@ import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.model import Extra, Extras
 from gbkfit.objective import Objective
-from gbkfit.observation import DepthGroup, Observation, ObservationGroup
+from gbkfit.observation import (
+    DepthGroup, GroupPlan, Observation, ObservationGroup)
 from gbkfit.params import (
     ParamDesc, ParamFunctions, ParamSpace, ParamValues, load_pdescs_dict,
     param_space_parser)
@@ -281,38 +282,96 @@ def load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
     return drivers
 
 
-def load_observation_group(
-        cfg: dict[str, Any],
-        drivers: Mapping[str | None, Driver] | None = None
-) -> ObservationGroup:
+def load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
     Return the galaxies and observations (with their data, if any) of a
     configuration, as an ObservationGroup, with the order of the galaxies
     along the line of sight of its section 'depth_order'. The galaxies
     and observations name lines and bands of the catalogue of GBKFIT and
     of the sections 'lines' and 'bands' of the configuration (see
-    LineCatalogue), and the observations and the galaxies refer to the
-    drivers of the configuration by name: the given ones, or by default
-    those it declares (see load_drivers).
+    LineCatalogue). Their option driver places them on a driver of the
+    configuration (see load_group_plan).
     """
-    if drivers is None:
-        drivers = load_drivers(cfg)
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
     ngalaxies = len(cfg['galaxies'])
     with parseutils.config_path('galaxies'):
         galaxies = gbkfit.model.galaxy_parser.load(
-            cfg['galaxies'], catalogue=[catalogue] * ngalaxies,
-            drivers=[drivers] * ngalaxies)
+            _without_driver(cfg['galaxies']),
+            catalogue=[catalogue] * ngalaxies)
     nobservations = len(cfg['observations'])
     with parseutils.config_path('observations'):
         observations = gbkfit.observation.observation_parser.load(
-            cfg['observations'], drivers=[drivers] * nobservations,
+            _without_driver(cfg['observations']),
             catalogue=[catalogue] * nobservations)
     with parseutils.config_path('depth_order'):
         depth_order = load_depth_order(cfg.get('depth_order'))
     return gbkfit.observation.ObservationGroup(
         galaxies, observations, depth_order)
 
+
+
+def _without_driver(infos: Sequence[Any]) -> list[Any]:
+    """
+    Return the configurations of galaxies or observations without their
+    option driver (see load_group_plan).
+    """
+    return [
+        {key: value for key, value in info.items() if key != 'driver'}
+        if isinstance(info, dict) else info for info in infos]
+
+
+def load_group_plan(
+        cfg: dict[str, Any],
+        group: ObservationGroup,
+        drivers: Mapping[str | None, Driver] | None = None
+) -> GroupPlan:
+    """
+    Return the plan of the galaxies and observations of a configuration
+    (see load_observation_group and ObservationGroup.plan) on the drivers
+    of the configuration: the given ones, or by default those it declares
+    (see load_drivers).
+
+    The option driver of a galaxy or an observation is not a driver but
+    the name of one of the drivers of the configuration, which declares
+    them at its top level. An observation, and a galaxy with mass, can
+    leave it out when there is one driver, and have the host when there
+    are none. A galaxy without mass and without it has the driver of the
+    observations that see it, if they have one, and else the host: its
+    stage is for them alone.
+
+    Raises
+    ------
+    ConfigError
+        If an option driver is not the name of one of the drivers, or is
+        left out while there are several.
+    """
+    if drivers is None:
+        drivers = load_drivers(cfg)
+    # (imported here: the host driver needs its native module)
+    from gbkfit.driver.drivers.host import DriverHost
+    host = DriverHost()
+
+    def driver_of(section: str, index: int, owner: str) -> Driver:
+        info = cfg[section][index]
+        with parseutils.config_path(section, index, 'driver'):
+            driver = driver_by_name(info.get('driver'), drivers, owner)
+        return host if driver is None else driver
+
+    observation_drivers = [
+        driver_of('observations', i, 'observation')
+        for i in range(len(cfg['observations']))]
+    galaxy_drivers = []
+    for g, info in enumerate(cfg['galaxies']):
+        if 'driver' in info or info.get('mass'):
+            galaxy_drivers.append(driver_of('galaxies', g, 'galaxy'))
+            continue
+        seen_on = {
+            id(driver): driver
+            for i, driver in enumerate(observation_drivers)
+            if g in group.seen_galaxies(i)}
+        galaxy_drivers.append(
+            next(iter(seen_on.values())) if len(seen_on) == 1 else host)
+    return GroupPlan(group, galaxy_drivers, observation_drivers)
 
 def load_pool(
         cfg: dict[str, Any],
@@ -423,9 +482,10 @@ _EXTRA_FOLDERS = dict(
     component='components')
 
 
-def data_outputs(group: ObservationGroup) -> dict[str, Output]:
+def data_outputs(group_plan: GroupPlan) -> dict[str, Output]:
     """
-    Return the data of the observations as outputs, by path, in the form
+    Return the data of the observations of a plan of a group as outputs
+    (the images on the drivers of the observations), by path, in the form
     the observations give them (see Observation.output): their values
     (kind 'data', NaN where masked) and errors ('error'), in their units,
     of each data item, and the images of their values and of their PSF
@@ -433,8 +493,10 @@ def data_outputs(group: ObservationGroup) -> dict[str, Output]:
     beam of visibilities, see Observation.images and psf_images), in
     observations/<observation>/<kind>/<item or image>.
     """
+    group = group_plan.group()
     outputs = []
-    for i, observation in enumerate(group.observations()):
+    for i, (observation, driver) in enumerate(zip(
+            group.observations(), group_plan.observation_drivers())):
         if (dataset := observation.data()) is None:
             continue
         name = group.observation_label(i)
@@ -449,8 +511,8 @@ def data_outputs(group: ObservationGroup) -> dict[str, Output]:
                     observation.output(item.error(), unit)))
         weights = _weights(dataset)
         images = observation.images(
-            {key: dataset[key].data() for key in observation.keys()},
-            weights, _units(dataset)) | observation.psf_images(weights)
+            driver, {key: dataset[key].data() for key in observation.keys()},
+            weights, _units(dataset)) | observation.psf_images(driver, weights)
         outputs += [
             _observation_output(name, 'data_image', image, x, 'image')
             for image, x in images.items()]
@@ -488,7 +550,7 @@ def _unit(
 
 
 def evaluation_outputs(
-        group: ObservationGroup,
+        group_plan: GroupPlan,
         objective: Objective | None,
         values: ParamValues,
         model: bool,
@@ -496,8 +558,9 @@ def evaluation_outputs(
         extra: bool = True
 ) -> dict[str, Output]:
     """
-    Return the outputs of an evaluation, by path, in the form the
-    observations give them, in observations/<observation>/<kind>/<item>
+    Return the outputs of an evaluation of a plan of a group, by path, in
+    the form the observations give them (their images made on their
+    drivers), in observations/<observation>/<kind>/<item>
     of each data item: the models (kind 'model'; 'model_mask' and
     'model_weight'), and the residuals ((model - data) / error) without
     and with the weights of the data items ('residual' and 'wresidual';
@@ -513,10 +576,11 @@ def evaluation_outputs(
     (extra), the extra outputs of the models are 'extra', with their
     titles and descriptions (see _extra_output).
     """
+    group = group_plan.group()
     outputs = []
     extras = Extras() if extra else None
     if model:
-        for i, data_i in enumerate(group.model_h(values, extras)):
+        for i, data_i in enumerate(group_plan.model_h(values, extras)):
             observation = group.observations()[i]
             name = group.observation_label(i)
             for key, value in data_i.items():
@@ -531,7 +595,8 @@ def evaluation_outputs(
                     outputs.append(
                         _observation_output(name, kind, key, output))
             outputs += _images(
-                observation, name, {k: v['d'] for k, v in data_i.items()})
+                observation, group_plan.observation_drivers()[i], name,
+                {k: v['d'] for k, v in data_i.items()})
             if (scale := _flux_scale_map(observation, values, data_i)) \
                     is not None:
                 outputs.append(Output(
@@ -579,20 +644,22 @@ def _flux_scale_map(
 
 def _images(
         observation: Observation,
+        driver: Driver,
         name: str,
         model: Mapping[str, np.ndarray]
 ) -> list[Output]:
     """
     Return the images that an observation (of the given name in the
     outputs) makes of its model ('model_image') and of its data minus the
-    model ('residual_image'; see Observation.images).
+    model ('residual_image'; see Observation.images), on its driver.
     """
     dataset = observation.data()
     weights = _weights(dataset)
     units = _units(dataset)
     images = [
         _observation_output(name, 'model_image', image, x, 'image')
-        for image, x in observation.images(model, weights, units).items()]
+        for image, x in observation.images(
+            driver, model, weights, units).items()]
     # (an observation that makes no images of its model makes none of the
     # residual either)
     if images and dataset is not None:
@@ -600,7 +667,7 @@ def _images(
         images += [
             _observation_output(name, 'residual_image', image, x, 'image')
             for image, x in observation.images(
-                residual, weights, units).items()]
+                driver, residual, weights, units).items()]
     return images
 
 

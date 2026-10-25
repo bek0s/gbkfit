@@ -37,7 +37,7 @@ def image_of(galaxy, params, observation=IMAGE):
     """The image of a galaxy, and its observation group."""
     group = ObservationGroup(
         galaxy_parser.load(galaxy), observation_parser.load(dict(observation)))
-    return group, group.model_h(params)[0]['brightness']['d'].copy()
+    return group, group.plan().model_h(params)[0]['brightness']['d'].copy()
 
 
 def write_truth(path, rval=None):
@@ -154,7 +154,8 @@ def test_images_need_an_observation_on_the_sky(tmp_path):
     galaxy = rotating_disk_of_image(tmp_path / 'truth.fits')
     with pytest.raises(ConfigError, match="an observation on the sky"):
         ObservationGroup(
-            galaxy_parser.load(galaxy), observation_parser.load(PROFILE))
+            galaxy_parser.load(galaxy), observation_parser.load(PROFILE)
+        ).plan()
 
 
 def test_profiles_of_galaxies_of_images(tmp_path):
@@ -168,7 +169,7 @@ def test_profiles_of_galaxies_of_images(tmp_path):
         observation_parser.load([dict(IMAGE), PROFILE]))
     params = GEOMETRY | dict(
         vsys=0, pt_a=1, dpt_a=10, distance=10, mass_bh_log_m=9)
-    vcirc = group.model_h(params)[1]['vcirc']['d']
+    vcirc = group.plan().model_h(params)[1]['vcirc']['d']
     assert vcirc == pytest.approx([np.sqrt(4.30092e-6 * 1e9)], rel=1e-4)
 
 

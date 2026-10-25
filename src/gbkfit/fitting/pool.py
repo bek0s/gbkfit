@@ -4,7 +4,7 @@ on several drivers (e.g. one per GPU; see EvaluationPool).
 """
 
 import concurrent.futures
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Self, TypeVar
 
 from gbkfit.driver import Driver
@@ -19,19 +19,26 @@ __all__ = [
 _Item = TypeVar('_Item')
 _Result = TypeVar('_Result')
 
+# Where a copy of an objective evaluates: a driver for all its work, or
+# one with other drivers of some galaxies and observations, by label (see
+# ObservationGroup.plan)
+_Placement = Driver | tuple[Driver, Mapping[str, Driver]]
+
 
 class EvaluationPool:
     """
-    Copies of an objective, one on each of the given drivers (see
+    Copies of an objective, one on each of the given placements (see
     Objective.with_driver), that evaluate the batches of points of a fit
     at once, each in a thread of its own (see Fitter.fit). Point i of a
     batch goes to copy i mod N (of N copies), so that a fit gives the same
     results each time it runs, also with drivers of different devices.
 
-    The first driver on which the objective does all its work (its
-    observations and the gravity of its galaxies with mass) takes the
-    objective itself; the others take copies. A driver can be listed more
-    than once (e.g. two copies on one GPU).
+    A placement is a driver for all the work of a copy, or a driver and
+    other drivers of some of its galaxies and observations, by label
+    (e.g. (gpu0, {'hi': gpu1}): a copy split over two GPUs, for models too
+    big for one; see ObservationGroup.plan). The first placement of the
+    objective itself takes the objective; the others take copies. A
+    placement can be listed more than once (e.g. two copies on one GPU).
 
     The threads overlap while they wait for their devices (GPUs); the
     host driver gains nothing from them (its kernels use every core).
@@ -40,24 +47,32 @@ class EvaluationPool:
     ----------
     objective : Objective
         The objective.
-    drivers : Sequence of Driver
-        The driver of each copy.
+    placements : Sequence of Driver or tuple of Driver and Mapping
+        The placement of each copy.
 
     Raises
     ------
     ValueError
-        If there are no drivers.
+        If there are no placements.
+    ConfigError
+        If a placement names unknown galaxies or observations (see
+        ObservationGroup.placement).
     """
 
-    def __init__(self, objective: Objective, drivers: Sequence[Driver]):
-        if not drivers:
-            raise ValueError("an evaluation pool needs at least one driver")
+    def __init__(self, objective: Objective, placements: Sequence[_Placement]):
+        if not placements:
+            raise ValueError("an evaluation pool needs at least one placement")
+        group_plan = objective.group_plan()
+        own = (group_plan.galaxy_drivers(), group_plan.observation_drivers())
         copies = []
-        for driver in drivers:
-            if objective not in copies and _all_on(objective, driver):
+        for placement in placements:
+            driver, drivers = (placement, None) \
+                if isinstance(placement, Driver) else placement
+            if objective not in copies \
+                    and objective.group().placement(driver, drivers) == own:
                 copies.append(objective)
             else:
-                copies.append(objective.with_driver(driver))
+                copies.append(objective.with_driver(driver, drivers))
         self._objective = objective
         self._copies = tuple(copies)
         self._executor = concurrent.futures.ThreadPoolExecutor(
@@ -104,13 +119,3 @@ class EvaluationPool:
     def __exit__(self, *exc_info: object) -> None:
         self.close()
 
-
-def _all_on(objective: Objective, driver: Driver) -> bool:
-    """
-    Return whether an objective does all its work on a driver: its
-    observations, and the gravity of its galaxies with mass.
-    """
-    group = objective.group()
-    return all(obs.driver() is driver for obs in group.observations()) \
-        and all(galaxy.driver() is driver
-                for galaxy in group.galaxies() if galaxy.mass())

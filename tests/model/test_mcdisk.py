@@ -12,7 +12,7 @@ import pytest
 import ruamel.yaml
 
 from gbkfit.model import Extras
-from modelutils import config_group
+from modelutils import config_group_plan
 
 
 CONFIG_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'mcdisk_vs_smdisk'
@@ -47,11 +47,11 @@ def evaluate_disk(
     config['driver'] = dict(type=driver_type)
     components = config['galaxies'][0]['components']
     components[0] = with_options(components[0], component or {})
-    obs_group = config_group(config)
+    plan = config_group_plan(config)
     params = gbkfit.params.ParamSpace(
-        obs_group.pdescs(),
+        plan.group().pdescs(),
         config['params']['properties'] | (properties or {}))
-    data = obs_group.model_h(params.evaluate(), out_extra)
+    data = plan.model_h(params.evaluate(), out_extra)
     return data[0]['spectra']['d'].copy()
 
 
@@ -350,11 +350,11 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     observation['instrument'] = {}
     observation['observable'] = dict(
         type='pixel_spectra', size=[48, 48, 120], step=[1, 1, 5])
-    obs_group = config_group(config)
+    plan = config_group_plan(config)
     params = gbkfit.params.ParamSpace(
-        obs_group.pdescs(), config['params']['properties'])
+        plan.group().pdescs(), config['params']['properties'])
     extra = Extras()
-    scube = obs_group.model_h(params.evaluate(), extra)[0]['spectra']['d']
+    scube = plan.model_h(params.evaluate(), extra)[0]['spectra']['d']
     velocities = (np.arange(120) - 59.5) * 5
     intensity = scube.sum(axis=0)
     bright = intensity > 0.01 * intensity.max()
@@ -447,7 +447,7 @@ def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
     # each ring: more light at one node (more clouds in the pools of its
     # rings) leaves the clouds of the rings beyond where they were (each
     # cloud draws from the stream of its index in its pool)
-    from modelutils import observation_group
+    from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(type='pixel_brightness', size=[40, 40], step=0.5),
@@ -459,12 +459,12 @@ def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
                 ptraits=dict(type='nw_uniform'),
                 htraits=dict(type='gauss', zmax=1)),
             emission=dict(type='band'))]))
-    group = observation_group([case])
+    plan = group_plan([case])
     params = dict(
         xpos=0, ypos=0, posa=0, incl=0, pt_a=np.ones(10), ht_s=0.2)
-    first = group.model_h(params)[0]['brightness']['d'].copy()
+    first = plan.model_h(params)[0]['brightness']['d'].copy()
     params['pt_a'] = np.where(np.arange(10) == 3, 2.0, 1.0)
-    second = group.model_h(params)[0]['brightness']['d']
+    second = plan.model_h(params)[0]['brightness']['d']
     y, x = np.indices(first.shape)
     beyond = 0.5 * np.hypot(x - 19.5, y - 19.5) > 5.5
     assert np.any(first[beyond])

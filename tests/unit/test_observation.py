@@ -17,8 +17,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 def test_observable_from_data():
     # The data give the observable its grid and the orders of its
-    # moments, and its spectral axis covers their velocities; the driver
-    # is the host by default
+    # moments, and its spectral axis covers their velocities
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2, rota=30)
@@ -27,10 +26,9 @@ def test_observable_from_data():
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
     assert observable.spec_rval() == 1500
-    observation = ObservationSky(
+    ObservationSky(
         observable, Flat(), data=data,
         likelihood=LikelihoodGaussian(missing_residual=3))
-    assert observation.driver().type() == 'host'
 
 
 @pytest.mark.parametrize('dataset_class, observable_class, shape', [
@@ -128,6 +126,7 @@ def test_likelihoods_name_items_of_their_observation(options, message):
 
 def test_solved_scales_do_not_go_with_upper_limits_on_their_items():
     from gbkfit.dataset import DatasetPixelSpectra
+    from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.objective.comparisons import comparison
     from gbkfit.observation import PixelSpectra
     data = DatasetPixelSpectra(Data(np.ones((10, 4, 4))))
@@ -136,4 +135,4 @@ def test_solved_scales_do_not_go_with_upper_limits_on_their_items():
         likelihood=LikelihoodGaussian(
             upper_limits=dict(spectra=dict(limit=0.1, error=0.05))))
     with pytest.raises(ConfigError, match="do not go with its upper limit"):
-        comparison(observation).check_scales(['spectra'])
+        comparison(observation, DriverHost()).check_scales(['spectra'])

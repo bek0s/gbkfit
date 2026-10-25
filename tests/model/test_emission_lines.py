@@ -11,7 +11,7 @@ import astropy.units as u
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 C = astropy.constants.c.to_value('km/s')
@@ -43,11 +43,11 @@ def scube(rest, **options):
 
 
 def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=line_of_sight, observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    return group.model_h(params.evaluate())[0]['spectra']['d'].copy()
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    return plan.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
 def galaxy_of(component):
@@ -200,12 +200,12 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     from gbkfit.observation import ObservationGroup, observation_parser
     observation = observation_parser.load(
         copy.deepcopy(dict(
-            type='sky', observable=observable, line_of_sight=FLAT) | options),
-        drivers={None: driver})
+            type='sky', observable=observable, line_of_sight=FLAT) | options))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(galaxy))], [observation])
+    plan = group.plan(driver)
     params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    data = group.model_h(params.evaluate())[0]
+    data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
 
@@ -282,12 +282,12 @@ def test_a_component_must_have_a_selected_line(driver):
         lines=['ha'], components=['gas'])
 
 
-def test_line_selection_round_trip(driver):
+def test_line_selection_round_trip():
     from gbkfit.observation import observation_parser
     info = dict(
         type='sky',
         observable=scube('6562.8 Angstrom'), line_of_sight=FLAT,
         lines=['ha'])
     dumped = observation_parser.dump(
-        observation_parser.load(dict(info), drivers={None: driver}))
+        observation_parser.load(dict(info)))
     assert dumped['lines'] == ['ha']

@@ -34,12 +34,11 @@ PARAMS = dict(
 
 def model(driver, observable, galaxy, item, out_extra=None):
     """The model data of an item of an observation of a galaxy."""
-    group = ObservationGroup(
-        galaxy, ObservationSky(observable, Flat(), driver))
+    group = ObservationGroup(galaxy, ObservationSky(observable, Flat()))
     params = ParamSpace(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
-    return group.model_h(params, out_extra)[0][item]['d'].copy()
+    return group.plan(driver).model_h(params, out_extra)[0][item]['d'].copy()
 
 
 def zero_padded_median(data, size):

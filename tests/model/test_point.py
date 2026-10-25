@@ -9,7 +9,7 @@ import copy
 import gbkfit.params
 import numpy as np
 import pytest
-from modelutils import observation_group
+from modelutils import group_plan
 
 
 FLAT = dict(type='flat')
@@ -22,11 +22,11 @@ LINE_POINT = dict(components=[dict(type='point', emission=dict(type='lines'))])
 
 
 def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
-    group = observation_group([dict(
+    plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=line_of_sight, observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    data = group.model_h(params.evaluate())[0]
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    data = plan.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
 

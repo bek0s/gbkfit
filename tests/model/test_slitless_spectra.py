@@ -10,7 +10,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 from gbkfit.observation.observables.slitless_spectra import pixel_footprint
-from modelutils import observation_group
+from modelutils import group_plan, observation_group
 
 
 GALAXY = dict(components=[dict(
@@ -37,12 +37,12 @@ SLITLESS = dict(
 
 
 def evaluate(driver, observable, properties=PROPERTIES):
-    group = observation_group([
+    plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
              line_of_sight=dict(type='flat'),
              observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
-    data = group.model_h(params.evaluate())[0]
+    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    data = plan.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
 
@@ -143,10 +143,10 @@ def test_slitless_spectra_objective_residual(driver):
     options = {k: v for k, v in SLITLESS.items() if k not in ('type', 'size')}
     observable = observable_parser.load(
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
-    observation = ObservationSky(observable, Flat(), driver, data=dataset)
+    observation = ObservationSky(observable, Flat(), data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
-    objective = Objective(group)
+    objective = Objective(group.plan(driver))
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
@@ -279,14 +279,13 @@ def test_slitless_spectra_have_flux_scales_per_row(driver):
         dict(type='slitless_spectra') | copy.deepcopy(options), dataset)
     assert observable.flux_scales()['per_row'].axis == 1
     observation = ObservationSky(
-        observable, Flat(), driver, data=dataset, flux_scale='per_row',
-        name='grism')
+        observable, Flat(), data=dataset, flux_scale='per_row', name='grism')
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES | dict(
         grism_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.5, minimum=0))))
-    objective = Objective(group, params.solves())
+    objective = Objective(group.plan(driver), params.solves())
     objective.residual_nddata_h(params.evaluate(), False)
     found = np.array(list(objective.solved().values()))
     a = (model ** 2).sum(axis=1) / error ** 2 + 1 / 0.5 ** 2

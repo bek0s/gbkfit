@@ -60,30 +60,34 @@ def observation(**options):
         observable=dict(type='pixel_brightness', size=[8, 8])) | options
 
 
-def load_group(**sections):
-    """The ObservationGroup of GALAXY and the sections of a configuration."""
-    return _detail.load_observation_group(dict(galaxies=[GALAXY]) | sections)
+def load_plan(galaxy=GALAXY, **sections):
+    """
+    The plan of the ObservationGroup of a galaxy (GALAXY by default) and
+    the sections of a configuration, on its drivers.
+    """
+    cfg = dict(galaxies=[galaxy]) | sections
+    return _detail.load_group_plan(cfg, _detail.load_observation_group(cfg))
 
 
 def test_observations_use_the_drivers_of_the_configuration():
     # One driver: every observation has it
-    group = load_group(
+    plan = load_plan(
         driver=HOST,
         observations=[observation(name='a'), observation(name='b')])
-    a, b = [obs.driver() for obs in group.observations()]
+    a, b = plan.observation_drivers()
     assert a is b
     # Several: each observation names its own
-    group = load_group(
+    plan = load_plan(
         drivers=dict(cpu1=HOST, cpu2=HOST),
         observations=[
             observation(name='a', driver='cpu2'),
             observation(name='b', driver='cpu1'),
             observation(name='c', driver='cpu2')])
-    a, b, c = [obs.driver() for obs in group.observations()]
+    a, b, c = plan.observation_drivers()
     assert a is c and a is not b
     # None: the host
-    group = load_group(observations=[observation()])
-    assert group.observations()[0].driver().type() == 'host'
+    plan = load_plan(observations=[observation()])
+    assert plan.observation_drivers()[0].type() == 'host'
 
 
 # A galaxy with mass, seen as a spectral cube
@@ -105,11 +109,10 @@ CUBE = dict(
 
 
 def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
-    # (for their gravity, as observations do for their models)
+    # (for their stage, as observations do for their models)
     def drivers(galaxy, **sections):
-        group = _detail.load_observation_group(
-            dict(galaxies=[galaxy]) | sections)
-        return group.galaxies()[0].driver(), group.observations()[0].driver()
+        plan = load_plan(galaxy, **sections)
+        return plan.galaxy_drivers()[0], plan.observation_drivers()[0]
     # One driver: the galaxy has it; several: it names its own
     galaxy, observation = drivers(MASSIVE, driver=HOST, observations=[CUBE])
     assert galaxy is observation
@@ -124,6 +127,20 @@ def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
     # None: the host
     galaxy, _ = drivers(MASSIVE, observations=[CUBE])
     assert galaxy.type() == 'host'
+
+
+def test_galaxies_without_mass_follow_their_observations():
+    # Without the option, a galaxy has the driver of the observations that
+    # see it, if they have one, else the host (its stage is for them)
+    several = dict(drivers=dict(cpu1=HOST, cpu2=HOST))
+    plan = load_plan(**several, observations=[observation(driver='cpu1')])
+    assert plan.galaxy_drivers() == plan.observation_drivers()
+    plan = load_plan(**several, observations=[
+        observation(name='a', driver='cpu1'),
+        observation(name='b', driver='cpu2')])
+    galaxy, = plan.galaxy_drivers()
+    assert galaxy.type() == 'host'
+    assert galaxy not in plan.observation_drivers()
 
 
 @pytest.mark.parametrize('sections, message', [
@@ -141,7 +158,7 @@ def test_galaxies_with_mass_use_the_drivers_of_the_configuration():
 ])
 def test_driver_errors(sections, message):
     with pytest.raises(ConfigError, match=message):
-        load_group(**sections)
+        load_plan(**sections)
 
 
 def test_parallel_evaluations_are_on_drivers_of_the_configuration(tmp_path):
@@ -156,13 +173,15 @@ def test_parallel_evaluations_are_on_drivers_of_the_configuration(tmp_path):
             observable=dict(type='pixel_brightness'),
             data=dict(data=str(tmp_path / 'image.fits')), driver='cpu1')])
     drivers = _detail.load_drivers(cfg)
-    objective = Objective(_detail.load_observation_group(cfg, drivers))
+    objective = Objective(_detail.load_group_plan(
+        cfg, _detail.load_observation_group(cfg), drivers))
     with _detail.load_pool(
             cfg | dict(parallel=dict(drivers=['cpu1', 'cpu2'])),
             objective, drivers) as pool:
         first, second = pool.copies()
         assert first is objective
-        assert second.group().observations()[0].driver() is drivers['cpu2']
+        assert second.group_plan().observation_drivers() == (
+            drivers['cpu2'],)
     assert _detail.load_pool(cfg, objective, drivers) is None
     with pytest.raises(ConfigError, match="unknown driver 'gpu'"):
         _detail.load_pool(
