@@ -2,6 +2,8 @@
 Tests for the validation of trait options.
 """
 
+import inspect
+
 import pytest
 
 from gbkfit.model.components import traits
@@ -50,7 +52,8 @@ def kernel_consts_cases():
                 options, consts = dict(size=[3, 2], step=2.0), (3, 2, 2.0)
             else:
                 options, consts = dict(), ()
-            if issubclass(cls, traits.TraitFeatureDirection):
+            if issubclass(cls, traits.VPTrait) and \
+                    'direction' in inspect.signature(cls).parameters:
                 options['direction'] = 'tan'
             yield pytest.param(cls, options, consts, id=f"{kind}-{type_}")
 

@@ -17,7 +17,7 @@ from gbkfit.params import ParamValues
 from ...mass.units import G
 from .._nodal import subring_radii
 from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
-from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, TraitFeatureSpiral
+from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._disk import Disk, DiskPlan
 
 
@@ -532,7 +532,7 @@ def density_waves(
 ) -> ParamValues:
     """
     Return the tables of the density waves of a disk at its subnodes, by
-    the names of their parameters (see traits.TraitFeatureSpiral): in its
+    the names of their parameters (see traits.Spiral): in its
     rotation there (see rotation), with the derivative of the rotation by
     the second-order three-point formula, and for the density of a wave,
     in the density of the disk without its waves (the azimuthal mean of
@@ -560,7 +560,7 @@ def density_waves(
         for trait, values, names in zip(
                 disk.traits(kind), disk.trait_values(kind, params),
                 disk.trait_params(kind).pnames):
-            if isinstance(trait, TraitFeatureSpiral):
+            if isinstance(trait, (RPTraitSpiral, VPTraitSpiral)):
                 tables |= {
                     names[name]: table for name, table in trait.wave(
                         r, v, dv, density, values).items()}

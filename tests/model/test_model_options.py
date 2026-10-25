@@ -5,6 +5,7 @@ options they accept and reject.
 """
 
 import logging
+import re
 
 import pytest
 from gbkfit.model import galaxy_parser
@@ -223,6 +224,30 @@ def test_unknown_options_are_warnings_in_lenient_mode(name, caplog):
     with parseutils.strict_mode(False), caplog.at_level(logging.WARNING):
         galaxy_parser.load(info)
     assert "'foo'" in caplog.text
+
+
+def test_trait_names_prefix_their_parameters():
+    # (in place of the kind and position, which an inserted trait moves)
+    inflow = dict(type='uniform', direction='rad', name='inflow')
+    rotation = ARCTAN | dict(name='rot')
+    info = dict(components=[LINES_THIN | dict(kinematics=dict(
+        vptraits=[inflow, rotation], dptraits=UNIFORM))])
+    galaxy = galaxy_parser.load(info)
+    assert {'inflow_vr', 'rot_rt', 'rot_vt', 'dpt_a'} <= set(galaxy.pdescs())
+    dumped = galaxy_parser.dump(galaxy)
+    vptraits = dumped['components'][0]['kinematics']['vptraits']
+    assert [trait['name'] for trait in vptraits] == ['inflow', 'rot']
+
+
+@pytest.mark.parametrize('vptraits, dptraits, message', [
+    ([ARCTAN | dict(name='rot'), ARCTAN], UNIFORM,
+     "either all or none of the traits must have a name"),
+    ([ARCTAN | dict(name='rot')], UNIFORM | dict(name='rot'),
+     r"cannot share a name; repeated: \['rot'\]")])
+def test_trait_names_are_all_or_none_and_unique(vptraits, dptraits, message):
+    info = dict(components=[LINES_THIN | dict(kinematics=dict(
+        vptraits=vptraits, dptraits=dptraits))])
+    assert re.search(message, galaxy_error(info))
 
 
 @pytest.mark.parametrize('rnmin, rnmax, rnsep, nodes', [

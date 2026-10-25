@@ -60,8 +60,15 @@ class TraitTable:
     def check(self, traits_: dict[str, Sequence[Trait]]) -> None:
         """
         Raise ConfigError if the component does not take one of the given
-        traits (by kind).
+        traits (by kind), or two of them share a name.
         """
+        names = [
+            trait.name() for values in traits_.values() for trait in values
+            if trait.name() is not None]
+        if repeated := sorted({n for n in names if names.count(n) > 1}):
+            raise ConfigError(
+                f"two traits of a {self.component} cannot share a name; "
+                f"repeated: {repeated}")
         for kind, values in traits_.items():
             classes = self.classes[kind]
             for trait in values:
@@ -151,7 +158,7 @@ def _trait_params(
                for name, pdesc in trait.params_rnw(nnodes).items()})
     prefixes = list(prefix) if iterutils.is_sequence(prefix) \
         else parseutils.item_prefixes(
-            [None] * len(params_list), 'traits', prefix, True)
+            [trait.name() for trait in traits_], 'traits', prefix, True)
     params, mappings = iterutils.merge_with_prefixes(params_list, prefixes)
     return TraitParams(
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},

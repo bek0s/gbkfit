@@ -188,11 +188,11 @@ def make_disk(
 def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
     """
     Raise ConfigError if a disk has a spiral density wave that takes its
-    rotation (see traits.TraitFeatureSpiral) but no tangential velocity
+    rotation (see traits.Spiral) but no tangential velocity
     traits.
     """
     waves = any(
-        isinstance(trait, traits.TraitFeatureSpiral)
+        isinstance(trait, (traits.RPTraitSpiral, traits.VPTraitSpiral))
         and trait.takes_rotation()
         for kind in ('rpt', 'vpt') for trait in traits_.get(kind, ()))
     if waves and not any(
@@ -255,7 +255,7 @@ def line_opacity_traits(
     result = ([], [], [])
     for index, (suffix, line_traits) in enumerate(lines):
         prefixes = parseutils.item_prefixes(
-            [None] * len(line_traits), 'traits', 'op', True)
+            [trait.name() for trait in line_traits], 'traits', 'op', True)
         for trait, prefix in zip(line_traits, prefixes):
             if not isinstance(trait, traits.RPTrait):
                 raise ConfigError(
