@@ -6,6 +6,7 @@ shape.
 
 import abc
 import functools
+import math
 from typing import Any, Literal, Self
 
 import numpy as np
@@ -85,7 +86,8 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
         shape of the axis ratio q (1 for a sphere; ignored by a profile
         that does not take a shape): the amplitude (the density, in the
         unit of the emission per arcsec), the scale (arcsec) and the axis
-        ratio of each, an array of shape (nterms, 3).
+        ratio of each, an array of shape (nterms, 3); NaN for a term of a
+        scale or an axis ratio that is not greater than zero.
         """
         pass
 
@@ -154,12 +156,16 @@ class LightSersic(LightProfile):
         # The face-on surface brightness ie at re is that of the density
         # ie / re f(r / re), with f the deprojection of exp(-b (u^(1/n) -
         # 1)); squashed into the axis ratio q, its density is that / q
-        re = params['re']
-        return np.array([[params['ie'] / (re * q), re, q]])
+        re, q = np.float64(params['re']), np.float64(q)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return _checked_terms(
+                np.array([[params['ie'] / (re * q), re, q]]))
 
     def cut(self, params: ParamValues, q: float, rmax: float) -> float:
         tables = sersic_tables(float(params['n']))
-        return float(1 - tables.mass(rmax / (max(1.0, q) * params['re'])))
+        scale = max(1.0, q) * np.float64(params['re'])
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return float(1 - tables.mass(rmax / scale))
 
     def table(self, params: ParamValues) -> tuple[np.ndarray, np.ndarray]:
         return _sersic_table(float(params['n']))
@@ -183,9 +189,10 @@ class LightMGE(LightProfile):
     surface brightness i0[k] and the dispersion sigma[k] (arcsec), with
     the intrinsic axis ratio q[k] (its height over its width, flattened
     for q < 1): the density i0 / (sqrt(2 pi) sigma q) exp(-m^2 / (2
-    sigma^2)), m^2 = R^2 + z^2 / q^2, of the total light 2 pi i0 sigma^2.
-    Exact. It has its own axis ratios: it takes no shape. Its parameters
-    are vectors of ngauss elements.
+    sigma^2)), m^2 = R^2 + z^2 / q^2, of the total light 2 pi i0 sigma^2,
+    exactly (the voxels sample it, see Spheroid: a Gaussian much thinner
+    than a voxel needs finer ones). It has its own axis ratios: it takes
+    no shape. Its parameters are vectors of ngauss elements.
 
     Parameters
     ----------
@@ -242,9 +249,10 @@ class LightMGE(LightProfile):
         i0, sigma, ratio = (
             np.asarray(params[name], dtype=float)
             for name in ('i0', 'sigma', 'q'))
-        return np.stack(
-            (i0 / (np.sqrt(2 * np.pi) * sigma * ratio), sigma, ratio),
-            axis=-1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            return _checked_terms(np.stack(
+                (i0 / (np.sqrt(2 * np.pi) * sigma * ratio), sigma, ratio),
+                axis=-1))
 
     def cut(self, params: ParamValues, q: float, rmax: float) -> float:
         # The share of the light of a 3d Gaussian beyond x dispersions,
@@ -253,11 +261,24 @@ class LightMGE(LightProfile):
         i0, sigma, ratio = (
             np.asarray(params[name], dtype=float)
             for name in ('i0', 'sigma', 'q'))
-        x = rmax / (np.maximum(1, ratio) * sigma)
-        beyond = scipy.special.erfc(x / np.sqrt(2)) \
-            + np.sqrt(2 / np.pi) * x * np.exp(-x ** 2 / 2)
-        light = i0 * sigma ** 2
-        return float(np.sum(light * beyond) / np.sum(light))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            x = rmax / (np.maximum(1, ratio) * sigma)
+            beyond = scipy.special.erfc(x / np.sqrt(2)) \
+                + np.sqrt(2 / np.pi) * x * np.exp(-x ** 2 / 2)
+            light = i0 * sigma ** 2
+            return float(np.sum(light * beyond) / np.sum(light))
+
+
+def _checked_terms(terms: np.ndarray) -> np.ndarray:
+    """
+    Return the terms of a light profile (see LightProfile.terms), with
+    those of a scale or an axis ratio that is not greater than zero (e.g.
+    at the bound 0 of its parameter) all NaN: they make the density NaN,
+    so that they are seen.
+    """
+    invalid = ~((terms[:, 1] > 0) & (terms[:, 2] > 0))
+    terms[invalid] = np.nan
+    return terms
 
 
 light_profile_parser = parseutils.TypedParser(LightProfile, [
@@ -366,9 +387,10 @@ class Spheroid(Component):
             raise ConfigError(
                 "a spheroid emits in bands (emission type: band)")
         if isinstance(rmax, bool) or not isinstance(rmax, (int, float)) \
-                or not rmax > 0:
+                or not (math.isfinite(rmax) and rmax > 0):
             raise ConfigError(
-                f"rmax must be a number greater than zero; it is {rmax!r}")
+                f"rmax must be a finite number greater than zero; it is "
+                f"{rmax!r}")
         if not profile.takes_shape() and shape is not None:
             raise ConfigError(
                 f"the light profile '{profile.type()}' has the axis ratios "

@@ -167,6 +167,24 @@ def test_a_warning_says_when_rmax_cuts_the_light(
     assert ('its rmax cuts' in caplog.text) == warns
 
 
+@pytest.mark.parametrize('profile, properties', [
+    (dict(type='sersic'), dict(ie=1, re=2, n=2, q=0)),
+    (dict(type='sersic'), dict(ie=1, re=0, n=2, q=0.5)),
+    (dict(type='mge', ngauss=2), dict(i0=[1, 2], sigma=[1, 2], q=[0, 0.9])),
+])
+def test_a_term_at_a_bound_of_zero_is_seen(
+        driver, evaluate_cases, profile, properties):
+    # A scale or an axis ratio of 0 (the bound of its parameter) makes the
+    # light NaN, rather than an error or a term that vanishes
+    shape = dict(shape=dict(type='flattened')) \
+        if profile['type'] == 'sersic' else {}
+    spheroid = dict(
+        type='spheroid', profile=profile, rmax=8, emission=BAND) | shape
+    data, _ = evaluate_cases(
+        [image(driver, spheroid)], GEOMETRY | properties)
+    assert np.isnan(data[0]['brightness']['d']).any()
+
+
 def test_a_sphere_has_no_axis():
     spheroid = Spheroid.load(dict(
         profile=dict(type='sersic'), rmax=10, emission=BAND))
@@ -192,6 +210,7 @@ def test_a_spheroid_round_trips():
 
 @pytest.mark.parametrize('options, message', [
     (dict(rmax=0), "rmax must be"),
+    (dict(rmax=float('inf')), "rmax must be"),
     (dict(emission=dict(type='lines')), "emits in bands"),
     (dict(profile=dict(type='mge', ngauss=2),
           shape=dict(type='flattened')), "takes no shape"),
