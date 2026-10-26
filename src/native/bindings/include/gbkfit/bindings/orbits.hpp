@@ -74,7 +74,8 @@ struct Orbits
     // (nchannels, ntargets), added to); and their steps and energies (a
     // row per orbit, at its start and its end). The cells, the sky, the
     // moments, the spectra and the steps and energies are optional
-    // (None).
+    // (None). Their samples are kept in samples (of shape (nchunk,
+    // nsamples, 6)), nchunk orbits at a time.
     static void
     integrate(
             Table table, Range range,
@@ -86,7 +87,7 @@ struct Orbits
             Values shares,
             Values target_v, Values target_s, int order, Out3 moments,
             Values light, T channel_scale, T channel_offset, Out2 spectra,
-            Steps steps, Out2 energies)
+            Steps steps, Out2 energies, Out3 samples)
     {
         const typename Kernels::DeviceScope scope(starts.device_id());
         OrbitArgs<T> a;
@@ -198,6 +199,13 @@ struct Orbits
         a.steps = data(steps);
         a.energies = data(energies);
 
+        require(samples.shape(0) >= 1
+                && samples.shape(1) == size_t(nsamples)
+                && samples.shape(2) == 6,
+                "samples must have the shape (nchunk, nsamples, 6)");
+        a.nchunk = int(samples.shape(0));
+        a.samples = samples.data();
+
         Kernels::orbits_integrate(a);
     }
 
@@ -244,7 +252,8 @@ struct Orbits
                         nb::arg("channel_offset"),
                         nb::arg("spectra").noconvert().none(),
                         nb::arg("steps").noconvert().none(),
-                        nb::arg("energies").noconvert().none());
+                        nb::arg("energies").noconvert().none(),
+                        nb::arg("samples").noconvert());
     }
 };
 

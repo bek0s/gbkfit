@@ -25,8 +25,8 @@ struct PotentialArgs
 };
 
 // An integration of orbits in the potential of a galaxy (see
-// PotentialArgs) and their recording, one orbit at a time (see
-// orbits_integrate), each orbit as it is seen from the sky: the time it
+// PotentialArgs) and their recording (see orbits_trajectory and
+// orbits_record_orbit), each orbit as it is seen from the sky: the time it
 // spends in cells of its spheroid, and its light and velocities in
 // targets of the sky (e.g. the Voronoi bins of observations), averaged
 // over its time. Plain data, so that it can be passed by value to a cuda
@@ -122,6 +122,12 @@ struct OrbitArgs
     // (energies[2k + 1])
     int* steps = nullptr;
     T* energies = nullptr;
+    // The samples of the orbits, kept from their integration to their
+    // recording: they are integrated, then recorded, nchunk at a time,
+    // sample n of the k-th orbit of a chunk at samples[6 (k nsamples +
+    // n)] (see orbits_trajectory)
+    int nchunk = 0;
+    T* samples = nullptr;
 };
 
 } // namespace gbkfit

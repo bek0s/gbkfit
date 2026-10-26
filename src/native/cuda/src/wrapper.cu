@@ -1,4 +1,5 @@
 
+#include <algorithm>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -59,6 +60,26 @@ launch_blocks(
     const dim3 bsize(block_size);
     const dim3 gsize(nblocks);
     kernel<<<gsize, bsize>>>(args...);
+    check(cudaGetLastError(), name);
+    check(cudaDeviceSynchronize(), name);
+}
+
+// Launch a kernel in nblocks blocks of the given size, each with the given
+// bytes of shared memory, wait for it to finish, and raise any error of
+// its launch or execution
+template<typename Kernel, typename... Args> void
+launch_grid(
+        const char* name, int nblocks, int block_size, size_t shared,
+        Kernel kernel, Args... args)
+{
+    if (nblocks <= 0)
+        return;
+    if (shared > 48 * 1024) {
+        check(cudaFuncSetAttribute(
+                kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
+                int(shared)), name);
+    }
+    kernel<<<nblocks, block_size, shared>>>(args...);
     check(cudaGetLastError(), name);
     check(cudaDeviceSynchronize(), name);
 }
@@ -403,13 +424,41 @@ Wrapper<T>::orbits_potential(
             p, n, points, potential, forces);
 }
 
-// (in blocks of a warp: an orbit is long, and a library has thousands, not
-// millions, so small blocks spread them over all the multiprocessors)
+// A chunk at a time: its orbits integrated, one per thread, in blocks of a
+// warp (an orbit is long, and a library has thousands, not millions, so
+// small blocks spread them over all the multiprocessors), then recorded,
+// one per block (see kernels::orbits_record), with as many targets at a
+// time as the shared memory of a block holds (of a long long each)
 template<typename T> void
 Wrapper<T>::orbits_integrate(const OrbitArgs<T>& a)
 {
-    launch_blocks("orbits_integrate", a.norbits, 32,
-            kernels::orbits_integrate<T>, a);
+    int device, max_shared;
+    check(cudaGetDevice(&device), "cudaGetDevice");
+    check(cudaDeviceGetAttribute(
+            &max_shared, cudaDevAttrMaxSharedMemoryPerBlockOptin, device),
+            "cudaDeviceGetAttribute");
+    const int twins = a.twins ? 2 : 1;
+    const long long ncells = a.cells ? a.ncell_r * a.ncell_b : 0;
+    const long long width = a.moments ? a.order + 2 : 0;
+    const int ntargets = a.nsky ? a.ntargets : 0;
+    int ntile = std::max(ntargets, 1);
+    if (width) {
+        const long long room = max_shared / 8 - twins * ncells;
+        ntile = int(std::min<long long>(ntile, room / (twins * width)));
+        if (ntile < 1) {
+            throw std::runtime_error(
+                    "orbits_integrate failed: the cells of an orbit do not "
+                    "fit in the shared memory of a block");
+        }
+    }
+    const size_t shared = 8 * twins * (ntile * width + ncells);
+    for (int first = 0; first < a.norbits; first += a.nchunk) {
+        const int count = std::min(a.nchunk, a.norbits - first);
+        launch_blocks("orbits_trajectories", count, 32,
+                kernels::orbits_trajectories<T>, a, first, count);
+        launch_grid("orbits_record", count, BLOCK_SIZE, shared,
+                kernels::orbits_record<T>, a, first, ntile);
+    }
 }
 
 #define INSTANTIATE(T)\

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "gbkfit/gmodel/gmodels.hpp"
 #include "gbkfit/math/math.hpp"
@@ -262,9 +263,9 @@ orbits_interval(const T* edges, int n, T value)
 // series ((v - mean) / dispersion) and alpha(w) = exp(-w^2 / 2) /
 // sqrt(2 pi) (the sums over the velocities of a distribution are its
 // gamma h_n: of a distribution gamma alpha(w) / dispersion (1 + sum h_n
-// H_n(w)), by the orthogonality of the H_n under alpha^2)
-template<typename T> constexpr void
-orbits_gauss_hermite(T w, T weight, int order, T* out)
+// H_n(w)), by the orthogonality of the H_n under alpha^2), with AddFunT
+template<auto AddFunT, typename T, typename S> constexpr void
+orbits_gauss_hermite(T w, T weight, int order, S* out)
 {
     const T a = weight * std::sqrt(T{2}) * std::exp(-w * w / 2);
     // (H_0 = 1, H_1 = sqrt(2) w, and H_{n+1} = (sqrt(2) w H_n - sqrt(n)
@@ -273,7 +274,7 @@ orbits_gauss_hermite(T w, T weight, int order, T* out)
     T current = 1;
     for (int n = 0; n <= order; ++n)
     {
-        out[n] += a * current;
+        AddFunT(out + n, a * current);
         const T next = (std::sqrt(T{2}) * w * current
                 - std::sqrt(T(n)) * previous) / std::sqrt(T(n + 1));
         previous = current;
@@ -316,23 +317,44 @@ orbits_circular_period(const PotentialArgs<T>& p, T energy)
     return std::exp(ln0 + (ln1 - ln0) * (energy - e0) / (e1 - e0));
 }
 
-// Add the light of a copy of a sample of an orbit (see OrbitArgs) at the
-// velocity v on the line of sight to the moments of the orbit (of index
-// orbit) in target t, of the share of the copy in the target
+// Add to a value (see OrbitRows: the records of an orbit that one thread
+// writes)
 template<typename T> constexpr void
-orbits_record_moments(
-        long long orbit, int t, T v, T share, const OrbitArgs<T>& a)
+orbits_add(T* addr, T val)
 {
-    const int width = a.order + 2;
-    T* out = a.moments + (orbit * a.ntargets + t) * width;
-    out[0] += share;
-    orbits_gauss_hermite(
-            (v - a.target_v[t]) / a.target_s[t], share, a.order, out + 1);
+    *addr += val;
+}
+
+// Where the records of an orbit go, and those of its twin (see
+// OrbitArgs), as values of type S: its moments in the targets [first,
+// last), those of target t at moments + (t - first) (order + 2), and its
+// time in the cells, that of cell (i, j) at cells + i ncell_b + j (none
+// if null); those of its twin twin_moments and twin_cells after them
+template<typename S>
+struct OrbitRows
+{
+    S* moments = nullptr;
+    int first = 0;
+    int last = 0;
+    long long twin_moments = 0;
+    S* cells = nullptr;
+    long long twin_cells = 0;
+};
+
+// Add the light of a copy of a sample of an orbit (see OrbitArgs) at the
+// velocity v on the line of sight to its moments in target t (at row; see
+// OrbitRows), of the share of the copy in the target, with AddFunT
+template<auto AddFunT, typename T, typename S> constexpr void
+orbits_record_moments(S* row, int t, T v, T share, const OrbitArgs<T>& a)
+{
+    AddFunT(row, share);
+    orbits_gauss_hermite<AddFunT>(
+            (v - a.target_v[t]) / a.target_s[t], share, a.order, row + 1);
 }
 
 // Add light at the velocity v on the line of sight to the spectrum of
 // target t (see OrbitArgs), in its channel, if any, with AddFunT (atomic
-// where the orbits are integrated in parallel)
+// where the orbits are recorded in parallel)
 template<auto AddFunT, typename T> constexpr void
 orbits_record_spectrum(int t, T v, T light, const OrbitArgs<T>& a)
 {
@@ -344,14 +366,17 @@ orbits_record_spectrum(int t, T v, T light, const OrbitArgs<T>& a)
 
 // Record a copy of a sample of orbit k on the sky: at the point (x, y)
 // of the sky with the velocity v on the line of sight, of the given
-// weight, in the targets of the cell of each grid that holds it, with
-// its twin (see OrbitArgs); AddFunT adds to the spectra
-template<auto AddFunT, typename T> constexpr void
+// weight, in the targets of rows (see OrbitRows) of the cell of each
+// grid that holds it, with its twin (see OrbitArgs); AddFunT adds to the
+// spectra, and AddRowFunT to the rows
+template<auto AddFunT, auto AddRowFunT, typename T, typename S>
+constexpr void
 orbits_record_sky(
         int k, T x, T y, T v, T weight,
-        const OrbitArgs<T>& a)
+        const OrbitArgs<T>& a, const OrbitRows<S>& rows)
 {
     const long long orbit = a.twins ? 2 * k : k;
+    const int width = a.order + 2;
     for (int s = 0; s < a.nsky; ++s)
     {
         const T* grid = a.grids + 6 * s;
@@ -365,12 +390,16 @@ orbits_record_sky(
         for (long long e = a.offsets[cell]; e < a.offsets[cell + 1]; ++e)
         {
             const int t = a.targets[e];
+            if (t < rows.first || t >= rows.last)
+                continue;
             const T share = weight * a.shares[e];
-            if (a.moments)
+            if (rows.moments)
             {
-                orbits_record_moments(orbit, t, v, share, a);
+                S* row = rows.moments + (long long)(t - rows.first) * width;
+                orbits_record_moments<AddRowFunT>(row, t, v, share, a);
                 if (a.twins)
-                    orbits_record_moments(orbit + 1, t, -v, share, a);
+                    orbits_record_moments<AddRowFunT>(
+                            row + rows.twin_moments, t, -v, share, a);
             }
             if (a.spectra)
             {
@@ -384,92 +413,13 @@ orbits_record_sky(
     }
 }
 
-// Record a sample of orbit k at the position x and the velocity v (in the
-// frame of its spheroid), at sample n of it (see OrbitArgs): in its cell,
-// and in the targets of the sky, of its copies, projected by the matrix
-// sky (the rows of the sky x, the sky y and the line of sight, see
-// orbits_integrate); AddFunT adds to the spectra
-template<auto AddFunT, typename T> constexpr void
-orbits_record(
-        int k, int n, const T* x, const T* v,
-        const T (&sky)[3][3], const OrbitArgs<T>& a)
+// The projection of a point of the frame of a spheroid on the sky, from
+// its centre (see OrbitArgs): the rows of the matrix of
+// transform_cpos_posa_incl_inverse (the sky x and y, and the line of
+// sight, positive away from us)
+template<typename T> constexpr void
+orbits_sky(const OrbitArgs<T>& a, T (&sky)[3][3])
 {
-    const T weight = T{1} / a.nsamples;
-    if (a.cells)
-    {
-        const T R = std::sqrt(x[0] * x[0] + x[1] * x[1]);
-        const int i = orbits_interval(
-                a.cell_r, a.ncell_r, std::sqrt(R * R + x[2] * x[2]));
-        const int j = orbits_interval(
-                a.cell_b, a.ncell_b, std::atan2(std::abs(x[2]), R));
-        if (i >= 0 && j >= 0)
-        {
-            const int ncells = a.ncell_r * a.ncell_b;
-            const int orbit = a.twins ? 2 * k : k;
-            const long long cell = (long long)orbit * ncells
-                    + i * a.ncell_b + j;
-            a.cells[cell] += weight;
-            if (a.twins)
-                a.cells[cell + ncells] += weight;
-        }
-    }
-    if (!a.nsky)
-        return;
-    // (the turns of the copies: evenly spaced, from a fraction of a turn
-    // that changes from sample to sample by the golden ratio)
-    constexpr T GOLDEN = 0.6180339887498949;
-    const T offset = n * GOLDEN - std::floor(n * GOLDEN);
-    const T share = weight / (2 * a.nphi);
-    for (int c = 0; c < a.nphi; ++c)
-    {
-        const T phi = 2 * PI<T> * (c + offset) / a.nphi;
-        const T cos = std::cos(phi);
-        const T sin = std::sin(phi);
-        const T px = cos * x[0] - sin * x[1];
-        const T py = sin * x[0] + cos * x[1];
-        const T pvx = cos * v[0] - sin * v[1];
-        const T pvy = sin * v[0] + cos * v[1];
-        for (int mirror = -1; mirror <= 1; mirror += 2)
-        {
-            const T pz = mirror * x[2];
-            const T pvz = mirror * v[2];
-            const T sx = sky[0][0] * px + sky[0][1] * py
-                    + sky[0][2] * pz;
-            const T sy = sky[1][0] * px + sky[1][1] * py
-                    + sky[1][2] * pz;
-            const T sv = sky[2][0] * pvx + sky[2][1] * pvy
-                    + sky[2][2] * pvz;
-            orbits_record_sky<AddFunT>(k, sx, sy, sv, share, a);
-        }
-    }
-}
-
-// Integrate orbit k and record it (see OrbitArgs): its outputs, which
-// only it writes to, from 0, and the spectra, which AddFunT adds to (from
-// 0 before)
-template<auto AddFunT, typename T> constexpr void
-orbits_integrate(int k, const OrbitArgs<T>& a)
-{
-    const int norbits = a.twins ? 2 : 1;
-    if (a.cells)
-    {
-        const long long size = (long long)a.ncell_r * a.ncell_b * norbits;
-        for (long long i = k * size; i < (k + 1) * size; ++i)
-            a.cells[i] = 0;
-    }
-    if (a.moments)
-    {
-        const long long size = (long long)a.ntargets * (a.order + 2)
-                * norbits;
-        for (long long i = k * size; i < (k + 1) * size; ++i)
-            a.moments[i] = 0;
-    }
-
-    // The projection of a point of the frame of the spheroid on the sky,
-    // from its centre: the rows of the matrix of
-    // transform_cpos_posa_incl_inverse (the sky x and y, and the line of
-    // sight, positive away from us)
-    T sky[3][3];
     for (int c = 0; c < 3; ++c)
     {
         T e[3] = {0, 0, 0};
@@ -480,7 +430,68 @@ orbits_integrate(int k, const OrbitArgs<T>& a)
         for (int r = 0; r < 3; ++r)
             sky[r][c] = e[r];
     }
+}
 
+// Add a sample of an orbit at the position x (in the frame of its
+// spheroid) to the time of the orbit in its cell, and of its twin (see
+// OrbitRows), with AddRowFunT
+template<auto AddRowFunT, typename T, typename S> constexpr void
+orbits_record_cell(
+        const T* x, const OrbitArgs<T>& a, const OrbitRows<S>& rows)
+{
+    const T R = std::sqrt(x[0] * x[0] + x[1] * x[1]);
+    const int i = orbits_interval(
+            a.cell_r, a.ncell_r, std::sqrt(R * R + x[2] * x[2]));
+    const int j = orbits_interval(
+            a.cell_b, a.ncell_b, std::atan2(std::abs(x[2]), R));
+    if (i < 0 || j < 0)
+        return;
+    S* cell = rows.cells + i * a.ncell_b + j;
+    const T weight = T{1} / a.nsamples;
+    AddRowFunT(cell, weight);
+    if (a.twins)
+        AddRowFunT(cell + rows.twin_cells, weight);
+}
+
+// Record copy c (of 2 nphi) of sample n of orbit k, at the position x and
+// the velocity v (in the frame of its spheroid; see OrbitArgs), on the
+// sky, projected by the matrix sky (see orbits_sky), into rows (see
+// orbits_record_sky): turned about the axis by the angle of copy c / 2
+// (nphi of them evenly spaced, from a fraction of a turn that changes
+// from sample to sample by the golden ratio), and mirrored about the
+// plane if c is odd
+template<auto AddFunT, auto AddRowFunT, typename T, typename S>
+constexpr void
+orbits_record_copy(
+        int k, int n, int c, const T* x, const T* v,
+        const T (&sky)[3][3], const OrbitArgs<T>& a,
+        const OrbitRows<S>& rows)
+{
+    constexpr T GOLDEN = 0.6180339887498949;
+    const T offset = n * GOLDEN - std::floor(n * GOLDEN);
+    const T phi = 2 * PI<T> * (c / 2 + offset) / a.nphi;
+    const T cos = std::cos(phi);
+    const T sin = std::sin(phi);
+    const T px = cos * x[0] - sin * x[1];
+    const T py = sin * x[0] + cos * x[1];
+    const T pvx = cos * v[0] - sin * v[1];
+    const T pvy = sin * v[0] + cos * v[1];
+    const T mirror = c % 2 ? 1 : -1;
+    const T pz = mirror * x[2];
+    const T pvz = mirror * v[2];
+    const T sx = sky[0][0] * px + sky[0][1] * py + sky[0][2] * pz;
+    const T sy = sky[1][0] * px + sky[1][1] * py + sky[1][2] * pz;
+    const T sv = sky[2][0] * pvx + sky[2][1] * pvy + sky[2][2] * pvz;
+    orbits_record_sky<AddFunT, AddRowFunT>(
+            k, sx, sy, sv, T{1} / (2 * a.nphi * a.nsamples), a, rows);
+}
+
+// Integrate orbit k (see OrbitArgs) and keep its samples: sample n at
+// samples + 6 n (x, y, z and vx, vy, vz; NaN for those past max_steps),
+// with its steps and energies, if wanted
+template<typename T> constexpr void
+orbits_trajectory(int k, const OrbitArgs<T>& a, T* samples)
+{
     OrbitPoint<T> start, end;
     for (int c = 0; c < 3; ++c)
     {
@@ -514,14 +525,16 @@ orbits_integrate(int k, const OrbitArgs<T>& a)
             const T time = (n + T{0.5}) * duration / a.nsamples;
             if (time >= t + dt)
                 break;
-            T x[3], v[3];
-            orbits_interpolate(start, end, dt, (time - t) / dt, x, v);
-            orbits_record<AddFunT>(k, n, x, v, sky, a);
+            T* sample = samples + 6LL * n;
+            orbits_interpolate(
+                    start, end, dt, (time - t) / dt, sample, sample + 3);
         }
         t += dt;
         start = end;
         ++steps;
     }
+    for (; n < a.nsamples; ++n)
+        samples[6LL * n] = std::numeric_limits<T>::quiet_NaN();
 
     if (a.steps)
         a.steps[k] = steps;
@@ -529,6 +542,45 @@ orbits_integrate(int k, const OrbitArgs<T>& a)
     {
         a.energies[2 * k] = start_energy;
         a.energies[2 * k + 1] = energy(start);
+    }
+}
+
+// Record orbit k from its samples (see orbits_trajectory), one after the
+// other, into its outputs (see OrbitArgs), which only it writes to, from
+// 0, and the spectra, which AddFunT adds to (from 0 before)
+template<auto AddFunT, typename T> constexpr void
+orbits_record_orbit(int k, const OrbitArgs<T>& a, const T* samples)
+{
+    const int twins = a.twins ? 2 : 1;
+    const long long orbit = (long long)k * twins;
+    OrbitRows<T> rows;
+    rows.last = a.ntargets;
+    if (a.cells)
+    {
+        const long long size = (long long)a.ncell_r * a.ncell_b;
+        rows.cells = a.cells + orbit * size;
+        rows.twin_cells = size;
+        std::fill(rows.cells, rows.cells + twins * size, T{0});
+    }
+    if (a.moments)
+    {
+        const long long size = (long long)a.ntargets * (a.order + 2);
+        rows.moments = a.moments + orbit * size;
+        rows.twin_moments = size;
+        std::fill(rows.moments, rows.moments + twins * size, T{0});
+    }
+    T sky[3][3];
+    orbits_sky(a, sky);
+    for (int n = 0; n < a.nsamples; ++n)
+    {
+        const T* sample = samples + 6LL * n;
+        if (std::isnan(sample[0]))
+            continue;
+        if (rows.cells)
+            orbits_record_cell<orbits_add<T>>(sample, a, rows);
+        for (int c = 0; a.nsky && c < 2 * a.nphi; ++c)
+            orbits_record_copy<AddFunT, orbits_add<T>>(
+                    k, n, c, sample, sample + 3, sky, a, rows);
     }
 }
 

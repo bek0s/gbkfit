@@ -28,6 +28,13 @@ __all__ = [
 ]
 
 
+# The most memory of the samples that an integrator keeps of its orbits
+# (bytes; see OrbitIntegrator): all of them in one go, unless it would
+# take more (the integration of a chunk lasts as long as its longest
+# orbit)
+_SAMPLES_MEMORY = 2 ** 30
+
+
 @dataclasses.dataclass(frozen=True)
 class PotentialTable:
     """
@@ -151,7 +158,9 @@ class OrbitIntegrator:
     with twins reversed in time too. It records the time of each orbit in
     cells, and in the targets of the sky its moments in their series
     (with an order) or the spectrum of all their light (with channels),
-    or both.
+    or both. It keeps the samples of the orbits from their integration to
+    their recording: 6 values each, at most 1 GiB (e.g. 480 MB for
+    10000 orbits of 2000 samples in float32).
 
     Parameters
     ----------
@@ -268,6 +277,11 @@ class OrbitIntegrator:
 
         self._steps = driver.mem_alloc_d((norbits,), np.int32)
         self._energies = driver.mem_alloc_d((norbits, 2), dtype)
+        # (the samples of the orbits, from their integration to their
+        # recording: of all of them, or as many as _SAMPLES_MEMORY holds)
+        nchunk = _SAMPLES_MEMORY // (nsamples * 6 * self._dtype.itemsize)
+        self._samples = driver.mem_alloc_d(
+            (min(norbits, max(nchunk, 1)), nsamples, 6), dtype)
 
     def integrate(
             self,
@@ -362,7 +376,8 @@ class OrbitIntegrator:
             channel_scale=0 if channels is None else channels[0],
             channel_offset=0 if channels is None else channels[1],
             spectra=self._spectra,
-            steps=self._steps, energies=self._energies)
+            steps=self._steps, energies=self._energies,
+            samples=self._samples)
 
         def host(array: DeviceArray | None) -> np.ndarray | None:
             return None if array is None else driver.mem_copy_d2h(array)
