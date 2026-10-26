@@ -8,7 +8,13 @@ dynamic = ['version']
 description = 'Galaxy kinematic modelling and fitting'
 readme = 'README.rst'
 license = 'BSD-3-Clause'
-license-files = ['LICENSE']
+license-files = [
+    'LICENSE',
+    # (of the code that the native modules build in)
+    'src/native/third_party/dnest4/LICENSE',
+    'src/native/third_party/nanobind/LICENSE',
+    'src/native/third_party/pocketfft/LICENSE.md'
+]
 authors = [{ name = 'Georgios Bekiaris', email = 'gbkfit@gmail.com' }]
 requires-python = '>=3.12'
 classifiers = [
