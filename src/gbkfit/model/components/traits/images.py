@@ -387,7 +387,9 @@ class RPTraitImage(RPTrait):
             x - dx, y - dy, origin, self._grid)
         image = scipy.ndimage.map_coordinates(
             self._data, [py, px], order=1, mode='constant', cval=0)
-        return (params['a'] * image * np.cos(np.radians(incl))).ravel()
+        # (|cos|, as the thin disk kernel divides by: beyond 90 degrees the
+        # disk is seen from below, and its light is not negative)
+        return (params['a'] * image * np.abs(np.cos(np.radians(incl)))).ravel()
 
     def check_coverage(
             self,

@@ -119,14 +119,16 @@ class ImageMaps:
         the image says little of the face-on light, which the deprojection
         stretches by 1 / cos(incl) along the minor axis.
         """
-        incl = np.max(params[self._disk.frame_params().incl])
-        if incl > _EDGE_ON_WARNING:
+        # (the nearest to edge-on, from either side)
+        incls = np.atleast_1d(params[self._disk.frame_params().incl])
+        cosines = np.abs(np.cos(np.radians(incls)))
+        if np.min(cosines) < np.cos(np.radians(_EDGE_ON_WARNING)):
+            incl, cosine = incls[np.argmin(cosines)], np.min(cosines)
             parseutils.warn(
                 f"the disk of {self._label!r} is at the inclination "
                 f"{incl:.3g} degrees: its image traits stretch their "
-                f"images by 1 / cos(incl) = "
-                f"{1 / np.cos(np.radians(incl)):.3g} along its minor "
-                f"axis, which say little of its face-on light")
+                f"images by 1 / |cos(incl)| = {1 / cosine:.3g} along its "
+                f"minor axis, which say little of its face-on light")
 
 
 def _geometry(

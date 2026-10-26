@@ -69,9 +69,10 @@ def test_images_are_read_by_the_kernels_of_maps(tmp_path):
     assert image.image_params() == ('m',)
 
 
-@pytest.mark.parametrize('incl', [60, 30])
+@pytest.mark.parametrize('incl', [60, 30, 120])
 def test_a_thin_disk_of_an_image_is_the_image(tmp_path, incl):
-    # At its own inclination, and at any other: the light is the image
+    # At its own inclination, and at any other (seen from below beyond 90
+    # degrees: its light was negative there): the light is the image
     # (to the cells of 0.1 arcsec, finer than the pixels, at the centre of
     # the exponential)
     truth = write_truth(tmp_path / 'truth.fits')
