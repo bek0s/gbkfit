@@ -59,9 +59,10 @@ class JeansKinematics(SpheroidKinematics):
 
     of the anisotropy beta_z = 1 - sigma_z^2 / sigma_R^2 and the rotation
     kappa (0: none; 1: that of an isotropic rotator where beta_z = 0), two
-    parameters. NaN where <v_phi^2> is negative, or below sigma_R^2 with
-    kappa > 0 (the spheroid cannot rotate so); 0 where it has no light
-    (beyond the floats). Each point of the spheroid moves with a Gaussian
+    parameters. Where <v_phi^2> is below sigma_R^2 the stars cannot rotate
+    so: <v_phi> is 0 there (as JamPy), and sigma_phi^2 = <v_phi^2>. NaN
+    where <v_phi^2> is negative, or where kappa makes <v_phi>^2 exceed
+    <v_phi^2>; 0 where it has no light (beyond the floats). Each point of the spheroid moves with a Gaussian
     distribution of velocities of that mean and those dispersions (the
     velocity ellipsoid seen along the line of sight): the Jeans equations
     give the mean and the dispersion of the stars, not the shape of their
@@ -257,8 +258,15 @@ def jeans_tables(
         vphi2 = nu_vphi2 / nu
         sr2 = b * sz2
         rotation = vphi2 - sr2
-        vphi = kappa * np.sqrt(np.where(
-            (rotation >= 0) | (kappa == 0), np.maximum(rotation, 0), np.nan))
+        # Where <v_phi^2> < sigma_R^2, no real kappa (<v_phi^2> -
+        # sigma_R^2)^(1/2) exists: the stars cannot rotate with sigma_phi =
+        # sigma_R. As JamPy (Cappellari 2008, 2020), their mean rotation is
+        # then 0, and sigma_phi^2 = <v_phi^2>: the second moments of the
+        # Jeans equations hold everywhere, and only the split of <v_phi^2>
+        # into rotation and dispersion (the assumption that kappa scales)
+        # gives way. A choice: NaN there would leave ordinary fast rotators
+        # (beta_z above about 0.6 (1 - q) at their centres) without a model.
+        vphi = kappa * np.sqrt(np.maximum(rotation, 0))
         sphi2 = vphi2 - vphi ** 2
         table = slice(None), heights
         # (0 where there is no light, of no weight: the kernels interpolate

@@ -508,11 +508,12 @@ def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
         return scipy.integrate.quad(
             lambda x: nu(R, x) * gm * x / np.hypot(R, x) ** 3, z, np.inf,
             epsrel=1e-12, limit=200)[0]
-    # (where R << z, near the point mass, it cannot rotate so: NaN)
+    # (where R << z, near the point mass, it cannot rotate so: there its
+    # rotation is 0, and sigma_phi^2 = <v_phi^2>)
     R, z = table_points(tables)
     b = 1 / (1 - beta_z)
     points = (20, 40), (40, 10), (40, 40), (50, 30), (55, 52)
-    expected = []
+    expected, still = [], []
     for i, j in points:
         Rk, zk = R[i, j] * k, z[i, j] * k
         h = 1e-4 * Rk
@@ -522,7 +523,8 @@ def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
                  / np.hypot(Rk, zk) ** 3) / nu(Rk, zk)
         sz2 = I / nu(Rk, zk)
         rotation = vphi2 - b * sz2
-        vphi = kappa * np.sqrt(rotation) if rotation >= 0 else np.nan
+        vphi = kappa * np.sqrt(max(rotation, 0.0))
+        still.append(rotation < 0)
         expected.append((
             vphi, np.sqrt(b * sz2), np.sqrt(vphi2 - vphi ** 2),
             np.sqrt(sz2)))
@@ -530,7 +532,7 @@ def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
     model = np.transpose([
         tables.vphi[index], tables.sigma_r[index],
         tables.sigma_phi[index], tables.sigma_z[index]])
-    assert np.isnan(np.array(expected)).any()
+    assert any(still)
     np.testing.assert_allclose(model, expected, rtol=3e-3)
 
 
