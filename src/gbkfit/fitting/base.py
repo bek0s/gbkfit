@@ -6,6 +6,7 @@ import abc
 import copy
 import dataclasses
 import importlib.metadata
+import logging
 import time
 from collections.abc import Sequence
 from typing import Any, Self
@@ -26,6 +27,9 @@ from gbkfit.objective import Objective
 from gbkfit.params import EvaluationError, ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
+
+
+_log = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -367,6 +371,14 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         diagnostics['uncertainty_nevals'] = uncertainty_nevals
         diagnostics['nan_nevals'] = problem.nan_nevals()
         diagnostics['failed_nevals'] = problem.failed_nevals()
+        if run.evidence is not None \
+                and (profiled := _profiled(problem.objective())):
+            note = (
+                f"the evidence is not one: the likelihood takes the best "
+                f"values of the solved elements of {profiled} (likelihood "
+                f"'profiled'), not their integral (see Solve)")
+            _log.warning(note)
+            diagnostics['evidence_note'] = note
         for key, message in problems:
             diagnostics.setdefault(key, []).append(message)
         posterior = None
@@ -503,6 +515,17 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
 
 # The uncertainty options of no uncertainty
 _NO_UNCERTAINTY = UncertaintyOptions(covariance=False, laplace_samples=0)
+
+
+def _profiled(objective: Objective) -> list[str]:
+    """
+    Return the parameters whose solved elements the log-likelihood takes
+    at their best values (likelihood 'profiled'; see Solve).
+    """
+    # (element names are 'name' or 'name[i]', see element_name)
+    return sorted({
+        name.split('[')[0] for name, solve in objective.solves().items()
+        if solve.likelihood() == 'profiled'})
 
 
 def _stopped_run(problem: FitProblem) -> FitRun:

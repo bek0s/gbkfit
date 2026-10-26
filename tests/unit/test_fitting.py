@@ -1237,6 +1237,23 @@ def test_dynesty_posterior_agrees_with_the_covariance():
     assert result.evidence.log_z_error > 0
 
 
+def test_a_nested_evidence_of_profiled_solves_says_it_is_not_one(caplog):
+    # (the likelihood takes their best values, not their integral)
+    pytest.importorskip('dynesty')
+    from gbkfit.fitting.fitters.dynesty import FitterDynestyStatic
+    plan = mock_objective(
+        DriverHost(), name='obs', flux_scale='one').group_plan()
+    params = ParamSpace(plan.group().pdescs(), TRUE | dict(
+        incl=dict(prior=dict(type='uniform', min=50, max=60)),
+        obs_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1, sigma=0.5, minimum=0,
+            likelihood='profiled'))))
+    objective = Objective(plan, params.solves())
+    result = FitterDynestyStatic(nlive=20, dlogz=10).fit(objective, params)
+    assert "['obs_flux_scale']" in result.diagnostics['evidence_note']
+    assert any('is not one' in r.message for r in caplog.records)
+
+
 @pytest.mark.slow
 def test_nested_evidence_with_a_prior_on_an_expression_is_corrected():
     # A uniform prior on incl times a Gaussian prior on the expression
