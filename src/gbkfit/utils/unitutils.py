@@ -39,7 +39,9 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Terms separated by spaces, '*' or '.' multiply each other, each read
     on its own: astropy reads 'Jy/beam km/s' as Jy / (beam km s), but the
     unit of a moment 0 map is Jy km/s per beam. Units written in capitals
-    (e.g. 'JY/BEAM.KM/S') are read in the case of their names.
+    (e.g. 'JY/BEAM.KM/S') are read in the case of their names. Else the
+    text is read by astropy as a whole (e.g. its own 'Jy / beam' or
+    'Jy km / (beam s)', whose spaces are not between terms).
 
     Parameters
     ----------
@@ -59,6 +61,11 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     for candidate in (text, _uncapitalised(text)):
         try:
             return _product(candidate)
+        except ValueError:
+            pass
+    for candidate in (text, _uncapitalised(text)):
+        try:
+            return astropy.units.Unit(candidate)
         except ValueError:
             pass
     raise ConfigError(

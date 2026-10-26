@@ -26,7 +26,11 @@ from gbkfit.utils.unitutils import format_unit, parse_unit
      1e-20 * u.erg / u.s / u.cm ** 2 / u.Angstrom),
     ('1.5e-17 erg/s/cm2/arcsec2',
      1.5e-17 * u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
-    ('Msun/pc2', u.Msun / u.pc ** 2)])
+    ('Msun/pc2', u.Msun / u.pc ** 2),
+    # (astropy's own forms, whose spaces are not between terms)
+    ('Jy / beam', u.Jy / u.beam),
+    ('Jy km / (beam s)', u.Jy * u.km / u.s / u.beam),
+    ('MJy / sr', u.MJy / u.sr)])
 def test_units_are_read_as_they_are_meant(text, unit):
     parsed = parse_unit(text)
     assert parsed.is_equivalent(unit)
