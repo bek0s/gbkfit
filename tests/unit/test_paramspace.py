@@ -155,6 +155,21 @@ def test_dump_keeps_the_transforms(tmp_path):
         params.dump()
 
 
+def test_dump_gives_prior_objects_as_configurations():
+    # (Python callers can give a Prior object; result.json needs its
+    # configuration, which loads back)
+    import json
+    from gbkfit.params import PriorGauss
+    pdescs = make_pdescs(a=S, v=2)
+    params = ParamSpace(pdescs, {
+        'a': dict(value=1, prior=PriorGauss(1, 2)),
+        'v': [dict(value=0, prior=PriorGauss(0, 1)), 2]})
+    info = json.loads(json.dumps(params.dump()))
+    assert info['properties']['a']['prior'] == dict(type='gauss', mean=1, std=2)
+    loaded = param_space_parser.load(info, pdescs=pdescs)
+    assert loaded.dump() == info
+
+
 def test_element_values():
     pdescs = make_pdescs(a=S, v=2)
     params = load_params(pdescs, {'a': 1, 'v': 'a + np.arange(2)'})

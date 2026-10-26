@@ -257,6 +257,21 @@ class _Assignment:
     expression: Expression
 
 
+def _dumped_property(value: Any) -> Any:
+    """
+    Return (a copy of) a property of a parameter as a configuration gives
+    it: the priors given as Prior objects (by Python callers; see
+    FreeElement.load) as their configurations.
+    """
+    if isinstance(value, Prior):
+        return prior_parser.dump(value)
+    if isinstance(value, Mapping):
+        return {key: _dumped_property(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_dumped_property(item) for item in value]
+    return copy.deepcopy(value)
+
+
 def _is_list(value: Any) -> bool:
     """Check whether a property is a list of properties."""
     return isinstance(value, (list, tuple)) or (
@@ -450,7 +465,9 @@ class ParamSpace(parseutils.Serializable):
             functions=functions)
 
     def dump(self) -> dict[str, Any]:
-        info: dict[str, Any] = dict(properties=copy.deepcopy(self._properties))
+        info: dict[str, Any] = dict(properties={
+            name: _dumped_property(value)
+            for name, value in self._properties.items()})
         if self._modes:
             info['modes'] = {
                 name: param_mode_parser.dump(mode)
