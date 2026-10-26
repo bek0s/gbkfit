@@ -1637,7 +1637,9 @@ gmodel_smspheroid_evaluate_voxel(
     if (rn < SPHEROID_CENTRE_VOXELS<T> * diagonal)
     {
         // (and the first two moments of the velocities of the sub-points,
-        // weighted by their density)
+        // weighted by their density, about vsys: in float32, about 0 the
+        // square of a vsys of thousands of km/s cancels the dispersion)
+        const T vref = a.vsys[0];
         T sum_v = 0;
         T sum_v2 = 0;
         constexpr int n = SPHEROID_SUBGRID;
@@ -1657,14 +1659,16 @@ gmodel_smspheroid_evaluate_voxel(
             {
                 T v, s;
                 gmodel_spheroid_kinematics(xs, ys, zs, incl, a, v, s);
-                sum_v += density * v;
-                sum_v2 += density * (v * v + s * s);
+                const T dv = v - vref;
+                sum_v += density * dv;
+                sum_v2 += density * (dv * dv + s * s);
             }
         }
         if (moves && rvalue)
         {
-            vvalue = sum_v / rvalue;
-            dvalue = std::sqrt(std::max(sum_v2 / rvalue - vvalue * vvalue,
+            const T mean = sum_v / rvalue;
+            vvalue = vref + mean;
+            dvalue = std::sqrt(std::max(sum_v2 / rvalue - mean * mean,
                                         T{0}));
         }
         rvalue /= n * n * n;

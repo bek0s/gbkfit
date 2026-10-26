@@ -563,6 +563,30 @@ def stars_cube(driver, spheroid, line_of_sight='grid'):
             type='point', name='bh')], distance=DISTANCE))
 
 
+def test_float32_stars_keep_their_dispersion_at_a_large_vsys(
+        driver, evaluate_cases):
+    # The voxels about the centre take the moments of the velocities of
+    # their sub-points: about vsys, else in float32 its square (of a
+    # vsys = cz of 15000 km/s) cancels the dispersion (km/s off)
+    properties = JEANS_PROPERTIES | dict(vsys=15000)
+    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    cubes = []
+    for dtype in ('float32', 'float64'):
+        case = stars_cube(driver, spheroid)
+        case['observable'] |= dict(dtype=dtype, rval=[0, 0, 15000])
+        data, _ = evaluate_cases([case], properties)
+        cubes.append(data[0]['spectra']['d'][:, 14:18, 14:18])
+    velocity = 15000 + (np.arange(181) - 90) * 10.0
+
+    def dispersion(cube):
+        weights = cube / cube.sum(axis=0)
+        mean = np.einsum('z,zyx->yx', velocity, weights)
+        return np.sqrt(np.einsum(
+            'zyx,zyx->yx', (velocity[:, None, None] - mean) ** 2, weights))
+    np.testing.assert_allclose(
+        dispersion(cubes[0]), dispersion(cubes[1]), atol=0.01)
+
+
 def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
         driver, evaluate_cases):
     # Each line of sight of the round Gaussian around a point mass
