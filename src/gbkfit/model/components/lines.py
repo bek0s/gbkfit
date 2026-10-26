@@ -396,12 +396,23 @@ class Lines:
         Raises
         ------
         ConfigError
-            If the line has no name, and the spectral axis has no rest.
+            If the line has no name, and the spectral axis has no rest, or
+            the galaxy has a redshift.
         """
         if self._lines is not None:
             return np.array([
                 line.rest().to_value(astropy.units.Hz, astropy.units.spectral())
                 for line in self._lines])
+        # (with a redshift, the rest of the axis can be that of the line as
+        # emitted or as observed, and nothing tells which: the frequency
+        # would be off by 1 + z, and the light dimmed by up to (1 + z)^5;
+        # refused rather than guessed)
+        if redshift != 0:
+            raise ConfigError(
+                "a line without a name cannot have a unit in a galaxy with "
+                "a redshift: the rest of the spectral axis may be that of "
+                "the line as emitted or as observed, which the unit needs; "
+                "name the line (e.g. lines: [hi21])")
         rest = spectral.coords.rest
         if rest is None:
             raise ConfigError(

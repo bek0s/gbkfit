@@ -41,11 +41,11 @@ def disk(unit=None, lines=('hi21',), thick=False):
 
 def model(
         driver, components, data_unit=None, beam=BEAM, line_of_sight='flat',
-        params=PARAMS):
+        params=PARAMS, redshift=None):
     """
-    The model of the spectra of a galaxy of the given components, seen in
-    data of the given unit (none: without data) along a line of sight of
-    the given type.
+    The model of the spectra of a galaxy of the given components (and
+    redshift, if any), seen in data of the given unit (none: without data)
+    along a line of sight of the given type.
     """
     observable = PixelSpectra(
         size=SIZE, step=STEP, rval=(0, 0, 470), rest=HI)
@@ -54,8 +54,11 @@ def model(
         data = DatasetPixelSpectra(
             Data(np.zeros(SIZE[::-1]), unit=data_unit, beam=beam),
             step=STEP, rval=(0, 0, 470), rest=HI)
+    galaxy = dict(components=components)
+    if redshift is not None:
+        galaxy.update(redshift=redshift)
     group = ObservationGroup(
-        [galaxy_parser.load(dict(components=components))], [ObservationSky(
+        [galaxy_parser.load(galaxy)], [ObservationSky(
             observable, line_of_sight_parser.load(dict(type=line_of_sight)),
             data=data)])
     plan = group.plan(driver)
@@ -127,6 +130,18 @@ def test_the_units_of_model_and_data_must_go_together(
         components = components[:1]
     with pytest.raises(ConfigError, match=message):
         model(driver, components, data_unit, beam)
+
+
+def test_a_line_without_a_name_has_no_unit_with_a_redshift(driver):
+    # Its unit needs the frequency at which the galaxy emits it; with a
+    # redshift, the rest of the axis may be that of the line as emitted or
+    # as observed (its dimming then off by 1 + z or more), which named
+    # lines do not leave open
+    unnamed = disk() | dict(emission=dict(type='lines', unit='K km/s'))
+    with pytest.raises(ConfigError, match="a line without a name"):
+        model(driver, [unnamed], 'K', redshift=0.02)
+    # (a named line is fine; at this redshift it is off the axis)
+    model(driver, [disk('K km/s')], 'K', redshift=0.02)
 
 
 def test_light_in_bands_with_a_unit_needs_the_redshift():
