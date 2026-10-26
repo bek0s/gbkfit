@@ -832,6 +832,24 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn():
     assert run.read(run.product('bootstrap')).colnames == list(boot.names)
 
 
+def test_a_gaussian_bootstrap_draws_the_noise_anew():
+    # Refits of the model plus Gaussian noise of the errors: of white
+    # noise, they scatter about as the covariance says
+    from gbkfit.fitting import (
+        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    result = fitter.fit(objective, params)
+    boot = bootstrap(
+        objective, params, result.best().elements, fitter,
+        BootstrapOptions(10, BootstrapGaussian()))
+    assert boot.samples.shape == (10, 6) and not boot.failures
+    std = result.best().covariance.std
+    for name in TRUE:
+        assert 0.5 < boot.std()[name] / std[name] < 2
+
+
 @pytest.mark.parametrize('scheme, message', [
     ([dict(type='blocks', size=[4, 4])] * 2, 'one for each of the 1 obs'),
     (dict(type='blocks', size=[4, 4, 2]), 'for each of x and y'),

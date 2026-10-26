@@ -22,6 +22,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'BootstrapBlocks',
+    'BootstrapGaussian',
     'BootstrapOptions',
     'BootstrapScheme',
     'bootstrap',
@@ -143,8 +144,56 @@ class BootstrapBlocks(BootstrapScheme):
         return dataset.resample_blocks(residuals, self._size, rng)
 
 
+class BootstrapGaussian(BootstrapScheme):
+    """
+    Residuals drawn anew from a Gaussian: each value of the data is the
+    model plus Gaussian noise of its noise (its error, or its fitted noise;
+    see bootstrap), independent from value to value: a parametric
+    bootstrap, e.g. of the kinematics of Voronoi bins, whose few values
+    have errors of their own, too unlike to swap residuals. Noise
+    correlated between the values is not drawn so: blocks keep it (see
+    BootstrapBlocks).
+
+    Raises
+    ------
+    ConfigError
+        If the noise of a data item is correlated (when it is checked).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'gaussian'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type())
+
+    def check(self, dataset: Dataset, params: ParamSpace) -> None:
+        if correlated := [
+                key for key in dataset
+                if dataset.noise_correlation(key) is not None]:
+            raise ConfigError(
+                f"the noise of the data items {correlated} is correlated; "
+                f"a Gaussian bootstrap draws it independent from value to "
+                f"value: redraw it in blocks (type 'blocks')")
+
+    def resample(
+            self,
+            dataset: Dataset,
+            residuals: Mapping[str, np.ndarray],
+            model: Mapping[str, np.ndarray],
+            params: ParamSpace,
+            values: ParamValues,
+            rng: np.random.Generator
+    ) -> dict[str, np.ndarray]:
+        return {
+            key: np.where(
+                np.isfinite(residual), rng.standard_normal(residual.shape),
+                np.nan)
+            for key, residual in residuals.items()}
+
+
 bootstrap_scheme_parser = parseutils.TypedParser(
-    BootstrapScheme, [BootstrapBlocks])
+    BootstrapScheme, [BootstrapBlocks, BootstrapGaussian])
 
 
 class BootstrapOptions(parseutils.Serializable):
