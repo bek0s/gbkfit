@@ -29,6 +29,7 @@ from gbkfit.model.mass import (
     SurfaceNodewise, VerticalComponent, VerticalSech, VerticalExponential,
     VerticalGauss, VerticalSech2, VerticalThin, mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
+from gbkfit.params import ModelEvaluationError
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -867,9 +868,13 @@ def test_dark_fractions_set_a_parameter_of_the_halo(
     parts = model.vcirc2_components(np.array([5.0]), params, CONTEXT)
     v2, baryon_v2 = parts['halo'][0], parts['stars'][0] + parts['bulge'][0]
     assert v2 / (v2 + baryon_v2) == pytest.approx(0.3, rel=1e-10)
-    with pytest.raises(ValueError, match="no value of"):
+    # (where no halo gives it, no model: a point fitters cannot evaluate)
+    with pytest.raises(ModelEvaluationError, match="no value of"):
         model.vcirc2(
             np.array([5.0]), params | dict(mass_halo_fdm=0.999), CONTEXT)
+    with pytest.raises(ModelEvaluationError, match="leaves its baryons"):
+        model.vcirc2(
+            np.array([5.0]), params | dict(mass_halo_fdm=1.0), CONTEXT)
 
 
 def test_responding_halos_are_checked(tmp_path):

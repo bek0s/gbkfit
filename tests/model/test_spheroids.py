@@ -488,6 +488,15 @@ def test_the_jeans_tables_of_a_gaussian_around_a_point_mass_are_exact():
     assert not tables.vphi.any()
 
 
+def test_the_jeans_equations_have_no_solution_at_beta_z_1():
+    # (sigma_R^2 = sigma_z^2 / (1 - beta_z): no model there, a point that
+    # fitters cannot evaluate, not a ZeroDivisionError)
+    from gbkfit.params import ModelEvaluationError
+    with pytest.raises(ModelEvaluationError, match="no solution at beta_z"):
+        jeans_galaxy().plan_stage().evaluate(
+            JEANS_PROPERTIES | dict(stars_beta_z=1.0))
+
+
 def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
     # The Jeans equations at a few points, by adaptive quadrature: nu
     # sigma_z^2 = int_z^inf nu G M z' / r'^3 dz', and R d(nu sigma_z^2)/dR

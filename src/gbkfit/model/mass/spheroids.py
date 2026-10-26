@@ -15,7 +15,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.optimize
 
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -404,14 +404,20 @@ class MassSpheroid(MassComponent):
 
         Raises
         ------
-        ValueError
-            If no value within the bounds gives the dark fraction.
+        ModelEvaluationError
+            If no value within the bounds gives the dark fraction (or it
+            is 1, which no baryons give).
         """
         if self._dark_fraction is None:
             return params
         name = self._dark_fraction.solve()
         radius = np.array([float(params['r_fdm'])])
         fdm = float(params['fdm'])
+        if not fdm < 1:
+            raise ModelEvaluationError(
+                f"the dark matter fraction {fdm} of the spheroid "
+                f"{self.name()!r} at {radius[0]} kpc leaves its baryons no "
+                f"share of v^2: no halo gives it")
         target = fdm / (1 - fdm) * self._baryons_vcirc2(radius, context)[0]
 
         def excess(value: float) -> float:
@@ -419,7 +425,7 @@ class MassSpheroid(MassComponent):
                 radius, dict(params) | {name: value}, context)[0] - target)
         lower, upper = self._dark_fraction.bounds()
         if not np.sign(excess(lower)) * np.sign(excess(upper)) <= 0:
-            raise ValueError(
+            raise ModelEvaluationError(
                 f"no value of {name!r} within {[lower, upper]} gives the "
                 f"spheroid {self.name()!r} the dark matter fraction {fdm} "
                 f"at {radius[0]} kpc")

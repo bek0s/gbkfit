@@ -15,7 +15,8 @@ import numpy as np
 import scipy.interpolate
 
 from gbkfit.driver import Driver
-from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
+from gbkfit.params import (
+    ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues)
 from ...gravity import GravityField
 from .._native import ParamBuffer
 from .._stage import GalaxyMass
@@ -214,6 +215,10 @@ def jeans_tables(
     """
     beta_z = float(kinematics_params['beta_z'])
     kappa = float(kinematics_params['kappa'])
+    if not beta_z < 1:
+        raise ModelEvaluationError(
+            f"the Jeans equations have no solution at beta_z = {beta_z}: "
+            f"sigma_R^2 = sigma_z^2 / (1 - beta_z)")
     b = 1 / (1 - beta_z)
     lnr = np.linspace(np.log(rmax / _TABLE_SPAN), np.log(rmax), _TABLE_SIZE)
     # (the heights of the tables, every _SUBSTEPS of those of the
