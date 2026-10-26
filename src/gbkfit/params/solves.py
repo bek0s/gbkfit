@@ -10,6 +10,7 @@ from the sums of that comparison, under its prior (see Solve).
 
 import abc
 import math
+import typing
 from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
@@ -80,7 +81,17 @@ class Solve(parseutils.TypedSerializable, abc.ABC):
     that is at its minimum. The residuals of its prior are not of the
     data: they count in the chi-square, but not in the degrees of freedom
     (see Objective.nnuisance).
+
+    Solves of the same options are equal (e.g. those of copies of the
+    parameters; see ParamSpace.with_values).
     """
+
+    def __eq__(self, other: object) -> bool:
+        return type(other) is type(self) \
+            and typing.cast(Solve, other).dump() == self.dump()
+
+    def __hash__(self) -> int:
+        return hash((type(self), repr(self.dump())))
 
     @abc.abstractmethod
     def likelihood(self) -> str:

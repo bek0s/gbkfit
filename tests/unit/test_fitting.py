@@ -850,6 +850,25 @@ def test_a_gaussian_bootstrap_draws_the_noise_anew():
         assert 0.5 < boot.std()[name] / std[name] < 2
 
 
+def test_a_bootstrap_refits_fits_of_solved_values():
+    # (the refits start at copies of the parameters, whose solves are equal
+    # to those of the objective)
+    from gbkfit.fitting import (
+        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+    plan = mock_objective(
+        DriverHost(), name='obs', flux_scale='one').group_plan()
+    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
+        obs_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1, sigma=0.1, minimum=0))))
+    objective = Objective(plan, params.solves())
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    result = fitter.fit(objective, params)
+    boot = bootstrap(
+        objective, params, result.best().elements, fitter,
+        BootstrapOptions(3, BootstrapGaussian()))
+    assert len(boot.samples) == 3 and not boot.failures
+
+
 @pytest.mark.parametrize('scheme, message', [
     ([dict(type='blocks', size=[4, 4])] * 2, 'one for each of the 1 obs'),
     (dict(type='blocks', size=[4, 4, 2]), 'for each of x and y'),
