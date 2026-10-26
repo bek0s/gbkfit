@@ -37,6 +37,17 @@ def test_the_problems_of_a_configuration_have_their_paths(tmp_path):
     assert check(str(filename), {str(filename): fixed}).problems == []
 
 
+def test_the_sections_of_tasks_are_checked_too(tmp_path):
+    # (the mock data of eval, the bootstrap of fit: their errors showed
+    # only when the task ran)
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    config['mock'] = dict(noise=dict(type='gauss', rms=1), nmock=2)
+    filename = tmp_path / 'config.yaml'
+    yaml.dump(config, filename)
+    (problem,) = check(str(filename)).problems
+    assert problem.path == ['mock'] and "'nmock'" in problem.message
+
+
 def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
     filename = tmp_path / 'config.yaml'
     assert check(str(filename), {str(filename): 'galaxies: [\n'}) \

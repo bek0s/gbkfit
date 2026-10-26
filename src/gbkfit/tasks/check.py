@@ -72,7 +72,8 @@ def check(config: str, texts: Mapping[str, str] | None = None) -> Checked:
         with parseutils.strict_mode(False):
             file = gbkfit.setup.read_config(config, texts=texts)
             sources = file.sources
-            gbkfit.setup.load(file).close()
+            with gbkfit.setup.load(file) as setup:
+                _check_task_sections(file.config, setup)
     except ConfigError as e:
         problems.append(_problem('error', e))
     finally:
@@ -104,3 +105,20 @@ def _problem(
     message = error.message if error.context is None \
         else f"[{error.context}] {error.message}"
     return Problem(severity, list(error.path), message)
+
+
+def _check_task_sections(
+        config: dict[str, Any], setup: gbkfit.setup.Setup
+) -> None:
+    """
+    Load the sections of a configuration that only tasks read (the mock
+    data of eval, the bootstrap of fit), as they load them, so that their
+    errors show with those of the rest.
+    """
+    from gbkfit.tasks import eval as eval_task, fit as fit_task
+    if 'mock' in config:
+        with parseutils.config_path('mock'):
+            eval_task._load_mock(
+                config['mock'], setup.group_plan.group().nobservations())
+    if setup.objective is not None:
+        fit_task._load_bootstrap(config, setup)
