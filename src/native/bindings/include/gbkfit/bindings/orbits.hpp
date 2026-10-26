@@ -62,39 +62,45 @@ struct Orbits
 
     // Integrate orbits in the potential of a table and range and record
     // them (see gbkfit::OrbitArgs): from starts (rows of x, y, z, vx, vy,
-    // vz) for the durations; their cells (between the edges cell_r and
-    // cell_b) into cells (of shape (norbits, ncell_r, ncell_b), norbits
-    // twice the orbits with twins); their moments in the targets of the
-    // sky (the arguments from grid_sizes to target_s; grid_sizes and
-    // grids, the 6 values of the map of each, a row per grid) into
-    // moments (of shape (norbits, ntargets, order + 2)); and their steps
-    // and energies (a row per orbit, at its start and its end). The
-    // cells, the sky and the steps and energies are optional (None).
+    // vz), each for turns circular periods; their cells (between the
+    // edges cell_r and cell_b) into cells (of shape (norbits, ncell_r,
+    // ncell_b), norbits twice the orbits with twins); on the sky (the
+    // arguments from grid_sizes to shares; grid_sizes and grids, the 6
+    // values of the map of each, a row per grid), their moments in the
+    // series of the targets (target_v and target_s) into moments (of
+    // shape (norbits, ntargets, order + 2)), and the spectrum of their
+    // light (light) on the channels of the map of their velocities
+    // (channel_scale and channel_offset) into spectra (of shape
+    // (nchannels, ntargets), added to); and their steps and energies (a
+    // row per orbit, at its start and its end). The cells, the sky, the
+    // moments, the spectra and the steps and energies are optional
+    // (None).
     static void
     integrate(
             Table table, Range range,
-            Rows starts, Values durations, T accuracy, int max_steps,
+            Rows starts, T turns, T accuracy, int max_steps,
             int nsamples, int nphi, bool twins, T posa, T incl,
             Values cell_r, Values cell_b, Out3 cells,
             Array<Device, const int, nb::ndim<2>> grid_sizes, Rows grids,
             Offsets grid_cells, Offsets offsets, Counts targets,
-            Values weights, Values target_v, Values target_s, int order,
-            Out3 moments,
+            Values shares,
+            Values target_v, Values target_s, int order, Out3 moments,
+            Values light, T channel_scale, T channel_offset, Out2 spectra,
             Steps steps, Out2 energies)
     {
-        const typename Kernels::DeviceScope scope(durations.device_id());
+        const typename Kernels::DeviceScope scope(starts.device_id());
         OrbitArgs<T> a;
         a.potential = potential_args(table, range);
 
         a.norbits = int(starts.shape(0));
         require(starts.shape(1) == 6,
                 "starts must have rows of x, y, z, vx, vy, vz");
-        require(durations.shape(0) == starts.shape(0),
-                "durations needs one value per orbit");
-        require(accuracy > 0 && max_steps > 0 && nsamples > 0 && nphi > 0,
-                "accuracy, max_steps, nsamples and nphi must be positive");
+        require(turns > 0 && accuracy > 0 && max_steps > 0 && nsamples > 0
+                && nphi > 0,
+                "turns, accuracy, max_steps, nsamples and nphi must be "
+                "positive");
         a.starts = starts.data();
-        a.durations = durations.data();
+        a.turns = turns;
         a.accuracy = accuracy;
         a.max_steps = max_steps;
         a.nsamples = nsamples;
@@ -123,23 +129,34 @@ struct Orbits
             a.cells = cells.data();
         }
 
-        require(moments.is_valid() == grid_sizes.is_valid(),
-                "moments and the arrays of the sky go together");
-        if (moments.is_valid())
+        const bool sky = moments.is_valid() || spectra.is_valid();
+        require(grid_sizes.is_valid() == sky && grids.is_valid() == sky
+                && grid_cells.is_valid() == sky && offsets.is_valid() == sky
+                && targets.is_valid() == sky && shares.is_valid() == sky,
+                "the arrays of the sky go with moments or spectra");
+        if (sky)
         {
-            require(grids.is_valid() && grid_cells.is_valid()
-                    && offsets.is_valid() && targets.is_valid()
-                    && weights.is_valid() && target_v.is_valid()
-                    && target_s.is_valid(),
-                    "the sky needs all its arrays");
             a.nsky = int(grid_sizes.shape(0));
             require(grid_sizes.shape(1) == 2
                     && grids.shape(0) == size_t(a.nsky)
                     && grids.shape(1) == 6
                     && grid_cells.shape(0) == size_t(a.nsky),
                     "grid_sizes, grids and grid_cells need a row per grid");
-            require(targets.shape(0) == weights.shape(0),
-                    "targets and weights must have the same length");
+            require(targets.shape(0) == shares.shape(0),
+                    "targets and shares must have the same length");
+            a.grid_sizes = grid_sizes.data();
+            a.grids = grids.data();
+            a.grid_cells = grid_cells.data();
+            a.offsets = offsets.data();
+            a.targets = targets.data();
+            a.shares = shares.data();
+        }
+
+        require(moments.is_valid() == target_v.is_valid()
+                && moments.is_valid() == target_s.is_valid(),
+                "moments, target_v and target_s go together");
+        if (moments.is_valid())
+        {
             a.ntargets = int(target_v.shape(0));
             require(target_s.shape(0) == target_v.shape(0),
                     "target_v and target_s need one value per target");
@@ -149,16 +166,27 @@ struct Orbits
                     && moments.shape(2) == size_t(order + 2),
                     "moments must have the shape (norbits, ntargets, "
                     "order + 2)");
-            a.grid_sizes = grid_sizes.data();
-            a.grids = grids.data();
-            a.grid_cells = grid_cells.data();
-            a.offsets = offsets.data();
-            a.targets = targets.data();
-            a.weights = weights.data();
             a.target_v = target_v.data();
             a.target_s = target_s.data();
             a.order = order;
             a.moments = moments.data();
+        }
+
+        require(spectra.is_valid() == light.is_valid(),
+                "spectra and light go together");
+        if (spectra.is_valid())
+        {
+            require(light.shape(0) == norbits,
+                    "light needs one value per orbit");
+            require(!moments.is_valid()
+                    || spectra.shape(1) == size_t(a.ntargets),
+                    "spectra and moments need the same targets");
+            a.ntargets = int(spectra.shape(1));
+            a.light = light.data();
+            a.nchannels = int(spectra.shape(0));
+            a.channel_scale = channel_scale;
+            a.channel_offset = channel_offset;
+            a.spectra = spectra.data();
         }
 
         require(!steps.is_valid() || steps.shape(0) == starts.shape(0),
@@ -190,7 +218,7 @@ struct Orbits
                         nb::arg("table").noconvert(),
                         nb::arg("range").noconvert(),
                         nb::arg("starts").noconvert(),
-                        nb::arg("durations").noconvert(),
+                        nb::arg("turns"),
                         nb::arg("accuracy"),
                         nb::arg("max_steps"),
                         nb::arg("nsamples"),
@@ -206,11 +234,15 @@ struct Orbits
                         nb::arg("grid_cells").noconvert().none(),
                         nb::arg("offsets").noconvert().none(),
                         nb::arg("targets").noconvert().none(),
-                        nb::arg("weights").noconvert().none(),
+                        nb::arg("shares").noconvert().none(),
                         nb::arg("target_v").noconvert().none(),
                         nb::arg("target_s").noconvert().none(),
                         nb::arg("order"),
                         nb::arg("moments").noconvert().none(),
+                        nb::arg("light").noconvert().none(),
+                        nb::arg("channel_scale"),
+                        nb::arg("channel_offset"),
+                        nb::arg("spectra").noconvert().none(),
                         nb::arg("steps").noconvert().none(),
                         nb::arg("energies").noconvert().none());
     }

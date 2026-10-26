@@ -528,14 +528,15 @@ orbits_potential(
 }
 
 // Integrate and record the orbits (see gbkfit::orbits_integrate), each by
-// one thread: their times differ, so they are handed out one by one
+// one thread: their times differ, so they are handed out one by one; they
+// add to the spectra atomically
 template<typename T> void
 orbits_integrate(const OrbitArgs<T>& a)
 {
     #pragma omp parallel for schedule(dynamic)
     for(int k = 0; k < a.norbits; ++k) {
 
-        gbkfit::orbits_integrate(k, a);
+        gbkfit::orbits_integrate<atomic_add<T>>(k, a);
 
     }
 }

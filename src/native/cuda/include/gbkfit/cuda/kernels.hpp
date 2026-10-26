@@ -467,7 +467,7 @@ orbits_integrate(GBKFIT_GRID_CONSTANT const OrbitArgs<T> a)
     if (tid >= a.norbits)
         return;
 
-    gbkfit::orbits_integrate(tid, a);
+    gbkfit::orbits_integrate<atomic_add<T>>(tid, a);
 }
 
 } // namespace gbkfit::cuda::kernels

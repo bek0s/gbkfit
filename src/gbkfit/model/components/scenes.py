@@ -30,6 +30,7 @@ from .traits import RPTraitImage
 
 if TYPE_CHECKING:
     from ..galaxy import Galaxy
+    from .base import Component
 
 
 __all__ = [
@@ -103,6 +104,19 @@ class Scene:
         drawn.
         """
         return self._emitters
+
+    def component(self, galaxy: int, component: int) -> 'Component':
+        """Return a component of a galaxy, by their indices."""
+        return self._galaxies[galaxy].components()[component]
+
+    def component_names(self, galaxy: int, component: int) -> dict[str, str]:
+        """
+        Return the names of the parameters of a component of a galaxy (by
+        their indices) in the group of the galaxies, by their own names.
+        """
+        mapping = self._mappings[galaxy]
+        names = self._galaxies[galaxy].component_params(component)
+        return {param: mapping[name] for param, name in names.items()}
 
     def orbit_emitters(self) -> tuple[tuple[int, int], ...]:
         """

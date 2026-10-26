@@ -37,9 +37,10 @@ struct OrbitArgs
     PotentialArgs<T> potential;
 
     // The orbits: the start of each (starts[6k] to starts[6k + 5]: x, y, z
-    // (arcsec) and vx, vy, vz (km/s), in the frame of the spheroid) and
-    // the time for which it is integrated (durations[k], in arcsec /
-    // (km/s)), in time-symmetric kick-drift-kick leapfrog steps (Hut,
+    // (arcsec) and vx, vy, vz (km/s), in the frame of the spheroid), each
+    // integrated for turns periods of the circular orbit of its energy in
+    // the plane (see orbits_circular_period), in time-symmetric
+    // kick-drift-kick leapfrog steps (Hut,
     // Makino & McMillan 1995), each step the mean of accuracy / f at its
     // start and its end, f^2 = (|Phi_u| + v^2) / r^2 (the frequencies of
     // the circular orbit of its radius and of its crossing), and at most
@@ -53,7 +54,7 @@ struct OrbitArgs
     // of the outputs; otherwise k.
     int norbits = 0;
     const T* starts = nullptr;
-    const T* durations = nullptr;
+    T turns = 0;
     T accuracy = 0;
     int max_steps = 0;
     int nsamples = 0;
@@ -82,27 +83,39 @@ struct OrbitArgs
     // g[3] x + g[4] y + g[5] (g = grids + 6s), its cell (x, y) the cell
     // grid_cells[s] + y nx + x of the table: each cell c of the table
     // gives its light to the targets targets[e], each the share
-    // weights[e], for e in [offsets[c], offsets[c + 1]) (e.g. the shares
+    // shares[e], for e in [offsets[c], offsets[c + 1]) (e.g. the shares
     // of the Voronoi bins of an observation in the light of a point in
-    // the cell after the PSF). Each target t has a Gauss-Hermite series of
-    // the mean target_v[t] and the dispersion target_s[t] (km/s), of
-    // velocities on the line of sight (relative to that of the centre).
-    // The moments of orbit k in target t, at moments[(k ntargets + t)
-    // (order + 2) + m]: its light (m = 0), and gamma h_n (m = n + 1, n in
-    // [0, order]) of its velocities in the series of the target (see
-    // orbits_gauss_hermite).
+    // the cell after the PSF). Velocities are on the line of sight,
+    // relative to that of the centre.
     int nsky = 0;
     const int* grid_sizes = nullptr;
     const T* grids = nullptr;
     const long long* grid_cells = nullptr;
     const long long* offsets = nullptr;
     const int* targets = nullptr;
-    const T* weights = nullptr;
+    const T* shares = nullptr;
     int ntargets = 0;
+
+    // The moments of each orbit in the targets (optional): each target t
+    // has a Gauss-Hermite series of the mean target_v[t] and the
+    // dispersion target_s[t] (km/s); the moments of orbit k in target t,
+    // at moments[(k ntargets + t) (order + 2) + m], are its light (m = 0)
+    // and gamma h_n (m = n + 1, n in [0, order]) of its velocities in the
+    // series of the target (see orbits_gauss_hermite).
     const T* target_v = nullptr;
     const T* target_s = nullptr;
     int order = 0;
     T* moments = nullptr;
+
+    // The spectrum of all the orbits in each target (optional), of the
+    // light of orbit k light[k]: its light at the velocity v in the
+    // channel floor(channel_scale v + channel_offset) of nchannels, at
+    // spectra[c ntargets + t] (which the orbits add to together)
+    const T* light = nullptr;
+    int nchannels = 0;
+    T channel_scale = 0;
+    T channel_offset = 0;
+    T* spectra = nullptr;
 
     // The number of steps of each orbit (optional), and its energy
     // ((km/s)^2, optional) at its start (energies[2k]) and its end

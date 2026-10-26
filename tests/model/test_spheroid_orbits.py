@@ -92,9 +92,9 @@ def test_the_forces_of_a_flattened_spheroid_are_those_of_its_gravity(
 @pytest.mark.parametrize('q', [None, 0.6])
 def test_orbits_conserve_their_energy(driver, q):
     # 300 orbits from 0.01 to 10 kpc, of speeds of 0.2 to 1.2 times the
-    # circular speed in random directions, for 20 circular periods of
-    # their start: the time-symmetric steps keep the energy; and all their
-    # time is in the cells, which span all space
+    # circular speed in random directions, for 20 periods of the circular
+    # orbit of their energy: the time-symmetric steps keep the energy; and
+    # all their time is in the cells, which span all space
     rng = np.random.default_rng(3)
     x = random_points(rng, 300, (1e-2, 10))
     table = potential_of(q)
@@ -108,8 +108,7 @@ def test_orbits_conserve_their_energy(driver, q):
         nsamples=100, nphi=1, twins=False,
         cell_edges=(np.array([0, 1, 1e5]), np.array([0, 0.5, np.pi / 2])))
     records = integrator.integrate(
-        table, np.hstack((x, v)), 20 * 2 * np.pi * r / speed,
-        (GEOMETRY['posa'], GEOMETRY['incl']))
+        table, np.hstack((x, v)), 20, (GEOMETRY['posa'], GEOMETRY['incl']))
     errors = np.abs(records.energies[:, 1] / records.energies[:, 0] - 1)
     assert np.median(errors) < 1e-4
     assert errors.max() < 1e-2
@@ -150,8 +149,8 @@ def test_an_orbit_is_seen_in_the_geometry_of_its_spheroid(driver):
         driver, np.float64, 1, accuracy=0.01, max_steps=10 ** 6,
         nsamples=4000, nphi=4, twins=True, sky=[grid], order=1)
     records = integrator.integrate(
-        table, np.array([[R, 0, 0, 0, vc, 0]]),
-        np.array([2 * np.pi * R / vc]), (GEOMETRY['posa'], GEOMETRY['incl']),
+        table, np.array([[R, 0, 0, 0, vc, 0]]), 1,
+        (GEOMETRY['posa'], GEOMETRY['incl']),
         np.array([[GEOMETRY['xpos'], GEOMETRY['ypos']]]),
         (velocity, np.full(size * size, 30.0)))
     light, h0, _ = records.moments[0].T

@@ -8,18 +8,14 @@ import math
 from collections.abc import Mapping, Sequence
 
 import numpy as np
-import scipy.signal
-import scipy.sparse
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
-    OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid, circular_periods,
-    potential_at)
+    OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
 from gbkfit.observation import GroupPlan, ObservationGroup, ObservationSky
 from gbkfit.params import ParamValues, Solution, Solve, solve_together_rows
 from gbkfit.params._keys import element_name
-from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from .comparisons import Comparison
 
@@ -33,11 +29,6 @@ __all__ = [
 # The relative error of the light of the spheroid in the bins and in the
 # cells, which the orbits must hold (the constraints)
 _LIGHT_ERROR = 0.01
-# The smallest share of a bin in the light of a point of the sky that the
-# sky grids keep
-_SHARE_FLOOR = 1e-6
-# The most steps of an orbit, times those of its turns on a circle
-_STEPS_FACTOR = 100
 
 
 class OrbitGroup:
@@ -50,11 +41,12 @@ class OrbitGroup:
     At each evaluation, the orbits of the state of the spheroid (see
     OrbitLibraryState) are integrated once, on the driver of its galaxy,
     and recorded in the bins of every observation through its PSF (see
-    sky_grid), in the Gauss-Hermite series of the data of each bin (its V
+    RegionMoments.sky_grid), in the Gauss-Hermite series of the data of
+    each bin (its V
     and sigma; Rix et al. 1997): gamma h_m of each orbit, g_m. The model
-    of a bin is then linear in the light of the orbits w_k = L s_k f_k (L
-    the light of the cells, s_k the share of orbit k, its twin the same,
-    and f_k the solved factors, its weights):
+    of a bin is then linear in the light of the orbits w_k (see
+    OrbitLibraryState.orbit_light: their shares of the light times the
+    solved factors f_k, its weights):
 
         V = V_d + sqrt(2) sigma_d g_1 / gamma
         sigma = sigma_d (1 + sqrt(2) g_2 / gamma)
@@ -135,8 +127,10 @@ class OrbitGroup:
                     f"{spheroid.name()!r} on orbits: its PSF does not vary")
             self._data.append(_BinsData(observation, i))
         self._order = max(data.order for data in self._data)
-        self._grids = tuple(sky_grid(group.observations()[i])
-                            for i in observations)
+        self._grids = tuple(
+            observation.observable().sky_grid(
+                observation.instrument(), observation.oversampling())
+            for observation in (group.observations()[i] for i in observations))
         self._integrator: OrbitIntegrator | None = None
         self._ones: list[dict[str, dict[str, DeviceArray | None]]] = []
         # The values of the parameters of its last evaluation, and its
@@ -184,27 +178,20 @@ class OrbitGroup:
             self._prepare(state, group_plan)
         integrator = self._integrator
 
-        # The orbits, each for its turns of its circular period
-        driver = group_plan.galaxy_drivers()[self._galaxy]
-        starts = state.starts
-        potential, _ = potential_at(
-            driver, self._dtype, state.potential, starts[:, :3])
-        energies = potential + np.sum(starts[:, 3:] ** 2, axis=1) / 2
-        durations = state.turns * circular_periods(state.potential, energies)
+        # The orbits, in the series of the data of the bins
         centres = np.array([
             (m[names['xpos']], m[names['ypos']]) for m in moved])
         series = tuple(np.concatenate(columns) for columns in zip(*(
             data.series(m[names['vsys']])
             for data, m in zip(self._data, moved))))
         records = integrator.integrate(
-            state.potential, starts, durations,
+            state.potential, state.starts, state.turns,
             (values['posa'], values['incl']), centres, series)
 
         # The rows of the factors of the orbits: of the data (the
         # residuals of the comparisons), and of the light of the bins and
         # the cells (constraints)
-        light = state.cell_light.sum()
-        scales = np.repeat(light * state.shares / 2, 2)
+        scales = state.orbit_light(1.0)
         moments = records.moments.astype(np.float64) * scales[:, None, None]
         bins_light = np.concatenate([
             _bins_light(self._spheroid, values, grid, centre)
@@ -233,7 +220,7 @@ class OrbitGroup:
             first += data.nbins
         cells = records.cells.reshape(len(scales), -1) * scales[:, None]
         cell_light = state.cell_light.ravel()
-        held = cell_light > 1e-12 * light
+        held = cell_light > 1e-12 * cell_light.sum()
         constraints = np.vstack((
             moments[:, :, 0].T / bins_light[:, None],
             cells[:, held].T / cell_light[held, None])) / _LIGHT_ERROR
@@ -272,13 +259,11 @@ class OrbitGroup:
         and the models of the data plus 1 of each observation (whose
         residuals are the factors of its comparison).
         """
-        self._dtype = self._group.observations()[
-            self._observations[0]].dtype()
-        steps = state.turns * 2 * math.pi / state.accuracy
+        dtype = self._group.observations()[self._observations[0]].dtype()
         self._integrator = OrbitIntegrator(
-            group_plan.galaxy_drivers()[self._galaxy], self._dtype,
+            group_plan.galaxy_drivers()[self._galaxy], dtype,
             len(state.starts), accuracy=state.accuracy,
-            max_steps=int(_STEPS_FACTOR * steps), nsamples=state.samples,
+            max_steps=state.max_steps(), nsamples=state.samples,
             nphi=state.copies, twins=True, cell_edges=state.cell_edges,
             sky=self._grids, order=self._order)
         self._ones = []
@@ -379,49 +364,6 @@ class _BinsData:
         return {
             f'moment{m}': base + slope * sums[:, m + 1]
             for m, (base, slope) in self._parts(gamma).items()}
-
-
-def sky_grid(observation: ObservationSky) -> SkyGrid:
-    """
-    Return the grid of the sky of the bins of an observation of moments of
-    regions on a grid (see RegionMoments), and the share of each bin in
-    the light of a point in each cell (see SkyGrid): the pixels of the
-    bins, oversampled as its model (along x and y), and around them the
-    half size of its PSF; the share of a bin in a cell is its mask
-    correlated with the PSF there (the share of the light of a point that
-    the PSF puts in it), shares below 1e-6 left out.
-    """
-    regions = observation.observable().regions()
-    grid = regions.grid()
-    fx, fy = observation.oversampling()[:2]
-    step = grid.coords.step[:2]
-    psf = observation.instrument().psf()
-    kernel = np.ones((1, 1)) if psf is None else psf.asarray(
-        (step[0] / fx, step[1] / fy), rota=grid.coords.rota)
-    my, mx = kernel.shape[0] // 2, kernel.shape[1] // 2
-    index = np.repeat(np.repeat(regions.index(), fy, axis=0), fx, axis=1)
-    index = np.pad(index, ((my, my), (mx, mx)), constant_values=-1)
-    flipped = kernel[::-1, ::-1]
-    cells, bins, shares = [], [], []
-    for b in range(regions.nregions()):
-        ys, xs = np.nonzero(index == b)
-        y0, y1 = ys.min() - my, ys.max() + my + 1
-        x0, x1 = xs.min() - mx, xs.max() + mx + 1
-        mask = (index[y0:y1, x0:x1] == b).astype(float)
-        share = scipy.signal.fftconvolve(mask, flipped, mode='same')
-        yy, xx = np.nonzero(share > _SHARE_FLOOR)
-        cells.append((yy + y0) * index.shape[1] + xx + x0)
-        bins.append(np.full(len(yy), b))
-        shares.append(share[yy, xx])
-    # (pixel p covers [p - 1/2, p + 1/2), and f cells along each axis)
-    matrix, offset = gridutils.sky_to_pixel(grid)
-    f = np.array([fx, fy], dtype=float)
-    to_cells = np.column_stack((
-        f[:, None] * matrix, f * (offset + 0.5) + (mx, my)))
-    return SkyGrid(to_cells, index.shape, scipy.sparse.csr_array(
-        (np.concatenate(shares),
-         (np.concatenate(cells), np.concatenate(bins))),
-        shape=(index.size, regions.nregions())))
 
 
 def _bins_light(

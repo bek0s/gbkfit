@@ -15,7 +15,7 @@ from gbkfit.dataset import Data, DatasetRegionMoments
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
-from gbkfit.objective._orbits import _bins_light, sky_grid
+from gbkfit.objective._orbits import _bins_light
 from gbkfit.observation import (
     LikelihoodGaussian, ObservationGroup, ObservationSky, PixelSpectra,
     RegionMoments, line_of_sight_parser)
@@ -59,17 +59,20 @@ def bins(rota=0.0):
     return RegionsBins(index, step=(2, 2), rpix=(15.5, 15.5), rota=rota)
 
 
-def observation(regions, psf=1.0, oversampling=None):
+def observation(regions, psf=1.0, oversampling=None, data=None):
     """
-    pPXF kinematics of the stars in the bins (V 0 and sigma 150 km/s, h3
-    and h4 0), through a Gaussian PSF of the given dispersion (arcsec).
+    pPXF kinematics of the stars in the bins (by default V 0 and sigma 150
+    km/s, h3 and h4 0; or V, sigma, h3 and h4 by order), of the errors 5
+    km/s and 0.03, through a Gaussian PSF of the given dispersion
+    (arcsec).
     """
     n = regions.nregions()
+    data = data or {1: np.zeros(n), 2: np.full(n, 150.0), 3: np.zeros(n),
+                    4: np.zeros(n)}
+    errors = {1: 5.0, 2: 5.0, 3: 0.03, 4: 0.03}
     dataset = DatasetRegionMoments({
-        1: Data(np.zeros(n), error=np.full(n, 5.0)),
-        2: Data(np.full(n, 150.0), error=np.full(n, 5.0)),
-        3: Data(np.zeros(n), error=np.full(n, 0.03)),
-        4: Data(np.zeros(n), error=np.full(n, 0.03))}, regions)
+        m: Data(np.asarray(data[m], float), error=np.full(n, errors[m]))
+        for m in range(1, 5)}, regions)
     return ObservationSky(
         RegionMoments.from_data(
             dataset, method='gauss_hermite', spec_convention='log',
@@ -79,6 +82,11 @@ def observation(regions, psf=1.0, oversampling=None):
         lines=['stars'], data=dataset, dtype='float64',
         oversampling=oversampling,
         likelihood=LikelihoodGaussian(missing_residual=3))
+
+
+def sky_grid(obs):
+    """The sky grid of the bins of an observation (see SkyGrid)."""
+    return obs.observable().sky_grid(obs.instrument(), obs.oversampling())
 
 
 def galaxy(**changes):
@@ -192,3 +200,40 @@ def test_an_objective_models_the_bins_of_stars_on_orbits(driver):
     weights = np.array(list(objective.solved().values()))
     assert len(weights) == 400 and np.all(weights >= 0)
     assert 0 < objective.nnuisance() <= objective.nresiduals()
+
+
+def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
+    # Data made by the orbits, of the weights of their prior (1): the
+    # moments of the spectra of the weighted orbits, as the model of the
+    # bins without the objective (e.g. of outputs) gives them. With the
+    # weights there (a prior of the factors 1 of a tiny sigma), the model
+    # of the objective, of the series of the data and linear in the
+    # weights, is the data, but for the h1 and h2 that the data have in
+    # their own series (Rix et al. 1997 take them as 0; a fit of V, sigma,
+    # h3 and h4 together leaves terms of the order of h4 times the higher
+    # orders): within 2% in sigma (where h4 is -0.09) and 0.01 in h4
+    group = ObservationGroup([galaxy()], [observation(bins())])
+    model = group.plan(driver).model_h(
+        PROPERTIES | dict(stars_weights=np.ones(400)))[0]
+    data = {m: model[f'moment{m}']['d'] for m in range(1, 5)}
+    obs = observation(bins(), data=data)
+    group = ObservationGroup([galaxy()], [obs])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        stars_weights=dict(solve=dict(
+            type='gaussian', mean=1, sigma=1e-6, minimum=0,
+            likelihood='profiled'))))
+    objective = Objective(group.plan(driver), params.solves())
+    objective.chi2(params.evaluate())
+    np.testing.assert_allclose(
+        list(objective.solved().values()), 1, rtol=1e-6)
+    residuals = objective.residual_nddata_h(params.evaluate(), False)[0]
+    errors = {key: obs.data()[key].error() for key in residuals}
+    assert np.abs(data[4]).max() > 0.08
+    np.testing.assert_allclose(
+        residuals['moment1'] * errors['moment1'], 0, atol=1e-6)
+    assert np.all(
+        np.abs(residuals['moment2'] * errors['moment2']) < 0.02 * data[2])
+    np.testing.assert_allclose(
+        residuals['moment3'] * errors['moment3'], 0, atol=1e-6)
+    np.testing.assert_allclose(
+        residuals['moment4'] * errors['moment4'], 0, atol=0.01)

@@ -23,7 +23,6 @@ __all__ = [
     'OrbitRecords',
     'PotentialTable',
     'SkyGrid',
-    'circular_periods',
     'potential_at',
     'potential_table'
 ]
@@ -102,23 +101,6 @@ def potential_table(
         np.stack((phi, phi_u, phi_b, phi_ub), axis=-1))
 
 
-def circular_periods(
-        table: PotentialTable, energies: np.ndarray
-) -> np.ndarray:
-    """
-    Return the period (arcsec / (km/s)) of the circular orbit in the plane
-    of each energy ((km/s)^2) in a potential table: 2 pi R / v_c of the
-    radius R of the energy Phi(R) + v_c^2 / 2 (v_c^2 = dPhi / d ln R),
-    interpolated in ln(period) between the radii of the table; that of
-    the first or the last radius beyond them.
-    """
-    radii = np.exp(
-        table.lnr_zero + table.lnr_step * np.arange(len(table.values)))
-    phi, slope = table.values[:, 0, 0], table.values[:, 0, 1]
-    periods = 2 * np.pi * radii / np.sqrt(slope)
-    return np.exp(np.interp(energies, phi + slope / 2, np.log(periods)))
-
-
 @dataclasses.dataclass(frozen=True)
 class SkyGrid:
     """
@@ -139,17 +121,20 @@ class SkyGrid:
 @dataclasses.dataclass(frozen=True)
 class OrbitRecords:
     """
-    The records of orbits (see OrbitIntegrator.integrate): the time
-    fraction of each in each cell (an array of shape (norbits, ncell_r,
-    ncell_b)), its moments in each target of the sky (of shape (norbits,
-    ntargets, order + 2): its light, and gamma h_n for n in [0, order] of
-    its velocities, see the native OrbitArgs), and the steps of the
-    integration of each orbit and its energy ((km/s)^2) at its start and
-    its end (of shape (n, 2)). With twins, orbit 2k + 1 of the cells and
-    the moments is orbit 2k reversed in time, both of start k.
+    The records of orbits (see OrbitIntegrator.integrate), each optional:
+    the time fraction of each orbit in each cell (an array of shape
+    (norbits, ncell_r, ncell_b)); its moments in each target of the sky
+    (of shape (norbits, ntargets, order + 2): its light, and gamma h_n for
+    n in [0, order] of its velocities, see the native OrbitArgs); the
+    spectrum of the light of the orbits in each target (of shape
+    (nchannels, ntargets)); and the steps of the integration of each
+    orbit and its energy ((km/s)^2) at its start and its end (of shape
+    (n, 2)). With twins, orbit 2k + 1 of the cells and the moments is
+    orbit 2k reversed in time, both of start k.
     """
     cells: np.ndarray | None
     moments: np.ndarray | None
+    spectra: np.ndarray | None
     steps: np.ndarray
     energies: np.ndarray
 
@@ -157,12 +142,16 @@ class OrbitRecords:
 class OrbitIntegrator:
     """
     The integration of orbits in the potential of a galaxy and their
-    records (see the native OrbitArgs), on the device of a driver, in
+    records (see the native OrbitArgs), on the device of a driver: each
+    orbit for some turns of the circular orbit of its energy, in
     time-symmetric leapfrog steps of the given accuracy (each the radians
     of the circular orbit of its radius, and of its crossing time), at
-    most max_steps of them, each orbit recorded at nsamples times, on the
-    sky in 2 nphi copies (turned about the axis and mirrored about the
-    plane), and with twins reversed in time too.
+    most max_steps of them, recorded at nsamples times, on the sky in 2
+    nphi copies (turned about the axis and mirrored about the plane), and
+    with twins reversed in time too. It records the time of each orbit in
+    cells, and in the targets of the sky its moments in their series
+    (with an order) or the spectrum of all their light (with channels),
+    or both.
 
     Parameters
     ----------
@@ -188,7 +177,16 @@ class OrbitIntegrator:
     sky : sequence of SkyGrid, optional
         The grids of the sky, their targets one after the other.
     order : int, optional
-        The highest order of the Gauss-Hermite series of the targets.
+        The highest order of the Gauss-Hermite series of the targets, for
+        the moments of the orbits.
+    nchannels : int, optional
+        The number of the channels of the spectra of the targets.
+
+    Raises
+    ------
+    ValueError
+        If the shares of a grid are not one row per cell, or a sky goes
+        without moments or spectra.
     """
 
     def __init__(
@@ -204,8 +202,12 @@ class OrbitIntegrator:
             twins: bool,
             cell_edges: tuple[np.ndarray, np.ndarray] | None = None,
             sky: Sequence[SkyGrid] = (),
-            order: int = 4
+            order: int | None = None,
+            nchannels: int | None = None
     ):
+        if bool(sky) != (order is not None or nchannels is not None):
+            raise ValueError(
+                "a sky goes with the moments of the orbits or their spectra")
         self._driver = driver
         self._dtype = np.dtype(dtype)
         self._orbits = driver.native_class('Orbits', dtype)
@@ -233,7 +235,7 @@ class OrbitIntegrator:
         self._sky = None
         self._grids = ()
         self._moments = None
-        self._ntargets = 0
+        self._spectra = None
         if sky:
             shares = [scipy.sparse.csr_array(grid.shares) for grid in sky]
             if any(s.shape[0] != grid.shape[0] * grid.shape[1]
@@ -243,7 +245,7 @@ class OrbitIntegrator:
             first_cells = np.cumsum([0] + [len(s.indptr) for s in shares])
             first_entries = np.cumsum([0] + [s.nnz for s in shares])
             first_targets = np.cumsum([0] + [s.shape[1] for s in shares])
-            self._ntargets = int(first_targets[-1])
+            ntargets = int(first_targets[-1])
             self._grids = tuple(np.asarray(grid.cells, float) for grid in sky)
             self._sky = dict(
                 grid_sizes=device(
@@ -255,26 +257,28 @@ class OrbitIntegrator:
                 targets=device(np.concatenate([
                     s.indices + first for s, first
                     in zip(shares, first_targets)]), np.int32),
-                weights=device(
+                shares=device(
                     np.concatenate([s.data for s in shares]), dtype))
-            self._moments = driver.mem_alloc_d(
-                (recorded, self._ntargets, order + 2), dtype)
+            if order is not None:
+                self._moments = driver.mem_alloc_d(
+                    (recorded, ntargets, order + 2), dtype)
+            if nchannels is not None:
+                self._spectra = driver.mem_alloc_d(
+                    (nchannels, ntargets), dtype)
 
         self._steps = driver.mem_alloc_d((norbits,), np.int32)
         self._energies = driver.mem_alloc_d((norbits, 2), dtype)
-
-    def ntargets(self) -> int:
-        """Return the number of the targets of the sky."""
-        return self._ntargets
 
     def integrate(
             self,
             table: PotentialTable,
             starts: np.ndarray,
-            durations: np.ndarray,
+            turns: float,
             geometry: tuple[float, float],
             centres: np.ndarray | None = None,
-            series: tuple[np.ndarray, np.ndarray] | None = None
+            series: tuple[np.ndarray, np.ndarray] | None = None,
+            light: np.ndarray | None = None,
+            channels: tuple[float, float] | None = None
     ) -> OrbitRecords:
         """
         Integrate the orbits and record them.
@@ -287,8 +291,9 @@ class OrbitIntegrator:
             The start of each orbit, an array of shape (norbits, 6): x, y,
             z (arcsec) and vx, vy, vz (km/s), in the frame of the
             spheroid.
-        durations : np.ndarray
-            The time of each orbit (arcsec / (km/s)).
+        turns : float
+            How long each orbit is integrated, in periods of the circular
+            orbit of its energy in the plane.
         geometry : tuple of float
             The position angle and the inclination of the spheroid
             (degrees).
@@ -297,7 +302,15 @@ class OrbitIntegrator:
             of shape (ngrids, 2): x, y), with a sky only.
         series : tuple of np.ndarray, optional
             The mean and the dispersion (km/s) of the Gauss-Hermite series
-            of each target of the sky, with a sky only.
+            of each target of the sky, with its moments only.
+        light : np.ndarray, optional
+            The light of each orbit (of each twin after its orbit), with
+            spectra only.
+        channels : tuple of float, optional
+            The map of the velocities (km/s, relative to that of the
+            centre) to the channels of the spectra, with spectra only: a
+            velocity v is in the channel floor(channels[0] v +
+            channels[1]).
 
         Returns
         -------
@@ -305,21 +318,25 @@ class OrbitIntegrator:
             The records, on the host.
         """
         driver, dtype = self._driver, self._dtype
-        if (series is None or centres is None) != (self._sky is None):
+        if (centres is None) != (self._sky is None) \
+                or (series is None) != (self._moments is None) \
+                or (light is None or channels is None) \
+                != (self._spectra is None):
             raise ValueError(
-                "the centres of the grids and the series of the targets go "
-                "with a sky")
-        if len(starts) != self._norbits or len(durations) != self._norbits:
+                "the centres of the grids go with a sky, the series of the "
+                "targets with moments, and the light and the channels with "
+                "spectra")
+        if len(starts) != self._norbits:
             raise ValueError(
                 f"the integrator has {self._norbits} orbits; it is given "
-                f"{len(starts)} starts and {len(durations)} durations")
+                f"{len(starts)} starts")
 
         def device(array: npt.ArrayLike) -> DeviceArray:
             return driver.mem_copy_h2d(np.ascontiguousarray(array, dtype))
 
         sky = dict.fromkeys((
             'grid_sizes', 'grids', 'grid_cells', 'offsets', 'targets',
-            'weights', 'target_v', 'target_s'))
+            'shares', 'target_v', 'target_s', 'light'))
         if self._sky is not None:
             # (the maps of the grids from the centre of the spheroid)
             grids = [
@@ -327,24 +344,32 @@ class OrbitIntegrator:
                     cells[:, :2], cells[:, 2] + cells[:, :2] @ centre))
                 for cells, centre in zip(self._grids, centres)]
             sky |= self._sky | dict(
-                grids=device([grid.ravel() for grid in grids]),
+                grids=device([grid.ravel() for grid in grids]))
+        if series is not None:
+            sky |= dict(
                 target_v=device(series[0]), target_s=device(series[1]))
+        if light is not None:
+            sky |= dict(light=device(light))
+            driver.mem_fill(self._spectra, 0)
         cell_r, cell_b = self._cell_edges or (None, None)
         self._orbits.integrate(
             table=device(table.values),
             range=device([table.lnr_zero, table.lnr_step]),
-            starts=device(starts), durations=device(durations),
+            starts=device(starts), turns=turns,
             **self._options, posa=geometry[0], incl=geometry[1],
             cell_r=cell_r, cell_b=cell_b, cells=self._cells,
-            **sky, order=self._order, moments=self._moments,
+            **sky, order=self._order or 0, moments=self._moments,
+            channel_scale=0 if channels is None else channels[0],
+            channel_offset=0 if channels is None else channels[1],
+            spectra=self._spectra,
             steps=self._steps, energies=self._energies)
+
+        def host(array: DeviceArray | None) -> np.ndarray | None:
+            return None if array is None else driver.mem_copy_d2h(array)
         return OrbitRecords(
-            cells=None if self._cells is None
-            else driver.mem_copy_d2h(self._cells),
-            moments=None if self._moments is None
-            else driver.mem_copy_d2h(self._moments),
-            steps=driver.mem_copy_d2h(self._steps),
-            energies=driver.mem_copy_d2h(self._energies))
+            cells=host(self._cells), moments=host(self._moments),
+            spectra=host(self._spectra), steps=host(self._steps),
+            energies=host(self._energies))
 
 
 def potential_at(

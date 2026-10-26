@@ -281,16 +281,76 @@ orbits_gauss_hermite(T w, T weight, int order, T* out)
     }
 }
 
+// The period (arcsec / (km/s)) of the circular orbit in the plane of an
+// energy ((km/s)^2) in a potential (see PotentialArgs): 2 pi R / v_c of
+// the radius R of the energy Phi(R) + v_c^2 / 2 (v_c^2 = Phi_u), its ln
+// linear in the energy between the radii of the table; that of the first
+// or the last radius beyond them
+template<typename T> constexpr T
+orbits_circular_period(const PotentialArgs<T>& p, T energy)
+{
+    // (the energy and the ln of the period of the radius of node i)
+    const auto node = [&p](int i, T& e, T& ln_period) {
+        const T* v = p.values + 4 * i * p.nb;
+        const T r = std::exp(p.range[0] + i * p.range[1]);
+        e = v[0] + v[1] / 2;
+        ln_period = std::log(2 * PI<T> * r / std::sqrt(v[1]));
+    };
+    T e0, ln0, e1, ln1;
+    node(0, e0, ln0);
+    node(p.nr - 1, e1, ln1);
+    if (!(energy > e0))
+        return std::exp(ln0);
+    if (!(energy < e1))
+        return std::exp(ln1);
+    int lo = 0, hi = p.nr - 1;
+    while (hi - lo > 1)
+    {
+        const int mid = (lo + hi) / 2;
+        T e, ln_period;
+        node(mid, e, ln_period);
+        (energy < e ? hi : lo) = mid;
+    }
+    node(lo, e0, ln0);
+    node(hi, e1, ln1);
+    return std::exp(ln0 + (ln1 - ln0) * (energy - e0) / (e1 - e0));
+}
+
+// Add the light of a copy of a sample of an orbit (see OrbitArgs) at the
+// velocity v on the line of sight to the moments of the orbit (of index
+// orbit) in target t, of the share of the copy in the target
+template<typename T> constexpr void
+orbits_record_moments(
+        long long orbit, int t, T v, T share, const OrbitArgs<T>& a)
+{
+    const int width = a.order + 2;
+    T* out = a.moments + (orbit * a.ntargets + t) * width;
+    out[0] += share;
+    orbits_gauss_hermite(
+            (v - a.target_v[t]) / a.target_s[t], share, a.order, out + 1);
+}
+
+// Add light at the velocity v on the line of sight to the spectrum of
+// target t (see OrbitArgs), in its channel, if any, with AddFunT (atomic
+// where the orbits are integrated in parallel)
+template<auto AddFunT, typename T> constexpr void
+orbits_record_spectrum(int t, T v, T light, const OrbitArgs<T>& a)
+{
+    const T channel = a.channel_scale * v + a.channel_offset;
+    if (!(channel >= 0 && channel < a.nchannels))
+        return;
+    AddFunT(a.spectra + (long long)(channel) * a.ntargets + t, light);
+}
+
 // Record a copy of a sample of orbit k on the sky: at the point (x, y)
 // of the sky with the velocity v on the line of sight, of the given
-// weight, in the targets of the cell of each grid that holds it (see
-// OrbitArgs)
-template<typename T> constexpr void
+// weight, in the targets of the cell of each grid that holds it, with
+// its twin (see OrbitArgs); AddFunT adds to the spectra
+template<auto AddFunT, typename T> constexpr void
 orbits_record_sky(
         int k, T x, T y, T v, T weight,
         const OrbitArgs<T>& a)
 {
-    const int width = a.order + 2;
     const long long orbit = a.twins ? 2 * k : k;
     for (int s = 0; s < a.nsky; ++s)
     {
@@ -305,19 +365,20 @@ orbits_record_sky(
         for (long long e = a.offsets[cell]; e < a.offsets[cell + 1]; ++e)
         {
             const int t = a.targets[e];
-            const T share = weight * a.weights[e];
-            const T mean = a.target_v[t];
-            const T dispersion = a.target_s[t];
-            T* out = a.moments + (orbit * a.ntargets + t) * width;
-            out[0] += share;
-            orbits_gauss_hermite(
-                    (v - mean) / dispersion, share, a.order, out + 1);
-            if (a.twins)
+            const T share = weight * a.shares[e];
+            if (a.moments)
             {
-                out += (long long)a.ntargets * width;
-                out[0] += share;
-                orbits_gauss_hermite(
-                        (-v - mean) / dispersion, share, a.order, out + 1);
+                orbits_record_moments(orbit, t, v, share, a);
+                if (a.twins)
+                    orbits_record_moments(orbit + 1, t, -v, share, a);
+            }
+            if (a.spectra)
+            {
+                orbits_record_spectrum<AddFunT>(
+                        t, v, share * a.light[orbit], a);
+                if (a.twins)
+                    orbits_record_spectrum<AddFunT>(
+                            t, -v, share * a.light[orbit + 1], a);
             }
         }
     }
@@ -327,8 +388,8 @@ orbits_record_sky(
 // frame of its spheroid), at sample n of it (see OrbitArgs): in its cell,
 // and in the targets of the sky, of its copies, projected by the matrix
 // sky (the rows of the sky x, the sky y and the line of sight, see
-// orbits_integrate)
-template<typename T> constexpr void
+// orbits_integrate); AddFunT adds to the spectra
+template<auto AddFunT, typename T> constexpr void
 orbits_record(
         int k, int n, const T* x, const T* v,
         const T (&sky)[3][3], const OrbitArgs<T>& a)
@@ -378,14 +439,15 @@ orbits_record(
                     + sky[1][2] * pz;
             const T sv = sky[2][0] * pvx + sky[2][1] * pvy
                     + sky[2][2] * pvz;
-            orbits_record_sky(k, sx, sy, sv, share, a);
+            orbits_record_sky<AddFunT>(k, sx, sy, sv, share, a);
         }
     }
 }
 
 // Integrate orbit k and record it (see OrbitArgs): its outputs, which
-// only it writes to, from 0
-template<typename T> constexpr void
+// only it writes to, from 0, and the spectra, which AddFunT adds to (from
+// 0 before)
+template<auto AddFunT, typename T> constexpr void
 orbits_integrate(int k, const OrbitArgs<T>& a)
 {
     const int norbits = a.twins ? 2 : 1;
@@ -432,7 +494,8 @@ orbits_integrate(int k, const OrbitArgs<T>& a)
     };
     const T start_energy = energy(start);
 
-    const T duration = a.durations[k];
+    const T duration = a.turns * orbits_circular_period(
+            a.potential, start_energy);
     const T accuracy = a.accuracy;
     T t = 0;
     int n = 0;
@@ -453,7 +516,7 @@ orbits_integrate(int k, const OrbitArgs<T>& a)
                 break;
             T x[3], v[3];
             orbits_interpolate(start, end, dt, (time - t) / dt, x, v);
-            orbits_record(k, n, x, v, sky, a);
+            orbits_record<AddFunT>(k, n, x, v, sky, a);
         }
         t += dt;
         start = end;

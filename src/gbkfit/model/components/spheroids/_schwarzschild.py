@@ -13,6 +13,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
 import scipy.integrate
 
 from gbkfit.driver import Driver
@@ -63,6 +64,8 @@ _CELL_INNER = 1e-6
 _ACCURACY = 0.02
 _SAMPLES = 2000
 _COPIES = 4
+# The most steps of an orbit, times those of its turns on a circle
+_STEPS_FACTOR = 100
 
 
 class SchwarzschildKinematics(SpheroidKinematics):
@@ -187,6 +190,23 @@ class OrbitLibraryState(ComponentState):
     accuracy: float = _ACCURACY
     samples: int = _SAMPLES
     copies: int = _COPIES
+
+    def max_steps(self) -> int:
+        """
+        Return the most steps of an orbit: 100 times those of its turns on
+        a circle.
+        """
+        return int(_STEPS_FACTOR * self.turns * 2 * math.pi / self.accuracy)
+
+    def orbit_light(self, factors: npt.ArrayLike) -> np.ndarray:
+        """
+        Return the light of each orbit and of its twin (2k and 2k + 1), of
+        the factors of their shares of the light (their weights, see
+        SchwarzschildKinematics): the light of the cells times its share
+        times its factor, half of it each.
+        """
+        return np.repeat(self.cell_light.sum() * self.shares / 2, 2) \
+            * np.asarray(factors, dtype=float)
 
 
 def orbit_library(

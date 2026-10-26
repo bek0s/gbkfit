@@ -3,11 +3,14 @@ from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
+import scipy.signal
+import scipy.sparse
 
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LineEmission
+from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
@@ -17,8 +20,6 @@ from ._region_sums import RegionSumsPlan, flux_weights
 from .base import HostModelData, ModelData, Observable, ObservablePlan
 
 if TYPE_CHECKING:
-    import scipy.sparse
-
     from gbkfit.model import Scene
     from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
@@ -29,6 +30,11 @@ if TYPE_CHECKING:
 __all__ = [
     'RegionMoments'
 ]
+
+
+# The smallest share of a bin in the light of a point of the sky that the
+# sky grids of orbits keep (see RegionMoments.sky_grid)
+_SHARE_FLOOR = 1e-6
 
 
 class RegionMoments(Observable):
@@ -334,13 +340,67 @@ spec_medium, method : optional
                 "region_moments does not support pixel_weights yet")
         if scene.orbit_emitters():
             self._check_orbits(scene, flux_scale)
-            return OrbitMomentsPlan()
+            return OrbitMomentsPlan(
+                self, scene, instrument, oversampling, driver, dtype)
         dcube = _moments.spectra_dcube(
             self, oversampling, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, scene, line_of_sight,
             foreground, dtype, flux_scale)
 
+
+    def sky_grid(
+            self, instrument: Instrument, oversampling: Sequence[int]
+    ) -> SkyGrid:
+        """
+        Return the grid of the sky of its bins for orbits (see SkyGrid),
+        through the PSF of an instrument: the pixels of the bins, of the
+        given oversampling (along x and y, as that of the model), and
+        around them the half size of the PSF; the share of a bin in the
+        light of a point in a cell is its mask correlated with the PSF there
+        (the share of the light of the point that the PSF puts in it),
+        shares below 1e-6 left out.
+
+        Raises
+        ------
+        ConfigError
+            If its regions are not bins (on a grid).
+        """
+        grid = self._regions.grid()
+        if grid is None:
+            raise ConfigError(
+                "orbits are recorded in bins of the pixels of a grid, not in "
+                "apertures")
+        fx, fy = oversampling[:2]
+        step = grid.coords.step[:2]
+        psf = instrument.psf()
+        kernel = np.ones((1, 1)) if psf is None else psf.asarray(
+            (step[0] / fx, step[1] / fy), rota=grid.coords.rota)
+        my, mx = kernel.shape[0] // 2, kernel.shape[1] // 2
+        index = np.repeat(
+            np.repeat(self._regions.index(), fy, axis=0), fx, axis=1)
+        index = np.pad(index, ((my, my), (mx, mx)), constant_values=-1)
+        flipped = kernel[::-1, ::-1]
+        cells, bins, shares = [], [], []
+        for b in range(self._regions.nregions()):
+            ys, xs = np.nonzero(index == b)
+            y0, y1 = ys.min() - my, ys.max() + my + 1
+            x0, x1 = xs.min() - mx, xs.max() + mx + 1
+            mask = (index[y0:y1, x0:x1] == b).astype(float)
+            share = scipy.signal.fftconvolve(mask, flipped, mode='same')
+            yy, xx = np.nonzero(share > _SHARE_FLOOR)
+            cells.append((yy + y0) * index.shape[1] + xx + x0)
+            bins.append(np.full(len(yy), b))
+            shares.append(share[yy, xx])
+        # (pixel p covers [p - 1/2, p + 1/2), and f cells along each axis)
+        matrix, offset = gridutils.sky_to_pixel(grid)
+        f = np.array([fx, fy], dtype=float)
+        to_cells = np.column_stack((
+            f[:, None] * matrix, f * (offset + 0.5) + (mx, my)))
+        return SkyGrid(to_cells, index.shape, scipy.sparse.csr_array(
+            (np.concatenate(shares),
+             (np.concatenate(cells), np.concatenate(bins))),
+            shape=(index.size, self._regions.nregions())))
 
     def _check_orbits(self, scene: 'Scene', flux_scale: str | None) -> None:
         """
@@ -349,13 +409,13 @@ spec_medium, method : optional
         method gauss_hermite and the orders 1 to M (V, sigma, h3 ... hM),
         without a flux scale.
         """
-        if sum(len(emitters) for emitters in scene.emitters()) \
-                != len(scene.orbit_emitters()):
+        if sum(len(emitters) for emitters in scene.emitters()) != 1 \
+                or len(scene.orbit_emitters()) != 1:
             raise ConfigError(
                 "moments of regions that see stars on orbits whose weights "
                 "are solved (e.g. of a spheroid of Schwarzschild kinematics) "
-                "see only them: give the observation the components or the "
-                "lines of those stars only")
+                "see only them, of one component: give the observation that "
+                "component or the lines of its stars only")
         if self._regions.grid() is None:
             raise ConfigError(
                 "moments of stars on orbits whose weights are solved are of "
@@ -377,11 +437,62 @@ spec_medium, method : optional
 
 class OrbitMomentsPlan(ObservablePlan):
     """
-    The plan of moments of regions that see stars on orbits whose weights
-    are solved (see Component.orbit_weights): an objective models them,
-    from the orbits and the data (see objective.Objective); they have no
-    model of their own (yet).
+    The moments of the bins of stars on orbits whose weights are solved
+    (see Component.orbit_weights), at given weights (e.g. those that an
+    objective solves; it models the bins itself in its fits, see
+    objective.Objective): the orbits of the state of their spheroid (see
+    OrbitLibraryState), integrated and recorded with the light of their
+    weights in the bins, through the PSF (see RegionMoments.sky_grid), as
+    the spectrum of each bin on the spectral axis of the moments, whose
+    moments are measured as those of the spectra of any regions (see
+    RegionMomentsPlan).
+
+    Parameters
+    ----------
+    moments : RegionMoments
+        The moments.
+    scene : Scene
+        What they see: the stars of one component, on orbits.
+    instrument : Instrument
+        The instrument of their observation.
+    oversampling : Sequence of int
+        The oversampling of their model (along x and y).
+    driver : Driver
+        The driver.
+    dtype : np.dtype
+        The precision of the model.
     """
+
+    def __init__(
+            self,
+            moments: RegionMoments,
+            scene: 'Scene',
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            driver: Driver,
+            dtype: np.dtype
+    ):
+        (galaxy, component), = scene.orbit_emitters()
+        self._galaxy = galaxy
+        self._component = component
+        self._names = scene.component_names(galaxy, component)
+        self._weights = scene.component(galaxy, component).orbit_weights()
+        self._grid = moments.sky_grid(instrument, oversampling)
+        self._driver = driver
+        self._dtype = dtype
+        nregions = moments.regions().nregions()
+        # (the spectral axis: its channels, their width, and the velocity
+        # of the centre of the first)
+        self._nchannels = moments.spec_size()
+        self._step = moments.spec_step()
+        self._zero = moments.spec_rval() \
+            - (self._nchannels / 2 - 0.5) * self._step
+        self._spectra = driver.mem_alloc_d(
+            (self._nchannels, 1, nregions), dtype)
+        self._moments = _moments.MomentsPlan(
+            driver, (nregions, 1), moments.orders(), moments.flux_floor(),
+            moments.method(), dtype)
+        self._integrator: OrbitIntegrator | None = None
 
     def evaluate(
             self,
@@ -389,7 +500,33 @@ class OrbitMomentsPlan(ObservablePlan):
             galaxies: Sequence[GalaxyState],
             out_extra: Extras | None
     ) -> ModelData:
-        raise NotImplementedError(_ORBIT_MODEL)
+        state = galaxies[self._galaxy].states[self._component]
+        values = {name: params[full] for name, full in self._names.items()}
+        if self._integrator is None:
+            self._integrator = OrbitIntegrator(
+                self._driver, self._dtype, len(state.starts),
+                accuracy=state.accuracy, max_steps=state.max_steps(),
+                nsamples=state.samples, nphi=state.copies, twins=True,
+                sky=[self._grid], nchannels=self._nchannels)
+        # (channel j holds the velocities vsys + v from zero + (j - 1/2)
+        # step to zero + (j + 1/2) step)
+        records = self._integrator.integrate(
+            state.potential, state.starts, state.turns,
+            (values['posa'], values['incl']),
+            np.array([[values['xpos'], values['ypos']]]),
+            light=state.orbit_light(values[self._weights]),
+            channels=(1 / self._step,
+                      (values['vsys'] - self._zero) / self._step + 0.5))
+        self._driver.mem_copy_h2d(
+            np.ascontiguousarray(records.spectra[:, None, :], self._dtype),
+            self._spectra)
+        moments = self._moments.evaluate(
+            (1.0, 1.0, self._step), (0.0, 0.0, self._zero), self._spectra,
+            None)
+        # The moments of the regions are vectors
+        return {
+            key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])
+            for key, value in moments.items()}
 
     def mock(
             self,
@@ -399,17 +536,12 @@ class OrbitMomentsPlan(ObservablePlan):
             rng: np.random.Generator,
             ndraws: int
     ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
-        raise NotImplementedError(_ORBIT_MODEL)
+        raise NotImplementedError(
+            "mock data of the moments of stars on orbits are not available "
+            "yet: their spectra have no noise of recorded data")
 
     def has_exact_errors(self) -> bool:
         return False
-
-
-# Why moments of stars on orbits have no model of their own
-_ORBIT_MODEL = (
-    "the moments of stars on orbits whose weights are solved are modelled by "
-    "an objective, which solves the weights (see objective.Objective); "
-    "their model without one, of given weights, is not available yet")
 
 
 class RegionMomentsPlan(_detail.DCubePlanBase):
