@@ -155,6 +155,13 @@ def _eval(
             mock = _load_mock(cfg['mock'], group_plan.group().nobservations())
 
     _log.info("calculating model parameters...")
+    if missing := [
+            name for name, info in params.free_properties().items()
+            if 'value' not in info]:
+        with parseutils.config_path('params'):
+            raise ConfigError(
+                f"an evaluation is at the 'value' of each free parameter; "
+                f"these have none: {missing}")
     param_values = setup.values() if objective is not None \
         else params.evaluate()
     run.write('params.json', 'params', dict(

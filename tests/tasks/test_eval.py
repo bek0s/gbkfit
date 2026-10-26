@@ -4,6 +4,7 @@ Tests for the eval task (gbkfit.tasks.eval).
 
 import json
 import pathlib
+import re
 import subprocess
 import sys
 
@@ -312,12 +313,17 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
         run, 'model', observation='maps', item='moment1').shape == (48, 48)
 
 
-def test_configuration_errors_are_reported_without_a_traceback(tmp_path):
+@pytest.mark.parametrize('incl, message', [
+    ('nonsense +', "error: params"),
+    # (a configuration of a sampler: evaluations are at the values)
+    (dict(min=20, max=80), r"these have none: \['incl'\]")])
+def test_configuration_errors_are_reported_without_a_traceback(
+        tmp_path, incl, message):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    config['params']['properties']['incl'] = 'nonsense +'
+    config['params']['properties']['incl'] = incl
     yaml.dump(config, tmp_path / 'config.yaml')
     result = run_task(
         tmp_path, 'eval', eval_options('model', 'config.yaml'))
     assert result.returncode == 1
-    assert "error: params" in result.stderr
+    assert re.search(message, result.stderr)
     assert 'Traceback' not in result.stderr
