@@ -302,6 +302,13 @@ class _BinsData:
                 f"sigma)")
         self.seen = masks[0]
         self.nbins = len(self.seen)
+        # (the series of a bin is about its sigma, which scales it: a sigma
+        # of 0 made every evaluation NaN, with a message of no use)
+        if not np.all(self.values['moment2'][self.seen] > 0):
+            raise ConfigError(
+                f"the bins of observation {index}, of stars on orbits, have "
+                f"a positive sigma (the series of each bin is about its V "
+                f"and sigma); mask those that do not")
         # (N_b = 1 + sum over even m >= 4 of h_m sqrt(m!) / m!!)
         self.norms = np.ones(self.nbins)
         for m in range(4, self.order + 1, 2):

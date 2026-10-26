@@ -161,6 +161,19 @@ def test_an_image_sees_the_light_of_stars_on_orbits(driver):
     assert np.isfinite(objective.chi2(params.evaluate()))
 
 
+def test_bins_of_stars_on_orbits_have_a_positive_sigma(driver):
+    # (each series is about the sigma of its bin: 0 gave NaN models)
+    n = bins().nregions()
+    data = {1: np.zeros(n), 2: np.full(n, 150.0), 3: np.zeros(n),
+            4: np.zeros(n)}
+    data[2][3] = 0
+    group = ObservationGroup([galaxy()], [observation(bins(), data=data)])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        stars_weights=dict(solve=SOLVE['solve'])))
+    with pytest.raises(ConfigError, match="have a positive sigma"):
+        Objective(group.plan(driver), params.solves())
+
+
 def test_the_weights_of_the_orbits_are_solved(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
