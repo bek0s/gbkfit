@@ -53,7 +53,8 @@ lmfit = ['lmfit']
 nautilus = ['nautilus-sampler']
 cmaes = ['cma']
 ultranest = ['ultranest']
-jwst = ['jwst']
+# (the datamodels of JWST files, and their transforms; not the pipeline)
+jwst = ['stdatamodels']
 
 [project.urls]
 Homepage = 'https://github.com/bek0s/gbkfit'

@@ -843,7 +843,7 @@ def test_nirspec_msa_spectra_of_a_source_in_a_slitlet():
     # A source in a slitlet of 3 shutters, observed at 3 nods, whose
     # background is the other nods: each exposure has the others, of the
     # sky moved by one or two pitches along the slit, of weights -1/2
-    pytest.importorskip('jwst')
+    pytest.importorskip('stdatamodels')
     import gbkfit.prep
     spectra = gbkfit.prep.nirspec_msa_spectra(
         os.environ['GBKFIT_TEST_NIRSPEC_CAL'])
@@ -881,7 +881,7 @@ def test_nirspec_msa_rectified_spectra_of_a_source_in_a_slitlet():
     # The s2d of 3 nods, each the background of the others, aligned on the
     # sky: each nod moved back to the sky, of weight 1/3, and the others
     # subtracted from it, of weights -1/6
-    pytest.importorskip('jwst')
+    pytest.importorskip('stdatamodels')
     import gbkfit.prep
     spectra = gbkfit.prep.nirspec_msa_rectified(
         os.environ['GBKFIT_TEST_NIRSPEC_S2D'],

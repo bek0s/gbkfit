@@ -1293,7 +1293,7 @@ def nirspec_msa_spectra(
     Read the spectra of a source in a slitlet of the micro-shutter array
     of JWST NIRSpec, of each of its exposures: from the cal file of the
     source of stage 3 of the pipeline, its cutouts of the detector, not
-    resampled (needs the package jwst).
+    resampled (needs the package stdatamodels: the extra jwst).
 
     The cutout of each exposure is the image of slitless spectra behind
     its shutters (see SlitlessSpectra). Its grid is that of the detector,
@@ -1343,7 +1343,7 @@ def nirspec_msa_spectra(
         micro-shutter array, or a slitlet has closed shutters between
         open ones or no shutter of the source.
     """
-    from jwst import datamodels
+    from stdatamodels.jwst import datamodels
     with datamodels.open(filename) as model:
         exposures = getattr(model, 'exposures', None)
         if not exposures or model.meta.exposure.type != 'NRS_MSASPEC':
@@ -1448,7 +1448,8 @@ def nirspec_msa_rectified(
     micro-shutter array of JWST NIRSpec: the s2d file of the source of
     stage 3 of the pipeline (its exposures resampled onto the sky by
     drizzle and combined), with the model of the instrument of the cal
-    file of the source (see nirspec_msa_spectra; needs the package jwst).
+    file of the source (see nirspec_msa_spectra; needs the package
+    stdatamodels: the extra jwst).
 
     The rectified spectra are the image of slitless spectra behind the
     shutters, resampled. Its grid is that of the s2d (columns along the
@@ -1494,7 +1495,7 @@ def nirspec_msa_rectified(
     """
     from gbkfit.dataset import Data, DatasetSlitlessSpectra
     from gbkfit.observation.observables.slitless_spectra import Exposure
-    from jwst import datamodels
+    from stdatamodels.jwst import datamodels
     with datamodels.open(cal_filename) as cal, \
             datamodels.open(s2d_filename) as s2d:
         exposures = getattr(cal, 'exposures', None)
