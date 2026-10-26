@@ -22,6 +22,16 @@ def test_blas_runs_on_one_thread_in_the_context():
     assert blas_threads() == before
 
 
+def test_contexts_at_once_take_the_fewest_threads():
+    before = blas_threads()
+    with threadutils.blas_limit(4):
+        assert blas_threads() == [min(4, n) for n in before]
+        with threadutils.single_threaded_blas():
+            assert blas_threads() == [1] * len(before)
+        assert blas_threads() == [min(4, n) for n in before]
+    assert blas_threads() == before
+
+
 def test_the_limit_lasts_while_any_thread_is_in_the_context():
     before = blas_threads()
     entered, leave = threading.Event(), threading.Event()

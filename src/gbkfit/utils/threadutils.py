@@ -5,11 +5,14 @@ The threads of the libraries that GBKFIT calls.
 import contextlib
 import functools
 import threading
+from collections.abc import Iterator
+from typing import Protocol
 
 import threadpoolctl
 
 
 __all__ = [
+    'blas_limit',
     'single_threaded_blas'
 ]
 
@@ -23,48 +26,75 @@ def _blas_libraries() -> threadpoolctl.ThreadpoolController:
     return threadpoolctl.ThreadpoolController().select(user_api='blas')
 
 
-class _SingleThreadedBlas:
+class _Limiter(Protocol):
+    """A limit of threads of threadpoolctl, which restores their own."""
+
+    def restore_original_limits(self) -> None: ...
+
+
+class _BlasLimits:
     """
-    The context of single_threaded_blas, one for all threads: the first
-    to enter it limits the BLAS libraries to one thread, and the last to
-    leave it restores their limits.
+    The contexts of blas_limit, one for all threads: the BLAS libraries
+    use the fewest threads of the contexts that threads are in, and their
+    own limits again once no thread is in one.
     """
 
     def __init__(self):
         self._lock = threading.Lock()
-        self._users = 0
-        self._limit = contextlib.ExitStack()
+        # The limits of the contexts entered (one per entry), the limit
+        # applied, and the limiter that restores the own limits
+        self._limits: list[int] = []
+        self._applied: int | None = None
+        self._limiter: _Limiter | None = None
 
-    def __enter__(self) -> None:
+    @contextlib.contextmanager
+    def limit(self, threads: int) -> Iterator[None]:
+        """Return a context of BLAS on at most the given threads."""
         with self._lock:
-            if self._users == 0:
-                self._limit.enter_context(_blas_libraries().limit(limits=1))
-            self._users += 1
+            self._limits.append(threads)
+            self._apply()
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._limits.remove(threads)
+                self._apply()
 
-    def __exit__(self, *exc_info: object) -> None:
-        with self._lock:
-            self._users -= 1
-            if self._users == 0:
-                self._limit.close()
+    def _apply(self) -> None:
+        """Apply the fewest threads of the contexts entered, if any."""
+        fewest = min(self._limits, default=None)
+        if fewest == self._applied:
+            return
+        if fewest is None:
+            assert self._limiter is not None
+            self._limiter.restore_original_limits()
+            self._limiter = None
+        elif self._limiter is None:
+            self._limiter = _blas_libraries().limit(limits=fewest)
+        else:
+            _blas_libraries().limit(limits=fewest)
+        self._applied = fewest
 
 
-_SINGLE_THREADED_BLAS = _SingleThreadedBlas()
+_BLAS_LIMITS = _BlasLimits()
 
 
-def single_threaded_blas() -> contextlib.AbstractContextManager:
+def blas_limit(threads: int) -> contextlib.AbstractContextManager:
     """
-    Return a context in which the BLAS libraries use one thread.
+    Return a context in which the BLAS libraries use at most the given
+    threads.
 
-    GBKFIT evaluates models with BLAS calls on small arrays (e.g. the
-    gravity of disks) between the OpenMP kernels of its host driver. The
-    threads of a multithreaded BLAS gain nothing there, and OpenBLAS keeps
-    them spinning for about 0.1 s after each call, on the cores that the
-    kernels need, which stalls the kernels. Their evaluations run in this
-    context. The limit applies to the whole process while any thread is
-    in the context (evaluations can run in several threads at once), and
-    to the libraries loaded when it is first used (gbkfit loads numpy and
-    scipy at import). Threads that spin from a call made before it keep
-    spinning.
+    The limit applies to the whole process while any thread is in the
+    context (evaluations can run in several threads at once), and to the
+    libraries loaded when it is first used (gbkfit loads numpy and scipy
+    at import); of contexts that threads are in at once, the fewest
+    threads. Threads that spin from a call made before it keep spinning
+    (see single_threaded_blas).
+
+    Parameters
+    ----------
+    threads : int
+        The most threads.
 
     Returns
     -------
@@ -72,4 +102,25 @@ def single_threaded_blas() -> contextlib.AbstractContextManager:
         The context; nested contexts, and contexts in several threads at
         once, are allowed.
     """
-    return _SINGLE_THREADED_BLAS
+    return _BLAS_LIMITS.limit(threads)
+
+
+def single_threaded_blas() -> contextlib.AbstractContextManager:
+    """
+    Return a context in which the BLAS libraries use one thread (see
+    blas_limit).
+
+    GBKFIT evaluates models with BLAS calls on small arrays (e.g. the
+    gravity of disks) between the OpenMP kernels of its host driver. The
+    threads of a multithreaded BLAS gain nothing there, and OpenBLAS keeps
+    them spinning for about 0.1 s after each call, on the cores that the
+    kernels need, which stalls the kernels. Their evaluations run in this
+    context.
+
+    Returns
+    -------
+    contextlib.AbstractContextManager
+        The context; nested contexts, and contexts in several threads at
+        once, are allowed.
+    """
+    return blas_limit(1)

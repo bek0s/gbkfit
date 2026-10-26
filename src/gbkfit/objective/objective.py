@@ -22,6 +22,13 @@ __all__ = [
 ]
 
 
+# The most threads of BLAS in the solves of the weights of orbits (see
+# Objective._solve_orbits): more lose to their overheads (an AICp solve
+# of 20000 weights on 1, 4, 8 and 22 threads of a 16-core laptop: 0.84,
+# 0.48, 0.52 and 2.1 s for 305 rows; 29, 12.4, 12.8 and 18.7 s for 2495)
+_ORBIT_BLAS_THREADS = 4
+
+
 class Merits(NamedTuple):
     """
     The numbers of an evaluation of an objective by which fitters judge
@@ -694,15 +701,13 @@ class Objective:
     ) -> None:
         """
         Solve the weights of the orbits of each orbit group (see
-        OrbitGroup), and put the models of its observations in models.
-        With BLAS on one thread (see threadutils.single_threaded_blas):
-        its threads lost more than they gained even in the solves of
-        thousands of rows.
+        OrbitGroup), and put the models of its observations in models,
+        with BLAS on at most _ORBIT_BLAS_THREADS threads.
         """
         group_plan = self._group_plan
         states = group_plan.galaxy_states(params)
         first = len(self._solved) + len(self._groups)
-        with threadutils.single_threaded_blas():
+        with threadutils.blas_limit(_ORBIT_BLAS_THREADS):
             for j, orbit in enumerate(self._orbits):
                 solution, orbit_models = orbit.evaluate(
                     params, states, group_plan)

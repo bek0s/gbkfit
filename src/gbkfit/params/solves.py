@@ -503,8 +503,12 @@ class _RowsSolver:
     priors: theirs, once, or one of all of them after another (see
     _chosen_together). Each of the latter starts from the solution of the
     last one: its dual y, its values above their minimum F (most stay so),
-    and their matrix A_F A_F^T (of the priors at a standard deviation of
-    1), which the standard deviation only scales.
+    and their matrix A_F B_F A_F^T (B the variances of the priors at a
+    standard deviation of 1), which the standard deviation only scales.
+    The matrix of new values F comes from that of the last ones, or from
+    that of all values (kept) without the others, or anew: whichever
+    takes the fewest columns (e.g. thousands change between distant
+    standard deviations, but few values are at their minimum).
     """
 
     def __init__(
@@ -523,6 +527,8 @@ class _RowsSolver:
         # The solution of the last standard deviation of all priors: its
         # dual, its free values and their matrix (None before one)
         self._last: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
+        # The matrix of all values, and its variances B (None before one)
+        self._all: tuple[np.ndarray, np.ndarray] | None = None
 
     def solve(self, sigma: float | None) -> tuple[Solution, float]:
         """
@@ -548,28 +554,24 @@ class _RowsSolver:
             return float(y @ y / 2 + np.sum(conjugates) - target @ y), values
 
         identity = np.eye(len(target))
+        factor = None
         if sigma is not None and self._last is not None:
             y, free, gram = self._last
         else:
-            y, free = None, np.ones(len(mean), dtype=bool)
-            gram = (rows * base) @ rows.T
-        factor = scipy.linalg.cho_factor(identity + scale * gram)
-        if y is None:
             # (from the solution without the minimum, all values free)
+            free = np.ones(len(mean), dtype=bool)
+            gram = self._all_matrix(base).copy()
+            factor = scipy.linalg.cho_factor(identity + scale * gram)
             y = scipy.linalg.cho_solve(factor, target - rows @ mean)
         value, values = dual(y)
         for _ in range(_ROWS_MAX_STEPS):
-            # (the Newton matrix, of the values entering and leaving F, or
-            # anew when most change)
+            # (the Newton matrix of the values F above their minimum)
             changed = free != (values > lower)
             free = values > lower
-            if 2 * changed.sum() > free.sum():
-                gram = (rows[:, free] * base[free]) @ rows[:, free].T
-            else:
-                sign = np.where(free[changed], 1.0, -1.0)
-                gram += (rows[:, changed] * (sign * base[changed])) \
-                    @ rows[:, changed].T
             if changed.any():
+                gram = self._matrix(gram, free, changed, base)
+                factor = None
+            if factor is None:
                 factor = scipy.linalg.cho_factor(identity + scale * gram)
             # (at the solution, the gradient of the dual is 0, to rounding)
             gradient = y + rows @ values - target
@@ -614,6 +616,42 @@ class _RowsSolver:
         return Solution(
             values, (values - mean) / sigmas, log_term, m_eff), \
             float(residuals @ residuals)
+
+    def _all_matrix(self, base: np.ndarray) -> np.ndarray:
+        """
+        Return the matrix A B A^T of all values, of the variances B (made
+        once for them).
+        """
+        if self._all is None or not np.array_equal(self._all[1], base):
+            self._all = (self._rows * base) @ self._rows.T, base
+        return self._all[0]
+
+    def _matrix(
+            self,
+            gram: np.ndarray,
+            free: np.ndarray,
+            changed: np.ndarray,
+            base: np.ndarray
+    ) -> np.ndarray:
+        """
+        Return the matrix A_F B A_F^T of the free values F, of the
+        variances B: from that of the values before the changed ones
+        changed, gram (updated in place), from that of all values without
+        the others, or anew, whichever takes the fewest columns.
+        """
+        rows = self._rows
+        nchanged, nfree = int(changed.sum()), int(free.sum())
+        nfixed = len(free) - nfree
+        if nchanged <= min(nfree, nfixed):
+            sign = np.where(free[changed], 1.0, -1.0)
+            gram += (rows[:, changed] * (sign * base[changed])) \
+                @ rows[:, changed].T
+            return gram
+        if nfixed <= nfree:
+            fixed = ~free
+            return self._all_matrix(base) \
+                - (rows[:, fixed] * base[fixed]) @ rows[:, fixed].T
+        return (rows[:, free] * base[free]) @ rows[:, free].T
 
 
 def _chosen_together(
