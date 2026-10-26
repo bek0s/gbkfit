@@ -619,6 +619,39 @@ def test_many_values_solved_on_few_rows_are_the_bounded_least_squares():
     assert np.mean(solution.values == 0) > 0.05
 
 
+def test_a_sigma_chosen_by_aicp_has_the_least_aicp():
+    # Of 300 values above 0 on 40 rows (e.g. the weights of orbits): the
+    # values of the sigma of the least AICp = chi2 of the data + 2 m_eff,
+    # within its range, as low as that of the best of a fine grid of
+    # sigmas, and inside the range (the data favour neither end)
+    rng = np.random.default_rng(6)
+    rows = rng.random((40, 300)) * (rng.random((40, 300)) < 0.2)
+    target = rows @ rng.exponential(1, 300) + rng.normal(size=40)
+
+    def aicp(solution):
+        residuals = rows @ solution.values - target
+        return residuals @ residuals + 2 * solution.m_eff
+    chosen = solve_together_rows(
+        [SolveGaussian(1.0, minimum=0.0, likelihood='profiled',
+                       sigma_aicp=[0.01, 100])], [300], rows, target)
+    grid = [aicp(solve_together_rows(
+        [SolveGaussian(1.0, sigma, 0.0, 'profiled')], [300], rows, target))
+        for sigma in np.geomspace(0.01, 100, 81)]
+    assert aicp(chosen) <= min(grid) + 1e-3
+    assert np.argmin(grid) not in (0, len(grid) - 1)
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(sigma=1.0, sigma_aicp=[0.1, 10]), "not both"),
+    (dict(), "not both"),
+    (dict(sigma_aicp=[10, 0.1], likelihood='profiled'), "increasing"),
+    (dict(sigma_aicp=[0.1, 10]), "'profiled'"),
+])
+def test_invalid_sigmas_chosen_by_aicp_are_refused(options, message):
+    with pytest.raises(ConfigError, match=message):
+        SolveGaussian(1.0, **options)
+
+
 def test_a_closed_objective_releases_its_memory_and_evaluates_again(driver):
     data = Data(np.random.default_rng(10).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(driver, data)

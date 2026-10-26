@@ -10,7 +10,7 @@ from the sums of that comparison, under its prior (see Solve).
 
 import abc
 import math
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import NamedTuple
 
 import numpy as np
@@ -40,6 +40,8 @@ LIKELIHOODS = ('integrated', 'profiled')
 
 # The most Newton steps of solve_together_rows
 _ROWS_MAX_STEPS = 100
+# The tolerance of ln(sigma) chosen by AICp (see SolveGaussian)
+_AICP_TOLERANCE = 1e-3
 
 
 class Solution(NamedTuple):
@@ -156,33 +158,52 @@ class SolveGaussian(Solve):
     those above it, and the integral has no exact formula (in more than
     one value): 'profiled' only.
 
+    The standard deviation can instead be chosen at each evaluation, in a
+    range (sigma_aicp), as the one of the least AICp = chi2 + 2 m_eff of
+    the data (Lipka & Thomas 2021; chi2 of the data alone, not of the
+    prior): the regularisation of the values that the data favour, e.g.
+    of the weights of orbits at each mass. It is found by a bounded
+    minimisation in ln(s), which changes smoothly with the data; the
+    log-likelihood takes the values 'profiled' (the integral of a prior
+    chosen by the data is not that of a prior).
+
     Parameters
     ----------
     mean : float
         The mean of the prior.
-    sigma : float
-        The standard deviation of the prior, finite and positive.
+    sigma : float, optional
+        The standard deviation of the prior, finite and positive; or else
+        sigma_aicp.
     minimum : float, optional
         The smallest value (e.g. 0 for a scale of the flux); none by
         default.
     likelihood : str, optional
         What the log-likelihood takes of the values: 'integrated' (the
         default) or 'profiled' (see Solve).
+    sigma_aicp : sequence of float, optional
+        The range of the standard deviation chosen by AICp (two finite
+        positive numbers, increasing), in place of sigma.
 
     Raises
     ------
     ConfigError
-        If the mean or the minimum is not finite, sigma is not finite and
-        positive, or likelihood is not one of LIKELIHOODS.
+        If the mean or the minimum is not finite, not one of sigma and
+        sigma_aicp is given, sigma is not finite and positive, sigma_aicp
+        not two of them increasing, likelihood is not one of LIKELIHOODS,
+        or it is 'integrated' with sigma_aicp.
     """
 
     @staticmethod
     def type() -> str:
         return 'gaussian'
 
-    def dump(self) -> dict[str, str | float]:
-        info: dict[str, str | float] = dict(
-            type=self.type(), mean=self._mean, sigma=self._sigma)
+    def dump(self) -> dict[str, str | float | list[float]]:
+        info: dict[str, str | float | list[float]] = dict(
+            type=self.type(), mean=self._mean)
+        if self._sigma_aicp is None:
+            info.update(sigma=self._sigma)
+        else:
+            info.update(sigma_aicp=list(self._sigma_aicp))
         if self._minimum is not None:
             info.update(minimum=self._minimum)
         if self._likelihood != LIKELIHOODS[0]:
@@ -192,15 +213,31 @@ class SolveGaussian(Solve):
     def __init__(
             self,
             mean: float,
-            sigma: float,
+            sigma: float | None = None,
             minimum: float | None = None,
-            likelihood: str = LIKELIHOODS[0]
+            likelihood: str = LIKELIHOODS[0],
+            sigma_aicp: Sequence[float] | None = None
     ):
         if not math.isfinite(mean):
             raise ConfigError(f"the mean must be finite; it is {mean}")
-        if not (math.isfinite(sigma) and sigma > 0):
+        if (sigma is None) == (sigma_aicp is None):
+            raise ConfigError(
+                "a Gaussian solve has sigma, or sigma_aicp (a range of sigma "
+                "chosen by AICp), not both")
+        if sigma is not None and not (math.isfinite(sigma) and sigma > 0):
             raise ConfigError(
                 f"sigma must be finite and positive; it is {sigma}")
+        if sigma_aicp is not None:
+            if not (len(sigma_aicp) == 2
+                    and all(math.isfinite(s) and s > 0 for s in sigma_aicp)
+                    and sigma_aicp[0] < sigma_aicp[1]):
+                raise ConfigError(
+                    f"sigma_aicp must be two finite positive numbers, "
+                    f"increasing; it is {sigma_aicp!r}")
+            if likelihood != 'profiled':
+                raise ConfigError(
+                    "values of a prior of sigma chosen by AICp take the "
+                    "likelihood 'profiled'")
         if minimum is not None and not math.isfinite(minimum):
             raise ConfigError(f"the minimum must be finite; it is {minimum}")
         if likelihood not in LIKELIHOODS:
@@ -208,7 +245,9 @@ class SolveGaussian(Solve):
                 f"likelihood must be one of {list(LIKELIHOODS)}; it is "
                 f"{likelihood!r}")
         self._mean = float(mean)
-        self._sigma = float(sigma)
+        self._sigma = None if sigma is None else float(sigma)
+        self._sigma_aicp = None if sigma_aicp is None \
+            else tuple(float(s) for s in sigma_aicp)
         self._minimum = None if minimum is None else float(minimum)
         self._likelihood = likelihood
 
@@ -219,7 +258,19 @@ class SolveGaussian(Solve):
         return -math.inf if self._minimum is None else self._minimum, math.inf
 
     def solve(self, a: np.ndarray, b: np.ndarray) -> Solution:
-        mean, sigma, minimum = self._mean, self._sigma, self._minimum
+        if self._sigma_aicp is not None:
+            return _chosen(
+                lambda sigma: self._solve_with(a, b, sigma), self._sigma_aicp)
+        return self._solve_with(a, b, self._sigma)[0]
+
+    def _solve_with(
+            self, a: np.ndarray, b: np.ndarray, sigma: float
+    ) -> tuple[Solution, float]:
+        """
+        Return the solution of the sums at the standard deviation sigma,
+        and the chi-square of the data (but a term without the values).
+        """
+        mean, minimum = self._mean, self._minimum
         precision = 1 / sigma ** 2
         a_prior, b_prior = a + precision, b + mean * precision
         values = b_prior / a_prior
@@ -240,16 +291,27 @@ class SolveGaussian(Solve):
                     + scipy.special.log_ndtr(z) + terms \
                     - scipy.special.log_ndtr((mean - minimum) / sigma)
             log_term = float(np.sum(terms))
+        chi2 = float(np.sum(a * values ** 2 - 2 * b * values))
         return Solution(
-            values, ((values - mean) / sigma).ravel(), log_term, m_eff)
+            values, ((values - mean) / sigma).ravel(), log_term, m_eff), chi2
 
     def mean(self) -> float:
         """Return the mean of the prior."""
         return self._mean
 
-    def sigma(self) -> float:
-        """Return the standard deviation of the prior."""
+    def sigma(self) -> float | None:
+        """
+        Return the standard deviation of the prior; None if it is chosen
+        (see sigma_aicp).
+        """
         return self._sigma
+
+    def sigma_aicp(self) -> tuple[float, float] | None:
+        """
+        Return the range of the standard deviation chosen by AICp, if it
+        is chosen.
+        """
+        return self._sigma_aicp
 
     def minimum(self) -> float | None:
         """Return the smallest value, if any."""
@@ -285,6 +347,10 @@ def check_together(solves: Sequence[Solve], sizes: Sequence[int]) -> None:
             f"exact integral for the log-likelihood: give their solves the "
             f"likelihood 'profiled' (the log-likelihood at their best "
             f"values), or no minimum")
+    if len({solve.sigma_aicp() for solve in solves}) > 1:
+        raise ConfigError(
+            "values solved together take one sigma chosen by AICp: their "
+            "solves have the same sigma_aicp, or none")
 
 
 def solve_together(
@@ -314,7 +380,24 @@ def solve_together(
     check_together(solves, sizes)
     if len(rhs) == 1:
         return solves[0].solve(normal[0], rhs)
-    mean, sigma, lower = _priors(solves, sizes)
+    return _chosen_together(
+        solves, lambda sigma: _together_with(
+            solves, sizes, normal, rhs, sigma))
+
+
+def _together_with(
+        solves: Sequence[Solve],
+        sizes: Sequence[int],
+        normal: np.ndarray,
+        rhs: np.ndarray,
+        sigma: float | None
+) -> tuple[Solution, float]:
+    """
+    Return the values of solve_together at the standard deviation sigma
+    of all priors (theirs if None), and the chi-square of the data (but a
+    term without the values).
+    """
+    mean, sigma, lower = _priors(solves, sizes, sigma)
     precision = 1 / sigma ** 2
     normal_prior = normal + np.diag(precision)
     rhs_prior = rhs + mean * precision
@@ -340,7 +423,9 @@ def solve_together(
     m_eff = float(np.trace(np.linalg.solve(
         normal_free + np.diag(precision[free]), normal_free))) \
         if free.any() else 0.0
-    return Solution(values, (values - mean) / sigma, log_term, m_eff)
+    chi2 = float(values @ normal @ values - 2 * rhs @ values)
+    return Solution(
+        values, (values - mean) / sigma, log_term, m_eff), chi2
 
 
 def solve_together_rows(
@@ -398,7 +483,25 @@ def solve_together_rows(
         If the Newton steps do not reach the solution.
     """
     check_together(solves, sizes)
-    mean, sigma, lower = _priors(solves, sizes)
+    return _chosen_together(
+        solves, lambda sigma: _rows_with(
+            solves, sizes, rows, target, ndata, sigma))
+
+
+def _rows_with(
+        solves: Sequence[Solve],
+        sizes: Sequence[int],
+        rows: np.ndarray,
+        target: np.ndarray,
+        ndata: int | None,
+        sigma: float | None
+) -> tuple[Solution, float]:
+    """
+    Return the values of solve_together_rows at the standard deviation
+    sigma of all priors (theirs if None), and the chi-square of the rows
+    of the data.
+    """
+    mean, sigma, lower = _priors(solves, sizes, sigma)
     variance = sigma ** 2
 
     def dual(y: np.ndarray) -> tuple[float, np.ndarray]:
@@ -460,20 +563,65 @@ def solve_together_rows(
     diagonal = np.sum(inverse ** 2, axis=0 if factor[1] else 1)
     counted = len(y) if ndata is None else ndata
     m_eff = counted - float(np.sum(diagonal[:counted]))
-    return Solution(values, (values - mean) / sigma, log_term, m_eff)
+    residuals = rows[:counted] @ values - target[:counted]
+    return Solution(
+        values, (values - mean) / sigma, log_term, m_eff), \
+        float(residuals @ residuals)
+
+
+def _chosen_together(
+        solves: Sequence[Solve],
+        solve_with: Callable[[float | None], tuple[Solution, float]]
+) -> Solution:
+    """
+    Return the solution of values solved together, of the function of
+    their solution at a standard deviation of their priors (and the
+    chi-square of their data): at theirs, or chosen by AICp in their range
+    (see SolveGaussian).
+    """
+    widths = solves[0].sigma_aicp()
+    if widths is None:
+        return solve_with(None)[0]
+    return _chosen(solve_with, widths)
+
+
+def _chosen(
+        solve_with: Callable[[float], tuple[Solution, float]],
+        widths: tuple[float, float]
+) -> Solution:
+    """
+    Return the solution of the standard deviation of a prior in a range
+    of the least AICp = chi2 + 2 m_eff of the data (see SolveGaussian), of
+    the function of the solution at a standard deviation and the
+    chi-square of the data: by a bounded minimisation in its ln.
+    """
+    best: list[tuple[float, Solution]] = []
+
+    def aicp(ln_sigma: float) -> float:
+        solution, chi2 = solve_with(math.exp(ln_sigma))
+        value = chi2 + 2 * solution.m_eff
+        if not best or value < best[0][0]:
+            best[:] = [(value, solution)]
+        return value
+    scipy.optimize.minimize_scalar(
+        aicp, bounds=np.log(widths), method='bounded',
+        options=dict(xatol=_AICP_TOLERANCE))
+    return best[0][1]
 
 
 def _priors(
-        solves: Sequence[Solve], sizes: Sequence[int]
+        solves: Sequence[Solve],
+        sizes: Sequence[int],
+        sigma: float | None = None
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Return the mean, the standard deviation and the minimum (-inf without
-    one) of the Gaussian prior of each value of the given solves, the given
-    number of each, in their order.
+    Return the mean, the standard deviation (that given, if any) and the
+    minimum (-inf without one) of the Gaussian prior of each value of the
+    given solves, the given number of each, in their order.
     """
-    mean, sigma = (
-        np.repeat([getter(solve) for solve in solves], sizes)
-        for getter in (SolveGaussian.mean, SolveGaussian.sigma))
+    mean = np.repeat([solve.mean() for solve in solves], sizes)
+    sigma = np.repeat([solve.sigma() for solve in solves], sizes) \
+        if sigma is None else np.full(len(mean), sigma)
     lower = np.repeat([
         -np.inf if solve.minimum() is None else solve.minimum()
         for solve in solves], sizes)
