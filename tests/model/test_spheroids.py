@@ -618,6 +618,21 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
         evaluate_cases([case], properties)
 
 
+@pytest.mark.parametrize('component, message', [
+    (dict(type='disk', rnodes=[0, 5, 10],
+          density=dict(ptraits=dict(type='exponential')),
+          emission=STARS_EMISSION), "stars of a disk with kinematics only"),
+    (dict(type='point', emission=STARS_EMISSION),
+     "does not see the stars of a point"),
+])
+def test_a_cube_sees_only_stars_that_move(driver, component, message):
+    # (stars without velocities have none to place in its channels: a disk
+    # without kinematics gave an all-zero model, a point a KeyError)
+    from modelutils import group_plan
+    with pytest.raises(ConfigError, match=message):
+        group_plan([stars_cube(driver, component)])
+
+
 def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
     # (as band light: its projection, without a depth axis)
     spheroid = JEANS_SPHEROID | dict(geometry='galaxy')

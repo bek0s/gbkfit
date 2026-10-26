@@ -20,7 +20,7 @@ from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..geometries import Geometry
 from ..lines import Band, LineCatalogue
-from ..roles import Emission, Opacity
+from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
 from ..parts import Density, Kinematics
@@ -224,6 +224,10 @@ class Disk(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> ComponentPlan:
+        if lines is not None and STARS in lines and self.kinematics() is None:
+            raise ConfigError(
+                "a spectral cube sees the stars of a disk with kinematics "
+                "only (its stars have no velocities to place in channels)")
         emission = self.emission()
         return _detail.disk_plan(
             self._disk, self._lines, self._bands,

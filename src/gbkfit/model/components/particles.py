@@ -23,7 +23,8 @@ from .base import (
 from .geometries import Geometry
 from .lines import Band, LineCatalogue, LinePlacement
 from .points import band_light, line_light
-from .roles import BandEmission, Emission, LineEmission, emission_parser
+from .roles import (
+    STARS, BandEmission, Emission, LineEmission, emission_parser)
 
 
 __all__ = [
@@ -465,6 +466,11 @@ class Particles(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> ParticlesPlan:
+        if lines is not None and STARS in lines:
+            raise ConfigError(
+                "a spectral cube does not see the stars of particles: they "
+                "have no velocities to place in channels (particles of "
+                "lines have theirs)")
         unit = self.emission().unit()
         if self._lines is None:
             return ParticlesPlan(

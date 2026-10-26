@@ -17,7 +17,7 @@ from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band, LineCatalogue
 from ..parts import Density, Kinematics
-from ..roles import Emission, Opacity
+from ..roles import STARS, Emission, Opacity
 from .._detail import geometry_desc
 from ..geometries import Geometry
 from . import _cone, _detail
@@ -175,6 +175,10 @@ class Cone(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> ComponentPlan:
+        if lines is not None and STARS in lines and self.kinematics() is None:
+            raise ConfigError(
+                "a spectral cube sees the stars of a cone with kinematics "
+                "only (its stars have no velocities to place in channels)")
         emission = self.emission()
         return _detail.cone_plan(
             self._cone, self._lines, self._bands,

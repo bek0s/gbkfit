@@ -17,7 +17,8 @@ from .base import (
     NativeGrid)
 from .geometries import Geometry
 from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
-from .roles import BandEmission, Emission, LineEmission, emission_parser
+from .roles import (
+    STARS, BandEmission, Emission, LineEmission, emission_parser)
 
 
 __all__ = [
@@ -400,6 +401,11 @@ class Point(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> PointPlan:
+        if lines is not None and STARS in lines:
+            raise ConfigError(
+                "a spectral cube does not see the stars of a point: they "
+                "have no velocities to place in channels (points of lines "
+                "have their vsys and dispersion)")
         unit = self.emission().unit()
         if self._lines is None:
             return PointPlan(
