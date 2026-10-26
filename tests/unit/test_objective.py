@@ -655,6 +655,17 @@ def test_invalid_sigmas_chosen_by_aicp_are_refused(options, message):
         SolveGaussian(1.0, **options)
 
 
+@pytest.mark.parametrize('mean, minimum, default', [
+    (1.0, None, 1.0), (1.0, 0.0, 1.0), (-1.0, 0.0, 0.0)])
+@pytest.mark.parametrize('sigma', [dict(sigma=2.0), dict(sigma_aicp=[0.1, 10])])
+def test_the_value_of_a_solve_without_data_is_its_mean(
+        mean, minimum, default, sigma):
+    # (at least its minimum, whatever its sigma)
+    solve = SolveGaussian(mean, minimum=minimum, likelihood='profiled', **sigma)
+    assert solve.default() == default
+    assert solve.solve(np.zeros(1), np.zeros(1)).values[0] == default
+
+
 def test_a_closed_objective_releases_its_memory_and_evaluates_again(driver):
     data = Data(np.random.default_rng(10).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(driver, data)

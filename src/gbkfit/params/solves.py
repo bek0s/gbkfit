@@ -257,6 +257,12 @@ class SolveGaussian(Solve):
     def bounds(self) -> tuple[float, float]:
         return -math.inf if self._minimum is None else self._minimum, math.inf
 
+    def default(self) -> float:
+        # (the mean, at least the minimum, at any sigma: no need to choose
+        # one by AICp)
+        return self._mean if self._minimum is None \
+            else max(self._mean, self._minimum)
+
     def solve(self, a: np.ndarray, b: np.ndarray) -> Solution:
         if self._sigma_aicp is not None:
             return _chosen(
