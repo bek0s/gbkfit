@@ -7,9 +7,12 @@ against exact and independent solutions, and in spectral cubes of stars;
 and the kinematics of their traits (TraitsKinematics).
 """
 
+import functools
+
 import numpy as np
 import pytest
 import scipy.integrate
+import scipy.optimize
 import scipy.special
 
 from gbkfit.model import (
@@ -748,3 +751,123 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
         moments['moment2']['d'], np.sqrt(80 ** 2 + 10 ** 2 / 12), rtol=1e-3)
     np.testing.assert_allclose(moments['moment3']['d'], 0, atol=1e-3)
     np.testing.assert_allclose(moments['moment4']['d'], 0, atol=1e-3)
+
+
+# The exact mock of the Schwarzschild proof of concept (model.orbits): a
+# sphere of Hernquist light of the scale radius 1 kpc, of a mass-to-light
+# ratio of 4 and a black hole of 5e8 Msun, its stars isotropic, of the
+# distribution function of Eddington's formula, at 10 Mpc (its kpc per
+# arcsec HERNQUIST_KPC)
+HERNQUIST_A = 1.0
+HERNQUIST_LIGHT = 1e10
+HERNQUIST_UPSILON = 4.0
+HERNQUIST_BH = 5e8
+HERNQUIST_DISTANCE = 10
+HERNQUIST_KPC = HERNQUIST_DISTANCE * 1e3 * np.pi / 648000
+
+
+@functools.cache
+def hernquist_mock():
+    """The exact mock (its tables of its distribution function made once)."""
+    from gbkfit.model.orbits.mocks import MockGalaxy
+    from gbkfit.model.orbits.profiles import Hernquist
+    return MockGalaxy(
+        Hernquist(HERNQUIST_LIGHT, HERNQUIST_A), HERNQUIST_UPSILON,
+        HERNQUIST_BH)
+
+
+def hernquist_mge(a, ngauss=60):
+    """
+    The dispersions (arcsec) and the peak surface brightnesses of an MGE
+    of the Hernquist profile of the scale radius a (arcsec), of unit
+    light: Gaussians of dispersions geometric from 1e-5 a to 1e3 a, of the
+    amplitudes of least squares of the relative error, within 3e-4 from
+    1e-3 a to 30 a.
+    """
+    sigma = np.geomspace(1e-5 * a, 1e3 * a, ngauss)
+    r = np.geomspace(3e-6 * a, 3e3 * a, 800)
+    density = a / (2 * np.pi * r * (r + a) ** 3)
+    design = np.exp(-r[:, None] ** 2 / (2 * sigma ** 2)) / density[:, None]
+    scale = np.abs(design).max(axis=0)
+    amplitudes = scipy.optimize.lsq_linear(
+        design / scale, np.ones_like(r), bounds=(0, np.inf), tol=1e-14,
+        max_iter=20000).x / scale
+    return sigma, amplitudes * np.sqrt(2 * np.pi) * sigma
+
+
+def hernquist_galaxy():
+    """
+    The spheroid of the stars of the exact mock, of isotropic Jeans
+    kinematics (beta_z = 0, kappa = 0) and an MGE of its light, in the
+    gravity of its Hernquist mass (a Zhao profile) and its black hole; its
+    galaxy and the values of its parameters.
+    """
+    a = HERNQUIST_A / HERNQUIST_KPC
+    sigma, i0 = hernquist_mge(a)
+    spheroid = dict(
+        type='spheroid', name='stars', geometry='galaxy', rmax=30 * a,
+        emission=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)),
+        kinematics=dict(type='jeans'))
+    galaxy = dict(
+        components=[spheroid],
+        mass=[dict(type='spheroid', name='light',
+                   profile=dict(type='zhao', parameters='density_radius')),
+              dict(type='point', name='bh')],
+        distance=DISTANCE)
+    properties = dict(
+        xpos=0, ypos=0, posa=0, incl=60, vsys=0,
+        distance=HERNQUIST_DISTANCE, stars_i0=list(i0),
+        stars_sigma=list(sigma), stars_q=[1.0] * len(i0), stars_beta_z=0,
+        stars_kappa=0,
+        mass_light_log_rho=np.log10(
+            HERNQUIST_UPSILON * HERNQUIST_LIGHT
+            / (2 * np.pi * HERNQUIST_A ** 3)),
+        mass_light_rs=HERNQUIST_A, mass_light_alpha=1.0,
+        mass_light_beta=4.0, mass_light_gamma=1.0,
+        mass_bh_log_m=np.log10(HERNQUIST_BH))
+    return galaxy, properties
+
+
+def test_the_jeans_tables_of_the_exact_mock_are_its_dispersion():
+    # The dispersion of its distribution function (isotropic: along every
+    # direction), at every 8th radius and height of the tables from 2e-3
+    # to 5 kpc (to the MGE and the tables)
+    galaxy, properties = hernquist_galaxy()
+    tables = galaxy_parser.load(galaxy).plan_stage().evaluate(
+        properties).states[0]
+    R, z = table_points(tables)
+    r = np.hypot(R, z)[::8, ::8] * HERNQUIST_KPC
+    within = (r > 2e-3 * HERNQUIST_A) & (r < 5 * HERNQUIST_A)
+    assert within.sum() > 30
+    exact = hernquist_mock().dispersion(r[within])
+    for sigma in (tables.sigma_r, tables.sigma_phi, tables.sigma_z):
+        np.testing.assert_allclose(
+            sigma[::8, ::8][within], exact, rtol=2e-4)
+
+
+def test_the_stars_of_a_cube_have_the_second_moments_of_the_exact_mock(
+        driver, evaluate_cases):
+    # The second moment of the spectrum of each line of sight (but those
+    # of the centre) is that of the distribution of the velocities of the
+    # mock on it, to the voxels. Its Gauss-Hermite series is not: Jeans
+    # kinematics take a Gaussian distribution of velocities at each point
+    # (here h4 is about 0.01, where the mock's is about -0.02, and the
+    # dispersion of the series 5% below the mock's)
+    galaxy, properties = hernquist_galaxy()
+    case = stars_cube(driver, galaxy['components'][0])
+    case['galaxy'] = galaxy
+    case['line_of_sight'] = dict(type='grid', depth=dict(step=2))
+    data, _ = evaluate_cases([case], properties)
+    cube = data[0]['spectra']['d']
+    velocity = (np.arange(181) - 90) * 10.0
+    exact = np.linspace(-1500, 1500, 3001)
+    pixels = (np.arange(32) - 15.5) * 2
+    for iy, ix in ((15, 18), (15, 23), (15, 31), (25, 25), (31, 31)):
+        spectrum = cube[:, iy, ix]
+        second = (spectrum * velocity ** 2).sum() / spectrum.sum() \
+            - 10.0 ** 2 / 12
+        losvd = hernquist_mock().losvd(
+            [np.hypot(pixels[ix], pixels[iy]) * HERNQUIST_KPC], exact)[0]
+        expected = np.trapezoid(losvd * exact ** 2, exact) \
+            / np.trapezoid(losvd, exact)
+        assert np.sqrt(second) == pytest.approx(np.sqrt(expected), rel=6e-4)
