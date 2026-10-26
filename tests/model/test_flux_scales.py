@@ -167,7 +167,8 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     # Data that are the model times a scale for each spectrum, of small
     # errors: the solved scales are those scales (but for the pull of the
     # prior, small), and the chi-square mostly that of their prior,
-    # ((a - 1) / s)^2
+    # ((a - 1) / s)^2; the scales count in the degrees of freedom by how
+    # much their data decide them
     spectra = model(driver)
     rng = np.random.default_rng(1)
     scales = rng.uniform(0.5, 2, SIZE[1::-1])
@@ -181,7 +182,11 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     np.testing.assert_allclose(found[lit], scales[lit], rtol=1e-3)
     assert chi2 == pytest.approx(
         np.sum(((found - 1) / SIGMA) ** 2), rel=1e-3)
-    assert obj.nnuisance() == SIZE[0] * SIZE[1]
+    # (each scale counts by how much its data decide it, a / (a + 1/s^2),
+    # a = sum m^2 / e^2: about 1 where the spectrum has light, 0 where not)
+    a = (spectra ** 2).sum(axis=0) / error ** 2
+    assert obj.nnuisance() == pytest.approx(
+        np.sum(a / (a + 1 / SIGMA ** 2)), rel=1e-4)
     fixed, params = objective(driver, spectra * scales, error, scale=1)
     assert fixed.chi2(params.evaluate()) > 1e3
     # (fitted, the same scales give the same model as solved)

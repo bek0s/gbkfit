@@ -296,10 +296,10 @@ class FitSolution:
         The chi-square.
     nresiduals : int
         The number of residuals that count (not masked).
-    nfitted : int
+    nfitted : float
         The number of fitted quantities: the free elements and the
-        nuisance parameters that the objective solves (see
-        Objective.nnuisance).
+        effective number of the nuisance parameters that the objective
+        solves (see Objective.nnuisance).
     dof : float
         The degrees of freedom: the number of independent residuals (see
         Objective.nindependent; nresiduals, but fewer for correlated
@@ -327,7 +327,7 @@ class FitSolution:
     derived: dict[str, float]
     chi2: float
     nresiduals: int
-    nfitted: int
+    nfitted: float
     dof: float
     reduced_chi2: float
     log_likelihood: float

@@ -15,12 +15,12 @@
   }
  ],
  "objective": {
-  "chi2": 41400.92792082395,
-  "log_likelihood": -21578.40833339294,
+  "chi2": 41400.92792082397,
+  "log_likelihood": -21578.40833339295,
   "noise_chi2": 0.0,
-  "nresiduals": 23616,
-  "nindependent": 23616.0,
-  "nnuisance": 576,
+  "nresiduals": 23040,
+  "nindependent": 23040.0,
+  "nnuisance": 392.79267709849205,
   "residuals": [
    {
     "size": 23040,

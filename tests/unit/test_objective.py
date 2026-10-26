@@ -7,6 +7,7 @@ import concurrent.futures
 
 import numpy as np
 import pytest
+import scipy.optimize
 import scipy.special
 
 from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
@@ -490,6 +491,90 @@ def test_solved_values_are_the_best_and_integrate_out(mean, sigma, minimum):
     assert solution.log_term == pytest.approx(log_terms, rel=1e-8)
     np.testing.assert_allclose(
         solution.residuals, (solution.values - mean) / sigma)
+    # (the effective number of each value: A / (A + 1/sigma^2), none at
+    # the minimum; profiled, the same values without the integral)
+    free = (b + mean / sigma ** 2) / (a + 1 / sigma ** 2) > lower
+    assert solution.m_eff == pytest.approx(
+        np.sum(np.where(free, a / (a + 1 / sigma ** 2), 0)))
+    profiled = SolveGaussian(mean, sigma, minimum, 'profiled').solve(a, b)
+    np.testing.assert_allclose(profiled.values, solution.values)
+    assert profiled.log_term == 0
+
+
+def least_squares_problem(seed):
+    """
+    The weighted model matrix and data of a linear problem of 3 values on
+    40 data values (pieces that overlap, so the values are coupled), and
+    its sums N and b (see SolveGaussian.solve_coupled).
+    """
+    rng = np.random.default_rng(seed)
+    pieces = np.abs(rng.normal(size=(40, 3))) + 0.2
+    data = pieces @ np.array([1.0, -0.4, 2.0]) + rng.normal(size=40)
+    return pieces, data, pieces.T @ pieces, pieces.T @ data
+
+
+def effective_number(solve, pieces, data, eps=1e-6):
+    """
+    The trace of the hat matrix of a solve by finite differences: how much
+    the fitted model at each data value moves with that data value.
+    """
+    def fitted(d):
+        return pieces @ solve.solve_coupled(
+            pieces.T @ pieces, pieces.T @ d).values
+    base = fitted(data)
+    return sum(
+        (fitted(data + eps * np.eye(len(data))[i]) - base)[i] / eps
+        for i in range(len(data)))
+
+
+def test_values_solved_together_are_the_best_and_integrate_out():
+    # Without a minimum: the best values of the chi-square of the data and
+    # the prior (numpy's least squares of the data and the prior rows), its
+    # integral over the values (a grid in 3-D) and their effective number
+    # (the trace of the hat matrix, by finite differences)
+    pieces, data, normal, rhs = least_squares_problem(1)
+    mean, sigma = 0.5, 1.5
+    solve = SolveGaussian(mean, sigma)
+    solution = solve.solve_coupled(normal, rhs)
+    rows = np.vstack((pieces, np.eye(3) / sigma))
+    target = np.concatenate((data, np.full(3, mean / sigma)))
+    np.testing.assert_allclose(
+        solution.values, np.linalg.lstsq(rows, target)[0], rtol=1e-10)
+
+    def chi2(u):
+        return np.sum((data - u @ pieces.T) ** 2, axis=-1) \
+            + np.sum(((u - mean) / sigma) ** 2, axis=-1)
+    axes = [np.linspace(v - 1.5, v + 1.5, 121) for v in solution.values]
+    grid = np.stack(np.meshgrid(*axes, indexing='ij'), axis=-1)
+    best = chi2(solution.values)
+    density = np.exp(-0.5 * (chi2(grid) - best)) \
+        / (sigma * np.sqrt(2 * np.pi)) ** 3
+    integral = np.trapezoid(np.trapezoid(np.trapezoid(
+        density, axes[2]), axes[1]), axes[0])
+    assert solution.log_term == pytest.approx(np.log(integral), abs=1e-4)
+    assert solution.m_eff == pytest.approx(
+        effective_number(solve, pieces, data), rel=1e-5)
+
+
+def test_values_solved_together_above_a_minimum_are_profiled():
+    # The best values above the minimum (scipy's bounded least squares of
+    # the data and the prior rows), and their effective number over those
+    # above it; their integral has no exact formula, so 'profiled' only
+    pieces, data, normal, rhs = least_squares_problem(2)
+    mean, sigma, minimum = 0.0, 3.0, 0.0
+    with pytest.raises(ConfigError, match="'profiled'"):
+        SolveGaussian(mean, sigma, minimum).solve_coupled(normal, rhs)
+    solve = SolveGaussian(mean, sigma, minimum, 'profiled')
+    solution = solve.solve_coupled(normal, rhs)
+    rows = np.vstack((pieces, np.eye(3) / sigma))
+    target = np.concatenate((data, np.full(3, mean / sigma)))
+    expected = scipy.optimize.lsq_linear(
+        rows, target, bounds=(minimum, np.inf)).x
+    np.testing.assert_allclose(solution.values, expected, atol=1e-8)
+    assert solution.values[1] == minimum
+    assert solution.log_term == 0
+    assert solution.m_eff == pytest.approx(
+        effective_number(solve, pieces, data), rel=1e-5)
 
 
 def test_a_closed_objective_releases_its_memory_and_evaluates_again(driver):

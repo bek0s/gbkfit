@@ -51,8 +51,8 @@ class Objective:
     comparison then compares the model times them (see
     Comparison.evaluate). The priors of the solved values add residuals
     after those of the data; the log-likelihood has the values integrated
-    out. They are nuisance parameters (see nnuisance); solved gives their
-    values.
+    out, or at their best values (see Solve). They are nuisance parameters
+    (see nnuisance); solved gives their values.
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -384,23 +384,39 @@ class Objective:
             values.update(zip(names, solution.values.tolist()))
         return values
 
-    def nnuisance(self) -> int:
+    def nnuisance(self) -> float:
         """
-        Return the number of nuisance parameters that the objective solves
-        itself: the solved elements (see Solve). The degrees of freedom of
-        a fit exclude them.
+        Return the effective number of the nuisance parameters that the
+        objective solves itself (see Solve), of the last evaluation: how
+        much the data decide the solved elements. The degrees of freedom
+        of a fit exclude them.
+
+        Raises
+        ------
+        RuntimeError
+            If it has solved elements and no evaluation yet.
         """
-        return len(self._solves)
+        if any(solution is None for solution in self._solutions):
+            raise RuntimeError(
+                "the effective number of the solved elements is of an "
+                "evaluation: evaluate the objective first")
+        # Each solved value counts by how much its data decide it (its
+        # m_eff: 1 decided by the data, 0 by its prior or at its minimum),
+        # not as 1: a value its data decide uses up a degree of freedom,
+        # and the residual of its prior, about 0 then, is not a residual
+        # of the data (see nresiduals). Counting it as 1 with its prior
+        # residual as a residual (net 0) left the degrees of freedom too
+        # large by about 1 for each value the data decide.
+        return float(sum(solution.m_eff for solution in self._solutions))
 
     def nresiduals(self) -> int:
         """
-        Return the number of residuals that count: those of the comparisons
-        (see Comparison.nresiduals), and that of the prior of each solved
-        value; not the noise residuals, which are not of the data (see
-        LikelihoodGaussian).
+        Return the number of residuals of the data that count: those of the
+        comparisons (see Comparison.nresiduals); not the residuals of the
+        priors of solved values (see nnuisance), nor the noise residuals
+        (see LikelihoodGaussian), which are not of the data.
         """
-        return sum(c.nresiduals() for c in self._comparisons) \
-            + self.nnuisance()
+        return sum(c.nresiduals() for c in self._comparisons)
 
     def nindependent(self) -> float:
         """
@@ -412,8 +428,7 @@ class Objective:
         out the whitening of the residuals, if not yet (see prepare).
         """
         self.prepare()
-        return sum(c.nindependent() for c in self._comparisons) \
-            + self.nnuisance()
+        return sum(c.nindependent() for c in self._comparisons)
 
     def _solve_residuals(self) -> list[np.ndarray]:
         """

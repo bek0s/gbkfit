@@ -18,9 +18,9 @@
   "chi2": 2158.936959718099,
   "log_likelihood": -1135.0407870787901,
   "noise_chi2": 0.0,
-  "nresiduals": 792,
-  "nindependent": 792.0,
-  "nnuisance": 24,
+  "nresiduals": 768,
+  "nindependent": 768.0,
+  "nnuisance": 20.37119539306471,
   "residuals": [
    {
     "size": 768,
