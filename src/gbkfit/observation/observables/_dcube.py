@@ -1,3 +1,5 @@
+import logging
+import math
 from collections.abc import Callable, Sequence
 from typing import Any, TypeAlias
 
@@ -13,7 +15,15 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 # The unit of the velocities of the spectral axis
+_log = logging.getLogger(__name__)
+
 _KMS = u.km / u.s
+
+# The spread (rms along x or y, in pixels of the model) below which a PSF
+# sampled at the centres of the pixels of the model is too narrow for
+# them: it then smooths the model too little (e.g. a Gaussian of 0.4
+# pixel acts as one of 0.28, with 92% of a point in its pixel for 79%)
+_MIN_PSF_SPREAD = 0.55
 
 # How an extra output is made from an array of a cube of DCube and the
 # grid of the cube (e.g. cube_extra)
@@ -199,6 +209,34 @@ def _varying_kernels(
         else:
             lsf_kernels = np.tile(lsf.asarray(step[2], lsf_size), (size[2], 1))
     return psf_images, lsf_kernels
+
+
+def _warn_narrow_psf(
+        images: np.ndarray, oversampling: Sequence[int]
+) -> None:
+    """
+    Log a warning if images of a PSF on the high-res grid (sampled at the
+    centres of its pixels; of shape (..., ny, nx)) are narrower than
+    _MIN_PSF_SPREAD pixel along x or y, with the oversampling that
+    resolves them.
+    """
+    images = np.asarray(images, dtype=float).reshape(-1, *images.shape[-2:])
+    spread = math.inf
+    for image in images:
+        for profile in (image.sum(axis=0), image.sum(axis=1)):
+            total = profile.sum()
+            if not total > 0:
+                continue
+            x = np.arange(len(profile))
+            mean = profile @ x / total
+            spread = min(spread, math.sqrt(profile @ (x - mean) ** 2 / total))
+    if spread < _MIN_PSF_SPREAD:
+        needed = [math.ceil(n / max(spread, 0.1)) for n in oversampling[:2]]
+        _log.warning(
+            f"the PSF is narrower than the pixels of the model (a spread of "
+            f"{spread:.2g} pixel at the oversampling {list(oversampling[:2])}"
+            f"): sampled at their centres, it smooths the model too little; "
+            f"raise the oversampling of the observation to {needed}")
 
 
 def _kernel_cube(dcube: 'DCube', grid_hi: gridutils.Grid) -> np.ndarray:
@@ -396,6 +434,10 @@ class DCubePlan:
         grid_hi = gridutils.Grid(
             tuple(size_hi), dcube.grid().coords._replace(
                 step=step_hi, rpix=rpix_hi), 2)
+        if psf is not None and not isinstance(psf, PSFPoint) \
+                and not psf.varies():
+            _warn_narrow_psf(
+                psf.asarray(step_hi[:2], rota=dcube.rota()), oversampling)
 
         # The shapes of the arrays are the reversed sizes
         shape_lo = size_lo[::-1]
@@ -411,6 +453,8 @@ class DCubePlan:
         if separable:
             psf_images, lsf_kernels = _varying_kernels(
                 dcube, grid_hi, lsf_size_hi)
+            if psf_images is not None and psf.varies():
+                _warn_narrow_psf(psf_images, oversampling)
             if psf_images is not None:
                 self._psf_convolution = backend_fft.convolution(
                     DriverFFT.fft_convolution_shift(

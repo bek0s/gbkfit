@@ -157,3 +157,16 @@ def test_points_in_wavelength_on_axes_of_log_velocities():
         assert varying.to_velocities(
             points, gridutils.VelocityConvention(rest, None, convention)) \
             == pytest.approx([velocity], rel=1e-12)
+
+
+@pytest.mark.parametrize('sigma', [0.4, table(0.4, 0.5)])
+def test_a_psf_narrower_than_a_pixel_is_warned_of(driver, caplog, sigma):
+    # (sampled at the centres of the pixels of the model, it smooths it too
+    # little: raise the oversampling, which then resolves it)
+    psf = dict(type='gauss', sigma=sigma)
+    spectra(driver, psf=psf)
+    assert any('narrower than the pixels' in r.message for r in caplog.records)
+    caplog.clear()
+    spectra(driver, psf=psf, oversampling=(3, 3, 1))
+    assert not any(
+        'narrower than the pixels' in r.message for r in caplog.records)
