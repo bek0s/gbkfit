@@ -105,6 +105,13 @@ class Scene:
         """
         return self._emitters
 
+    def galaxy_label(self, galaxy: int) -> str:
+        """
+        Return the label of a galaxy, by its index: the id 'galaxy' of its
+        extra outputs.
+        """
+        return self._labels[galaxy]
+
     def component(self, galaxy: int, component: int) -> 'Component':
         """Return a component of a galaxy, by their indices."""
         return self._galaxies[galaxy].components()[component]

@@ -177,9 +177,10 @@ class OrbitLibraryState(ComponentState):
     has the same), the edges of the cells of the spheroid (radii, arcsec,
     and angles from the plane, radians) and the light in each cell (of
     both sides of the plane; an array of shape (ncell_r, ncell_b)), how
-    long the orbits are integrated (see SchwarzschildKinematics), and how
-    (see OrbitIntegrator): the accuracy of the steps, the records of each
-    orbit in time and its turned copies on the sky.
+    long the orbits are integrated (see SchwarzschildKinematics), the kpc
+    of an arcsec at the galaxy, and how (see OrbitIntegrator): the
+    accuracy of the steps, the records of each orbit in time and its
+    turned copies on the sky.
     """
     potential: PotentialTable
     starts: np.ndarray
@@ -187,6 +188,7 @@ class OrbitLibraryState(ComponentState):
     cell_edges: tuple[np.ndarray, np.ndarray]
     cell_light: np.ndarray
     turns: float
+    kpc_per_arcsec: float
     accuracy: float = _ACCURACY
     samples: int = _SAMPLES
     copies: int = _COPIES
@@ -266,7 +268,7 @@ def orbit_library(
     return OrbitLibraryState(
         table, np.hstack((positions, velocities)), shares / shares.sum(),
         cell_edges, _cell_light(light_terms, *cell_edges),
-        kinematics.turns())
+        kinematics.turns(), mass.kpc_per_arcsec)
 
 
 def _angle_weights(table: PotentialTable) -> np.ndarray:

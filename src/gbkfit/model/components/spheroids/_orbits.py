@@ -137,13 +137,17 @@ class OrbitRecords:
     (nchannels, ntargets)); and the steps of the integration of each
     orbit and its energy ((km/s)^2) at its start and its end (of shape
     (n, 2)). With twins, orbit 2k + 1 of the cells and the moments is
-    orbit 2k reversed in time, both of start k.
+    orbit 2k reversed in time, both of start k. The moments of the light of
+    all the orbits in each cell (of shape (ncell_r, ncell_b, 9): the light,
+    and its sums of v_r, v_R, v_phi, v_r^2, v_theta^2, v_phi^2, v_R^2 and
+    v_z^2; see the native OrbitArgs) are optional too.
     """
     cells: np.ndarray | None
     moments: np.ndarray | None
     spectra: np.ndarray | None
     steps: np.ndarray
     energies: np.ndarray
+    cell_moments: np.ndarray | None = None
 
 
 class OrbitIntegrator:
@@ -156,9 +160,9 @@ class OrbitIntegrator:
     most max_steps of them, recorded at nsamples times, on the sky in 2
     nphi copies (turned about the axis and mirrored about the plane), and
     with twins reversed in time too. It records the time of each orbit in
-    cells, and in the targets of the sky its moments in their series
-    (with an order) or the spectrum of all their light (with channels),
-    or both. It keeps the samples of the orbits from their integration to
+    cells (and, of the light of all, its moments there), and in the
+    targets of the sky its moments in their series (with an order) or the
+    spectrum of all their light (with channels), or both. It keeps the samples of the orbits from their integration to
     their recording: 6 values each, at most 1 GiB (e.g. 480 MB for
     10000 orbits of 2000 samples in float32).
 
@@ -180,9 +184,9 @@ class OrbitIntegrator:
         The number of its turned copies on the sky.
     twins : bool
         Whether each orbit is also recorded reversed in time.
-    cell_edges : tuple of np.ndarray, optional
-        The edges of the cells, increasing: radii (arcsec) and angles from
-        the plane (radians, within [0, pi / 2]).
+    cells : tuple of int, optional
+        The number of the cells along the radius and the angle from the
+        plane (their edges are those of each integration).
     sky : sequence of SkyGrid, optional
         The grids of the sky, their targets one after the other.
     order : int, optional
@@ -190,12 +194,16 @@ class OrbitIntegrator:
         the moments of the orbits.
     nchannels : int, optional
         The number of the channels of the spectra of the targets.
+    cell_moments : bool, optional
+        Whether to record the moments of the light of the orbits in the
+        cells.
 
     Raises
     ------
     ValueError
-        If the shares of a grid are not one row per cell, or a sky goes
-        without moments or spectra.
+        If the shares of a grid are not one row per cell, a sky goes
+        without moments or spectra, or the moments of the cells go without
+        cells.
     """
 
     def __init__(
@@ -209,14 +217,17 @@ class OrbitIntegrator:
             nsamples: int,
             nphi: int,
             twins: bool,
-            cell_edges: tuple[np.ndarray, np.ndarray] | None = None,
+            cells: tuple[int, int] | None = None,
             sky: Sequence[SkyGrid] = (),
             order: int | None = None,
-            nchannels: int | None = None
+            nchannels: int | None = None,
+            cell_moments: bool = False
     ):
         if bool(sky) != (order is not None or nchannels is not None):
             raise ValueError(
                 "a sky goes with the moments of the orbits or their spectra")
+        if cell_moments and cells is None:
+            raise ValueError("the moments of the cells go with cells")
         self._driver = driver
         self._dtype = np.dtype(dtype)
         self._orbits = driver.native_class('Orbits', dtype)
@@ -232,14 +243,13 @@ class OrbitIntegrator:
         ) -> DeviceArray:
             return driver.mem_copy_h2d(np.ascontiguousarray(array, dtype))
 
-        self._cell_edges = None
+        self._cell_shape = cells
         self._cells = None
-        if cell_edges is not None:
-            self._cell_edges = tuple(
-                device(edges, dtype) for edges in cell_edges)
-            self._cells = driver.mem_alloc_d(
-                (recorded, len(cell_edges[0]) - 1, len(cell_edges[1]) - 1),
-                dtype)
+        self._cell_moments = None
+        if cells is not None:
+            self._cells = driver.mem_alloc_d((recorded, *cells), dtype)
+            if cell_moments:
+                self._cell_moments = driver.mem_alloc_d((*cells, 9), dtype)
 
         self._sky = None
         self._grids = ()
@@ -289,6 +299,7 @@ class OrbitIntegrator:
             starts: np.ndarray,
             turns: float,
             geometry: tuple[float, float],
+            cell_edges: tuple[np.ndarray, np.ndarray] | None = None,
             centres: np.ndarray | None = None,
             series: tuple[np.ndarray, np.ndarray] | None = None,
             light: np.ndarray | None = None,
@@ -311,6 +322,10 @@ class OrbitIntegrator:
         geometry : tuple of float
             The position angle and the inclination of the spheroid
             (degrees).
+        cell_edges : tuple of np.ndarray, optional
+            The edges of the cells, increasing (as many as its cells, with
+            cells only): radii (arcsec) and angles from the plane
+            (radians, within [0, pi / 2]).
         centres : np.ndarray, optional
             The centre of the spheroid in the sky of each grid (an array
             of shape (ngrids, 2): x, y), with a sky only.
@@ -319,7 +334,7 @@ class OrbitIntegrator:
             of each target of the sky, with its moments only.
         light : np.ndarray, optional
             The light of each orbit (of each twin after its orbit), with
-            spectra only.
+            spectra or the moments of the cells only.
         channels : tuple of float, optional
             The map of the velocities (km/s, relative to that of the
             centre) to the channels of the spectra, with spectra only: a
@@ -332,14 +347,22 @@ class OrbitIntegrator:
             The records, on the host.
         """
         driver, dtype = self._driver, self._dtype
+        if (cell_edges is None) != (self._cell_shape is None) \
+                or cell_edges is not None and tuple(
+                    len(edges) - 1 for edges in cell_edges) \
+                != self._cell_shape:
+            raise ValueError(
+                f"the integrator has cells of the shape {self._cell_shape}; "
+                f"give their edges (only)")
         if (centres is None) != (self._sky is None) \
                 or (series is None) != (self._moments is None) \
-                or (light is None or channels is None) \
-                != (self._spectra is None):
+                or (channels is None) != (self._spectra is None) \
+                or (light is None) != (self._spectra is None
+                                       and self._cell_moments is None):
             raise ValueError(
                 "the centres of the grids go with a sky, the series of the "
-                "targets with moments, and the light and the channels with "
-                "spectra")
+                "targets with moments, the channels with spectra, and the "
+                "light with spectra or the moments of the cells")
         if len(starts) != self._norbits:
             raise ValueError(
                 f"the integrator has {self._norbits} orbits; it is given "
@@ -364,8 +387,11 @@ class OrbitIntegrator:
                 target_v=device(series[0]), target_s=device(series[1]))
         if light is not None:
             sky |= dict(light=device(light))
-            driver.mem_fill(self._spectra, 0)
-        cell_r, cell_b = self._cell_edges or (None, None)
+        for added in (self._spectra, self._cell_moments):
+            if added is not None:
+                driver.mem_fill(added, 0)
+        cell_r, cell_b = (None, None) if cell_edges is None else (
+            device(edges) for edges in cell_edges)
         self._orbits.integrate(
             table=device(table.values),
             range=device([table.lnr_zero, table.lnr_step]),
@@ -375,7 +401,7 @@ class OrbitIntegrator:
             **sky, order=self._order or 0, moments=self._moments,
             channel_scale=0 if channels is None else channels[0],
             channel_offset=0 if channels is None else channels[1],
-            spectra=self._spectra,
+            spectra=self._spectra, cell_moments=self._cell_moments,
             steps=self._steps, energies=self._energies,
             samples=self._samples)
 
@@ -384,7 +410,8 @@ class OrbitIntegrator:
         return OrbitRecords(
             cells=host(self._cells), moments=host(self._moments),
             spectra=host(self._spectra), steps=host(self._steps),
-            energies=host(self._energies))
+            energies=host(self._energies),
+            cell_moments=host(self._cell_moments))
 
 
 def potential_at(

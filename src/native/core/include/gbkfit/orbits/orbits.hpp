@@ -432,25 +432,55 @@ orbits_sky(const OrbitArgs<T>& a, T (&sky)[3][3])
     }
 }
 
-// Add a sample of an orbit at the position x (in the frame of its
-// spheroid) to the time of the orbit in its cell, and of its twin (see
-// OrbitRows), with AddRowFunT
-template<auto AddRowFunT, typename T, typename S> constexpr void
+// Add a sample of orbit k at the position x and the velocity v (in the
+// frame of its spheroid) to the time of the orbit in its cell, and of its
+// twin (see OrbitRows; if any), with AddRowFunT, and to the moments of the
+// light of the orbits there (see OrbitArgs; if wanted), with AddFunT
+template<auto AddFunT, auto AddRowFunT, typename T, typename S>
+constexpr void
 orbits_record_cell(
-        const T* x, const OrbitArgs<T>& a, const OrbitRows<S>& rows)
+        int k, const T* x, const T* v, const OrbitArgs<T>& a,
+        const OrbitRows<S>& rows)
 {
     const T R = std::sqrt(x[0] * x[0] + x[1] * x[1]);
-    const int i = orbits_interval(
-            a.cell_r, a.ncell_r, std::sqrt(R * R + x[2] * x[2]));
+    const T r = std::sqrt(R * R + x[2] * x[2]);
+    const int i = orbits_interval(a.cell_r, a.ncell_r, r);
     const int j = orbits_interval(
             a.cell_b, a.ncell_b, std::atan2(std::abs(x[2]), R));
     if (i < 0 || j < 0)
         return;
-    S* cell = rows.cells + i * a.ncell_b + j;
     const T weight = T{1} / a.nsamples;
-    AddRowFunT(cell, weight);
-    if (a.twins)
-        AddRowFunT(cell + rows.twin_cells, weight);
+    if (rows.cells)
+    {
+        S* cell = rows.cells + i * a.ncell_b + j;
+        AddRowFunT(cell, weight);
+        if (a.twins)
+            AddRowFunT(cell + rows.twin_cells, weight);
+    }
+    if (!a.cell_moments)
+        return;
+    // (the velocity along R, phi and z, and along r and theta, theta from
+    // the axis; at R = 0, along x and y)
+    const T cos = R > 0 ? x[0] / R : 1;
+    const T sin = R > 0 ? x[1] / R : 0;
+    const T vR = cos * v[0] + sin * v[1];
+    const T vphi = cos * v[1] - sin * v[0];
+    const T vr = r > 0 ? (R * vR + x[2] * v[2]) / r : 0;
+    const T vtheta = r > 0 ? (x[2] * vR - R * v[2]) / r : 0;
+    const T moments[ORBITS_CELL_MOMENTS] = {
+        1, vr, vR, vphi, vr * vr, vtheta * vtheta, vphi * vphi, vR * vR,
+        v[2] * v[2]};
+    const long long orbit = a.twins ? 2 * k : k;
+    T* out = a.cell_moments
+            + (long long)(i * a.ncell_b + j) * ORBITS_CELL_MOMENTS;
+    for (int m = 0; m < ORBITS_CELL_MOMENTS; ++m)
+    {
+        AddFunT(out + m, weight * a.light[orbit] * moments[m]);
+        // (its twin: the velocities reversed)
+        if (a.twins)
+            AddFunT(out + m, (m >= 1 && m <= 3 ? -1 : 1)
+                    * weight * a.light[orbit + 1] * moments[m]);
+    }
 }
 
 // Record copy c (of 2 nphi) of sample n of orbit k, at the position x and
@@ -576,8 +606,9 @@ orbits_record_orbit(int k, const OrbitArgs<T>& a, const T* samples)
         const T* sample = samples + 6LL * n;
         if (std::isnan(sample[0]))
             continue;
-        if (rows.cells)
-            orbits_record_cell<orbits_add<T>>(sample, a, rows);
+        if (rows.cells || a.cell_moments)
+            orbits_record_cell<AddFunT, orbits_add<T>>(
+                    k, sample, sample + 3, a, rows);
         for (int c = 0; a.nsky && c < 2 * a.nphi; ++c)
             orbits_record_copy<AddFunT, orbits_add<T>>(
                     k, n, c, sample, sample + 3, sky, a, rows);

@@ -15,12 +15,14 @@ from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _dcube, _detail, _moments
+from . import _dcube, _detail, _moments, _orbit_outputs
 from ._region_sums import RegionSumsPlan, flux_weights
 from .base import HostModelData, ModelData, Observable, ObservablePlan
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
+    from gbkfit.model.components.spheroids import (
+        OrbitLibraryState, OrbitRecords)
     from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
     from ..noise import Noise
@@ -447,6 +449,16 @@ class OrbitMomentsPlan(ObservablePlan):
     moments are measured as those of the spectra of any regions (see
     RegionMomentsPlan).
 
+    Its extra outputs, wanted, come from one pass that records the orbits
+    in the bins and in the pixels of their grid and cells: the cube of the
+    pixels ('cube': their spectra convolved with the PSF) and the moments
+    of each pixel ('unbinned_moment<m>', measured as those of the bins),
+    and of the component: the moments of the light of the orbits in its
+    cells and in its spherical shells (the density, the rotation, the
+    dispersions and the anisotropy: 'orbit_cells' and 'orbit_profile')
+    and each orbit ('orbits': its energy, angular momentum, circularity,
+    weight and light).
+
     Parameters
     ----------
     moments : RegionMoments
@@ -476,11 +488,17 @@ class OrbitMomentsPlan(ObservablePlan):
         self._galaxy = galaxy
         self._component = component
         self._names = scene.component_names(galaxy, component)
-        self._weights = scene.component(galaxy, component).orbit_weights()
+        spheroid = scene.component(galaxy, component)
+        self._weights = spheroid.orbit_weights()
+        # (the ids of the extra outputs of the component)
+        self._ids = dict(
+            galaxy=scene.galaxy_label(galaxy),
+            component=spheroid.name() or f'component{component}')
         self._grid = moments.sky_grid(instrument, oversampling)
         self._driver = driver
         self._dtype = dtype
         nregions = moments.regions().nregions()
+        self._nregions = nregions
         # (the spectral axis: its channels, their width, and the velocity
         # of the centre of the first)
         self._nchannels = moments.spec_size()
@@ -493,6 +511,26 @@ class OrbitMomentsPlan(ObservablePlan):
             driver, (nregions, 1), moments.orders(), moments.flux_floor(),
             moments.method(), dtype)
         self._integrator: OrbitIntegrator | None = None
+        # The pixels of the grid of the bins, their cube on the spectral
+        # axis of the moments and their moments, for the extra outputs
+        grid = moments.regions().grid()
+        assert grid is not None
+        shape = moments.regions().index().shape
+        self._pixels = _orbit_outputs.PixelCube(
+            grid, shape, instrument, oversampling)
+        coords = grid.coords
+        self._cube_coords = gridutils.Coords(
+            coords.step[:2] + (self._step,),
+            coords.rpix[:2] + (self._nchannels / 2 - 0.5,),
+            coords.rval[:2] + (moments.spec_rval(),), coords.rota,
+            moments.spec_rest(), moments.spec_medium(),
+            moments.spec_convention())
+        self._map_coords = coords
+        self._orders = moments.orders()
+        self._flux_floor = moments.flux_floor()
+        self._method = moments.method()
+        self._outputs: tuple[
+            OrbitIntegrator, _moments.MomentsPlan] | None = None
 
     def evaluate(
             self,
@@ -502,23 +540,35 @@ class OrbitMomentsPlan(ObservablePlan):
     ) -> ModelData:
         state = galaxies[self._galaxy].states[self._component]
         values = {name: params[full] for name, full in self._names.items()}
-        if self._integrator is None:
-            self._integrator = OrbitIntegrator(
-                self._driver, self._dtype, len(state.starts),
-                accuracy=state.accuracy, max_steps=state.max_steps(),
-                nsamples=state.samples, nphi=state.copies, twins=True,
-                sky=[self._grid], nchannels=self._nchannels)
+        weights = np.asarray(values[self._weights], dtype=float)
+        light = state.orbit_light(weights)
+        centre = [values['xpos'], values['ypos']]
+        geometry = (values['posa'], values['incl'])
         # (channel j holds the velocities vsys + v from zero + (j - 1/2)
         # step to zero + (j + 1/2) step)
-        records = self._integrator.integrate(
-            state.potential, state.starts, state.turns,
-            (values['posa'], values['incl']),
-            np.array([[values['xpos'], values['ypos']]]),
-            light=state.orbit_light(values[self._weights]),
-            channels=(1 / self._step,
-                      (values['vsys'] - self._zero) / self._step + 0.5))
+        channels = (1 / self._step,
+                    (values['vsys'] - self._zero) / self._step + 0.5)
+        if out_extra is None:
+            if self._integrator is None:
+                self._integrator = OrbitIntegrator(
+                    self._driver, self._dtype, len(state.starts),
+                    accuracy=state.accuracy, max_steps=state.max_steps(),
+                    nsamples=state.samples, nphi=state.copies, twins=True,
+                    sky=[self._grid], nchannels=self._nchannels)
+            records = self._integrator.integrate(
+                state.potential, state.starts, state.turns, geometry,
+                centres=np.array([centre]), light=light, channels=channels)
+        else:
+            integrator, _ = self._outputs_of(state)
+            records = integrator.integrate(
+                state.potential, state.starts, state.turns, geometry,
+                cell_edges=state.cell_edges,
+                centres=np.array([centre, centre]), light=light,
+                channels=channels)
+            self._add_extras(out_extra, state, weights, light, records)
         self._driver.mem_copy_h2d(
-            np.ascontiguousarray(records.spectra[:, None, :], self._dtype),
+            np.ascontiguousarray(
+                records.spectra[:, None, :self._nregions], self._dtype),
             self._spectra)
         moments = self._moments.evaluate(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), self._spectra,
@@ -527,6 +577,75 @@ class OrbitMomentsPlan(ObservablePlan):
         return {
             key: dict(d=value['d'][0], m=value['m'][0], w=value['w'][0])
             for key, value in moments.items()}
+
+    def _outputs_of(
+            self, state: 'OrbitLibraryState'
+    ) -> tuple[OrbitIntegrator, _moments.MomentsPlan]:
+        """
+        Return the integrator of the extra outputs (of the bins, the pixels
+        and the cells; made once) and the moments of the pixels.
+        """
+        if self._outputs is None:
+            integrator = OrbitIntegrator(
+                self._driver, self._dtype, len(state.starts),
+                accuracy=state.accuracy, max_steps=state.max_steps(),
+                nsamples=state.samples, nphi=state.copies, twins=True,
+                cells=state.cell_light.shape,
+                sky=[self._grid, self._pixels.grid],
+                nchannels=self._nchannels, cell_moments=True)
+            moments = _moments.MomentsPlan(
+                self._driver, self._pixels.shape[::-1], self._orders,
+                self._flux_floor, self._method, self._dtype)
+            self._outputs = integrator, moments
+        return self._outputs
+
+    def _add_extras(
+            self,
+            out_extra: Extras,
+            state: 'OrbitLibraryState',
+            weights: np.ndarray,
+            light: np.ndarray,
+            records: 'OrbitRecords'
+    ) -> None:
+        """
+        Add the extra outputs (see OrbitMomentsPlan) of the records of the
+        bins, the pixels and the cells.
+        """
+        _, moments = self._outputs_of(state)
+        cube = self._pixels.cube(records.spectra[:, self._nregions:])
+        out_extra.add(
+            'cube', gridutils.GridData(cube, self._cube_coords, 2),
+            "Cube of the stars on orbits",
+            "The spectra of the light of the stars on their orbits (at the "
+            "solved weights) in each pixel of the grid of the bins, "
+            "through the PSF, on the spectral axis of the moments.")
+        d_cube = self._driver.mem_copy_h2d(
+            np.ascontiguousarray(cube, self._dtype))
+        measured = moments.evaluate(
+            (1.0, 1.0, self._step), (0.0, 0.0, self._zero), d_cube, None)
+        for key, value in measured.items():
+            image = self._driver.mem_copy_d2h(value['d']).astype(float)
+            mask = self._driver.mem_copy_d2h(value['m'])
+            image[mask == 0] = np.nan
+            out_extra.add(
+                f'unbinned_{key}',
+                gridutils.GridData(image, self._map_coords, None),
+                f"Unbinned {key} of the stars on orbits",
+                f"The {key} of the spectrum of each pixel of the cube of the "
+                f"stars on orbits, measured as those of the bins (NaN where "
+                f"masked).")
+        cells, profile = _orbit_outputs.cell_tables(
+            state, records.cell_moments)
+        out_extra.add(
+            'orbit_cells', cells, "Moments of the orbits in the cells",
+            _orbit_outputs.CELLS_DESCRIPTION, **self._ids)
+        out_extra.add(
+            'orbit_profile', profile, "Profile of the moments of the orbits",
+            _orbit_outputs.PROFILE_DESCRIPTION, **self._ids)
+        out_extra.add(
+            'orbits', _orbit_outputs.orbit_table(
+                state, weights, light, records.energies[:, 0]),
+            "Orbits", _orbit_outputs.ORBITS_DESCRIPTION, **self._ids)
 
     def mock(
             self,

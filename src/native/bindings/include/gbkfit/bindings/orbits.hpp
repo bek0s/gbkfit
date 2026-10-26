@@ -71,9 +71,11 @@ struct Orbits
     // shape (norbits, ntargets, order + 2)), and the spectrum of their
     // light (light) on the channels of the map of their velocities
     // (channel_scale and channel_offset) into spectra (of shape
-    // (nchannels, ntargets), added to); and their steps and energies (a
-    // row per orbit, at its start and its end). The cells, the sky, the
-    // moments, the spectra and the steps and energies are optional
+    // (nchannels, ntargets), added to); the moments of their light in the
+    // cells into cell_moments (of shape (ncell_r, ncell_b, 9), added to;
+    // with the cells); and their steps and energies (a row per orbit, at
+    // its start and its end). The cells, the sky, the moments, the
+    // spectra, the cell moments and the steps and energies are optional
     // (None). Their samples are kept in samples (of shape (nchunk,
     // nsamples, 6)), nchunk orbits at a time.
     static void
@@ -87,7 +89,7 @@ struct Orbits
             Values shares,
             Values target_v, Values target_s, int order, Out3 moments,
             Values light, T channel_scale, T channel_offset, Out2 spectra,
-            Steps steps, Out2 energies, Out3 samples)
+            Out3 cell_moments, Steps steps, Out2 energies, Out3 samples)
     {
         const typename Kernels::DeviceScope scope(starts.device_id());
         OrbitArgs<T> a;
@@ -173,17 +175,31 @@ struct Orbits
             a.moments = moments.data();
         }
 
-        require(spectra.is_valid() == light.is_valid(),
-                "spectra and light go together");
-        if (spectra.is_valid())
+        require(light.is_valid()
+                == (spectra.is_valid() || cell_moments.is_valid()),
+                "light goes with spectra or cell moments");
+        if (light.is_valid())
         {
             require(light.shape(0) == norbits,
                     "light needs one value per orbit");
+            a.light = light.data();
+        }
+        if (cell_moments.is_valid())
+        {
+            require(cells.is_valid()
+                    && cell_moments.shape(0) == size_t(a.ncell_r)
+                    && cell_moments.shape(1) == size_t(a.ncell_b)
+                    && cell_moments.shape(2) == ORBITS_CELL_MOMENTS,
+                    "cell_moments go with the cells, of the shape "
+                    "(ncell_r, ncell_b, 9)");
+            a.cell_moments = cell_moments.data();
+        }
+        if (spectra.is_valid())
+        {
             require(!moments.is_valid()
                     || spectra.shape(1) == size_t(a.ntargets),
                     "spectra and moments need the same targets");
             a.ntargets = int(spectra.shape(1));
-            a.light = light.data();
             a.nchannels = int(spectra.shape(0));
             a.channel_scale = channel_scale;
             a.channel_offset = channel_offset;
@@ -251,6 +267,7 @@ struct Orbits
                         nb::arg("channel_scale"),
                         nb::arg("channel_offset"),
                         nb::arg("spectra").noconvert().none(),
+                        nb::arg("cell_moments").noconvert().none(),
                         nb::arg("steps").noconvert().none(),
                         nb::arg("energies").noconvert().none(),
                         nb::arg("samples").noconvert());

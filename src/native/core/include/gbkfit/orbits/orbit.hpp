@@ -2,6 +2,10 @@
 
 namespace gbkfit {
 
+// The number of the moments of the light of orbits in a cell (see
+// OrbitArgs::cell_moments)
+constexpr int ORBITS_CELL_MOMENTS = 9;
+
 // The potential of the gravity of a galaxy in the frame of a spheroid (see
 // SpheroidArgs), symmetric about its axis and its plane, as a table: on
 // the nodes u = ln r = range[0] + i range[1] (r in arcsec) for i in [0,
@@ -116,6 +120,17 @@ struct OrbitArgs
     T channel_scale = 0;
     T channel_offset = 0;
     T* spectra = nullptr;
+
+    // The moments of the light of all the orbits in the cells (optional,
+    // with the cells and light): in cell (i, j), at cell_moments[
+    // ORBITS_CELL_MOMENTS (i ncell_b + j) + m], the sums over the orbits
+    // of light[k] times the fraction of the time of orbit k in the cell
+    // (m = 0) and times its velocities there (km/s, in the frame of the
+    // spheroid; m = 1 to 8): v_r, v_R, v_phi, v_r^2, v_theta^2, v_phi^2,
+    // v_R^2 and v_z^2 (r, theta and phi spherical, theta from the axis;
+    // R, phi and z cylindrical; the means of v_theta and v_z are 0, of
+    // orbits mirrored about the plane, which the sky sees)
+    T* cell_moments = nullptr;
 
     // The number of steps of each orbit (optional), and its energy
     // ((km/s)^2, optional) at its start (energies[2k]) and its end

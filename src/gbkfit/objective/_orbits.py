@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.driver import DeviceArray, Driver
+from gbkfit.driver import DeviceArray
 from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
@@ -186,7 +186,8 @@ class OrbitGroup:
             for data, m in zip(self._data, moved))))
         records = integrator.integrate(
             state.potential, state.starts, state.turns,
-            (values['posa'], values['incl']), centres, series)
+            (values['posa'], values['incl']), state.cell_edges, centres,
+            series)
 
         # The rows of the factors of the orbits: of the data (the
         # residuals of the comparisons), and of the light of the bins and
@@ -264,7 +265,7 @@ class OrbitGroup:
             group_plan.galaxy_drivers()[self._galaxy], dtype,
             len(state.starts), accuracy=state.accuracy,
             max_steps=state.max_steps(), nsamples=state.samples,
-            nphi=state.copies, twins=True, cell_edges=state.cell_edges,
+            nphi=state.copies, twins=True, cells=state.cell_light.shape,
             sky=self._grids, order=self._order)
         self._ones = []
         for data, i in zip(self._data, self._observations):

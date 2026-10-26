@@ -203,6 +203,51 @@ def test_an_objective_models_the_bins_of_stars_on_orbits(driver):
     assert 0 < objective.nnuisance() <= objective.nresiduals()
 
 
+def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
+    # The extra outputs of the orbits at the weights of their prior (1):
+    # the cube of the pixels summed over the pixels of each bin is the
+    # spectrum of the bin (of a symmetric PSF), so its moments are the
+    # model of the bins; the cells hold most of the light of the orbits;
+    # the tables have a row per cell, shell and orbit (and its twin, of
+    # the opposite angular momentum)
+    from gbkfit.model import Extras
+    from gbkfit.observation.observables import _moments
+    obs = observation(bins())
+    moments = obs.observable()
+    extras = Extras()
+    model = ObservationGroup([galaxy()], [obs]).plan(driver).model_h(
+        PROPERTIES | dict(stars_weights=np.ones(400)), extras)[0]
+    cube = extras.get('cube').data
+    index = moments.regions().index()
+    spectra = np.stack(
+        [cube[:, index == b].sum(axis=1) for b in range(index.max() + 1)],
+        axis=1)
+    plan = _moments.MomentsPlan(
+        driver, (spectra.shape[1], 1), moments.orders(),
+        moments.flux_floor(), moments.method(), np.float64)
+    step = moments.spec_step()
+    zero = moments.spec_rval() - (moments.spec_size() / 2 - 0.5) * step
+    measured = plan.evaluate(
+        (1.0, 1.0, step), (0.0, 0.0, zero),
+        driver.mem_copy_h2d(np.ascontiguousarray(spectra[:, None, :])), None)
+    for key, value in measured.items():
+        np.testing.assert_allclose(
+            driver.mem_copy_d2h(value['d'])[0], model[key]['d'],
+            rtol=1e-6, atol=1e-6)
+    assert extras.get('unbinned_moment2').data.shape == index.shape
+    cells = extras.get('orbit_cells', component='stars')
+    profile = extras.get('orbit_profile', component='stars')
+    assert len(cells) == len(profile) * 5
+    total = cells['light_spheroid'].sum()
+    assert 0.9 * total < cells['light'].sum() <= total * (1 + 1e-9)
+    assert np.all(np.isfinite(profile['beta'][profile['light'] > 0]))
+    orbits = extras.get('orbits', component='stars')
+    assert len(orbits) == 400
+    np.testing.assert_allclose(
+        orbits['L_z'][1::2], -orbits['L_z'][::2], rtol=1e-12)
+    assert np.all(np.abs(orbits['circularity']) < 1.05)
+
+
 def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     # Data made by the orbits, of the weights of their prior (1): the
     # moments of the spectra of the weighted orbits, as the model of the

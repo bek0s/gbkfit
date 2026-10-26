@@ -105,10 +105,10 @@ def test_orbits_conserve_their_energy(driver, q):
         * (speed * rng.uniform(0.2, 1.2, 300))[:, None]
     integrator = OrbitIntegrator(
         driver, np.float64, 300, accuracy=0.02, max_steps=10 ** 6,
-        nsamples=100, nphi=1, twins=False,
-        cell_edges=(np.array([0, 1, 1e5]), np.array([0, 0.5, np.pi / 2])))
+        nsamples=100, nphi=1, twins=False, cells=(2, 2))
     records = integrator.integrate(
-        table, np.hstack((x, v)), 20, (GEOMETRY['posa'], GEOMETRY['incl']))
+        table, np.hstack((x, v)), 20, (GEOMETRY['posa'], GEOMETRY['incl']),
+        (np.array([0, 1, 1e5]), np.array([0, 0.5, np.pi / 2])))
     errors = np.abs(records.energies[:, 1] / records.energies[:, 0] - 1)
     assert np.median(errors) < 1e-4
     assert errors.max() < 1e-2
@@ -151,8 +151,8 @@ def test_an_orbit_is_seen_in_the_geometry_of_its_spheroid(driver):
     records = integrator.integrate(
         table, np.array([[R, 0, 0, 0, vc, 0]]), 1,
         (GEOMETRY['posa'], GEOMETRY['incl']),
-        np.array([[GEOMETRY['xpos'], GEOMETRY['ypos']]]),
-        (velocity, np.full(size * size, 30.0)))
+        centres=np.array([[GEOMETRY['xpos'], GEOMETRY['ypos']]]),
+        series=(velocity, np.full(size * size, 30.0)))
     light, h0, _ = records.moments[0].T
     seen = light > 0
     assert light.sum() == pytest.approx(1)

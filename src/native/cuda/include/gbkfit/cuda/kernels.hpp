@@ -544,9 +544,10 @@ orbits_record(GBKFIT_GRID_CONSTANT const OrbitArgs<T> a, int first, int ntile)
             const T* sample = samples + 6LL * n;
             if (isnan(sample[0]))
                 continue;
-            if (rows.cells && c == 0)
-                gbkfit::orbits_record_cell<orbits_record_add<T>>(
-                        sample, a, rows);
+            if (c == 0 && tile == 0 && (rows.cells || a.cell_moments))
+                gbkfit::orbits_record_cell<
+                        atomic_add<T>, orbits_record_add<T>>(
+                                k, sample, sample + 3, a, rows);
             if (a.nsky)
                 gbkfit::orbits_record_copy<
                         atomic_add<T>, orbits_record_add<T>>(
