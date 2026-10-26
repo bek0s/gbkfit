@@ -115,7 +115,14 @@ class FitterCMAES(Fitter):
     maxfevals : int, optional
         The most model evaluations of all runs (by default, pycma's).
     tolfun : float, optional
-        The change of the merit below which a run stops.
+        The change of the merit below which a run stops (the merit is in
+        units of chi-square, whose changes mean the same at any size of
+        the data: 1 moves a parameter by one standard deviation). By
+        default 0.01, which keeps a run going while it matters (0.1 of a
+        standard deviation), and lets it stop above the round-off of a
+        merit summed from float32 models (~1e-4 for chi-squares of ~1e4),
+        which a smaller one waits for in vain: the run then ends by
+        stagnation, without success.
     tolx : float, optional
         The step (in units of sigma) below which a run stops.
     sigma : float, optional
@@ -164,7 +171,7 @@ class FitterCMAES(Fitter):
             restarts: int = 0,
             bipop: bool = False,
             maxfevals: int | None = None,
-            tolfun: float = 1e-6,
+            tolfun: float = 0.01,
             tolx: float = 1e-6,
             sigma: float | None = None,
             verbose: bool = False,
