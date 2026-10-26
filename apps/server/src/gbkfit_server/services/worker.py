@@ -18,11 +18,14 @@ import logging
 import os
 import sys
 from collections.abc import Mapping
-from typing import Any, BinaryIO
+from typing import TYPE_CHECKING, Any, BinaryIO
 
 import numpy as np
 
 from gbkfit_server.services import frames
+
+if TYPE_CHECKING:
+    from gbkfit.params import ParamSpace
 
 
 # The kinds of the outputs (see gbkfit.Setup.outputs) of the data, sent
@@ -39,6 +42,7 @@ def main() -> None:
     os.dup2(2, 1)
     from gbkfit import load
     from gbkfit.tasks import log_handler
+    from gbkfit.params import ParamEvaluationError
     from gbkfit.utils.parseutils import ConfigError
 
     logger = logging.getLogger('gbkfit')
@@ -51,8 +55,12 @@ def main() -> None:
         sys.exit(1)
     params, objective = setup.params, setup.objective
     free = params.free_properties()
-    values = {name: info.get('value') for name, info in free.items()}
-    outputs = setup.outputs(params.evaluate(values), data=True)
+    try:
+        values = _start_values(params)
+        outputs = setup.outputs(params.evaluate(values), data=True)
+    except (ConfigError, ParamEvaluationError) as e:
+        _write(out, frames.encode(dict(type='error', message=str(e))))
+        sys.exit(1)
     _write(out, frames.array_frame(
         dict(type='ready', free=free, data=objective is not None),
         _arrays(outputs, _DATA)))
@@ -61,8 +69,10 @@ def main() -> None:
         try:
             if unknown := set(header['values']) - set(free):
                 raise ValueError(f"no free elements {sorted(unknown)}")
-            values |= header['values']
-            param_values = params.evaluate(values)
+            # (a value it refuses does not stay for the next frames)
+            changed = values | header['values']
+            param_values = params.evaluate(changed)
+            values = changed
             outputs = setup.outputs(param_values)
             chi2 = None if objective is None \
                 else objective.chi2(param_values)
@@ -70,6 +80,23 @@ def main() -> None:
                 dict(type='result', chi2=chi2), _arrays(outputs, _RESULT)))
         except Exception as e:
             _write(out, frames.encode(dict(type='error', message=str(e))))
+
+
+def _start_values(params: 'ParamSpace') -> dict[str, float]:
+    """
+    Return the start value of each free element: its value, or else (e.g.
+    of a configuration of a sampler) the median of its prior, or of its
+    bounds.
+
+    Raises
+    ------
+    ConfigError
+        If an element has no value, no prior and not both bounds.
+    """
+    return {
+        name: element.value() if element.value() is not None
+        else float(element.proper_prior().ppf(0.5))
+        for name, element in params.free_elements().items()}
 
 
 def _arrays(

@@ -132,6 +132,29 @@ def test_a_session_evaluates_its_model_at_new_values(root, setup):
         type='error', message="no free elements ['nothing']", nbytes=0)
 
 
+def test_a_session_of_a_sampler_starts_at_the_median_of_the_priors(
+        root, setup):
+    # (free elements without a value: the session failed to open; and a
+    # value it refuses does not stay for the next evaluations)
+    params = pathlib.Path(root, 'study/params/disk.yaml')
+    properties = yaml.load(params)
+    properties['properties']['incl'] = dict(min=0, max=90)
+    yaml.dump(properties, params)
+
+    async def run():
+        server = Server(root, LocalExecutor())
+        session = await server.sessions.open(setup)
+        results = [
+            frames.decode(await session.evaluate(values))[0]['type']
+            for values in (dict(incl='steep'), {})]
+        await server.close()
+        return session.info(), results
+
+    info, results = asyncio.run(run())
+    assert info['free']['incl'] == dict(min=0, max=90)
+    assert results == ['error', 'result']
+
+
 def test_a_session_with_data_has_residuals_and_a_chi_square(root, setup):
     # The data are the model at the start: its residuals and chi-square
     # are 0 there, and not elsewhere
