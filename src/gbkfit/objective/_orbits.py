@@ -5,7 +5,7 @@ the observations that see them, which the groups model.
 """
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -29,6 +29,14 @@ __all__ = [
 # The relative error of the light of the spheroid in the bins and in the
 # cells, which the orbits must hold (the constraints)
 _LIGHT_ERROR = 0.01
+
+# The integral of the light over each cell of a sky grid: Gauss-Legendre
+# nodes along each axis of a square, and a square is split in four while
+# that changes its light by more than the tolerance (relative to the
+# brightest cell), at most to the depth
+_CELL_NODES = 4
+_CELL_TOLERANCE = 1e-5
+_CELL_DEPTH = 12
 
 
 class OrbitGroup:
@@ -375,18 +383,70 @@ def _bins_light(
 ) -> np.ndarray:
     """
     Return the light of a spheroid at the values of its parameters in the
-    targets of a sky grid (its surface density at the centre of each cell,
-    times the area of a cell, through the shares), of its centre in the
+    targets of a sky grid (its surface density integrated over each cell,
+    as the orbits record it, through the shares), of its centre in the
     sky of the grid.
     """
     cells = np.flatnonzero(np.diff(grid.shares.indptr))
     ny, nx = grid.shape
-    points = np.stack((cells % nx + 0.5, cells // nx + 0.5))
     inverse = np.linalg.inv(grid.cells[:, :2])
-    x, y = inverse @ (points - grid.cells[:, 2:]) - centre[:, None]
     area = abs(np.linalg.det(inverse))
-    density = spheroid.surface_density(values, x, y) * area
-    return grid.shares[cells].T @ density
+
+    def density(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+        x, y = inverse @ (np.stack((u, v)) - grid.cells[:, 2:]) \
+            - centre[:, None]
+        return spheroid.surface_density(values, x, y)
+
+    light = _cells_integral(density, cells % nx, cells // nx) * area
+    return grid.shares[cells].T @ light
+
+
+def _cells_integral(
+        function: Callable[[np.ndarray, np.ndarray], np.ndarray],
+        x0: np.ndarray,
+        y0: np.ndarray
+) -> np.ndarray:
+    """
+    Return the integral of a function of (x, y) over each unit square
+    [x0, x0 + 1] x [y0, y0 + 1], adaptively (see _CELL_NODES).
+    """
+    nodes, weights = np.polynomial.legendre.leggauss(_CELL_NODES)
+    nodes, weights = (nodes + 1) / 2, weights / 2
+
+    def rule(x: np.ndarray, y: np.ndarray, size: float) -> np.ndarray:
+        # (the integral over each square of the given corners and size)
+        u = x[:, None, None] + size * nodes[None, :, None]
+        v = y[:, None, None] + size * nodes[None, None, :]
+        u, v = np.broadcast_arrays(u, v)
+        f = function(u.ravel(), v.ravel()).reshape(u.shape)
+        return size ** 2 * np.einsum('i,j,sij->s', weights, weights, f)
+
+    integral = np.zeros(len(x0))
+    squares = np.arange(len(x0))
+    x, y = np.asarray(x0, dtype=float), np.asarray(y0, dtype=float)
+    whole = rule(x, y, 1.0)
+    brightest = np.max(np.abs(whole), initial=0.0)
+    size = 1.0
+    for depth in range(_CELL_DEPTH):
+        size /= 2
+        # (each square in four: the corners of its quarters)
+        x = (x[:, None] + size * np.array([0, 1, 0, 1])).ravel()
+        y = (y[:, None] + size * np.array([0, 0, 1, 1])).ravel()
+        quarters = rule(x, y, size)
+        split = quarters.reshape(-1, 4).sum(axis=1)
+        # (a profile narrower than the nodes shows its peak only once
+        # split, so the brightest light found so far sets the tolerance)
+        brightest = max(brightest, np.max(np.abs(split), initial=0.0))
+        done = np.abs(split - whole) <= _CELL_TOLERANCE * brightest
+        if depth == _CELL_DEPTH - 1:
+            done[:] = True
+        np.add.at(integral, squares[done], split[done])
+        kept = np.repeat(~done, 4)
+        squares = np.repeat(squares, 4)[kept]
+        x, y, whole = x[kept], y[kept], quarters[kept]
+        if not len(squares):
+            break
+    return integral
 
 
 def _same(first: ParamValues, second: ParamValues) -> bool:

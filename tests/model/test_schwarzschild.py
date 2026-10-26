@@ -158,9 +158,11 @@ def test_the_sky_grid_of_bins_holds_their_pixels(rota, oversampling):
 
 
 def test_the_light_of_bins_is_that_of_the_spheroid():
-    # Without a PSF, the surface density at the centres of their pixels
-    # times their area; with one, the light that it moves between the
-    # bins (with the light of the grid as a whole kept within 1%)
+    # Without a PSF, the integral of its surface density over their pixels
+    # (here the mean over 64 x 64 points of each pixel, times its area, as
+    # the orbits record it; not its value at the centres, 15% off in the
+    # central pixels); with one, the light that it moves between the bins
+    # (with the light of the grid as a whole kept within 1%)
     regions = bins()
     spheroid = galaxy().components()[0]
     values = {name[len('stars_'):] if name.startswith('stars_') else name:
@@ -169,11 +171,15 @@ def test_the_light_of_bins_is_that_of_the_spheroid():
     x, y = gridutils.sky_positions(regions.grid())
     index = regions.index()
     inside = index >= 0
-    direct = np.bincount(index[inside], spheroid.surface_density(
-        values, x[inside] - centre[0], y[inside] - centre[1]) * 4)
+    offsets = 2 * ((np.arange(64) + 0.5) / 64 - 0.5)
+    dx, dy = (d.ravel() for d in np.meshgrid(offsets, offsets))
+    density = spheroid.surface_density(
+        values, x[inside][:, None] + dx - centre[0],
+        y[inside][:, None] + dy - centre[1])
+    direct = np.bincount(index[inside], density.mean(axis=1) * 4)
     exact = _bins_light(
         spheroid, values, sky_grid(observation(regions, None)), centre)
-    np.testing.assert_allclose(exact, direct, rtol=1e-12)
+    np.testing.assert_allclose(exact, direct, rtol=1e-4)
     blurred = _bins_light(
         spheroid, values, sky_grid(observation(regions, 1.0)), centre)
     assert blurred.sum() == pytest.approx(direct.sum(), rel=0.01)
