@@ -402,9 +402,14 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         nevals = 1
         nfitted = problem.ndim() + objective.nnuisance()
         dof = objective.nindependent() - nfitted
-        # (the noise residuals of a fitted noise are not of the data: a
-        # reduced chi-square with them would scale the covariance wrongly)
-        reduced_chi2 = (merits.chi2 - objective.noise_chi2()) / dof \
+        # (of the chi-square of the data alone, the AICp less 2 nnuisance
+        # (see Merits): the residuals of the priors of solved values are
+        # not of the data, as the degrees of freedom leave out their
+        # nnuisance, nor the noise residuals of a fitted noise; with them,
+        # it was ~13 for ~2.5 in a Schwarzschild fit, and it scales the
+        # covariance)
+        data_chi2 = merits.aicp - 2 * objective.nnuisance()
+        reduced_chi2 = (data_chi2 - objective.noise_chi2()) / dof \
             if dof > 0 else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)

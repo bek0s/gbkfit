@@ -318,7 +318,9 @@ class FitSolution:
         Objective.nindependent; nresiduals, but fewer for correlated
         noise) less nfitted.
     reduced_chi2 : float
-        chi2 / dof (nan if dof <= 0).
+        The chi-square of the data alone (without the residuals of the
+        priors of solved values and the noise residuals of a fitted noise)
+        over dof (nan if dof <= 0).
     log_likelihood : float
         The log-likelihood (-chi2 / 2, unless the objective has nuisance
         parameters; see Objective.log_likelihood).

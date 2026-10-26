@@ -250,6 +250,25 @@ def test_least_squares_fit_the_scale_of_the_errors(driver):
     assert best.reduced_chi2 == pytest.approx(n / best.dof, rel=1e-2)
 
 
+def test_the_reduced_chi2_is_of_the_data_alone():
+    # A solved flux scale under a prior far from what the data say (the
+    # brightness fixed at its truth, so the scale is 1): the residual of
+    # its prior is in the chi-square, but not of the data, and the degrees
+    # of freedom leave its value out (nnuisance)
+    from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
+    plan = mock_objective(
+        DriverHost(), name='obs', flux_scale='one').group_plan()
+    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
+        pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1.5, sigma=0.05, minimum=0))))
+    objective = Objective(plan, params.solves())
+    best = FitterScipyLeastSquares().fit(objective, params).best()
+    residuals = objective.residuals(params.evaluate(list(best.free.values())))
+    data_chi2 = float(np.sum(residuals[:objective.nresiduals()] ** 2))
+    assert best.chi2 - data_chi2 > 50
+    assert best.reduced_chi2 == pytest.approx(data_chi2 / best.dof, rel=1e-6)
+
+
 def test_lmfit_says_why_leastsq_stopped():
     # lmfit reported every MINPACK convergence as 'Fit succeeded.' (also
     # when no step was accepted), and a run stopped by max_nfev as
