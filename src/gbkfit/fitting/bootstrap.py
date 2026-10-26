@@ -328,8 +328,10 @@ def bootstrap(
     keep theirs). Each refit starts at the best fit (see
     ParamSpace.with_values), with the fitter of the options, or else that
     of the fit, which works out no uncertainty. The refits that fail (the
-    fitter reports no success or finds no point, or the parameters cannot
-    be evaluated) are counted and left out.
+    fitter finds no point, or the parameters cannot be evaluated) are
+    counted and left out; those whose fitter reports no success (e.g.
+    stopped by its budget of evaluations) are kept, and flagged (see
+    Bootstrap.converged).
 
     The fitter of the refits may differ from that of the fit (e.g. least
     squares after a sampler or CMA-ES): the bootstrap tells how the best
@@ -395,6 +397,7 @@ def bootstrap(
     # (the refits share its whitening of correlated noise; see with_data)
     objective.prepare()
     rows = []
+    converged = []
     failures = []
     for k in range(options.nsamples()):
         datasets = []
@@ -417,16 +420,24 @@ def bootstrap(
             failures.append(str(e))
             _log.warning(f"{refit} failed: {e}")
             continue
-        if not result.success:
-            failures.append(f"the fitter did not succeed: {result.message}")
-            _log.warning(f"{refit} failed: {failures[-1]}")
-            continue
+        # A refit whose fitter reports no success (e.g. stopped by its
+        # budget of evaluations, or stagnating on round-off) is kept, and
+        # flagged. A choice: leaving it out would keep only the refits
+        # that were easy to fit, a biased sample of the noise. Only refits
+        # without a best point at all are failures.
         best = result.best()
         rows.append(
             [best.elements[name] for name in params.kinds()]
             + [best.derived.get(name, np.nan) for name in derived])
-        _log.info(f"{refit}: chi2 {best.chi2:.6g}")
+        converged.append(result.success)
+        if result.success:
+            _log.info(f"{refit}: chi2 {best.chi2:.6g}")
+        else:
+            _log.warning(
+                f"{refit}: chi2 {best.chi2:.6g}, kept, but the fitter did "
+                f"not converge: {result.message}")
     return Bootstrap(
         names=names, samples=np.array(rows, dtype=float).reshape(
             -1, len(names)),
+        converged=np.array(converged, dtype=bool),
         failures=tuple(failures), options=options.dump())

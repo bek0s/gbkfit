@@ -247,7 +247,8 @@ def _bootstrap(
     boot = gbkfit.fitting.bootstrap(
         setup.objective, setup.params, start, setup.fitter, options)
     _log.info(
-        f"bootstrap completed ({len(boot.failures)} refits failed; elapsed "
+        f"bootstrap completed ({len(boot.failures)} refits failed, "
+        f"{int((~boot.converged).sum())} kept unconverged; elapsed "
         f"time: {time.perf_counter() - begin:.1f} s)")
     return boot
 

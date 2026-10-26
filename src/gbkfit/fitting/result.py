@@ -211,7 +211,11 @@ class Bootstrap:
         those of the derived values (see FitSolution.derived), which are
         NaN in the samples where they cannot be evaluated.
     samples : np.ndarray
-        The best fit of each refit that succeeded, one per row.
+        The best fit of each refit that found one, one per row.
+    converged : np.ndarray
+        Whether the fitter of each of those refits reports success (bool,
+        one per row); those it does not (e.g. stopped by its budget of
+        evaluations) are kept, see bootstrap.
     failures : tuple of str
         Why each of the other refits failed.
     options : dict
@@ -219,6 +223,7 @@ class Bootstrap:
     """
     names: tuple[str, ...]
     samples: np.ndarray
+    converged: np.ndarray
     failures: tuple[str, ...]
     options: dict[str, Any]
 
@@ -244,17 +249,25 @@ class Bootstrap:
     def info(self) -> dict[str, Any]:
         """
         Return its summary, for result.json: the number of refits that
-        succeeded and failed, why those failed, and the standard deviation
-        and the percentiles of each element (see std and summary).
+        found a best fit, of those whose fitter did not report success,
+        and of those that failed, why those failed, and the standard
+        deviation and the percentiles of each element (see std and
+        summary).
         """
         return dict(
-            nsamples=len(self.samples), nfailed=len(self.failures),
-            failures=list(self.failures), std=self.std(),
-            quantiles=self.summary(), options=self.options)
+            nsamples=len(self.samples),
+            nunconverged=int(np.count_nonzero(~self.converged)),
+            nfailed=len(self.failures), failures=list(self.failures),
+            std=self.std(), quantiles=self.summary(), options=self.options)
 
     def table(self) -> Table:
-        """Return the samples as a table: a column of each element."""
-        return _samples_table(self.names, self.samples)
+        """
+        Return the samples as a table: a column of each element, and one
+        of whether each refit converged.
+        """
+        table = _samples_table(self.names, self.samples)
+        table['converged'] = self.converged
+        return table
 
 
 @dataclasses.dataclass(frozen=True)

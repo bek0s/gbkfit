@@ -829,7 +829,8 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn():
     written = run.read(run.product('fit_result'))['bootstrap']
     assert (written['nsamples'], written['nfailed']) == (10, 0)
     assert written['options']['scheme'] == dict(type='blocks', size=[4, 4])
-    assert run.read(run.product('bootstrap')).colnames == list(boot.names)
+    assert run.read(run.product('bootstrap')).colnames \
+        == list(boot.names) + ['converged']
 
 
 def test_a_gaussian_bootstrap_draws_the_noise_anew():
@@ -848,6 +849,24 @@ def test_a_gaussian_bootstrap_draws_the_noise_anew():
     std = result.best().covariance.std
     for name in TRUE:
         assert 0.5 < boot.std()[name] / std[name] < 2
+
+
+def test_a_bootstrap_keeps_refits_that_do_not_converge():
+    # Refits stopped by their budget of evaluations are kept, and flagged:
+    # leaving them out would bias the samples to the refits easy to fit
+    from gbkfit.fitting import (
+        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
+        objective, params)
+    boot = bootstrap(
+        objective, params, result.best().elements,
+        fitter_parser.load(dict(type='scipy.least_squares', max_nfev=2)),
+        BootstrapOptions(3, BootstrapGaussian()))
+    assert len(boot.samples) == 3 and not boot.failures
+    assert not boot.converged.any()
+    assert boot.info()['nunconverged'] == 3
 
 
 def test_a_bootstrap_refits_fits_of_solved_values():
