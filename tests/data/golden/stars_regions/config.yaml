@@ -1,4 +1,4 @@
-# stars_regions: The kinematics of the stars of a flattened Sersic spheroid in Voronoi bins, as pPXF gives them (V, sigma, h3 and h4 of Gauss-Hermite series, log velocities, a PSF and no LSF): its Jeans kinematics in the gravity of its light and an NFW halo.
+# stars_regions: The kinematics of the stars of a flattened Sersic spheroid in Voronoi bins, as pPXF gives them (log velocities, a PSF and no LSF), as Jeans models are fitted to them: the mean and the dispersion of each bin (see prep.gauss_hermite_moments). Its Jeans kinematics in the gravity of its light and an NFW halo.
 # (written by make_golden.py; do not edit)
 driver: {type: host}
 galaxies:
@@ -27,10 +27,10 @@ observations:
       rpix: [11.5, 11.5]
       rval: [0.0, 0.0]
       rota: 0.0
-    moment1: {data: observation0_moment1_d.fits, error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
-    moment3: {data: observation0_moment3_d.fits, error: observation0_moment3_e.fits}
-    moment4: {data: observation0_moment4_d.fits, error: observation0_moment4_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
+      error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
+      error: observation0_moment2_e.fits}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight:
     type: grid
@@ -42,7 +42,7 @@ observations:
     lsf: null
   observable: {type: region_moments, flux_floor: 1.0e-06, spec_size: 101, spec_step: 10,
     spec_rval: 0, spec_rest: 5.000000000000001e-07 m, spec_medium: vacuum, spec_convention: log,
-    method: gauss_hermite}
+    method: moments}
   oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64

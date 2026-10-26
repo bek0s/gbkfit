@@ -531,6 +531,53 @@ def test_binned_maps_must_hold_one_value_per_bin():
         prep.prep_region_moments('bins.fits', ['vel.fits'], None, None, 'float32')
 
 
+def test_the_moments_of_the_gauss_hermite_series_of_a_table():
+    # The mean and the dispersion of the series of each row (e.g. of
+    # pPXF), exactly those of the series (here by quadrature), and their
+    # errors to first order (here by finite differences)
+    import astropy.units as u
+    from astropy.table import Table
+    rows = [(10.0, 143.22, 0.0, -0.0096), (-50.0, 120.0, 0.08, 0.05)]
+    errors = [2.0, 3.0, 0.02, 0.03]
+    kms = u.km / u.s
+    v, sigma, h3, h4 = np.transpose(rows)
+    Table(dict(
+        V=v * kms, SIGMA=sigma * kms, H3=h3, H4=h4, EV=[2.0] * 2 * kms,
+        ES=[3.0] * 2 * kms, EH3=[0.02] * 2, EH4=[0.03] * 2,
+    )).write('kinematics.fits')
+    prep.prep_gauss_hermite_moments(
+        'kinematics.fits', ['V', 'SIGMA', 'H3', 'H4'],
+        ['EV', 'ES', 'EH3', 'EH4'])
+    table = Table.read('prep_kinematics.ecsv')
+    assert table['dispersion'].unit == kms
+    velocity = np.linspace(-3000, 3000, 600001)
+
+    def moments(coefficients):
+        v0, s, c3, c4 = coefficients
+        w = (velocity - v0) / s
+        series = np.exp(-w ** 2 / 2) * (
+            1 + c3 * (2 * w ** 3 - 3 * w) / np.sqrt(3)
+            + c4 * (4 * w ** 4 - 12 * w ** 2 + 3) / (2 * np.sqrt(6)))
+        total = np.trapezoid(series, velocity)
+        mean = np.trapezoid(series * velocity, velocity) / total
+        return np.array([mean, np.sqrt(np.trapezoid(
+            series * (velocity - mean) ** 2, velocity) / total)])
+
+    for i, row in enumerate(rows):
+        np.testing.assert_allclose(
+            [table['mean'][i], table['dispersion'][i]], moments(row),
+            rtol=1e-9, atol=1e-9)
+        steps = np.diag([1e-5, 1e-5, 1e-7, 1e-7])
+        partials = [
+            (moments(row + step) - moments(row - step)) / (2 * step.sum())
+            for step in steps]
+        expected = np.sqrt(np.sum(
+            (np.array(partials) * np.array(errors)[:, None]) ** 2, axis=0))
+        np.testing.assert_allclose(
+            [table['mean_error'][i], table['dispersion_error'][i]],
+            expected, rtol=1e-4)
+
+
 @pytest.mark.parametrize('keywords', [
     # FWHM = 0.8 - 2e-5 (w - 7000) arcsec, beta = 2.5 (of MPDAF: the
     # wavelength normalised to [-0.5, 0.5] from 5000 to 9000 Angstrom)

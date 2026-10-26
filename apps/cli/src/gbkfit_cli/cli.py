@@ -443,6 +443,23 @@ def _make_parser() -> argparse.ArgumentParser:
         help="estimate the errors from the noise of each channel, from its "
              "negative values (instead of an errors file; the noise must be "
              "of mean 0, e.g. without continuum)")
+    parser_prep_gauss_hermite_moments = parsers_prep.add_parser(
+        'gauss_hermite_moments', parents=[parser_common_output, parser_common],
+        help="the mean and the dispersion of the Gauss-Hermite series of a "
+             "table of stellar kinematics (e.g. of pPXF), for Jeans models")
+    parser_prep_gauss_hermite_moments.add_argument(
+        'table', type=str, help="the table, one row per bin")
+    parser_prep_gauss_hermite_moments.add_argument(
+        '--columns', type=str, nargs=4, required=True,
+        metavar=('V', 'SIGMA', 'H3', 'H4'),
+        help="the columns of V, sigma, h3 and h4")
+    parser_prep_gauss_hermite_moments.add_argument(
+        '--errors', type=str, nargs=4,
+        metavar=('V_ERROR', 'SIGMA_ERROR', 'H3_ERROR', 'H4_ERROR'),
+        help="the columns of their errors")
+    parser_prep_gauss_hermite_moments.add_argument(
+        '--format', type=str,
+        help="the format of the table, if astropy cannot tell it")
     parser_prep_psf_muse = parsers_prep.add_parser(
         'psf_muse', parents=[parser_common_output, parser_common],
         help="the PSF of a MUSE cube (from its header), as a table")
@@ -591,6 +608,9 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.bins, args.data_d, args.data_e, args.data_m,
             args.roi_spec, args.dtype, args.velocity_rest, args.velocity,
             **output)
+    elif args.prep_task == 'gauss_hermite_moments':
+        gbkfit.tasks.prep.prep_gauss_hermite_moments(
+            args.table, args.columns, args.errors, args.format, **output)
     elif args.prep_task == 'psf_muse':
         gbkfit.tasks.prep.prep_psf_muse(args.cube, **output)
     elif args.prep_task == 'lsf_muse':

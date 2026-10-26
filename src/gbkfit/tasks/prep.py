@@ -20,12 +20,13 @@ from astropy.io import fits
 
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
-from gbkfit.utils import fitsutils, unitutils
+from gbkfit.utils import fitsutils, tableutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 
 
 __all__ = [
+    'prep_gauss_hermite_moments',
     'prep_lsf_muse',
     'prep_pixel_brightness',
     'prep_pixel_moments',
@@ -475,6 +476,71 @@ def _write_table(
     filename = os.path.join(output_dir, f'prep_{name}.ecsv')
     table.write(filename, overwrite=True)
     return filename
+
+
+def prep_gauss_hermite_moments(
+        file: str,
+        columns: Sequence[str],
+        errors: Sequence[str] | None = None,
+        format_: str | None = None,
+        output_dir: str = '.',
+        output_dir_mode: _Exists = 'overwrite'
+) -> None:
+    """
+    Write the mean and the dispersion of the Gauss-Hermite series of a
+    table of stellar kinematics (e.g. the V, sigma, h3 and h4 of the bins
+    of pPXF, one row per bin), for models that predict those and not the
+    shape of the distribution of velocities (see
+    gbkfit.prep.gauss_hermite_moments): a table (prep_<name>.ecsv) of the
+    columns mean and dispersion, in the unit of the velocities, with
+    mean_error and dispersion_error if the errors are given.
+
+    Parameters
+    ----------
+    file : str
+        The table (any that astropy reads, see Table.read).
+    columns : Sequence of str
+        The columns of V, sigma, h3 and h4.
+    errors : Sequence of str, optional
+        The columns of their errors.
+    format_ : str, optional
+        The format of the table, if astropy cannot tell it.
+    output_dir, output_dir_mode : optional
+        The output directory (see the module).
+    """
+    if len(columns) != 4 or (errors is not None and len(errors) != 4):
+        raise ConfigError(
+            "give the columns of V, sigma, h3 and h4, and of their errors "
+            "if any, four each")
+    table = tableutils.read_table(file, format_)
+    velocity = tableutils.read_column(table, columns[0], None)
+    unit = velocity.unit
+
+    def values(name: str, of_velocity: bool) -> np.ndarray:
+        value = tableutils.read_column(table, name, None)
+        if of_velocity and value.unit != astropy.units.dimensionless_unscaled:
+            value = value.to(unit)
+        return value.value
+
+    kinds = (True, True, False, False)
+    moments = prep.gauss_hermite_moments(
+        *(values(name, kind) for name, kind in zip(columns, kinds)),
+        *(values(name, kind) for name, kind in zip(errors or (), kinds)))
+    output = astropy.table.QTable(dict(
+        mean=moments.mean * unit, dispersion=moments.dispersion * unit))
+    if moments.mean_error is not None:
+        output['mean_error'] = moments.mean_error * unit
+        output['dispersion_error'] = moments.dispersion_error * unit
+    output_dir = _output_dir(output_dir, output_dir_mode)
+    name = os.path.splitext(os.path.basename(file))[0]
+    filename = _write_table(output, output_dir, name)
+    moment1 = 'mean, error: mean_error' if errors else 'mean'
+    moment2 = 'dispersion, error: dispersion_error' if errors else 'dispersion'
+    _log.info(
+        f"the mean and the dispersion are in {filename}; use them as the "
+        f"data of region_moments (file: {filename}, moment1: {{column: "
+        f"{moment1}}}, moment2: {{column: {moment2}}}), of the observable "
+        f"method moments")
 
 
 def prep_psf_muse(

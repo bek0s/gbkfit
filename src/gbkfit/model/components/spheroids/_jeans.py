@@ -61,10 +61,11 @@ class JeansKinematics(SpheroidKinematics):
     kappa (0: none; 1: that of an isotropic rotator where beta_z = 0), two
     parameters. NaN where <v_phi^2> is negative, or below sigma_R^2 with
     kappa > 0 (the spheroid cannot rotate so); 0 where it has no light
-    (beyond the floats). Each point of the spheroid
-    moves with a Gaussian distribution of velocities of that mean and
-    those dispersions (the velocity ellipsoid seen along the line of
-    sight).
+    (beyond the floats). Each point of the spheroid moves with a Gaussian
+    distribution of velocities of that mean and those dispersions (the
+    velocity ellipsoid seen along the line of sight): the Jeans equations
+    give the mean and the dispersion of the stars, not the shape of their
+    distribution, so fit those (see SpheroidKinematics).
     """
 
     @staticmethod

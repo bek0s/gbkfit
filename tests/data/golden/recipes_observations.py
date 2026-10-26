@@ -345,8 +345,9 @@ CASES: list[dict[str, Any]] = [
     dict(
         name='stars_regions',
         doc="The kinematics of the stars of a flattened Sersic spheroid in "
-            "Voronoi bins, as pPXF gives them (V, sigma, h3 and h4 of "
-            "Gauss-Hermite series, log velocities, a PSF and no LSF): its "
+            "Voronoi bins, as pPXF gives them (log velocities, a PSF and no "
+            "LSF), as Jeans models are fitted to them: the mean and the "
+            "dispersion of each bin (see prep.gauss_hermite_moments). Its "
             "Jeans kinematics in the gravity of its light and an NFW halo.",
         galaxies=[dict(
             components=[_STARS],
@@ -356,13 +357,13 @@ CASES: list[dict[str, Any]] = [
         observations=[_sky(
             dict(type='region_moments',
                  regions=dict(type='bins', file='bins.fits'),
-                 orders=[1, 2, 3, 4], method='gauss_hermite', spec_size=101,
+                 orders=[1, 2], method='moments', spec_size=101,
                  spec_step=10, spec_rest='5000 Angstrom',
                  spec_convention='log'),
             line_of_sight=dict(type='grid', depth=dict(step=0.5)),
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
-        noises=[_gauss(0.0005)],
+        noises=[_gauss(0.0002)],
         likelihoods=[dict(type='gaussian', missing_residual=3)],
         prepare=_write_voronoi_bins),
     dict(

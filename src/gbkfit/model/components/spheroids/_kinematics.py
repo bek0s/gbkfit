@@ -110,6 +110,15 @@ class SpheroidKinematics(parseutils.TypedSerializable, abc.ABC):
     the axis of the spheroid: the systemic velocity vsys and a rotation
     around the axis, and the velocity ellipsoid of the dispersions along
     the radial, tangential and vertical directions of the cylinder.
+
+    The mean and the dispersion of the velocities of a line of sight (or
+    of a bin) are then those of its stars, but not the shape of their
+    distribution, which a Gaussian at each point does not give: its h3,
+    h4 and the sigma of a Gauss-Hermite series fitted to it (e.g. by pPXF)
+    are not those of the stars (a sigma 5% low, in a test of an isotropic
+    Hernquist sphere). Fit their mean and dispersion: observables of
+    moments of the method 'moments', with the data of pPXF converted (see
+    prep.gauss_hermite_moments).
     """
 
     def dump(self) -> dict[str, Any]:

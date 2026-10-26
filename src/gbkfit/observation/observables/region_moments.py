@@ -43,13 +43,18 @@ class RegionMoments(Observable):
     spatial grid of regions on a grid (see from_data).
 
     E.g. the kinematics of the stars of a spheroid (lines ['stars'] of its
-    observation, see model.StarsEmission) in the Voronoi bins of pPXF:
-    their V, sigma, h3 and h4, method 'gauss_hermite' (orders 1 to 4).
+    observation, see model.StarsEmission) in the Voronoi bins of pPXF.
     Those are of the distribution of the velocities of the stars itself
     (the fit of the spectra took the LSF out), seen through the PSF: the
     instrument of their observation has a PSF and no LSF. The velocities
     of pPXF are c ln(1 + z), the convention 'log' (with any spec_rest
-    wavelength: the light of stars has no rest).
+    wavelength: the light of stars has no rest). Models that predict the
+    mean and the dispersion of the stars, but not the shape of their
+    distribution (e.g. Jeans kinematics, see model.SpheroidKinematics),
+    are fitted to the mean and the dispersion of the series of pPXF (see
+    prep.gauss_hermite_moments), of the method 'moments' (orders 1 and
+    2); models of its shape, to its V, sigma, h3 and h4, of the method
+    'gauss_hermite' (orders 1 to 4).
 
     Parameters
     ----------

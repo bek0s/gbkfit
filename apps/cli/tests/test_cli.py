@@ -62,6 +62,19 @@ def test_prep_writes_to_the_output_directory(tmp_path):
     assert "output will be stored" in result.stderr
 
 
+def test_prep_takes_the_moments_of_a_table_of_kinematics(tmp_path):
+    # (a series without h3 and h4 is a Gaussian: its V and sigma)
+    from astropy.table import Table
+    Table(dict(V=[10.0], S=[120.0], H3=[0.0], H4=[0.0])).write(
+        tmp_path / 'kinematics.ecsv')
+    result = run_cli(
+        tmp_path, 'prep', 'gauss_hermite_moments', 'kinematics.ecsv',
+        '--columns', 'V', 'S', 'H3', 'H4', '--output-dir', 'prepared')
+    assert result.returncode == 0
+    table = Table.read(tmp_path / 'prepared/prep_kinematics.ecsv')
+    assert (table['mean'][0], table['dispersion'][0]) == (10, 120)
+
+
 @pytest.mark.parametrize('args, message', [
     # One value for each moment order, also when the orders come last
     (['pixel_moments', '--data-d', 'image.fits', '--nanpad', '1', '0', '1'],
