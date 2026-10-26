@@ -78,6 +78,26 @@ def test_moment_maps_are_of_the_filtered_spectra(driver):
         zero_padded_median(plain.get('dcube_lo').data, 3))
 
 
+def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
+    # A median does not add (solved amplitudes of the light assume models
+    # that do), and the noise of mock data goes through it: their errors
+    # are the scatter of draws, about 0.41 of the noise for 3 x 3 pixels
+    # (not the noise itself, 2.4 times too large)
+    from gbkfit.observation import NoiseGauss
+    assert PixelBrightness(size=(8, 8)).linear_in_light()
+    assert not PixelBrightness(size=(8, 8), median_size=3).linear_in_light()
+    assert not PixelSpectra(size=(8, 8, 5), median_size=3).linear_in_light()
+    group = ObservationGroup(disk('band'), ObservationSky(
+        PixelBrightness(size=(24, 20), median_size=3), Flat()))
+    params = ParamSpace(group.pdescs(), {
+        key: value for key, value in PARAMS.items()
+        if key in group.pdescs()}).evaluate()
+    (mock,), = group.plan(driver).mock(
+        params, NoiseGauss(rms=1.0), nsamples=50, seed=1)
+    error = np.nanmedian(mock['brightness'].error())
+    assert error == pytest.approx(0.41, abs=0.08)
+
+
 def test_the_median_size_is_an_odd_number_of_at_least_3():
     observable = PixelSpectra(size=(8, 8, 5), median_size=3)
     assert observable_parser.load(observable.dump()).dump() \

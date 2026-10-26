@@ -154,8 +154,9 @@ class PixelBrightness(Observable):
         return ('brightness',)
 
     def linear_in_light(self) -> bool:
-        # (its images of the light, through its instrument: linear)
-        return True
+        # (its images of the light, through its instrument: linear; not
+        # through a median filter, which does not add)
+        return self._median_size is None
 
     def model_can_lack_values(self) -> bool:
         return False
@@ -208,11 +209,15 @@ class PixelBrightnessPlan(_detail.DCubePlanBase):
         return self._dcube_plan.scratch_grid().spatial()
 
     def has_exact_errors(self) -> bool:
-        return True
+        # (but through a median filter, whose noise no formula gives: then
+        # the scatter of draws)
+        return self._dcube.median_size() is None
 
     def _exact_errors(
             self, noise: 'Noise', recorded: np.ndarray
-    ) -> dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray] | None:
+        if not self.has_exact_errors():
+            return None
         return dict(brightness=noise.sigma(self._dcube.grid(), recorded)[0])
 
     _extra_lo = staticmethod(_image_extra)
