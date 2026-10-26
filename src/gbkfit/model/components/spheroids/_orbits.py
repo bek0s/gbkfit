@@ -23,7 +23,8 @@ __all__ = [
     'OrbitRecords',
     'PotentialTable',
     'SkyGrid',
-    'potential',
+    'circular_periods',
+    'potential_at',
     'potential_table'
 ]
 
@@ -101,19 +102,36 @@ def potential_table(
         np.stack((phi, phi_u, phi_b, phi_ub), axis=-1))
 
 
+def circular_periods(
+        table: PotentialTable, energies: np.ndarray
+) -> np.ndarray:
+    """
+    Return the period (arcsec / (km/s)) of the circular orbit in the plane
+    of each energy ((km/s)^2) in a potential table: 2 pi R / v_c of the
+    radius R of the energy Phi(R) + v_c^2 / 2 (v_c^2 = dPhi / d ln R),
+    interpolated in ln(period) between the radii of the table; that of
+    the first or the last radius beyond them.
+    """
+    radii = np.exp(
+        table.lnr_zero + table.lnr_step * np.arange(len(table.values)))
+    phi, slope = table.values[:, 0, 0], table.values[:, 0, 1]
+    periods = 2 * np.pi * radii / np.sqrt(slope)
+    return np.exp(np.interp(energies, phi + slope / 2, np.log(periods)))
+
+
 @dataclasses.dataclass(frozen=True)
 class SkyGrid:
     """
-    A grid of square cells of the sky (arcsec; that of the geometry of
-    the galaxy) and the targets that a point in each cell gives its light
-    to: the corner of its first cell (x, y), the size of its cells (x,
-    y), its shape (ny, nx), and shares, a sparse array of shape (ny nx,
-    ntargets): the share of each target in the light of a point in cell
-    (x, y), at row y nx + x (e.g. of the Voronoi bins of an observation,
-    after its PSF).
+    A grid of cells of the sky and the targets that a point in each cell
+    gives its light to: the map of the sky (arcsec, of the frame of the
+    geometry of the galaxy) to the cells, an array of shape (2, 3) (a
+    point (x, y) is in the cell (floor(cx), floor(cy)) of (cx, cy) = cells
+    @ (x, y, 1)), its shape (ny, nx), and shares, a sparse array of shape
+    (ny nx, ntargets): the share of each target in the light of a point in
+    cell (x, y), at row y nx + x (e.g. of the Voronoi bins of an
+    observation, after its PSF).
     """
-    zero: tuple[float, float]
-    step: tuple[float, float]
+    cells: np.ndarray
     shape: tuple[int, int]
     shares: scipy.sparse.csr_array
 
@@ -213,6 +231,7 @@ class OrbitIntegrator:
                 dtype)
 
         self._sky = None
+        self._grids = ()
         self._moments = None
         self._ntargets = 0
         if sky:
@@ -225,11 +244,10 @@ class OrbitIntegrator:
             first_entries = np.cumsum([0] + [s.nnz for s in shares])
             first_targets = np.cumsum([0] + [s.shape[1] for s in shares])
             self._ntargets = int(first_targets[-1])
+            self._grids = tuple(np.asarray(grid.cells, float) for grid in sky)
             self._sky = dict(
                 grid_sizes=device(
                     [grid.shape[::-1] for grid in sky], np.int32),
-                grids=device(
-                    [(*grid.zero, *grid.step) for grid in sky], dtype),
                 grid_cells=device(first_cells[:-1], np.int64),
                 offsets=device(np.concatenate([
                     s.indptr + first for s, first
@@ -254,7 +272,8 @@ class OrbitIntegrator:
             table: PotentialTable,
             starts: np.ndarray,
             durations: np.ndarray,
-            geometry: tuple[float, float, float, float],
+            geometry: tuple[float, float],
+            centres: np.ndarray | None = None,
             series: tuple[np.ndarray, np.ndarray] | None = None
     ) -> OrbitRecords:
         """
@@ -271,8 +290,11 @@ class OrbitIntegrator:
         durations : np.ndarray
             The time of each orbit (arcsec / (km/s)).
         geometry : tuple of float
-            The geometry of the spheroid: xpos, ypos (arcsec), posa and
-            incl (degrees).
+            The position angle and the inclination of the spheroid
+            (degrees).
+        centres : np.ndarray, optional
+            The centre of the spheroid in the sky of each grid (an array
+            of shape (ngrids, 2): x, y), with a sky only.
         series : tuple of np.ndarray, optional
             The mean and the dispersion (km/s) of the Gauss-Hermite series
             of each target of the sky, with a sky only.
@@ -283,8 +305,10 @@ class OrbitIntegrator:
             The records, on the host.
         """
         driver, dtype = self._driver, self._dtype
-        if (series is None) != (self._sky is None):
-            raise ValueError("the series of the targets go with a sky")
+        if (series is None or centres is None) != (self._sky is None):
+            raise ValueError(
+                "the centres of the grids and the series of the targets go "
+                "with a sky")
         if len(starts) != self._norbits or len(durations) != self._norbits:
             raise ValueError(
                 f"the integrator has {self._norbits} orbits; it is given "
@@ -297,16 +321,20 @@ class OrbitIntegrator:
             'grid_sizes', 'grids', 'grid_cells', 'offsets', 'targets',
             'weights', 'target_v', 'target_s'))
         if self._sky is not None:
+            # (the maps of the grids from the centre of the spheroid)
+            grids = [
+                np.column_stack((
+                    cells[:, :2], cells[:, 2] + cells[:, :2] @ centre))
+                for cells, centre in zip(self._grids, centres)]
             sky |= self._sky | dict(
+                grids=device([grid.ravel() for grid in grids]),
                 target_v=device(series[0]), target_s=device(series[1]))
         cell_r, cell_b = self._cell_edges or (None, None)
         self._orbits.integrate(
             table=device(table.values),
             range=device([table.lnr_zero, table.lnr_step]),
             starts=device(starts), durations=device(durations),
-            **self._options,
-            xpos=geometry[0], ypos=geometry[1], posa=geometry[2],
-            incl=geometry[3],
+            **self._options, posa=geometry[0], incl=geometry[1],
             cell_r=cell_r, cell_b=cell_b, cells=self._cells,
             **sky, order=self._order, moments=self._moments,
             steps=self._steps, energies=self._energies)
@@ -319,7 +347,7 @@ class OrbitIntegrator:
             energies=driver.mem_copy_d2h(self._energies))
 
 
-def potential(
+def potential_at(
         driver: Driver,
         dtype: npt.DTypeLike,
         table: PotentialTable,

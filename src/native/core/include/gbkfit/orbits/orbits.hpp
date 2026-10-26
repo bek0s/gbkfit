@@ -294,9 +294,9 @@ orbits_record_sky(
     const long long orbit = a.twins ? 2 * k : k;
     for (int s = 0; s < a.nsky; ++s)
     {
-        const T* grid = a.grids + 4 * s;
-        const T gx = (x - grid[0]) / grid[2];
-        const T gy = (y - grid[1]) / grid[3];
+        const T* grid = a.grids + 6 * s;
+        const T gx = grid[0] * x + grid[1] * y + grid[2];
+        const T gy = grid[3] * x + grid[4] * y + grid[5];
         if (!(gx >= 0 && gx < a.grid_sizes[2 * s]
                 && gy >= 0 && gy < a.grid_sizes[2 * s + 1]))
             continue;
@@ -373,9 +373,9 @@ orbits_record(
             const T pz = mirror * x[2];
             const T pvz = mirror * v[2];
             const T sx = sky[0][0] * px + sky[0][1] * py
-                    + sky[0][2] * pz + a.xpos;
+                    + sky[0][2] * pz;
             const T sy = sky[1][0] * px + sky[1][1] * py
-                    + sky[1][2] * pz + a.ypos;
+                    + sky[1][2] * pz;
             const T sv = sky[2][0] * pvx + sky[2][1] * pvy
                     + sky[2][2] * pvz;
             orbits_record_sky(k, sx, sy, sv, share, a);
@@ -403,9 +403,10 @@ orbits_integrate(int k, const OrbitArgs<T>& a)
             a.moments[i] = 0;
     }
 
-    // The projection of a point of the frame of the spheroid on the sky:
-    // the rows of the matrix of transform_cpos_posa_incl_inverse (the
-    // sky x and y, and the line of sight, positive away from us)
+    // The projection of a point of the frame of the spheroid on the sky,
+    // from its centre: the rows of the matrix of
+    // transform_cpos_posa_incl_inverse (the sky x and y, and the line of
+    // sight, positive away from us)
     T sky[3][3];
     for (int c = 0; c < 3; ++c)
     {

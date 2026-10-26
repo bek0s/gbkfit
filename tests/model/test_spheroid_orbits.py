@@ -10,7 +10,7 @@ import pytest
 import scipy.sparse
 
 from gbkfit.model.components.spheroids._orbits import (
-    OrbitIntegrator, SkyGrid, potential, potential_table)
+    OrbitIntegrator, SkyGrid, potential_at, potential_table)
 from gbkfit.model.gravity import GravityNewton
 from gbkfit.model.mass import (
     G, MassContext, MassModel, MassPoint, MassSpheroid, ProfileZhao,
@@ -64,7 +64,7 @@ def test_the_potential_of_a_sphere_is_exact(driver):
     # BH / r, from 1e-5 to 1e3 kpc, and its forces
     points = random_points(np.random.default_rng(1), 200, (1e-5, 1e3))
     r = np.linalg.norm(points, axis=1)
-    phi, forces = potential(driver, np.float64, potential_of(), points)
+    phi, forces = potential_at(driver, np.float64, potential_of(), points)
     exact = -G * M / (r + A) - G * BH / r
     exact_forces = -(G * M / (r + A) ** 2 + G * BH / r ** 2)[:, None] \
         * points / r[:, None]
@@ -79,7 +79,7 @@ def test_the_forces_of_a_flattened_spheroid_are_those_of_its_gravity(
     # Between the nodes of the table, from 1e-3 to 100 kpc
     q = 0.6
     points = random_points(np.random.default_rng(2), 200, (1e-3, 1e2))
-    _, forces = potential(driver, np.float64, potential_of(q), points)
+    _, forces = potential_at(driver, np.float64, potential_of(q), points)
     R = np.hypot(points[:, 0], points[:, 1])
     force_R, force_z = gravity(q).forces(R, points[:, 2])
     exact = np.column_stack((
@@ -98,7 +98,7 @@ def test_orbits_conserve_their_energy(driver, q):
     rng = np.random.default_rng(3)
     x = random_points(rng, 300, (1e-2, 10))
     table = potential_of(q)
-    _, forces = potential(driver, np.float64, table, x)
+    _, forces = potential_at(driver, np.float64, table, x)
     r = np.linalg.norm(x, axis=1)
     speed = np.sqrt(r * np.linalg.norm(forces, axis=1))
     v = random_points(rng, 300, (1, 1)) \
@@ -109,7 +109,7 @@ def test_orbits_conserve_their_energy(driver, q):
         cell_edges=(np.array([0, 1, 1e5]), np.array([0, 0.5, np.pi / 2])))
     records = integrator.integrate(
         table, np.hstack((x, v)), 20 * 2 * np.pi * r / speed,
-        tuple(GEOMETRY.values()))
+        (GEOMETRY['posa'], GEOMETRY['incl']))
     errors = np.abs(records.energies[:, 1] / records.energies[:, 0] - 1)
     assert np.median(errors) < 1e-4
     assert errors.max() < 1e-2
@@ -126,14 +126,15 @@ def test_an_orbit_is_seen_in_the_geometry_of_its_spheroid(driver):
     # rotates the other way.
     R = 5.0
     table = potential_of()
-    _, force = potential(
+    _, force = potential_at(
         driver, np.float64, table, np.array([[R, 0, 0]]))
     vc = np.sqrt(R * np.abs(force[0, 0]))
     size, step = 400, 0.05
     zero = (GEOMETRY['xpos'] - size * step / 2,
             GEOMETRY['ypos'] - size * step / 2)
     grid = SkyGrid(
-        zero=zero, step=(step, step), shape=(size, size),
+        cells=np.array([[1, 0, -zero[0]], [0, 1, -zero[1]]]) / step,
+        shape=(size, size),
         shares=scipy.sparse.identity(size * size, format='csr'))
     # (the azimuth of the point of the plane seen at each cell: see
     # test_spheroids.spheroid_frame)
@@ -150,7 +151,8 @@ def test_an_orbit_is_seen_in_the_geometry_of_its_spheroid(driver):
         nsamples=4000, nphi=4, twins=True, sky=[grid], order=1)
     records = integrator.integrate(
         table, np.array([[R, 0, 0, 0, vc, 0]]),
-        np.array([2 * np.pi * R / vc]), tuple(GEOMETRY.values()),
+        np.array([2 * np.pi * R / vc]), (GEOMETRY['posa'], GEOMETRY['incl']),
+        np.array([[GEOMETRY['xpos'], GEOMETRY['ypos']]]),
         (velocity, np.full(size * size, 30.0)))
     light, h0, _ = records.moments[0].T
     seen = light > 0

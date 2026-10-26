@@ -347,7 +347,8 @@ def solve_together_rows(
         solves: Sequence[Solve],
         sizes: Sequence[int],
         rows: np.ndarray,
-        target: np.ndarray
+        target: np.ndarray,
+        ndata: int | None = None
 ) -> Solution:
     """
     Return the values of the given solves solved together, as
@@ -378,6 +379,11 @@ def solve_together_rows(
         The matrix A, of shape (n, K) for K values.
     target : np.ndarray
         The vector t, of shape (n,).
+    ndata : int, optional
+        The number of the rows of the data, the first ones; the others
+        are of the prior (e.g. constraints): their residuals count in the
+        chi-square, but not in the effective number (that of the rows of
+        the data, sum of 1 - (H^-1)_ii over them). By default, all.
 
     Returns
     -------
@@ -447,9 +453,13 @@ def solve_together_rows(
     log_term = 0.0
     if solves[0].likelihood() == 'integrated':
         log_term = -float(np.sum(np.log(np.diag(factor[0]))))
+    # (the diagonal of H^-1, of the inverse of its Cholesky factor: H =
+    # U^T U, or L L^T)
     inverse = scipy.linalg.solve_triangular(
         factor[0], identity, lower=factor[1])
-    m_eff = len(y) - float(np.sum(inverse ** 2))
+    diagonal = np.sum(inverse ** 2, axis=0 if factor[1] else 1)
+    counted = len(y) if ndata is None else ndata
+    m_eff = counted - float(np.sum(diagonal[:counted]))
     return Solution(values, (values - mean) / sigma, log_term, m_eff)
 
 

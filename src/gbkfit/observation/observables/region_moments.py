@@ -7,13 +7,14 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, LineEmission
+from gbkfit.model import DataUnit, Extras, GalaxyState, LineEmission
+from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
 from ._region_sums import RegionSumsPlan, flux_weights
-from .base import ModelData, Observable
+from .base import HostModelData, ModelData, Observable, ObservablePlan
 
 if TYPE_CHECKING:
     import scipy.sparse
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
     from gbkfit.model import Scene
     from ..line_of_sight import LineOfSight
     from ..foreground import Foreground
+    from ..noise import Noise
     from ..weights import Weights
 
 
@@ -330,11 +332,84 @@ spec_medium, method : optional
         if pixel_weights is not None:
             raise ConfigError(
                 "region_moments does not support pixel_weights yet")
+        if scene.orbit_emitters():
+            self._check_orbits(scene, flux_scale)
+            return OrbitMomentsPlan()
         dcube = _moments.spectra_dcube(
             self, oversampling, instrument, dtype, fft_dtype)
         return RegionMomentsPlan(
             self, self._weights, dcube, driver, scene, line_of_sight,
             foreground, dtype, flux_scale)
+
+
+    def _check_orbits(self, scene: 'Scene', flux_scale: str | None) -> None:
+        """
+        Raise ConfigError unless it can see stars on orbits whose weights
+        are solved (see OrbitMomentsPlan): only them, in bins, of the
+        method gauss_hermite and the orders 1 to M (V, sigma, h3 ... hM),
+        without a flux scale.
+        """
+        if sum(len(emitters) for emitters in scene.emitters()) \
+                != len(scene.orbit_emitters()):
+            raise ConfigError(
+                "moments of regions that see stars on orbits whose weights "
+                "are solved (e.g. of a spheroid of Schwarzschild kinematics) "
+                "see only them: give the observation the components or the "
+                "lines of those stars only")
+        if self._regions.grid() is None:
+            raise ConfigError(
+                "moments of stars on orbits whose weights are solved are of "
+                "bins of the pixels of a grid (e.g. Voronoi bins), not of "
+                "apertures")
+        orders = self._orders
+        if self._method != 'gauss_hermite' or len(orders) < 2 \
+                or orders != tuple(range(1, len(orders) + 1)):
+            raise ConfigError(
+                f"moments of stars on orbits whose weights are solved are "
+                f"Gauss-Hermite series (method gauss_hermite) of the orders "
+                f"1 to M (V, sigma, h3 ... hM); they are of the method "
+                f"{self._method!r} and the orders {list(orders)}")
+        if flux_scale is not None:
+            raise ConfigError(
+                "moments of stars on orbits whose weights are solved have "
+                "no flux scale")
+
+
+class OrbitMomentsPlan(ObservablePlan):
+    """
+    The plan of moments of regions that see stars on orbits whose weights
+    are solved (see Component.orbit_weights): an objective models them,
+    from the orbits and the data (see objective.Objective); they have no
+    model of their own (yet).
+    """
+
+    def evaluate(
+            self,
+            params: ParamValues,
+            galaxies: Sequence[GalaxyState],
+            out_extra: Extras | None
+    ) -> ModelData:
+        raise NotImplementedError(_ORBIT_MODEL)
+
+    def mock(
+            self,
+            params: ParamValues,
+            galaxies: Sequence[GalaxyState],
+            noise: 'Noise',
+            rng: np.random.Generator,
+            ndraws: int
+    ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
+        raise NotImplementedError(_ORBIT_MODEL)
+
+    def has_exact_errors(self) -> bool:
+        return False
+
+
+# Why moments of stars on orbits have no model of their own
+_ORBIT_MODEL = (
+    "the moments of stars on orbits whose weights are solved are modelled by "
+    "an objective, which solves the weights (see objective.Objective); "
+    "their model without one, of given weights, is not available yet")
 
 
 class RegionMomentsPlan(_detail.DCubePlanBase):

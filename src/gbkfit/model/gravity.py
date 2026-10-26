@@ -114,6 +114,9 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
     - the forces anywhere (off the plane too), which the jeans
       equilibrium and the rotation at each height take (see check_forces,
       parts.Kinematics and traits.VHTraitMass)
+    - forces that are the gradient of a potential, in which orbits keep
+      their energy, as the orbits of Schwarzschild models take (see
+      check_potential)
     - the vertical structure of self-gravitating isothermal sheets,
       which the self_gravitating equilibrium and pressure support take
       (see check_self_gravitating_sheets, parts.Kinematics and
@@ -157,6 +160,14 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
+    def check_potential(self, mass_model: MassModel) -> None:
+        """
+        Raise ConfigError, saying why, unless its fields give the forces
+        of the mass model anywhere (see check_forces), and they are the
+        gradient of a potential (they have no curl).
+        """
+
+    @abc.abstractmethod
     def check_self_gravitating_sheets(self) -> None:
         """
         Raise ConfigError, saying why, unless the vertical structure of a
@@ -195,6 +206,10 @@ class GravityNewton(Gravity):
 
     def check_forces(self, mass_model: MassModel) -> None:
         _check_components_give_forces(mass_model)
+
+    def check_potential(self, mass_model: MassModel) -> None:
+        # (that of the mass)
+        self.check_forces(mass_model)
 
     def check_self_gravitating_sheets(self) -> None:
         pass
@@ -308,6 +323,12 @@ class GravityMOND(Gravity):
     def check_forces(self, mass_model: MassModel) -> None:
         # (of the Newtonian forces of all the mass)
         _check_components_give_forces(mass_model)
+
+    def check_potential(self, mass_model: MassModel) -> None:
+        raise ConfigError(
+            "the forces of MOND here (the Newtonian forces times the "
+            "interpolation function) are not the gradient of a potential "
+            "off the plane: orbits do not keep their energy in them")
 
     def check_self_gravitating_sheets(self) -> None:
         raise ConfigError(
@@ -532,6 +553,11 @@ class GravityHuSawicki(Gravity):
         # (of the Newtonian forces of all the mass)
         _check_components_give_forces(mass_model)
 
+    def check_potential(self, mass_model: MassModel) -> None:
+        raise ConfigError(
+            "the forces of f(R) gravity here are not given as the gradient "
+            "of a potential off the plane")
+
     def check_self_gravitating_sheets(self) -> None:
         raise ConfigError(
             "the self-gravitating sheets of f(R) gravity are not those of "
@@ -651,6 +677,11 @@ class GravityPalatini(Gravity):
     def check_forces(self, mass_model: MassModel) -> None:
         # (of the Newtonian forces of all the mass)
         _check_components_give_forces(mass_model)
+
+    def check_potential(self, mass_model: MassModel) -> None:
+        raise ConfigError(
+            "the forces of Palatini f(R) gravity here are not given as the "
+            "gradient of a potential off the plane")
 
     def check_self_gravitating_sheets(self) -> None:
         raise ConfigError(

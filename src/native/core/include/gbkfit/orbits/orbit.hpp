@@ -60,11 +60,8 @@ struct OrbitArgs
     int nphi = 0;
     bool twins = false;
 
-    // The geometry of the spheroid: its centre on the sky (arcsec), its
-    // position angle and its inclination (degrees; see
-    // transform_cpos_posa_incl)
-    T xpos = 0;
-    T ypos = 0;
+    // The geometry of the spheroid: its position angle and its
+    // inclination (degrees; see transform_cpos_posa_incl)
     T posa = 0;
     T incl = 0;
 
@@ -78,10 +75,11 @@ struct OrbitArgs
     const T* cell_b = nullptr;
     T* cells = nullptr;
 
-    // The sky (optional): nsky grids of square cells, grid s of
-    // grid_sizes[2s] by grid_sizes[2s + 1] cells, from (grids[4s],
-    // grids[4s + 1]) in steps of (grids[4s + 2], grids[4s + 3]) (arcsec,
-    // the sky of transform_cpos_posa_incl), its cell (x, y) the cell
+    // The sky (optional): nsky grids of cells, grid s of grid_sizes[2s]
+    // by grid_sizes[2s + 1] cells, a point (x, y) of the sky (arcsec from
+    // the centre of the spheroid, as in transform_cpos_posa_incl) in its
+    // cell (floor(cx), floor(cy)), cx = g[0] x + g[1] y + g[2] and cy =
+    // g[3] x + g[4] y + g[5] (g = grids + 6s), its cell (x, y) the cell
     // grid_cells[s] + y nx + x of the table: each cell c of the table
     // gives its light to the targets targets[e], each the share
     // weights[e], for e in [offsets[c], offsets[c + 1]) (e.g. the shares

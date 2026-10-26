@@ -17,7 +17,8 @@ __all__ = [
     'Need',
     'NeedsForces',
     'NeedsMass',
-    'NeedsMassDensities'
+    'NeedsMassDensities',
+    'NeedsPotential'
 ]
 
 
@@ -79,6 +80,28 @@ class NeedsForces(Need):
     def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
         if mass_model is not None:
             _check_gravity(gravity.check_forces, mass_model, what=self._what)
+
+
+class NeedsPotential(Need):
+    """
+    Forces of the mass in the gravity of the galaxy that are the gradient
+    of a potential (see Gravity.check_potential), if it has mass (see
+    NeedsMass for the mass itself): e.g. for orbits, which keep their
+    energy in them.
+
+    Parameters
+    ----------
+    what : str
+        What takes them (e.g. "the orbits of the spheroid 'stars'").
+    """
+
+    def __init__(self, what: str):
+        self._what = what
+
+    def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
+        if mass_model is not None:
+            _check_gravity(
+                gravity.check_potential, mass_model, what=self._what)
 
 
 class NeedsMassDensities(Need):

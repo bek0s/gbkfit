@@ -186,6 +186,18 @@ class Comparison(abc.ABC):
             f"{self._observation.likelihood().type()}, solves no amplitudes "
             f"of the light of its model")
 
+    def check_pointwise(self, keys: Collection[str]) -> None:
+        """
+        Raise ConfigError unless its weighted residual of each value of the
+        given data items is c (m - d) of the model of that value m alone
+        (e.g. for the weights of orbits, see Objective; c is then the
+        residual of the model d + 1): here, it is not.
+        """
+        raise ConfigError(
+            f"the likelihood of the observation, "
+            f"{self._observation.likelihood().type()}, does not compare "
+            f"each value of its data with its model alone")
+
     def check_scales(self, keys: Collection[str]) -> None:
         """
         Raise ConfigError unless it can give the sums of solved scales of
@@ -616,6 +628,22 @@ class ComparisonGaussian(Comparison):
                 "solved amplitudes of the light do not go with a model that "
                 "can lack values (e.g. moments): its residuals are not "
                 "linear in the model")
+
+    def check_pointwise(self, keys: Collection[str]) -> None:
+        """
+        Raise ConfigError if a data item of the given ones has an upper
+        limit (its residuals are not linear in the model) or correlated
+        noise (its residuals, whitened, mix the values).
+        """
+        for key in keys:
+            if not np.isnan(self._upper_limits[key][0]):
+                raise ConfigError(
+                    f"'{key}' has an upper limit: its residuals are not "
+                    f"linear in its model")
+            if self._dataset.noise_correlation(key) is not None:
+                raise ConfigError(
+                    f"'{key}' has correlated noise: its residuals mix its "
+                    f"values")
 
     def check_scales(self, keys: Collection[str]) -> None:
         """

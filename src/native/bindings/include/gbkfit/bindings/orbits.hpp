@@ -66,16 +66,15 @@ struct Orbits
     // cell_b) into cells (of shape (norbits, ncell_r, ncell_b), norbits
     // twice the orbits with twins); their moments in the targets of the
     // sky (the arguments from grid_sizes to target_s; grid_sizes and
-    // grids a row per grid) into moments (of shape (norbits, ntargets,
-    // order + 2)); and their steps and energies (a row per orbit, at its
-    // start and its end). The cells, the sky and the steps and energies
-    // are optional (None).
+    // grids, the 6 values of the map of each, a row per grid) into
+    // moments (of shape (norbits, ntargets, order + 2)); and their steps
+    // and energies (a row per orbit, at its start and its end). The
+    // cells, the sky and the steps and energies are optional (None).
     static void
     integrate(
             Table table, Range range,
             Rows starts, Values durations, T accuracy, int max_steps,
-            int nsamples, int nphi, bool twins,
-            T xpos, T ypos, T posa, T incl,
+            int nsamples, int nphi, bool twins, T posa, T incl,
             Values cell_r, Values cell_b, Out3 cells,
             Array<Device, const int, nb::ndim<2>> grid_sizes, Rows grids,
             Offsets grid_cells, Offsets offsets, Counts targets,
@@ -103,8 +102,6 @@ struct Orbits
         a.twins = twins;
         const size_t norbits = starts.shape(0) * (twins ? 2 : 1);
 
-        a.xpos = xpos;
-        a.ypos = ypos;
         a.posa = posa;
         a.incl = incl;
 
@@ -138,7 +135,7 @@ struct Orbits
             a.nsky = int(grid_sizes.shape(0));
             require(grid_sizes.shape(1) == 2
                     && grids.shape(0) == size_t(a.nsky)
-                    && grids.shape(1) == 4
+                    && grids.shape(1) == 6
                     && grid_cells.shape(0) == size_t(a.nsky),
                     "grid_sizes, grids and grid_cells need a row per grid");
             require(targets.shape(0) == weights.shape(0),
@@ -199,8 +196,6 @@ struct Orbits
                         nb::arg("nsamples"),
                         nb::arg("nphi"),
                         nb::arg("twins"),
-                        nb::arg("xpos"),
-                        nb::arg("ypos"),
                         nb::arg("posa"),
                         nb::arg("incl"),
                         nb::arg("cell_r").noconvert().none(),

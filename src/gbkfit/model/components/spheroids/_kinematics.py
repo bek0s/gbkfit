@@ -18,6 +18,7 @@ from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._native import ParamBuffer
+from .._needs import Need, NeedsForces, NeedsMass
 from .._nodal import (
     NodalTraits, TraitTable, native_traits, parse_component_rnode_args,
     subring_radii, with_default_height_traits)
@@ -63,6 +64,14 @@ class SpheroidMotion(abc.ABC):
         that its velocities change with it.
         """
         pass
+
+    def orbit_weights(self) -> str | None:
+        """
+        Return its parameter of the weights of the orbits of the stars, if
+        they move on orbits whose weights are solved (see
+        Component.orbit_weights); None by default.
+        """
+        return None
 
     @abc.abstractmethod
     def state(
@@ -147,6 +156,20 @@ class SpheroidKinematics(parseutils.TypedSerializable, abc.ABC):
         Spheroid). Raise ConfigError if it cannot move so.
         """
         pass
+
+    def needs(self, label: str) -> tuple[Need, ...]:
+        """
+        Return what it needs from the galaxy of its spheroid (see
+        Component.needs), of the given label (e.g. "the jeans kinematics
+        of the spheroid 'stars'"): if it uses the mass, the mass and the
+        forces of the gravity off the plane.
+        """
+        if not self.uses_mass():
+            return ()
+        return (
+            NeedsMass(f"{label} need the mass of its galaxy"),
+            NeedsForces(f"{label} take the forces of its gravity off its "
+                        f"plane"))
 
 
 # The kinds of the traits of TraitsKinematics: velocity (v) and dispersion

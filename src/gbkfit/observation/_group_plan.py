@@ -8,7 +8,7 @@ import concurrent.futures
 import contextvars
 import copy
 import threading
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
@@ -259,14 +259,28 @@ class GroupPlan:
             states.append(state)
         return states
 
+    def galaxy_states(self, params: ParamValues) -> list[GalaxyState]:
+        """
+        Return the state of each galaxy in an evaluation (see
+        GalaxyStage.evaluate), as model_d evaluates it: that of its last
+        evaluation if its parameters have the same values.
+        """
+        with self._lock:
+            return self._galaxy_states(params, None)
+
     def model_d(
             self,
             params: ParamValues,
-            out_extra: Extras | None = None
+            out_extra: Extras | None = None,
+            skip: Collection[int] = ()
     ) -> list[ModelData]:
         """
         Evaluate the model data of the observations, on their drivers,
-        with BLAS on one thread (see threadutils.single_threaded_blas).
+        with BLAS on one thread (see threadutils.single_threaded_blas),
+        but those of the observations of the indices skip, whose models
+        are made elsewhere (e.g. by an objective, see
+        Component.orbit_weights): their model data are those of their last
+        evaluation, if any.
 
         Without extra outputs, an observation whose parameters (see
         ObservationGroup.model_params) have exactly the values of its last
@@ -305,11 +319,13 @@ class GroupPlan:
               threadutils.single_threaded_blas()):
             with self._timers.measure('model_gravity'):
                 states = self._galaxy_states(params, out_extra)
+            evaluated = [i for i in range(len(self._plans)) if i not in skip]
             if self._executor is None:
-                for i in range(len(self._plans)):
+                for i in evaluated:
                     self._evaluate_model(i, params, states, out_extra)
             else:
-                self._evaluate_models_at_once(params, states, out_extra)
+                self._evaluate_models_at_once(
+                    evaluated, params, states, out_extra)
         return self._d_model_data
 
     def _evaluate_model(
@@ -337,23 +353,25 @@ class GroupPlan:
 
     def _evaluate_models_at_once(
             self,
+            evaluated: Collection[int],
             params: ParamValues,
             states: Sequence[GalaxyState],
             out_extra: Extras | None
     ) -> None:
         """
-        Evaluate the models of the observations on each driver one after
-        the other, in a thread of the driver, with the context of the
-        caller (e.g. the paths of configuration errors); the extra outputs
-        of each observation go to out_extra after all are done, in their
-        order (see model_d).
+        Evaluate the models of the observations of the given indices on
+        each driver one after the other, in a thread of the driver, with
+        the context of the caller (e.g. the paths of configuration
+        errors); the extra outputs of each observation go to out_extra
+        after all are done, in their order (see model_d).
         """
         extras = [
             None if out_extra is None else Extras() for _ in self._plans]
 
         def evaluate(indices: tuple[int, ...]) -> None:
             for i in indices:
-                self._evaluate_model(i, params, states, extras[i])
+                if i in evaluated:
+                    self._evaluate_model(i, params, states, extras[i])
         futures = [
             self._executor.submit(
                 contextvars.copy_context().run, evaluate, indices)

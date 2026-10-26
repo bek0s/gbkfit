@@ -104,6 +104,19 @@ class Scene:
         """
         return self._emitters
 
+    def orbit_emitters(self) -> tuple[tuple[int, int], ...]:
+        """
+        Return the components whose light is drawn and whose stars move on
+        orbits whose weights are solved (see Component.orbit_weights),
+        each as the index of its galaxy (in the scene) and its own index.
+        """
+        return tuple(
+            (g, i)
+            for g, (galaxy, emitters) in enumerate(
+                zip(self._galaxies, self._emitters))
+            for i in emitters
+            if galaxy.components()[i].orbit_weights() is not None)
+
     def bounding_radii(self) -> tuple[float, ...]:
         """
         Return the bounding radius (arcsec) of each galaxy: that of its

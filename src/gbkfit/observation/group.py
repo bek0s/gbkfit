@@ -466,6 +466,18 @@ class ObservationGroup:
         """
         return self._frames[index].moved(params)
 
+    def orbit_components(self, index: int) -> tuple[tuple[int, int], ...]:
+        """
+        Return the components whose stars the observation of the given
+        index sees on orbits whose weights are solved (see
+        Observation.orbit_components), each as the index of its galaxy (in
+        the group) and its own index.
+        """
+        seen = self._seen_galaxies[index]
+        components = self._observations[index].orbit_components(
+            self.seen_by(index))
+        return tuple((seen[g], i) for g, i in components)
+
     def light_amplitudes(self, index: int) -> dict[str, str | None]:
         """
         Return the amplitudes of the light that the model of the

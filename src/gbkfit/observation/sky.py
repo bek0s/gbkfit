@@ -618,6 +618,11 @@ class ObservationSky(Observation):
                     amplitudes[mapping[names[param]]] = reason
         return amplitudes
 
+    def orbit_components(
+            self, seen: SeenGalaxies
+    ) -> tuple[tuple[int, int], ...]:
+        return self._scene(seen).orbit_emitters()
+
     def _scene(self, seen: SeenGalaxies) -> Scene:
         """
         Return the scene of the galaxies it sees, along its line of sight

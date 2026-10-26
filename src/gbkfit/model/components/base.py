@@ -248,6 +248,15 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def orbit_weights(self) -> str | None:
+        """
+        Return its parameter of the weights of the orbits of its stars, if
+        they move on orbits whose weights are solved to fit the data (e.g.
+        a spheroid of Schwarzschild kinematics; see objective.Objective,
+        which models the observations of them); None by default.
+        """
+        return None
+
     def bounding_radius(self) -> float:
         """
         Return the radius (arcsec) of the sphere around its centre that

@@ -15,5 +15,5 @@ from . import cones, disks, spheroids, traits
 from .cones import Cone
 from .disks import Clouds, Disk, LineOpacity
 from .spheroids import (
-    JeansKinematics, LightMGE, LightSersic, Spheroid, SpheroidKinematics,
-    TraitsKinematics)
+    JeansKinematics, LightMGE, LightSersic, SchwarzschildKinematics,
+    Spheroid, SpheroidKinematics, TraitsKinematics)

@@ -12,6 +12,7 @@ from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, check_together, solve_together)
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
+from ._orbits import orbit_groups
 
 
 __all__ = [
@@ -71,10 +72,14 @@ class Objective:
     comparisons, linear in the model, give the sums of their parts
     (r(m_k) - r(m_0) and -r(m_0)), and the models are evaluated at their
     values. They do not go with a solved flux scale of the same
-    observation (the model is then not linear in both). The priors of the solved values add residuals
-    after those of the data; the log-likelihood has the values integrated
-    out, or at their best values (see Solve). They are nuisance parameters
-    (see nnuisance); solved gives their values.
+    observation (the model is then not linear in both). The weights of the
+    orbits of the stars of a spheroid (see Component.orbit_weights): the
+    objective models the observations that see the stars (they have no
+    model of their own), from the orbits, linear in their weights, which
+    it solves together (see OrbitGroup). The priors of the solved values
+    add residuals after those of the data; the log-likelihood has the
+    values integrated out, or at their best values (see Solve). They are
+    nuisance parameters (see nnuisance); solved gives their values.
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -103,7 +108,9 @@ class Objective:
         observation whose comparison can solve it (see
         Comparison.check_scales), nor an amplitude of the light that the
         models are linear in (see Component.light_amplitudes,
-        Observable.linear_in_light and Comparison.check_linear).
+        Observable.linear_in_light and Comparison.check_linear), nor a
+        weight of orbits; or the weights of the orbits of stars that
+        observations see are not solved (see OrbitGroup).
     """
 
     def __init__(
@@ -125,8 +132,13 @@ class Objective:
             comparison(obs, driver) for obs, driver in zip(
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
+        self._orbits = orbit_groups(group, self._comparisons, self._solves)
+        orbit_elements = {
+            element for orbit in self._orbits for element in orbit.elements()}
         self._solved, amplitudes = _solved(
-            group, self._comparisons, self._solves)
+            group, self._comparisons, {
+                name: solve for name, solve in self._solves.items()
+                if name not in orbit_elements})
         # The observations with solved scales
         self._scaled = sorted({solved.observation for solved in self._solved})
         self._groups = _groups(
@@ -140,11 +152,14 @@ class Objective:
         """
         for comparison_ in self._comparisons:
             comparison_.close()
-        # The values of the solved elements of the last evaluation, and
+        for orbit in self._orbits:
+            orbit.close()
+        # The values of the solved elements of the last evaluation (of the
+        # flux scales, the groups of amplitudes and the orbits), and
         # the scales of the observations with some, on the host (h) and
         # the device (d), by index
         self._solutions: list[Solution | None] = [None] * (
-            len(self._solved) + len(self._groups))
+            len(self._solved) + len(self._groups) + len(self._orbits))
         self._h_scales: dict[int, np.ndarray] = {}
         self._d_scales: dict[int, DeviceArray] = {}
         # The weighted residuals of the models of each group, at 0 and with
@@ -395,7 +410,7 @@ class Objective:
             If an observation fits its noise, or values are solved (see
             Solve), whose terms are sums over many points.
         """
-        if self._solved or any(
+        if self._solutions or any(
                 c.noise_residuals().size for c in self._comparisons):
             raise NotImplementedError(
                 "the log-likelihood of each point is not given with a fitted "
@@ -436,6 +451,10 @@ class Objective:
             values.update(zip(
                 (element_name(*element) for element in group.elements),
                 solution.values.tolist()))
+        first = len(self._solved) + len(self._groups)
+        for orbit, solution in zip(self._orbits, self._solutions[first:]):
+            if solution is not None:
+                values.update(zip(orbit.elements(), solution.values.tolist()))
         return values
 
     def nnuisance(self) -> float:
@@ -602,12 +621,35 @@ class Objective:
         with group_plan.lock():
             if self._groups:
                 params = self._solve_groups(params)
-            models = group_plan.model_d(self._unscaled(params), out_extra)
+            skip = [i for orbit in self._orbits for i in orbit.observations()]
+            models = list(group_plan.model_d(
+                self._unscaled(params), out_extra, skip))
+            if self._orbits:
+                with group_plan.timers().measure('objective_orbits'):
+                    self._solve_orbits(params, models)
             with group_plan.timers().measure('objective_residual_eval'):
                 scales = self._solve(models, params)
                 for comparison_, model, scales_ in zip(
                         self._comparisons, models, scales):
                     comparison_.evaluate(model, params, weighted, scales_)
+
+    def _solve_orbits(
+            self,
+            params: ParamValues,
+            models: list[dict[str, dict[str, DeviceArray | None]]]
+    ) -> None:
+        """
+        Solve the weights of the orbits of each orbit group (see
+        OrbitGroup), and put the models of its observations in models.
+        """
+        group_plan = self._group_plan
+        states = group_plan.galaxy_states(params)
+        first = len(self._solved) + len(self._groups)
+        for j, orbit in enumerate(self._orbits):
+            solution, orbit_models = orbit.evaluate(params, states, group_plan)
+            self._solutions[first + j] = solution
+            for i, model in orbit_models.items():
+                models[i] = model
 
     def _solve_groups(self, params: ParamValues) -> ParamValues:
         """

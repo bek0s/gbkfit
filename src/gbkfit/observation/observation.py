@@ -266,6 +266,18 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def orbit_components(
+            self, seen: SeenGalaxies
+    ) -> tuple[tuple[int, int], ...]:
+        """
+        Return the components of the galaxies it sees whose stars it sees
+        on orbits whose weights are solved (see Component.orbit_weights;
+        an objective models it, see objective.Objective), each as the index
+        of its galaxy (among those it sees) and its own index; none here,
+        where it sees no light.
+        """
+        return ()
+
     @abc.abstractmethod
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """

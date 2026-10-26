@@ -25,7 +25,7 @@ from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
 from .._detail import dump_geometry, dump_name, geometry_desc
-from .._needs import Need, NeedsForces, NeedsMass
+from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
     evaluate_native, make_bands)
@@ -39,6 +39,7 @@ from ..roles import (
 from ._jeans import JeansKinematics
 from ._kinematics import (
     SpheroidKinematics, SpheroidLight, SpheroidMotion, TraitsKinematics)
+from ._schwarzschild import SchwarzschildKinematics
 from ._stage import SpheroidStage
 
 
@@ -439,7 +440,8 @@ light_profile_parser = parseutils.TypedParser(LightProfile, [
 
 spheroid_kinematics_parser = parseutils.TypedParser(SpheroidKinematics, [
     JeansKinematics,
-    TraitsKinematics])
+    TraitsKinematics,
+    SchwarzschildKinematics])
 
 
 # The geometric parameters of a spheroid: its centre, the orientation of
@@ -633,6 +635,28 @@ class Spheroid(Component):
                 profile.function(params),
                 profile.table(params) if profile.ntable() else None)
 
+    def surface_density(
+            self, params: ParamValues, x: np.ndarray, y: np.ndarray
+    ) -> np.ndarray:
+        """
+        Return its surface density (its projection on the sky, in the unit
+        of its emission per arcsec^2) at the values of its parameters, at
+        the points (x, y) of the sky from its centre (arcsec, as xpos and
+        ypos): the sum of the terms of its projection (see
+        LightProfile.projected_terms), as its images have it.
+        """
+        p = np.radians(params.get('posa', 0.0))
+        terms = self._profile.projected_terms(
+            params, self.axis_ratio(params), params.get('incl', 0.0))
+        c, power = self._profile.function(params)
+        major = -x * np.sin(p) + y * np.cos(p)
+        minor = -x * np.cos(p) - y * np.sin(p)
+        density = np.zeros(np.broadcast(x, y).shape)
+        for amplitude, scale, q in terms:
+            m = np.sqrt(major ** 2 + (minor / q) ** 2)
+            density += amplitude * np.exp(-c * (m / scale) ** power)
+        return density
+
     def light_amplitudes(self) -> dict[str, str | None]:
         # (the amplitudes of the terms of its profile; its kinematics can
         # take its light, e.g. the density of the Jeans equations)
@@ -641,6 +665,10 @@ class Spheroid(Component):
             reason = (f"its {self._kinematics.type()} kinematics take its "
                       f"light")
         return dict.fromkeys(self._profile.amplitudes(), reason)
+
+    def orbit_weights(self) -> str | None:
+        return None if self._motion is None \
+            else self._motion.orbit_weights()
 
     def thick(self, seen_by: 'type[Emission]') -> bool:
         # (an image is its projection; in a spectral cube, its velocities
@@ -657,15 +685,11 @@ class Spheroid(Component):
         return self._kinematics is not None and self._kinematics.uses_mass()
 
     def needs(self) -> tuple[Need, ...]:
-        if not self.uses_mass():
+        if self._kinematics is None:
             return ()
-        label = (
+        return self._kinematics.needs(
             f"the {self._kinematics.type()} kinematics of the spheroid "
             f"{self.name()!r}")
-        return (
-            NeedsMass(f"{label} need the mass of its galaxy"),
-            NeedsForces(f"{label} take the forces of its gravity off its "
-                        f"plane"))
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
@@ -710,6 +734,14 @@ class Spheroid(Component):
                 "a spectral cube sees the stars of a spheroid with "
                 "kinematics only (e.g. kinematics: {type: jeans}, or "
                 "{type: traits})")
+        if lines is not None and STARS in lines \
+                and self.orbit_weights() is not None:
+            raise ConfigError(
+                f"the stars of a spheroid of {self._kinematics.type()} "
+                f"kinematics are on orbits whose weights are solved to fit "
+                f"the data: an objective models them (see Objective), in "
+                f"the bins of region_moments of the method gauss_hermite; "
+                f"spectral cubes do not see them")
         emission = emission_setup(
             None, self._bands, self.emission().unit(), spectral, lines,
             band, emits, data_unit, redshift, ())
