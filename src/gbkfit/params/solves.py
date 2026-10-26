@@ -538,8 +538,10 @@ class _RowsSolver:
         rows, target = self._rows, self._target
         mean, sigmas, lower = _priors(self._solves, self._sizes, sigma)
         # (the variances: scale times those of a scale of 1, base)
+        # (exactly 1 with one standard deviation of all priors, so that
+        # the matrix of all values is made once for all of them)
         scale = 1.0 if sigma is None else sigma ** 2
-        base = sigmas ** 2 / scale
+        base = sigmas ** 2 if sigma is None else np.ones(len(sigmas))
         variance = scale * base
 
         def dual(y: np.ndarray) -> tuple[float, np.ndarray]:
@@ -607,9 +609,15 @@ class _RowsSolver:
             log_term = -float(np.sum(np.log(np.diag(factor[0]))))
         # (the diagonal of H^-1, of the inverse of its Cholesky factor: H =
         # U^T U, or L L^T)
-        inverse = scipy.linalg.solve_triangular(
-            factor[0], identity, lower=factor[1])
-        diagonal = np.sum(inverse ** 2, axis=0 if factor[1] else 1)
+        triangle, lower = factor
+        trtri, = scipy.linalg.get_lapack_funcs(('trtri',), (triangle,))
+        inverse, info = trtri(triangle, lower=lower)
+        if info != 0:
+            raise RuntimeError(
+                f"the Newton matrix of the values solved on rows is "
+                f"singular (trtri: {info})")
+        inverse = np.tril(inverse) if lower else np.triu(inverse)
+        diagonal = np.sum(inverse ** 2, axis=0 if lower else 1)
         counted = len(y) if self._ndata is None else self._ndata
         m_eff = counted - float(np.sum(diagonal[:counted]))
         residuals = rows[:counted] @ values - target[:counted]
