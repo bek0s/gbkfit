@@ -311,6 +311,13 @@ class FitSolution:
         parameters; see Objective.log_likelihood).
     log_prior : float or None
         The log of the prior density, if the fit has priors.
+    aicp : float
+        The AICp (Lipka & Thomas 2021): the chi-square of the data (see
+        Objective.aicp) plus twice the number of fitted quantities (see
+        nfitted): the lower, the better a model, of several fitted to the
+        same data, whose solved values are regularised by their priors
+        (e.g. Schwarzschild models). Without solved values, it is the
+        chi-square plus twice the number of the free elements.
     covariance : Covariance or None
         The covariance, or None if disabled, if the parameters cannot be
         evaluated at a step of its Jacobian, or if the fit was asked to
@@ -332,6 +339,7 @@ class FitSolution:
     reduced_chi2: float
     log_likelihood: float
     log_prior: float | None
+    aicp: float
     covariance: Covariance | None
     laplace: Posterior | None
 
@@ -425,7 +433,7 @@ class FitResult:
             f"({self.message})",
             f"model evaluations: {self.nevals}; time: {self.time:.1f} s",
             f"chi2: {best.chi2:.6g}; dof: {best.dof:.6g}; reduced chi2: "
-            f"{best.reduced_chi2:.6g}"]
+            f"{best.reduced_chi2:.6g}; AICp: {best.aicp:.6g}"]
         if self.evidence is not None:
             lines.append(f"log Z: {self.evidence.log_z:.6g}")
         posterior = self.posterior or best.laplace
@@ -536,7 +544,8 @@ def _solution_summary(solution: FitSolution) -> dict[str, Any]:
         dof=solution.dof,
         reduced_chi2=solution.reduced_chi2,
         log_likelihood=solution.log_likelihood,
-        log_prior=solution.log_prior, aic=solution.aic, bic=solution.bic)
+        log_prior=solution.log_prior, aic=solution.aic, bic=solution.bic,
+        aicp=solution.aicp)
     if (cov := solution.covariance) is not None:
         info['covariance'] = dict(
             names=list(cov.names), std=cov.std, element_std=cov.element_std,

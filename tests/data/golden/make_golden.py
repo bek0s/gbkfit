@@ -327,7 +327,7 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
         for model in group_plan.model_h(values)])
     with setup:
         objective = setup.objective
-        chi2, log_likelihood = objective.chi2_and_log_likelihood(values)
+        chi2, log_likelihood, _ = objective.merits(values)
         golden['objective'] = dict(
             chi2=chi2, log_likelihood=log_likelihood,
             noise_chi2=objective.noise_chi2(),

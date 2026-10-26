@@ -16,8 +16,28 @@ from ._orbits import orbit_groups
 
 
 __all__ = [
+    'Merits',
     'Objective'
 ]
+
+
+class Merits(NamedTuple):
+    """
+    The numbers of an evaluation of an objective by which fitters judge
+    the models (see Objective.merits).
+
+    Attributes
+    ----------
+    chi2 : float
+        The chi-square (see Objective.chi2).
+    log_likelihood : float
+        The log-likelihood (see Objective.log_likelihood).
+    aicp : float
+        The AICp (see Objective.aicp).
+    """
+    chi2: float
+    log_likelihood: float
+    aicp: float
 
 
 class _Solved(NamedTuple):
@@ -88,9 +108,9 @@ class Objective:
     memory, until Python collects it.
 
     The methods for fitters return totals over all observations and new
-    arrays (chi2, log_likelihood, residuals). The others return a value
-    or the arrays of each observation, which are overwritten by the next
-    evaluation.
+    arrays (chi2, log_likelihood, aicp, merits, residuals). The others
+    return a value or the arrays of each observation, which are
+    overwritten by the next evaluation.
 
     Parameters
     ----------
@@ -296,11 +316,7 @@ class Objective:
         float
             The chi-square.
         """
-        self._update_residual_d(params, True, out_extra)
-        with self._group_plan.timers().measure('objective_residual_sum_eval'):
-            chi2 = sum(comparison_.chi2() for comparison_ in self._comparisons)
-        return float(chi2 + sum(
-            np.sum(residuals ** 2) for residuals in self._solve_residuals()))
+        return self.merits(params, out_extra).chi2
 
     def log_likelihood(
             self,
@@ -326,16 +342,23 @@ class Objective:
         float
             The log-likelihood.
         """
-        return self.chi2_and_log_likelihood(params, out_extra)[1]
+        return self.merits(params, out_extra).log_likelihood
 
-    def chi2_and_log_likelihood(
+    def aicp(
             self,
             params: ParamValues,
             out_extra: Extras | None = None
-    ) -> tuple[float, float]:
+    ) -> float:
         """
-        Return the chi-square and the log-likelihood of all observations,
-        of one evaluation (see chi2 and log_likelihood).
+        Return the AICp of all observations (Lipka & Thomas 2021): the
+        chi-square of the data plus twice the effective number of the
+        solved values (see nnuisance), without the residuals of their
+        priors, which are not of the data (with the noise residuals of a
+        fitted noise, which are). Of models whose solved values are
+        regularised by their priors (e.g. the weights of orbits), the
+        lower, the better: the chi-square alone prefers the weakest
+        regularisation, which fits the noise. Without solved values, it is
+        the chi-square.
 
         Parameters
         ----------
@@ -346,12 +369,42 @@ class Objective:
 
         Returns
         -------
-        tuple of float
-            The chi-square and the log-likelihood.
+        float
+            The AICp.
         """
-        chi2 = self.chi2(params, out_extra)
-        return chi2, -0.5 * chi2 + sum(
-            solution.log_term for solution in self._solutions)
+        return self.merits(params, out_extra).aicp
+
+    def merits(
+            self,
+            params: ParamValues,
+            out_extra: Extras | None = None
+    ) -> Merits:
+        """
+        Return the chi-square, the log-likelihood and the AICp of all
+        observations, of one evaluation (see chi2, log_likelihood and
+        aicp).
+
+        Parameters
+        ----------
+        params : ParamValues
+            The parameters of the models, prefixed (see pdescs).
+        out_extra : Extras, optional
+            Where the extra outputs of the models go, if wanted.
+
+        Returns
+        -------
+        Merits
+            The numbers.
+        """
+        self._update_residual_d(params, True, out_extra)
+        with self._group_plan.timers().measure('objective_residual_sum_eval'):
+            data_chi2 = float(sum(
+                comparison_.chi2() for comparison_ in self._comparisons))
+        chi2 = data_chi2 + float(sum(
+            np.sum(residuals ** 2) for residuals in self._solve_residuals()))
+        log_likelihood = -0.5 * chi2 + float(sum(
+            solution.log_term for solution in self._solutions))
+        return Merits(chi2, log_likelihood, data_chi2 + 2 * self.nnuisance())
 
     def residuals(
             self,

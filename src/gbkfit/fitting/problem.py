@@ -19,7 +19,7 @@ from gbkfit.params.joint_priors import joint_prior_residuals
 from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.params.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
-from gbkfit.objective import Objective
+from gbkfit.objective import Merits, Objective
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
 from gbkfit.utils import threadutils
 
@@ -28,11 +28,18 @@ _log = logging.getLogger(__name__)
 
 
 __all__ = [
+    'MERITS',
     'FitProblem'
 ]
 
 
 _T = TypeVar('_T')
+
+# What optimizers may minimise (see FitProblem.cost): the fields of Merits
+MERITS = ('chi2', 'aicp')
+
+# The numbers of a point whose parameters cannot be evaluated
+_UNEVALUATED = Merits(math.inf, -math.inf, math.inf)
 
 
 class FitProblem:
@@ -50,11 +57,14 @@ class FitProblem:
     ParamSpace.expression): a cost of inf, a log-prior and what nested
     samplers integrate of -inf.
 
-    Free elements may have priors: samplers need one for each, optimizers
-    take any (then they minimise the chi-square plus the priors', see
-    cost, and the residuals include those of the priors). The parameters
-    may also have priors on several of them at once (see ParamSpace and
-    JointPrior), which add to the priors of the elements the same way.
+    Optimizers minimise its merit (see cost): the chi-square, or the AICp
+    (see Objective.aicp; e.g. of models whose solved values are
+    regularised). Free elements may have priors: samplers need one for
+    each, optimizers take any (then they minimise the merit plus the
+    chi-square of the priors, see cost, and the residuals include those
+    of the priors). The parameters may also have priors on several of
+    them at once (see ParamSpace and JointPrior), which add to the priors
+    of the elements the same way.
 
     The batch functions take several points (one per row). With a pool
     (see EvaluationPool), they evaluate them at once, on copies of the
@@ -75,9 +85,9 @@ class FitProblem:
 
     Every model evaluation raises FitStopped once the control (if any) is
     stopped: those of a batch before it count, without a pool (with one,
-    none of the batch do). The numbers it evaluates (chi-squares,
-    log-likelihoods, not residuals) go to the log (if any), and those of a
-    fit that resumes come from it while it lasts (see EvaluationLog).
+    none of the batch do). The numbers it evaluates (see Merits; not
+    residuals) go to the log (if any), and those of a fit that resumes
+    come from it while it lasts (see EvaluationLog).
 
     Parameters
     ----------
@@ -98,6 +108,8 @@ class FitProblem:
         The log of the evaluations (of a fit that resumes, or a new one).
     pool : EvaluationPool, optional
         Copies of the objective that evaluate the batches at once.
+    merit : {'chi2', 'aicp'}, optional
+        What optimizers minimise (see cost).
 
     Raises
     ------
@@ -105,8 +117,8 @@ class FitProblem:
         If the parameter space lacks parameters of the objective, the
         objective does not solve its solved elements (see
         Objective.solves), nothing is free, the number of priors is
-        wrong, the log is of a fit of other free elements, or the pool is
-        of another objective.
+        wrong, the log is of a fit of other free elements, the pool is of
+        another objective, or the merit is unknown.
     ConfigError
         If a prior on several parameters is invalid.
     """
@@ -120,7 +132,8 @@ class FitProblem:
             interval: float = 2.0,
             control: FitControl | None = None,
             log: EvaluationLog | None = None,
-            pool: EvaluationPool | None = None
+            pool: EvaluationPool | None = None,
+            merit: str = 'chi2'
     ):
         if missing := set(objective.pdescs()) - set(params.pdescs()):
             raise ValueError(
@@ -140,6 +153,9 @@ class FitProblem:
                 f"{len(priors)}")
         if pool is not None and pool.objective() is not objective:
             raise ValueError("the pool is of copies of another objective")
+        if merit not in MERITS:
+            raise ValueError(
+                f"the merit must be one of {list(MERITS)}; it is {merit!r}")
         self._objective = objective
         self._params = params
         self._names = names
@@ -163,6 +179,7 @@ class FitProblem:
         self._control = control
         self._log = log
         self._pool = pool
+        self._merit = merit
         if log is not None:
             log.begin(names)
 
@@ -188,6 +205,10 @@ class FitProblem:
         if any has one.
         """
         return self._priors
+
+    def merit(self) -> str:
+        """Return what optimizers minimise (see cost)."""
+        return self._merit
 
     def precision(self) -> float:
         """
@@ -273,9 +294,10 @@ class FitProblem:
 
     def cost(self, x: npt.ArrayLike) -> float:
         """
-        Return what optimizers minimise at the given free values: the
-        chi-square plus that of the priors (see Prior.chi2; -2 log of the
-        posterior, up to a constant), or the chi-square without priors.
+        Return what optimizers minimise at the given free values: the merit
+        (see Merits: the chi-square, or the AICp) plus the chi-square of
+        the priors (see Prior.chi2; with the chi-square, -2 log of the
+        posterior, up to a constant), or the merit without priors.
         """
         return float(self.cost_batch(np.atleast_2d(x))[0])
 
@@ -393,23 +415,23 @@ class FitProblem:
     def chi2_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the chi-square of each point (one per row)."""
         chi2 = []
-        for x, evaluated in self._chi2s_and_log_likelihoods(_points(xs)):
-            if evaluated is None:
+        for x, merits in self._merits(_points(xs)):
+            if merits is None:
                 chi2.append(math.inf)
                 continue
-            self._record(x, evaluated[0])
-            chi2.append(evaluated[0])
+            self._record(x, merits.chi2)
+            chi2.append(merits.chi2)
         return np.array(chi2)
 
     def cost_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the cost of each point (one per row; see cost)."""
         costs = []
-        for x, evaluated in self._chi2s_and_log_likelihoods(_points(xs)):
-            if evaluated is None:
+        for x, merits in self._merits(_points(xs)):
+            if merits is None:
                 costs.append(math.inf)
                 continue
             try:
-                cost = evaluated[0] + self.prior_chi2(x)
+                cost = getattr(merits, self._merit) + self.prior_chi2(x)
             except ParamEvaluationError:
                 cost = math.inf
             self._record(x, cost)
@@ -419,12 +441,12 @@ class FitProblem:
     def log_likelihood_batch(self, xs: npt.ArrayLike) -> np.ndarray:
         """Return the log-likelihood of each point (one per row)."""
         log_likelihoods = []
-        for x, evaluated in self._chi2s_and_log_likelihoods(_points(xs)):
-            if evaluated is None:
+        for x, merits in self._merits(_points(xs)):
+            if merits is None:
                 log_likelihoods.append(-math.inf)
                 continue
-            self._record(x, evaluated[0])
-            log_likelihoods.append(evaluated[1])
+            self._record(x, merits.chi2)
+            log_likelihoods.append(merits.log_likelihood)
         return np.array(log_likelihoods)
 
     def log_posterior_batch(self, xs: npt.ArrayLike) -> np.ndarray:
@@ -599,16 +621,16 @@ class FitProblem:
             return function(objective, values)
         return stoppable
 
-    def _chi2s_and_log_likelihoods(
+    def _merits(
             self,
             xs: np.ndarray
-    ) -> Iterator[tuple[np.ndarray, tuple[float, float] | None]]:
+    ) -> Iterator[tuple[np.ndarray, Merits | None]]:
         """
-        Yield each point (one per row) with its chi-square and
-        log-likelihood, or None where the parameters cannot be evaluated
-        or they are not numbers: from the log while a fit that resumes
-        replays it, else from the objective (see map_objective), and
-        logged (None as inf and -inf, numbers that are not as they are).
+        Yield each point (one per row) with its numbers (see Merits), or
+        None where the parameters cannot be evaluated or the numbers are
+        not numbers: from the log while a fit that resumes replays it,
+        else from the objective (see map_objective), and logged (None as
+        infinities, numbers that are not as they are).
 
         Raises
         ------
@@ -628,27 +650,24 @@ class FitProblem:
             except ParamEvaluationError:
                 new.append((x, None))
         evaluated = self.map_objective(
-            Objective.chi2_and_log_likelihood,
+            Objective.merits,
             [values for _, values in new if values is not None])
         for x, values in new:
-            numbers = (math.inf, -math.inf) if values is None \
-                else next(evaluated)
+            merits = _UNEVALUATED if values is None else next(evaluated)
             if self._log is not None:
-                self._log.append(x, *numbers)
-            yield x, self._evaluated(x, numbers)
+                self._log.append(x, merits)
+            yield x, self._evaluated(x, merits)
 
-    def _evaluated(
-            self, x: np.ndarray, numbers: tuple[float, float]
-    ) -> tuple[float, float] | None:
+    def _evaluated(self, x: np.ndarray, merits: Merits) -> Merits | None:
         """
-        Return the chi-square and log-likelihood of a point, or None for
-        those of a point whose parameters could not be evaluated (inf,
-        -inf), or that are not numbers (counted).
+        Return the numbers of a point, or None for those of a point whose
+        parameters could not be evaluated (infinities), or that are not
+        numbers (counted).
         """
-        if math.isnan(numbers[0]) or math.isnan(numbers[1]):
+        if any(math.isnan(number) for number in merits):
             self._count_nan(x)
             return None
-        return None if numbers == (math.inf, -math.inf) else numbers
+        return None if merits == _UNEVALUATED else merits
 
     def _count_nan(self, x: np.ndarray) -> None:
         """

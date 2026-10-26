@@ -45,18 +45,20 @@ START = dict(
 
 
 def mock_objective(
-        driver, seed=1, error_scale=1.0, likelihood=None, name=None):
+        driver, seed=1, error_scale=1.0, likelihood=None, name=None,
+        flux_scale=None):
     """
     An objective of a mock image, seen through a PSF (without one, the
     cusp of the exponential disk makes the chi-square kink at the centre
     of a pixel), with noise of 1% of its peak, and errors of error_scale
-    times it, under a likelihood, of an observation of a name.
+    times it, under a likelihood, of an observation of a name and a flux
+    scale (with nothing solved).
     """
-    def group(dataset, likelihood=None):
+    def group(dataset, likelihood=None, flux_scale=None):
         observation = ObservationSky(
             PixelBrightness.from_data(dataset), Flat(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
-            likelihood=likelihood, name=name)
+            likelihood=likelihood, flux_scale=flux_scale, name=name)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(driver)
     shape = (32, 32)
@@ -68,7 +70,7 @@ def mock_objective(
     noise = np.random.default_rng(seed).normal(0, sigma, shape)
     dataset = DatasetPixelBrightness(
         Data(model + noise, error=np.full(shape, error_scale * sigma)))
-    return Objective(group(dataset, likelihood))
+    return Objective(group(dataset, likelihood, flux_scale))
 
 
 def bounded_properties():
@@ -617,7 +619,7 @@ def test_a_grid_maps_the_chi2_of_two_free_elements():
     params = ParamSpace(objective.pdescs(), properties)
     result = FitterGrid(batch=7).fit(objective, params)
     grid = result.diagnostics['grid']
-    chi2 = np.array(grid['chi2'])
+    chi2 = np.array(grid['cost'])
     assert grid['names'] == ['posa', 'incl'] and chi2.shape == (9, 11)
     assert result.success and result.nevals == 9 * 11
     assert result.best().free == dict(posa=40, incl=55)
@@ -646,7 +648,7 @@ def test_a_stopped_grid_keeps_the_points_it_evaluated():
         posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=6)))
     result = FitterGrid(batch=10).fit(
         objective, params, control=StopAfter(25))
-    chi2 = np.array(result.diagnostics['grid']['chi2'])
+    chi2 = np.array(result.diagnostics['grid']['cost'])
     assert not result.success and result.message.startswith('stopped')
     assert np.count_nonzero(np.isfinite(chi2)) == 20
     with pytest.raises(ConfigError, match="more than max_points"):
@@ -654,6 +656,38 @@ def test_a_stopped_grid_keeps_the_points_it_evaluated():
     from gbkfit.fitting.fitters.grid import FitParamGrid
     with pytest.raises(ConfigError, match="at least 2"):
         FitParamGrid(0, 1, 1)
+
+
+def test_optimizers_of_the_aicp_minimise_it():
+    # A flux scale solved under a prior: the AICp is not the chi-square.
+    # A grid of merit 'aicp' maps it; its best solution reports it with
+    # twice the free element, and has no covariance (the AICp is not a
+    # likelihood)
+    from gbkfit.fitting.fitters.cmaes import FitterCMAES
+    from gbkfit.fitting.fitters.grid import FitterGrid
+    from gbkfit.fitting.fitters.multistart import FitterMultiStart
+    from gbkfit.fitting.uncertainty import UncertaintyOptions
+    plan = mock_objective(
+        DriverHost(), name='obs', flux_scale='one').group_plan()
+    params = ParamSpace(plan.group().pdescs(), TRUE | dict(
+        obs_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1, sigma=0.1, minimum=0)),
+        posa=dict(min=36, max=44, n=5)))
+    objective = Objective(plan, params.solves())
+    result = FitterGrid(merit='aicp').fit(objective, params)
+    grid = result.diagnostics['grid']
+    merits = objective.merits(params.evaluate([grid['axes'][0][1]]))
+    assert merits.aicp > merits.chi2 + 1
+    assert grid['cost'][1] == pytest.approx(merits.aicp)
+    best = result.best()
+    assert best.aicp == pytest.approx(
+        objective.aicp(params.evaluate(list(best.free.values()))) + 2)
+    assert best.covariance is None and best.laplace is None
+    assert FitterMultiStart(FitterCMAES(merit='aicp')).merit() == 'aicp'
+    with pytest.raises(ConfigError, match="not a likelihood"):
+        FitterCMAES(merit='aicp', uncertainty=UncertaintyOptions())
+    with pytest.raises(ConfigError, match="option 'merit'"):
+        FitterGrid(merit='bic')
 
 
 def test_least_squares_take_priors_with_residuals_only():
@@ -1208,8 +1242,8 @@ def test_summaries_show_the_free_elements_decoded():
         values={'v': np.array([100.0, 105.0])},
         elements={'v[0]': 100.0, 'v[1]': 105.0}, derived={}, chi2=10.0,
         nresiduals=12, nfitted=2, dof=10, reduced_chi2=1.0,
-        log_likelihood=-5.0, log_prior=None, covariance=covariance,
-        laplace=None)
+        log_likelihood=-5.0, log_prior=None, aicp=14.0,
+        covariance=covariance, laplace=None)
     result = FitResult(
         fitter=dict(type='grid'), params=None, versions={},
         solutions=(solution,), posterior=None, evidence=None, nevals=1,
@@ -1226,8 +1260,8 @@ def test_the_information_criteria_of_a_solution():
     solution = FitSolution(
         free={}, values={}, elements={}, derived={}, chi2=100.0,
         nresiduals=100, nfitted=3, dof=97, reduced_chi2=100 / 97,
-        log_likelihood=-50.0,
-        log_prior=None, covariance=None, laplace=None)
+        log_likelihood=-50.0, log_prior=None, aicp=106.0,
+        covariance=None, laplace=None)
     assert solution.nfitted == 3
     assert solution.aic == pytest.approx(106)
     assert solution.bic == pytest.approx(3 * np.log(100) + 100)

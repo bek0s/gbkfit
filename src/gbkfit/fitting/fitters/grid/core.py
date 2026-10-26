@@ -97,20 +97,20 @@ class FitParamGrid(FitParam):
 
 class FitterGrid(Fitter):
     """
-    A brute-force grid (e.g. 3D Barolo's SPACEPAR): the chi-square at
-    every combination of the values of the free elements (see
-    FitParamGrid), with that of the priors, if any (the cost of the
-    optimizers; see FitProblem.cost), evaluated in batches. Its best
-    solution is the point of the lowest. With two free elements and the
-    others fixed, it maps how they trade off (e.g. the inclination and the
-    rotation of a ring: free one element of each node-wise parameter).
+    A brute-force grid (e.g. 3D Barolo's SPACEPAR): the chi-square (or
+    the AICp; see merit) at every combination of the values of the free
+    elements (see FitParamGrid), with the chi-square of the priors, if
+    any (the cost of the optimizers; see FitProblem.cost), evaluated in
+    batches. Its best solution is the point of the lowest. With two free
+    elements and the others fixed, it maps how they trade off (e.g. the
+    inclination and the rotation of a ring: free one element of each
+    node-wise parameter).
 
     Its diagnostics 'grid' hold the names of the free elements, the
-    values of each on the grid ('axes') and the chi-square of every point
-    ('chi2', with that of the priors; of the shape
-    of the grid, the first element along the first axis; inf where the
-    parameters cannot be evaluated, NaN where a stopped grid did not
-    evaluate it).
+    values of each on the grid ('axes') and the cost of every point
+    ('cost'; of the shape of the grid, the first element along the first
+    axis; inf where the parameters cannot be evaluated, NaN where a
+    stopped grid did not evaluate it).
 
     Parameters
     ----------
@@ -121,16 +121,20 @@ class FitterGrid(Fitter):
     n : int, optional
         The number of values of the free elements without their own (see
         FitParamGrid).
+    merit : {'chi2', 'aicp'}, optional
+        What it minimises (see Fitter): the chi-square, or the AICp.
     seed : int, optional
         The seed of the random numbers (of its uncertainty).
     uncertainty : UncertaintyOptions, optional
-        How to work out the uncertainty of the best solution.
+        How to work out the uncertainty of the best solution (by default,
+        of merit 'aicp': none).
 
     Raises
     ------
     ConfigError
         If batch or max_points is not positive, n is not an integer of at
-        least 2, or the grid has more than max_points points (when it
+        least 2, the merit and the uncertainty do not go together (see
+        Fitter), or the grid has more than max_points points (when it
         runs).
     """
 
@@ -148,17 +152,18 @@ class FitterGrid(Fitter):
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), batch=self._batch, max_points=self._max_points,
-            n=self._n) | self.dump_common()
+            n=self._n, merit=self.merit()) | self.dump_common()
 
     def __init__(
             self,
             batch: int = 1000,
             max_points: int = 1_000_000,
             n: int | None = None,
+            merit: str = 'chi2',
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
-        super().__init__(seed, uncertainty)
+        super().__init__(seed, uncertainty, merit)
         for name, value in dict(batch=batch, max_points=max_points).items():
             if not value > 0:
                 raise ConfigError(
@@ -192,19 +197,19 @@ class FitterGrid(Fitter):
         points = np.stack(
             np.meshgrid(*axes, indexing='ij'), axis=-1).reshape(-1, len(axes))
         # A grid asked to stop keeps the points it evaluated
-        chi2 = np.full(npoints, np.nan)
+        costs = np.full(npoints, np.nan)
         stopped = False
         for start in range(0, npoints, self._batch):
             end = min(start + self._batch, npoints)
             try:
-                chi2[start:end] = problem.cost_batch(points[start:end])
+                costs[start:end] = problem.cost_batch(points[start:end])
             except FitStopped:
                 stopped = True
                 break
         best = problem.best()
         if best is None:
-            raise RuntimeError("the grid found no point with a finite chi2")
-        nevaluated = int(np.count_nonzero(~np.isnan(chi2)))
+            raise RuntimeError("the grid found no point with a finite cost")
+        nevaluated = int(np.count_nonzero(~np.isnan(costs)))
         message = f'stopped after {nevaluated} of {npoints} points' \
             if stopped else f'evaluated the {npoints} points of the grid'
         return FitRun(
@@ -214,4 +219,4 @@ class FitterGrid(Fitter):
             diagnostics=dict(grid=dict(
                 names=list(problem.names()),
                 axes=[axis.tolist() for axis in axes],
-                chi2=chi2.reshape(shape).tolist())))
+                cost=costs.reshape(shape).tolist())))

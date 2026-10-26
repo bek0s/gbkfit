@@ -45,7 +45,9 @@ class FitterMultiStart(Fitter):
     local : Fitter
         The optimizer: a fitter whose free elements take an initial value
         and bounds (see FitParamBounded; samplers do not). Its seed and
-        uncertainty options are not used (those of multistart are).
+        uncertainty options are not used (those of multistart are); its
+        merit is that of multistart (see Fitter), by which it ranks the
+        minima.
     nstarts : int, optional
         The number of starts (the first is the given values).
     nsolutions : int, optional
@@ -56,13 +58,15 @@ class FitterMultiStart(Fitter):
     seed : int, optional
         The seed of the starts and the Laplace samples.
     uncertainty : UncertaintyOptions, optional
-        How to work out the uncertainty of the solutions.
+        How to work out the uncertainty of the solutions (by default, of
+        merit 'aicp': none).
 
     Raises
     ------
     ConfigError
-        If the local fitter is not an optimizer, or a number is not
-        positive.
+        If the local fitter is not an optimizer, a number is not
+        positive, or the merit and the uncertainty do not go together
+        (see Fitter).
     """
 
     @staticmethod
@@ -98,7 +102,7 @@ class FitterMultiStart(Fitter):
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
-        super().__init__(seed, uncertainty)
+        super().__init__(seed, uncertainty, local.merit())
         if not issubclass(local.fit_param_class(), FitParamBounded):
             raise ConfigError(
                 f"the local fitter of multistart must be an optimizer, which "

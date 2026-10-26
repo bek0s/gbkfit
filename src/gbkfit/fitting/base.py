@@ -16,7 +16,7 @@ from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.pool import EvaluationPool
-from gbkfit.fitting.problem import FitProblem
+from gbkfit.fitting.problem import MERITS, FitProblem
 from gbkfit.fitting.progress import ProgressObserver
 from gbkfit.fitting.result import (
     Evidence, FitResult, FitSolution, Posterior)
@@ -88,13 +88,30 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     the fitter evaluates each solution, and computes its covariance and
     Laplace posterior (see UncertaintyOptions).
 
+    Optimizers of one number minimise its merit (see FitProblem.cost):
+    the chi-square, or the AICp (see Objective.aicp), the merit of models
+    whose solved values are regularised (e.g. Schwarzschild models). The
+    AICp is not a likelihood: the solutions of its fits have no
+    covariance (nor Laplace posterior).
+
     Parameters
     ----------
     seed : int
         The seed of the random numbers (of the fitter, if random, and of
         the Laplace samples).
     uncertainty : UncertaintyOptions, optional
-        How to work out the uncertainty of the solutions.
+        How to work out the uncertainty of the solutions (by default, of
+        merit 'aicp': none).
+    merit : {'chi2', 'aicp'}, optional
+        What the fitter minimises: the chi-square (samplers and least
+        squares, which take the likelihood or the residuals), or the AICp
+        (optimizers that take it).
+
+    Raises
+    ------
+    ConfigError
+        If the merit is unknown, or it is 'aicp' and the uncertainty
+        options ask for a covariance.
     """
 
     @classmethod
@@ -108,14 +125,33 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     def __init__(
             self,
             seed: int,
-            uncertainty: UncertaintyOptions | None
+            uncertainty: UncertaintyOptions | None,
+            merit: str = 'chi2'
     ):
+        if merit not in MERITS:
+            raise ConfigError(
+                f"option 'merit' must be one of {list(MERITS)}; it is "
+                f"{merit!r}")
+        if merit == 'aicp' and uncertainty is not None \
+                and uncertainty.covariance():
+            raise ConfigError(
+                "the AICp is not a likelihood: the solutions of a fit of "
+                "merit 'aicp' have no covariance; give uncertainty "
+                "covariance false")
+        if uncertainty is None:
+            uncertainty = UncertaintyOptions() if merit == 'chi2' \
+                else _NO_UNCERTAINTY
         self._seed = seed
-        self._uncertainty = uncertainty or UncertaintyOptions()
+        self._uncertainty = uncertainty
+        self._merit = merit
 
     def seed(self) -> int:
         """Return the seed of the random numbers."""
         return self._seed
+
+    def merit(self) -> str:
+        """Return what the fitter minimises (see FitProblem.cost)."""
+        return self._merit
 
     def uncertainty(self) -> UncertaintyOptions:
         """Return the options of the uncertainty."""
@@ -128,8 +164,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         uncertainty; see bootstrap).
         """
         fitter = copy.copy(self)
-        fitter._uncertainty = UncertaintyOptions(
-            covariance=False, laplace_samples=0)
+        fitter._uncertainty = _NO_UNCERTAINTY
         return fitter
 
     def dump_common(self) -> dict[str, Any]:
@@ -248,7 +283,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         _check_valid_ranges(fit_params, params.free_valid_ranges())
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
-            observers, control=control, log=log, pool=pool)
+            observers, control=control, log=log, pool=pool,
+            merit=self._merit)
         try:
             return self._fit(problem, params, fit_params)
         finally:
@@ -353,8 +389,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         objective = problem.objective()
         params = problem.params()
         x = np.asarray(x, dtype=float)
-        chi2, log_likelihood = objective.chi2_and_log_likelihood(
-            params.evaluate(x))
+        merits = objective.merits(params.evaluate(x))
         # (with the values of the solved elements there)
         values = params.evaluate(x, objective.solved())
         problems = []
@@ -369,8 +404,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         dof = objective.nindependent() - nfitted
         # (the noise residuals of a fitted noise are not of the data: a
         # reduced chi-square with them would scale the covariance wrongly)
-        reduced_chi2 = (chi2 - objective.noise_chi2()) / dof if dof > 0 \
-            else np.nan
+        reduced_chi2 = (merits.chi2 - objective.noise_chi2()) / dof \
+            if dof > 0 else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
         cov = laplace = None
@@ -402,15 +437,20 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             values=values,
             elements=params.element_values(values),
             derived=derived,
-            chi2=chi2,
+            chi2=merits.chi2,
             nresiduals=nresiduals,
             nfitted=nfitted,
             dof=dof,
             reduced_chi2=reduced_chi2,
-            log_likelihood=log_likelihood,
+            log_likelihood=merits.log_likelihood,
             log_prior=log_prior,
+            aicp=merits.aicp + 2 * problem.ndim(),
             covariance=cov,
             laplace=laplace), nevals, problems
+
+
+# The uncertainty options of no uncertainty
+_NO_UNCERTAINTY = UncertaintyOptions(covariance=False, laplace_samples=0)
 
 
 def _stopped_run(problem: FitProblem) -> FitRun:

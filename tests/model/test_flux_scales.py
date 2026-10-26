@@ -196,6 +196,20 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
         spectra * found, rtol=1e-6, atol=1e-9 * spectra.max())
 
 
+def test_the_aicp_counts_the_data_and_the_solved_scales(driver):
+    # The AICp: the chi-square of the data alone (not that of the prior
+    # of the scales), plus twice the effective number of the scales
+    spectra = model(driver)
+    rng = np.random.default_rng(3)
+    error = 0.05 * spectra.max()
+    data = spectra * rng.uniform(0.5, 2, SIZE[1::-1]) \
+        + rng.normal(0, error, spectra.shape)
+    obj, params = objective(driver, data, error)
+    aicp = obj.aicp(params.evaluate())
+    data_chi2 = np.sum(((data - spectra * solved(obj)) / error) ** 2)
+    assert aicp == pytest.approx(data_chi2 + 2 * obj.nnuisance(), rel=1e-5)
+
+
 def test_solved_scales_weigh_the_values_by_their_fitted_noise(driver):
     # With a fitted jitter j, the noise of each value, sqrt(e^2 + j^2),
     # weighs it in place of its error e, as in its residual
@@ -224,7 +238,7 @@ def test_the_log_likelihood_integrates_the_solved_scales(driver):
     error = 0.05 * spectra.max()
     data = 0.7 * spectra + rng.normal(0, error, spectra.shape)
     obj, params = objective(driver, data, error)
-    _, log_likelihood = obj.chi2_and_log_likelihood(params.evaluate())
+    log_likelihood = obj.log_likelihood(params.evaluate())
     expected = 0.0
     a = np.linspace(0, 20, 40001)[:, None]
     prior = scipy.stats.truncnorm.pdf(
@@ -243,7 +257,7 @@ def test_a_likelihood_of_no_weight_has_no_terms_of_solved_scales(driver):
     obj, params = objective(
         driver, spectra, 1e-3 * spectra.max(),
         likelihood=LikelihoodGaussian(weights=0.0))
-    assert obj.chi2_and_log_likelihood(params.evaluate()) == (0.0, 0.0)
+    assert obj.merits(params.evaluate())[:2] == (0.0, 0.0)
 
 
 def test_flux_scales_need_light_and_a_name():

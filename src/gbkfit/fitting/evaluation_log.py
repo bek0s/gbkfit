@@ -12,6 +12,8 @@ from typing import BinaryIO
 
 import numpy as np
 
+from gbkfit.objective import Merits
+
 
 __all__ = [
     'EvaluationLog'
@@ -20,8 +22,11 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# The first line of the files of a log
-_MAGIC = b'GBKFIT EVALUATIONS 1\n'
+# The first line of the files of a log (of the version of their format)
+_MAGIC = b'GBKFIT EVALUATIONS 2\n'
+
+# The numbers of each evaluation
+_NNUMBERS = len(Merits._fields)
 
 # The least time between two flushes of the files (s)
 _FLUSH_INTERVAL = 1.0
@@ -30,8 +35,8 @@ _FLUSH_INTERVAL = 1.0
 class EvaluationLog:
     """
     A file of the model evaluations of a fit, written as it runs: the free
-    values of each point the fitter asks about, with its chi-square and
-    log-likelihood. A fit that resumes from it (see resume) runs again
+    values of each point the fitter asks about, with its numbers (see
+    Merits). A fit that resumes from it (see resume) runs again
     with the same configuration and seed, so that its fitter asks for the
     same points: they are answered from the log while they match it
     exactly, then evaluated (and logged). The result is that of the fit
@@ -78,12 +83,12 @@ class EvaluationLog:
         Raises
         ------
         ValueError
-            If the file is not a log of evaluations.
+            If the file is not a log of evaluations (of this version).
         """
         log = cls(filename)
         names, rows, header = _read(filename)
         log._names = names
-        log._rows = rows.reshape(-1, len(names) + 2)
+        log._rows = rows.reshape(-1, len(names) + _NNUMBERS)
         log._header = header
         log._replaying = len(log._rows) > 0
         return log
@@ -121,19 +126,19 @@ class EvaluationLog:
             self._header = self._file.tell()
         self._chain_file = None
 
-    def replay(self, x: np.ndarray) -> tuple[float, float] | None:
+    def replay(self, x: np.ndarray) -> Merits | None:
         """
-        Return the chi-square and log-likelihood of the next evaluation of
-        the log, if it is at the given free values; else None, and the
-        replay ends (the rest of the log is dropped).
+        Return the numbers of the next evaluation of the log, if it is at
+        the given free values; else None, and the replay ends (the rest of
+        the log is dropped).
         """
         if not self._replaying:
             return None
         if self._next < len(self._rows):
             row = self._rows[self._next]
-            if np.array_equal(row[:-2], x):
+            if np.array_equal(row[:-_NNUMBERS], x):
                 self._next += 1
-                return float(row[-2]), float(row[-1])
+                return Merits(*row[-_NNUMBERS:].tolist())
             _log.warning(
                 f"{self._filename}: the fit asked for another point than "
                 f"the log at evaluation {self._next + 1} (of "
@@ -146,17 +151,11 @@ class EvaluationLog:
         self._end_replay()
         return None
 
-    def append(
-            self,
-            x: np.ndarray,
-            chi2: float,
-            log_likelihood: float
-    ) -> None:
+    def append(self, x: np.ndarray, merits: Merits) -> None:
         """Log an evaluation."""
         assert self._file is not None and not self._replaying
         self._file.write(np.concatenate(
-            [np.asarray(x, dtype=np.float64), [chi2, log_likelihood]]
-        ).tobytes())
+            [np.asarray(x, dtype=np.float64), merits]).tobytes())
         self._flush_now_and_then()
 
     def record_chain(
@@ -209,10 +208,12 @@ def _read(filename: str) -> tuple[tuple[str, ...], np.ndarray, int]:
     """
     with open(filename, 'rb') as file:
         if file.readline() != _MAGIC:
-            raise ValueError(f"{filename} is not a log of evaluations")
+            raise ValueError(
+                f"{filename} is not a log of evaluations of this version of "
+                f"GBKFIT")
         names = tuple(json.loads(file.readline())['names'])
         header = file.tell()
         values = file.read()
-    width = len(names) + 2
+    width = len(names) + _NNUMBERS
     values = np.frombuffer(values[:len(values) // 8 * 8], dtype=np.float64)
     return names, values[:len(values) // width * width], header

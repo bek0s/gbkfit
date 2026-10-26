@@ -56,6 +56,9 @@ def test_totals_agree_with_the_residuals(driver):
         np.sum(residuals ** 2), rel=1e-5)
     assert objective.log_likelihood(params) == pytest.approx(
         -0.5 * objective.chi2(params))
+    # (nothing solved: the AICp is the chi-square)
+    chi2, _, aicp = objective.merits(params)
+    assert aicp == chi2
 
 
 def test_the_log_likelihoods_of_the_points_sum_to_it(driver):

@@ -91,8 +91,9 @@ class FitParamCMAES(FitParamBounded):
 class FitterCMAES(Fitter):
     """
     The covariance matrix adaptation evolution strategy (Hansen 2016),
-    with pycma: a global, derivative-free optimizer of the chi-square,
-    with optional restarts of growing populations (IPOP or BIPOP).
+    with pycma: a global, derivative-free optimizer of the chi-square (or
+    of the AICp; see merit), with optional restarts of growing
+    populations (IPOP or BIPOP).
 
     The free elements take a value, optional min and max, and sigma (see
     FitParamCMAES; the option sigma of the fitter is the default). CMA-ES
@@ -114,7 +115,7 @@ class FitterCMAES(Fitter):
     maxfevals : int, optional
         The most model evaluations of all runs (by default, pycma's).
     tolfun : float, optional
-        The change of the chi-square below which a run stops.
+        The change of the merit below which a run stops.
     tolx : float, optional
         The step (in units of sigma) below which a run stops.
     sigma : float, optional
@@ -122,16 +123,20 @@ class FitterCMAES(Fitter):
         FitParamCMAES).
     verbose : bool, optional
         Whether pycma prints its progress.
+    merit : {'chi2', 'aicp'}, optional
+        What it minimises (see Fitter): the chi-square, or the AICp.
     seed : int, optional
         The seed of the random numbers.
     uncertainty : UncertaintyOptions, optional
-        How to work out the uncertainty of the best solution.
+        How to work out the uncertainty of the best solution (by default,
+        of merit 'aicp': none).
 
     Raises
     ------
     ConfigError
-        If a number is not positive (restarts: negative), or sigma is not
-        finite.
+        If a number is not positive (restarts: negative), sigma is not
+        finite, or the merit and the uncertainty do not go together (see
+        Fitter).
     """
 
     @staticmethod
@@ -151,7 +156,7 @@ class FitterCMAES(Fitter):
             restarts=self._restarts, bipop=self._bipop,
             maxfevals=self._maxfevals, tolfun=self._tolfun,
             tolx=self._tolx, sigma=self._sigma,
-            verbose=self._verbose) | self.dump_common()
+            verbose=self._verbose, merit=self.merit()) | self.dump_common()
 
     def __init__(
             self,
@@ -163,10 +168,11 @@ class FitterCMAES(Fitter):
             tolx: float = 1e-6,
             sigma: float | None = None,
             verbose: bool = False,
+            merit: str = 'chi2',
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
-        super().__init__(seed, uncertainty)
+        super().__init__(seed, uncertainty, merit)
         for name, value in dict(
                 popsize=popsize, maxfevals=maxfevals, tolfun=tolfun,
                 tolx=tolx, sigma=sigma).items():
@@ -202,7 +208,7 @@ class FitterCMAES(Fitter):
         lower = [(p.minimum() - p.value()) / p.sigma() for p in params]
         upper = [(p.maximum() - p.value()) / p.sigma() for p in params]
 
-        def chi2(zs: list[np.ndarray]) -> list[float]:
+        def cost(zs: list[np.ndarray]) -> list[float]:
             return problem.cost_batch(x0 + scale * np.array(zs)).tolist()
 
         options: dict[str, Any] = dict(
@@ -219,7 +225,7 @@ class FitterCMAES(Fitter):
         zbest, es = cma.fmin2(
             None, np.zeros(len(params)), 1.0, options,
             restarts=self._restarts, bipop=self._bipop,
-            parallel_objective=chi2)
+            parallel_objective=cost)
         if problem.best() is None:
             raise RuntimeError("CMA-ES found no point with a finite chi2")
         stop = {str(k): v for k, v in es.stop().items()}
