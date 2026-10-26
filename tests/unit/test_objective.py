@@ -17,7 +17,8 @@ from gbkfit.objective import Objective
 from gbkfit.observation import (
     Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
     PixelBrightness, PixelMoments, observable_parser)
-from gbkfit.params import ParamSpace, SolveGaussian
+from gbkfit.params import (
+    ParamSpace, SolveGaussian, solve_together, solve_together_rows)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -575,6 +576,47 @@ def test_values_solved_together_above_a_minimum_are_profiled():
     assert solution.log_term == 0
     assert solution.m_eff == pytest.approx(
         effective_number(solve, pieces, data), rel=1e-5)
+
+
+@pytest.mark.parametrize('minimum, likelihood', [
+    (None, 'integrated'), (0.0, 'profiled')])
+def test_values_solved_on_rows_are_those_of_their_sums(minimum, likelihood):
+    # Of two solves, with and without a minimum: their values, the
+    # integral of the likelihood and the effective number, as those of the
+    # sums of the rows (solve_together)
+    rng = np.random.default_rng(4)
+    rows = np.abs(rng.normal(size=(30, 12)))
+    target = rows @ rng.normal(1, 1, 12) + rng.normal(size=30)
+    solves = [SolveGaussian(0.5, 1.5, minimum, likelihood),
+              SolveGaussian(1.0, 0.3, minimum, likelihood)]
+    expected = solve_together(
+        solves, [5, 7], rows.T @ rows, rows.T @ target)
+    solution = solve_together_rows(solves, [5, 7], rows, target)
+    np.testing.assert_allclose(
+        solution.values, expected.values, rtol=1e-9, atol=1e-12)
+    np.testing.assert_allclose(
+        solution.residuals, expected.residuals, rtol=1e-9, atol=1e-12)
+    assert solution.log_term == pytest.approx(expected.log_term)
+    assert solution.m_eff == pytest.approx(expected.m_eff)
+
+
+def test_many_values_solved_on_few_rows_are_the_bounded_least_squares():
+    # 1000 values (e.g. the weights of orbits) above 0 of 100 rows, of a
+    # prior of the mean 1: those of scipy's bounded least squares of the
+    # rows and the prior rows, many at their minimum
+    rng = np.random.default_rng(5)
+    rows = rng.random((100, 1000)) * (rng.random((100, 1000)) < 0.05)
+    truth = rng.exponential(1, 1000) * (rng.random(1000) < 0.3)
+    target = rows @ truth + 0.1 * rng.normal(size=100)
+    sigma = 2.0
+    solution = solve_together_rows(
+        [SolveGaussian(1.0, sigma, 0.0, 'profiled')], [1000], rows, target)
+    stacked = np.vstack((rows, np.eye(1000) / sigma))
+    expected = scipy.optimize.lsq_linear(
+        stacked, np.concatenate((target, np.full(1000, 1 / sigma))),
+        bounds=(0, np.inf), tol=1e-12).x
+    np.testing.assert_allclose(solution.values, expected, atol=1e-7)
+    assert np.mean(solution.values == 0) > 0.05
 
 
 def test_a_closed_objective_releases_its_memory_and_evaluates_again(driver):

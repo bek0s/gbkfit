@@ -29,13 +29,17 @@ __all__ = [
     'SolveGaussian',
     'check_together',
     'solve_parser',
-    'solve_together'
+    'solve_together',
+    'solve_together_rows'
 ]
 
 
 # What the log-likelihood takes of solved values (see Solve): their
 # integral under their prior, or their best values (the profile)
 LIKELIHOODS = ('integrated', 'profiled')
+
+# The most Newton steps of solve_together_rows
+_ROWS_MAX_STEPS = 100
 
 
 class Solution(NamedTuple):
@@ -310,12 +314,7 @@ def solve_together(
     check_together(solves, sizes)
     if len(rhs) == 1:
         return solves[0].solve(normal[0], rhs)
-    mean, sigma = (
-        np.repeat([getter(solve) for solve in solves], sizes)
-        for getter in (SolveGaussian.mean, SolveGaussian.sigma))
-    lower = np.repeat([
-        -np.inf if solve.minimum() is None else solve.minimum()
-        for solve in solves], sizes)
+    mean, sigma, lower = _priors(solves, sizes)
     precision = 1 / sigma ** 2
     normal_prior = normal + np.diag(precision)
     rhs_prior = rhs + mean * precision
@@ -342,6 +341,133 @@ def solve_together(
         normal_free + np.diag(precision[free]), normal_free))) \
         if free.any() else 0.0
     return Solution(values, (values - mean) / sigma, log_term, m_eff)
+
+
+def solve_together_rows(
+        solves: Sequence[Solve],
+        sizes: Sequence[int],
+        rows: np.ndarray,
+        target: np.ndarray
+) -> Solution:
+    """
+    Return the values of the given solves solved together, as
+    solve_together, of the rows of their chi-square rather than its sums:
+    of the residuals A u - t of the values u (e.g. over the errors of the
+    data), N = A^T A and b = A^T t. For many values and fewer rows (e.g.
+    the weights of the orbits of Schwarzschild models), as N is never
+    made.
+
+    They are solved on the dual, in one variable per row (the semismooth
+    Newton method): y = t - A u, u = max(c, mu + s^2 A^T y), whose
+    Newton matrix is H = I + A_F S_F^2 A_F^T over the values F above their
+    minimum (the dual is quadratic where F holds, so a full step that
+    keeps it reaches the solution), from the solution without the minimum
+    (from the means of the priors, the minimum cuts the steps short, and
+    from the solution of similar rows it takes more of them). Then the
+    effective number of the values is n - tr(H^-1), and the integral of
+    the likelihood (without a minimum) -log det(H) / 2: those of
+    solve_together, by the identities of Woodbury and Sylvester.
+
+    Parameters
+    ----------
+    solves : sequence of Solve
+        The solves.
+    sizes : sequence of int
+        The number of values of each, in their order.
+    rows : np.ndarray
+        The matrix A, of shape (n, K) for K values.
+    target : np.ndarray
+        The vector t, of shape (n,).
+
+    Returns
+    -------
+    Solution
+        The solution.
+
+    Raises
+    ------
+    ConfigError
+        If they cannot be solved together (see check_together).
+    RuntimeError
+        If the Newton steps do not reach the solution.
+    """
+    check_together(solves, sizes)
+    mean, sigma, lower = _priors(solves, sizes)
+    variance = sigma ** 2
+
+    def dual(y: np.ndarray) -> tuple[float, np.ndarray]:
+        # (the dual, as a minimum, and the values of y: ||y||^2 / 2 + sum
+        # G_k((A^T y)_k) - t^T y, G_k(s) = max over u >= c_k of u s - (u -
+        # mu_k)^2 / (2 s_k^2), convex, whose derivative is u_k(s))
+        slopes = rows.T @ y
+        values = np.maximum(lower, mean + variance * slopes)
+        conjugates = values * slopes - (values - mean) ** 2 / (2 * variance)
+        return float(y @ y / 2 + np.sum(conjugates) - target @ y), values
+
+    # (from the solution without the minimum, all values free)
+    identity = np.eye(len(target))
+    free = np.ones(len(mean), dtype=bool)
+    gram = (rows * variance) @ rows.T
+    factor = scipy.linalg.cho_factor(identity + gram)
+    y = scipy.linalg.cho_solve(factor, target - rows @ mean)
+    value, values = dual(y)
+    for _ in range(_ROWS_MAX_STEPS):
+        # (the Newton matrix, of the values entering and leaving F, or
+        # anew when most change)
+        changed = free != (values > lower)
+        free = values > lower
+        if 2 * changed.sum() > free.sum():
+            gram = (rows[:, free] * variance[free]) @ rows[:, free].T
+        else:
+            sign = np.where(free[changed], 1.0, -1.0)
+            gram += (rows[:, changed] * (sign * variance[changed])) \
+                @ rows[:, changed].T
+        if changed.any():
+            factor = scipy.linalg.cho_factor(identity + gram)
+        # (at the solution, the gradient of the dual is 0, to rounding)
+        gradient = y + rows @ values - target
+        if np.linalg.norm(gradient) <= 1e-12 * (1 + np.linalg.norm(target)):
+            break
+        step = -scipy.linalg.cho_solve(factor, gradient)
+        # (backtracking, over the kinks of max)
+        slope = float(step @ gradient)
+        length = 1.0
+        while True:
+            trial, trial_values = dual(y + length * step)
+            if trial <= value + 1e-4 * length * slope or length < 1e-10:
+                break
+            length /= 2
+        y, value, values = y + length * step, trial, trial_values
+        if length == 1 and np.array_equal(values > lower, free):
+            break
+    else:
+        raise RuntimeError(
+            f"the values solved on rows did not converge in "
+            f"{_ROWS_MAX_STEPS} Newton steps")
+    log_term = 0.0
+    if solves[0].likelihood() == 'integrated':
+        log_term = -float(np.sum(np.log(np.diag(factor[0]))))
+    inverse = scipy.linalg.solve_triangular(
+        factor[0], identity, lower=factor[1])
+    m_eff = len(y) - float(np.sum(inverse ** 2))
+    return Solution(values, (values - mean) / sigma, log_term, m_eff)
+
+
+def _priors(
+        solves: Sequence[Solve], sizes: Sequence[int]
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Return the mean, the standard deviation and the minimum (-inf without
+    one) of the Gaussian prior of each value of the given solves, the given
+    number of each, in their order.
+    """
+    mean, sigma = (
+        np.repeat([getter(solve) for solve in solves], sizes)
+        for getter in (SolveGaussian.mean, SolveGaussian.sigma))
+    lower = np.repeat([
+        -np.inf if solve.minimum() is None else solve.minimum()
+        for solve in solves], sizes)
+    return mean, sigma, lower
 
 
 solve_parser = parseutils.TypedParser(Solve, [SolveGaussian])
