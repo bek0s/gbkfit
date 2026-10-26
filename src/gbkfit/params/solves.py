@@ -38,8 +38,10 @@ __all__ = [
 # integral under their prior, or their best values (the profile)
 LIKELIHOODS = ('integrated', 'profiled')
 
-# The most Newton steps of solve_together_rows
+# The most Newton steps of solve_together_rows, and the relative change
+# of its dual below which it is rounding (of sums of many terms)
 _ROWS_MAX_STEPS = 100
+_ROWS_ROUNDING = 1e-14
 # The tolerance of ln(sigma) chosen by AICp (see SolveGaussian)
 _AICP_TOLERANCE = 1e-3
 
@@ -455,7 +457,9 @@ def solve_together_rows(
     minimum (the dual is quadratic where F holds, so a full step that
     keeps it reaches the solution), from the solution without the minimum
     (from the means of the priors, the minimum cuts the steps short, and
-    from the solution of similar rows it takes more of them). Then the
+    from the solution of similar rows it takes more of them); at the
+    standard deviations that AICp tries (see SolveGaussian), each from the
+    solution at the last one (see _RowsSolver). Then the
     effective number of the values is n - tr(H^-1), and the integral of
     the likelihood (without a minimum) -log det(H) / 2: those of
     solve_together, by the identities of Woodbury and Sylvester.
@@ -490,89 +494,126 @@ def solve_together_rows(
     """
     check_together(solves, sizes)
     return _chosen_together(
-        solves, lambda sigma: _rows_with(
-            solves, sizes, rows, target, ndata, sigma))
+        solves, _RowsSolver(solves, sizes, rows, target, ndata).solve)
 
 
-def _rows_with(
-        solves: Sequence[Solve],
-        sizes: Sequence[int],
-        rows: np.ndarray,
-        target: np.ndarray,
-        ndata: int | None,
-        sigma: float | None
-) -> tuple[Solution, float]:
+class _RowsSolver:
     """
-    Return the values of solve_together_rows at the standard deviation
-    sigma of all priors (theirs if None), and the chi-square of the rows
-    of the data.
+    The values of solve_together_rows at a standard deviation of the
+    priors: theirs, once, or one of all of them after another (see
+    _chosen_together). Each of the latter starts from the solution of the
+    last one: its dual y, its values above their minimum F (most stay so),
+    and their matrix A_F A_F^T (of the priors at a standard deviation of
+    1), which the standard deviation only scales.
     """
-    mean, sigma, lower = _priors(solves, sizes, sigma)
-    variance = sigma ** 2
 
-    def dual(y: np.ndarray) -> tuple[float, np.ndarray]:
-        # (the dual, as a minimum, and the values of y: ||y||^2 / 2 + sum
-        # G_k((A^T y)_k) - t^T y, G_k(s) = max over u >= c_k of u s - (u -
-        # mu_k)^2 / (2 s_k^2), convex, whose derivative is u_k(s))
-        slopes = rows.T @ y
-        values = np.maximum(lower, mean + variance * slopes)
-        conjugates = values * slopes - (values - mean) ** 2 / (2 * variance)
-        return float(y @ y / 2 + np.sum(conjugates) - target @ y), values
+    def __init__(
+            self,
+            solves: Sequence[Solve],
+            sizes: Sequence[int],
+            rows: np.ndarray,
+            target: np.ndarray,
+            ndata: int | None
+    ):
+        self._solves = solves
+        self._sizes = sizes
+        self._rows = rows
+        self._target = target
+        self._ndata = ndata
+        # The solution of the last standard deviation of all priors: its
+        # dual, its free values and their matrix (None before one)
+        self._last: tuple[np.ndarray, np.ndarray, np.ndarray] | None = None
 
-    # (from the solution without the minimum, all values free)
-    identity = np.eye(len(target))
-    free = np.ones(len(mean), dtype=bool)
-    gram = (rows * variance) @ rows.T
-    factor = scipy.linalg.cho_factor(identity + gram)
-    y = scipy.linalg.cho_solve(factor, target - rows @ mean)
-    value, values = dual(y)
-    for _ in range(_ROWS_MAX_STEPS):
-        # (the Newton matrix, of the values entering and leaving F, or
-        # anew when most change)
-        changed = free != (values > lower)
-        free = values > lower
-        if 2 * changed.sum() > free.sum():
-            gram = (rows[:, free] * variance[free]) @ rows[:, free].T
+    def solve(self, sigma: float | None) -> tuple[Solution, float]:
+        """
+        Return the values at the standard deviation sigma of all priors
+        (theirs if None), and the chi-square of the rows of the data.
+        """
+        rows, target = self._rows, self._target
+        mean, sigmas, lower = _priors(self._solves, self._sizes, sigma)
+        # (the variances: scale times those of a scale of 1, base)
+        scale = 1.0 if sigma is None else sigma ** 2
+        base = sigmas ** 2 / scale
+        variance = scale * base
+
+        def dual(y: np.ndarray) -> tuple[float, np.ndarray]:
+            # (the dual, as a minimum, and the values of y: ||y||^2 / 2 +
+            # sum G_k((A^T y)_k) - t^T y, G_k(s) = max over u >= c_k of u s
+            # - (u - mu_k)^2 / (2 s_k^2), convex, whose derivative is
+            # u_k(s))
+            slopes = rows.T @ y
+            values = np.maximum(lower, mean + variance * slopes)
+            conjugates = \
+                values * slopes - (values - mean) ** 2 / (2 * variance)
+            return float(y @ y / 2 + np.sum(conjugates) - target @ y), values
+
+        identity = np.eye(len(target))
+        if sigma is not None and self._last is not None:
+            y, free, gram = self._last
         else:
-            sign = np.where(free[changed], 1.0, -1.0)
-            gram += (rows[:, changed] * (sign * variance[changed])) \
-                @ rows[:, changed].T
-        if changed.any():
-            factor = scipy.linalg.cho_factor(identity + gram)
-        # (at the solution, the gradient of the dual is 0, to rounding)
-        gradient = y + rows @ values - target
-        if np.linalg.norm(gradient) <= 1e-12 * (1 + np.linalg.norm(target)):
-            break
-        step = -scipy.linalg.cho_solve(factor, gradient)
-        # (backtracking, over the kinks of max)
-        slope = float(step @ gradient)
-        length = 1.0
-        while True:
-            trial, trial_values = dual(y + length * step)
-            if trial <= value + 1e-4 * length * slope or length < 1e-10:
+            y, free = None, np.ones(len(mean), dtype=bool)
+            gram = (rows * base) @ rows.T
+        factor = scipy.linalg.cho_factor(identity + scale * gram)
+        if y is None:
+            # (from the solution without the minimum, all values free)
+            y = scipy.linalg.cho_solve(factor, target - rows @ mean)
+        value, values = dual(y)
+        for _ in range(_ROWS_MAX_STEPS):
+            # (the Newton matrix, of the values entering and leaving F, or
+            # anew when most change)
+            changed = free != (values > lower)
+            free = values > lower
+            if 2 * changed.sum() > free.sum():
+                gram = (rows[:, free] * base[free]) @ rows[:, free].T
+            else:
+                sign = np.where(free[changed], 1.0, -1.0)
+                gram += (rows[:, changed] * (sign * base[changed])) \
+                    @ rows[:, changed].T
+            if changed.any():
+                factor = scipy.linalg.cho_factor(identity + scale * gram)
+            # (at the solution, the gradient of the dual is 0, to rounding)
+            gradient = y + rows @ values - target
+            if np.linalg.norm(gradient) \
+                    <= 1e-12 * (1 + np.linalg.norm(target)):
                 break
-            length /= 2
-        y, value, values = y + length * step, trial, trial_values
-        if length == 1 and np.array_equal(values > lower, free):
-            break
-    else:
-        raise RuntimeError(
-            f"the values solved on rows did not converge in "
-            f"{_ROWS_MAX_STEPS} Newton steps")
-    log_term = 0.0
-    if solves[0].likelihood() == 'integrated':
-        log_term = -float(np.sum(np.log(np.diag(factor[0]))))
-    # (the diagonal of H^-1, of the inverse of its Cholesky factor: H =
-    # U^T U, or L L^T)
-    inverse = scipy.linalg.solve_triangular(
-        factor[0], identity, lower=factor[1])
-    diagonal = np.sum(inverse ** 2, axis=0 if factor[1] else 1)
-    counted = len(y) if ndata is None else ndata
-    m_eff = counted - float(np.sum(diagonal[:counted]))
-    residuals = rows[:counted] @ values - target[:counted]
-    return Solution(
-        values, (values - mean) / sigma, log_term, m_eff), \
-        float(residuals @ residuals)
+            step = -scipy.linalg.cho_solve(factor, gradient)
+            # (backtracking, over the kinks of max)
+            slope = float(step @ gradient)
+            length = 1.0
+            while True:
+                trial, trial_values = dual(y + length * step)
+                if trial <= value + 1e-4 * length * slope or length < 1e-10:
+                    break
+                length /= 2
+            # (the solution to rounding: a full step that keeps F, or no
+            # step that lowers the dual beyond rounding, e.g. of a value
+            # at its minimum, in F and out of it from step to step)
+            stalled = not value - trial > _ROWS_ROUNDING * abs(value)
+            if not stalled:
+                y, value, values = y + length * step, trial, trial_values
+            if stalled or length == 1 \
+                    and np.array_equal(values > lower, free):
+                break
+        else:
+            raise RuntimeError(
+                f"the values solved on rows did not converge in "
+                f"{_ROWS_MAX_STEPS} Newton steps")
+        if sigma is not None:
+            self._last = y, free, gram
+        log_term = 0.0
+        if self._solves[0].likelihood() == 'integrated':
+            log_term = -float(np.sum(np.log(np.diag(factor[0]))))
+        # (the diagonal of H^-1, of the inverse of its Cholesky factor: H =
+        # U^T U, or L L^T)
+        inverse = scipy.linalg.solve_triangular(
+            factor[0], identity, lower=factor[1])
+        diagonal = np.sum(inverse ** 2, axis=0 if factor[1] else 1)
+        counted = len(y) if self._ndata is None else self._ndata
+        m_eff = counted - float(np.sum(diagonal[:counted]))
+        residuals = rows[:counted] @ values - target[:counted]
+        return Solution(
+            values, (values - mean) / sigmas, log_term, m_eff), \
+            float(residuals @ residuals)
 
 
 def _chosen_together(

@@ -11,6 +11,7 @@ from gbkfit.observation import FluxScale, GroupPlan, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, check_together, solve_together)
 from gbkfit.params._keys import element_name
+from gbkfit.utils import threadutils
 from gbkfit.utils.parseutils import ConfigError
 from ._orbits import orbit_groups
 
@@ -694,15 +695,20 @@ class Objective:
         """
         Solve the weights of the orbits of each orbit group (see
         OrbitGroup), and put the models of its observations in models.
+        With BLAS on one thread (see threadutils.single_threaded_blas):
+        its threads lost more than they gained even in the solves of
+        thousands of rows.
         """
         group_plan = self._group_plan
         states = group_plan.galaxy_states(params)
         first = len(self._solved) + len(self._groups)
-        for j, orbit in enumerate(self._orbits):
-            solution, orbit_models = orbit.evaluate(params, states, group_plan)
-            self._solutions[first + j] = solution
-            for i, model in orbit_models.items():
-                models[i] = model
+        with threadutils.single_threaded_blas():
+            for j, orbit in enumerate(self._orbits):
+                solution, orbit_models = orbit.evaluate(
+                    params, states, group_plan)
+                self._solutions[first + j] = solution
+                for i, model in orbit_models.items():
+                    models[i] = model
 
     def _solve_groups(self, params: ParamValues) -> ParamValues:
         """
