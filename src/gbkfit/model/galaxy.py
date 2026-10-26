@@ -203,6 +203,8 @@ class Galaxy(parseutils.Serializable):
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(
             components, distance, mass_model, gravity, geometry)
+        if distance is not None:
+            distance.check_redshift(redshift)
         if redshift is None:
             _check_redshift_not_needed(self._component_set.components())
         self._pdescs = self._component_set.pdescs()

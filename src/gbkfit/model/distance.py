@@ -157,6 +157,13 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    def check_redshift(self, redshift: float | None) -> None:
+        """
+        Raise ConfigError unless it can be had for a galaxy of the given
+        redshift (None if not given): any here.
+        """
+        pass
+
     @abc.abstractmethod
     def epoch(self, params: ParamValues, redshift: float) -> float:
         """
@@ -300,6 +307,15 @@ class DistanceRedshift(Distance):
 
     def epoch(self, params: ParamValues, redshift: float) -> float:
         return self._redshift if self._redshift is not None else redshift
+
+    def check_redshift(self, redshift: float | None) -> None:
+        # (without its own, that of the galaxy: none or 0 gave a distance
+        # of 0, silently, and a blueshift a negative one)
+        if self._redshift is None and not (redshift or 0) > 0:
+            raise ConfigError(
+                f"a distance by redshift needs a redshift above 0: give the "
+                f"galaxy its redshift, or the distance its own; the galaxy "
+                f"has {redshift}")
 
 
 distance_parser = parseutils.TypedParser(Distance, [

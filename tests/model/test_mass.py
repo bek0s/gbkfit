@@ -1282,6 +1282,12 @@ def test_distances_give_the_length_of_an_arcsec():
         DistanceRedshift(redshift=-1)
     with pytest.raises(ConfigError, match="cosmology must be one of"):
         DistanceRedshift(cosmology='Planck99')
+    # (by the redshift of a galaxy without one, or blueshifted: no length)
+    for redshift in ({}, dict(redshift=-0.001)):
+        with pytest.raises(ConfigError, match="needs a redshift above 0"):
+            galaxy_parser.load(dict(
+                components=[], mass=[dict(type='point', name='bh')],
+                distance=dict(type='redshift')) | redshift)
 
 
 MASS = [
