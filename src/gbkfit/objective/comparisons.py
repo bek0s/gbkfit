@@ -393,7 +393,9 @@ class ComparisonGaussian(Comparison):
     The comparison of a Gaussian likelihood (see LikelihoodGaussian).
 
     The residual of each value is (model - data) / error, times the
-    weights of the model (if any) and of the data item. Values the data
+    weights of the model (if any; their pixel weights, normalised to a
+    mean square of 1 over the values the data do not mask, see
+    _pixel_weight) and of the data item. Values the data
     mask have a residual of 0 and do not count. Where the data have a
     value but the model none (NaN, e.g. the velocity of a spectrum without
     flux), the residual is the missing_residual of the likelihood (times
@@ -431,6 +433,11 @@ class ComparisonGaussian(Comparison):
         # model does not have (none where the model cannot lack values:
         # NaN would show one)
         self._weights = {key: likelihood.weight(key) for key in keys}
+        # The number of values of each data item that the data do not mask
+        # (over which the weights of the model are normalised)
+        self._nunmasked = {
+            key: int(np.count_nonzero(self._dataset[key].mask()))
+            for key in keys}
         missing = likelihood.missing_residual()
         self._missing_residual = np.nan if missing is None else missing
         # The upper limit of each data item where it is masked, and its
@@ -594,7 +601,8 @@ class ComparisonGaussian(Comparison):
             key: self._scaled(model, key, scales)
             for key in self._observation.keys()}
         for key in self._observation.keys():
-            weight = self._weights[key] if weighted else 1.0
+            weight = (self._weights[key] if weighted else 1.0) \
+                * self._pixel_weight(model, key)
             residual = self._d_residual_nddata[key]
             self._backend.residual(
                 self._d_data[key],
@@ -696,8 +704,35 @@ class ComparisonGaussian(Comparison):
             *self._noise_values(key, params), axis, *d_sums)
         for h, d in zip(h_sums, d_sums):
             driver.mem_copy_d2h(d, h)
-        weight = self._weights[key] ** 2
+        weight = (self._weights[key] * self._pixel_weight(model, key)) ** 2
         return weight * h_sums[0], weight * h_sums[1]
+
+    def _pixel_weight(self, model: _Model, key: str) -> float:
+        """
+        Return the factor of the weights of the model of data item key (its
+        pixel weights, see Weights) that makes their mean square over the
+        values the data do not mask 1; 1 without weights.
+        """
+        # Pixel weights follow the free geometry of their disk, and the
+        # chi-square expected at the truth is the sum of the squares of the
+        # weights of the values compared. Unnormalised, a fit lowers it by
+        # turning the geometry so that the values fall where the weights
+        # are low: in a Monte Carlo of velocity fields, the inclination ran
+        # 1 to 4 degrees high, and to the end of its range with cos^2
+        # weights. Normalised, only the shape of the weights counts, and
+        # the bias is gone. (A choice over weights fixed at a given
+        # geometry, which remove it as well but stop following the disk.)
+        weights = model[key]['w']
+        if weights is None:
+            return 1.0
+        driver = self._driver
+        flat = weights.reshape(-1)
+        mask = self._d_mask.get(key)
+        unmasked = flat if mask is None \
+            else driver.math_mul(flat, mask.reshape(-1))
+        total = float(driver.math_matmul(unmasked, flat))
+        return float(np.sqrt(self._nunmasked[key] / total)) \
+            if total > 0 else 1.0
 
     def noise_residuals(self) -> np.ndarray:
         """
@@ -734,7 +769,8 @@ class ComparisonGaussian(Comparison):
         """
         driver = self._driver
         for j, (key, noise) in enumerate(self._noise.items()):
-            weight = self._weights[key] if weighted else 1.0
+            weight = (self._weights[key] if weighted else 1.0) \
+                * self._pixel_weight(model, key)
             self._backend.noise_sum(
                 self._d_error.get(key),
                 self._d_mask.get(key),
@@ -799,7 +835,14 @@ class ComparisonUser(Comparison):
                 residuals[...] = 0
                 continue
             if (weights := model[key]['w']) is not None:
-                result = result * driver.mem_copy_d2h(weights)
+                # (normalised to a mean square of 1 over the values the
+                # data do not mask, as ComparisonGaussian._pixel_weight)
+                weights = np.asarray(driver.mem_copy_d2h(weights), float)
+                unmasked = weights if mask is None else weights[mask != 0]
+                total = float(np.sum(unmasked ** 2))
+                if total > 0:
+                    weights = weights * np.sqrt(unmasked.size / total)
+                result = result * weights
             if mask is not None:
                 result = np.where(mask != 0, result * mask, 0)
             residuals[...] = result

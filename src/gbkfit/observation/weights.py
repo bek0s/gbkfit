@@ -2,7 +2,8 @@
 Pixel weights of the data of an observation (its option pixel_weights):
 functions of the position of each pixel in the plane of a disk of a
 galaxy it sees (e.g. less weight near the minor axis), evaluated with
-the current parameters of the disk, so that free angles are followed.
+the current parameters of the disk, so that free angles are followed,
+and normalised by the comparison of the data (see Weights).
 """
 
 import abc
@@ -153,7 +154,11 @@ class Weights(parseutils.Serializable):
     galaxy that the observation sees. The pixels are deprojected through
     the geometry of the disk with its current parameters, so free angles
     are followed; a warped disk is deprojected at its mean plane (the mean
-    of its node-wise parameters).
+    of its node-wise parameters). The comparison of the data normalises
+    them to a mean square of 1 over the values it compares, so that only
+    their shape counts: a fit cannot lower its chi-square by turning the
+    disk so that the data fall where the weights are low (see
+    ComparisonGaussian).
 
     Parameters
     ----------

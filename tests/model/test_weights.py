@@ -74,6 +74,42 @@ def test_weights_follow_the_plane_of_the_disk(driver):
     np.testing.assert_array_equal(weights, weights[:1].repeat(21, axis=0))
 
 
+@pytest.mark.parametrize('incl', [40, 70])
+def test_weights_are_normalised_over_the_values_compared(driver, incl):
+    # Data one error below the model, half of them masked: each residual
+    # is 1 before the weights, so the chi-square is the sum of the squares
+    # of the weights over the unmasked values, which the comparison makes
+    # their number at any inclination (unnormalised, it would fall as the
+    # disk turns its pixels towards the minor axis)
+    import gbkfit.params
+    from gbkfit.dataset import Data, DatasetPixelSpectra
+    from gbkfit.model import galaxy_parser
+    from gbkfit.objective import Objective
+    from gbkfit.observation import (
+        ObservationGroup, ObservationSky, PixelSpectra, Weights,
+        line_of_sight_parser)
+    values = PROPERTIES | dict(incl=incl)
+    gas = config(driver, None, None)['galaxies']
+    size, step = (24, 24, 21), (1, 1, 20)
+
+    def plan(data, mask):
+        dataset = DatasetPixelSpectra(
+            Data(data, error=np.ones_like(data), mask=mask), step=step)
+        return ObservationGroup(
+            galaxy_parser.load(gas), [ObservationSky(
+                PixelSpectra.from_data(dataset),
+                line_of_sight_parser.load(dict(type='flat')), data=dataset,
+                pixel_weights=Weights('gas', WeightAzimuthPower(2)))]
+        ).plan(driver)
+    blank = plan(np.zeros(size[::-1]), None)
+    params = gbkfit.params.ParamSpace(blank.group().pdescs(), values)
+    model = blank.model_h(params.evaluate())[0]['spectra']['d']
+    mask = np.random.default_rng(1).random(model.shape) < 0.5
+    objective = Objective(plan(model - 1, mask))
+    assert objective.chi2(params.evaluate()) \
+        == pytest.approx(np.count_nonzero(mask), rel=1e-4)
+
+
 @pytest.mark.parametrize('observable, component, message', [
     (dict(type='pixel_moments', size=[24, 24], method='gaussian_fit',
           spec_convention='relativistic'), None,
