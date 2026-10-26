@@ -13,6 +13,7 @@
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
 #include <gbkfit/objective/objective.hpp>
+#include <gbkfit/orbits/orbits.hpp>
 
 namespace gbkfit::host::kernels {
 
@@ -511,6 +512,34 @@ objective_amplitude_sums(
     }
 }
 
+// The potential and the force at each of n points (see
+// gbkfit::orbits_potential_point)
+template<typename T> void
+orbits_potential(
+        const PotentialArgs<T>& p, int n, const T* points,
+        T* potential, T* forces)
+{
+    #pragma omp parallel for
+    for(int i = 0; i < n; ++i) {
+
+        gbkfit::orbits_potential_point(i, p, points, potential, forces);
+
+    }
+}
+
+// Integrate and record the orbits (see gbkfit::orbits_integrate), each by
+// one thread: their times differ, so they are handed out one by one
+template<typename T> void
+orbits_integrate(const OrbitArgs<T>& a)
+{
+    #pragma omp parallel for schedule(dynamic)
+    for(int k = 0; k < a.norbits; ++k) {
+
+        gbkfit::orbits_integrate(k, a);
+
+    }
+}
+
 } // namespace gbkfit::host::kernels
 
 namespace gbkfit::host {
@@ -684,6 +713,16 @@ struct Wrapper
     static void
     objective_noise_sum(auto... args) {
         kernels::objective_noise_sum<T>(args...);
+    }
+
+    static void
+    orbits_potential(auto... args) {
+        kernels::orbits_potential<T>(args...);
+    }
+
+    static void
+    orbits_integrate(const OrbitArgs<T>& a) {
+        kernels::orbits_integrate<T>(a);
     }
 };
 

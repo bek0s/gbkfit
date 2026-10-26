@@ -41,24 +41,34 @@ DeviceScope::~DeviceScope()
 }
 
 // Launch a kernel with one thread per item (n items, which can be more
-// than an int holds), wait for it to finish, and raise any error of its
-// launch or execution
+// than an int holds), in blocks of the given size, wait for it to finish,
+// and raise any error of its launch or execution
 template<typename Kernel, typename... Args> void
-launch(const char* name, long long n, Kernel kernel, Args... args)
+launch_blocks(
+        const char* name, long long n, int block_size, Kernel kernel,
+        Args... args)
 {
     if (n <= 0)
         return;
-    const long long nblocks = (n + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    const long long nblocks = (n + block_size - 1) / block_size;
     if (nblocks > std::numeric_limits<int>::max()) {
         throw std::runtime_error(
                 std::string(name) + " failed: too many items ("
                 + std::to_string(n) + ")");
     }
-    const dim3 bsize(BLOCK_SIZE);
+    const dim3 bsize(block_size);
     const dim3 gsize(nblocks);
     kernel<<<gsize, bsize>>>(args...);
     check(cudaGetLastError(), name);
     check(cudaDeviceSynchronize(), name);
+}
+
+// Launch a kernel with one thread per item, in blocks of BLOCK_SIZE (see
+// launch_blocks)
+template<typename Kernel, typename... Args> void
+launch(const char* name, long long n, Kernel kernel, Args... args)
+{
+    launch_blocks(name, n, BLOCK_SIZE, kernel, args...);
 }
 
 template<typename T> void
@@ -382,6 +392,24 @@ Wrapper<T>::objective_noise_sum(
             0.0, thrust::plus<double>());
     check(cudaMemcpy(sum, &result, sizeof(double), cudaMemcpyHostToDevice),
           "objective_noise_sum");
+}
+
+template<typename T> void
+Wrapper<T>::orbits_potential(
+        const PotentialArgs<T>& p, int n, const T* points,
+        T* potential, T* forces)
+{
+    launch("orbits_potential", n, kernels::orbits_potential<T>,
+            p, n, points, potential, forces);
+}
+
+// (in blocks of a warp: an orbit is long, and a library has thousands, not
+// millions, so small blocks spread them over all the multiprocessors)
+template<typename T> void
+Wrapper<T>::orbits_integrate(const OrbitArgs<T>& a)
+{
+    launch_blocks("orbits_integrate", a.norbits, 32,
+            kernels::orbits_integrate<T>, a);
 }
 
 #define INSTANTIATE(T)\

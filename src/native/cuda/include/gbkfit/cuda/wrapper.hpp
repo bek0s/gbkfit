@@ -4,6 +4,7 @@
 #include <gbkfit/gmodel/disk.hpp>
 #include <gbkfit/gmodel/spheroid.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
+#include <gbkfit/orbits/orbit.hpp>
 
 namespace gbkfit { namespace cuda {
 
@@ -124,6 +125,14 @@ struct Wrapper
             const T* mdl_d, const T* mdl_w,
             int size, T weight, T scale, T jitter, T scale_minimum,
             double* sum);
+
+    static void
+    orbits_potential(
+            const PotentialArgs<T>& p, int n, const T* points,
+            T* potential, T* forces);
+
+    static void
+    orbits_integrate(const OrbitArgs<T>& a);
 };
 
 }} // namespace gbkfit::cuda

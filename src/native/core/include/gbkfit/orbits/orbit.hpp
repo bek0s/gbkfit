@@ -1,0 +1,116 @@
+#pragma once
+
+namespace gbkfit {
+
+// The potential of the gravity of a galaxy in the frame of a spheroid (see
+// SpheroidArgs), symmetric about its axis and its plane, as a table: on
+// the nodes u = ln r = range[0] + i range[1] (r in arcsec) for i in [0,
+// nr) and b = j pi / (2 (nb - 1)) for j in [0, nb), b the angle from the
+// plane (atan2(|z|, R)), 4 values at each node (values[4 (i nb + j) + k]):
+// the potential Phi ((km/s)^2), its derivatives along u and b, and along
+// both (k = 0 to 3). Between the nodes it is bicubic Hermite: one smooth
+// function, whose forces are its gradient, so orbits conserve its energy.
+// Below the first radius r0 it is Phi(r0, b) + Phi_u(r0, b) (r^2 / r0^2 -
+// 1) / 2 (harmonic), and beyond the last one rn Phi(rn, b) + Phi_u(rn, b)
+// (1 - rn / r) (the gravity of a point of the force at rn): each with the
+// value and the slope along u of the table at its end.
+// Plain data, so that it can be passed by value to a cuda kernel.
+template<typename T>
+struct PotentialArgs
+{
+    int nr = 0;
+    int nb = 0;
+    const T* range = nullptr;
+    const T* values = nullptr;
+};
+
+// An integration of orbits in the potential of a galaxy (see
+// PotentialArgs) and their recording, one orbit at a time (see
+// orbits_integrate), each orbit as it is seen from the sky: the time it
+// spends in cells of its spheroid, and its light and velocities in
+// targets of the sky (e.g. the Voronoi bins of observations), averaged
+// over its time. Plain data, so that it can be passed by value to a cuda
+// kernel.
+template<typename T>
+struct OrbitArgs
+{
+    PotentialArgs<T> potential;
+
+    // The orbits: the start of each (starts[6k] to starts[6k + 5]: x, y, z
+    // (arcsec) and vx, vy, vz (km/s), in the frame of the spheroid) and
+    // the time for which it is integrated (durations[k], in arcsec /
+    // (km/s)), in time-symmetric kick-drift-kick leapfrog steps (Hut,
+    // Makino & McMillan 1995), each step the mean of accuracy / f at its
+    // start and its end, f^2 = (|Phi_u| + v^2) / r^2 (the frequencies of
+    // the circular orbit of its radius and of its crossing), and at most
+    // max_steps of them. Each orbit is recorded at nsamples times evenly
+    // spaced in its time (each at the time of its fraction 1 / nsamples)
+    // and, on the sky, each time in 2 nphi copies (each a share of it):
+    // turned about the axis by nphi angles evenly spaced (by a fraction
+    // of the turn that changes from time to time), each also mirrored
+    // about the plane. With twins, each orbit k is also recorded
+    // reversed in time (its velocities negated): the orbits 2k and 2k + 1
+    // of the outputs; otherwise k.
+    int norbits = 0;
+    const T* starts = nullptr;
+    const T* durations = nullptr;
+    T accuracy = 0;
+    int max_steps = 0;
+    int nsamples = 0;
+    int nphi = 0;
+    bool twins = false;
+
+    // The geometry of the spheroid: its centre on the sky (arcsec), its
+    // position angle and its inclination (degrees; see
+    // transform_cpos_posa_incl)
+    T xpos = 0;
+    T ypos = 0;
+    T posa = 0;
+    T incl = 0;
+
+    // The cells (optional): between the radii cell_r (arcsec, ncell_r + 1
+    // edges, increasing) and the angles from the plane cell_b (radians,
+    // ncell_b + 1 edges, increasing); the time fraction of orbit k in
+    // cell (i, j) at cells[(k ncell_r + i) ncell_b + j]
+    int ncell_r = 0;
+    int ncell_b = 0;
+    const T* cell_r = nullptr;
+    const T* cell_b = nullptr;
+    T* cells = nullptr;
+
+    // The sky (optional): nsky grids of square cells, grid s of
+    // grid_sizes[2s] by grid_sizes[2s + 1] cells, from (grids[4s],
+    // grids[4s + 1]) in steps of (grids[4s + 2], grids[4s + 3]) (arcsec,
+    // the sky of transform_cpos_posa_incl), its cell (x, y) the cell
+    // grid_cells[s] + y nx + x of the table: each cell c of the table
+    // gives its light to the targets targets[e], each the share
+    // weights[e], for e in [offsets[c], offsets[c + 1]) (e.g. the shares
+    // of the Voronoi bins of an observation in the light of a point in
+    // the cell after the PSF). Each target t has a Gauss-Hermite series of
+    // the mean target_v[t] and the dispersion target_s[t] (km/s), of
+    // velocities on the line of sight (relative to that of the centre).
+    // The moments of orbit k in target t, at moments[(k ntargets + t)
+    // (order + 2) + m]: its light (m = 0), and gamma h_n (m = n + 1, n in
+    // [0, order]) of its velocities in the series of the target (see
+    // orbits_gauss_hermite).
+    int nsky = 0;
+    const int* grid_sizes = nullptr;
+    const T* grids = nullptr;
+    const long long* grid_cells = nullptr;
+    const long long* offsets = nullptr;
+    const int* targets = nullptr;
+    const T* weights = nullptr;
+    int ntargets = 0;
+    const T* target_v = nullptr;
+    const T* target_s = nullptr;
+    int order = 0;
+    T* moments = nullptr;
+
+    // The number of steps of each orbit (optional), and its energy
+    // ((km/s)^2, optional) at its start (energies[2k]) and its end
+    // (energies[2k + 1])
+    int* steps = nullptr;
+    T* energies = nullptr;
+};
+
+} // namespace gbkfit

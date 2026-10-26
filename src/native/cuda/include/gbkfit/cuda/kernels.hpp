@@ -8,6 +8,7 @@
 #include <gbkfit/gmodel/gmodels.hpp>
 #include <gbkfit/gmodel/transfer.hpp>
 #include <gbkfit/objective/objective.hpp>
+#include <gbkfit/orbits/orbits.hpp>
 
 // A kernel parameter that the kernel reads where it is, without a copy
 // to local memory: the disk kernels take the address of their arguments,
@@ -444,6 +445,29 @@ objective_amplitude_sums(
     }
     a[tid] = sum_a;
     b[tid] = sum_b;
+}
+
+template<typename T> __global__ void
+orbits_potential(
+        PotentialArgs<T> p, int n, const T* points, T* potential, T* forces)
+{
+    // Parallelization: per point
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= n)
+        return;
+
+    gbkfit::orbits_potential_point(tid, p, points, potential, forces);
+}
+
+template<typename T> __global__ void
+orbits_integrate(GBKFIT_GRID_CONSTANT const OrbitArgs<T> a)
+{
+    // Parallelization: per orbit
+    const int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= a.norbits)
+        return;
+
+    gbkfit::orbits_integrate(tid, a);
 }
 
 } // namespace gbkfit::cuda::kernels
