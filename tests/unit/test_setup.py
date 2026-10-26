@@ -58,6 +58,19 @@ def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
             output.kind for output in outputs.values()}
 
 
+def test_the_outputs_of_an_evaluation_are_its_own():
+    # (the plan reuses its arrays of the models: the outputs of a second
+    # evaluation must not overwrite those of the first)
+    loaded = gbkfit.load(dict(
+        galaxies=[GALAXY], observations=[observation()], params=PARAMS))
+    values = loaded.values()
+    first = loaded.outputs(values)
+    model = next(o for o in first.values() if o.kind == 'model')
+    before = np.array(model.value.data)
+    loaded.outputs(values | dict(pt_a=2.0))
+    np.testing.assert_array_equal(model.value.data, before)
+
+
 def test_a_configuration_without_data_cannot_fit():
     loaded = gbkfit.load(dict(
         galaxies=[GALAXY], observations=[observation()], params=PARAMS))

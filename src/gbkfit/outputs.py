@@ -769,7 +769,10 @@ def evaluation_outputs(
     outputs = []
     extras = Extras() if extra else None
     if model:
-        for i, data_i in enumerate(group_plan.model_h(values, extras)):
+        # (the plan reuses its arrays of the models, so copy them: the next
+        # evaluation would overwrite the outputs)
+        models = copy.deepcopy(group_plan.model_h(values, extras))
+        for i, data_i in enumerate(models):
             observation = group.observations()[i]
             name = group.observation_label(i)
             for key, value in data_i.items():
