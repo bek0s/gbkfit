@@ -25,10 +25,18 @@ class DatasetRegionMoments(Dataset):
     """
     Moments of the spectra in regions of the sky (see Regions; e.g.
     Voronoi bins, fibres): some of the orders 0 to 7, as the data items
-    moment0 to moment7.
+    moment0 to moment7 (above 2, central moments or the coefficients of a
+    Gauss-Hermite series, see moment_items of _detail).
 
     Its configuration has the regions, and the data items moment0 to
-    moment7 (the files of each: data, mask, error; see from_files).
+    moment7: the files of each (data, mask, error; see from_files), or the
+    columns of a table of one row for each region, in their order (e.g.
+    the V, sigma, h3 and h4 of the bins of pPXF): the file of the table
+    ('file'; any that astropy reads, see Table.read: e.g. FITS, ECSV or
+    CSV), its format if astropy cannot tell it ('format'), and of each
+    item, {column, error (a column, or one error for all the values), mask
+    (a column: 0 for the values to leave out), unit (by default that of
+    the column)}.
 
     Parameters
     ----------
@@ -57,6 +65,9 @@ class DatasetRegionMoments(Dataset):
         info = dict(info)
         parseutils.load_option_and_update_info(
             regions_parser, info, 'regions', required=True, prefix=prefix)
+        if 'file' in info:
+            regions = info.pop('regions')
+            return cls(_detail.read_table_moments(info, prefix), regions)
         files = _detail.pop_moment_options(info, prefix)
         return _detail.load_with_files(cls, info, **files)
 

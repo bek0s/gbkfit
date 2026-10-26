@@ -411,8 +411,8 @@ def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
 
 def test_moments_of_velocity_are_in_km_s():
     # (e.g. maps of BUNIT m/s): the velocity and the dispersion in km/s,
-    # the central moment of order 3 in (km/s)^3; a unit of another kind is
-    # an error
+    # the central moment of order 3 in (km/s)^3, or h3 of a Gauss-Hermite
+    # series dimensionless; a unit of another kind is an error
     import astropy.units as u
     from gbkfit.dataset import DatasetPixelMoments
     velocity = Data(
@@ -425,8 +425,13 @@ def test_moments_of_velocity_are_in_km_s():
     assert dataset['moment1'].unit() == u.km / u.s
     np.testing.assert_allclose(dataset['moment2'].data(), 30)
     np.testing.assert_allclose(dataset['moment3'].data(), 2)
+    hermite = DatasetPixelMoments({3: Data(np.full((4, 4), 5.0), unit='%')})
+    np.testing.assert_allclose(hermite['moment3'].data(), 0.05)
+    assert hermite['moment3'].unit() == u.dimensionless_unscaled
     with pytest.raises(ConfigError, match="not a unit of velocity"):
         DatasetPixelMoments({1: Data(np.ones((4, 4)), unit='Jy')})
+    with pytest.raises(ConfigError, match="nor dimensionless"):
+        DatasetPixelMoments({3: Data(np.ones((4, 4)), unit='Jy')})
 
 
 def test_noise_correlation_is_the_shape_on_the_pixel_separations(tmp_path):

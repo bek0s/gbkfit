@@ -135,6 +135,29 @@ def check_velocities(
             "'relativistic'")
 
 
+def check_moment_units(dataset: Dataset, method: str) -> None:
+    """
+    Raise ConfigError unless the moments of the orders above 2 of a
+    dataset are those of the method, by their units, if they have one:
+    the central moments of 'moments', in (km/s)^k, or the coefficients h3
+    and h4 of the Gauss-Hermite series of 'gauss_hermite', dimensionless
+    (see the datasets of moments).
+    """
+    hermite = method == 'gauss_hermite'
+    for key, item in dataset.items():
+        order = int(key.removeprefix('moment'))
+        unit = item.unit()
+        if order <= 2 or unit is None:
+            continue
+        if unit.is_equivalent(astropy.units.dimensionless_unscaled) \
+                != hermite:
+            kind = f'h{order}, dimensionless' if hermite \
+                else 'a central moment, in velocity^k'
+            raise ConfigError(
+                f"moment {order} of the method {method} is {kind}; the data "
+                f"are in {unit}")
+
+
 def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
     """
     Warn if the flux floor of moments is 0 with a PSF or an LSF, whose

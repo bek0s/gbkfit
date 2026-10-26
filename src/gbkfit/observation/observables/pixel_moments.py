@@ -288,6 +288,10 @@ class PixelMoments(Observable):
     def check_instrument(self, instrument: Instrument) -> None:
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
+    def require_matching(self, dataset: Dataset) -> None:
+        super().require_matching(dataset)
+        _moments.check_moment_units(dataset, self._method)
+
     def plan(
             self,
             driver: Driver,

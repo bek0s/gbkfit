@@ -1,0 +1,65 @@
+# stars_regions: The kinematics of the stars of a flattened Sersic spheroid in Voronoi bins, as pPXF gives them (V, sigma, h3 and h4 of Gauss-Hermite series, log velocities, a PSF and no LSF): its Jeans kinematics in the gravity of its light and an NFW halo.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: spheroid
+    name: stars
+    rmax: 8
+    emission: {type: stars}
+    profile: {type: sersic}
+    shape: {type: flattened}
+    kinematics: {type: jeans}
+  mass:
+  - {type: light_spheroid, name: lum, component: stars}
+  - type: spheroid
+    name: halo
+    profile: {type: nfw}
+  distance: {type: direct, cosmology: Planck18}
+observations:
+- type: sky
+  lines: [stars]
+  data:
+    regions:
+      type: bins
+      file: observation0_bins.fits
+      step: [0.49999999999996797, 0.4999999999999968]
+      rpix: [11.5, 11.5]
+      rval: [0.0, 0.0]
+      rota: 0.0
+    moment1: {data: observation0_moment1_d.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
+    moment3: {data: observation0_moment3_d.fits, error: observation0_moment3_e.fits}
+    moment4: {data: observation0_moment4_d.fits, error: observation0_moment4_e.fits}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: 0.5}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: null
+  observable: {type: region_moments, flux_floor: 1.0e-06, spec_size: 101, spec_step: 10,
+    spec_rval: 0, spec_rest: 5.000000000000001e-07 m, spec_medium: vacuum, spec_convention: log,
+    method: gauss_hermite}
+  oversampling: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.3
+    ypos: -0.4
+    posa: {value: 42, min: 0, max: 90}
+    incl: {value: 55, min: 30, max: 85}
+    vsys: {value: 8, min: -50, max: 50}
+    distance: 20
+    stars_ie: 1
+    stars_re: 2
+    stars_n: 2
+    stars_q: 0.6
+    stars_beta_z: {value: 0.1, min: -0.5, max: 0.5}
+    stars_kappa: {value: 0.7, min: 0, max: 1.2}
+    mass_lum_upsilon: {value: 12000000000.0, min: 1000000000.0, max: 100000000000.0}
+    mass_halo_log_m: {value: 11.8, min: 10, max: 14}
+    mass_halo_c: 10

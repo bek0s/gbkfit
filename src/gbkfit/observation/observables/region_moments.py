@@ -42,6 +42,15 @@ class RegionMoments(Observable):
     regions and the orders when it has data, which give them, and the
     spatial grid of regions on a grid (see from_data).
 
+    E.g. the kinematics of the stars of a spheroid (lines ['stars'] of its
+    observation, see model.StarsEmission) in the Voronoi bins of pPXF:
+    their V, sigma, h3 and h4, method 'gauss_hermite' (orders 1 to 4).
+    Those are of the distribution of the velocities of the stars itself
+    (the fit of the spectra took the LSF out), seen through the PSF: the
+    instrument of their observation has a PSF and no LSF. The velocities
+    of pPXF are c ln(1 + z), the convention 'log' (with any spec_rest
+    wavelength: the light of stars has no rest).
+
     Parameters
     ----------
     regions : Regions
@@ -265,6 +274,10 @@ spec_medium, method : optional
 
     def check_instrument(self, instrument: Instrument) -> None:
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
+
+    def require_matching(self, dataset: Dataset) -> None:
+        super().require_matching(dataset)
+        _moments.check_moment_units(dataset, self._method)
 
     def _require_matching_coordinates(
             self, dataset: DatasetRegionMoments

@@ -8,7 +8,7 @@ from astropy.table import Table
 
 from gbkfit.utils import parseutils, tableutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _resampling
+from . import _detail, _resampling
 from .base import Dataset
 from .data import Data
 
@@ -21,9 +21,6 @@ __all__ = [
 
 # The axes of its blocks of residuals (see resample_blocks)
 _BLOCK_AXES = ('the radii',)
-
-# The options of a data item in its configuration (see load)
-_ITEM_OPTIONS = ('column', 'error', 'mask', 'unit')
 
 
 def check_profile_radii(
@@ -128,7 +125,7 @@ class DatasetProfile(Dataset):
         items = {}
         for key, item in info.items():
             with parseutils.config_path(key):
-                items[key] = _item(table, item)
+                items[key] = _detail.table_item(table, item)
         return cls(
             items, radii, None if distance is None else distance * u.Mpc)
 
@@ -209,38 +206,3 @@ class DatasetProfile(Dataset):
         return _resampling.resample_blocks(
             residuals, size, _BLOCK_AXES, rng)
 
-
-def _item(table: Table, info: Any) -> Data:
-    """
-    Return a data item of a table from its configuration (see
-    DatasetProfile): its values, errors and mask, in its unit.
-    """
-    if not isinstance(info, Mapping):
-        raise ConfigError(
-            f"a data item has its column ('column'), and optionally its "
-            f"error ('error': a column, or one error), mask ('mask': a "
-            f"column) and unit ('unit'); it is {info!r}")
-    info = parseutils.parse_options(
-        info, required={'column'}, optional=set(_ITEM_OPTIONS) - {'column'})
-    values = tableutils.read_column(table, info['column'], info.get('unit'))
-    unit = None if values.unit is u.dimensionless_unscaled else values.unit
-    error = info.get('error')
-    if isinstance(error, (int, float)):
-        error = np.full(values.shape, float(error))
-    elif error is not None:
-        with parseutils.config_path('error'):
-            error = tableutils.read_column(table, error, None)
-            if error.unit is not u.dimensionless_unscaled:
-                try:
-                    error = error.to(values.unit)
-                except u.UnitConversionError:
-                    raise ConfigError(
-                        f"the errors are in {error.unit}, but the values in "
-                        f"{values.unit}") from None
-            error = error.value
-    mask = None
-    if info.get('mask') is not None:
-        with parseutils.config_path('mask'):
-            mask = np.nan_to_num(
-                tableutils.read_column(table, info['mask'], None).value)
-    return Data(values.value, mask, error, unit)

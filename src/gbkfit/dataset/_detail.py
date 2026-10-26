@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING, Any
 
 import astropy.units
 import numpy as np
+from astropy.table import Table
 
 from gbkfit.instrument import PSF, lsf_parser, psf_parser
-from gbkfit.utils import fitsutils, gridutils, parseutils, unitutils
+from gbkfit.utils import (
+    fitsutils, gridutils, parseutils, tableutils, unitutils)
 from gbkfit.utils.parseutils import ConfigError
 from .data import Data, FitsFile, dump_data, fits_file
 
@@ -19,6 +21,9 @@ if TYPE_CHECKING:
 
 # The options of the files of a data item
 _ITEM_OPTIONS = ('data', 'mask', 'error', 'unit', 'beam')
+
+# The options of a data item of the columns of a table (see table_item)
+_TABLE_ITEM_OPTIONS = ('column', 'error', 'mask', 'unit')
 
 # The parsers of the correlations of the noise of a data item, by kind
 # (see Data)
@@ -120,6 +125,31 @@ def pop_moment_options(
         beams=beams) | correlated
 
 
+def read_table_moments(info: dict[str, Any], prefix: str) -> dict[int, Data]:
+    """
+    Return the moments of a dataset of the columns of a table, from the
+    options of its configuration: the file of the table ('file'; any that
+    astropy reads, see tableutils.read_table; the prefix is prepended to
+    its filename), its format ('format', if astropy cannot tell it), and
+    the data items moment0 to moment7, each of its columns (see
+    table_item). Raise ConfigError for other options, or without moments.
+    """
+    names = {f'moment{order}': order for order in _ORDERS}
+    options = parseutils.parse_options(
+        info, required={'file'}, optional={'format', *names})
+    with parseutils.config_path('file'):
+        table = tableutils.read_table(
+            options['file'], options.get('format'), prefix)
+    moments = {}
+    for name, order in names.items():
+        if options.get(name) is not None:
+            with parseutils.config_path(name):
+                moments[order] = table_item(table, options[name])
+    if not moments:
+        raise ConfigError("a dataset needs at least one moment")
+    return moments
+
+
 def load_with_files(
         cls: type['Dataset'],
         info: dict[str, Any],
@@ -145,7 +175,9 @@ def moment_items(moments: Mapping[int, Data]) -> dict[str, Data]:
     """
     Return the data items of the moments of the given orders: moment0 to
     moment7, those of the orders of 1 and above in km/s, as the models
-    give them (see _in_kms). Raise ConfigError for other orders.
+    give them, or above 2 the dimensionless coefficients of a
+    Gauss-Hermite series (see _in_kms). Raise ConfigError for other
+    orders.
     """
     if invalid := sorted(set(moments) - set(_ORDERS), key=str):
         raise ConfigError(
@@ -161,27 +193,81 @@ def _in_kms(data: Data, order: int) -> Data:
     Return the data of a moment of an order of 1 and above in km/s: the
     mean velocity (1) and the dispersion (2) in km/s, the central moments
     of an order k above 2 in (km/s)^k; converted from their unit (e.g.
-    m/s), if they have one, or taken to be in km/s. Raise ConfigError if
-    their unit is not one of velocity (to the power k).
+    m/s), if they have one, or taken to be in km/s. A moment of an order k
+    above 2 can be the coefficient h_k of a Gauss-Hermite series instead,
+    dimensionless (e.g. of the method gauss_hermite of the observables of
+    moments, which say which they take). Raise ConfigError if their unit
+    is not one of velocity (to the power k), nor dimensionless for an
+    order above 2.
     """
     unit = data.unit()
     if unit is None:
         return data
     power = 1 if order <= 2 else order
     kms = (astropy.units.km / astropy.units.s) ** power
-    if not unit.is_equivalent(kms):
-        kind = 'velocity' if power == 1 else f'velocity^{power}'
+    if power > 1 and unit.is_equivalent(astropy.units.dimensionless_unscaled):
+        target = astropy.units.dimensionless_unscaled
+    elif unit.is_equivalent(kms):
+        target = kms
+    else:
+        kind = f"a unit of velocity (e.g. {unitutils.format_unit(kms)!r})"
+        if power > 1:
+            kind = (
+                f"a unit of velocity^{power} (e.g. "
+                f"{unitutils.format_unit(kms)!r}), nor dimensionless (h{order} "
+                f"of a Gauss-Hermite series)")
         raise ConfigError(
             f"moment {order} is in {unitutils.format_unit(unit)!r}, which is "
-            f"not a unit of {kind} (e.g. {unitutils.format_unit(kms)!r})")
-    factor = unit.to(kms)
+            f"not {kind}")
+    factor = unit.to(target)
     if factor == 1:
         return data
     error = data.error()
     return Data(
         data.data() * factor, data.mask(),
-        None if error is None else error * factor, kms, data.beam(),
+        None if error is None else error * factor, target, data.beam(),
         data.spatial_correlation(), data.spectral_correlation())
+
+
+def table_item(table: Table, info: Any) -> Data:
+    """
+    Return a data item of the columns of a table from its configuration:
+    its column ('column'), and optionally its error ('error': a column, or
+    one error for all its values), mask ('mask': a column, 0 for the values
+    to leave out) and unit ('unit'; by default that of its column); its
+    values, errors and mask, in its unit.
+    """
+    if not isinstance(info, Mapping):
+        raise ConfigError(
+            f"a data item has its column ('column'), and optionally its "
+            f"error ('error': a column, or one error), mask ('mask': a "
+            f"column) and unit ('unit'); it is {info!r}")
+    info = parseutils.parse_options(
+        info, required={'column'},
+        optional=set(_TABLE_ITEM_OPTIONS) - {'column'})
+    values = tableutils.read_column(table, info['column'], info.get('unit'))
+    unit = None if values.unit is astropy.units.dimensionless_unscaled \
+        else values.unit
+    error = info.get('error')
+    if isinstance(error, (int, float)):
+        error = np.full(values.shape, float(error))
+    elif error is not None:
+        with parseutils.config_path('error'):
+            error = tableutils.read_column(table, error, None)
+            if error.unit is not astropy.units.dimensionless_unscaled:
+                try:
+                    error = error.to(values.unit)
+                except astropy.units.UnitConversionError:
+                    raise ConfigError(
+                        f"the errors are in {error.unit}, but the values in "
+                        f"{values.unit}") from None
+            error = error.value
+    mask = None
+    if info.get('mask') is not None:
+        with parseutils.config_path('mask'):
+            mask = np.nan_to_num(
+                tableutils.read_column(table, info['mask'], None).value)
+    return Data(values.value, mask, error, unit)
 
 
 def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:

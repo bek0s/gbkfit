@@ -68,6 +68,28 @@ _MOMENTS = _sky(
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 
+# A flattened Sersic spheroid of stars, of Jeans kinematics, whose mass
+# (with that of an NFW halo) holds it up
+_STARS = dict(
+    type='spheroid', name='stars', rmax=8, emission=dict(type='stars'),
+    profile=dict(type='sersic'), shape=dict(type='flattened'),
+    kinematics=dict(type='jeans'))
+
+_STARS_TRUTH = dict(
+    xpos=0.3, ypos=-0.4, posa=40, incl=60, vsys=10, distance=20,
+    stars_ie=1, stars_re=2, stars_n=2, stars_q=0.6, stars_beta_z=0.2,
+    stars_kappa=0.8, mass_lum_upsilon=1e10, mass_halo_log_m=12,
+    mass_halo_c=10)
+
+_STARS_TRIAL = _STARS_TRUTH | dict(
+    posa=dict(value=42, min=0, max=90), incl=dict(value=55, min=30, max=85),
+    vsys=dict(value=8, min=-50, max=50),
+    stars_beta_z=dict(value=0.1, min=-0.5, max=0.5),
+    stars_kappa=dict(value=0.7, min=0, max=1.2),
+    mass_lum_upsilon=dict(value=1.2e10, min=1e9, max=1e11),
+    mass_halo_log_m=dict(value=11.8, min=10, max=14))
+
+
 def _small_cube(**options: Any) -> dict[str, Any]:
     """
     An observation of a cube smaller than _CUBE (for cases of several
@@ -319,6 +341,29 @@ CASES: list[dict[str, Any]] = [
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.0005), _gauss(0.005)],
         likelihoods=[dict(type='gaussian', missing_residual=3), None],
+        prepare=_write_voronoi_bins),
+    dict(
+        name='stars_regions',
+        doc="The kinematics of the stars of a flattened Sersic spheroid in "
+            "Voronoi bins, as pPXF gives them (V, sigma, h3 and h4 of "
+            "Gauss-Hermite series, log velocities, a PSF and no LSF): its "
+            "Jeans kinematics in the gravity of its light and an NFW halo.",
+        galaxies=[dict(
+            components=[_STARS],
+            mass=[dict(type='light_spheroid', name='lum', component='stars'),
+                  dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
+            distance=dict(type='direct', cosmology='Planck18'))],
+        observations=[_sky(
+            dict(type='region_moments',
+                 regions=dict(type='bins', file='bins.fits'),
+                 orders=[1, 2, 3, 4], method='gauss_hermite', spec_size=101,
+                 spec_step=10, spec_rest='5000 Angstrom',
+                 spec_convention='log'),
+            line_of_sight=dict(type='grid', depth=dict(step=0.5)),
+            lines=['stars'], instrument=dict(psf=_PSF))],
+        truth=_STARS_TRUTH, trial=_STARS_TRIAL,
+        noises=[_gauss(0.0005)],
+        likelihoods=[dict(type='gaussian', missing_residual=3)],
         prepare=_write_voronoi_bins),
     dict(
         name='visibilities',

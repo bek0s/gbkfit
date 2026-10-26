@@ -16,6 +16,7 @@ from gbkfit.model import (
     MassSpheroid, ProfileSersic, ShapeFlattened, Spheroid, component_parser,
     galaxy_parser)
 from gbkfit.model.mass import G, _numerics
+from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -703,3 +704,47 @@ def test_a_spheroid_of_traits_round_trips():
     galaxy = galaxy_parser.load(dict(components=[TRAITS_SPHEROID]))
     assert set(galaxy.pdescs()) == set(TRAITS_PROPERTIES)
     assert galaxy_parser.load(galaxy.dump()).dump() == galaxy.dump()
+
+
+def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
+        driver, evaluate_cases, tmp_path):
+    # The kinematics of the stars in Voronoi bins as pPXF gives them:
+    # stars of a uniform dispersion of 80 km/s and no rotation have a
+    # Gaussian distribution of velocities everywhere, so each bin has V the
+    # velocity c ln D of vsys = 1000 km/s (D its relativistic Doppler
+    # factor; the convention log, 1.7 km/s from the optical c (D - 1)),
+    # sigma 80 km/s (with the channels of 10 km/s, sqrt(80^2 + 10^2 / 12)),
+    # and h3 = h4 = 0
+    pixels = (np.arange(32) - 15.5) * 2
+    x, y = np.meshgrid(pixels, pixels)
+    index = np.where(
+        np.hypot(x, y) < 20, (x > 0) + 2 * (y > 0) + 4 * (np.hypot(x, y) > 8),
+        -1)
+    fitsutils.write_data(
+        str(tmp_path / 'bins.fits'), index,
+        gridutils.Coords((2, 2), (15.5, 15.5), (0, 0), 0))
+    spheroid = TRAITS_SPHEROID | dict(geometry='galaxy', kinematics=dict(
+        type='traits', vptraits=dict(type='uniform', direction='tan'),
+        dptraits=dict(type='uniform')))
+    case = stars_cube(driver, spheroid)
+    case['galaxy'] = dict(components=[spheroid])
+    case['observable'] = dict(
+        type='region_moments',
+        regions=dict(type='bins', file=str(tmp_path / 'bins.fits')),
+        orders=[0, 1, 2, 3, 4], method='gauss_hermite', spec_size=81,
+        spec_step=10, spec_rval=1000, spec_rest='5000 Angstrom',
+        spec_convention='log', psf=dict(type='gauss', sigma=3),
+        dtype='float64')
+    properties = GEOMETRY | dict(
+        vsys=1000, stars_i0=[1], stars_sigma=[8], stars_q=[1],
+        stars_vpt_vt=0, stars_dpt_a=80)
+    data, _ = evaluate_cases([case], properties)
+    moments = data[0]
+    c = 299792.458
+    assert moments['moment1']['d'].shape == (8,)
+    np.testing.assert_allclose(
+        moments['moment1']['d'], c * np.arctanh(1000 / c), atol=0.02)
+    np.testing.assert_allclose(
+        moments['moment2']['d'], np.sqrt(80 ** 2 + 10 ** 2 / 12), rtol=1e-3)
+    np.testing.assert_allclose(moments['moment3']['d'], 0, atol=1e-3)
+    np.testing.assert_allclose(moments['moment4']['d'], 0, atol=1e-3)

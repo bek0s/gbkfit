@@ -5,16 +5,19 @@ moments of the sums of a spectral cube in regions (bins or apertures).
 
 import copy
 
+import astropy.units as u
 import gbkfit.dataset
 import gbkfit.params
 import numpy as np
 import pytest
+from astropy.table import Table
 from modelutils import group_plan
 
 from gbkfit.dataset import Data
 from gbkfit.dataset import DatasetRegionMoments
 from gbkfit.region import RegionsBins
 from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(
@@ -204,3 +207,48 @@ def test_region_moments_objective_residual(driver):
         params.evaluate(), False)
     for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(residual[0][key], -0.5, rtol=1e-4)
+
+
+def test_region_moments_of_the_columns_of_a_table(tmp_path):
+    # The V, sigma, h3 and h4 of the bins of pPXF, a row for each bin: the
+    # velocities in km/s (converted from m/s), h3 and h4 without a unit
+    Table(dict(
+        V=[1.4e6, 1.5e6, 1.6e6] * u.m / u.s,
+        V_ERR=[5e3, 6e3, 7e3] * u.m / u.s,
+        SIGMA=[100.0, 120, 140] * u.km / u.s,
+        H3=[0.01, -0.02, 0.03], H4=[0.0, 0.05, -0.01],
+    )).write(tmp_path / 'kinematics.fits')
+    fitsutils.write_data(
+        str(tmp_path / 'bins.fits'), np.array([[0, 0, -1], [1, 2, 2]]),
+        gridutils.Coords((1, 1), (1, 0.5), (0, 0), 0))
+    dataset = gbkfit.dataset.dataset_parser.load(dict(
+        type='region_moments',
+        regions=dict(type='bins', file=str(tmp_path / 'bins.fits')),
+        file=str(tmp_path / 'kinematics.fits'),
+        moment1=dict(column='V', error='V_ERR'), moment2=dict(column='SIGMA'),
+        moment3=dict(column='H3', error=0.01),
+        moment4=dict(column='H4', error=0.01)))
+    assert dataset.regions().nregions() == 3
+    np.testing.assert_allclose(dataset['moment1'].data(), [1400, 1500, 1600])
+    np.testing.assert_allclose(dataset['moment1'].error(), [5, 6, 7])
+    np.testing.assert_allclose(dataset['moment2'].data(), [100, 120, 140])
+    np.testing.assert_allclose(dataset['moment4'].data(), [0, 0.05, -0.01])
+    assert dataset['moment3'].unit() is None
+
+
+@pytest.mark.parametrize('method, unit, message', [
+    ('gauss_hermite', 'km3/s3', "is h3, dimensionless"),
+    ('moments', '%', "is a central moment"),
+])
+def test_the_moments_above_2_are_those_of_the_method(method, unit, message):
+    # h3 of a Gauss-Hermite series has no unit, and the central moment of
+    # order 3 is in (km/s)^3
+    from gbkfit.observation import RegionMoments
+    regions = RegionsBins(np.array([[0, 1]]))
+    observable = RegionMoments(
+        regions, orders=[3], method=method, spec_convention='relativistic')
+    observable.require_matching(
+        DatasetRegionMoments({3: Data(np.zeros(2))}, regions))
+    with pytest.raises(ConfigError, match=message):
+        observable.require_matching(
+            DatasetRegionMoments({3: Data(np.zeros(2), unit=unit)}, regions))
