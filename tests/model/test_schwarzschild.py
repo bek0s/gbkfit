@@ -298,3 +298,75 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
     assert min(chi2, key=chi2.get) == (bh, 1.0)
     # (about one per residual)
     assert chi2[bh, 1.0] < 1.2 * objective.nresiduals()
+
+
+@pytest.mark.slow
+def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
+    # The Gauss-Hermite series of the bins of a flattened (q = 0.7)
+    # spheroid, inclined (60 degrees) and rotating (kappa 0.6), of Jeans
+    # kinematics in the mass of its light and a black hole, through a
+    # PSF: fitted by Schwarzschild models in that mass scaled by 0.8, 1 and
+    # 1.25 (a weak prior of the weights), the chi-square of the data is
+    # the least at the truth, and their rotation is that of the data.
+    # (Their sigma and h4 are not quite: a Gaussian at each point, as the
+    # Jeans kinematics take, is not the distribution of a steady state of
+    # orbits; 6 to 20 km/s in sigma, of 60 to 80)
+    pixels = (np.arange(40) - 19.5) * 0.5
+    x, y = np.meshgrid(pixels, pixels)
+    r, theta = np.hypot(x, y), np.arctan2(y, x)
+    edges = [0, 1, 2, 3, 4.5, 6.5, 9.5]
+    ring = np.digitize(r, edges) - 1
+    sector = ((theta + np.pi) / (2 * np.pi) * 8).astype(int) % 8
+    index = np.where(
+        r < edges[-1], np.where(ring == 0, 0, 1 + (ring - 1) * 8 + sector),
+        -1)
+    regions = RegionsBins(index, step=(0.5, 0.5), rpix=(19.5, 19.5))
+
+    def stars(kinematics):
+        return galaxy(
+            components=[SPHEROID | dict(rmax=40, kinematics=kinematics)],
+            mass=[dict(type='light_spheroid', name='stars',
+                       component='stars'),
+                  dict(type='point', name='bh')])
+    truth = dict(
+        xpos=0, ypos=0, posa=0, incl=60, vsys=0, distance=16,
+        stars_i0=[50.0, 10.0], stars_sigma=[1.0, 4.0], stars_q=[0.7, 0.7],
+        mass_stars_upsilon=1e8, mass_bh_log_m=8.5)
+    los = line_of_sight_parser.load(dict(type='grid', depth=dict(step=0.5)))
+    instrument = Instrument(psf=PSFGauss(0.4))
+    moments = RegionMoments(
+        regions, orders=[1, 2, 3, 4], method='gauss_hermite', spec_size=241,
+        spec_step=10, spec_rval=0, spec_rest='5000 Angstrom',
+        spec_convention='log')
+    model = ObservationGroup(
+        [stars(dict(type='jeans'))],
+        [ObservationSky(moments, los, instrument=instrument, lines=['stars'],
+                        dtype='float64')]).plan(driver).model_h(
+        truth | dict(stars_beta_z=0.0, stars_kappa=0.6))[0]
+    errors = {1: 3.0, 2: 3.0, 3: 0.02, 4: 0.02}
+    dataset = DatasetRegionMoments({
+        m: Data(model[f'moment{m}']['d'],
+                error=np.full(regions.nregions(), errors[m]))
+        for m in range(1, 5)}, regions)
+    obs = ObservationSky(
+        RegionMoments.from_data(
+            dataset, method='gauss_hermite', spec_convention='log',
+            spec_rest='5000 Angstrom'),
+        los, instrument=instrument, lines=['stars'], data=dataset,
+        likelihood=LikelihoodGaussian(missing_residual=3))
+    group = ObservationGroup([stars(dict(
+        type='schwarzschild', norbits=1500, turns=30))], [obs])
+    solve = dict(solve=dict(
+        type='gaussian', mean=1, sigma=10, minimum=0, likelihood='profiled'))
+    objective = None
+    chi2 = {}
+    for factor in (0.8, 1.0, 1.25):
+        params = ParamSpace(group.pdescs(), truth | dict(
+            mass_stars_upsilon=1e8 * factor, stars_weights=solve))
+        if objective is None:
+            objective = Objective(group.plan(driver), params.solves())
+        residuals = objective.residual_nddata_h(params.evaluate(), True)[0]
+        chi2[factor] = sum(float(np.sum(r ** 2)) for r in residuals.values())
+        if factor == 1.0:
+            assert np.sum(residuals['moment1'] ** 2) < regions.nregions()
+    assert min(chi2, key=chi2.get) == 1.0
