@@ -119,16 +119,14 @@ def eval_(
             _eval(mode, cfg, root, setup, profile_iters, run)
 
 
-# The sections of the configurations of the task
-_REQUIRED = ('galaxies', 'observations', 'params')
-_OPTIONAL = (
-    'driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order', 'mock')
-
-
 def _read_config(config: str) -> ConfigFile:
-    """Read the configuration of an evaluation."""
+    """
+    Read the configuration of an evaluation: of any section (see
+    setup.read_config), of which it uses those it needs (e.g. a
+    configuration of a fit evaluates).
+    """
     _log.info(f"reading configuration from file: {config}...")
-    return gbkfit.setup.read_config(config, _REQUIRED, _OPTIONAL)
+    return gbkfit.setup.read_config(config)
 
 
 def _eval(

@@ -87,6 +87,8 @@ def test_objective_residuals(tmp_path):
         step=observation['observable'].pop('step'))
     observation['observable'].pop('size')
     observation['likelihood'] = dict(type='gaussian', weights=0.5)
+    # (a configuration of a fit evaluates too: its fitter is left)
+    config['fitter'] = dict(type='scipy.least_squares')
     run = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
     np.testing.assert_allclose(array(run, 'wresidual'), -0.25, rtol=1e-5)

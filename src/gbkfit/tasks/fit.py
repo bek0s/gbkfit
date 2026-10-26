@@ -213,12 +213,16 @@ def _products_of_fit(output_dir: str, action: str, *kinds: str) -> list[str]:
 
 
 def _read_config(config: str) -> ConfigFile:
-    """Read the configuration of a fit."""
+    """
+    Read the configuration of a fit: of any section (see
+    setup.read_config), of which it uses those it needs (e.g. that of a
+    mock of the data is left), and a fitter.
+    """
     _log.info(f"reading configuration from file: {config}...")
-    return gbkfit.setup.read_config(
-        config, ('galaxies', 'observations', 'params', 'fitter'),
-        ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
-         'parallel', 'bootstrap'))
+    file = gbkfit.setup.read_config(config)
+    if 'fitter' not in file.config:
+        raise ConfigError("a fit needs the section 'fitter'")
+    return file
 
 
 def _load_bootstrap(
