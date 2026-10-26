@@ -10,6 +10,7 @@ from the sums of that comparison, under its prior (see Solve).
 
 import abc
 import math
+from collections.abc import Sequence
 from typing import NamedTuple
 
 import numpy as np
@@ -26,7 +27,9 @@ __all__ = [
     'Solution',
     'Solve',
     'SolveGaussian',
-    'solve_parser'
+    'check_together',
+    'solve_parser',
+    'solve_together'
 ]
 
 
@@ -236,47 +239,109 @@ class SolveGaussian(Solve):
         return Solution(
             values, ((values - mean) / sigma).ravel(), log_term, m_eff)
 
+    def mean(self) -> float:
+        """Return the mean of the prior."""
+        return self._mean
+
+    def sigma(self) -> float:
+        """Return the standard deviation of the prior."""
+        return self._sigma
+
+    def minimum(self) -> float | None:
+        """Return the smallest value, if any."""
+        return self._minimum
+
     def check_coupled(self, size: int) -> None:
-        if size > 1 and self._minimum is not None \
-                and self._likelihood == 'integrated':
-            raise ConfigError(
-                f"{size} values solved together above a minimum have no "
-                f"exact integral for the log-likelihood: give the solve "
-                f"likelihood 'profiled' (the log-likelihood at their best "
-                f"values), or no minimum")
+        check_together([self], [size])
 
     def solve_coupled(self, normal: np.ndarray, rhs: np.ndarray) -> Solution:
-        if len(rhs) == 1:
-            return self.solve(normal[0], rhs)
-        self.check_coupled(len(rhs))
-        mean, sigma, minimum = self._mean, self._sigma, self._minimum
-        precision = 1 / sigma ** 2
-        normal_prior = normal + precision * np.eye(len(rhs))
-        rhs_prior = rhs + mean * precision
-        log_term = 0.0
-        if minimum is None:
-            factor = scipy.linalg.cho_factor(normal_prior)
-            values = scipy.linalg.cho_solve(factor, rhs_prior)
-            free = np.ones(len(rhs), dtype=bool)
-            if self._likelihood == 'integrated':
-                log_term = -float(np.sum(np.log(np.diag(factor[0])))) \
-                    - len(rhs) * math.log(sigma)
-        else:
-            # (the least squares of R x = t, R^T R = N' and R^T t = b',
-            # whose chi-square is that of the values but a constant)
-            upper = scipy.linalg.cholesky(normal_prior)
-            target = scipy.linalg.solve_triangular(
-                upper, rhs_prior, trans='T')
-            values = scipy.optimize.lsq_linear(
-                upper, target, bounds=(minimum, np.inf), method='bvls').x
-            free = values > minimum
-        # (the effective number of the values: the trace of N'^-1 N over
-        # those above the minimum, which their data set)
-        normal_free = normal[np.ix_(free, free)]
-        m_eff = float(np.trace(np.linalg.solve(
-            normal_free + precision * np.eye(len(normal_free)),
-            normal_free))) if free.any() else 0.0
-        return Solution(values, (values - mean) / sigma, log_term, m_eff)
+        return solve_together([self], [len(rhs)], normal, rhs)
+
+
+def check_together(solves: Sequence[Solve], sizes: Sequence[int]) -> None:
+    """
+    Raise ConfigError unless values of the given solves, the given number
+    of each, can be solved together (see solve_together): of Gaussian
+    priors and one likelihood, and 'profiled' if more than one value has
+    a minimum (their integral has no exact formula).
+    """
+    if not all(isinstance(solve, SolveGaussian) for solve in solves):
+        raise ConfigError(
+            "values solved together take Gaussian priors (solves of type "
+            "'gaussian')")
+    likelihoods = {solve.likelihood() for solve in solves}
+    if len(likelihoods) > 1:
+        raise ConfigError(
+            f"values solved together take one likelihood; they have "
+            f"{sorted(likelihoods)}")
+    if sum(sizes) > 1 and likelihoods == {'integrated'} and any(
+            solve.minimum() is not None for solve in solves):
+        raise ConfigError(
+            f"{sum(sizes)} values solved together above a minimum have no "
+            f"exact integral for the log-likelihood: give their solves the "
+            f"likelihood 'profiled' (the log-likelihood at their best "
+            f"values), or no minimum")
+
+
+def solve_together(
+        solves: Sequence[Solve],
+        sizes: Sequence[int],
+        normal: np.ndarray,
+        rhs: np.ndarray
+) -> Solution:
+    """
+    Return the values of the given solves solved together, the given
+    number of each in their order, of the sums of their values (see
+    Solve.solve_coupled), each of the Gaussian prior of its solve (mean
+    mu, standard deviation s, minimum c): with N' = N + diag(1/s^2) and
+    b' = b + mu/s^2, without a minimum, the best values solve N' x = b',
+    the integral is -chi2 / 2 at them - log det(N') / 2 - sum log(s), and
+    their effective number is the trace of N'^-1 N; with a minimum, the
+    best values are those of the least squares of N' and b' above it
+    (bounded variables), their effective number that trace over those
+    above it, and they are profiled (see check_together). One value alone
+    takes the formulas of SolveGaussian.
+
+    Raises
+    ------
+    ConfigError
+        If they cannot be solved together (see check_together).
+    """
+    check_together(solves, sizes)
+    if len(rhs) == 1:
+        return solves[0].solve(normal[0], rhs)
+    mean, sigma = (
+        np.repeat([getter(solve) for solve in solves], sizes)
+        for getter in (SolveGaussian.mean, SolveGaussian.sigma))
+    lower = np.repeat([
+        -np.inf if solve.minimum() is None else solve.minimum()
+        for solve in solves], sizes)
+    precision = 1 / sigma ** 2
+    normal_prior = normal + np.diag(precision)
+    rhs_prior = rhs + mean * precision
+    log_term = 0.0
+    if np.all(np.isinf(lower)):
+        factor = scipy.linalg.cho_factor(normal_prior)
+        values = scipy.linalg.cho_solve(factor, rhs_prior)
+        free = np.ones(len(rhs), dtype=bool)
+        if solves[0].likelihood() == 'integrated':
+            log_term = -float(np.sum(np.log(np.diag(factor[0])))) \
+                - float(np.sum(np.log(sigma)))
+    else:
+        # (the least squares of R x = t, R^T R = N' and R^T t = b', whose
+        # chi-square is that of the values but a constant)
+        upper = scipy.linalg.cholesky(normal_prior)
+        target = scipy.linalg.solve_triangular(upper, rhs_prior, trans='T')
+        values = scipy.optimize.lsq_linear(
+            upper, target, bounds=(lower, np.inf), method='bvls').x
+        free = values > lower
+    # (the effective number of the values: the trace of N'^-1 N over those
+    # above their minimum, which their data set)
+    normal_free = normal[np.ix_(free, free)]
+    m_eff = float(np.trace(np.linalg.solve(
+        normal_free + np.diag(precision[free]), normal_free))) \
+        if free.any() else 0.0
+    return Solution(values, (values - mean) / sigma, log_term, m_eff)
 
 
 solve_parser = parseutils.TypedParser(Solve, [SolveGaussian])

@@ -246,6 +246,11 @@ class Visibilities(Observable):
     def light_items(self) -> tuple[str, ...]:
         return ('re', 'im')
 
+    def linear_in_light(self) -> bool:
+        # (the Fourier transforms of its images of the light, through its
+        # instrument: linear)
+        return True
+
     def model_can_lack_values(self) -> bool:
         return False
 

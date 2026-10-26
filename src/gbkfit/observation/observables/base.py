@@ -215,6 +215,16 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """Return the names of the data items (e.g. 'spectra')."""
         pass
 
+    def linear_in_light(self) -> bool:
+        """
+        Check whether its model is linear in the light of what it sees:
+        the sum of the models of parts of the light, each times its
+        amplitude (e.g. images and spectra, but not moments, which are
+        ratios of sums of the light), so that amplitudes of the light can
+        be solved (see params.Solve); False here.
+        """
+        return False
+
     @abc.abstractmethod
     def model_can_lack_values(self) -> bool:
         """

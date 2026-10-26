@@ -57,6 +57,14 @@ class SpheroidMotion(abc.ABC):
         pass
 
     @abc.abstractmethod
+    def takes_light(self) -> bool:
+        """
+        Check whether it takes the light of its spheroid (see state), so
+        that its velocities change with it.
+        """
+        pass
+
+    @abc.abstractmethod
     def state(
             self,
             values: ParamValues,
@@ -328,6 +336,9 @@ class TraitsMotion(SpheroidMotion):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._traits.pdescs()
+
+    def takes_light(self) -> bool:
+        return False
 
     def state(
             self,

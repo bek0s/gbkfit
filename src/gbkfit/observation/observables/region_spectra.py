@@ -231,6 +231,11 @@ class RegionSpectra(Observable):
         return super().flux_scales() \
             | dict(per_spectrum=FluxScale(('spectra',), 0, nregions))
 
+    def linear_in_light(self) -> bool:
+        # (the sums of its spectra of the light, through its instrument:
+        # linear)
+        return True
+
     def model_can_lack_values(self) -> bool:
         return False
 

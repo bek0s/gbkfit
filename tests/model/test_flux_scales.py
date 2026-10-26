@@ -261,11 +261,11 @@ def test_flux_scales_need_light_and_a_name():
             flux_scale='per_spectrum')
 
 
-def test_only_flux_scales_of_gaussian_likelihoods_are_solved(
+def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
         driver, tmp_path):
     spectra = model(driver)
     plan = group_plan(driver, spectra, 1.0)
-    with pytest.raises(ConfigError, match=r"cannot: \['vsys'\]"):
+    with pytest.raises(ConfigError, match="vsys cannot be solved"):
         Objective(plan, dict(vsys=SolveGaussian(0, 10)))
     (tmp_path / 'like.py').write_text(
         "def like(key, data, model, error, mask, params):\n"

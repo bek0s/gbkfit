@@ -255,6 +255,17 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
             likelihood (see __init__).
         """
 
+    def light_amplitudes(self, seen: SeenGalaxies) -> dict[str, str | None]:
+        """
+        Return the amplitudes of the light that its model takes (see
+        Component.light_amplitudes), by their names in its observation
+        group: those of the components whose light it sees, of the
+        galaxies it sees, each with None if its model is linear in it, or
+        why not (also when it is not linear in the light: see
+        Observable.linear_in_light); none here, where it sees no light.
+        """
+        return {}
+
     @abc.abstractmethod
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """

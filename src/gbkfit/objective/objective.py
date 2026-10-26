@@ -8,7 +8,8 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import Extras
 from gbkfit.objective.comparisons import Comparison, comparison
 from gbkfit.observation import FluxScale, GroupPlan, ObservationGroup
-from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
+from gbkfit.params import (
+    ParamDesc, ParamValues, Solution, Solve, check_together, solve_together)
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
 
@@ -32,6 +33,19 @@ class _Solved(NamedTuple):
     solve: Solve
 
 
+class _Group(NamedTuple):
+    """
+    Solved amplitudes of the light of the models (see
+    Component.light_amplitudes), solved together (see solve_together):
+    the elements (each the name of its parameter and its index, None for
+    a scalar), in runs of one solve (the solve and the number of its
+    elements), and the observations whose models take them.
+    """
+    elements: tuple[tuple[str, int | None], ...]
+    runs: tuple[tuple[Solve, int], ...]
+    observations: tuple[int, ...]
+
+
 class Objective:
     """
     The comparison of the models of a group of observations with their
@@ -44,12 +58,20 @@ class Objective:
     noise; see LikelihoodGaussian). The objective sums them.
 
     The elements of parameters can be solved at each evaluation, rather
-    than fitted (see Solve and ParamSpace): for now, those of the flux
-    scales of observations (see ObservationSky), which the model is linear
-    in. The model is evaluated with them at 1, the comparison of their
-    observation gives their sums, their solve their values, and the
+    than fitted (see Solve and ParamSpace): those of the flux scales of
+    observations (see ObservationSky), and the amplitudes of the light of
+    components (see Component.light_amplitudes), which the model is linear
+    in. A flux scale: the model is evaluated with it at 1, the comparison
+    of its observation gives its sums, its solve its values, and the
     comparison then compares the model times them (see
-    Comparison.evaluate). The priors of the solved values add residuals
+    Comparison.evaluate). Amplitudes of the light, solved together where
+    their parts of the model fall on the same data (in one or several
+    observations; see solve_together): the models are evaluated with them
+    at 0 and with each at 1 alone; the weighted residuals of the
+    comparisons, linear in the model, give the sums of their parts
+    (r(m_k) - r(m_0) and -r(m_0)), and the models are evaluated at their
+    values. They do not go with a solved flux scale of the same
+    observation (the model is then not linear in both). The priors of the solved values add residuals
     after those of the data; the log-likelihood has the values integrated
     out, or at their best values (see Solve). They are nuisance parameters
     (see nnuisance); solved gives their values.
@@ -77,9 +99,11 @@ class Objective:
     ------
     ConfigError
         If an observation has no data, its comparison cannot be made (see
-        Comparison), or a solved element is not of the flux scale of an
+        Comparison), or a solved element is neither of the flux scale of an
         observation whose comparison can solve it (see
-        Comparison.check_scales).
+        Comparison.check_scales), nor an amplitude of the light that the
+        models are linear in (see Component.light_amplitudes,
+        Observable.linear_in_light and Comparison.check_linear).
     """
 
     def __init__(
@@ -101,9 +125,12 @@ class Objective:
             comparison(obs, driver) for obs, driver in zip(
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
-        self._solved = _solved(group, self._comparisons, self._solves)
-        # The observations with solved elements
+        self._solved, amplitudes = _solved(
+            group, self._comparisons, self._solves)
+        # The observations with solved scales
         self._scaled = sorted({solved.observation for solved in self._solved})
+        self._groups = _groups(
+            group, self._comparisons, amplitudes, self._scaled)
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -116,9 +143,18 @@ class Objective:
         # The values of the solved elements of the last evaluation, and
         # the scales of the observations with some, on the host (h) and
         # the device (d), by index
-        self._solutions: list[Solution | None] = [None] * len(self._solved)
+        self._solutions: list[Solution | None] = [None] * (
+            len(self._solved) + len(self._groups))
         self._h_scales: dict[int, np.ndarray] = {}
         self._d_scales: dict[int, DeviceArray] = {}
+        # The weighted residuals of the models of each group, at 0 and with
+        # each of its elements at 1 alone (and then their parts, see
+        # _solve_groups), of each of its observations, in float64 on its
+        # device, and their sums (host and device), by group and
+        # observation
+        self._d_rows: dict[tuple[int, int], DeviceArray] = {}
+        self._sums: dict[tuple[int, int], tuple[
+            np.ndarray, DeviceArray, np.ndarray, DeviceArray]] = {}
         # The memory is allocated on the first evaluation (see prepare)
         self._prepared = False
 
@@ -210,6 +246,17 @@ class Objective:
             (self._h_scales[i],
              self._d_scales[i]) = driver.mem_alloc_s(
                 shape, observation.dtype())
+        drivers = self._group_plan.observation_drivers()
+        for g, group in enumerate(self._groups):
+            size = len(group.elements)
+            for i in group.observations:
+                driver = drivers[i]
+                nvalues = self._comparisons[i].residual_vector_d().size
+                self._d_rows[g, i] = driver.mem_alloc_d(
+                    (size + 1, nvalues), np.float64)
+                self._sums[g, i] = (
+                    *driver.mem_alloc_s((size, size), np.float64),
+                    *driver.mem_alloc_s(size, np.float64))
         self._prepared = True
 
     def chi2(
@@ -382,6 +429,13 @@ class Objective:
             names = [solved.param] if solved.indices is None else [
                 element_name(solved.param, int(k)) for k in solved.indices]
             values.update(zip(names, solution.values.tolist()))
+        for group, solution in zip(
+                self._groups, self._solutions[len(self._solved):]):
+            if solution is None:
+                continue
+            values.update(zip(
+                (element_name(*element) for element in group.elements),
+                solution.values.tolist()))
         return values
 
     def nnuisance(self) -> float:
@@ -546,12 +600,63 @@ class Objective:
         self.prepare()
         group_plan = self._group_plan
         with group_plan.lock():
+            if self._groups:
+                params = self._solve_groups(params)
             models = group_plan.model_d(self._unscaled(params), out_extra)
             with group_plan.timers().measure('objective_residual_eval'):
                 scales = self._solve(models, params)
                 for comparison_, model, scales_ in zip(
                         self._comparisons, models, scales):
                     comparison_.evaluate(model, params, weighted, scales_)
+
+    def _solve_groups(self, params: ParamValues) -> ParamValues:
+        """
+        Solve the groups of amplitudes of the light (see _Group), and
+        return the values of the parameters with their solved values.
+        """
+        group_plan = self._group_plan
+        drivers = group_plan.observation_drivers()
+        unscaled = self._unscaled(params)
+        # (every solved amplitude at 0: those of the other groups take no
+        # part in the models of a group)
+        values = _with_elements(
+            unscaled, [e for g in self._groups for e in g.elements], 0.0)
+        for g, group in enumerate(self._groups):
+            size = len(group.elements)
+            # The weighted residuals of the models at 0 (row 0) and with
+            # each element at 1 alone (row k + 1); the residuals are linear
+            # in the model (see Comparison.check_linear)
+            for k in range(size + 1):
+                ones = [group.elements[k - 1]] if k else []
+                models = group_plan.model_d(_with_elements(values, ones, 1.0))
+                for i in group.observations:
+                    comparison_ = self._comparisons[i]
+                    comparison_.evaluate(models[i], values, True, {})
+                    drivers[i].mem_copy_d2d(
+                        comparison_.residual_vector_d(),
+                        self._d_rows[g, i][k])
+            # The sums of the parts of the model: of R = r(m_k) - r(m_0) and
+            # r(m_0), N = R R^T and b = -R r(m_0)
+            normal = np.zeros((size, size))
+            rhs = np.zeros(size)
+            for i in group.observations:
+                driver, rows = drivers[i], self._d_rows[g, i]
+                h_normal, d_normal, h_rhs, d_rhs = self._sums[g, i]
+                negative = -rows[0]
+                for k in range(1, size + 1):
+                    driver.math_add(rows[k], negative, out=rows[k])
+                driver.math_matmul(rows[1:], rows[1:].T, out=d_normal)
+                driver.math_matmul(rows[1:], negative, out=d_rhs)
+                driver.mem_copy_d2h(d_normal, h_normal)
+                driver.mem_copy_d2h(d_rhs, h_rhs)
+                normal += h_normal
+                rhs += h_rhs
+            solution = solve_together(
+                [solve for solve, _ in group.runs],
+                [count for _, count in group.runs], normal, rhs)
+            self._solutions[len(self._solved) + g] = solution
+            values = _with_elements(values, group.elements, solution.values)
+        return values
 
     def _unscaled(self, params: ParamValues) -> ParamValues:
         """
@@ -607,17 +712,18 @@ def _solved(
         group: ObservationGroup,
         comparisons: Sequence[Comparison],
         solves: Mapping[str, Solve]
-) -> tuple[_Solved, ...]:
+) -> tuple[tuple[_Solved, ...], dict[str, Solve]]:
     """
     Return the solved elements of the flux scales of the observations of a
     group, of the solve of each element (by element name), those of one
-    parameter and one solve together.
+    parameter and one solve together; and the solves of the other solved
+    elements, by element name (see _groups).
 
     Raises
     ------
     ConfigError
-        If an element is not of the flux scale of an observation, or its
-        comparison cannot solve it (see Comparison.check_scales).
+        If the comparison of an observation cannot solve its scale (see
+        Comparison.check_scales).
     """
     pdescs = group.pdescs()
     solved = []
@@ -641,11 +747,124 @@ def _solved(
             solved.append(_Solved(
                 i, param, None if pdesc.is_scalar() else np.array(indices),
                 scale, solve))
-    if unknown := [name for name in solves if name not in found]:
-        raise ConfigError(
-            f"only the flux scales of observations can be solved (the "
-            f"model is linear in them); these cannot: {unknown}")
-    return tuple(solved)
+    others = {name: solve for name, solve in solves.items()
+              if name not in found}
+    return tuple(solved), others
+
+
+def _groups(
+        group: ObservationGroup,
+        comparisons: Sequence[Comparison],
+        solves: Mapping[str, Solve],
+        scaled: Sequence[int]
+) -> tuple[_Group, ...]:
+    """
+    Return the groups of the solved elements of the parameters of a group
+    that are amplitudes of the light (see Component.light_amplitudes), of
+    the solve of each element (by element name): those of parameters
+    whose models fall on the same observations solved together.
+
+    Raises
+    ------
+    ConfigError
+        If an element is not an amplitude of the light, or one that a model
+        is not linear in (with why), its observation has a solved flux
+        scale (the model is not linear in both), its comparison cannot
+        solve it (see Comparison.check_linear), or its solves cannot be
+        solved together (see check_together).
+    """
+    if not solves:
+        return ()
+    pdescs = group.pdescs()
+    # The observations that take each amplitude of the light, and why
+    # their models are not linear in it, if not
+    takers: dict[str, list[int]] = {}
+    reasons: dict[str, str] = {}
+    for i in range(group.nobservations()):
+        for param, reason in group.light_amplitudes(i).items():
+            takers.setdefault(param, []).append(i)
+            if reason is not None:
+                reasons.setdefault(param, reason)
+    elements: dict[str, list[tuple[str, int | None]]] = {}
+    for param, pdesc in pdescs.items():
+        names = [param] if pdesc.is_scalar() else [
+            element_name(param, k) for k in range(pdesc.size())]
+        for k, name in enumerate(names):
+            if name in solves:
+                elements.setdefault(param, []).append(
+                    (param, None if pdesc.is_scalar() else k))
+    if unknown := sorted(set(solves) - {
+            element_name(*e) for es in elements.values() for e in es}):
+        raise ConfigError(f"these elements are not parameters: {unknown}")
+    for param in elements:
+        if param not in takers:
+            raise ConfigError(
+                f"{param} cannot be solved: only the flux scales of "
+                f"observations and the amplitudes of the light of components "
+                f"seen by observations can be solved (the model is linear "
+                f"in them)")
+        if param in reasons:
+            raise ConfigError(
+                f"{param} cannot be solved: {reasons[param]}, so the model "
+                f"is not linear in it; fit it instead")
+        for i in takers[param]:
+            if i in scaled:
+                raise ConfigError(
+                    f"{param} cannot be solved with the solved flux scale of "
+                    f"observation {i}: the model is not linear in both")
+            comparisons[i].check_linear(group.observations()[i].keys())
+    # (the parameters whose models fall on the same observations, together)
+    groups: list[tuple[list[str], set[int]]] = []
+    for param in elements:
+        observations = set(takers[param])
+        joined = [g for g in groups if g[1] & observations]
+        merged = ([param], observations)
+        for g in joined:
+            merged[0][:0] = g[0]
+            merged[1].update(g[1])
+            groups.remove(g)
+        groups.append(merged)
+    result = []
+    for params, observations in groups:
+        members = [e for param in params for e in elements[param]]
+        runs: list[tuple[Solve, int]] = []
+        for element in members:
+            solve = solves[element_name(*element)]
+            if runs and runs[-1][0] is solve:
+                runs[-1] = (solve, runs[-1][1] + 1)
+            else:
+                runs.append((solve, 1))
+        check_together(
+            [solve for solve, _ in runs], [count for _, count in runs])
+        result.append(_Group(
+            tuple(members), tuple(runs), tuple(sorted(observations))))
+    return tuple(result)
+
+
+def _with_elements(
+        params: ParamValues,
+        elements: Sequence[tuple[str, int | None]],
+        values: float | Sequence[float]
+) -> ParamValues:
+    """
+    Return the values of the parameters with the given elements (each the
+    name of its parameter and its index, None for a scalar) at the given
+    values (one for all, or one for each); copies of those it changes.
+    """
+    if not elements:
+        return params
+    result = dict(params)
+    values = np.broadcast_to(np.asarray(values, dtype=float), len(elements))
+    copied = set()
+    for (param, index), value in zip(elements, values):
+        if index is None:
+            result[param] = float(value)
+            continue
+        if param not in copied:
+            result[param] = np.array(result[param], dtype=float)
+            copied.add(param)
+        result[param][index] = value
+    return result
 
 
 def _scale_sums(

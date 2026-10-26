@@ -174,6 +174,18 @@ class Comparison(abc.ABC):
         """
         pass
 
+    def check_linear(self, keys: Collection[str]) -> None:
+        """
+        Raise ConfigError unless its weighted residuals of the given data
+        items are linear in the model (see Objective: amplitudes of the
+        light solved together take the residuals of their parts of the
+        model): here, they are not.
+        """
+        raise ConfigError(
+            f"the likelihood of the observation, "
+            f"{self._observation.likelihood().type()}, solves no amplitudes "
+            f"of the light of its model")
+
     def check_scales(self, keys: Collection[str]) -> None:
         """
         Raise ConfigError unless it can give the sums of solved scales of
@@ -586,6 +598,24 @@ class ComparisonGaussian(Comparison):
                 self._whiteners[key](residual)
         if self._noise:
             self._update_noise_residuals(model, scaled, params, weighted)
+
+    def check_linear(self, keys: Collection[str]) -> None:
+        """
+        Raise ConfigError if a data item of the given ones has an upper
+        limit (its residuals are not linear in the model), or values that
+        the model can lack (their residual is a constant).
+        """
+        for key in keys:
+            if not np.isnan(self._upper_limits[key][0]):
+                raise ConfigError(
+                    f"solved amplitudes of the light do not go with the "
+                    f"upper limit of '{key}': its residuals are not linear "
+                    f"in the model")
+        if self._observation.model_can_lack_values():
+            raise ConfigError(
+                "solved amplitudes of the light do not go with a model that "
+                "can lack values (e.g. moments): its residuals are not "
+                "linear in the model")
 
     def check_scales(self, keys: Collection[str]) -> None:
         """

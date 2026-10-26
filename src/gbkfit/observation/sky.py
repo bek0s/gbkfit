@@ -10,7 +10,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import (
-    Band, BandEmission, DataUnit, Extras, GalaxyState, LineCatalogue,
+    Band, BandEmission, DataUnit, Extras, GalaxyState, LineCatalogue, Scene,
     band_parser)
 from gbkfit.model.components.roles import load_band
 from gbkfit.params import (
@@ -600,6 +600,33 @@ class ObservationSky(Observation):
         """Return the floating type of the FFT convolutions of the model."""
         return self._fft_dtype
 
+    def light_amplitudes(self, seen: SeenGalaxies) -> dict[str, str | None]:
+        linear = self._observable.linear_in_light()
+        amplitudes = {}
+        for galaxy, mapping, emitters in zip(
+                seen.galaxies, seen.mappings, self._scene(seen).emitters()):
+            reasons = galaxy.light_amplitudes()
+            for i in emitters:
+                names = galaxy.component_params(i)
+                for param in galaxy.components()[i].light_amplitudes():
+                    reason = reasons[names[param]]
+                    if reason is None and not linear:
+                        reason = (
+                            f"the observable {self._observable.type()!r} of "
+                            f"the observation is not linear in the light "
+                            f"(e.g. moments, ratios of sums of the light)")
+                    amplitudes[mapping[names[param]]] = reason
+        return amplitudes
+
+    def _scene(self, seen: SeenGalaxies) -> Scene:
+        """
+        Return the scene of the galaxies it sees, along its line of sight
+        (see make_scene).
+        """
+        return make_scene(
+            seen, self._components, self._lines, self._band,
+            self._line_of_sight, self._observable.emission, self.data_unit())
+
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
         Plan the evaluation of what it sees (see ObservationGroup.plan):
@@ -624,9 +651,7 @@ class ObservationSky(Observation):
             If what it sees does not go with it (see make_scene), or with
             its observable (see Observable.plan).
         """
-        scene = make_scene(
-            seen, self._components, self._lines, self._band,
-            self._line_of_sight, self._observable.emission, self.data_unit())
+        scene = self._scene(seen)
         # (the light of an image is blurred by its PSF and again by ours)
         for trait in scene.image_traits():
             trait.check_psf(self._instrument.psf())

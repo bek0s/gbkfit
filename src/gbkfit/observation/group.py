@@ -466,6 +466,15 @@ class ObservationGroup:
         """
         return self._frames[index].moved(params)
 
+    def light_amplitudes(self, index: int) -> dict[str, str | None]:
+        """
+        Return the amplitudes of the light that the model of the
+        observation of the given index takes, each with None if its model
+        is linear in it, or why not (see Observation.light_amplitudes).
+        """
+        return self._observations[index].light_amplitudes(
+            self.seen_by(index))
+
     def model_params(self, index: int) -> tuple[str, ...]:
         """
         Return the names of the parameters that the model of the

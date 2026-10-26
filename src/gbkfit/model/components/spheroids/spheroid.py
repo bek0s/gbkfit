@@ -74,6 +74,14 @@ class LightProfile(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
+    def amplitudes(self) -> tuple[str, ...]:
+        """
+        Return its parameters whose elements are the amplitudes of its
+        terms: its light is linear in them (see Component.light_amplitudes).
+        """
+        pass
+
+    @abc.abstractmethod
     def takes_shape(self) -> bool:
         """
         Check whether it is laid out in a shape (see Spheroid), or has the
@@ -195,6 +203,9 @@ class LightSersic(LightProfile):
                 desc="the effective radius (arcsec)", minimum=0),
             n=ParamScalarDesc(
                 desc="the Sersic index", minimum=0.3, maximum=12))
+
+    def amplitudes(self) -> tuple[str, ...]:
+        return ('ie',)
 
     def takes_shape(self) -> bool:
         return True
@@ -328,6 +339,9 @@ class LightMGE(LightProfile):
             q=ParamVectorDesc(
                 n, desc="the intrinsic axis ratio of each Gaussian "
                         "(height over width)", minimum=0))
+
+    def amplitudes(self) -> tuple[str, ...]:
+        return ('i0',)
 
     def takes_shape(self) -> bool:
         return False
@@ -618,6 +632,15 @@ class Spheroid(Component):
         return (profile.terms(params, self.axis_ratio(params)),
                 profile.function(params),
                 profile.table(params) if profile.ntable() else None)
+
+    def light_amplitudes(self) -> dict[str, str | None]:
+        # (the amplitudes of the terms of its profile; its kinematics can
+        # take its light, e.g. the density of the Jeans equations)
+        reason = None
+        if self._motion is not None and self._motion.takes_light():
+            reason = (f"its {self._kinematics.type()} kinematics take its "
+                      f"light")
+        return dict.fromkeys(self._profile.amplitudes(), reason)
 
     def thick(self, seen_by: 'type[Emission]') -> bool:
         # (an image is its projection; in a spectral cube, its velocities

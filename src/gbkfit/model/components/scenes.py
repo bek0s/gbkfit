@@ -97,6 +97,13 @@ class Scene:
             DepthUnit((g,)) for g in range(len(self._galaxies))
             if g not in ordered)
 
+    def emitters(self) -> tuple[tuple[int, ...], ...]:
+        """
+        Return the indices of the components of each galaxy whose light is
+        drawn.
+        """
+        return self._emitters
+
     def bounding_radii(self) -> tuple[float, ...]:
         """
         Return the bounding radius (arcsec) of each galaxy: that of its

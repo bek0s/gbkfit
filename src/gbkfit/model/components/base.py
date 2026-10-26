@@ -237,6 +237,17 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return False
 
+    def light_amplitudes(self) -> dict[str, str | None]:
+        """
+        Return its parameters whose elements are amplitudes of its light,
+        by name: its light is the sum of parts, each times one element
+        (e.g. the Gaussians of an MGE), so that models of it can be linear
+        in them, and solve them (see params.Solve). Each with None if its
+        models are linear in it, or why not (e.g. kinematics that take its
+        light). None by default.
+        """
+        return {}
+
     def bounding_radius(self) -> float:
         """
         Return the radius (arcsec) of the sphere around its centre that

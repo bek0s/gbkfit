@@ -236,6 +236,28 @@ class Galaxy(parseutils.Serializable):
         """
         return self._component_set.geometries()
 
+    def light_amplitudes(self) -> dict[str, str | None]:
+        """
+        Return the parameters of its components whose elements are
+        amplitudes of their light (see Component.light_amplitudes), by
+        their names in the galaxy, each with None if its models are linear
+        in it, or why not: also when a mass follows the light of their
+        component (the light then moves its gravity).
+        """
+        followed = set()
+        if (mass_model := self.mass_model()) is not None:
+            for mass_component in mass_model.components():
+                followed.update(mass_component.followed_components())
+        amplitudes = {}
+        for i, component in enumerate(self.components()):
+            names = self.component_params(i)
+            for param, reason in component.light_amplitudes().items():
+                if reason is None and component.name() in followed:
+                    reason = (f"a mass follows the light of the component "
+                              f"{component.name()!r}")
+                amplitudes[names[param]] = reason
+        return amplitudes
+
     def mass(self) -> tuple[MassComponent, ...]:
         """Return the components of its mass (none without mass)."""
         return self._mass

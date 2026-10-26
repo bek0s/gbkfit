@@ -153,6 +153,10 @@ class PixelBrightness(Observable):
     def light_items(self) -> tuple[str, ...]:
         return ('brightness',)
 
+    def linear_in_light(self) -> bool:
+        # (its images of the light, through its instrument: linear)
+        return True
+
     def model_can_lack_values(self) -> bool:
         return False
 

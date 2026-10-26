@@ -615,6 +615,10 @@ class SlitlessSpectra(Observable):
         return _detail.data_unit(
             dataset, 'spectra', abs(self.step()[0] * self.step()[1]), True)
 
+    def linear_in_light(self) -> bool:
+        # (its dispersed spectra of the light, through its instrument: linear)
+        return True
+
     def model_can_lack_values(self) -> bool:
         return False
 

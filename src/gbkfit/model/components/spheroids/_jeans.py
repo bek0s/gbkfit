@@ -287,6 +287,9 @@ class JeansMotion(SpheroidMotion):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._kinematics.pdescs()
 
+    def takes_light(self) -> bool:
+        return True
+
     def state(
             self,
             values: ParamValues,
