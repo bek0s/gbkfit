@@ -341,7 +341,7 @@ spec_medium, method : optional
             raise ConfigError(
                 "region_moments does not support pixel_weights yet")
         if scene.orbit_emitters():
-            self._check_orbits(scene, flux_scale)
+            self._check_orbits(scene, flux_scale, foreground, instrument)
             return OrbitMomentsPlan(
                 self, scene, instrument, oversampling, driver, dtype)
         dcube = _moments.spectra_dcube(
@@ -404,13 +404,36 @@ spec_medium, method : optional
              (np.concatenate(cells), np.concatenate(bins))),
             shape=(index.size, self._regions.nregions())))
 
-    def _check_orbits(self, scene: 'Scene', flux_scale: str | None) -> None:
+    def _check_orbits(
+            self,
+            scene: 'Scene',
+            flux_scale: str | None,
+            foreground: 'Foreground',
+            instrument: Instrument
+    ) -> None:
         """
         Raise ConfigError unless it can see stars on orbits whose weights
         are solved (see OrbitMomentsPlan): only them, in bins, of the
         method gauss_hermite and the orders 1 to M (V, sigma, h3 ... hM),
-        without a flux scale.
+        without a flux scale; through a PSF that does not vary, without an
+        LSF (pPXF takes it out of their kinematics), a primary beam, a
+        lens or dust, which the recording of the orbits does not apply.
         """
+        # (refused here, before the plan: it ignored them, or failed on a
+        # varying PSF before the objective refused it)
+        for applies, what in (
+                (instrument.lsf() is not None,
+                 "an LSF (pPXF takes it out of their kinematics)"),
+                (instrument.psf() is not None and instrument.psf().varies(),
+                 "a PSF that varies"),
+                (instrument.primary_beam() is not None, "a primary beam"),
+                (foreground.lens() is not None, "a lens"),
+                (scene.has_dust(), "dust in the galaxies it sees")):
+            if applies:
+                raise ConfigError(
+                    f"moments of stars on orbits whose weights are solved "
+                    f"are seen without {what}: their recording does not "
+                    f"apply it")
         if sum(len(emitters) for emitters in scene.emitters()) != 1 \
                 or len(scene.orbit_emitters()) != 1:
             raise ConfigError(

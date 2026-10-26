@@ -25,7 +25,7 @@ from ._transfer import (
 from ._units import DataUnit
 from .base import ComponentState, DepthAxis, FrameParams
 from .lines import Band
-from .roles import DustOpacity
+from .roles import STARS, DustOpacity
 from .traits import RPTraitImage
 
 if TYPE_CHECKING:
@@ -128,15 +128,25 @@ class Scene:
     def orbit_emitters(self) -> tuple[tuple[int, int], ...]:
         """
         Return the components whose light is drawn and whose stars move on
-        orbits whose weights are solved (see Component.orbit_weights),
-        each as the index of its galaxy (in the scene) and its own index.
+        orbits whose weights are solved (see Component.orbit_weights), in
+        a spectral view of their stars (its lines name them; an image sees
+        their light, as that of any component), each as the index of its
+        galaxy (in the scene) and its own index.
         """
+        if self._lines is None or STARS not in self._lines:
+            return ()
         return tuple(
             (g, i)
             for g, (galaxy, emitters) in enumerate(
                 zip(self._galaxies, self._emitters))
             for i in emitters
             if galaxy.components()[i].orbit_weights() is not None)
+
+    def has_dust(self) -> bool:
+        """Check whether a component of its galaxies has dust."""
+        return any(
+            isinstance(component.opacity(), DustOpacity)
+            for galaxy in self._galaxies for component in galaxy.components())
 
     def bounding_radii(self) -> tuple[float, ...]:
         """

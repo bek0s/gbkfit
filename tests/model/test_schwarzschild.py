@@ -131,6 +131,36 @@ def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
         ObservationGroup([galaxy()], [spectra]).plan(driver)
 
 
+def test_orbits_are_seen_without_what_their_recording_ignores(driver):
+    # (an LSF here; and a varying PSF, a primary beam, a lens, dust:
+    # refused when the observation is planned, not ignored)
+    from gbkfit.instrument import LSFGauss
+    seen = observation(bins())
+    with_lsf = ObservationSky(
+        seen.observable(), seen.line_of_sight(),
+        instrument=Instrument(psf=PSFGauss(1.0), lsf=LSFGauss(20.0)),
+        lines=['stars'], data=seen.data(), dtype='float64',
+        likelihood=seen.likelihood())
+    with pytest.raises(ConfigError, match="without an LSF"):
+        ObservationGroup([galaxy()], [with_lsf]).plan(driver)
+
+
+def test_an_image_sees_the_light_of_stars_on_orbits(driver):
+    # (as that of any component: it is no observation of their orbits)
+    from gbkfit.dataset import DatasetPixelBrightness
+    from gbkfit.observation import PixelBrightness
+    dataset = DatasetPixelBrightness(
+        Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
+    image = ObservationSky(
+        PixelBrightness.from_data(dataset),
+        line_of_sight_parser.load(dict(type='flat')), data=dataset)
+    group = ObservationGroup([galaxy()], [observation(bins()), image])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        stars_weights=dict(solve=SOLVE['solve'])))
+    objective = Objective(group.plan(driver), params.solves())
+    assert np.isfinite(objective.chi2(params.evaluate()))
+
+
 def test_the_weights_of_the_orbits_are_solved(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(

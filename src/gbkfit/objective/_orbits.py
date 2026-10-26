@@ -91,9 +91,10 @@ class OrbitGroup:
     ------
     ConfigError
         If an observation of it does not compare each value of its data
-        with its model alone (see Comparison.check_pointwise), has an LSF
-        (the kinematics of stars of pPXF have it taken out) or a PSF that
-        varies, or a bin with some of its moments masked and not others.
+        with its model alone (see Comparison.check_pointwise), or has a
+        bin with some of its moments masked and not others (what its
+        instrument and its scene may have is checked by its plan, see
+        RegionMoments).
     """
 
     def __init__(
@@ -124,16 +125,6 @@ class OrbitGroup:
         for i, comparison in zip(observations, self._comparisons):
             observation = group.observations()[i]
             comparison.check_pointwise(observation.keys())
-            instrument = observation.instrument()
-            if instrument.lsf() is not None:
-                raise ConfigError(
-                    f"observation {i} sees the stars of the spheroid "
-                    f"{spheroid.name()!r} on orbits: its instrument has no "
-                    f"LSF (pPXF takes it out of their kinematics)")
-            if instrument.psf() is not None and instrument.psf().varies():
-                raise ConfigError(
-                    f"observation {i} sees the stars of the spheroid "
-                    f"{spheroid.name()!r} on orbits: its PSF does not vary")
             self._data.append(_BinsData(observation, i))
         self._order = max(data.order for data in self._data)
         self._grids = tuple(
