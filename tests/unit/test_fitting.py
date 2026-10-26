@@ -271,6 +271,23 @@ def test_a_point_where_the_model_fails_does_not_end_the_fit(monkeypatch):
     assert result.best().free['incl'] <= 60
 
 
+def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
+    # (a fit of the chi-square would minimise a mix of both)
+    from gbkfit.fitting import fitter_parser
+    plan = mock_objective(
+        DriverHost(), name='obs', flux_scale='one').group_plan()
+    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
+        obs_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1, sigma_aicp=[0.1, 10], minimum=0,
+            likelihood='profiled'))))
+    objective = Objective(plan, params.solves())
+    with pytest.raises(ConfigError, match="minimises the aicp"):
+        fitter_parser.load(dict(type='cmaes')).fit(objective, params)
+    result = fitter_parser.load(dict(
+        type='cmaes', merit='aicp', maxfevals=100)).fit(objective, params)
+    assert result.best().aicp < np.inf
+
+
 def test_the_reduced_chi2_is_of_the_data_alone():
     # A solved flux scale under a prior far from what the data say (the
     # brightness fixed at its truth, so the scale is 1): the residual of

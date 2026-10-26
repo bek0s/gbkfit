@@ -287,6 +287,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         if not fit_params:
             raise ValueError("no parameter is free")
         _check_valid_ranges(fit_params, params.free_valid_ranges())
+        self._check_merit(objective)
         uncertainty = self._fit_uncertainty(objective)
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
@@ -296,6 +297,21 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             return self._fit(problem, params, fit_params, uncertainty)
         finally:
             problem.close()
+
+    def _check_merit(self, objective: Objective) -> None:
+        """
+        Raise ConfigError unless it minimises the merit that the solves of
+        the objective need (see Solve.merit), if any.
+        """
+        needs = {
+            name: solve.merit() for name, solve in objective.solves().items()
+            if solve.merit() not in (None, self._merit)}
+        if needs:
+            raise ConfigError(
+                f"the solves of {sorted(needs)} need a fit that minimises "
+                f"the {sorted(set(needs.values()))[0]} (the option merit of "
+                f"optimizers and grids); this fit minimises the "
+                f"{self._merit}")
 
     def _fit_uncertainty(self, objective: Objective) -> UncertaintyOptions:
         """

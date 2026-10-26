@@ -143,6 +143,13 @@ class Solve(parseutils.TypedSerializable, abc.ABC):
         """
         return float(self.solve(np.zeros(1), np.zeros(1)).values[0])
 
+    def merit(self) -> str | None:
+        """
+        Return the merit that the fits of its values must minimise (see
+        Fitter), if one; none here.
+        """
+        return None
+
 
 class SolveGaussian(Solve):
     """
@@ -332,6 +339,12 @@ class SolveGaussian(Solve):
         is chosen.
         """
         return self._sigma_aicp
+
+    def merit(self) -> str | None:
+        # (a prior chosen by the AICp at each evaluation is consistent
+        # only in a fit that minimises the AICp: with the chi-square, a fit
+        # would minimise a mix of both)
+        return None if self._sigma_aicp is None else 'aicp'
 
     def minimum(self) -> float | None:
         """Return the smallest value, if any."""
