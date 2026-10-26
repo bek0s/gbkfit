@@ -23,6 +23,7 @@ from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
+from test_spheroids import hernquist_mge
 
 
 # A spheroid of two Gaussians of light of Schwarzschild kinematics in the
@@ -237,3 +238,63 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
         residuals['moment3'] * errors['moment3'], 0, atol=1e-6)
     np.testing.assert_allclose(
         residuals['moment4'] * errors['moment4'], 0, atol=0.01)
+
+
+@pytest.mark.slow
+def test_schwarzschild_models_recover_the_exact_mock(driver):
+    # The exact mock of the proof of concept (model.orbits: a Hernquist
+    # sphere of a mass-to-light ratio of 4 and a black hole of 5e8 Msun,
+    # isotropic, of Eddington's distribution function) at 16 Mpc, seen in
+    # polar bins through a PSF of 0.5 arcsec, with noise; fitted with its
+    # MGE in its Hernquist mass at mass-to-light ratios scaled by 0.8, 1
+    # and 1.25, with and without the black hole: the chi-square of the
+    # data is the least at the truth (as in the proof of concept)
+    from gbkfit.model.orbits.kinematics import BinnedField, polar_bins
+    from gbkfit.model.orbits.mocks import MockGalaxy, add_noise, observe
+    from gbkfit.model.orbits.profiles import Hernquist
+    light, upsilon, bh, distance = Hernquist(2.5e10, 1.5), 4.0, 5e8, 16.0
+    edges = [0, 0.2, 0.4, 0.6, 0.85, 1.15, 1.5, 2.0, 2.6, 3.4, 4.4, 5.7]
+    field = BinnedField(polar_bins((120, 120), 0.1, edges, 4), 0.1, 0.5)
+    mock = add_noise(
+        observe(MockGalaxy(light, upsilon, bh), field, distance), seed=1)
+    regions = RegionsBins(field.bin_map, step=(0.1, 0.1), rpix=(59.5, 59.5))
+    dataset = DatasetRegionMoments({
+        1: Data(mock.mean, error=mock.mean_error),
+        2: Data(mock.sigma, error=mock.sigma_error),
+        3: Data(mock.h[:, 0], error=mock.h_error[:, 0]),
+        4: Data(mock.h[:, 1], error=mock.h_error[:, 1])}, regions)
+    obs = ObservationSky(
+        RegionMoments.from_data(
+            dataset, method='gauss_hermite', spec_convention='log',
+            spec_rest='5000 Angstrom'),
+        line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
+        instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
+        lines=['stars'], data=dataset,
+        likelihood=LikelihoodGaussian(missing_residual=3))
+    a = light.a / mock.kpc_per_arcsec()
+    sigma, i0 = hernquist_mge(a)
+    spheroid = SPHEROID | dict(
+        rmax=30 * a, profile=dict(type='mge', ngauss=len(i0)),
+        kinematics=dict(type='schwarzschild', norbits=1500, turns=30))
+    group = ObservationGroup([galaxy(components=[spheroid])], [obs])
+    values = dict(
+        xpos=0, ypos=0, posa=0, incl=90, vsys=0, distance=distance,
+        stars_i0=list(i0), stars_sigma=list(sigma),
+        stars_q=[1.0] * len(i0), mass_light_rs=light.a,
+        mass_light_alpha=1.0, mass_light_beta=4.0, mass_light_gamma=1.0,
+        stars_weights=SOLVE)
+    log_rho = np.log10(upsilon * light.total / (2 * np.pi * light.a ** 3))
+    objective = None
+    chi2 = {}
+    for bh_mass in (bh, 1.0):
+        for factor in (0.8, 1.0, 1.25):
+            params = ParamSpace(group.pdescs(), values | dict(
+                mass_light_log_rho=log_rho + np.log10(factor),
+                mass_bh_log_m=np.log10(bh_mass)))
+            if objective is None:
+                objective = Objective(group.plan(driver), params.solves())
+            residuals = objective.residual_vector_h(params.evaluate(), True)
+            chi2[bh_mass, factor] = float(np.sum(residuals[0] ** 2))
+    assert min(chi2, key=chi2.get) == (bh, 1.0)
+    # (about one per residual)
+    assert chi2[bh, 1.0] < 1.2 * objective.nresiduals()
