@@ -571,6 +571,14 @@ class Objective:
         """
         return [solution.residuals for solution in self._solutions]
 
+    def gives_residuals(self) -> bool:
+        """
+        Check whether the comparisons of all its observations give
+        residuals (see Comparison.gives_residuals), which least squares
+        and covariances need.
+        """
+        return all(c.gives_residuals() for c in self._comparisons)
+
     def _check_residuals(self) -> None:
         """
         Raise ConfigError if the comparison of an observation gives no

@@ -552,9 +552,14 @@ def test_evaluations_that_are_not_numbers_are_outside(tmp_path, caplog):
     assert problem.cost_batch(xs)[1] == np.inf
     assert problem.log_likelihood_batch(xs)[1] == -np.inf
     assert problem.nan_nevals() == 3
-    result = fitter_parser.load(dict(
-        type='emcee', nwalkers=16, nsteps=20, burnin=10,
-        uncertainty=dict(covariance=False))).fit(objective, params)
+    # (without residuals, a fit has no covariance by default, and one
+    # asked for is refused before the fit, not after it)
+    fitter = dict(type='emcee', nwalkers=16, nsteps=20, burnin=10)
+    with pytest.raises(ConfigError, match="has no residuals"):
+        fitter_parser.load(fitter | dict(
+            uncertainty=dict(covariance=True))).fit(objective, params)
+    result = fitter_parser.load(fitter).fit(objective, params)
+    assert result.best().covariance is None
     assert result.diagnostics['nan_nevals'] > 0
     assert result.best().free['mock_cut'] <= 0
     logged = [record for record in caplog.records

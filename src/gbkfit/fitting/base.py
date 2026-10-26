@@ -138,10 +138,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                 "the AICp is not a likelihood: the solutions of a fit of "
                 "merit 'aicp' have no covariance; give uncertainty "
                 "covariance false")
-        if uncertainty is None:
-            uncertainty = UncertaintyOptions() if merit == 'chi2' \
-                else _NO_UNCERTAINTY
         self._seed = seed
+        # (None: each fit takes its default, see _fit_uncertainty)
         self._uncertainty = uncertainty
         self._merit = merit
 
@@ -153,8 +151,11 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         """Return what the fitter minimises (see FitProblem.cost)."""
         return self._merit
 
-    def uncertainty(self) -> UncertaintyOptions:
-        """Return the options of the uncertainty."""
+    def uncertainty(self) -> UncertaintyOptions | None:
+        """
+        Return the options of the uncertainty, if given; None if each fit
+        takes its default (see fit).
+        """
         return self._uncertainty
 
     def without_uncertainty(self) -> Self:
@@ -169,7 +170,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
 
     def dump_common(self) -> dict[str, Any]:
         """Return the options of all fitters, for dump."""
-        return dict(seed=self._seed, uncertainty=self._uncertainty.dump())
+        info: dict[str, Any] = dict(seed=self._seed)
+        if self._uncertainty is not None:
+            info['uncertainty'] = self._uncertainty.dump()
+        return info
 
     @staticmethod
     @abc.abstractmethod
@@ -281,20 +285,43 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         if not fit_params:
             raise ValueError("no parameter is free")
         _check_valid_ranges(fit_params, params.free_valid_ranges())
+        uncertainty = self._fit_uncertainty(objective)
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
             observers, control=control, log=log, pool=pool,
             merit=self._merit)
         try:
-            return self._fit(problem, params, fit_params)
+            return self._fit(problem, params, fit_params, uncertainty)
         finally:
             problem.close()
+
+    def _fit_uncertainty(self, objective: Objective) -> UncertaintyOptions:
+        """
+        Return the options of the uncertainty of a fit of an objective:
+        those given, or by default a covariance (and Laplace samples; see
+        UncertaintyOptions) if the merit is the chi-square and the
+        objective gives residuals (of which a covariance is made), else
+        none. Raise ConfigError if those given ask for a covariance of an
+        objective without residuals (a user likelihood of the
+        log-likelihood), before the fit rather than after it.
+        """
+        if self._uncertainty is None:
+            return UncertaintyOptions() \
+                if self._merit == 'chi2' and objective.gives_residuals() \
+                else _NO_UNCERTAINTY
+        if self._uncertainty.covariance() and not objective.gives_residuals():
+            raise ConfigError(
+                "a likelihood that is a function of the log-likelihood has "
+                "no residuals, of which the covariance is made; give "
+                "uncertainty covariance false")
+        return self._uncertainty
 
     def _fit(
             self,
             problem: FitProblem,
             params: ParamSpace,
-            fit_params: dict[str, FitParam]
+            fit_params: dict[str, FitParam],
+            uncertainty: UncertaintyOptions
     ) -> FitResult:
         """Run the fitter on a problem, and make its result (see fit)."""
         rng = np.random.default_rng(self._seed)
@@ -315,7 +342,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         problems = []
         for x in run.solutions:
             solution, nevals, solution_problems = self._solution(
-                problem, x, bounds, rng)
+                problem, x, bounds, rng, uncertainty)
             solutions.append(solution)
             uncertainty_nevals += nevals
             problems += solution_problems
@@ -375,13 +402,14 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             problem: FitProblem,
             x: np.ndarray,
             bounds: '_Bounds',
-            rng: np.random.Generator
+            rng: np.random.Generator,
+            uncertainty: UncertaintyOptions
     ) -> tuple[FitSolution, int, list[tuple[str, str]]]:
         """
-        Evaluate a solution and its uncertainty; return it, the number of
-        model evaluations it took, and its problems, as the keys of the
-        diagnostics of the result and the messages: why its uncertainty
-        is missing ('uncertainty_errors': the parameters cannot be
+        Evaluate a solution and its uncertainty (of the given options);
+        return it, the number of model evaluations it took, and its
+        problems, as the keys of the diagnostics of the result and the
+        messages: why its uncertainty is missing ('uncertainty_errors': the parameters cannot be
         evaluated at a step of its Jacobian, or the fit was asked to
         stop), or its derived values ('derived_errors': an expression
         fails there).
@@ -414,7 +442,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
         cov = laplace = None
-        options = self._uncertainty
+        options = uncertainty
         if options.covariance():
             try:
                 cov, cov_nevals = covariance(
