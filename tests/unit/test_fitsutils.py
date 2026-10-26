@@ -261,6 +261,20 @@ def test_spectral_axis_is_read_last():
     np.testing.assert_array_equal(result, data.T)
 
 
+def test_a_position_axis_in_degrees_is_in_arcsec():
+    # e.g. the OFFSET of a PV slice in degrees (pvextractor): the model
+    # takes positions in arcsec (an axis without a unit keeps its values)
+    for unit, step in (('deg', 0.25 / 3600), ('arcmin', 0.25 / 60),
+                       ('arcsec', 0.25)):
+        header = dict(
+            CTYPE1='OFFSET', CUNIT1=unit, CDELT1=step, CTYPE2='VRAD',
+            CUNIT2='km/s', CDELT2=10.0)
+        fits.writeto('data.fits', np.ones((8, 40)), fits.Header(header),
+                     overwrite=True)
+        _, coords = fitsutils.read_data('data.fits')
+        assert coords.step[0] == pytest.approx(0.25)
+
+
 def test_hdu_without_data():
     # e.g. the empty primary HDU of JWST data: a clear error, not a crash
     fits.HDUList([

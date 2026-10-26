@@ -973,9 +973,15 @@ def _axis_scale(source, wcs, axis):
     """
     Return the factor from the world units of an axis to model units:
     celestial axes stay in degrees (only their steps become arcsec),
-    velocity axes become km/s, and the other axes keep their units.
+    velocity axes become km/s, other axes in units of angle (e.g. the
+    position along a slit, OFFSET) become arcsec, and the other axes keep
+    their units.
     """
     if axis != wcs.wcs.spec:
+        unit = astropy.units.Unit(wcs.wcs.cunit[axis])
+        celestial = axis in (wcs.wcs.lng, wcs.wcs.lat)
+        if not celestial and unit.physical_type == 'angle':
+            return unit.to(astropy.units.arcsec)
         return 1.0
     ctype = wcs.wcs.ctype[axis]
     if ctype[:4] not in VELOCITY_TYPES:
