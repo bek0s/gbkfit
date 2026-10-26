@@ -329,6 +329,16 @@ def _disk_traits(
                 "velocity traits away from the plane ('away') need density "
                 "height traits (a thick disk, whose faces they leave)")
         result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
+        # (above the density, pressure support divides by a density of 0:
+        # the table of a mass trait above it was NaN, and its disk with it)
+        zmax = max(trait.zmax() for trait in result['rht']) if thick else 0
+        for trait in heights['vht'] or ():
+            if isinstance(trait, traits.VHTraitMass) and trait.zmax() > zmax:
+                raise ConfigError(
+                    f"the zmax of a velocity height trait 'mass' is the "
+                    f"top of its table, which must not be above the zmax "
+                    f"of the density height traits, {zmax}; it is "
+                    f"{trait.zmax()}")
         if thick:
             result.update(
                 vht=with_default_height_traits(

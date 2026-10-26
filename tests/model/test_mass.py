@@ -1967,6 +1967,20 @@ def rotation_at_heights(vptraits, mass, params):
     return galaxy, galaxy.plan_stage().evaluate(params).given[0]
 
 
+def test_the_table_of_rotation_at_heights_stays_within_the_density():
+    # (above the zmax of the density height traits, pressure support
+    # divided by a density of 0: the table was NaN there, and the disk
+    # with it)
+    disk = with_traits(
+        DISK, vptraits=dict(type='mass', pressure_support='jeans'),
+        htraits=dict(type='sech2', zmax=6))
+    disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=7))
+    with pytest.raises(ConfigError, match="must not be above the zmax"):
+        galaxy_parser.load(dict(
+            components=[disk | dict(type='disk')], mass=[dict(
+                type='point', name='bh')], distance=copy.deepcopy(DISTANCE)))
+
+
 def test_rotation_at_each_height_of_a_point_mass(driver):
     # v(R, z)^2 = G M R^2 / r^3, plus the jeans pressure support of the
     # disk, of a constant height profile and a uniform dispersion: R
