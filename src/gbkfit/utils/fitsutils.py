@@ -33,6 +33,7 @@ __all__ = [
     'model_axis_flips',
     'model_axis_order',
     'read_beam',
+    'read_companion',
     'read_data',
     'read_unit',
     'reorder_data',
@@ -187,25 +188,9 @@ def read_data(
         or does not say whether its velocities are radio or optical (see
         with_velocity_convention), or the medium is not valid.
     """
-    with astropy.io.fits.open(filename) as hdulist:
-        data = hdulist[hdu].data
-        header = hdulist[hdu].header
-    if data is None:
-        raise ConfigError(
-            f"{filename}: HDU {hdu} has no data; choose the HDU with the "
-            f"data (e.g. hdu: SCI)")
+    data, header = _read_hdu(filename, hdu)
     header = with_velocity_convention(header, None, filename)
-    header = centre_missing_crpix(header, data.shape)
-    try:
-        wcs = astropy.wcs.WCS(header)
-    except Exception as e:
-        raise ConfigError(
-            f"{filename}: invalid world coordinates: {e}") from e
-    if wcs.naxis != data.ndim:
-        raise ConfigError(
-            f"{filename}: the header has world coordinates for {wcs.naxis} "
-            f"axes, but the data has {data.ndim}")
-    wcs, log = _log_velocity_axis(filename, wcs, rest)
+    wcs, log = _file_wcs(filename, header, data.shape, rest)
     data, wcs = to_model_axes(data, wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
@@ -219,6 +204,107 @@ def read_data(
     if log:
         coords = coords._replace(convention='log')
     return np.ascontiguousarray(data), coords
+
+
+def read_companion(
+        filename: str,
+        hdu: int | str,
+        data_file: tuple[str, int | str],
+        rest: typing.Any = None
+) -> np.ndarray:
+    """
+    Read a companion of the data of a FITS file (e.g. their errors or
+    mask), in the orientation of the model as the data are (see
+    read_data): by its own world coordinates, if its header has any; else
+    by those of the data, as an array in the axes of the file of the data
+    (a file without world coordinates cannot say how its axes lie, and
+    taken as it is, its values would sit on the wrong channels of a
+    reversed spectral axis).
+
+    Parameters
+    ----------
+    filename : str
+        The name of the file.
+    hdu : int or str
+        The HDU with its values.
+    data_file : tuple of str and (int or str)
+        The file and the HDU of the data.
+    rest : optional
+        The rest that replaces that of the header of the data (see
+        read_data).
+
+    Raises
+    ------
+    ConfigError
+        If the HDU has no values, or, without world coordinates, its shape
+        is not that of the data.
+    """
+    values, header = _read_hdu(filename, hdu)
+    if any(f'CTYPE{i}' in header for i in range(1, values.ndim + 1)):
+        return read_data(filename, hdu, rest=rest)[0]
+    data_name, data_hdu = data_file
+    with astropy.io.fits.open(data_name) as hdulist:
+        data_header = hdulist[data_hdu].header
+    shape = tuple(
+        data_header.get(f'NAXIS{i}', 0)
+        for i in range(data_header.get('NAXIS', 0), 0, -1))
+    if values.shape != shape:
+        raise ConfigError(
+            f"{filename}: without world coordinates, its values must be of "
+            f"the shape of the data, {shape}, in the axes of their file; "
+            f"they are of {values.shape}")
+    header = with_velocity_convention(data_header, None, data_name)
+    wcs, _ = _file_wcs(data_name, header, shape, rest)
+    return np.ascontiguousarray(to_model_axes(values, wcs)[0])
+
+
+def _read_hdu(
+        filename: str, hdu: int | str
+) -> tuple[np.ndarray, astropy.io.fits.Header]:
+    """
+    Return the array and the header of an HDU of a FITS file, or raise
+    ConfigError if it has no array.
+    """
+    with astropy.io.fits.open(filename) as hdulist:
+        data = hdulist[hdu].data
+        header = hdulist[hdu].header
+    if data is None:
+        raise ConfigError(
+            f"{filename}: HDU {hdu} has no data; choose the HDU with the "
+            f"data (e.g. hdu: SCI)")
+    return data, header
+
+
+def _file_wcs(
+        filename: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...],
+        rest: typing.Any
+) -> tuple[astropy.wcs.WCS, bool]:
+    """
+    Return the world coordinates of the header of a FITS file of an array
+    of the given shape, in the axes of the file (with a missing reference
+    pixel at the centre, and an axis of logarithmic wavelengths as one of
+    log velocities, see _log_velocity_axis), and whether it has such an
+    axis.
+
+    Raises
+    ------
+    ConfigError
+        If the world coordinates are invalid, or not of the axes of the
+        array.
+    """
+    header = centre_missing_crpix(header, shape)
+    try:
+        wcs = astropy.wcs.WCS(header)
+    except Exception as e:
+        raise ConfigError(
+            f"{filename}: invalid world coordinates: {e}") from e
+    if wcs.naxis != len(shape):
+        raise ConfigError(
+            f"{filename}: the header has world coordinates for {wcs.naxis} "
+            f"axes, but the data has {len(shape)}")
+    return _log_velocity_axis(filename, wcs, rest)
 
 
 def _log_velocity_axis(

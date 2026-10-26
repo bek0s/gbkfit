@@ -62,6 +62,20 @@ def _read(
         filename, hdu, rpix, rval, rest, spectral_axis, medium)
 
 
+def _read_companion(
+        file: FitsFile,
+        data: FitsFile,
+        rest: str | astropy.units.Quantity | None
+) -> np.ndarray:
+    """
+    Read a FITS file of the errors or the mask of the data of another, in
+    their orientation (see fitsutils.read_companion).
+    """
+    filename, hdu = (file, 0) if isinstance(file, str) else file
+    data_file = (data, 0) if isinstance(data, str) else data
+    return fitsutils.read_companion(filename, hdu, data_file, rest)
+
+
 def fits_file(x: str | Mapping[str, Any], prefix: str = '') -> FitsFile:
     """
     Return the FITS file of a file option.
@@ -258,7 +272,7 @@ class Data:
             Data).
         """
         values, coords = _read(data, rpix, rval, rest, spectral_axis, medium)
-        masks = None if mask is None else _read(mask)[0]
+        masks = None if mask is None else _read_companion(mask, data, rest)
         if error is None:
             errors = None
         elif isinstance(error, bool):
@@ -270,7 +284,7 @@ class Data:
                 raise ConfigError(f"the error must be positive; it is {error}")
             errors = np.full(values.shape, error, dtype=float)
         else:
-            errors = _read(error)[0]
+            errors = _read_companion(error, data, rest)
         filename, hdu = (data, 0) if isinstance(data, str) else data
         if unit is None:
             unit = _header_unit(filename, hdu)

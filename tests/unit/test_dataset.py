@@ -189,6 +189,33 @@ def test_data_can_be_read_from_extensions(tmp_path):
     assert data.error().mean() == 0.5
 
 
+def test_files_of_errors_and_masks_without_coordinates_follow_the_data(
+        tmp_path):
+    # A cube of decreasing velocities (reversed on reading), with error and
+    # mask files without world coordinates, in the axes of its file: their
+    # values stay on the channels of the data
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CRVAL1=150.0, CRPIX1=2.0, CUNIT1='deg',
+        CDELT1=-1 / 3600, CTYPE2='DEC--TAN', CRVAL2=2.0, CRPIX2=2.0,
+        CUNIT2='deg', CDELT2=1 / 3600, CTYPE3='VRAD', CUNIT3='km/s',
+        CRVAL3=1500.0, CRPIX3=1.0, CDELT3=-10.0))
+    channel = np.arange(4.0)[:, None, None] * np.ones((4, 3, 3))
+    fits.writeto(tmp_path / 'data.fits', channel, header)
+    fits.writeto(tmp_path / 'error.fits', channel + 1)
+    fits.writeto(tmp_path / 'mask.fits', (channel != 0).astype(float))
+    data, _ = Data.from_files(
+        str(tmp_path / 'data.fits'), mask=str(tmp_path / 'mask.fits'),
+        error=str(tmp_path / 'error.fits'))
+    np.testing.assert_array_equal(data.data()[:3, 0, 0], [3, 2, 1])
+    np.testing.assert_array_equal(data.error()[:3, 0, 0], [4, 3, 2])
+    np.testing.assert_array_equal(data.mask()[:, 0, 0], [1, 1, 1, 0])
+    # (they must be of the shape of the data, in the axes of its file)
+    fits.writeto(tmp_path / 'bad.fits', np.ones((3, 3, 4)))
+    with pytest.raises(ConfigError, match="of the shape of the data"):
+        Data.from_files(
+            str(tmp_path / 'data.fits'), error=str(tmp_path / 'bad.fits'))
+
+
 def test_data_does_not_change_the_callers_arrays():
     data = np.ones((4, 4))
     data[0, 0] = np.nan
