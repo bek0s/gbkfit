@@ -34,9 +34,10 @@ The kinds of traits, and how the traits of one kind combine:
   a part of the component is kept if every trait selects it.
 
 The height traits pair with the polar traits of their kind by their
-order, and a component has at most four traits of a kind. Each type of
-component takes its own list of traits (see _nodal.TraitTable): the
-cones, e.g., take no vertical distortion, mixture or map traits.
+order, and a component has at most 16 traits of a kind (MAX_TRAITS of
+_nodal). Each type of component takes its own list of traits (see
+_nodal.TraitTable): the cones, e.g., take no vertical distortion,
+mixture or map traits.
 
 Coordinates and units: theta is from the major axis on the side of the
 position angle posa (the receding side when the rotation is positive),
