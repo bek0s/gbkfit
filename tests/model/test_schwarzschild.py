@@ -174,6 +174,19 @@ def test_bins_of_stars_on_orbits_have_a_positive_sigma(driver):
         Objective(group.plan(driver), params.solves())
 
 
+def test_orbits_cut_by_the_most_steps_are_warned_of(
+        driver, monkeypatch, caplog):
+    # (they lose the light of the rest of their time, which was silent)
+    from gbkfit.model.components.spheroids import OrbitLibraryState
+    monkeypatch.setattr(OrbitLibraryState, 'max_steps', lambda self: 10)
+    group = ObservationGroup([galaxy()], [observation(bins())])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        stars_weights=dict(solve=SOLVE['solve'])))
+    objective = Objective(group.plan(driver), params.solves())
+    objective.chi2(params.evaluate())
+    assert any('took the most steps' in r.message for r in caplog.records)
+
+
 def test_the_weights_of_the_orbits_are_solved(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(

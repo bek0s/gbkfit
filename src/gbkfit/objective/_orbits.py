@@ -4,6 +4,7 @@ of the stars of a spheroid (see Component.orbit_weights), solved to fit
 the observations that see them, which the groups model.
 """
 
+import logging
 import math
 from collections.abc import Callable, Mapping, Sequence
 
@@ -19,6 +20,9 @@ from gbkfit.params import (
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
 from .comparisons import Comparison
+
+
+_log = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -132,6 +136,8 @@ class OrbitGroup:
                 observation.instrument(), observation.oversampling())
             for observation in (group.observations()[i] for i in observations))
         self._integrator: OrbitIntegrator | None = None
+        # (whether it warned of orbits cut by the most steps: once)
+        self._cut_warned = False
         self._ones: list[dict[str, dict[str, DeviceArray | None]]] = []
         # The values of the parameters of its last evaluation, and its
         # solution and models then
@@ -188,6 +194,16 @@ class OrbitGroup:
             state.potential, state.starts, state.turns,
             (values['posa'], values['incl']), state.cell_edges, centres,
             series)
+        if not self._cut_warned \
+                and (cut := int(np.sum(records.steps >= state.max_steps()))):
+            # (an orbit cut by the most steps records its samples only up
+            # to there, and loses the light of the rest of its time)
+            _log.warning(
+                f"{cut} orbits of the spheroid {self._spheroid.name()!r} "
+                f"took the most steps of their integration "
+                f"({state.max_steps()}) before the end of their time: the "
+                f"light of the rest of it is left out")
+            self._cut_warned = True
 
         # The rows of the factors of the orbits: of the data (the
         # residuals of the comparisons), and of the light of the bins and
