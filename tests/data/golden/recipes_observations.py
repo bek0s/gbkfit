@@ -90,6 +90,27 @@ _STARS_TRIAL = _STARS_TRUTH | dict(
     mass_halo_log_m=dict(value=11.8, min=10, max=14))
 
 
+def _mge_stars(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
+    """
+    A galaxy of a spheroid of stars of two Gaussians of light, of the
+    given kinematics in the gravity of its light and a black hole.
+    """
+    return [dict(
+        components=[dict(
+            type='spheroid', name='stars', rmax=20,
+            emission=dict(type='stars'), profile=dict(type='mge', ngauss=2),
+            kinematics=kinematics)],
+        mass=[dict(type='light_spheroid', name='lum', component='stars'),
+              dict(type='point', name='bh')],
+        distance=dict(type='direct', cosmology='Planck18'))]
+
+
+_MGE_STARS_TRUTH = dict(
+    xpos=0.3, ypos=-0.4, posa=40, incl=60, vsys=10, distance=16,
+    stars_i0=[50.0, 10.0], stars_sigma=[1.0, 4.0], stars_q=[0.8, 0.8],
+    mass_lum_upsilon=1e8, mass_bh_log_m=8.5)
+
+
 def _small_cube(**options: Any) -> dict[str, Any]:
     """
     An observation of a cube smaller than _CUBE (for cases of several
@@ -364,6 +385,36 @@ CASES: list[dict[str, Any]] = [
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
         noises=[_gauss(0.0002)],
+        likelihoods=[dict(type='gaussian', missing_residual=3)],
+        prepare=_write_voronoi_bins),
+    dict(
+        name='stars_orbits',
+        doc="The kinematics of the stars of a flattened spheroid in "
+            "Voronoi bins, as pPXF gives them (V, sigma, h3 and h4; log "
+            "velocities, a PSF and no LSF), as Schwarzschild models are "
+            "fitted to them: the weights of their orbits solved, of a prior "
+            "whose width the AICp chooses. The data are of its rotating "
+            "Jeans kinematics in the gravity of its light and a black hole.",
+        galaxies=_mge_stars(dict(type='schwarzschild', norbits=200,
+                                 turns=20)),
+        mock_galaxies=_mge_stars(dict(type='jeans')),
+        observations=[_sky(
+            dict(type='region_moments',
+                 regions=dict(type='bins', file='bins.fits'),
+                 orders=[1, 2, 3, 4], method='gauss_hermite', spec_size=101,
+                 spec_step=10, spec_rest='5000 Angstrom',
+                 spec_convention='log'),
+            line_of_sight=dict(type='grid', depth=dict(step=0.5)),
+            lines=['stars'], instrument=dict(psf=_PSF))],
+        truth=_MGE_STARS_TRUTH | dict(stars_beta_z=0.0, stars_kappa=0.5),
+        trial=_MGE_STARS_TRUTH | dict(
+            posa=dict(value=42, min=0, max=90),
+            mass_lum_upsilon=dict(value=1.2e8, min=1e7, max=1e9),
+            mass_bh_log_m=dict(value=8.3, min=6, max=10),
+            stars_weights=dict(solve=dict(
+                type='gaussian', mean=1, sigma_aicp=[0.1, 100], minimum=0,
+                likelihood='profiled'))),
+        noises=[_gauss(0.03)],
         likelihoods=[dict(type='gaussian', missing_residual=3)],
         prepare=_write_voronoi_bins),
     dict(

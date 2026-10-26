@@ -1,0 +1,65 @@
+# stars_orbits: The kinematics of the stars of a flattened spheroid in Voronoi bins, as pPXF gives them (V, sigma, h3 and h4; log velocities, a PSF and no LSF), as Schwarzschild models are fitted to them: the weights of their orbits solved, of a prior whose width the AICp chooses. The data are of its rotating Jeans kinematics in the gravity of its light and a black hole.
+# (written by make_golden.py; do not edit)
+driver: {type: host}
+galaxies:
+- components:
+  - type: spheroid
+    name: stars
+    rmax: 20
+    emission: {type: stars}
+    profile: {type: mge, ngauss: 2}
+    kinematics: {type: schwarzschild, norbits: 200, turns: 20}
+  mass:
+  - {type: light_spheroid, name: lum, component: stars}
+  - {type: point, name: bh}
+  distance: {type: direct, cosmology: Planck18}
+observations:
+- type: sky
+  lines: [stars]
+  data:
+    regions:
+      type: bins
+      file: observation0_bins.fits
+      step: [0.49999999999996797, 0.4999999999999968]
+      rpix: [11.5, 11.5]
+      rval: [0.0, 0.0]
+      rota: 0.0
+    moment1: {data: observation0_moment1_d.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
+    moment3: {data: observation0_moment3_d.fits, error: observation0_moment3_e.fits}
+    moment4: {data: observation0_moment4_d.fits, error: observation0_moment4_e.fits}
+  likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
+  line_of_sight:
+    type: grid
+    depth: {extent: galaxy, step: 0.5}
+  foreground: {lens: null}
+  instrument:
+    primary_beam: null
+    psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
+    lsf: null
+  observable: {type: region_moments, flux_floor: 1.0e-06, spec_size: 101, spec_step: 10,
+    spec_rval: 0, spec_rest: 5.000000000000001e-07 m, spec_medium: vacuum, spec_convention: log,
+    method: gauss_hermite}
+  oversampling: [1, 1]
+  dtype: float64
+  fft_dtype: float64
+params:
+  properties:
+    xpos: 0.3
+    ypos: -0.4
+    posa: {value: 42, min: 0, max: 90}
+    incl: 60
+    vsys: 10
+    distance: 16
+    stars_i0: [50.0, 10.0]
+    stars_sigma: [1.0, 4.0]
+    stars_q: [0.8, 0.8]
+    mass_lum_upsilon: {value: 120000000.0, min: 10000000.0, max: 1000000000.0}
+    mass_bh_log_m: {value: 8.3, min: 6, max: 10}
+    stars_weights:
+      solve:
+        type: gaussian
+        mean: 1
+        sigma_aicp: [0.1, 100]
+        minimum: 0
+        likelihood: profiled

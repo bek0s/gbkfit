@@ -81,7 +81,8 @@ class Case:
         The section 'observations', without data: those of the observables
         give their grids.
     truth : dict
-        The parameter properties of its mock data (all fixed).
+        The parameter properties of its mock data (all fixed), of its
+        galaxies (or those of mock_galaxies).
     trial : dict
         The parameter properties of its configuration: the values at
         which it is evaluated (free elements at their 'value').
@@ -105,6 +106,10 @@ class Case:
     nsamples : int, optional
         The number of draws of the errors of measured data (see
         ObservationGroup.mock).
+    mock_galaxies : list of dict, optional
+        The galaxies of its mock data, if not those of its configuration
+        (e.g. Jeans models of the stars of Schwarzschild models, whose
+        observations have no mock data).
     """
     name: str
     doc: str
@@ -120,6 +125,7 @@ class Case:
     prepare: Callable[[pathlib.Path], None] | None = None
     seed: int = 1
     nsamples: int = 30
+    mock_galaxies: list[dict[str, Any]] | None = None
 
 
 # --- The recipes ----------------------------------------------------------
@@ -207,8 +213,8 @@ def _compacted(info: Any, folder: pathlib.Path) -> Any:
 def make_data(case: Case, folder: pathlib.Path) -> None:
     """
     Write the configuration and the data of a case into its folder: mock
-    data of the model at its true values, and its parameters at its trial
-    values.
+    data of the model at its true values (see Case.mock_galaxies), and
+    its parameters at its trial values.
     """
     from gbkfit.observation import likelihood_parser, noise_parser
     from gbkfit.observation import observation_parser
@@ -219,6 +225,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     sections = dict(galaxies=case.galaxies) | case.sections
     setup = _load(
         sections | dict(
+            galaxies=case.mock_galaxies or case.galaxies,
             observations=case.observations,
             params=dict(properties=case.truth)), folder, 'host')
     group_plan, params = setup.group_plan, setup.params
@@ -309,10 +316,12 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     """
     Return the golden values of a case on a driver: for each observation,
     a summary of each part of each item of its model (data, mask,
-    weights); of the objective, the chi-square, the log-likelihood, the
-    noise chi-square, the counts, and summaries of the residuals and of
-    the solved values, if any; the summaries of the derived values; and the
-    chi-square of the priors on several parameters, if any.
+    weights), with the values that the objective solves, if any (the
+    model of a fit); of the objective, the chi-square, the
+    log-likelihood, the noise chi-square, the counts, and summaries of the
+    residuals and of the solved values, if any; the summaries of the
+    derived values; and the chi-square of the priors on several
+    parameters, if any.
     """
     from gbkfit.fitting.problem import FitProblem
     from gbkfit.setup import read_config
@@ -320,14 +329,16 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     setup = _load(file.config, pathlib.Path(file.root), driver)
     group_plan, params = setup.group_plan, setup.params
     values = params.evaluate()
-    golden: dict[str, Any] = dict(model=[
-        {key: {part: summary(array) for part, array in item.items()
-               if array is not None}
-         for key, item in model.items()}
-        for model in group_plan.model_h(values)])
     with setup:
         objective = setup.objective
         chi2, log_likelihood, _ = objective.merits(values)
+        models = group_plan.model_h(params.evaluate(
+            solved=objective.solved()))
+        golden: dict[str, Any] = dict(model=[
+            {key: {part: summary(array) for part, array in item.items()
+                   if array is not None}
+             for key, item in model.items()}
+            for model in models])
         golden['objective'] = dict(
             chi2=chi2, log_likelihood=log_likelihood,
             noise_chi2=objective.noise_chi2(),
