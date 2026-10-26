@@ -80,13 +80,18 @@ class Comparison(abc.ABC):
         return self._observation
 
     def nresiduals(self) -> int:
+        """Return the number of residuals that count (see counted)."""
+        return int(np.count_nonzero(self.counted()))
+
+    def counted(self) -> np.ndarray:
         """
-        Return the number of residuals that count: those of the values the
-        data do not mask.
+        Return which of its residuals count, one bool per value of its data
+        items, one item after the other (as its residuals): those of the
+        values the data do not mask.
         """
-        return sum(
-            int(np.count_nonzero(self._dataset[key].mask()))
-            for key in self._observation.keys())
+        return np.concatenate([
+            self._dataset[key].mask().ravel() != 0
+            for key in self._observation.keys()])
 
     def nindependent(self) -> float:
         """
@@ -481,24 +486,24 @@ class ComparisonGaussian(Comparison):
         # LikelihoodGaussian)
         self._noise_shares: np.ndarray | None = None
 
-    def nresiduals(self) -> int:
+    def counted(self) -> np.ndarray:
         """
-        Return the number of residuals that count: those of the values the
-        data do not mask (the values the model does not have count too,
-        with the missing_residual of the likelihood), and all values of
-        the data items with upper limits (within their footprints, if
-        any).
+        Return which of its residuals count (see Comparison.counted): those
+        of the values the data do not mask (the values the model does not
+        have count too, with the missing_residual of the likelihood), and
+        all values of the data items with upper limits (within their
+        footprints, if any).
         """
-        total = 0
+        counted = []
         for key in self._observation.keys():
             mask = self._dataset[key].mask()
             if key in self._footprints:
-                total += int(np.count_nonzero(self._footprints[key]))
+                counted.append(self._footprints[key].ravel() != 0)
             elif not np.isnan(self._upper_limits[key][0]):
-                total += int(mask.size)
+                counted.append(np.ones(mask.size, dtype=bool))
             else:
-                total += int(np.count_nonzero(mask))
-        return total
+                counted.append(mask.ravel() != 0)
+        return np.concatenate(counted)
 
     def nindependent(self) -> float:
         """

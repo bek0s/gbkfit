@@ -448,7 +448,8 @@ class Objective:
 
     def pointwise_log_likelihood(self, params: ParamValues) -> np.ndarray:
         """
-        Return the log-likelihood of each data point of all observations,
+        Return the log-likelihood of each data point of all observations
+        that counts (see Comparison.counted; not the values the data mask),
         in the order of residuals: -r^2 / 2 of its weighted residual r, so
         that they sum to the log-likelihood (see log_likelihood); for
         comparisons of models that leave points out (e.g. analysis.loo).
@@ -477,7 +478,8 @@ class Objective:
                 "the log-likelihood of each point is not given with a fitted "
                 "noise or solved values (e.g. flux scales): their terms are "
                 "sums over many points")
-        return -0.5 * self.residuals(params) ** 2
+        counted = np.concatenate([c.counted() for c in self._comparisons])
+        return -0.5 * self.residuals(params)[counted] ** 2
 
     def noise_chi2(self) -> float:
         """

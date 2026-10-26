@@ -65,13 +65,18 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
     # (and the samples of a fit give them, one evaluation each; not with
     # a fitted noise, whose terms are sums over the points)
     from gbkfit.analysis import pointwise_log_likelihoods
+    # (the points the data mask are no points: LOO and WAIC count them)
     rng = np.random.default_rng(1)
-    data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
+    data = Data(
+        rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5),
+        mask=rng.random((24, 32)) < 0.5)
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(weights=2.0))
     pointwise = objective.pointwise_log_likelihood(params)
     assert pointwise.sum() == pytest.approx(
         objective.log_likelihood(params), rel=1e-5)
+    assert len(pointwise) == objective.nresiduals() \
+        == np.count_nonzero(data.mask())
     space = ParamSpace(objective.pdescs(), PROPERTIES | dict(
         pt_a=dict(min=0, max=2)))
     lls = pointwise_log_likelihoods(objective, space, [[1.0], [0.5]])
