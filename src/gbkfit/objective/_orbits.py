@@ -14,7 +14,8 @@ from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
 from gbkfit.observation import GroupPlan, ObservationGroup, ObservationSky
-from gbkfit.params import ParamValues, Solution, Solve, solve_together_rows
+from gbkfit.params import (
+    ModelEvaluationError, ParamValues, Solution, Solve, solve_together_rows)
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
 from .comparisons import Comparison
@@ -206,7 +207,7 @@ class OrbitGroup:
             _bins_light(self._spheroid, values, grid, centre)
             for grid, centre in zip(self._grids, centres)])
         if not np.all(bins_light > 0):
-            raise ValueError(
+            raise ModelEvaluationError(
                 f"bins see no light of the spheroid "
                 f"{self._spheroid.name()!r}: the series of their stars has no "
                 f"strength")

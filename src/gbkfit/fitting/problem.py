@@ -20,7 +20,8 @@ from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.params.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Merits, Objective
-from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
+from gbkfit.params import (
+    ModelEvaluationError, ParamEvaluationError, ParamSpace, ParamValues)
 from gbkfit.utils import threadutils
 
 
@@ -168,6 +169,7 @@ class FitProblem:
             for obs in objective.group().observations())
         self._nevals = 0
         self._nan_nevals = 0
+        self._failed_nevals = 0
         self._best_x: np.ndarray | None = None
         self._best_chi2 = math.inf
         self._observers = tuple(observers)
@@ -228,6 +230,13 @@ class FitProblem:
         was not a number.
         """
         return self._nan_nevals
+
+    def failed_nevals(self) -> int:
+        """
+        Return the number of model evaluations so far where the model or a
+        solve failed (see ModelEvaluationError).
+        """
+        return self._failed_nevals
 
     def best(self) -> tuple[np.ndarray, float] | None:
         """
@@ -627,8 +636,9 @@ class FitProblem:
     ) -> Iterator[tuple[np.ndarray, Merits | None]]:
         """
         Yield each point (one per row) with its numbers (see Merits), or
-        None where the parameters cannot be evaluated or the numbers are
-        not numbers: from the log while a fit that resumes replays it,
+        None where the parameters cannot be evaluated, the model or a solve
+        fails (counted; see failed_nevals), or the numbers are not
+        numbers: from the log while a fit that resumes replays it,
         else from the objective (see map_objective), and logged (None as
         infinities, numbers that are not as they are).
 
@@ -650,10 +660,13 @@ class FitProblem:
             except ParamEvaluationError:
                 new.append((x, None))
         evaluated = self.map_objective(
-            Objective.merits,
+            _merits_or_failure,
             [values for _, values in new if values is not None])
         for x, values in new:
             merits = _UNEVALUATED if values is None else next(evaluated)
+            if isinstance(merits, ModelEvaluationError):
+                self._count_failed(x, merits)
+                merits = _UNEVALUATED
             if self._log is not None:
                 self._log.append(x, merits)
             yield x, self._evaluated(x, merits)
@@ -681,6 +694,22 @@ class FitProblem:
                 "diagnostics 'nan_nevals' of the result",
                 dict(zip(self._names, np.asarray(x).tolist())))
         self._nan_nevals += 1
+
+    def _count_failed(
+            self, x: np.ndarray, failure: ModelEvaluationError
+    ) -> None:
+        """
+        Count a model evaluation where the model or a solve failed, and log
+        the first.
+        """
+        if not self._failed_nevals:
+            _log.warning(
+                "the model cannot be evaluated at the free values %s (%s): "
+                "such points count as ones whose parameters cannot be "
+                "evaluated; see the diagnostics 'failed_nevals' of the "
+                "result",
+                dict(zip(self._names, np.asarray(x).tolist())), failure)
+        self._failed_nevals += 1
 
     def set_stage(self, stage: str) -> None:
         """
@@ -729,6 +758,20 @@ class FitProblem:
         self._observers = tuple(
             observer for observer in self._observers
             if observer not in failed)
+
+
+def _merits_or_failure(
+        objective: Objective, values: ParamValues
+) -> Merits | ModelEvaluationError:
+    """
+    Return the merits of an objective at the values of the parameters, or
+    the failure of its model or a solve there (see ModelEvaluationError),
+    which a point of a batch must not raise for the others.
+    """
+    try:
+        return objective.merits(values)
+    except ModelEvaluationError as e:
+        return e
 
 
 def _points(xs: npt.ArrayLike) -> np.ndarray:

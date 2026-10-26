@@ -14,7 +14,7 @@ from gbkfit.fitting.base import FitRun, Fitter, fitter_parser
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitProblem
-from gbkfit.params import ParamEvaluationError
+from gbkfit.params import EvaluationError
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -158,7 +158,7 @@ class FitterMultiStart(Fitter):
             nevals = problem.nevals()
             try:
                 run = self._local._run(problem, start_params, rng)
-            except (ParamEvaluationError, ValueError) as e:
+            except (EvaluationError, ValueError) as e:
                 starts_info.append(dict(
                     error=str(e), nevals=problem.nevals() - nevals))
                 continue

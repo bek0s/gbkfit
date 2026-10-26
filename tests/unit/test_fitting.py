@@ -250,6 +250,27 @@ def test_least_squares_fit_the_scale_of_the_errors(driver):
     assert best.reduced_chi2 == pytest.approx(n / best.dof, rel=1e-2)
 
 
+def test_a_point_where_the_model_fails_does_not_end_the_fit(monkeypatch):
+    # (e.g. a solve that does not converge there): it is a point that
+    # cannot be evaluated, counted, and the fit goes on
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.params import ModelEvaluationError
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    merits = objective.merits
+
+    def failing(values):
+        if values['incl'] > 60:
+            raise ModelEvaluationError("no model here")
+        return merits(values)
+    monkeypatch.setattr(objective, 'merits', failing)
+    result = fitter_parser.load(dict(
+        type='cmaes', maxfevals=300, seed=1,
+        uncertainty=dict(covariance=False))).fit(objective, params)
+    assert result.diagnostics['failed_nevals'] > 0
+    assert result.best().free['incl'] <= 60
+
+
 def test_the_reduced_chi2_is_of_the_data_alone():
     # A solved flux scale under a prior far from what the data say (the
     # brightness fixed at its truth, so the scale is 1): the residual of

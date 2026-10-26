@@ -23,7 +23,7 @@ from gbkfit.fitting.result import (
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, covariance, laplace_posterior, sample_values)
 from gbkfit.objective import Objective
-from gbkfit.params import ParamEvaluationError, ParamSpace
+from gbkfit.params import EvaluationError, ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -274,9 +274,11 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         ValueError
             If no parameter is free, the parameter space lacks parameters
             of the objective, or the pool is of another objective.
-        ParamEvaluationError
-            If the parameters cannot be evaluated where a least-squares
-            fitter evaluates them (e.g. at the start).
+        EvaluationError
+            If the parameters cannot be evaluated, or the model or a solve
+            fails, where a least-squares fitter evaluates them (e.g. at the
+            start); other fitters take such points as ones they cannot
+            evaluate.
         RuntimeError
             If the fitter finds no point with a finite chi-square (or the
             fit was stopped before).
@@ -348,6 +350,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             problems += solution_problems
         diagnostics['uncertainty_nevals'] = uncertainty_nevals
         diagnostics['nan_nevals'] = problem.nan_nevals()
+        diagnostics['failed_nevals'] = problem.failed_nevals()
         for key, message in problems:
             diagnostics.setdefault(key, []).append(message)
         posterior = None
@@ -449,7 +452,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                     problem, x, bounds.lower, bounds.upper, bounds.scales,
                     options, reduced_chi2, tuple(derived))
                 nevals += cov_nevals
-            except ParamEvaluationError as e:
+            except EvaluationError as e:
                 problems.append(('uncertainty_errors', f"no covariance: {e}"))
             except FitStopped:
                 problems.append((

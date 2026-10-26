@@ -19,6 +19,7 @@ import scipy.linalg
 import scipy.optimize
 import scipy.special
 
+from gbkfit.params._errors import ModelEvaluationError
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -500,8 +501,9 @@ def solve_together_rows(
     ------
     ConfigError
         If they cannot be solved together (see check_together).
-    RuntimeError
-        If the Newton steps do not reach the solution.
+    ModelEvaluationError
+        If the Newton steps do not reach the solution, or their matrix is
+        singular.
     """
     check_together(solves, sizes)
     return _chosen_together(
@@ -610,7 +612,7 @@ class _RowsSolver:
                     and np.array_equal(values > lower, free):
                 break
         else:
-            raise RuntimeError(
+            raise ModelEvaluationError(
                 f"the values solved on rows did not converge in "
                 f"{_ROWS_MAX_STEPS} Newton steps")
         if sigma is not None:
@@ -624,7 +626,7 @@ class _RowsSolver:
         trtri, = scipy.linalg.get_lapack_funcs(('trtri',), (triangle,))
         inverse, info = trtri(triangle, lower=lower)
         if info != 0:
-            raise RuntimeError(
+            raise ModelEvaluationError(
                 f"the Newton matrix of the values solved on rows is "
                 f"singular (trtri: {info})")
         inverse = np.tril(inverse) if lower else np.triu(inverse)

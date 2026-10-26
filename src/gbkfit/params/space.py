@@ -18,6 +18,7 @@ from typing import Any, TypeAlias
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.params._errors import ParamEvaluationError
 from gbkfit.params._expressions import (
     Expression, InvalidExpressionError, check_name)
 from gbkfit.params._keys import (
@@ -33,7 +34,6 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'FreeElement',
-    'ParamEvaluationError',
     'ParamFunctions',
     'ParamKind',
     'ParamSpace',
@@ -230,13 +230,6 @@ class FreeElement:
     def n(self) -> int | None:
         """Return the number of values of a grid, if any."""
         return self._n
-
-
-class ParamEvaluationError(RuntimeError):
-    """
-    An evaluation of the parameters failed: an expression or the
-    transforms function failed, or a value is not finite or not valid.
-    """
 
 
 class ParamKind(enum.Enum):

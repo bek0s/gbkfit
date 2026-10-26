@@ -9,7 +9,7 @@ import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
-from gbkfit.params import ParamValues
+from gbkfit.params import ModelEvaluationError, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
@@ -186,7 +186,7 @@ class CloudDiskPlan(_disk.DiskPlan):
             np.maximum(np.rint(np.abs(pool_flux) / disk.clouds().cflux()), 1),
             0)
         if not np.sum(nclouds) <= _MAX_CLOUDS:
-            raise RuntimeError(
+            raise ModelEvaluationError(
                 f"the disk of clouds needs {np.sum(nclouds):.3g} clouds of "
                 f"flux cflux = {disk.clouds().cflux()}, but the kernels draw "
                 f"at most {_MAX_CLOUDS}; give it a larger cflux")
