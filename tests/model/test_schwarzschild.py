@@ -248,6 +248,28 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     assert np.all(np.abs(orbits['circularity']) < 1.05)
 
 
+def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
+    # Mock moments of the bins of the noise of the cube of their pixels, as
+    # for other stars (an rms of the peak: errors of 8 km/s in V, 0.04 in
+    # h3): their errors (of 30 draws) hold the model, about one error from
+    # it
+    from gbkfit.model import Extras
+    from gbkfit.observation import noise_parser
+    plan = ObservationGroup([galaxy()], [observation(bins())]).plan(driver)
+    values = PROPERTIES | dict(stars_weights=np.ones(400))
+    extras = Extras()
+    model = plan.model_h(values, extras)[0]
+    rms = extras.get('cube').data.max()
+    dataset, = plan.mock(
+        values, [noise_parser.load(dict(type='gauss', rms=rms))],
+        nsamples=30, seed=1)[0]
+    z = np.concatenate([
+        (dataset[key].data() - model[key]['d']) / dataset[key].error()
+        for key in model])
+    assert np.all(np.isfinite(z))
+    assert 0.5 < np.mean(z ** 2) < 2
+
+
 def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     # Data made by the orbits, of the weights of their prior (1): the
     # moments of the spectra of the weighted orbits, as the model of the

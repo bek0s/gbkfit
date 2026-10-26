@@ -449,6 +449,9 @@ class OrbitMomentsPlan(ObservablePlan):
     moments are measured as those of the spectra of any regions (see
     RegionMomentsPlan).
 
+    Its mock data are the moments of the bins of the cube of the pixels
+    of their grid plus the noise (see mock), as those of RegionMomentsPlan.
+
     Its extra outputs, wanted, come from one pass that records the orbits
     in the bins and in the pixels of their grid and cells: the cube of the
     pixels ('cube': their spectra convolved with the PSF) and the moments
@@ -526,6 +529,10 @@ class OrbitMomentsPlan(ObservablePlan):
             moments.spec_rest(), moments.spec_medium(),
             moments.spec_convention())
         self._map_coords = coords
+        self._cube_grid = gridutils.Grid(
+            (shape[1], shape[0], self._nchannels), self._cube_coords, 2)
+        self._bin_weights = moments.regions().weights(grid)
+        self._psf = instrument.psf()
         self._orders = moments.orders()
         self._flux_floor = moments.flux_floor()
         self._method = moments.method()
@@ -539,6 +546,24 @@ class OrbitMomentsPlan(ObservablePlan):
             out_extra: Extras | None
     ) -> ModelData:
         state = galaxies[self._galaxy].states[self._component]
+        records, weights, light = self._record(
+            params, state, out_extra is not None)
+        if out_extra is not None:
+            self._add_extras(out_extra, state, weights, light, records)
+        return self._measure(records.spectra[:, :self._nregions])
+
+    def _record(
+            self,
+            params: ParamValues,
+            state: 'OrbitLibraryState',
+            pixels: bool
+    ) -> tuple['OrbitRecords', np.ndarray, np.ndarray]:
+        """
+        Return the records of the orbits of a state at the values of the
+        parameters: the spectra of the bins, and with pixels, also those of
+        the pixels and the moments of the cells (see _outputs_of); and the
+        weights and the light of the orbits.
+        """
         values = {name: params[full] for name, full in self._names.items()}
         weights = np.asarray(values[self._weights], dtype=float)
         light = state.orbit_light(weights)
@@ -548,27 +573,32 @@ class OrbitMomentsPlan(ObservablePlan):
         # step to zero + (j + 1/2) step)
         channels = (1 / self._step,
                     (values['vsys'] - self._zero) / self._step + 0.5)
-        if out_extra is None:
-            if self._integrator is None:
-                self._integrator = OrbitIntegrator(
-                    self._driver, self._dtype, len(state.starts),
-                    accuracy=state.accuracy, max_steps=state.max_steps(),
-                    nsamples=state.samples, nphi=state.copies, twins=True,
-                    sky=[self._grid], nchannels=self._nchannels)
-            records = self._integrator.integrate(
-                state.potential, state.starts, state.turns, geometry,
-                centres=np.array([centre]), light=light, channels=channels)
-        else:
+        if pixels:
             integrator, _ = self._outputs_of(state)
             records = integrator.integrate(
                 state.potential, state.starts, state.turns, geometry,
                 cell_edges=state.cell_edges,
                 centres=np.array([centre, centre]), light=light,
                 channels=channels)
-            self._add_extras(out_extra, state, weights, light, records)
+            return records, weights, light
+        if self._integrator is None:
+            self._integrator = OrbitIntegrator(
+                self._driver, self._dtype, len(state.starts),
+                accuracy=state.accuracy, max_steps=state.max_steps(),
+                nsamples=state.samples, nphi=state.copies, twins=True,
+                sky=[self._grid], nchannels=self._nchannels)
+        records = self._integrator.integrate(
+            state.potential, state.starts, state.turns, geometry,
+            centres=np.array([centre]), light=light, channels=channels)
+        return records, weights, light
+
+    def _measure(self, spectra: np.ndarray) -> ModelData:
+        """
+        Return the moments of the spectra of the bins (an array of shape
+        (nchannels, nbins)), on the driver.
+        """
         self._driver.mem_copy_h2d(
-            np.ascontiguousarray(
-                records.spectra[:, None, :self._nregions], self._dtype),
+            np.ascontiguousarray(spectra[:, None, :], self._dtype),
             self._spectra)
         moments = self._moments.evaluate(
             (1.0, 1.0, self._step), (0.0, 0.0, self._zero), self._spectra,
@@ -618,7 +648,9 @@ class OrbitMomentsPlan(ObservablePlan):
             "Cube of the stars on orbits",
             "The spectra of the light of the stars on their orbits (at the "
             "solved weights) in each pixel of the grid of the bins, "
-            "through the PSF, on the spectral axis of the moments.")
+            "through the PSF, on the spectral axis of the moments: the light "
+            "of the spheroid per arcsec^2 in each channel, as the model "
+            "cubes of other stars.")
         d_cube = self._driver.mem_copy_h2d(
             np.ascontiguousarray(cube, self._dtype))
         measured = moments.evaluate(
@@ -655,9 +687,23 @@ class OrbitMomentsPlan(ObservablePlan):
             rng: np.random.Generator,
             ndraws: int
     ) -> tuple[list[HostModelData], dict[str, np.ndarray] | None]:
-        raise NotImplementedError(
-            "mock data of the moments of stars on orbits are not available "
-            "yet: their spectra have no noise of recorded data")
+        # (the cube of the pixels, plus the noise of each draw, summed over
+        # the pixels of each bin: as RegionMomentsPlan does)
+        state = galaxies[self._galaxy].states[self._component]
+        records, _, _ = self._record(params, state, True)
+        recorded = self._pixels.cube(records.spectra[:, self._nregions:])
+        draws = []
+        for _ in range(ndraws):
+            noisy = recorded + noise.draw(
+                rng, self._cube_grid, self._psf, recorded)
+            measured = self._measure(
+                (self._bin_weights @ noisy.reshape(len(noisy), -1).T).T)
+            draws.append({
+                key: dict(
+                    d=self._driver.mem_copy_d2h(value['d']),
+                    m=self._driver.mem_copy_d2h(value['m']))
+                for key, value in measured.items()})
+        return draws, None
 
     def has_exact_errors(self) -> bool:
         return False

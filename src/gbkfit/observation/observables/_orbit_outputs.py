@@ -103,6 +103,7 @@ class PixelCube:
                          self._kernel.shape[1] // 2)
         self.shape = shape
         self._oversampling = (fy, fx)
+        self._area = abs(step[0] * step[1])
         my, mx = self._margins
         padded = (shape[0] * fy + 2 * my, shape[1] * fx + 2 * mx)
         # (pixel p covers [p - 1/2, p + 1/2), and f cells along each axis;
@@ -119,7 +120,8 @@ class PixelCube:
         """
         Return the cube (nchannels, ny, nx) of the pixels of the spectra of
         the targets of its grid (an array of shape (nchannels, ncells)):
-        convolved with the PSF, and summed over the cells of each pixel.
+        convolved with the PSF, summed over the cells of each pixel, and
+        per arcsec^2 (as the model cubes of other stars).
         """
         (ny, nx), (fy, fx), (my, mx) = \
             self.shape, self._oversampling, self._margins
@@ -128,7 +130,8 @@ class PixelCube:
         cube = scipy.signal.fftconvolve(
             cube, self._kernel[None], mode='same', axes=(1, 2))
         cube = cube[:, my:my + ny * fy, mx:mx + nx * fx]
-        return cube.reshape(nchannels, ny, fy, nx, fx).sum(axis=(2, 4))
+        return cube.reshape(nchannels, ny, fy, nx, fx).sum(axis=(2, 4)) \
+            / self._area
 
 
 def cell_tables(
