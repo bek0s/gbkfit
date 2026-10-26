@@ -123,6 +123,16 @@ def test_the_rotation_is_traced_on_position_velocity_diagrams():
     np.testing.assert_allclose(envelope.rotation[outer], 200, rtol=0.02)
 
 
+def test_a_terminal_velocity_next_to_a_masked_channel_is_a_number():
+    # (the crossing interpolated with a channel that is NaN: inf / inf)
+    from gbkfit.analysis.pv import _terminal_velocity
+    velocities = np.arange(6) * 10.0
+    spectrum = np.array([1.0, 1.0, 1.0, 1.0, np.nan, 0.0])
+    assert _terminal_velocity(velocities, spectrum, 0.5, True) == 30.0
+    spectrum[4] = 0.0
+    assert _terminal_velocity(velocities, spectrum, 0.5, True) == 35.0
+
+
 def test_structure_functions_are_the_mean_over_pairs_of_pixels():
     # Against every pair of the pixels with values of a small map, and 2
     # sigma^2 at every separation for white noise

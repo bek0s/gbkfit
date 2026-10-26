@@ -244,8 +244,10 @@ def _terminal_velocity(
     v, s = velocities[order], np.nan_to_num(spectrum[order], nan=-np.inf)
     above = np.flatnonzero(s >= threshold)
     first = int(above[0])
-    if first == 0:
-        return float(v[0])
+    # (without a channel outside to interpolate with: at the edge, or one
+    # not a number, which gave inf / inf)
+    if first == 0 or not np.isfinite(s[first - 1]):
+        return float(v[first])
     # (between the channel outside and the first inside)
     fraction = (threshold - s[first - 1]) / (s[first] - s[first - 1])
     return float(v[first - 1] + fraction * (v[first] - v[first - 1]))
