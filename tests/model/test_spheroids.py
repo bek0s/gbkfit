@@ -820,7 +820,7 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
     np.testing.assert_allclose(moments['moment4']['d'], 0, atol=1e-3)
 
 
-# The exact mock of the Schwarzschild proof of concept (model.orbits): a
+# The exact mock of the Schwarzschild proof of concept (orbit_mock): a
 # sphere of Hernquist light of the scale radius 1 kpc, of a mass-to-light
 # ratio of 4 and a black hole of 5e8 Msun, its stars isotropic, of the
 # distribution function of Eddington's formula, at 10 Mpc (its kpc per
@@ -836,8 +836,8 @@ HERNQUIST_KPC = HERNQUIST_DISTANCE * 1e3 * np.pi / 648000
 @functools.cache
 def hernquist_mock():
     """The exact mock (its tables of its distribution function made once)."""
-    from gbkfit.model.orbits.mocks import MockGalaxy
-    from gbkfit.model.orbits.profiles import Hernquist
+    from orbit_mock.mocks import MockGalaxy
+    from orbit_mock.profiles import Hernquist
     return MockGalaxy(
         Hernquist(HERNQUIST_LIGHT, HERNQUIST_A), HERNQUIST_UPSILON,
         HERNQUIST_BH)

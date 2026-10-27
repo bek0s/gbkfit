@@ -512,16 +512,16 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
 
 @pytest.mark.slow
 def test_schwarzschild_models_recover_the_exact_mock(driver):
-    # The exact mock of the proof of concept (model.orbits: a Hernquist
+    # The exact mock of the proof of concept (orbit_mock: a Hernquist
     # sphere of a mass-to-light ratio of 4 and a black hole of 5e8 Msun,
     # isotropic, of Eddington's distribution function) at 16 Mpc, seen in
     # polar bins through a PSF of 0.5 arcsec, with noise; fitted with its
     # MGE in its Hernquist mass at mass-to-light ratios scaled by 0.8, 1
     # and 1.25, with and without the black hole: the chi-square of the
     # data is the least at the truth (as in the proof of concept)
-    from gbkfit.model.orbits.kinematics import BinnedField, polar_bins
-    from gbkfit.model.orbits.mocks import MockGalaxy, add_noise, observe
-    from gbkfit.model.orbits.profiles import Hernquist
+    from orbit_mock.kinematics import BinnedField, polar_bins
+    from orbit_mock.mocks import MockGalaxy, add_noise, observe
+    from orbit_mock.profiles import Hernquist
     light, upsilon, bh, distance = Hernquist(2.5e10, 1.5), 4.0, 5e8, 16.0
     edges = [0, 0.2, 0.4, 0.6, 0.85, 1.15, 1.5, 2.0, 2.6, 3.4, 4.4, 5.7]
     field = BinnedField(polar_bins((120, 120), 0.1, edges, 4), 0.1, 0.5)

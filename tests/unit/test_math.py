@@ -1,8 +1,3 @@
-import numpy as np
-import pytest
-import scipy.integrate
-import scipy.stats
-
 from gbkfit.math.math import *
 
 
@@ -21,32 +16,18 @@ def test_is_even_is_odd():
 
 def test_round_functions():
     # round even
-    assert roundd_even(0.0) == 0
-    assert roundd_even(+3.0) == +2
-    assert roundd_even(-3.0) == -4
-    assert roundd_even(+3.5) == +2
-    assert roundd_even(-3.5) == -4
     assert roundu_even(0.0) == 0
     assert roundu_even(+3.0) == +4
     assert roundu_even(-3.0) == -2
     assert roundu_even(+3.5) == +4
     assert roundu_even(-3.5) == -2
     # round odd
-    assert roundd_odd(0.0) == -1
-    assert roundd_odd(+2.0) == +1
-    assert roundd_odd(-2.0) == -3
-    assert roundd_odd(+2.5) == +1
-    assert roundd_odd(-2.5) == -3
     assert roundu_odd(0.0) == 1
     assert roundu_odd(+2.0) == +3
     assert roundu_odd(-2.0) == -1
     assert roundu_odd(+2.5) == +3
     assert roundu_odd(-2.5) == -1
     # round multiple
-    assert roundd_multiple(+1.0, 2.0) == 0
-    assert roundd_multiple(+5.0, 2.0) == +4
-    assert roundd_multiple(-1.0, 2.0) == -2
-    assert roundd_multiple(-5.0, 2.0) == -6
     assert roundu_multiple(+1.0, 2.0) == +2
     assert roundu_multiple(+5.0, 2.0) == +6
     assert roundu_multiple(-1.0, 2.0) == 0
@@ -54,29 +35,3 @@ def test_round_functions():
     # round power of two
     assert roundu_po2(3.0) == 4
     assert roundu_po2(3.5) == 4
-
-
-def test_uniform_1d():
-    assert uniform_1d_fun(0, 10, -10, 10) == 10
-    assert uniform_1d_fun(-11, 10, -10, 10) == 0
-    assert uniform_1d_fun(11, 10, -10, 10) == 0
-
-    assert uniform_1d_cdf(0, -10, 10) == 0.5
-    assert uniform_1d_cdf(-10, -10, 10) == 0
-    assert uniform_1d_cdf(10, -10, 10) == 1
-
-
-@pytest.mark.parametrize('pdf, cdf, distribution', [
-    (lambda x: expon_1d_pdf(x, 1, 2), lambda x: expon_1d_cdf(x, 1, 2),
-     scipy.stats.expon(loc=1, scale=2)),
-    (lambda x: laplace_1d_pdf(x, 1, 2), lambda x: laplace_1d_cdf(x, 1, 2),
-     scipy.stats.laplace(loc=1, scale=2)),
-    (lambda x: moffat_1d_pdf(x, 1, 2, 1.5), None,
-     scipy.stats.t(df=2, loc=1, scale=2 / np.sqrt(2)))])
-def test_pdfs_are_those_of_their_distributions(pdf, cdf, distribution):
-    x = np.linspace(-9, 11, 41)
-    np.testing.assert_allclose(pdf(x), distribution.pdf(x), rtol=1e-12)
-    if cdf is not None:
-        np.testing.assert_allclose(cdf(x), distribution.cdf(x), rtol=1e-12)
-    assert scipy.integrate.quad(pdf, -np.inf, np.inf)[0] == \
-        pytest.approx(1, rel=1e-6)

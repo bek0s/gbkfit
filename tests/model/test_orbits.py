@@ -1,8 +1,7 @@
 """
-Tests for the Schwarzschild proof of concept (gbkfit.model.orbits): the
-Gauss-Hermite series, the exact mock galaxy against independent
-integrals, the orbit integration, the weight solver, and the recovery
-of the mass of a mock (slow).
+Tests of the exact mock of a galaxy of stars on orbits (orbit_mock), which
+the tests of the Schwarzschild models take: the Gauss-Hermite series, and
+the mock galaxy against independent integrals.
 """
 
 import numpy as np
@@ -11,15 +10,10 @@ import scipy.integrate
 import scipy.optimize
 
 from gbkfit.model.mass import G, MassContext
-from gbkfit.model.orbits.gauss_hermite import (
+from orbit_mock.gauss_hermite import (
     fit_gauss_hermite, gauss_hermite_losvd, hermite_weights, mass_factor)
-from gbkfit.model.orbits.kinematics import BinnedField, polar_bins
-from gbkfit.model.orbits.library import (
-    LibraryOptions, SphericalPotential, build_library, initial_conditions,
-    integrate)
-from gbkfit.model.orbits.mocks import MockGalaxy, add_noise, observe
-from gbkfit.model.orbits.profiles import Hernquist
-from gbkfit.model.orbits.schwarzschild import fit_weights, regularised_nnls
+from orbit_mock.mocks import MockGalaxy
+from orbit_mock.profiles import Hernquist
 
 
 LIGHT = Hernquist(total=2.5e10, a=1.5)
@@ -92,60 +86,3 @@ def test_mock_losvds_project_the_light(bh_mass):
         0, np.arccosh(1e6 / x), limit=500, epsrel=1e-9)[0] for x in R]
     assert (losvds * v ** 2) @ weights == pytest.approx(
         projected, rel=1e-5)
-
-
-def test_integration_conserves_energy_and_angular_momentum():
-    model, params = LIGHT.mass_model(UPSILON, BH_MASS)
-    potential = SphericalPotential(model, params, CONTEXT)
-    x, v, _ = initial_conditions(potential, LIGHT, 300, (1e-3, 15.0), 0)
-    energy = potential.potential(np.linalg.norm(x, axis=1)) \
-        + np.sum(v ** 2, axis=1) / 2
-    periods = 2 * np.pi / potential.circular_frequency(
-        potential.circular_radius(energy))
-    final_x, final_v = integrate(potential, x, v, 20 * periods, 0.02)
-    final_energy = potential.potential(np.linalg.norm(final_x, axis=1)) \
-        + np.sum(final_v ** 2, axis=1) / 2
-    errors = np.abs(final_energy / energy - 1)
-    assert np.median(errors) < 1e-4
-    assert errors.max() < 1e-2
-    np.testing.assert_allclose(
-        np.cross(final_x, final_v), np.cross(x, v), rtol=0, atol=1e-10)
-
-
-def test_regularised_nnls_is_that_of_the_stacked_system():
-    rng = np.random.default_rng(3)
-    matrix = rng.normal(size=(30, 120)) * rng.random((30, 120))
-    target = matrix @ rng.random(120) + rng.normal(size=30)
-    penalties = rng.uniform(0.05, 0.5, 120)
-    w = regularised_nnls(matrix, target, penalties)
-    stacked = np.vstack((matrix, np.diag(np.sqrt(penalties))))
-    expected, _ = scipy.optimize.nnls(
-        stacked, np.concatenate((target, np.zeros(120))))
-    np.testing.assert_allclose(w, expected, rtol=0, atol=1e-10)
-
-
-@pytest.mark.slow
-def test_schwarzschild_models_recover_the_mock():
-    # A small library of the true potential and one without the black
-    # hole, fitted to the mock at mass-to-light ratios scaled by 0.8, 1
-    # and 1.25: the best is the truth (on the noise-free mock all fit:
-    # the regularisation breaks the mass-anisotropy degeneracy)
-    edges = [0, 0.2, 0.4, 0.6, 0.85, 1.15, 1.5, 2.0, 2.6, 3.4, 4.4, 5.7]
-    field = BinnedField(polar_bins((120, 120), 0.1, edges, 4), 0.1, 0.5)
-    data = add_noise(
-        observe(MockGalaxy(LIGHT, UPSILON, BH_MASS), field, 16.0), seed=1)
-    scale = data.kpc_per_arcsec()
-    options = LibraryOptions(
-        orbits=1500, radii=(0.02 * scale, 15.0), periods=30,
-        shell_edges=tuple(np.concatenate((
-            [0], np.geomspace(0.1 * scale, 15.0, 20)))))
-    chi2 = {}
-    for bh_mass in (BH_MASS, 0.0):
-        model, params = LIGHT.mass_model(UPSILON, bh_mass)
-        library = build_library(
-            model, params, CONTEXT, LIGHT, field, scale, options=options)
-        for factor in (0.8, 1.0, 1.25):
-            chi2[bh_mass, factor] = fit_weights(
-                library, data, LIGHT, scale=factor,
-                regularisation=1000).chi2
-    assert min(chi2, key=chi2.get) == (BH_MASS, 1.0)
