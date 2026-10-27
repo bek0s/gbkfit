@@ -52,7 +52,11 @@ def prior_predictive(
     samplers read them: see FreeElement.proper_prior), each with
     noise of the errors of the data (none without errors), as data they
     predict; their percentiles at each value of the data, and the share of
-    the data within them.
+    the data within them. The solved elements (see Solve) are solved at
+    each draw, as the fit solves them (the models and the chi-square are
+    of those values): the check is of the priors of the free elements,
+    which a nuisance value drawn far from the data (e.g. a flux scale)
+    must not condemn.
 
     Parameters
     ----------
@@ -90,8 +94,11 @@ def prior_predictive(
             values = params.evaluate(x)
         except ParamEvaluationError:
             continue
-        chi2[k] = objective.chi2(values)
-        models = objective.group_plan().model_h(values)
+        # (the models at the solved values that the chi-square takes)
+        evaluation = objective.evaluate(values)
+        chi2[k] = evaluation.merits.chi2
+        models = objective.group_plan().model_h(
+            params.evaluate(x, evaluation.solved))
         for i, (dataset, model) in enumerate(zip(datasets, models)):
             for key, item in model.items():
                 error = dataset[key].error()

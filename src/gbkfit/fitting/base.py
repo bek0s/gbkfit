@@ -448,9 +448,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         objective = problem.objective()
         params = problem.params()
         x = np.asarray(x, dtype=float)
-        merits = objective.merits(params.evaluate(x))
+        evaluation = objective.evaluate(params.evaluate(x))
+        merits = evaluation.merits
         # (with the values of the solved elements there)
-        values = params.evaluate(x, objective.solved())
+        values = params.evaluate(x, evaluation.solved)
         problems = []
         try:
             derived = params.derived_elements(values)
@@ -459,16 +460,14 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             problems.append(('derived_errors', f"no derived values: {e}"))
         nresiduals = objective.nresiduals()
         nevals = 1
-        nfitted = problem.ndim() + objective.nnuisance()
+        nfitted = problem.ndim() + evaluation.nnuisance
         dof = objective.nindependent() - nfitted
-        # (of the chi-square of the data alone, the AICp less 2 nnuisance
-        # (see Merits): the residuals of the priors of solved values are
-        # not of the data, as the degrees of freedom leave out their
+        # (of the data alone: the residuals of the priors of solved values
+        # are not of the data, as the degrees of freedom leave out their
         # nnuisance, nor the noise residuals of a fitted noise; with them,
         # it was ~13 for ~2.5 in a Schwarzschild fit, and it scales the
         # covariance)
-        data_chi2 = merits.aicp - 2 * objective.nnuisance()
-        reduced_chi2 = (data_chi2 - objective.noise_chi2()) / dof \
+        reduced_chi2 = (evaluation.data_chi2 - evaluation.noise_chi2) / dof \
             if dof > 0 else np.nan
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)

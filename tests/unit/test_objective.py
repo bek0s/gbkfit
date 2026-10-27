@@ -253,9 +253,10 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
         np.testing.assert_allclose(
             residuals[:-1].reshape(24, 32), (model - data.data()) / sigma,
             rtol=1e-5, atol=1e-6)
-        chi2 = objective.chi2(point)
+        evaluation = objective.evaluate(point)
+        chi2 = evaluation.merits.chi2
         assert chi2 == pytest.approx(np.sum(residuals ** 2), rel=1e-6)
-        assert objective.noise_chi2() == pytest.approx(residuals[-1] ** 2)
+        assert evaluation.noise_chi2 == pytest.approx(residuals[-1] ** 2)
         offsets.append(chi2 - np.sum(
             ((model - data.data()) / sigma) ** 2 + np.log(sigma ** 2)))
     np.testing.assert_allclose(offsets, offsets[0], atol=1e-3)
@@ -390,8 +391,7 @@ def test_values_the_model_lacks_take_no_noise(driver):
     moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
     has = ~np.isnan(moment1) & (dataset['moment1'].mask() != 0)
     assert np.any(np.isnan(moment1) & (dataset['moment1'].mask() != 0))
-    objective.chi2(compact)
-    assert objective.noise_chi2() == pytest.approx(
+    assert objective.evaluate(compact).noise_chi2 == pytest.approx(
         np.count_nonzero(has) * np.log((2 / 0.1) ** 2), rel=1e-6)
 
 
@@ -429,7 +429,8 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
     shape = objective.datasets()[0].noise_correlation('brightness').spatial
     k = shape[23 + y[:, None] - y, 31 + x[:, None] - x]
     c = 0.95 * k + 0.05 * np.eye(len(k))
-    chi2 = objective.chi2(params) - objective.noise_chi2()
+    evaluation = objective.evaluate(params)
+    chi2 = evaluation.merits.chi2 - evaluation.noise_chi2
     assert chi2 == pytest.approx(r @ np.linalg.solve(c, r), rel=1e-4)
     # Noise of exactly K gives the chi-square tr(K C^-1) on average
     assert objective.nindependent() == pytest.approx(
@@ -437,7 +438,7 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
     # The noise residual counts the values as the independent ones they
     # are worth: c^2 log(s^2 / (f_min e)^2) of each, times n_ind / n
     share = objective.nindependent() / np.count_nonzero(kept)
-    assert objective.noise_chi2() == pytest.approx(share * np.sum(
+    assert evaluation.noise_chi2 == pytest.approx(share * np.sum(
         4 * np.log((sigma / (0.1 * data.error()))[kept] ** 2)), rel=1e-6)
     residuals = objective.residuals(params)[:-1]
     assert np.sum(residuals ** 2) == pytest.approx(chi2, rel=1e-5)

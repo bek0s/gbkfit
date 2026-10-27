@@ -87,7 +87,8 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
     params = ParamSpace(
         group.pdescs(), TRUTH | dict(core_i0=SOLVE, envelope_ie=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
-    chi2 = objective.chi2(params.evaluate())
+    evaluation = objective.evaluate(params.evaluate())
+    chi2 = evaluation.merits.chi2
     parts = np.array([
         np.concatenate([m.ravel() for m in models(
             driver, sizes, with_amplitudes(TRUTH, np.eye(3)[k]))])
@@ -96,13 +97,13 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
     target = np.concatenate((
         np.concatenate([d.ravel() for d in data]) / ERROR, np.zeros(3)))
     expected = scipy.optimize.lsq_linear(rows, target, bounds=(0, np.inf))
-    solved = objective.solved()
+    solved = evaluation.solved
     np.testing.assert_allclose(
         [solved['core_i0[0]'], solved['core_i0[1]'], solved['envelope_ie']],
         expected.x, rtol=1e-4)
     np.testing.assert_allclose(expected.x, [4.0, 1.5, 0.3], rtol=0.05)
     assert chi2 == pytest.approx(2 * expected.cost, rel=1e-4)
-    assert 0 < objective.nnuisance() <= 3
+    assert 0 < evaluation.nnuisance <= 3
 
 
 @pytest.mark.parametrize('change, message', [

@@ -1,3 +1,4 @@
+import dataclasses
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple, Self
 
@@ -17,6 +18,7 @@ from ._orbits import orbit_groups
 
 
 __all__ = [
+    'Evaluation',
     'Merits',
     'Objective'
 ]
@@ -46,6 +48,43 @@ class Merits(NamedTuple):
     chi2: float
     log_likelihood: float
     aicp: float
+
+
+@dataclasses.dataclass(frozen=True)
+class Evaluation:
+    """
+    An evaluation of an objective at the values of its parameters (see
+    Objective.evaluate): its merits, the parts of its chi-square, and the
+    values of its solved elements there.
+
+    Attributes
+    ----------
+    merits : Merits
+        The numbers by which fitters judge the models.
+    data_chi2 : float
+        The chi-square of the comparisons of the data with the models, with
+        the noise residuals of a fitted noise (see noise_chi2).
+    noise_chi2 : float
+        The sum of the squared noise residuals (see LikelihoodGaussian):
+        the part of data_chi2 that is not of the data (0 without a fitted
+        noise).
+    prior_chi2 : float
+        The sum of the squared residuals of the priors of the solved
+        values (and of the constraints of the light of orbits): the rest
+        of the chi-square, not of the data.
+    nnuisance : float
+        The effective number of the solved values (the sum of their m_eff;
+        see Solve): how much the data decide them.
+    solved : dict
+        The values of the solved elements, by element name (see
+        ParamSpace.evaluate).
+    """
+    merits: Merits
+    data_chi2: float
+    noise_chi2: float
+    prior_chi2: float
+    nnuisance: float
+    solved: dict[str, float]
 
 
 class _Solved(NamedTuple):
@@ -107,7 +146,8 @@ class Objective:
     it solves together (see OrbitGroup). The priors of the solved values
     add residuals after those of the data; the log-likelihood has the
     values integrated out, or at their best values (see Solve). They are
-    nuisance parameters (see nnuisance); solved gives their values.
+    nuisance parameters (see Evaluation.nnuisance); an evaluation gives
+    their values (see evaluate).
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -360,7 +400,7 @@ class Objective:
         """
         Return the AICp of all observations (Lipka & Thomas 2021): the
         chi-square of the data plus twice the effective number of the
-        solved values (see nnuisance), without the residuals of their
+        solved values (see Evaluation.nnuisance), without the residuals of their
         priors, which are not of the data (with the noise residuals of a
         fitted noise, which are). Of models whose solved values are
         regularised by their priors (e.g. the weights of orbits), the
@@ -389,8 +429,19 @@ class Objective:
     ) -> Merits:
         """
         Return the chi-square, the log-likelihood and the AICp of all
-        observations, of one evaluation (see chi2, log_likelihood and
-        aicp).
+        observations, of one evaluation (see evaluate).
+        """
+        return self.evaluate(params, out_extra).merits
+
+    def evaluate(
+            self,
+            params: ParamValues,
+            out_extra: Extras | None = None
+    ) -> Evaluation:
+        """
+        Evaluate the models and compare them with the data: return the
+        merits (see chi2, log_likelihood and aicp), the parts of the
+        chi-square and the solved values there.
 
         Parameters
         ----------
@@ -401,18 +452,24 @@ class Objective:
 
         Returns
         -------
-        Merits
-            The numbers.
+        Evaluation
+            The evaluation.
         """
         self._update_residual_d(params, True, out_extra)
         with self._group_plan.timers().measure('objective_residual_sum_eval'):
             data_chi2 = float(sum(
                 comparison_.chi2() for comparison_ in self._comparisons))
-        chi2 = data_chi2 + float(sum(
+        prior_chi2 = float(sum(
             np.sum(residuals ** 2) for residuals in self._solve_residuals()))
+        chi2 = data_chi2 + prior_chi2
         log_likelihood = -0.5 * chi2 + float(sum(
             solution.log_term for solution in self._solutions))
-        return Merits(chi2, log_likelihood, data_chi2 + 2 * self.nnuisance())
+        nnuisance = self._nnuisance()
+        return Evaluation(
+            Merits(chi2, log_likelihood, data_chi2 + 2 * nnuisance),
+            data_chi2=data_chi2, noise_chi2=self._noise_chi2(),
+            prior_chi2=prior_chi2, nnuisance=nnuisance,
+            solved=self._solved_values())
 
     def residuals(
             self,
@@ -481,12 +538,10 @@ class Objective:
         counted = np.concatenate([c.counted() for c in self._comparisons])
         return -0.5 * self.residuals(params)[counted] ** 2
 
-    def noise_chi2(self) -> float:
+    def _noise_chi2(self) -> float:
         """
         Return the sum of the squared noise residuals of all observations
-        (see LikelihoodGaussian), of the last evaluation: the part of the
-        chi-square that is not of the data (e.g. for a reduced
-        chi-square); 0 without a fitted noise.
+        (see LikelihoodGaussian), of the last evaluation.
         """
         return float(sum(
             np.sum(c.noise_residuals() ** 2) for c in self._comparisons))
@@ -495,10 +550,10 @@ class Objective:
         """Return the solve of each solved element, by element name."""
         return dict(self._solves)
 
-    def solved(self) -> dict[str, float]:
+    def _solved_values(self) -> dict[str, float]:
         """
         Return the values of the solved elements of the last evaluation,
-        by element name (see ParamSpace.evaluate); none before one.
+        by element name (see ParamSpace.evaluate).
         """
         values = {}
         for solved, solution in zip(self._solved, self._solutions):
@@ -520,22 +575,11 @@ class Objective:
                 values.update(zip(orbit.elements(), solution.values.tolist()))
         return values
 
-    def nnuisance(self) -> float:
+    def _nnuisance(self) -> float:
         """
-        Return the effective number of the nuisance parameters that the
-        objective solves itself (see Solve), of the last evaluation: how
-        much the data decide the solved elements. The degrees of freedom
-        of a fit exclude them.
-
-        Raises
-        ------
-        RuntimeError
-            If it has solved elements and no evaluation yet.
+        Return the effective number of the solved values of the last
+        evaluation (see Evaluation.nnuisance).
         """
-        if any(solution is None for solution in self._solutions):
-            raise RuntimeError(
-                "the effective number of the solved elements is of an "
-                "evaluation: evaluate the objective first")
         # Each solved value counts by how much its data decide it (its
         # m_eff: 1 decided by the data, 0 by its prior or at its minimum),
         # not as 1: a value its data decide uses up a degree of freedom,
@@ -549,7 +593,7 @@ class Objective:
         """
         Return the number of residuals of the data that count: those of the
         comparisons (see Comparison.nresiduals); not the residuals of the
-        priors of solved values (see nnuisance), nor the noise residuals
+        priors of solved values (see Evaluation.nnuisance), nor the noise residuals
         (see LikelihoodGaussian), which are not of the data.
         """
         return sum(c.nresiduals() for c in self._comparisons)

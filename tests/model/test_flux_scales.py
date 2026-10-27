@@ -78,9 +78,10 @@ def model(driver):
         .astype(float)
 
 
-def solved(obj):
-    """The solved scales of the spectra of the last evaluation, an image."""
-    return np.reshape(list(obj.solved().values()), SIZE[1::-1])
+def solved(obj, params):
+    """The solved scales of the spectra at the values, an image."""
+    return np.reshape(
+        list(obj.evaluate(params.evaluate()).solved.values()), SIZE[1::-1])
 
 
 def best_scales(spectra, data, error):
@@ -159,8 +160,8 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
         scaled.group().pdescs(),
         PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
     obj = Objective(scaled, params.solves())
-    obj.chi2(params.evaluate())
-    assert obj.solved()['obs_flux_scale'] == pytest.approx(2, rel=1e-6)
+    assert obj.evaluate(params.evaluate()).solved['obs_flux_scale'] \
+        == pytest.approx(2, rel=1e-6)
 
 
 def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
@@ -175,7 +176,7 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     error = 1e-3 * spectra.max()
     obj, params = objective(driver, spectra * scales, error)
     chi2 = obj.chi2(params.evaluate())
-    found = solved(obj)
+    found = solved(obj, params)
     np.testing.assert_allclose(
         found, best_scales(spectra, spectra * scales, error), rtol=1e-5)
     lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
@@ -185,7 +186,7 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     # (each scale counts by how much its data decide it, a / (a + 1/s^2),
     # a = sum m^2 / e^2: about 1 where the spectrum has light, 0 where not)
     a = (spectra ** 2).sum(axis=0) / error ** 2
-    assert obj.nnuisance() == pytest.approx(
+    assert obj.evaluate(params.evaluate()).nnuisance == pytest.approx(
         np.sum(a / (a + 1 / SIGMA ** 2)), rel=1e-4)
     fixed, params = objective(driver, spectra * scales, error, scale=1)
     assert fixed.chi2(params.evaluate()) > 1e3
@@ -205,9 +206,10 @@ def test_the_aicp_counts_the_data_and_the_solved_scales(driver):
     data = spectra * rng.uniform(0.5, 2, SIZE[1::-1]) \
         + rng.normal(0, error, spectra.shape)
     obj, params = objective(driver, data, error)
-    aicp = obj.aicp(params.evaluate())
-    data_chi2 = np.sum(((data - spectra * solved(obj)) / error) ** 2)
-    assert aicp == pytest.approx(data_chi2 + 2 * obj.nnuisance(), rel=1e-5)
+    evaluation = obj.evaluate(params.evaluate())
+    data_chi2 = np.sum(((data - spectra * solved(obj, params)) / error) ** 2)
+    assert evaluation.merits.aicp == pytest.approx(
+        data_chi2 + 2 * evaluation.nnuisance, rel=1e-5)
 
 
 def test_solved_scales_weigh_the_values_by_their_fitted_noise(driver):
@@ -222,10 +224,9 @@ def test_solved_scales_weigh_the_values_by_their_fitted_noise(driver):
         driver, data, error,
         likelihood=LikelihoodGaussian(noise=dict(spectra=dict(jitter=True))),
         obs_noise_jitter_spectra=jitter)
-    obj.chi2(params.evaluate())
     np.testing.assert_allclose(
-        solved(obj), best_scales(spectra, data, np.hypot(error, jitter)),
-        rtol=1e-5)
+        solved(obj, params),
+        best_scales(spectra, data, np.hypot(error, jitter)), rtol=1e-5)
 
 
 def test_the_log_likelihood_integrates_the_solved_scales(driver):

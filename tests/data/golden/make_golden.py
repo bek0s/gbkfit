@@ -331,9 +331,10 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     values = params.evaluate()
     with setup:
         objective = setup.objective
-        chi2, log_likelihood, _ = objective.merits(values)
+        evaluation = objective.evaluate(values)
+        chi2, log_likelihood, _ = evaluation.merits
         models = group_plan.model_h(params.evaluate(
-            solved=objective.solved()))
+            solved=evaluation.solved))
         golden: dict[str, Any] = dict(model=[
             {key: {part: summary(array) for part, array in item.items()
                    if array is not None}
@@ -341,15 +342,15 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
             for model in models])
         golden['objective'] = dict(
             chi2=chi2, log_likelihood=log_likelihood,
-            noise_chi2=objective.noise_chi2(),
+            noise_chi2=evaluation.noise_chi2,
             nresiduals=objective.nresiduals(),
             nindependent=objective.nindependent(),
-            nnuisance=objective.nnuisance(),
+            nnuisance=evaluation.nnuisance,
             # (of each observation: those of a user likelihood of the
             # log-likelihood are 0, and the objective has no residuals)
             residuals=[
                 summary(r) for r in objective.residual_vector_h(values, True)],
-            solved=summary(list(objective.solved().values()))
+            solved=summary(list(evaluation.solved.values()))
             if params.solves() else None)
         derived = params.derived_values(values)
         golden['derived'] = {

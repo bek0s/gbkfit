@@ -373,8 +373,8 @@ def bootstrap(
     start_params = params.with_values(start)
     # (the model that the objective compares with the data: with the
     # values of the solved elements that it solves there)
-    objective.chi2(start_params.evaluate())
-    values = start_params.evaluate(solved=objective.solved())
+    evaluation = objective.evaluate(start_params.evaluate())
+    values = start_params.evaluate(solved=evaluation.solved)
     group = objective.group()
     schemes = options.schemes(group.nobservations())
     models = [

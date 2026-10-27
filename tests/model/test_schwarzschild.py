@@ -253,16 +253,17 @@ def test_an_objective_models_the_bins_of_stars_on_orbits(driver):
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
-    chi2 = objective.chi2(params.evaluate())
+    evaluation = objective.evaluate(params.evaluate())
+    chi2 = evaluation.merits.chi2
     residuals = objective.residuals(params.evaluate())
     assert chi2 == pytest.approx(np.sum(residuals ** 2))
     bins_residuals = objective.residual_vector_h(
         params.evaluate(), True)[0].reshape(4, -1)
     np.testing.assert_allclose(bins_residuals[[0, 2]], 0, atol=1e-6)
     assert np.all(np.isfinite(bins_residuals))
-    weights = np.array(list(objective.solved().values()))
+    weights = np.array(list(evaluation.solved.values()))
     assert len(weights) == 400 and np.all(weights >= 0)
-    assert 0 < objective.nnuisance() <= objective.nresiduals()
+    assert 0 < evaluation.nnuisance <= objective.nresiduals()
 
 
 def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
@@ -353,9 +354,9 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
             type='gaussian', mean=1, sigma=1e-6, minimum=0,
             likelihood='profiled'))))
     objective = Objective(group.plan(driver), params.solves())
-    objective.chi2(params.evaluate())
+    evaluation = objective.evaluate(params.evaluate())
     np.testing.assert_allclose(
-        list(objective.solved().values()), 1, rtol=1e-6)
+        list(evaluation.solved.values()), 1, rtol=1e-6)
     residuals = objective.residual_nddata_h(params.evaluate(), False)[0]
     errors = {key: obs.data()[key].error() for key in residuals}
     assert np.abs(data[4]).max() > 0.08

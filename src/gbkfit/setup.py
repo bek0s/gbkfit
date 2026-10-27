@@ -102,8 +102,8 @@ class Setup:
         values = self.params.evaluate(free)
         if self.objective is None or not self.objective.solves():
             return values
-        self.objective.chi2(values)
-        return self.params.evaluate(free, self.objective.solved())
+        return self.params.evaluate(
+            free, self.objective.evaluate(values).solved)
 
     def outputs(
             self,
