@@ -198,3 +198,14 @@ def test_spectral_axes_are_migrated_to_one_option():
     assert observations[2]['data'] == dict(
         data='cube.fits', step=[1, 1],
         spectral=dict(step=10, rest='1420 MHz'))
+
+
+def test_the_field_of_visibilities_is_migrated_to_an_angle():
+    given = dict(type='visibilities', size=[32, 28], step=0.5)
+    default = dict(type='visibilities', size=[32, 28])
+    changes = migration.migrate(dict(observations=[
+        dict(observable=given), dict(observable=default)]), 2)
+    assert given == dict(type='visibilities', fov=[16.0, 14.0], step=0.5)
+    # (the default step depends on the coverage: the field is by hand)
+    assert default == dict(type='visibilities')
+    assert any(c.message.startswith("by hand: give fov") for c in changes)

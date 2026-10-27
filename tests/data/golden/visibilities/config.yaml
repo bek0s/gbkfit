@@ -27,7 +27,7 @@ observations:
     lsf: {type: hanning, width: 20}
   observable:
     type: visibilities
-    size: [32, 28]
+    fov: [32, 28]
     step: [1, 1]
     rpix: [15.5, 13.5]
     rval: [150, -30]

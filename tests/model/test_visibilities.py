@@ -4,6 +4,7 @@ the model (that of pixel_spectra on its grid), and analytic sources.
 """
 
 import copy
+import logging
 
 import gbkfit.params
 import numpy as np
@@ -40,7 +41,7 @@ UVW = np.random.default_rng(1).uniform(-1, 1, (40, 3)) * [15e3, 15e3, 5e3]
 COVERAGE = UVCoverage(
     UVW, HI * (1 - VELOCITIES * 1e3 / C), (150.001, -30.0005), 'LSRK',
     f'{HI} Hz')
-GRID = dict(size=[32, 28], step=1, rval=[150, -30])
+GRID = dict(fov=[32, 28], step=1, rval=[150, -30])
 
 
 def evaluate(driver, galaxy, observable, properties):
@@ -121,7 +122,7 @@ def test_visibilities_have_no_psf():
     from gbkfit.instrument import Instrument, PSFGauss
     from gbkfit.observation import Visibilities
     with pytest.raises(ConfigError, match="no PSF"):
-        Visibilities(COVERAGE, (8, 8)).check_instrument(
+        Visibilities(COVERAGE, 8).check_instrument(
             Instrument(psf=PSFGauss(sigma=1)))
 
 
@@ -209,3 +210,34 @@ def test_the_noise_of_visibilities_is_not_correlated_on_the_sky(driver):
     noise = NoiseGauss(rms=0.1, spatial_correlation=PSFGauss(sigma=1))
     with pytest.raises(ConfigError, match="not on the sky"):
         plan.mock(params, noise, seed=1)
+
+
+def test_the_default_step_samples_the_longest_baseline_five_times():
+    # As galario's: 1 / (5 u_max), at the highest frequency
+    from gbkfit.observation import Visibilities
+    uv = np.hypot(*COVERAGE.uvw()[:, :2].T).max()
+    u_max = uv * COVERAGE.frequencies().max() / C
+    observable = Visibilities(COVERAGE, 8)
+    assert observable.step()[0] == pytest.approx(
+        np.degrees(1) * 3600 / (5 * u_max))
+    assert observable.size()[:2] == tuple(
+        int(np.ceil(8 / step)) for step in observable.step()[:2])
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(fov=40), None),
+    (dict(fov=40, step=1.25), "change by"),
+    (dict(fov=12), "edges of the field")])
+def test_the_first_evaluation_checks_the_sampling(
+        driver, caplog, options, message):
+    # At half the step, the visibilities of the Nyquist step of the longest
+    # baseline change by 5%; a field that cuts the disk has flux at its
+    # edges
+    COVERAGE.dump('coverage.npz', overwrite=True)
+    with caplog.at_level(logging.WARNING):
+        evaluate(driver, DISK, dict(
+            type='visibilities', coverage='coverage.npz',
+            rval=[150, -30]) | options, DISK_PROPERTIES)
+    warnings = [r.message for r in caplog.records
+                if r.levelno == logging.WARNING]
+    assert any(message in w for w in warnings) if message else not warnings

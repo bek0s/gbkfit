@@ -435,7 +435,7 @@ CASES: list[dict[str, Any]] = [
         galaxies=_DISK,
         observations=[_sky(
             dict(type='visibilities', coverage='coverage.npz',
-                 size=[32, 28], step=1, rval=[150, -30]),
+                 fov=[32, 28], step=1, rval=[150, -30]),
             instrument=dict(lsf=dict(type='hanning', width=20)))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.01)],

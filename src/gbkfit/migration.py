@@ -429,6 +429,44 @@ class _SpectralAxes(Rule):
             spectral['convention'] = 'relativistic'
 
 
+class _VisibilityFields(Rule):
+    """
+    The field of visibilities is an angle (2026-10-28): fov (arcsec) is
+    the size in pixels times the step; its default step is no longer 1 /
+    (2 u_max) but 1 / (5 u_max), whose pixels sample the model better.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            observable = item.get('observable')
+            if not isinstance(observable, MutableMapping) \
+                    or observable.get('type') != 'visibilities' \
+                    or 'size' not in observable:
+                continue
+            size = observable['size']
+            step = observable.get('step')
+            path = path + ['observable']
+            if step is None:
+                del observable['size']
+                changes.append(Change(path, (
+                    "by hand: give fov, the field (arcsec), that of size "
+                    "times the default step of the pixels, which was 1 / (2 "
+                    "u_max) of the longest baseline")))
+                continue
+            steps = [step] * 2 if not isinstance(step, list) else step
+            _rename(observable, 'size', 'fov')
+            observable['fov'] = _like(
+                size, [n * s for n, s in zip(size, steps)])
+            changes.append(Change(
+                path, "size -> fov (arcsec): size times step"))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -437,6 +475,7 @@ RULES: tuple[Rule, ...] = (
     _ObservationRenames(),
     _TypedKinematics(),
     _SpectralAxes(),
+    _VisibilityFields(),
 )
 
 
