@@ -76,6 +76,14 @@ class DriverHost(Driver):
     ) -> DeviceArray:
         return np.add(x1, x2, out=out)
 
+    def math_sub(
+            self,
+            x1: DeviceArray,
+            x2: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        return np.subtract(x1, x2, out=out)
+
     def math_mul(
             self,
             x1: DeviceArray,

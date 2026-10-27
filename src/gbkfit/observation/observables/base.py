@@ -220,8 +220,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         Check whether its model is linear in the light of what it sees:
         the sum of the models of parts of the light, each times its
         amplitude (e.g. images and spectra, but not moments, which are
-        ratios of sums of the light), so that amplitudes of the light can
-        be solved (see params.Solve); False here.
+        ratios of sums of the light, nor a model that can lack values, see
+        model_can_lack_values), so that amplitudes of the light can be
+        solved (see params.Solve); False here.
         """
         return False
 

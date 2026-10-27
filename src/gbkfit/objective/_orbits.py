@@ -31,7 +31,7 @@ class OrbitSolve:
 
     The model of each moment of a bin is linear in the weights f (see
     OrbitSeries): base + slope (moments @ f). Its comparison gives its
-    residual c (model - data) (see Comparison.check_pointwise; c is the
+    residual c (model - data) (see Comparison.pointwise_form; c is the
     residual of the model data + 1): the rows of the data, c slope
     moments, and their targets, c (data - base). The constraints of the
     light of the orbits give the rows of constraints, which count with the
@@ -53,8 +53,8 @@ class OrbitSolve:
     Raises
     ------
     ConfigError
-        If an observation of it does not compare each value of its data
-        with its model alone (see Comparison.check_pointwise).
+        If the weighted residuals of the comparison of an observation of
+        it are not pointwise (see Comparison.pointwise_form).
     """
 
     def __init__(
@@ -69,8 +69,12 @@ class OrbitSolve:
         observations = [group_plan.group().observations()[i] for i in indices]
         self._recording = recording
         self._comparisons = tuple(comparisons[i] for i in indices)
-        for comparison, observation in zip(self._comparisons, observations):
-            comparison.check_pointwise(observation.keys())
+        for i, comparison, observation in zip(
+                indices, self._comparisons, observations):
+            if reason := comparison.pointwise_form(observation.keys()):
+                raise ConfigError(
+                    f"the weights of the orbits {recording.weights()!r} "
+                    f"cannot be solved from observation {i}: {reason}")
         self._drivers = tuple(
             group_plan.observation_drivers()[i] for i in indices)
         self._dtypes = tuple(
@@ -92,6 +96,10 @@ class OrbitSolve:
     def elements(self) -> tuple[str, ...]:
         """Return the names of the elements of its weights."""
         return self._elements
+
+    def likelihood(self) -> str:
+        """Return what the log-likelihood takes of their values (see Solve)."""
+        return self._solve.likelihood()
 
     def close(self) -> None:
         """Release its memory; the next solve allocates it again."""

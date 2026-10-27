@@ -170,3 +170,34 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
             type='gaussian', mean=1, sigma=0.5, minimum=0))))
     with pytest.raises(ConfigError, match="not linear in both"):
         Objective(group.plan(driver), params.solves())
+
+
+def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
+    # The plan gives the image of the core and the envelope as linear in
+    # the amplitudes of the core: the base, the envelope alone, and the
+    # image of each amplitude alone; the comparison weighs them by the
+    # errors of the data
+    from gbkfit.objective.comparisons import comparison
+    image = models(driver, [(32, 32)], TRUTH)[0]
+    group = ObservationGroup(
+        [galaxy_parser.load(dict(components=copy.deepcopy([CORE, ENVELOPE])))],
+        [observation(None, image)])
+    plan = group.plan(driver)
+    pieces = plan.amplitude_pieces(TRUTH, AMPLITUDES[:2], [0])[0]
+    base = driver.mem_copy_d2h(pieces.base['brightness']['d'])
+    parts = driver.mem_copy_d2h(pieces.pieces['brightness'])
+    atol = 1e-6 * image.max()
+    np.testing.assert_allclose(
+        base, models(driver, [(32, 32)], with_amplitudes(
+            TRUTH, [0, 0, TRUTH['envelope_ie']]))[0], atol=atol)
+    for k in range(2):
+        np.testing.assert_allclose(parts[k], models(
+            driver, [(32, 32)], with_amplitudes(TRUTH, np.eye(3)[k]))[0],
+            atol=atol)
+    comparison_ = comparison(group.observations()[0], driver)
+    comparison_.prepare()
+    rows = driver.mem_alloc_d((2, image.size), np.float64)
+    comparison_.weigh(pieces, TRUTH, rows)
+    np.testing.assert_allclose(
+        driver.mem_copy_d2h(rows), parts.reshape(2, -1) / ERROR,
+        atol=atol / ERROR)

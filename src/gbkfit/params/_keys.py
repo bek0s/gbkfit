@@ -6,7 +6,7 @@ numpy subscript that selects elements of a vector parameter, e.g. 'a',
 
 import ast
 import dataclasses
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 
 import numpy as np
 
@@ -39,6 +39,30 @@ def element_names(name: str, indices: Iterable[int] | None) -> list[str]:
     if indices is None:
         return [name]
     return [element_name(name, int(i)) for i in indices]
+
+
+def with_elements(
+        values: Mapping[str, float | np.ndarray],
+        elements: Sequence[tuple[str, int | None]],
+        new: float | Sequence[float] | np.ndarray
+) -> dict[str, float | np.ndarray]:
+    """
+    Return the values of parameters with the given elements (each the
+    name of its parameter and its index, None for a scalar) at new values
+    (one for all, or one for each); copies of the vectors it changes.
+    """
+    result = dict(values)
+    new = np.broadcast_to(np.asarray(new, dtype=float), len(elements))
+    copied = set()
+    for (name, index), value in zip(elements, new):
+        if index is None:
+            result[name] = float(value)
+            continue
+        if name not in copied:
+            result[name] = np.array(result[name], dtype=float)
+            copied.add(name)
+        result[name][index] = value
+    return result
 
 
 def subscript_value(node: ast.expr) -> int | slice | list[int] | None:

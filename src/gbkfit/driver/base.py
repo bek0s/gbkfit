@@ -641,6 +641,15 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
         """Return x1 + x2 (into out, if given)."""
 
     @abc.abstractmethod
+    def math_sub(
+            self,
+            x1: DeviceArray,
+            x2: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        """Return x1 - x2 (into out, if given)."""
+
+    @abc.abstractmethod
     def math_mul(
             self,
             x1: DeviceArray,

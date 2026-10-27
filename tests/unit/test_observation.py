@@ -124,7 +124,8 @@ def test_likelihoods_name_items_of_their_observation(options, message):
             likelihood=LikelihoodGaussian(missing_residual=3, **options))
 
 
-def test_solved_scales_do_not_go_with_upper_limits_on_their_items():
+def test_residuals_of_upper_limits_are_not_linear_in_the_model():
+    # (so that no elements of the model are solved from them)
     from gbkfit.dataset import DatasetPixelSpectra
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.objective.comparisons import comparison
@@ -134,5 +135,6 @@ def test_solved_scales_do_not_go_with_upper_limits_on_their_items():
         PixelSpectra.from_data(data), Flat(), data=data,
         likelihood=LikelihoodGaussian(
             upper_limits=dict(spectra=dict(limit=0.1, error=0.05))))
-    with pytest.raises(ConfigError, match="do not go with its upper limit"):
-        comparison(observation, DriverHost()).check_scales(['spectra'])
+    comparison_ = comparison(observation, DriverHost())
+    for form in (comparison_.linear_form, comparison_.pointwise_form):
+        assert "has an upper limit" in form(['spectra'])

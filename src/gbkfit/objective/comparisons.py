@@ -6,7 +6,7 @@ import numpy as np
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import Observation
+from gbkfit.observation import LinearPieces, Observation
 from gbkfit.observation.likelihood import (
     LikelihoodGaussian, LikelihoodUser, Whitening, whitening)
 from gbkfit.params import ParamValues
@@ -37,6 +37,13 @@ class Comparison(abc.ABC):
     The model it compares can have scales (the solved values of a flux
     scale of the observation; see Objective): factors of the values of
     data items, which it applies to a copy of the model of its own.
+
+    Its weighted residuals can be linear in the model, W (m - d) of a
+    linear map W (see linear_form), and pointwise, of each value alone
+    (see pointwise_form): elements of the parameters that the model is
+    linear in can then be solved (see Objective). It gives the weighted
+    pieces of the model, W p (see weigh), and of a solved scale its sums
+    (see scale_sums).
 
     Its memory on the device (and the host) is allocated by prepare and
     released by close. The methods of the residuals return arrays that the
@@ -179,39 +186,54 @@ class Comparison(abc.ABC):
         """
         pass
 
-    def check_linear(self, keys: Collection[str]) -> None:
+    def linear_form(self, keys: Collection[str]) -> str | None:
         """
-        Raise ConfigError unless its weighted residuals of the given data
-        items are linear in the model (see Objective: amplitudes of the
-        light solved together take the residuals of their parts of the
-        model): here, they are not.
+        Return why its weighted residuals of the given data items are not
+        W (m - d), linear in the model m by a map W of their own, or None
+        if they are (e.g. amplitudes of the light are solved from the
+        weighted pieces of the model, see weigh): here, they are not known
+        to be.
         """
-        raise ConfigError(
+        return (
             f"the likelihood of the observation, "
-            f"{self._observation.likelihood().type()}, solves no amplitudes "
-            f"of the light of its model")
+            f"{self._observation.likelihood().type()}, is not known to be "
+            f"linear in the model")
 
-    def check_pointwise(self, keys: Collection[str]) -> None:
+    def pointwise_form(self, keys: Collection[str]) -> str | None:
         """
-        Raise ConfigError unless its weighted residual of each value of the
-        given data items is c (m - d) of the model of that value m alone
-        (e.g. for the weights of orbits, see Objective; c is then the
-        residual of the model d + 1): here, it is not.
+        Return why its weighted residual of each value of the given data
+        items is not c (m - d), of the model m of that value alone (W of
+        linear_form diagonal), or None if it is (e.g. solved scales are
+        solved from the sums of each spectrum, see scale_sums, and the
+        weights of orbits from c, the residual of the model d + 1): here,
+        the reason of linear_form.
         """
-        raise ConfigError(
-            f"the likelihood of the observation, "
-            f"{self._observation.likelihood().type()}, does not compare "
-            f"each value of its data with its model alone")
+        return self.linear_form(keys)
 
-    def check_scales(self, keys: Collection[str]) -> None:
+    def weigh(
+            self,
+            pieces: LinearPieces,
+            params: ParamValues,
+            out: DeviceArray
+    ) -> None:
         """
-        Raise ConfigError unless it can give the sums of solved scales of
-        the given data items (see scale_sums): here, it cannot.
+        Write its weighted pieces of the model (see
+        GroupPlan.amplitude_pieces) to the rows of out, one for each piece,
+        as its residuals: W p, of the map W of its weighted residuals (see
+        linear_form). Only comparisons whose weighted residuals are linear
+        in the model give them. It overwrites its residuals.
+
+        Parameters
+        ----------
+        pieces : LinearPieces
+            The pieces of the model of the observation.
+        params : ParamValues
+            The parameters, prefixed (see Objective.pdescs).
+        out : DeviceArray
+            The rows (float64), of the number of pieces by that of its
+            residuals.
         """
-        raise ConfigError(
-            f"the likelihood of the observation, "
-            f"{self._observation.likelihood().type()}, solves no scales of "
-            f"its model (e.g. its flux scale)")
+        raise NotImplementedError
 
     def scale_sums(
             self,
@@ -226,7 +248,8 @@ class Comparison(abc.ABC):
         A = sum w m^2 and B = sum w m d of the values along it, m the
         model, d the data and w the weight of the value in the chi-square;
         new arrays of the shape of the item, of 1 along the axis. Only
-        comparisons that can solve scales give them (see check_scales).
+        comparisons whose weighted residuals are pointwise give them (see
+        pointwise_form).
         """
         raise NotImplementedError
 
@@ -481,6 +504,9 @@ class ComparisonGaussian(Comparison):
         self._d_error: dict[str, DeviceArray] = {}
         # The footprints of upper limits, by name
         self._d_footprints: dict[str, DeviceArray] = {}
+        # Data of 0 of each item, by name, allocated on first use: the
+        # weighted residual of a piece of the model p is W p (see weigh)
+        self._d_zeros: dict[str, DeviceArray] = {}
         # The sums of each item and axis of scales (A and B; see
         # scale_sums), allocated on first use
         self._h_scale_sums: dict[tuple[str, int], list[np.ndarray]] = {}
@@ -631,55 +657,82 @@ class ComparisonGaussian(Comparison):
         if self._noise:
             self._update_noise_residuals(model, scaled, params, weighted)
 
-    def check_linear(self, keys: Collection[str]) -> None:
+    def linear_form(self, keys: Collection[str]) -> str | None:
         """
-        Raise ConfigError if a data item of the given ones has an upper
-        limit (its residuals are not linear in the model), or values that
-        the model can lack (their residual is a constant).
+        Return why its weighted residuals of the given data items are not
+        linear in the model (see Comparison.linear_form), or None if they
+        are: a data item with an upper limit, whose residuals of the
+        values below it are not. (The residual of a value the model lacks
+        is a constant: the models of observables linear in the light have
+        every value, see Observable.linear_in_light.)
         """
         for key in keys:
             if not np.isnan(self._upper_limits[key][0]):
-                raise ConfigError(
-                    f"solved amplitudes of the light do not go with the "
-                    f"upper limit of '{key}': its residuals are not linear "
-                    f"in the model")
-        if self._observation.model_can_lack_values():
-            raise ConfigError(
-                "solved amplitudes of the light do not go with a model that "
-                "can lack values (e.g. moments): its residuals are not "
-                "linear in the model")
+                return (
+                    f"'{key}' has an upper limit, whose residuals are not "
+                    f"linear in the model")
+        return None
 
-    def check_pointwise(self, keys: Collection[str]) -> None:
+    def pointwise_form(self, keys: Collection[str]) -> str | None:
         """
-        Raise ConfigError if a data item of the given ones has an upper
-        limit (its residuals are not linear in the model) or correlated
-        noise (its residuals, whitened, mix the values).
+        Return why its weighted residual of each value of the given data
+        items is not of the model of that value alone (see
+        Comparison.pointwise_form), or None if it is: that of linear_form,
+        or a data item with correlated noise, whose whitened residuals mix
+        the values.
         """
+        if (reason := self.linear_form(keys)) is not None:
+            return reason
         for key in keys:
-            if not np.isnan(self._upper_limits[key][0]):
-                raise ConfigError(
-                    f"'{key}' has an upper limit: its residuals are not "
-                    f"linear in its model")
             if self._dataset.noise_correlation(key) is not None:
-                raise ConfigError(
-                    f"'{key}' has correlated noise: its residuals mix its "
-                    f"values")
+                return (
+                    f"'{key}' has correlated noise, whose whitened residuals "
+                    f"mix the values")
+        return None
 
-    def check_scales(self, keys: Collection[str]) -> None:
-        """
-        Raise ConfigError if a data item of the given ones has an upper
-        limit (the sums leave out its terms) or correlated noise (the best
-        scale of each spectrum would depend on the others).
-        """
-        for key in keys:
-            if not np.isnan(self._upper_limits[key][0]):
-                raise ConfigError(
-                    f"solved scales of '{key}' do not go with its upper "
-                    f"limit: they are solved without the terms of the limit")
-            if self._dataset.noise_correlation(key) is not None:
-                raise ConfigError(
-                    f"solved scales of '{key}' do not go with its correlated "
-                    f"noise")
+    def weigh(
+            self,
+            pieces: LinearPieces,
+            params: ParamValues,
+            out: DeviceArray
+    ) -> None:
+        # (W p is the residual of p of data 0, without upper limits or a
+        # residual of values the model lacks, which W leaves out)
+        driver = self._driver
+        keys = self._observation.keys()
+        if not self._d_zeros:
+            self._alloc_zeros()
+        weights = {
+            key: self._weights[key] * self._pixel_weight(pieces.base, key)
+            for key in keys}
+        noise = {key: self._noise_values(key, params) for key in keys}
+        for k, row in enumerate(out):
+            for key in keys:
+                residual = self._d_residual_nddata[key]
+                self._backend.residual(
+                    self._d_zeros[key],
+                    self._d_error.get(key),
+                    self._d_mask.get(key),
+                    pieces.pieces[key][k],
+                    pieces.base[key]['w'],
+                    weights[key],
+                    np.nan, np.nan, np.nan,
+                    *noise[key],
+                    residual)
+                if key in self._whiteners:
+                    self._whiteners[key](residual)
+            driver.mem_copy_d2d(self._d_residual_vector, row)
+
+    def _alloc_zeros(self) -> None:
+        """Allocate the data of 0 of each item (see weigh)."""
+        driver = self._driver
+        shape = self._dataset.shape()
+        npix = int(np.prod(shape))
+        keys = self._observation.keys()
+        zeros = driver.mem_alloc_d(npix * len(keys), self._observation.dtype())
+        driver.mem_fill(zeros, 0)
+        for j, key in enumerate(keys):
+            self._d_zeros[key] = zeros[j * npix:(j + 1) * npix].reshape(shape)
 
     def scale_sums(
             self,

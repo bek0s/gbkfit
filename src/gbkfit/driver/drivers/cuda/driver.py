@@ -116,6 +116,15 @@ class DriverCuda(Driver):
         with self._device:
             return cp.add(x1, x2, out=out)
 
+    def math_sub(
+            self,
+            x1: DeviceArray,
+            x2: DeviceArray,
+            out: DeviceArray | None = None
+    ) -> DeviceArray:
+        with self._device:
+            return cp.subtract(x1, x2, out=out)
+
     def math_mul(
             self,
             x1: DeviceArray,

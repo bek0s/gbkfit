@@ -1,7 +1,8 @@
 """
 A group of galaxies and observations planned on devices (GroupPlan): the
 stage of each galaxy and the plan of each observation, each on its
-driver, with the memory of their models.
+driver, with the memory of their models, and the models of observations
+linear in amplitudes of their light (LinearPieces).
 """
 
 import concurrent.futures
@@ -9,15 +10,16 @@ import contextvars
 import copy
 import threading
 from collections.abc import Iterable, Sequence
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import numpy as np
 
 from gbkfit.dataset import Data, Dataset
-from gbkfit.driver import Driver
+from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
 from gbkfit.params import ParamFunctions, ParamValues
+from gbkfit.params._keys import with_elements
 from gbkfit.utils import parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 from ._orbits import (
@@ -31,8 +33,27 @@ if TYPE_CHECKING:
 
 
 __all__ = [
-    'GroupPlan'
+    'GroupPlan',
+    'LinearPieces'
 ]
+
+
+class LinearPieces(NamedTuple):
+    """
+    The model of an observation as linear in elements of the parameters
+    (see GroupPlan.amplitude_pieces): base + sum_k x_k pieces[k] at the
+    values x_k of the elements, on the driver of the observation.
+
+    Attributes
+    ----------
+    base : ModelData
+        The model with the elements at 0.
+    pieces : dict
+        The pieces of each data item, by key: an array of the piece of
+        each element along its first axis, each of the shape of the item.
+    """
+    base: ModelData
+    pieces: dict[str, DeviceArray]
 
 
 class GroupPlan:
@@ -56,6 +77,11 @@ class GroupPlan:
     weights there, as an objective fits them (see objective.Objective).
     Observations of the orbits without data have the models of their own
     plans (see OrbitMomentsPlan).
+
+    The models of observations that see amplitudes of the light of
+    components (see Component.light_amplitudes) are linear in them: it
+    gives them as pieces (see amplitude_pieces), from which an objective
+    solves them (see objective.Objective).
 
     An evaluation skips the stage of a galaxy, the recording of orbits,
     or the model of an observation, when the parameters it reads have
@@ -151,6 +177,9 @@ class GroupPlan:
             {key: dict(d=None, m=None, w=None) for key in obs.keys()}
             for obs in observations]
         self._d_model_data = [dict() for _ in observations]
+        # The pieces of the models linear in amplitudes of the light, of
+        # each observation that has some (see amplitude_pieces)
+        self._pieces: dict[int, LinearPieces] = {}
         # The times of the steps of its evaluations (and of those of the
         # objectives of it)
         self._timers = timeutils.Timers()
@@ -344,13 +373,15 @@ class GroupPlan:
         Release the memory of its recordings of orbits now, rather than when
         Python collects it: the samples of the orbits on the device (up to
         a gigabyte, see OrbitIntegrator) and the orbits of the last
-        recording on the host. The next evaluation allocates it again.
+        recording on the host; and that of the pieces of models (see
+        amplitude_pieces). The next evaluation allocates it again.
         """
         with self._lock:
             for recording, last in zip(
                     self._recordings, self._recording_lasts):
                 recording.close()
                 last.forget()
+            self._pieces = {}
 
     def model_d(
             self,
@@ -408,13 +439,114 @@ class GroupPlan:
             with self._timers.measure('model_gravity'):
                 states = self._galaxy_states(params, out_extra)
             series = self._orbit_series(params, states)
-            if self._executor is None:
-                for i in range(len(self._plans)):
-                    self._evaluate_model(i, params, states, series, out_extra)
-            else:
-                self._evaluate_models_at_once(
-                    params, states, series, out_extra)
+            self._evaluate_models(
+                range(len(self._plans)), params, states, series, out_extra)
         return self._d_model_data
+
+    def amplitude_pieces(
+            self,
+            params: ParamValues,
+            elements: Sequence[tuple[str, int | None]],
+            observations: Sequence[int]
+    ) -> dict[int, LinearPieces]:
+        """
+        Evaluate the models of the given observations as linear in elements
+        of the parameters that are amplitudes of the light they see (see
+        ObservationGroup.light_amplitudes): the base, with the elements at
+        0, and the piece of each, the model with it at 1 alone less the
+        base (see LinearPieces). With K elements, the models of these
+        observations (not those of the others) are evaluated K + 1 times,
+        as model_d evaluates them, with BLAS on one thread.
+
+        Parameters
+        ----------
+        params : dict
+            The parameters of the group (see ObservationGroup.pdescs).
+        elements : Sequence of tuple
+            The elements: each the name of its parameter and its index
+            (None for a scalar).
+        observations : Sequence of int
+            The observations, by index.
+
+        Returns
+        -------
+        dict
+            The pieces of the model of each observation, by index, on its
+            driver; they are overwritten by the next call (hold the lock
+            while reading them, see lock).
+
+        Raises
+        ------
+        ValueError
+            If a recording of orbits models one of the observations (see
+            orbit_series): its model is not linear in the light.
+        """
+        if recorded := sorted(set(observations) & set(self._recording_of)):
+            raise ValueError(
+                f"the models of observations {recorded} are of orbits, not "
+                f"linear in the light")
+        base = with_elements(params, elements, 0.0)
+        with (self._lock, self._timers.measure('model_pieces'),
+              threadutils.single_threaded_blas()):
+            for k in range(len(elements) + 1):
+                values = base if k == 0 \
+                    else with_elements(base, [elements[k - 1]], 1.0)
+                states = self._galaxy_states(values, None)
+                self._evaluate_models(observations, values, states, (), None)
+                for i in observations:
+                    if k == 0:
+                        self._keep_base(i, len(elements))
+                    else:
+                        self._keep_piece(i, k - 1)
+        return {i: self._pieces[i] for i in observations}
+
+    def _keep_base(self, index: int, size: int) -> None:
+        """
+        Copy the model of the observation of the given index to the base of
+        its pieces (see amplitude_pieces), for the given number of pieces.
+        """
+        driver = self._observation_drivers[index]
+        model = self._d_model_data[index]
+        pieces = self._pieces.get(index)
+        if pieces is None or _npieces(pieces) != size:
+            pieces = _alloc_pieces(driver, model, size)
+            self._pieces[index] = pieces
+        for key, item in model.items():
+            for part, array in item.items():
+                if array is not None:
+                    driver.mem_copy_d2d(array, pieces.base[key][part])
+
+    def _keep_piece(self, index: int, k: int) -> None:
+        """
+        Make the model of the observation of the given index less the base
+        its piece k (see amplitude_pieces).
+        """
+        driver = self._observation_drivers[index]
+        pieces = self._pieces[index]
+        for key, item in self._d_model_data[index].items():
+            driver.math_sub(
+                item['d'], pieces.base[key]['d'], out=pieces.pieces[key][k])
+
+    def _evaluate_models(
+            self,
+            indices: Iterable[int],
+            params: ParamValues,
+            states: Sequence[GalaxyState],
+            series: Sequence[OrbitSeries],
+            out_extra: Extras | None
+    ) -> None:
+        """
+        Evaluate the models of the observations of the given indices (see
+        model_d): those on each driver one after the other, and those on
+        different drivers at the same time, if any (see
+        _evaluate_models_at_once).
+        """
+        if self._executor is None:
+            for i in indices:
+                self._evaluate_model(i, params, states, series, out_extra)
+        else:
+            self._evaluate_models_at_once(
+                indices, params, states, series, out_extra)
 
     def _evaluate_model(
             self,
@@ -452,28 +584,32 @@ class GroupPlan:
 
     def _evaluate_models_at_once(
             self,
+            indices: Iterable[int],
             params: ParamValues,
             states: Sequence[GalaxyState],
             series: Sequence[OrbitSeries],
             out_extra: Extras | None
     ) -> None:
         """
-        Evaluate the models of the observations on each driver one after
-        the other, in a thread of the driver, with the context of the
-        caller (e.g. the paths of configuration errors); the extra outputs
-        of each observation go to out_extra after all are done, in their
-        order (see model_d).
+        Evaluate the models of the observations of the given indices on
+        each driver one after the other, in a thread of the driver, with
+        the context of the caller (e.g. the paths of configuration
+        errors); the extra outputs of each observation go to out_extra
+        after all are done, in their order (see model_d).
         """
         extras = [
             None if out_extra is None else Extras() for _ in self._plans]
+        wanted = set(indices)
 
-        def evaluate(indices: tuple[int, ...]) -> None:
-            for i in indices:
-                self._evaluate_model(i, params, states, series, extras[i])
+        def evaluate(on_driver: tuple[int, ...]) -> None:
+            for i in on_driver:
+                if i in wanted:
+                    self._evaluate_model(
+                        i, params, states, series, extras[i])
         futures = [
             self._executor.submit(
-                contextvars.copy_context().run, evaluate, indices)
-            for indices in self._on_drivers]
+                contextvars.copy_context().run, evaluate, on_driver)
+            for on_driver in self._on_drivers]
         concurrent.futures.wait(futures)
         for future in futures:
             future.result()
@@ -670,6 +806,28 @@ class _LastValues:
         """Forget the last evaluation (e.g. its memory was overwritten)."""
         self._values = None
         self._result = None
+
+
+def _alloc_pieces(
+        driver: Driver, model: ModelData, size: int
+) -> LinearPieces:
+    """
+    Allocate the pieces of a model of the given number of pieces (see
+    GroupPlan.amplitude_pieces), on its driver: the base of the parts of
+    the model, and the pieces of its values ('d').
+    """
+    return LinearPieces(
+        {key: {part: None if array is None
+               else driver.mem_alloc_d(array.shape, array.dtype)
+               for part, array in item.items()}
+         for key, item in model.items()},
+        {key: driver.mem_alloc_d((size, *item['d'].shape), item['d'].dtype)
+         for key, item in model.items()})
+
+
+def _npieces(pieces: LinearPieces) -> int:
+    """Return the number of the pieces of a model."""
+    return len(next(iter(pieces.pieces.values())))
 
 
 def _same(a: Any, b: Any) -> bool:

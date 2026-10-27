@@ -108,6 +108,6 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), data=dataset,
             flux_scale='one', name='obs')])
-    with pytest.raises(ConfigError, match="its correlated noise"):
+    with pytest.raises(ConfigError, match="has correlated noise"):
         Objective(group.plan(driver),
                   dict(obs_flux_scale=SolveGaussian(1, 0.5, 0)))

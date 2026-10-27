@@ -287,7 +287,7 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
         "    return model - data\n")
     user = LikelihoodUser(
         str(tmp_path / 'like.py'), 'like', 'residuals')
-    with pytest.raises(ConfigError, match="solves no scales"):
+    with pytest.raises(ConfigError, match="not known to be linear"):
         objective(driver, spectra, 1.0, likelihood=user)
     # (and a fit needs an objective that solves those of its parameters)
     obj, params = objective(driver, spectra, 1.0, vsys=dict(value=0))
