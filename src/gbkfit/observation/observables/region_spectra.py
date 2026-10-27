@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, LineEmission
+from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -180,8 +180,12 @@ class RegionSpectra(Observable):
         return DatasetRegionSpectra(
             items['spectra'], self.regions(), self.spectral())
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
-        return _detail.region_data_unit(dataset, 'spectra', False)
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
+        return _detail.region_data_unit(dataset, 'spectra', False, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)

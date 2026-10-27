@@ -8,7 +8,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, Extras, GalaxyState, LineEmission
+from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
@@ -278,10 +278,14 @@ class Visibilities(Observable):
     def dataset(self, items: Mapping[str, Data]) -> DatasetVisibilities:
         return DatasetVisibilities(items['re'], items['im'], self._coverage)
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         # (the visibilities are sums of the flux of the pixels: of their
         # surface brightness times their area, see VisibilitiesPlan)
-        return _detail.region_data_unit(dataset, 're', False)
+        return _detail.region_data_unit(dataset, 're', False, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('re', 'im')

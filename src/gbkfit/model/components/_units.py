@@ -28,6 +28,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     'DataUnit',
+    'LightUnit',
     'LineFactors',
     'BandFactors',
     'OpacityScales',
@@ -256,6 +257,18 @@ class DataUnit(NamedTuple):
     beam: float | np.ndarray | None = None
     beam_spectral: u.Quantity | None = None
     integrated: bool = False
+
+
+class LightUnit(NamedTuple):
+    """
+    The unit of the light of the model of an observation without data, as
+    the observation gives it (see observation.ObservationSky: unit), with
+    the solid angle of the beam (arcsec^2) of a unit per beam: one, or one
+    for each of the spectral points beam_spectral (as DataUnit).
+    """
+    unit: u.UnitBase
+    beam: float | np.ndarray | None = None
+    beam_spectral: u.Quantity | None = None
 
 
 class LineFrame(NamedTuple):

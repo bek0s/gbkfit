@@ -483,3 +483,16 @@ def test_psfs_from_files_in_python(tmp_path):
             psf.asarray((0.2, 0.2)), loaded.asarray((0.2, 0.2)))
     np.testing.assert_allclose(
         PSFImage.from_file(str(tmp_path / 'psf.fits'))._step, (0.5, 0.5))
+
+
+@pytest.mark.parametrize('psf', [
+    PSFGauss(1.0, 0.5), PSFGGauss(1.0, 1.5, 0.5), PSFMoffat(1.0, 3.0, 0.5),
+    PSFGaussBeam(2.0, 1.0, 30),
+    PSFImage(PSFMoffat(1.0, 3.0).asarray((0.05, 0.05)), (0.05, 0.05)),
+    PSFSum([PSFGauss(1.0), PSFGauss(2.0)], [0.3, 0.7]),
+    PSFConvolution([PSFGauss(1.0), PSFMoffat(1.0, 3.0)])])
+def test_the_beam_area_is_the_integral_over_the_peak(psf):
+    # (of the PSF drawn finely, which sums to 1)
+    step = 0.02
+    assert psf.beam_area() == pytest.approx(
+        step ** 2 / psf.asarray((step, step)).max(), rel=2e-3)

@@ -9,7 +9,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import (
-    DataUnit, Emission, Extras, GalaxyState, LineEmission)
+    DataUnit, Emission, Extras, GalaxyState, LightUnit, LineEmission)
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -269,7 +269,11 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         """
         Return the unit of the light of its data, which its model takes.
 
@@ -277,14 +281,17 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         ----------
         dataset : Dataset, optional
             The data.
+        light : LightUnit, optional
+            The unit of the light of its model without data, if given.
 
         Returns
         -------
         DataUnit or None
             The unit of the data item of light (e.g. 'spectra' or
             'moment0'; see DataUnit), with its beam and the area of its
-            pixels; None without data, or without an item of light (e.g.
-            moments of order 1 and above only: velocities).
+            pixels; without data, that of the given light; None without
+            either, or without an item of light (e.g. moments of order 1
+            and above only: velocities).
         """
         pass
 

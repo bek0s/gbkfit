@@ -8,7 +8,7 @@ import scipy.sparse
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, Extras, GalaxyState, LineEmission
+from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
@@ -236,9 +236,13 @@ class RegionMoments(Observable):
             {order: items[f'moment{order}'] for order in self.orders()},
             self.regions())
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         return _detail.region_data_unit(
-            dataset, 'moment0' if 0 in self._orders else None, True)
+            dataset, 'moment0' if 0 in self._orders else None, True, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('moment0',) if 0 in self._orders else ()

@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, LineEmission
+from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .base import FluxScale, ModelData, Observable
@@ -148,9 +148,14 @@ class PixelSpectra(Observable):
         return DatasetPixelSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         return _detail.data_unit(
-            dataset, 'spectra', abs(self.step()[0] * self.step()[1]), False)
+            dataset, 'spectra', abs(self.step()[0] * self.step()[1]), False,
+            light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)

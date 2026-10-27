@@ -190,6 +190,39 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
                 f"but both values must be odd")
         return self._asarray_impl(step, size, offset, rota)
 
+    def beam_area(self) -> float:
+        """
+        Return the solid angle of its beam (arcsec^2), as of the unit of
+        light per beam (e.g. Jy/beam): its integral over its peak, of the
+        PSF itself (exact for the analytic ones).
+
+        Returns
+        -------
+        float
+            The solid angle.
+
+        Raises
+        ------
+        ConfigError
+            If it has no beam: a point, or a PSF that varies (each point
+            of the spectral axis has its own; see at).
+        """
+        if self.varies():
+            raise ConfigError(
+                "a PSF that varies has a beam at each point of the spectral "
+                "axis (see PSF.at)")
+        return self._beam_area_impl()
+
+    def _beam_area_impl(self) -> float:
+        """
+        Return the solid angle of its beam (see beam_area): here, of the
+        PSF drawn on pixels of about 1/400 of its extent, as the area of a
+        pixel over the peak (the PSF sums to 1).
+        """
+        extent = max(self.size((1.0, 1.0)))
+        step = (extent / 400, extent / 400)
+        return float(step[0] * step[1] / np.max(self.asarray(step)))
+
     def varies(self) -> bool:
         """
         Check whether the PSF varies along the spectral axis.
@@ -298,6 +331,11 @@ class PSFPoint(PSF):
     ) -> dict[str, Any]:
         return dict(type=self.type())
 
+    def _beam_area_impl(self) -> float:
+        raise ConfigError(
+            "a point PSF has no beam: a unit of light per beam needs a PSF "
+            "of a width")
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         return 1, 1
 
@@ -350,6 +388,10 @@ class PSFGauss(PSF):
         self._sigma = sigma
         self._ratio = ratio
         self._posa = posa
+
+    def _beam_area_impl(self) -> float:
+        # (2 pi sigma^2 times the axis ratio)
+        return 2 * np.pi * self._sigma ** 2 * self._ratio
 
     def _extent(self) -> float:
         """
@@ -425,6 +467,12 @@ class PSFGGauss(PSF):
         self._beta = beta
         self._ratio = ratio
         self._posa = posa
+
+    def _beam_area_impl(self) -> float:
+        # (2 pi alpha^2 Gamma(2 / beta) / beta times the axis ratio)
+        return float(
+            2 * np.pi * self._alpha ** 2 * scipy.special.gamma(2 / self._beta)
+            / self._beta * self._ratio)
 
     def _extent(self) -> float:
         """
@@ -505,6 +553,10 @@ class PSFMoffat(PSF):
         self._beta = beta
         self._ratio = ratio
         self._posa = posa
+
+    def _beam_area_impl(self) -> float:
+        # (pi alpha^2 / (beta - 1) times the axis ratio)
+        return np.pi * self._alpha ** 2 / (self._beta - 1) * self._ratio
 
     def _extent(self) -> float:
         """
@@ -614,6 +666,12 @@ class PSFImage(PSF):
         self._data = data
         self._step = tuple(step)
 
+    def _beam_area_impl(self) -> float:
+        # (the sum of its pixels times their area, over its peak)
+        return float(
+            np.sum(self._data) * abs(self._step[0] * self._step[1])
+            / np.max(self._data))
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         return (
             (self._step[0] / step[0]) * self._data.shape[1],
@@ -680,6 +738,13 @@ class PSFSum(PSF):
         self._psfs = tuple(psfs)
         self._weights = _detail.sum_weights(
             weights, len(self._psfs), "a sum of PSFs")
+
+    def _beam_area_impl(self) -> float:
+        # (its terms, each of an integral of 1, peak at 1 over their beam
+        # areas)
+        return float(np.sum(self._weights) / sum(
+            weight / psf.beam_area()
+            for weight, psf in zip(self._weights, self._psfs)))
 
     def varies(self) -> bool:
         return any(psf.varies() for psf in self._psfs)
@@ -887,6 +952,9 @@ class PSFGaussBeam(PSF):
     def bpa(self) -> float:
         """Return the position angle of the major axis."""
         return self._bpa
+
+    def _beam_area_impl(self) -> float:
+        return self._gauss.beam_area()
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         return self._gauss._size_impl(step)

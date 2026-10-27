@@ -10,7 +10,7 @@ import scipy.sparse
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, LineEmission
+from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail, _moments
@@ -552,10 +552,15 @@ class SlitlessSpectra(Observable):
         return DatasetSlitlessSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         # (the light of a pixel is integrated over the lines, as moment 0)
         return _detail.data_unit(
-            dataset, 'spectra', abs(self.step()[0] * self.step()[1]), True)
+            dataset, 'spectra', abs(self.step()[0] * self.step()[1]), True,
+            light)
 
     def linear_in_light(self) -> bool:
         # (its dispersed spectra of the light, through its instrument: linear)

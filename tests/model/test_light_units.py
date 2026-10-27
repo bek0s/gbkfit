@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from gbkfit.dataset import Beam, Data, DatasetPixelSpectra
+from gbkfit.instrument import Instrument, PSFGaussBeam
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
     ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
@@ -43,11 +44,12 @@ def disk(unit=None, lines=('hi21',), thick=False):
 
 def model(
         driver, components, data_unit=None, beam=BEAM, line_of_sight='flat',
-        params=PARAMS, redshift=None):
+        params=PARAMS, redshift=None, psf=None, unit=None):
     """
     The model of the spectra of a galaxy of the given components (and
     redshift, if any), seen in data of the given unit (none: without data)
-    along a line of sight of the given type.
+    along a line of sight of the given type, through the PSF, if given,
+    in the given unit without data, if any.
     """
     observable = PixelSpectra(
         size=SIZE[:2], step=STEP[:2], rval=(0, 0), spectral=SpectralAxis(
@@ -64,7 +66,7 @@ def model(
     group = ObservationGroup(
         [galaxy_parser.load(galaxy)], [ObservationSky(
             observable, line_of_sight_parser.load(dict(type=line_of_sight)),
-            data=data)])
+            instrument=Instrument(psf=psf), data=data, unit=unit)])
     plan = group.plan(driver)
     space = ParamSpace(group.pdescs(), params)
     return plan.model_h(space.evaluate())[0]['spectra']['d'].copy()
@@ -159,3 +161,16 @@ def test_light_in_bands_with_a_unit_needs_the_redshift():
         galaxy_parser.load(dict(components=[stars]))
     galaxy = galaxy_parser.load(dict(components=[stars], redshift=0))
     assert galaxy.dump()['redshift'] == 0
+
+
+def test_a_model_without_data_is_in_its_unit(driver):
+    # Jy/beam of the beam of its PSF, as data of that unit and beam
+    components = [disk('K km/s')]
+    psf = PSFGaussBeam(BEAM.bmaj, BEAM.bmin, BEAM.bpa)
+    np.testing.assert_allclose(
+        model(driver, components, psf=psf, unit='Jy/beam'),
+        model(driver, components, 'Jy/beam', psf=psf), rtol=1e-12)
+    with pytest.raises(ConfigError, match="give the unit of its model"):
+        model(driver, components, 'Jy/beam', unit='Jy/beam')
+    with pytest.raises(ConfigError, match="which has none"):
+        model(driver, components, unit='Jy/beam')

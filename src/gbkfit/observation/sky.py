@@ -10,8 +10,8 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import (
-    Band, BandEmission, DataUnit, Extras, GalaxyState, LineCatalogue, Scene,
-    band_parser)
+    Band, BandEmission, DataUnit, Extras, GalaxyState, LightUnit,
+    LineCatalogue, Scene, band_parser)
 from gbkfit.model.components.roles import load_band
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
@@ -186,6 +186,11 @@ class ObservationSky(Observation):
     name : str, optional
         Its name, which is the id of its extra outputs instead of its
         position (see ObservationGroup.observation_label).
+    unit : str, optional
+        The unit of the light of its model without data (e.g. 'Jy/beam',
+        see unitutils.parse_unit): data give theirs. A unit per beam takes
+        the beam of the PSF of the instrument (see PSF.beam_area), of each
+        point of the spectral axis for a PSF that varies.
 
     Raises
     ------
@@ -203,7 +208,9 @@ class ObservationSky(Observation):
         (see Likelihood.check), the observable cannot be seen through the
         instrument (see Observable.check_observation), the dtype or the
         fft_dtype is not one of the native modules (see Driver.dtypes), or
-        the fft_dtype is less precise than the dtype.
+        the fft_dtype is less precise than the dtype, or the unit is
+        given with data, is not a unit, or is per beam without a beam (see
+        _light_unit).
     """
 
     @staticmethod
@@ -323,13 +330,15 @@ class ObservationSky(Observation):
             flux_scale=self._flux_scale)
         offsets = {} if not self._offsets else dict(offsets=dict(
             self._offsets))
+        unit = {} if self._light is None else dict(
+            unit=unitutils.format_unit(self._light.unit))
         # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
             data={k: v for k, v in self._data.dump(**kwargs).items()
                   if k != 'type'},
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | galaxies | components | lines | band | pixel_weights \
-            | flux_scale | offsets | data | dict(
+            | flux_scale | offsets | unit | data | dict(
             line_of_sight=line_of_sight_parser.dump(self._line_of_sight),
             foreground=foreground_parser.dump(self._foreground, **kwargs),
             instrument=instrument_parser.dump(self._instrument, **kwargs),
@@ -357,7 +366,8 @@ class ObservationSky(Observation):
             oversampling: Sequence[int] | None = None,
             dtype: str | None = None,
             fft_dtype: str = 'float64',
-            name: str | None = None
+            name: str | None = None,
+            unit: str | None = None
     ):
         # (the second argument was the driver before the line of sight, and
         # the third until the driver left the observations, 2026-10-25)
@@ -418,6 +428,8 @@ class ObservationSky(Observation):
             observable.model_can_lack_values())
         observable.check_observation(
             instrument, self._oversampling, pixel_weights)
+        self._light = None if unit is None \
+            else _light_unit(unit, data, observable, instrument)
         if data is not None:
             _check_beams(data, instrument)
         if dtype is None:
@@ -548,7 +560,7 @@ class ObservationSky(Observation):
         (see Observable.data_unit); None without data (its model is then
         in the unit of the components it sees), or without data of light.
         """
-        return self._observable.data_unit(self._data)
+        return self._observable.data_unit(self._data, self._light)
 
     def output(
             self,
@@ -684,6 +696,54 @@ class ObservationSky(Observation):
         if scale is None or one:
             return plan
         return _FluxScaledPlan(plan, driver, *scale, self._dtype)
+
+
+def _light_unit(
+        unit: str,
+        data: Dataset | None,
+        observable: Observable,
+        instrument: Instrument
+) -> LightUnit:
+    """
+    Return the unit of the light of the model of an observation without
+    data, as given (see ObservationSky: unit): with the beam of the PSF of
+    its instrument for a unit per beam, of each channel of the spectral
+    axis of its observable for a PSF that varies (see PSF.beam_area).
+
+    Raises
+    ------
+    ConfigError
+        If it has data, which give the unit, the unit is not a unit, or a
+        unit per beam has no PSF, or one without a beam.
+    """
+    if data is not None:
+        raise ConfigError(
+            "the data of an observation give the unit of its model; remove "
+            "its unit")
+    with parseutils.config_path('unit'):
+        unit = unitutils.parse_unit(unit)
+    if unitutils.spatial_unit(unit) != astropy.units.beam:
+        return LightUnit(unit)
+    psf = instrument.psf()
+    if psf is None:
+        raise ConfigError(
+            f"a unit per beam ({unitutils.format_unit(unit)}) takes the beam "
+            f"of the PSF of the instrument, which has none")
+    if not psf.varies():
+        return LightUnit(unit, psf.beam_area())
+    spectral = observable.spectral()
+    if spectral is None:
+        raise ConfigError(
+            "a PSF that varies along the spectral axis needs an observable "
+            "with one")
+    velocities = (
+        spectral.rval() + spectral.step()
+        * (np.arange(spectral.size()) - spectral.rpix())) \
+        * astropy.units.km / astropy.units.s
+    convention = gridutils.VelocityConvention(
+        spectral.rest(), spectral.medium(), spectral.convention())
+    areas = [beam.beam_area() for beam in psf.at(velocities, convention)]
+    return LightUnit(unit, np.array(areas), velocities)
 
 
 def _check_offsets(

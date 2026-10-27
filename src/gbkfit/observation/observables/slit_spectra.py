@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, LineEmission
+from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
@@ -176,10 +176,15 @@ class SlitSpectra(Observable):
         return DatasetSlitSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         # (a pixel spans the step along the slit and the width of the slit)
         return _detail.data_unit(
-            dataset, 'spectra', abs(self.step()[0]) * self._slit_width, False)
+            dataset, 'spectra', abs(self.step()[0]) * self._slit_width,
+            False, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('spectra',)

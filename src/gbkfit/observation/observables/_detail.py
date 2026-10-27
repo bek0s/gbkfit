@@ -12,7 +12,7 @@ import numpy as np
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, Extras, GalaxyState
+from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils, unitutils
@@ -225,17 +225,21 @@ def data_unit(
         dataset: Dataset | None,
         key: str | None,
         pixel: float,
-        integrated: bool
+        integrated: bool,
+        light: LightUnit | None = None
 ) -> DataUnit | None:
     """
     Return the unit of the light of a dataset (see Observable.data_unit):
     that of its item of the given key (None: it has none), with its beam,
     whose pixels have the given solid angle (arcsec^2), and whose light
-    is integrated over the lines or not; None without data, or without an
-    item of light.
+    is integrated over the lines or not; without data, that of the given
+    light, if any; None without either, or without an item of light.
     """
-    if dataset is None or key is None:
+    if key is None:
         return None
+    if dataset is None:
+        return None if light is None else DataUnit(
+            light.unit, pixel, light.beam, light.beam_spectral, integrated)
     data = dataset[key]
     beam = data.beam()
     return DataUnit(
@@ -245,7 +249,10 @@ def data_unit(
 
 
 def region_data_unit(
-        dataset: Dataset | None, key: str | None, integrated: bool
+        dataset: Dataset | None,
+        key: str | None,
+        integrated: bool,
+        light: LightUnit | None = None
 ) -> DataUnit | None:
     """
     Return the unit of the light of a dataset of regions (see data_unit),
@@ -253,7 +260,7 @@ def region_data_unit(
     model over their pixels, times the area of each (see flux_weights),
     so the model takes the unit per arcsec^2 (see flux_per_area).
     """
-    result = data_unit(dataset, key, 1.0, integrated)
+    result = data_unit(dataset, key, 1.0, integrated, light)
     if result is None or result.unit is None:
         return result
     return result._replace(

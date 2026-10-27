@@ -6,7 +6,7 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import BandEmission, DataUnit
+from gbkfit.model import BandEmission, DataUnit, LightUnit
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
@@ -145,10 +145,14 @@ class PixelBrightness(Observable):
         return DatasetPixelBrightness(
             items['brightness'], **_detail.dataset_grid_options(self.grid()))
 
-    def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
+    def data_unit(
+            self,
+            dataset: Dataset | None,
+            light: LightUnit | None = None
+    ) -> DataUnit | None:
         return _detail.data_unit(
             dataset, 'brightness', abs(self.step()[0] * self.step()[1]),
-            False)
+            False, light)
 
     def light_items(self) -> tuple[str, ...]:
         return ('brightness',)
