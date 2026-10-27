@@ -26,7 +26,7 @@ from .observables import (
     FluxScale, HostModelData, ModelData, Observable, ObservablePlan,
     observable_parser)
 from .observation import Observation
-from .weights import Weights, weights_parser
+from .weights import Weights, weights_geometry, weights_parser
 
 
 __all__ = [
@@ -201,7 +201,7 @@ class ObservationSky(Observation):
         noise but it has no name, the noise of an item is correlated where
         its kind of data cannot have it, its likelihood does not suit it
         (see Likelihood.check), the observable cannot be seen through the
-        instrument (see Observable.check_instrument), the dtype or the
+        instrument (see Observable.check_observation), the dtype or the
         fft_dtype is not one of the native modules (see Driver.dtypes), or
         the fft_dtype is less precise than the dtype.
     """
@@ -416,7 +416,8 @@ class ObservationSky(Observation):
         super().__init__(
             observable.keys(), galaxies, data, likelihood, name,
             observable.model_can_lack_values())
-        observable.check_instrument(instrument)
+        observable.check_observation(
+            instrument, self._oversampling, pixel_weights)
         if data is not None:
             _check_beams(data, instrument)
         if dtype is None:
@@ -632,6 +633,22 @@ class ObservationSky(Observation):
             seen, self._components, self._lines, self._band,
             self._line_of_sight, self._observable.emission, self.data_unit())
 
+    def check(self, seen: SeenGalaxies) -> None:
+        scene = self._scene(seen)
+        # (the light of an image is blurred by its PSF and again by ours)
+        for trait in scene.image_traits():
+            trait.check_psf(self._instrument.psf())
+        if self._pixel_weights is not None:
+            weights_geometry(self._pixel_weights, scene)
+        self._line_of_sight.check_scene(scene)
+        # (a flux scale of one value scales the flux of the model where the
+        # observable records it; one of several values, its items of light)
+        scale = self.flux_scale()
+        one = scale is not None and scale[1].axis is None
+        self._observable.check_scene(
+            scene, self._foreground, self._instrument,
+            scale[0] if one else None)
+
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
         Plan the evaluation of what it sees (see ObservationGroup.plan):
@@ -657,11 +674,6 @@ class ObservationSky(Observation):
             its observable (see Observable.plan).
         """
         scene = self._scene(seen)
-        # (the light of an image is blurred by its PSF and again by ours)
-        for trait in scene.image_traits():
-            trait.check_psf(self._instrument.psf())
-        # (a flux scale of one value scales the flux of the model where the
-        # observable records it; one of several values, its items of light)
         scale = self.flux_scale()
         one = scale is not None and scale[1].axis is None
         plan = self._observable.plan(

@@ -21,7 +21,8 @@ from ._component_plans import opacity_cubes
 from ._component_set import IMAGE_SPECTRAL_AXIS, ComponentSetPlan
 from ._stage import GalaxyState
 from ._transfer import (
-    MAX_SUBCHANNELS, LineResolution, TransferPlan, warn_resolution)
+    MAX_SUBCHANNELS, LineResolution, TransferPlan, check_emitters,
+    warn_resolution)
 from ._units import DataUnit
 from .base import ComponentState, DepthAxis, FrameParams
 from .disks.disk import Disk
@@ -280,6 +281,21 @@ class AdditiveScenePlan(ScenePlan):
             for galaxy, emitters in zip(scene._galaxies, scene._emitters))
         self._depth = depth
 
+    @staticmethod
+    def check(scene: Scene) -> None:
+        """
+        Check, without a driver, that a scene can be evaluated so: its
+        galaxies each dimmed by its own dust (see opacity_cubes).
+
+        Raises
+        ------
+        ConfigError
+            If it cannot.
+        """
+        for galaxy, emitters in zip(scene._galaxies, scene._emitters):
+            opacity_cubes(
+                [galaxy], [emitters], scene._lines, scene._band, np.float64)
+
     def _evaluate(
             self,
             group_params: ParamValues,
@@ -315,6 +331,26 @@ class TransferScenePlan(ScenePlan):
     opacity, or the depth axis the velocity of the light, too coarsely
     (see warn_resolution).
     """
+
+    @staticmethod
+    def check(scene: Scene) -> None:
+        """
+        Check, without a driver, that a scene can be evaluated so: the
+        dust of all its galaxies in one set of cubes of opacity (see
+        opacity_cubes), and the components that emit in each unit (see
+        _transfer.check_emitters).
+
+        Raises
+        ------
+        ConfigError
+            If it cannot.
+        """
+        opacity_cubes(
+            scene._galaxies, scene._emitters, scene._lines, scene._band,
+            np.float64)
+        for unit in scene._order:
+            check_emitters(
+                sum(len(scene._emitters[g]) for g in unit.galaxies))
 
     def __init__(
             self,

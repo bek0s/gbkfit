@@ -280,6 +280,25 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         return ()
 
     @abc.abstractmethod
+    def check(self, seen: SeenGalaxies) -> None:
+        """
+        Check that it can see the galaxies it sees, without a driver (see
+        ObservationGroup, which calls this for each observation): every
+        rule of its configuration about what it sees is raised here, before
+        any plan, which then fails only for resources.
+
+        Parameters
+        ----------
+        seen : SeenGalaxies
+            The galaxies it sees.
+
+        Raises
+        ------
+        ConfigError
+            If it cannot see them.
+        """
+
+    @abc.abstractmethod
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan).

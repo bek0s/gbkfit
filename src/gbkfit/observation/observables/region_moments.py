@@ -247,8 +247,26 @@ class RegionMoments(Observable):
         # (moment 0, the flux, always has a value)
         return any(order >= 1 for order in self._orders)
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
+        if pixel_weights is not None:
+            raise ConfigError(
+                "region_moments does not support pixel_weights yet")
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
+
+    def check_scene(
+            self,
+            scene: 'Scene',
+            foreground: 'Foreground',
+            instrument: Instrument,
+            flux_scale: str | None
+    ) -> None:
+        if scene.orbit_emitters():
+            self._check_orbits(scene, flux_scale, foreground, instrument)
 
     def require_matching(self, dataset: Dataset) -> None:
         super().require_matching(dataset)
@@ -297,11 +315,7 @@ class RegionMoments(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'RegionMomentsPlan':
-        if pixel_weights is not None:
-            raise ConfigError(
-                "region_moments does not support pixel_weights yet")
         if scene.orbit_emitters():
-            self._check_orbits(scene, flux_scale, foreground, instrument)
             return OrbitMomentsPlan(
                 self, scene, instrument, oversampling, driver, dtype)
         dcube = _moments.spectra_dcube(

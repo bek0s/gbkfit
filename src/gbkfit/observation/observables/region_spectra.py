@@ -215,6 +215,16 @@ class RegionSpectra(Observable):
     def output(self, data: np.ndarray) -> gridutils.SpectraData:
         return gridutils.SpectraData(data, self.spectral_grid().coords)
 
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
+        if pixel_weights is not None:
+            raise ConfigError(
+                "region_spectra does not support pixel_weights yet")
+
     def plan(
             self,
             driver: Driver,
@@ -228,9 +238,6 @@ class RegionSpectra(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'RegionSpectraPlan':
-        if pixel_weights is not None:
-            raise ConfigError(
-                "region_spectra does not support pixel_weights yet")
         # The masking of DCube is disabled: every pixel of a region adds
         # to its spectrum
         dcube = _dcube.DCube(

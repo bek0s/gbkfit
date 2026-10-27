@@ -156,7 +156,7 @@ def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
                 size=16, step=20, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         lines=['stars'])
-    with pytest.raises(ConfigError, match="spectral cubes do not see them"):
+    with pytest.raises(ConfigError, match="pixel_spectra does not see them"):
         ObservationGroup([galaxy()], [spectra]).plan(driver)
 
 

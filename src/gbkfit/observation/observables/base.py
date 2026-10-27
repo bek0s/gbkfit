@@ -8,7 +8,8 @@ import numpy as np
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
-from gbkfit.model import DataUnit, Emission, Extras, GalaxyState
+from gbkfit.model import (
+    DataUnit, Emission, Extras, GalaxyState, LineEmission)
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -307,25 +308,64 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         items = self.light_items()
         return {} if not items else dict(one=FluxScale(items, None, 1))
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
         """
-        Check the instrument that the observable is seen through.
+        Check the options of the observation of the observable: the
+        instrument it is seen through, the oversampling of its model and
+        its pixel weights, if any (see ObservationSky), before any plan.
 
         It warns about the options of the observable that the instrument
-        makes useless (see parseutils.warn). Here, any instrument suits;
+        makes useless (see parseutils.warn). Here, every observation suits;
         observables override this.
 
         Parameters
         ----------
         instrument : Instrument
             The instrument.
+        oversampling : Sequence of int
+            The oversampling of each axis of the model.
+        pixel_weights : Weights, optional
+            The pixel weights.
 
         Raises
         ------
         ConfigError
-            If the observable cannot be seen through the instrument.
+            If the observable cannot be seen so.
         """
         pass
+
+    def check_scene(
+            self,
+            scene: 'Scene',
+            foreground: 'Foreground',
+            instrument: Instrument,
+            flux_scale: str | None
+    ) -> None:
+        """
+        Check that the observable can see a scene (see make_scene), through
+        the foreground and the instrument, with the given flux scale of one
+        value (its parameter), if any, before any plan: here, of the stars
+        on orbits whose weights are solved (see Component.orbit_weights),
+        it sees the light only (as an image), which RegionMoments
+        overrides.
+
+        Raises
+        ------
+        ConfigError
+            If it cannot.
+        """
+        if self.emission is LineEmission and scene.orbit_emitters():
+            raise ConfigError(
+                f"stars on orbits whose weights are solved to fit the data "
+                f"(e.g. of Schwarzschild kinematics) are seen in the bins of "
+                f"region_moments of the method gauss_hermite, which an "
+                f"objective models (see Objective); {self.type()} does not "
+                f"see them")
 
     def require_matching(self, dataset: Dataset) -> None:
         """

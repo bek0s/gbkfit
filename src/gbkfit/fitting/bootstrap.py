@@ -15,6 +15,7 @@ from gbkfit.dataset import Dataset
 from gbkfit.fitting.base import Fitter, fitter_parser
 from gbkfit.fitting.result import Bootstrap
 from gbkfit.objective import Objective
+from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -285,16 +286,18 @@ class BootstrapOptions(parseutils.Serializable):
                 f"{len(self._scheme)}")
         return self._scheme
 
-    def check(self, objective: Objective, params: ParamSpace) -> None:
+    def check(self, group: ObservationGroup, params: ParamSpace) -> None:
         """
-        Raise ConfigError unless the options suit the observations of an
-        objective and its parameters: their schemes their data (see
+        Raise ConfigError unless the options suit the observations of a
+        group and its parameters: their schemes their data (see
         BootstrapScheme.check), and the free properties of the parameters
         the fitter of the refits, if given (see Fitter.load_fit_params).
         """
-        schemes = self.schemes(objective.nobservations())
-        for i, (scheme, dataset) in enumerate(
-                zip(schemes, objective.datasets())):
+        observations = group.observations()
+        schemes = self.schemes(len(observations))
+        for i, (scheme, observation) in enumerate(
+                zip(schemes, observations)):
+            dataset = observation.data()
             index = [i] if isinstance(self._scheme, list) else []
             with parseutils.config_path('scheme', *index):
                 scheme.check(dataset, params)
@@ -366,7 +369,7 @@ def bootstrap(
         (see BootstrapOptions.check), or the data of an observation cannot
         be redrawn by its scheme (see BootstrapScheme.resample).
     """
-    options.check(objective, params)
+    options.check(objective.group(), params)
     refitter = (options.fitter() or fitter).without_uncertainty()
     seed = refitter.seed() if options.seed() is None else options.seed()
     rng = np.random.default_rng(seed)

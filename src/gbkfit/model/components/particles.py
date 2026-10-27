@@ -454,6 +454,13 @@ class Particles(Component):
             self._particles['x'] ** 2 + self._particles['y'] ** 2
             + self._particles['z'] ** 2)))
 
+    def check_lines(self, lines: tuple[str, ...] | None) -> None:
+        if lines is not None and STARS in lines:
+            raise ConfigError(
+                "a spectral cube does not see the stars of particles: they "
+                "have no velocities to place in channels (particles of "
+                "lines have theirs)")
+
     def plan(
             self,
             driver: Driver,
@@ -466,11 +473,6 @@ class Particles(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> ParticlesPlan:
-        if lines is not None and STARS in lines:
-            raise ConfigError(
-                "a spectral cube does not see the stars of particles: they "
-                "have no velocities to place in channels (particles of "
-                "lines have theirs)")
         unit = self.emission().unit()
         if self._lines is None:
             return ParticlesPlan(

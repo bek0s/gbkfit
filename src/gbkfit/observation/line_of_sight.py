@@ -172,6 +172,19 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
             "of sight of radiative transfer (transfer), which orders them "
             "along it")
 
+    def check_scene(self, scene: Scene) -> None:
+        """
+        Check, without a driver, that a scene can be evaluated along this
+        line of sight (see plan_scene): here, each galaxy dimmed by its own
+        dust (see AdditiveScenePlan.check).
+
+        Raises
+        ------
+        ConfigError
+            If it cannot.
+        """
+        AdditiveScenePlan.check(scene)
+
     def plan_scene(
             self,
             scene: Scene,
@@ -395,6 +408,10 @@ class Transfer(LineOfSight):
                 f"one after the other, front to back: the depth_order of the "
                 f"observation group must give the place of the galaxies "
                 f"{missing}")
+
+    def check_scene(self, scene: Scene) -> None:
+        # (by radiative transfer, see TransferScenePlan.check)
+        TransferScenePlan.check(scene)
 
     def plan_scene(
             self,

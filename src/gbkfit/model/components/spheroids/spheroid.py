@@ -726,6 +726,13 @@ class Spheroid(Component):
             return None
         return SpheroidStage(self, mass_per_unit(self.emission()))
 
+    def check_lines(self, lines: tuple[str, ...] | None) -> None:
+        if lines is not None and STARS in lines and self._kinematics is None:
+            raise ConfigError(
+                "a spectral cube sees the stars of a spheroid with "
+                "kinematics only (e.g. kinematics: {type: jeans}, or "
+                "{type: traits})")
+
     def plan(
             self,
             driver: Driver,
@@ -738,19 +745,6 @@ class Spheroid(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> NativeComponentPlan:
-        if lines is not None and STARS in lines and self._kinematics is None:
-            raise ConfigError(
-                "a spectral cube sees the stars of a spheroid with "
-                "kinematics only (e.g. kinematics: {type: jeans}, or "
-                "{type: traits})")
-        if lines is not None and STARS in lines \
-                and self.orbit_weights() is not None:
-            raise ConfigError(
-                f"the stars of a spheroid of {self._kinematics.type()} "
-                f"kinematics are on orbits whose weights are solved to fit "
-                f"the data: an objective models them (see Objective), in "
-                f"the bins of region_moments of the method gauss_hermite; "
-                f"spectral cubes do not see them")
         emission = emission_setup(
             None, self._bands, self.emission().unit(), spectral, lines,
             band, emits, data_unit, redshift, ())

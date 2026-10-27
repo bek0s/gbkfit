@@ -564,7 +564,15 @@ class SlitlessSpectra(Observable):
     def model_can_lack_values(self) -> bool:
         return False
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
+        if pixel_weights is not None:
+            raise ConfigError(
+                "slitless spectra do not support pixel_weights yet")
         if instrument.lsf() is not None and self._aperture is None:
             raise ConfigError(
                 "slitless spectra without an aperture have no LSF: the PSF "
@@ -584,9 +592,6 @@ class SlitlessSpectra(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'SlitlessSpectraPlan':
-        if pixel_weights is not None:
-            raise ConfigError(
-                "slitless spectra do not support pixel_weights yet")
         edges = self._channel_edges()
         offset, size = self._sky(edges)
         rpix, step, k = self.rpix(), self.step(), self._sky_sampling

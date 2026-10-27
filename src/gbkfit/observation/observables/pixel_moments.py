@@ -231,7 +231,16 @@ class PixelMoments(Observable):
         """
         return self._spectral
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
+        if pixel_weights is not None and self._method != 'moments':
+            raise ConfigError(
+                f"the method {self._method} does not support pixel_weights "
+                f"yet")
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
     def require_matching(self, dataset: Dataset) -> None:
@@ -251,10 +260,6 @@ class PixelMoments(Observable):
             pixel_weights: 'Weights | None',
             flux_scale: str | None
     ) -> 'PixelMomentsPlan':
-        if pixel_weights is not None and self._method != 'moments':
-            raise ConfigError(
-                f"the method {self._method} does not support pixel_weights "
-                f"yet")
         dcube = _moments.spectra_dcube(
             self, oversampling, instrument, dtype, fft_dtype,
             self._median_size)

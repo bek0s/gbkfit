@@ -169,7 +169,12 @@ class PixelSpectra(Observable):
     def model_can_lack_values(self) -> bool:
         return False
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
         _detail.warn_unsmoothed_weights(self._smooth_weights, instrument)
 
     def plan(

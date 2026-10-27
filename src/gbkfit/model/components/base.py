@@ -247,6 +247,19 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def check_lines(self, lines: tuple[str, ...] | None) -> None:
+        """
+        Check that a spectral cube of the given lines (None: all) can see
+        its light (see observation.make_scene, which calls this for the
+        components a cube sees, before any plan). Here it can; components
+        whose stars a cube cannot place in channels override this.
+
+        Raises
+        ------
+        ConfigError
+            If the cube cannot see its light.
+        """
+
     def orbit_weights(self) -> str | None:
         """
         Return its parameter of the weights of the orbits of its stars, if

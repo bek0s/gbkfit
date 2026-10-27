@@ -122,8 +122,8 @@ def test_visibilities_have_no_psf():
     from gbkfit.instrument import Instrument, PSFGauss
     from gbkfit.observation import Visibilities
     with pytest.raises(ConfigError, match="no PSF"):
-        Visibilities(COVERAGE, 8).check_instrument(
-            Instrument(psf=PSFGauss(sigma=1)))
+        Visibilities(COVERAGE, 8).check_observation(
+            Instrument(psf=PSFGauss(sigma=1)), (1, 1, 1), None)
 
 
 def test_the_pixels_of_visibilities_are_not_oversampled(driver):

@@ -17,7 +17,7 @@ import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any, NamedTuple, Self
+from typing import Any, NamedTuple, Self, TypeVar
 
 import ruamel.yaml
 
@@ -40,14 +40,19 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'ConfigFile',
+    'Description',
     'Setup',
     'SetupEvaluation',
+    'describe',
     'load',
     'read_config'
 ]
 
 
 _log = logging.getLogger(__name__)
+
+# (a driver, or what stands for it, see _load_placement)
+_T = TypeVar('_T')
 
 # Reads YAML (round trip: dicts keep their order)
 _yaml = ruamel.yaml.YAML()
@@ -408,6 +413,92 @@ def read_config(
         sources)
 
 
+@dataclasses.dataclass(frozen=True)
+class Description:
+    """
+    A configuration described without devices (see describe).
+
+    Attributes
+    ----------
+    problems : tuple of Problem
+        Its warnings and its unknown names, then its error, if any, each
+        with its path in the configuration (see parseutils.Problem).
+    config : dict or None
+        The configuration, as plain JSON values (see read_config), if it
+        could be read.
+    group : ObservationGroup or None
+        Its galaxies and their observations, if it has no error before
+        them.
+    params : ParamSpace or None
+        Its parameters, with their descriptions, if it has no error
+        before them.
+    fitter : Fitter or None
+        Its fitter, if it has one and no error before it.
+    sources : dict
+        The files of the pieces of its project that it names (see
+        gbkfit.project.Resolved).
+    """
+    problems: tuple[parseutils.Problem, ...]
+    config: dict[str, Any] | None
+    group: ObservationGroup | None
+    params: ParamSpace | None
+    fitter: Fitter | None
+    sources: dict[str, Any]
+
+
+def describe(
+        config: str | Mapping[str, Any],
+        texts: Mapping[str, str] | None = None
+) -> Description:
+    """
+    Describe a configuration without devices: load its galaxies, their
+    observations, its parameters and its fitter as descriptions, with
+    every rule of them checked (see ObservationGroup), but no drivers and
+    no plans; and collect its problems, past its unknown names (see
+    parseutils.collect_problems). Its drivers are checked by type only.
+
+    Parameters
+    ----------
+    config : str or Mapping
+        The configuration: its file (see read_config), or a dictionary (see
+        load).
+    texts : Mapping of str to str, optional
+        Texts to read in place of files, by their absolute paths (see
+        read_config): of the configuration, or of the pieces of its project
+        (e.g. edits not saved yet).
+
+    Returns
+    -------
+    Description
+        What it describes, as far as it could be loaded, and its problems.
+    """
+    file = group = params = fitter = None
+    # (lenient, to list every unknown name)
+    with parseutils.strict_mode(False), \
+            parseutils.collect_problems() as problems:
+        file = read_config(config, texts=texts) if isinstance(config, str) \
+            else _config_file(config)
+        cfg = file.config
+        with parseutils.paths_relative_to(file.root):
+            _check_driver_types(cfg)
+            group = _load_observation_group(cfg)
+            params = _load_params(
+                cfg, group.pdescs(), group.constants(),
+                group.function_names())
+            fitter = _load_fitter(cfg)
+            if fitter is not None:
+                group.require_data()
+            # (the names of drivers, checked against the configurations of
+            # those declared)
+            declared = {None: cfg['driver']} if 'driver' in cfg \
+                else dict(cfg.get('drivers', {}))
+            _load_placement(cfg, group, declared, 'host')
+            _load_parallel(cfg, declared)
+    return Description(
+        tuple(problems), None if file is None else file.config, group,
+        params, fitter, {} if file is None else file.sources)
+
+
 def load(
         config: str | ConfigFile | Mapping[str, Any],
         drivers: Mapping[str | None, Driver] | None = None
@@ -460,7 +551,9 @@ def load(
         if drivers is None:
             drivers = _load_drivers(cfg)
         group = _load_observation_group(cfg)
-        driver, placed = _load_placement(cfg, group, drivers)
+        # (imported here: the host driver needs its native module)
+        from gbkfit.driver.drivers.host import DriverHost
+        driver, placed = _load_placement(cfg, group, drivers, DriverHost())
         _log.info("setting up params...")
         params = _load_params(
             cfg, group.pdescs(), group.constants(), group.function_names())
@@ -598,6 +691,33 @@ def _merge_pdescs(
     return pdescs1 | pdescs2
 
 
+def _check_driver_types(cfg: dict[str, Any]) -> None:
+    """
+    Check the types of the drivers of a configuration (see _load_drivers)
+    without loading them, which needs their packages (e.g. CuPy).
+
+    Raises
+    ------
+    ConfigError
+        If it has both sections 'driver' and 'drivers', or a driver is not
+        a dictionary of a known type.
+    """
+    if 'driver' in cfg and 'drivers' in cfg:
+        raise ConfigError(
+            "the configuration must have either a section 'driver' (one "
+            "driver) or a section 'drivers' (several, by name), not both")
+    infos = {None: cfg['driver']} if 'driver' in cfg \
+        else dict(cfg.get('drivers', {}))
+    for name, info in infos.items():
+        path = ('driver',) if name is None else ('drivers', name)
+        with parseutils.config_path(*path):
+            type_ = info.get('type') if isinstance(info, Mapping) else None
+            if type_ not in driver_parser.types():
+                raise ConfigError(
+                    f"a driver is a dictionary of one of the types "
+                    f"{driver_parser.types()}; it is {info!r}")
+
+
 def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
     """
     Return the drivers of a configuration, by name: the one of its
@@ -610,10 +730,7 @@ def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
         If it has both sections, a name is invalid, or a driver has an
         error.
     """
-    if 'driver' in cfg and 'drivers' in cfg:
-        raise ConfigError(
-            "the configuration must have either a section 'driver' (one "
-            "driver) or a section 'drivers' (several, by name), not both")
+    _check_driver_types(cfg)
     if 'driver' in cfg:
         with parseutils.config_path('driver'):
             return {None: driver_parser.load(cfg['driver'])}
@@ -665,13 +782,16 @@ def _without_driver(infos: Sequence[Any]) -> list[Any]:
 def _load_placement(
         cfg: dict[str, Any],
         group: ObservationGroup,
-        drivers: Mapping[str | None, Driver]
-) -> tuple[Driver | None, dict[str, Driver] | None]:
+        drivers: Mapping[str | None, _T],
+        host: _T
+) -> tuple[_T | None, dict[str, _T] | None]:
     """
     Return where the galaxies and observations of a configuration (see
     _load_observation_group) go among its drivers, as Setup takes it: the
     driver of all of them, or else the driver of each, by its label (see
-    ObservationGroup.plan).
+    ObservationGroup.plan); the host is the given one (or anything that
+    stands for drivers, e.g. their configurations, to check the names
+    only; see describe).
 
     The option driver of a galaxy or an observation is not a driver but
     the name of one of the drivers of the configuration, which declares
@@ -687,11 +807,7 @@ def _load_placement(
         If an option driver is not the name of one of the drivers, or is
         left out while there are several.
     """
-    # (imported here: the host driver needs its native module)
-    from gbkfit.driver.drivers.host import DriverHost
-    host = DriverHost()
-
-    def driver_of(section: str, index: int, owner: str) -> Driver:
+    def driver_of(section: str, index: int, owner: str) -> _T:
         info = cfg[section][index]
         with parseutils.config_path(section, index, 'driver'):
             driver = driver_by_name(info.get('driver'), drivers, owner)
@@ -755,12 +871,14 @@ def _load_fitter(cfg: dict[str, Any]) -> Fitter | None:
 
 def _load_parallel(
         cfg: dict[str, Any],
-        drivers: Mapping[str | None, Driver]
-) -> list[Driver] | None:
+        drivers: Mapping[str | None, _T]
+) -> list[_T] | None:
     """
     Return the drivers of the section 'parallel' of a configuration, if it
     has one: {drivers: [names]}, those of the drivers of the
-    configuration where copies of its objective go (see Setup).
+    configuration where copies of its objective go (see Setup); of the
+    given ones, or of anything that stands for them (see
+    _load_placement).
 
     Raises
     ------

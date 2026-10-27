@@ -206,12 +206,25 @@ class GalaxyFunctions:
     def radius_range(self, name: str) -> tuple[float, float] | None:
         """
         Return the range of the radii (arcsec) of its function of a disk
-        of the name (e.g. rotation_gas): from the first radial node of the
-        disk to its last; None for its other functions, of any radius.
+        of the name (see radius_range_of).
         """
-        for index, suffix in self._suffixes.items():
+        return self.radius_range_of(self._component_set, name)
+
+    @staticmethod
+    def radius_range_of(
+            component_set: 'ComponentSet', name: str
+    ) -> tuple[float, float] | None:
+        """
+        Return the range of the radii (arcsec) of the function of a disk
+        of the name (e.g. rotation_gas) of a galaxy of the given components,
+        without planning it: from the first radial node of the disk to its
+        last; None for its other functions, of any radius.
+        """
+        components = component_set.components()
+        for index, suffix in _disk_suffixes(component_set).items():
             if name in (f'rotation{suffix}', f'dispersion{suffix}'):
-                rnodes = self._disks[index].rnodes()
+                rnodes = typing.cast(
+                    Disk, components[index]).density_disk().rnodes()
                 return float(rnodes[0]), float(rnodes[-1])
         return None
 

@@ -161,8 +161,9 @@ def load_plan(galaxy=GALAXY, **sections):
     """
     cfg = dict(galaxies=[galaxy]) | sections
     group = setup._load_observation_group(cfg)
+    from gbkfit.driver.drivers.host import DriverHost
     return group.plan(*setup._load_placement(
-        cfg, group, setup._load_drivers(cfg)))
+        cfg, group, setup._load_drivers(cfg), DriverHost()))
 
 
 def test_observations_use_the_drivers_of_the_configuration():
@@ -283,3 +284,23 @@ def test_depth_order_has_galaxies_and_groups_of_them():
     assert order == ['fg', DepthGroup('pair', ('a', 'b'))]
     with pytest.raises(ConfigError, match="a group of depth_order is"):
         setup._load_depth_order([{'pair': ['a', 'b'], 'other': ['c']}])
+
+
+def test_a_configuration_is_described_without_devices(tmp_path):
+    # Its problems with their paths, its parameters; a driver of cuda is
+    # checked by type only (no CuPy), and the rules of what observations
+    # see are checked without plans
+    config = dict(
+        version=VERSION, driver=dict(type='cuda'), galaxies=[GALAXY],
+        observations=[observation()], params=PARAMS)
+    description = gbkfit.describe(config)
+    assert description.problems == ()
+    assert set(description.params.pdescs()) >= {'xpos', 'pt_s'}
+    stars = dict(
+        type='sky', lines=['stars'], line_of_sight=dict(type='flat'),
+        observable=dict(type='pixel_spectra', size=[8, 8], spectral=dict(
+            size=11, convention='relativistic')))
+    described = gbkfit.describe(config | dict(observations=[stars]))
+    (problem,) = described.problems
+    assert problem.severity == 'error' and problem.path == ['observations', 0]
+    assert described.params is None

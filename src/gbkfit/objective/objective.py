@@ -175,11 +175,7 @@ class Objective:
     ):
         group = group_plan.group()
         observations = group.observations()
-        if missing := [
-                i for i, obs in enumerate(observations) if obs.data() is None]:
-            raise ConfigError(
-                f"every observation of an objective needs data; these have "
-                f"none: {missing}")
+        group.require_data()
         self._group_plan = group_plan
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)

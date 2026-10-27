@@ -232,6 +232,11 @@ class ObservationGroup:
                 seen, self._observations, _alignments(self._observations)))
         _check_offsets(self._galaxies, self._observations, seen)
         _warn_unused_masses(self._galaxies, self._observations, seen)
+        # (every rule about what each sees, here, without devices: the
+        # plans fail only for resources)
+        for i, observation in enumerate(self._observations):
+            with parseutils.config_path('observations', i):
+                observation.check(self.seen_by(i))
 
     def _seen(self, i: int, observation: Observation) -> list[int]:
         """Return the indices of the galaxies that observation i sees."""
@@ -276,6 +281,18 @@ class ObservationGroup:
         return _Frame(
             tuple(names['x']), tuple(names['y']), tuple(names['v']),
             alignment, observation.offset_params())
+
+    def require_data(self) -> None:
+        """
+        Raise ConfigError unless every observation has data (e.g. those of
+        an objective, see Objective).
+        """
+        if missing := [
+                i for i, observation in enumerate(self._observations)
+                if observation.data() is None]:
+            raise ConfigError(
+                f"every observation of an objective needs data; these have "
+                f"none: {missing}")
 
     def seen_by(self, index: int) -> SeenGalaxies:
         """

@@ -20,6 +20,8 @@ import gbkfit.outputs
 import gbkfit.params
 import gbkfit.project
 import gbkfit.setup
+from gbkfit.observation import ObservationGroup
+from gbkfit.params import ParamSpace
 from gbkfit.setup import ConfigFile, Setup
 from gbkfit.utils import numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -177,7 +179,8 @@ def bootstrap(output_dir: str, config: str) -> None:
         result = json.load(f)
     best = result['solutions'][0]
     with gbkfit.setup.load(file) as setup:
-        options = _load_bootstrap(bootstrap_cfg, setup)
+        options = _load_bootstrap(
+            bootstrap_cfg, setup.group_plan.group(), setup.params)
         with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
             boot = _bootstrap(setup, best['elements'], options)
             result['bootstrap'] = boot.info()
@@ -228,17 +231,18 @@ def _read_config(config: str) -> ConfigFile:
 
 
 def _load_bootstrap(
-        cfg: dict[str, Any], setup: Setup
+        cfg: dict[str, Any], group: ObservationGroup, params: ParamSpace
 ) -> gbkfit.fitting.BootstrapOptions | None:
     """
     Load the options of the bootstrap of a configuration (its section
-    'bootstrap'), if it has them, checked for a fit.
+    'bootstrap'), if it has them, checked for a fit of the observations of
+    a group and the parameters.
     """
     if 'bootstrap' not in cfg:
         return None
     with parseutils.config_path('bootstrap'):
         options = gbkfit.fitting.BootstrapOptions.load(cfg['bootstrap'])
-        options.check(setup.objective, setup.params)
+        options.check(group, params)
     return options
 
 
@@ -295,7 +299,8 @@ def _fit(
     fit).
     """
     params = setup.params
-    options = _load_bootstrap(cfg, setup)
+    options = _load_bootstrap(
+        cfg, setup.group_plan.group(), setup.params)
 
     _log.info("model-fitting started")
 

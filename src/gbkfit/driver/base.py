@@ -9,7 +9,7 @@ import abc
 import numbers
 import types
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, TypeAlias, Union
+from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -20,6 +20,9 @@ from gbkfit.utils import parseutils
 if TYPE_CHECKING:
     import cupy
 
+
+# (a driver, or what stands for it, see driver_by_name)
+_T = TypeVar('_T')
 
 __all__ = [
     'DeviceArray',
@@ -751,9 +754,9 @@ driver_parser = parseutils.TypedParser(Driver)
 
 def driver_by_name(
         name: object,
-        drivers: Mapping[str | None, Driver],
+        drivers: Mapping[str | None, _T],
         owner: str
-) -> Driver | None:
+) -> _T | None:
     """
     Return the driver of the given name among the drivers of a
     configuration, which it declares at its top level (the one unnamed
@@ -765,7 +768,8 @@ def driver_by_name(
         The name, from the option driver of the owner; None for the only
         driver (none if there are none).
     drivers : Mapping of str to Driver
-        The drivers, by name.
+        The drivers, by name (or anything by name, e.g. their
+        configurations, to check the name only).
     owner : str
         What names the driver, in messages (e.g. 'observation').
 

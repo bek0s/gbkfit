@@ -335,6 +335,50 @@ class ObservationProfile(Observation):
             radius=self._radii,
             value=values if unit is None else values * unit))
 
+    def check(self, seen: SeenGalaxies) -> None:
+        """
+        Check that the galaxy it sees has its functions, and those of a
+        disk at radii on the disk, in angles (see Observation.check).
+
+        Raises
+        ------
+        ConfigError
+            If the galaxy does not have a function, or a function of a
+            disk is at radii of physical lengths, or outside the disk.
+        """
+        galaxy, label = seen.galaxies[0], seen.labels[0]
+        names = galaxy.function_names()
+        if missing := [k for k in self.keys() if k not in names]:
+            raise ConfigError(
+                f"galaxy {label} has no functions {missing}; its functions "
+                f"are {list(names)}")
+        arcsec, _ = self._radii_of()
+        for key in self.keys():
+            bounds = galaxy.function_radius_range(key)
+            if bounds is None:
+                continue
+            if arcsec is None:
+                raise ConfigError(
+                    f"{key} is a function of a disk, of radii in angles; the "
+                    f"radii are physical lengths (they have no distance)")
+            if not np.all((bounds[0] <= arcsec) & (arcsec <= bounds[1])):
+                raise ConfigError(
+                    f"the radii of {key} must be on its disk, from "
+                    f"{bounds[0]:g} to {bounds[1]:g} arcsec; they are "
+                    f"{arcsec} arcsec")
+
+    def _radii_of(self) -> tuple[np.ndarray | None, np.ndarray | None]:
+        """
+        Return its radii as angles (arcsec) if they are, or have a
+        distance, or else as physical lengths (kpc).
+        """
+        if self._radii.unit.is_equivalent(u.arcsec):
+            return self._radii.to_value(u.arcsec), None
+        if self._distance is not None:
+            return (self._radii / self._distance).to_value(
+                u.arcsec, u.dimensionless_angles()), None
+        return None, self._radii.to_value(u.kpc)
+
     def plan(self, driver: Driver, seen: SeenGalaxies) -> ObservablePlan:
         """
         Plan the evaluation of its model (see ObservationGroup.plan): the
@@ -353,41 +397,10 @@ class ObservationProfile(Observation):
         ObservablePlan
             The plan.
 
-        Raises
-        ------
-        ConfigError
-            If the galaxy does not have a function, or a function of a
-            disk is at radii of physical lengths, or outside the disk.
         """
-        galaxy, mapping, label = \
-            seen.galaxies[0], seen.mappings[0], seen.labels[0]
+        galaxy, mapping = seen.galaxies[0], seen.mappings[0]
         functions = galaxy.plan_functions(seen.sky_origin, driver)
-        if missing := [k for k in self.keys() if k not in functions.names()]:
-            raise ConfigError(
-                f"galaxy {label} has no functions {missing}; its functions "
-                f"are {list(functions.names())}")
-        # The radii as angles (arcsec), or as physical lengths (kpc)
-        arcsec = kpc = None
-        if self._radii.unit.is_equivalent(u.arcsec):
-            arcsec = self._radii.to_value(u.arcsec)
-        elif self._distance is not None:
-            arcsec = (self._radii / self._distance).to_value(
-                u.arcsec, u.dimensionless_angles())
-        else:
-            kpc = self._radii.to_value(u.kpc)
-        for key in self.keys():
-            bounds = functions.radius_range(key)
-            if bounds is None:
-                continue
-            if arcsec is None:
-                raise ConfigError(
-                    f"{key} is a function of a disk, of radii in angles; the "
-                    f"radii are physical lengths (they have no distance)")
-            if not np.all((bounds[0] <= arcsec) & (arcsec <= bounds[1])):
-                raise ConfigError(
-                    f"the radii of {key} must be on its disk, from "
-                    f"{bounds[0]:g} to {bounds[1]:g} arcsec; they are "
-                    f"{arcsec} arcsec")
+        arcsec, kpc = self._radii_of()
         inclination = None
         if self._inclination is not None:
             inclination = (

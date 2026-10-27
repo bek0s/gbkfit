@@ -85,5 +85,6 @@ def config_group_plan(config):
     """
     from gbkfit import setup
     group = config_group(config)
+    from gbkfit.driver.drivers.host import DriverHost
     return group.plan(*setup._load_placement(
-        config, group, setup._load_drivers(config)))
+        config, group, setup._load_drivers(config), DriverHost()))

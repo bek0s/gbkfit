@@ -153,6 +153,17 @@ class TransferMember(NamedTuple):
     depth: DepthAxis
 
 
+def check_emitters(count: int) -> None:
+    """
+    Raise ConfigError if radiative transfer would take more components
+    that emit than it can (_MAX_EMITTERS).
+    """
+    if count > _MAX_EMITTERS:
+        raise ConfigError(
+            f"radiative transfer takes at most {_MAX_EMITTERS} components "
+            f"that emit; there are {count}")
+
+
 class TransferPlan:
     """
     The evaluation of the components of one galaxy or more on the grid of
@@ -207,11 +218,7 @@ class TransferPlan:
             subchannels: int,
             smoothing: float | None
     ):
-        nemitters = sum(len(member.emitters) for member in members)
-        if nemitters > _MAX_EMITTERS:
-            raise ConfigError(
-                f"radiative transfer takes at most {_MAX_EMITTERS} components "
-                f"that emit; there are {nemitters}")
+        check_emitters(sum(len(member.emitters) for member in members))
         # The depth axis: that of the galaxy, or of several, as long as
         # theirs together and a margin of 2 voxels each (see _placement)
         depth = members[0].depth

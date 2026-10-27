@@ -294,12 +294,28 @@ class Visibilities(Observable):
     def model_can_lack_values(self) -> bool:
         return False
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
         if instrument.psf() is not None:
             raise ConfigError(
                 "visibilities have no PSF: their baselines sample the "
                 "transform of the sky itself (the dirty beam is their "
                 "sampling); remove the psf of the instrument")
+        if tuple(oversampling[:2]) != (1, 1):
+            raise ConfigError(
+                f"the pixels of visibilities are the points of their "
+                f"transform, not oversampled (the means of their subpixels "
+                f"would damp the long baselines): give a smaller step "
+                f"instead; the spatial oversampling is "
+                f"{tuple(oversampling[:2])}")
+        if pixel_weights is not None:
+            raise ConfigError(
+                "pixel_weights do not apply to visibilities, which are not "
+                "on pixels")
 
     def _require_matching_coordinates(
             self, dataset: DatasetVisibilities
@@ -412,17 +428,6 @@ class Visibilities(Observable):
         Return its plan (see plan), with the plan of it at half its step
         that checks its first evaluation (refinement, made then), if any.
         """
-        if tuple(oversampling[:2]) != (1, 1):
-            raise ConfigError(
-                f"the pixels of visibilities are the points of their "
-                f"transform, not oversampled (the means of their subpixels "
-                f"would damp the long baselines): give a smaller step "
-                f"instead; the spatial oversampling is "
-                f"{tuple(oversampling[:2])}")
-        if pixel_weights is not None:
-            raise ConfigError(
-                "pixel_weights do not apply to visibilities, which are not "
-                "on pixels")
         dcube = _dcube.DCube(
             size=self.size(),
             step=self.step(),

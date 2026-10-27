@@ -277,8 +277,17 @@ def plan_weights(
 ) -> WeightsPlan:
     """
     Plan the evaluation of the weights of an observation of a scene on the
-    spatial grid of its model. Raise ConfigError unless their component is
-    a disk of the scene.
+    spatial grid of its model (see weights_geometry).
+    """
+    return WeightsPlan(
+        weights, weights_geometry(weights, scene), grid, driver, dtype)
+
+
+def weights_geometry(weights: Weights, scene: 'Scene') -> dict[str, str]:
+    """
+    Return the parameters of the plane of the disk of pixel weights in a
+    scene, by role (xpos, ypos, posa, incl). Raise ConfigError unless
+    their component is a disk of the scene.
     """
     frame = scene.frame_params(weights.component())
     names = dict(xpos=frame.x, ypos=frame.y, posa=frame.posa, incl=frame.incl)
@@ -286,4 +295,4 @@ def plan_weights(
         raise ConfigError(
             f"pixel weights need the plane of a disk; the component "
             f"{weights.component()!r} has no {missing}")
-    return WeightsPlan(weights, names, grid, driver, dtype)
+    return names

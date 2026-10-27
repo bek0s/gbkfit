@@ -19,7 +19,7 @@ import logging
 import os
 import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
-from typing import Any, Self
+from typing import Any, Literal, NamedTuple, Self
 
 from . import funcutils, iterutils, typeutils
 
@@ -171,6 +171,69 @@ def _log_problem(error: 'ConfigError', note: str | None = None) -> None:
         _add_location(error, segments, context)
     text = str(error) if note is None else f"{error}; {note}"
     _log.warning(text, extra=dict(config_problem=error))
+
+
+class Problem(NamedTuple):
+    """
+    A problem of a configuration: an error or a warning, its path in the
+    configuration (option names and list indices; e.g. ['galaxies', 0]),
+    and its message (with the type of the part, if known).
+    """
+    severity: Literal['error', 'warning']
+    path: list[str | int]
+    message: str
+
+
+@contextlib.contextmanager
+def collect_problems() -> Iterator[list[Problem]]:
+    """
+    Collect the problems of the configuration loaded in the block: the
+    warnings logged about it (see warn), its unknown names, as errors (see
+    report_unknown, in lenient mode), and the ConfigError that ends the
+    block, if any, which it stops; each with its path, in order.
+
+    Yields
+    ------
+    list of Problem
+        The problems, as they come.
+    """
+    problems: list[Problem] = []
+    handler = _ProblemHandler(problems)
+    logger = logging.getLogger('gbkfit')
+    logger.addHandler(handler)
+    try:
+        yield problems
+    except ConfigError as e:
+        problems.append(_problem('error', e))
+    finally:
+        logger.removeHandler(handler)
+
+
+class _ProblemHandler(logging.Handler):
+    """
+    The handler of the warnings about a configuration logged (see warn),
+    and its unknown names, as errors (see report_unknown), which adds them
+    to a list of problems.
+    """
+
+    def __init__(self, problems: list[Problem]):
+        super().__init__(logging.WARNING)
+        self._problems = problems
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if (error := getattr(record, 'config_problem', None)) is not None:
+            severity = 'error' if isinstance(error, UnknownNamesError) \
+                else 'warning'
+            self._problems.append(_problem(severity, error))
+
+
+def _problem(
+        severity: Literal['error', 'warning'], error: 'ConfigError'
+) -> Problem:
+    """Return the problem of an error (or of a warning)."""
+    message = error.message if error.context is None \
+        else f"[{error.context}] {error.message}"
+    return Problem(severity, list(error.path), message)
 
 
 class ConfigError(RuntimeError):

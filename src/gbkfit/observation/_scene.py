@@ -68,8 +68,9 @@ def make_scene(
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
         sees, a component cannot be seen along its line of sight (see
-        LineOfSight.check), it sees several galaxies with opacity that its
-        line of sight cannot order, or not in that order (see
+        LineOfSight.check) or by a spectral cube of its lines (see
+        Component.check_lines), it sees several galaxies with opacity that
+        its line of sight cannot order, or not in that order (see
         LineOfSight.check_order), or without data of light, it sees
         components of different units (its model is then in the unit of
         its components).
@@ -105,6 +106,8 @@ def make_scene(
             component = galaxy.components()[i]
             try:
                 line_of_sight.check(component, emission)
+                if emission is LineEmission and i in galaxy_emitters:
+                    component.check_lines(lines)
             except ConfigError as e:
                 raise ConfigError(
                     f"component {_label(galaxy, i)}: {e}") from e

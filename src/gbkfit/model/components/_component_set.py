@@ -393,6 +393,15 @@ class ComponentSet:
         """
         return GalaxyFunctions.names_of(self)
 
+    def function_radius_range(
+            self, name: str
+    ) -> tuple[float, float] | None:
+        """
+        Return the range of the radii (arcsec) of the function of a disk of
+        the name, without planning it (see GalaxyFunctions.radius_range_of).
+        """
+        return GalaxyFunctions.radius_range_of(self, name)
+
     def plan(
             self,
             driver: Driver,

@@ -165,6 +165,12 @@ class Disk(Component):
         """Return its density."""
         return self._density
 
+    def check_lines(self, lines: tuple[str, ...] | None) -> None:
+        if lines is not None and STARS in lines and self.kinematics() is None:
+            raise ConfigError(
+                "a spectral cube sees the stars of a disk with kinematics "
+                "only (its stars have no velocities to place in channels)")
+
     def kinematics(self) -> DiskTraitsKinematics | None:
         """Return its kinematics, if any."""
         return self._kinematics
@@ -229,10 +235,6 @@ class Disk(Component):
             data_unit: DataUnit | None,
             redshift: float
     ) -> ComponentPlan:
-        if lines is not None and STARS in lines and self.kinematics() is None:
-            raise ConfigError(
-                "a spectral cube sees the stars of a disk with kinematics "
-                "only (its stars have no velocities to place in channels)")
         emission = self.emission()
         return _detail.disk_plan(
             self._disk, self._lines, self._bands,

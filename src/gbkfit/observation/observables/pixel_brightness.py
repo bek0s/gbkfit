@@ -161,7 +161,12 @@ class PixelBrightness(Observable):
     def model_can_lack_values(self) -> bool:
         return False
 
-    def check_instrument(self, instrument: Instrument) -> None:
+    def check_observation(
+            self,
+            instrument: Instrument,
+            oversampling: Sequence[int],
+            pixel_weights: 'Weights | None'
+    ) -> None:
         if instrument.lsf() is not None:
             raise ConfigError(
                 "an image has no spectral axis for an LSF; remove the LSF "
