@@ -29,19 +29,17 @@ classifiers = [
 ]
 dependencies = [
     'astropy',
-    'corner',
-    'matplotlib',
     'numpy',
-    'pandas',
     'pydantic>=2',
     'rich',
     'ruamel.yaml',
-    'scikit-image',
     'scipy',
     'threadpoolctl'
 ]
 
 [project.optional-dependencies]
+# (the plot task)
+plot = ['corner', 'matplotlib']
 cuda = ['cupy-cuda12x']
 finufft = ['finufft>=2.5']
 cufinufft = ['cufinufft>=2.5']
@@ -61,7 +59,10 @@ Homepage = 'https://github.com/bek0s/gbkfit'
 Documentation = 'https://gbkfit.readthedocs.io'
 
 [dependency-groups]
-test = ['pytest>=8', 'pytest-regressions', 'pytest-xdist']
+test = [
+    'pytest>=8', 'pytest-regressions', 'pytest-xdist',
+    # (the plot task)
+    'corner', 'matplotlib']
 dev = [{ include-group = 'test' }]
 
 [tool.scikit-build]

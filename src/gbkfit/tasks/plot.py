@@ -1,7 +1,8 @@
 """
 The plot task: figures of a run of a fit (or of the eval task in
 objective mode): the data, model and residuals of each data item, and
-corner plots of the posterior.
+corner plots of the posterior. It needs the extra plot (matplotlib and
+corner).
 """
 
 import io
@@ -13,10 +14,17 @@ from collections.abc import Sequence
 from typing import Literal, NamedTuple
 
 import numpy as np
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
 from astropy.table import Table
-from matplotlib.patches import Ellipse
+
+try:
+    import corner
+    from matplotlib.axes import Axes
+    from matplotlib.figure import Figure
+    from matplotlib.patches import Ellipse
+except ModuleNotFoundError as e:
+    raise ModuleNotFoundError(
+        f"the plot task needs matplotlib and corner (pip install "
+        f"'gbkfit[plot]'): {e}") from e
 
 import gbkfit.outputs
 from gbkfit.outputs import Product, Run
@@ -401,7 +409,6 @@ def _corner(
     samples that have every element plotted (not NaN, e.g. a row of a
     table that a sample does not use).
     """
-    import corner
     kept = ~np.any(np.isnan(samples), axis=1)
     samples = samples[kept]
     weights = None if weights is None else weights[kept]

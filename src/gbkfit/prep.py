@@ -25,7 +25,6 @@ import numpy as np
 import numpy.typing as npt
 import scipy.ndimage
 import scipy.spatial
-import skimage.measure
 
 from gbkfit.utils import fitsutils, gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
@@ -651,18 +650,19 @@ def largest_regions_mask(
     min_pixels pixels, and those at least min_ratio times the largest
     (each criterion if given).
     """
-    regions = skimage.measure.regionprops(skimage.measure.label(mask != 0))
-    regions.sort(key=lambda r: r.area, reverse=True)
+    # (pixels connected through their sides or corners)
+    labels, nregions = scipy.ndimage.label(
+        mask != 0, structure=np.ones((3,) * mask.ndim))
+    areas = np.bincount(labels.ravel(), minlength=nregions + 1)[1:]
+    # (the largest first; of equal areas, in the order of their labels)
+    order = np.argsort(-areas, kind='stable')
     if count is not None:
-        regions = regions[:count]
+        order = order[:count]
     if min_pixels is not None:
-        regions = [r for r in regions if r.area >= min_pixels]
-    if min_ratio is not None and regions:
-        regions = [r for r in regions if r.area / regions[0].area >= min_ratio]
-    kept = np.zeros(mask.shape, bool)
-    for region in regions:
-        kept[tuple(region.coords.T)] = True
-    return kept
+        order = order[areas[order] >= min_pixels]
+    if min_ratio is not None and order.size:
+        order = order[areas[order] / areas[order[0]] >= min_ratio]
+    return np.isin(labels, order + 1)
 
 
 def bounding_box(mask: np.ndarray) -> tuple[slice, ...]:

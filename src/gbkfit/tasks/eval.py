@@ -9,7 +9,6 @@ import logging
 import os
 from typing import Any, Literal, NamedTuple
 
-import pandas as pd
 
 import gbkfit.outputs
 import gbkfit.setup
@@ -193,8 +192,24 @@ def _eval(
         time_stats = numutils.nativify({
             name: stats.to_dict()
             for name, stats in group_plan.timers().stats().items()})
-        _log.info(pd.DataFrame.from_dict(time_stats, orient='index'))
+        _log.info(_timings_table(time_stats))
         run.write('timings.json', 'timings', time_stats)
+
+
+def _timings_table(time_stats: dict[str, dict[str, Any]]) -> str:
+    """
+    Return the statistics of the timings of steps (see Timers.stats) as a
+    table: a row of each step, a column of each statistic.
+    """
+    columns = list(next(iter(time_stats.values()), {}))
+    rows = [[''] + columns] + [
+        [name] + [str(stats[column]) for column in columns]
+        for name, stats in time_stats.items()]
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    return '\n'.join(
+        '  '.join([row[0].ljust(widths[0])] + [
+            cell.rjust(width) for cell, width in zip(row[1:], widths[1:])])
+        for row in rows)
 
 
 def _load_mock(info: dict[str, Any], nobservations: int) -> _Mock:
