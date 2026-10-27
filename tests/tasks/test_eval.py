@@ -190,7 +190,7 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     observation['observable'].pop('size')
     yaml.dump(config, tmp_path / 'data.yaml')
     setup = gbkfit.load(str(tmp_path / 'data.yaml'))
-    outputs = setup.outputs(setup.params.evaluate(), data=True)
+    outputs = setup.outputs(setup.evaluate(), data=True)
     kinds = {output.kind for output in outputs.values()}
     assert {'model', 'data', 'error', 'residual', 'wresidual'} <= kinds
     assert 'extra' not in kinds

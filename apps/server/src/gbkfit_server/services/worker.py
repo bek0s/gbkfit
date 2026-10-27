@@ -57,7 +57,7 @@ def main() -> None:
     free = params.free_properties()
     try:
         values = _start_values(params)
-        outputs = setup.outputs(setup.values(values), data=True)
+        outputs = setup.outputs(setup.evaluate(values), data=True)
     except (ConfigError, ParamEvaluationError) as e:
         _write(out, frames.encode(dict(type='error', message=str(e))))
         sys.exit(1)
@@ -71,12 +71,11 @@ def main() -> None:
                 raise ValueError(f"no free elements {sorted(unknown)}")
             # (a value it refuses does not stay for the next frames)
             changed = values | header['values']
-            # (with the solved values, as the chi-square takes them)
-            param_values = setup.values(changed)
+            evaluation = setup.evaluate(changed)
             values = changed
-            outputs = setup.outputs(param_values)
-            chi2 = None if objective is None \
-                else objective.chi2(param_values)
+            outputs = setup.outputs(evaluation)
+            chi2 = None if evaluation.objective is None \
+                else evaluation.objective.merits.chi2
             _write(out, frames.array_frame(
                 dict(type='result', chi2=chi2), _arrays(outputs, _RESULT)))
         except Exception as e:

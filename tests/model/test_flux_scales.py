@@ -314,7 +314,7 @@ def test_the_outputs_have_the_solved_scales(driver):
     obj, params = objective(driver, 2 * spectra, error)
     setup = Setup(obj.group_plan(), params, obj, None, None)
     outputs = {
-        x.kind: x.value for x in setup.outputs(setup.values()).values()}
+        x.kind: x.value for x in setup.outputs(setup.evaluate()).values()}
     scales = best_scales(spectra, 2 * spectra, error)
     np.testing.assert_allclose(
         outputs['model'].data, spectra * scales, rtol=1e-5,
@@ -333,7 +333,7 @@ def test_the_scales_of_slitless_rows_scale_their_rows():
     unscaled = setup.group_plan.model_h(
         setup.params.evaluate())[0]['spectra']['d'].copy()
     outputs = {
-        x.kind: x.value for x in setup.outputs(setup.values()).values()}
+        x.kind: x.value for x in setup.outputs(setup.evaluate()).values()}
     scales = outputs['flux_scale']
     assert scales.shape == (24,)
     np.testing.assert_allclose(

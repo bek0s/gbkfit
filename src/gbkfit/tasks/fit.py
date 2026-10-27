@@ -316,8 +316,8 @@ def _fit(
 
     _log.info(f"saving result under '{run.path}'...")
     result.write(run)
-    gbkfit.outputs.write_outputs(
-        run, setup.outputs(result.best().values, data=True, extra=True))
+    gbkfit.outputs.write_outputs(run, setup.outputs(
+        setup.evaluate(result.best().free), data=True, extra=True))
     _write_config(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
         result.best().elements)

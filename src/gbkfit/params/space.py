@@ -700,7 +700,7 @@ class ParamSpace(parseutils.Serializable):
             (e.g. the initial value of a fit).
         solved : Mapping, optional
             The values of the solved elements, by element name (e.g. those
-            of Objective.solved); those without one have their value
+            of Evaluation.solved); those without one have their value
             without data (see Solve.default).
 
         Returns

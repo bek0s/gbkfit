@@ -162,7 +162,7 @@ def _eval(
             raise ConfigError(
                 f"an evaluation is at the 'value' of each free parameter; "
                 f"these have none: {missing}")
-    param_values = setup.values() if objective is not None \
+    param_values = setup.evaluate().values if objective is not None \
         else params.evaluate()
     run.write('params.json', 'params', dict(
         params=param_values, eparams=params.element_values(param_values),

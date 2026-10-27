@@ -50,10 +50,10 @@ def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
         root=str(tmp_path), galaxies=[GALAXY],
         observations=[image(tmp_path / 'image.fits')], params=PARAMS)
     with gbkfit.load(config) as loaded:
-        values = loaded.values()
-        assert loaded.objective.chi2(values) > 0
+        evaluation = loaded.evaluate()
+        assert evaluation.objective.merits.chi2 > 0
         assert loaded.fitter is None and loaded.pool is None
-        outputs = loaded.outputs(values, data=True)
+        outputs = loaded.outputs(evaluation, data=True)
         assert {'model', 'residual', 'wresidual', 'data'} <= {
             output.kind for output in outputs.values()}
 
@@ -63,11 +63,10 @@ def test_the_outputs_of_an_evaluation_are_its_own():
     # evaluation must not overwrite those of the first)
     loaded = gbkfit.load(dict(
         galaxies=[GALAXY], observations=[observation()], params=PARAMS))
-    values = loaded.values()
-    first = loaded.outputs(values)
+    first = loaded.outputs(loaded.evaluate())
     model = next(o for o in first.values() if o.kind == 'model')
     before = np.array(model.value.data)
-    loaded.outputs(values | dict(pt_a=2.0))
+    loaded.outputs(loaded.evaluate(dict(pt_s=3.0)))
     np.testing.assert_array_equal(model.value.data, before)
 
 
@@ -75,7 +74,7 @@ def test_a_configuration_without_data_cannot_fit():
     loaded = gbkfit.load(dict(
         galaxies=[GALAXY], observations=[observation()], params=PARAMS))
     assert loaded.objective is None
-    model = loaded.group_plan.model_h(loaded.values())[0]
+    model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
     assert model['brightness']['d'].sum() > 0
     with pytest.raises(ConfigError, match="a fit needs a fitter"):
         loaded.fit()

@@ -27,7 +27,7 @@ from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import (
     EvaluationLog, EvaluationPool, FitControl, Fitter, FitResult,
     ProgressObserver, fitter_parser)
-from gbkfit.objective import Objective
+from gbkfit.objective import Evaluation, Objective
 from gbkfit.observation import DepthGroup, GroupPlan, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamFunctions, ParamSpace, ParamValues,
@@ -39,6 +39,7 @@ from gbkfit.utils.parseutils import ConfigError
 __all__ = [
     'ConfigFile',
     'Setup',
+    'SetupEvaluation',
     'load',
     'read_config'
 ]
@@ -73,6 +74,27 @@ class ConfigFile(NamedTuple):
 
 
 @dataclasses.dataclass(frozen=True)
+class SetupEvaluation:
+    """
+    An evaluation of a setup at values of its free elements (see
+    Setup.evaluate).
+
+    Attributes
+    ----------
+    values : ParamValues
+        The values of all parameters, with those of the solved elements
+        that the objective solves there (without an objective, their
+        values without data; see Solve.default).
+    objective : Evaluation or None
+        The evaluation of the objective there (its merits, the parts of
+        its chi-square, and the solved values), or None without an
+        objective.
+    """
+    values: ParamValues
+    objective: Evaluation | None
+
+
+@dataclasses.dataclass(frozen=True)
 class Setup:
     """
     What a configuration sets up (see load): the plan of the observations
@@ -90,24 +112,42 @@ class Setup:
     fitter: Fitter | None
     pool: EvaluationPool | None
 
-    def values(
+    def evaluate(
             self, free: Mapping[str, float] | Sequence[float] | None = None
-    ) -> ParamValues:
+    ) -> SetupEvaluation:
         """
-        Return the values of the parameters at those of the free elements
-        (see ParamSpace.evaluate), with those of the solved elements that
-        the objective solves there (see Objective.solved); without an
-        objective, their values without data.
+        Evaluate the setup at values of its free elements: the values of
+        all parameters, with those of the solved elements, and the
+        evaluation of its objective there, if it has one.
+
+        Parameters
+        ----------
+        free : Mapping of str to float or Sequence of float, optional
+            The values of the free elements (see ParamSpace.evaluate); by
+            default their option 'value'.
+
+        Returns
+        -------
+        SetupEvaluation
+            The evaluation.
+
+        Raises
+        ------
+        ValueError
+            If values of free elements are missing or unknown.
+        ParamEvaluationError
+            If the parameters cannot be evaluated there.
         """
         values = self.params.evaluate(free)
-        if self.objective is None or not self.objective.solves():
-            return values
-        return self.params.evaluate(
-            free, self.objective.evaluate(values).solved)
+        if self.objective is None:
+            return SetupEvaluation(values, None)
+        evaluation = self.objective.evaluate(values)
+        return SetupEvaluation(
+            self.params.evaluate(free, evaluation.solved), evaluation)
 
     def outputs(
             self,
-            values: ParamValues,
+            evaluation: SetupEvaluation,
             data: bool = False,
             extra: bool = False
     ) -> dict[str, gbkfit.outputs.Output]:
@@ -117,9 +157,8 @@ class Setup:
 
         Parameters
         ----------
-        values : ParamValues
-            The values of the parameters, with those of the solved
-            elements (see values).
+        evaluation : SetupEvaluation
+            The evaluation (see evaluate).
         data : bool, optional
             Whether to add the data of the observations ('data', 'error'
             and 'data_image'; see gbkfit.outputs.data_outputs), which do
@@ -137,7 +176,8 @@ class Setup:
         """
         residuals = self.objective is not None
         outputs = gbkfit.outputs.evaluation_outputs(
-            self.group_plan, self.objective, values, True, residuals, extra)
+            self.group_plan, self.objective, evaluation.values, True,
+            residuals, extra)
         if data:
             outputs |= gbkfit.outputs.data_outputs(self.group_plan)
         return outputs
@@ -310,8 +350,7 @@ def load(
     --------
     >>> import gbkfit
     >>> with gbkfit.load('config.yaml') as setup:
-    ...     values = setup.values()
-    ...     chi2 = setup.objective.chi2(values)
+    ...     chi2 = setup.evaluate().objective.merits.chi2
     ...     result = setup.fit()
     """
     if isinstance(config, str):

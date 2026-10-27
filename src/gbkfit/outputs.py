@@ -752,7 +752,7 @@ def evaluation_outputs(
     'model_weight'), and the residuals ((model - data) / error) without
     and with the weights of the data items ('residual' and 'wresidual';
     these need the objective; the values of the parameters must have
-    those of the solved elements that it solves, see Objective.solved).
+    those of the solved elements that it solves, see Setup.evaluate).
     With the models, a flux scale of several values of an observation
     (see ObservationSky) is 'flux_scale'
     (observations/<observation>/flux_scale), of the shape of its spectra
