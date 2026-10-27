@@ -790,3 +790,21 @@ def test_user_likelihoods_take_parameters_of_their_observation(
         np.sum(2 * np.log1p(x[kept] ** 2)), rel=1e-5)
     with pytest.raises(ConfigError, match="needs a name"):
         make_objective(driver, user_data(), cauchy)
+
+
+def test_the_log_likelihood_of_a_fitted_scale_is_free_of_its_minimum(driver):
+    # (the noise residual holds sum ln f_min^2, a constant of the option
+    # scale_minimum alone: the log-likelihood and the AICp leave it out)
+    rng = np.random.default_rng(1)
+    data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
+    merits = []
+    for minimum in (0.1, 0.001):
+        noise = dict(brightness=dict(scale=True, scale_minimum=minimum))
+        objective, params = make_objective(
+            driver, data, LikelihoodGaussian(noise=noise), 'obs',
+            obs_noise_scale_brightness=1.5)
+        merits.append(objective.merits(params))
+    assert merits[0].log_likelihood == pytest.approx(
+        merits[1].log_likelihood, rel=1e-6)
+    assert merits[0].aicp == pytest.approx(merits[1].aicp, rel=1e-6)
+    assert merits[0].chi2 != pytest.approx(merits[1].chi2, rel=1e-3)

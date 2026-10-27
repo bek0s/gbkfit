@@ -92,11 +92,11 @@
  ],
  "objective": {
   "chi2": 1506.1463306329285,
-  "log_likelihood": -753.0731653164643,
+  "log_likelihood": -678.2132698159902,
   "noise_chi2": 207.9253166365295,
   "nresiduals": 792,
   "nindependent": 792.0,
-  "nnuisance": 0,
+  "nnuisance": 0.0,
   "residuals": [
    {
     "size": 1728,

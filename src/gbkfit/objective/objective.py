@@ -462,11 +462,15 @@ class Objective:
         prior_chi2 = float(sum(
             np.sum(residuals ** 2) for residuals in self._solve_residuals()))
         chi2 = data_chi2 + prior_chi2
-        log_likelihood = -0.5 * chi2 + float(sum(
+        # (the noise residuals of fitted scales hold a constant of their
+        # scale_minimum, which the log-likelihood and the AICp leave out)
+        constant = float(sum(c.noise_constant() for c in self._comparisons))
+        log_likelihood = -0.5 * (chi2 + constant) + float(sum(
             solution.log_term for solution in self._solutions))
         nnuisance = self._nnuisance()
         return Evaluation(
-            Merits(chi2, log_likelihood, data_chi2 + 2 * nnuisance),
+            Merits(chi2, log_likelihood,
+                   data_chi2 + constant + 2 * nnuisance),
             data_chi2=data_chi2, noise_chi2=self._noise_chi2(),
             prior_chi2=prior_chi2, nnuisance=nnuisance,
             solved=self._solved_values())

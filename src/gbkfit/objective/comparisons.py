@@ -237,6 +237,13 @@ class Comparison(abc.ABC):
         """
         return np.zeros(0)
 
+    def noise_constant(self) -> float:
+        """
+        Return the constant that its noise residuals add to -2 ln L (see
+        LikelihoodGaussian): none here.
+        """
+        return 0.0
+
     def chi2(self) -> float:
         """
         Return its chi-square, of the last evaluation: the sum of its
@@ -733,6 +740,19 @@ class ComparisonGaussian(Comparison):
         total = float(driver.math_matmul(unmasked, flat))
         return float(np.sqrt(self._nunmasked[key] / total)) \
             if total > 0 else 1.0
+
+    def noise_constant(self) -> float:
+        # (the noise residual of a fitted scale is sum c^2 ln(sigma^2 /
+        # (f_min e)^2), for least squares never negative: its part sum c^2
+        # ln(f_min^2), with sum c^2 over the values compared (the pixel
+        # weights normalised to their number; fewer independent values of
+        # correlated noise), is a constant of scale_minimum alone, which
+        # -2 ln L and the AICp must not hold)
+        return float(sum(
+            self._weights[key] ** 2 * self._nunmasked[key] * share
+            * 2 * np.log(noise.scale_minimum)
+            for (key, noise), share in zip(
+                self._noise.items(), self._noise_shares)))
 
     def noise_residuals(self) -> np.ndarray:
         """
