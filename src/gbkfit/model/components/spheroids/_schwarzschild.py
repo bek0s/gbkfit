@@ -84,9 +84,10 @@ class SchwarzschildKinematics(SpheroidKinematics):
     shares of the light (the smaller sigma, the stronger).
 
     The gravity must be the gradient of a potential (Newtonian), in which
-    the orbits keep their energy. The objective models the observations
-    of its stars, in the bins of region_moments of the method
-    gauss_hermite (their V, sigma, h3, h4 ...).
+    the orbits keep their energy. The observations of its stars are the
+    bins of region_moments of the method gauss_hermite (their V, sigma,
+    h3, h4 ...), which model the orbits in the series of their data (see
+    observation.OrbitRecording).
 
     Parameters
     ----------
@@ -367,8 +368,8 @@ class SchwarzschildMotion(SpheroidMotion):
     """
     The motion of the stars of a spheroid of SchwarzschildKinematics, of
     the given rmax: its orbits in each evaluation (its state, see
-    orbit_library). It gives the native spheroid no kinematics: an
-    objective models the observations of its stars (see
+    orbit_library). It gives the native spheroid no kinematics: the
+    observations of its stars record its orbits (see
     SchwarzschildKinematics).
     """
 

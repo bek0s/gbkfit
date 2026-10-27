@@ -1,9 +1,10 @@
 """
 Tests of the Schwarzschild kinematics of spheroids (its configuration,
-the gravity and the observations it takes) and of the objective that
-models the bins of their stars from the orbits (objective._orbits): the
-sky of the bins, the light of the spheroid in them, and the solved
-weights.
+the gravity and the observations it takes), of the recording of the
+orbits in the bins of their stars with data (observation._orbits) and of
+the objective that solves their weights (objective._orbits): the sky of
+the bins, the light of the spheroid in them, the solved weights and the
+model of the bins there.
 """
 
 import copy
@@ -15,10 +16,10 @@ from gbkfit.dataset import Data, DatasetRegionMoments
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
-from gbkfit.objective._orbits import _bins_light
 from gbkfit.observation import (
     LikelihoodGaussian, ObservationGroup, ObservationSky, PixelSpectra,
     RegionMoments, line_of_sight_parser)
+from gbkfit.observation._orbits import _bins_light
 from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
 from gbkfit.utils import gridutils
@@ -83,6 +84,16 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
         lines=['stars'], data=dataset, dtype='float64',
         oversampling=oversampling,
         likelihood=LikelihoodGaussian(missing_residual=3))
+
+
+def without_data(obs):
+    """
+    An observation as another, without data: its model is that of the
+    orbits as they are (see OrbitMomentsPlan), not in the series of data.
+    """
+    return ObservationSky(
+        obs.observable(), obs.line_of_sight(), instrument=obs.instrument(),
+        lines=['stars'], dtype='float64', oversampling=obs.oversampling())
 
 
 def sky_grid(obs):
@@ -284,12 +295,12 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     # The extra outputs of the orbits at the weights of their prior (1):
     # the cube of the pixels summed over the pixels of each bin is the
     # spectrum of the bin (of a symmetric PSF), so its moments are the
-    # model of the bins; the cells hold most of the light of the orbits;
-    # the tables have a row per cell, shell and orbit (and its twin, of
-    # the opposite angular momentum)
+    # model of the bins without data; the cells hold most of the light of
+    # the orbits; the tables have a row per cell, shell and orbit (and its
+    # twin, of the opposite angular momentum)
     from gbkfit.model import Extras
     from gbkfit.observation.observables import _moments
-    obs = observation(bins())
+    obs = without_data(observation(bins()))
     moments = obs.observable()
     extras = Extras()
     model = ObservationGroup([galaxy()], [obs]).plan(driver).model_h(
@@ -328,11 +339,12 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
 def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
     # Mock moments of the bins of the noise of the cube of their pixels, as
     # for other stars (an rms of the peak: errors of 8 km/s in V, 0.04 in
-    # h3): their errors (of 30 draws) hold the model, about one error from
-    # it
+    # h3): their errors (of 30 draws) hold the model without data, about
+    # one error from it
     from gbkfit.model import Extras
     from gbkfit.observation import noise_parser
-    plan = ObservationGroup([galaxy()], [observation(bins())]).plan(driver)
+    plan = ObservationGroup(
+        [galaxy()], [without_data(observation(bins()))]).plan(driver)
     values = PROPERTIES | dict(stars_weights=np.ones(400))
     extras = Extras()
     model = plan.model_h(values, extras)[0]
@@ -350,14 +362,14 @@ def test_mock_data_of_orbits_are_the_model_plus_noise(driver):
 def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     # Data made by the orbits, of the weights of their prior (1): the
     # moments of the spectra of the weighted orbits, as the model of the
-    # bins without the objective (e.g. of outputs) gives them. With the
+    # bins of an observation without data gives them. With the
     # weights there (a prior of the factors 1 of a tiny sigma), the model
     # of the objective, of the series of the data and linear in the
     # weights, is the data, but for the h1 and h2 that the data have in
     # their own series (Rix et al. 1997 take them as 0; a fit of V, sigma,
     # h3 and h4 together leaves terms of the order of h4 times the higher
     # orders): within 2% in sigma (where h4 is -0.09) and 0.01 in h4
-    group = ObservationGroup([galaxy()], [observation(bins())])
+    group = ObservationGroup([galaxy()], [without_data(observation(bins()))])
     model = group.plan(driver).model_h(
         PROPERTIES | dict(stars_weights=np.ones(400)))[0]
     data = {m: model[f'moment{m}']['d'] for m in range(1, 5)}
@@ -382,6 +394,76 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
         residuals['moment3'] * errors['moment3'], 0, atol=1e-6)
     np.testing.assert_allclose(
         residuals['moment4'] * errors['moment4'], 0, atol=0.01)
+
+
+def compared_model(objective, params):
+    """
+    The model that an objective of one observation compares with its data
+    at the values of the parameters: the data plus the residuals times the
+    errors, by key.
+    """
+    residuals = objective.residual_nddata_h(params, False)[0]
+    dataset = objective.datasets()[0]
+    return {key: dataset[key].data() + residual * dataset[key].error()
+            for key, residual in residuals.items()}
+
+
+def test_the_model_of_bins_with_data_is_that_of_the_objective(driver):
+    # The model of the bins of an observation with data, at the solved
+    # weights, is the model that the objective compares with the data (of
+    # the orbits in the series of the data), which the outputs and the
+    # bootstrap of a fit read; not that of the orbits as they are (of the
+    # observation without data), whose sigma is up to 7 km/s off here
+    obs = observation(bins())
+    group = ObservationGroup([galaxy()], [obs])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        stars_weights=SOLVE))
+    objective = Objective(group.plan(driver), params.solves())
+    evaluation = objective.evaluate(params.evaluate())
+    values = params.evaluate(solved=evaluation.solved)
+    model = objective.group_plan().model_h(values)[0]
+    for key, compared in compared_model(
+            objective, params.evaluate()).items():
+        np.testing.assert_allclose(
+            model[key]['d'], compared, rtol=1e-12, atol=1e-12)
+    forward = ObservationGroup([galaxy()], [without_data(obs)]).plan(
+        driver).model_h(values)[0]
+    assert np.abs(model['moment2']['d'] - forward['moment2']['d']).max() > 1
+
+
+def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
+    # The data of the refits of a bootstrap of a fit of the weights are
+    # the model that the objective compares with the data plus noise
+    from gbkfit.fitting import (
+        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+
+    class KeptModels(BootstrapGaussian):
+        """A Gaussian bootstrap that keeps the models it draws about."""
+
+        def __init__(self):
+            super().__init__()
+            self.models = []
+
+        def resample(self, dataset, residuals, model, params, values, rng):
+            self.models.append(model)
+            return super().resample(
+                dataset, residuals, model, params, values, rng)
+
+    group = ObservationGroup([galaxy()], [observation(bins())])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        vsys=dict(value=0, min=-50, max=50), stars_weights=SOLVE))
+    objective = Objective(group.plan(driver), params.solves())
+    scheme = KeptModels()
+    boot = bootstrap(
+        objective, params, dict(vsys=0.0),
+        fitter_parser.load(dict(type='scipy.least_squares', max_nfev=2)),
+        BootstrapOptions(2, scheme, seed=1))
+    assert len(boot.samples) == 2 and not boot.failures
+    compared = compared_model(objective, params.evaluate())
+    for model in scheme.models:
+        for key, value in compared.items():
+            np.testing.assert_allclose(
+                model[key], value, rtol=1e-12, atol=1e-12)
 
 
 @pytest.mark.slow

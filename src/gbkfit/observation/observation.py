@@ -272,9 +272,10 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         Return the components of the galaxies it sees whose stars it sees
         on orbits whose weights are solved (see Component.orbit_weights;
-        an objective models it, see objective.Objective), each as the index
-        of its galaxy (among those it sees) and its own index; none here,
-        where it sees no light.
+        with data, a recording of the orbits models it, see
+        GroupPlan.orbit_series), each as the index of its galaxy (among
+        those it sees) and its own index; none here, where it sees no
+        light.
         """
         return ()
 

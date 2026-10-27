@@ -463,17 +463,19 @@ spec_medium, method : optional
 class OrbitMomentsPlan(ObservablePlan):
     """
     The moments of the bins of stars on orbits whose weights are solved
-    (see Component.orbit_weights), at given weights (e.g. those that an
-    objective solves; it models the bins itself in its fits, see
-    objective.Objective): the orbits of the state of their spheroid (see
-    OrbitLibraryState), integrated and recorded with the light of their
-    weights in the bins, through the PSF (see RegionMoments.sky_grid), as
-    the spectrum of each bin on the spectral axis of the moments, whose
-    moments are measured as those of the spectra of any regions (see
-    RegionMomentsPlan).
+    (see Component.orbit_weights), at given weights: the orbits of the
+    state of their spheroid (see OrbitLibraryState), integrated and
+    recorded with the light of their weights in the bins, through the PSF
+    (see RegionMoments.sky_grid), as the spectrum of each bin on the
+    spectral axis of the moments, whose moments are measured as those of
+    the spectra of any regions (see RegionMomentsPlan). They are the model
+    of an observation without data; that of an observation with data is
+    of the orbits in the series of its data (see OrbitRecording), which an
+    objective fits.
 
     Its mock data are the moments of the bins of the cube of the pixels
-    of their grid plus the noise (see mock), as those of RegionMomentsPlan.
+    of their grid plus the noise (see mock), as those of RegionMomentsPlan,
+    with data or without.
 
     Its extra outputs, wanted, come from one pass that records the orbits
     in the bins and in the pixels of their grid and cells: the cube of the

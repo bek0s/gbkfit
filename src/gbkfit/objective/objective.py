@@ -14,7 +14,7 @@ from gbkfit.params import (
 from gbkfit.params._keys import element_name
 from gbkfit.utils import threadutils
 from gbkfit.utils.parseutils import ConfigError
-from ._orbits import orbit_groups
+from ._orbits import orbit_solves
 
 
 __all__ = [
@@ -148,13 +148,14 @@ class Objective:
     values. They do not go with a solved flux scale of the same
     observation (the model is then not linear in both). The weights of the
     orbits of the stars of a spheroid (see Component.orbit_weights): the
-    objective models the observations that see the stars (they have no
-    model of their own), from the orbits, linear in their weights, which
-    it solves together (see OrbitGroup). The priors of the solved values
-    add residuals after those of the data; the log-likelihood has the
-    values integrated out, or at their best values (see Solve). They are
-    nuisance parameters (see Evaluation.nnuisance); an evaluation gives
-    their values (see evaluate).
+    models of the observations that see the stars are linear in them (the
+    orbits in the series of their data, see OrbitRecording); the objective
+    solves them together (see OrbitSolve), and the models are evaluated at
+    their values. The priors of the solved values add residuals after
+    those of the data; the log-likelihood has the values integrated out,
+    or at their best values (see Solve). They are nuisance parameters (see
+    Evaluation.nnuisance); an evaluation gives their values (see
+    evaluate).
 
     Its memory on the devices (and the host) is allocated on the first
     evaluation, and released by close, or when Python collects it. An
@@ -185,7 +186,7 @@ class Objective:
         models are linear in (see Component.light_amplitudes,
         Observable.linear_in_light and Comparison.check_linear), nor a
         weight of orbits; or the weights of the orbits of stars that
-        observations see are not solved (see OrbitGroup).
+        observations see are not solved (see OrbitSolve).
     """
 
     def __init__(
@@ -207,7 +208,8 @@ class Objective:
             comparison(obs, driver) for obs, driver in zip(
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
-        self._orbits = orbit_groups(group, self._comparisons, self._solves)
+        self._orbits = orbit_solves(
+            group_plan, self._comparisons, self._solves)
         orbit_elements = {
             element for orbit in self._orbits for element in orbit.elements()}
         self._solved, amplitudes = _solved(
@@ -304,10 +306,12 @@ class Objective:
         """
         Release its memory on the devices and the host now, rather than
         when Python collects it (e.g. hundreds of megabytes of the whitening
-        of correlated noise; see LikelihoodGaussian). The next evaluation
-        allocates it again.
+        of correlated noise; see LikelihoodGaussian), with that of the
+        recordings of orbits of its plan (see GroupPlan.close). The next
+        evaluation allocates it again.
         """
         self._reset_memory()
+        self._group_plan.close()
 
     def __enter__(self) -> Self:
         return self
@@ -763,38 +767,31 @@ class Objective:
         with group_plan.lock():
             if self._groups:
                 params = self._solve_groups(params)
-            skip = [i for orbit in self._orbits for i in orbit.observations()]
-            models = list(group_plan.model_d(
-                self._unscaled(params), out_extra, skip))
             if self._orbits:
                 with group_plan.timers().measure('objective_orbits'):
-                    self._solve_orbits(params, models)
+                    params = self._solve_orbits(params)
+            models = group_plan.model_d(self._unscaled(params), out_extra)
             with group_plan.timers().measure('objective_residual_eval'):
                 scales = self._solve(models, params)
                 for comparison_, model, scales_ in zip(
                         self._comparisons, models, scales):
                     comparison_.evaluate(model, params, weighted, scales_)
 
-    def _solve_orbits(
-            self,
-            params: ParamValues,
-            models: list[dict[str, dict[str, DeviceArray | None]]]
-    ) -> None:
+    def _solve_orbits(self, params: ParamValues) -> ParamValues:
         """
-        Solve the weights of the orbits of each orbit group (see
-        OrbitGroup), and put the models of its observations in models,
-        with BLAS on at most _ORBIT_BLAS_THREADS threads.
+        Solve the weights of the orbits of each recording of the plan (see
+        OrbitSolve), with BLAS on at most _ORBIT_BLAS_THREADS threads, and
+        return the values of the parameters with their solved values.
         """
-        group_plan = self._group_plan
-        states = group_plan.galaxy_states(params)
         first = len(self._solved) + len(self._groups)
         with threadutils.blas_limit(_ORBIT_BLAS_THREADS):
-            for j, orbit in enumerate(self._orbits):
-                solution, orbit_models = orbit.evaluate(
-                    params, states, group_plan)
+            series = self._group_plan.orbit_series(self._unscaled(params))
+            for j, (orbit, series_j) in enumerate(zip(self._orbits, series)):
+                solution = orbit.solve(series_j, params)
                 self._solutions[first + j] = solution
-                for i, model in orbit_models.items():
-                    models[i] = model
+                params = params | {
+                    orbit.recording().weights(): solution.values}
+        return params
 
     def _solve_groups(self, params: ParamValues) -> ParamValues:
         """

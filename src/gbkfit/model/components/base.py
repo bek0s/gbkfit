@@ -252,7 +252,9 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         Return its parameter of the weights of the orbits of its stars, if
         they move on orbits whose weights are solved to fit the data (e.g.
         a spheroid of Schwarzschild kinematics; see objective.Objective,
-        which models the observations of them); None by default.
+        which solves them); None by default. The state of its galaxy does
+        not depend on them: only the observations of the orbits weigh the
+        orbits by them (see observation.OrbitRecording).
         """
         return None
 

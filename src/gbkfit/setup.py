@@ -316,13 +316,15 @@ class Setup:
 
     def close(self) -> None:
         """
-        Release the memory of its objective (allocated again by its next
-        evaluation; see Objective.close), and stop the threads of its pool.
+        Release the memory of its objective and its plan (allocated again by
+        their next evaluation; see Objective.close and GroupPlan.close),
+        and stop the threads of its pool.
         """
         if self.pool is not None:
             self.pool.close()
         if self.objective is not None:
             self.objective.close()
+        self.group_plan.close()
 
     def __enter__(self) -> Self:
         return self
