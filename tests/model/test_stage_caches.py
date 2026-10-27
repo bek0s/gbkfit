@@ -27,8 +27,8 @@ CASES = sorted(
 def _setup(case: str) -> Setup:
     """Set up a golden case on the host."""
     file = read_config(str(GOLDEN_DIR / case / 'config.yaml'))
-    return gbkfit.load(
-        dict(file.config, root=str(file.root), driver=dict(type='host')))
+    return gbkfit.load(file._replace(
+        config=file.config | dict(driver=dict(type='host'))))
 
 
 def _stepped(value: float | np.ndarray) -> float | np.ndarray:

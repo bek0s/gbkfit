@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import gbkfit.outputs
+import gbkfit.project
 from gbkfit.setup import ConfigFile
 from gbkfit.utils import miscutils
 
@@ -113,12 +114,13 @@ def write_config(
         **ids: str
 ) -> None:
     """
-    Write a configuration as a product of a run (YAML), with its root (the
-    directory its relative paths are relative to) relative to the
-    directory of its file.
+    Write a configuration as a product of a run (YAML), with the version
+    of its format and its root (the directory its relative paths are
+    relative to) relative to the directory of its file.
     """
     directory = os.path.dirname(os.path.join(run.path, path))
     run.write(
         path, kind,
-        dict(root=os.path.relpath(root, directory)) | copy.deepcopy(cfg),
+        dict(version=gbkfit.project.FORMAT_VERSION,
+             root=os.path.relpath(root, directory)) | copy.deepcopy(cfg),
         **ids)

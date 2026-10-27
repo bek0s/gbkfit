@@ -1,5 +1,6 @@
 # msa_shutters: Slitless spectra behind a slitlet of three MSA shutters: two nods subtracted (A - B, B - A) and aligned on the sky (sky and image offsets, weights), blurred by the LSF behind the aperture.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

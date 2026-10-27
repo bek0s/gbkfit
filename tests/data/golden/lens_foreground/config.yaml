@@ -1,5 +1,6 @@
 # lens_foreground: The image of a source disk behind a foreground lens of three masses: an elliptical power law, its multipole of order 4 (tied to it by expressions) and an external shear.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

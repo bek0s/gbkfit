@@ -1,5 +1,6 @@
 # blobs_maps_selection: The moment maps of a disk whose density is an exponential, three blobs (a mixture) and a map of 4 x 4 cells, within a range of radii and of azimuths (selection traits).
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

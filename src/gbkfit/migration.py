@@ -1,13 +1,14 @@
 """
 Migration of configurations to the current format.
 
-The format changes by rules (see Rule, RULES), each of which finds its
-old form in a configuration and rewrites it in the new form. The
-loaders of configurations refuse the old forms, with an error that
-names the new form (see refuse_old_forms); migrate rewrites them in a
-configuration, migrate_file in a file (keeping its comments), and
-migrate_project in the pieces and setups of a project (see
-gbkfit.project).
+Configurations carry the version of their format (see
+gbkfit.project.FORMAT_VERSION): configuration files their section
+'version', and the pieces and setups of a project its marker. The format
+changes by rules (see Rule, RULES), each of which rewrites the old form
+of a configuration of an older version in the form of its own; migrate
+rewrites a configuration, migrate_file a file (keeping its comments), and
+migrate_project the pieces and setups of a project (see gbkfit.project).
+Configurations of the current version are left as they are.
 """
 
 import abc
@@ -21,6 +22,7 @@ import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap
 
 import gbkfit.project
+from gbkfit.project import FORMAT_VERSION
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -30,17 +32,18 @@ __all__ = [
     'Rule',
     'migrate',
     'migrate_file',
-    'migrate_project',
-    'refuse_old_forms'
+    'migrate_project'
 ]
 
 
 # The sections whose items are pieces of projects
 _SECTIONS = ('galaxies', 'observations', 'params', 'fitter')
 
-# (round trip, keeping comments; flow collections are rewritten within
-# the width, and null stays null)
+# (round trip, keeping comments; a flow collection is rewritten on one
+# line, as ruamel breaks lines between keys and their values, and null
+# stays null)
 _yaml = ruamel.yaml.YAML()
+_yaml.width = 4096
 _yaml.representer.add_representer(
     type(None),
     lambda representer, _: representer.represent_scalar(
@@ -58,29 +61,15 @@ class Change(NamedTuple):
 
 
 class Rule(abc.ABC):
-    """A change of the format of configurations."""
+    """
+    A change of the format of configurations: of those of the version
+    before its own (see version) to its own.
+    """
 
+    @staticmethod
     @abc.abstractmethod
-    def find(
-            self, section: str, item: Mapping[str, Any]
-    ) -> ConfigError | None:
-        """
-        Find the old form in an item of a section of a configuration.
-
-        Parameters
-        ----------
-        section : str
-            The section (e.g. 'galaxies').
-        item : Mapping
-            The item: one of a list of them (e.g. a galaxy), or the
-            section itself (e.g. 'params').
-
-        Returns
-        -------
-        ConfigError or None
-            An error that names the new form, with its path in the item;
-            None if the item has no old form.
-        """
+    def version() -> int:
+        """Return the version of the format that it rewrites to."""
 
     @abc.abstractmethod
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
@@ -112,28 +101,9 @@ class _FluxScales(Rule):
     'per_spectrum' ('per_row' of slitless spectra).
     """
 
-    def find(
-            self, section: str, item: Mapping[str, Any]
-    ) -> ConfigError | None:
-        if section != 'observations':
-            return None
-        if 'calibration' in item:
-            return ConfigError(
-                "option 'calibration' is now flux_scale: 'one', whose "
-                "parameter is '{name}_flux_scale' (was "
-                "'{name}_calibration')", ['calibration'])
-        likelihood = item.get('likelihood')
-        if isinstance(likelihood, Mapping) and (
-                {'amplitudes', 'amplitude_sigma'} & set(likelihood)):
-            sigma = likelihood.get('amplitude_sigma')
-            return ConfigError(
-                f"the amplitudes of the likelihood are now a solved flux "
-                f"scale of the observation: its option flux_scale: "
-                f"per_spectrum (or per_row, of slitless spectra), and in "
-                f"the parameters '{{name}}_flux_scale': {{solve: {{type: "
-                f"gaussian, mean: 1, sigma: {sigma}, minimum: 0}}}}",
-                ['likelihood'])
-        return None
+    @staticmethod
+    def version() -> int:
+        return 2
 
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
@@ -223,23 +193,9 @@ class _DiskTypes(Rule):
 
     _NEW = dict(smdisk='disk', mcdisk='disk', smcone='cone')
 
-    def find(
-            self, section: str, item: Mapping[str, Any]
-    ) -> ConfigError | None:
-        if section != 'galaxies':
-            return None
-        for path, component in _components(item):
-            if (old := component.get('type')) not in self._NEW:
-                continue
-            new = f"type '{self._NEW[old]}'"
-            if old == 'mcdisk':
-                clouds = dict(cflux=component.get('cflux'))
-                if 'seed' in component:
-                    clouds['seed'] = component['seed']
-                new += f" with clouds: {clouds}"
-            return ConfigError(
-                f"type '{old}' is now {new}", path + ['type'])
-        return None
+    @staticmethod
+    def version() -> int:
+        return 2
 
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
@@ -268,15 +224,12 @@ class _OwnGeometries(Rule):
     geometry 'own', which keeps the model and the names of its
     parameters: those of galaxies of several components, those with
     names (which prefix their parameters) and the warped ones (loose or
-    tilted, their own warps). There is no old form to find: the
-    configuration of the old default is valid (its parameters are then
-    unknown, and named so).
+    tilted, their own warps).
     """
 
-    def find(
-            self, section: str, item: Mapping[str, Any]
-    ) -> ConfigError | None:
-        return None
+    @staticmethod
+    def version() -> int:
+        return 2
 
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
@@ -303,15 +256,9 @@ class _ObservationRenames(Rule):
 
     _NEW = dict(scale='oversampling', weights='pixel_weights')
 
-    def find(
-            self, section: str, item: Mapping[str, Any]
-    ) -> ConfigError | None:
-        if section != 'observations':
-            return None
-        for old, new in self._NEW.items():
-            if old in item:
-                return ConfigError(f"option '{old}' is now {new}", [old])
-        return None
+    @staticmethod
+    def version() -> int:
+        return 2
 
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
@@ -332,56 +279,49 @@ RULES: tuple[Rule, ...] = (
 )
 
 
-def refuse_old_forms(section: str, item: Any) -> None:
+def migrate(
+        config: MutableMapping[str, Any], from_version: int | None = None
+) -> list[Change]:
     """
-    Refuse the old forms in an item of a section of a configuration (see
-    Rule.find).
-
-    Parameters
-    ----------
-    section : str
-        The section (e.g. 'galaxies').
-    item : Any
-        The item: one of a list of them (e.g. a galaxy), or the section
-        itself (e.g. 'params'). Items that are not dictionaries have no
-        old forms.
-
-    Raises
-    ------
-    ConfigError
-        If the item has an old form: an error that names the new form.
-    """
-    if not isinstance(item, Mapping):
-        return
-    for rule in RULES:
-        if (error := rule.find(section, item)) is not None:
-            raise ConfigError(
-                f"{error.message} (gbkfit-cli migrate rewrites it)",
-                error.path, error.context)
-
-
-def migrate(config: MutableMapping[str, Any]) -> list[Change]:
-    """
-    Rewrite the old forms of a configuration in the current format, in
-    place (see Rule.rewrite).
+    Rewrite a configuration of an older version of the format in the
+    current one, in place (see Rule.rewrite), with its section 'version'
+    set to the current version.
 
     Parameters
     ----------
     config : MutableMapping
-        The configuration, or some of its sections.
+        The configuration.
+    from_version : int, optional
+        The version of its format, if it has no section 'version' (those
+        of before version 3 had none): 1, before 2026-10-25; 2, before
+        2026-10-28.
 
     Returns
     -------
     list of Change
-        The changes, in order.
+        The changes, in order; none if it is of the current version.
+
+    Raises
+    ------
+    ConfigError
+        If its version is not given, is not one of the format, or is newer
+        than the current one, or from_version is not its version.
     """
-    return [change for rule in RULES for change in rule.rewrite(config)]
+    version = _version(config.get('version'), from_version)
+    if version == FORMAT_VERSION:
+        return []
+    changes = _rewrite(config, version)
+    _insert_first(config, 'version', FORMAT_VERSION)
+    return changes + [Change(['version'], f"{version} -> {FORMAT_VERSION}")]
 
 
-def migrate_file(path: str, output: str | None = None) -> list[Change]:
+def migrate_file(
+        path: str, output: str | None = None, from_version: int | None = None
+) -> list[Change]:
     """
-    Rewrite the old forms of a configuration file (YAML or JSON) in the
-    current format, keeping the comments of YAML (see migrate).
+    Rewrite a configuration file (YAML or JSON) of an older version of the
+    format in the current one, keeping the comments of YAML (see
+    migrate).
 
     Parameters
     ----------
@@ -389,6 +329,9 @@ def migrate_file(path: str, output: str | None = None) -> list[Change]:
         The file.
     output : str, optional
         The file to write; by default the file itself, if it changes.
+    from_version : int, optional
+        The version of its format, if it has no section 'version' (see
+        migrate).
 
     Returns
     -------
@@ -398,10 +341,13 @@ def migrate_file(path: str, output: str | None = None) -> list[Change]:
     Raises
     ------
     ConfigError
-        If the file cannot be read.
+        If the file cannot be read, or its version is not valid (see
+        migrate).
     """
     config = _read(path)
-    changes = migrate(config) if isinstance(config, MutableMapping) else []
+    if not isinstance(config, MutableMapping):
+        raise ConfigError(f"{path} is not a configuration (a dictionary)")
+    changes = migrate(config, from_version)
     if output is not None or changes:
         _write(output or path, config)
     return changes
@@ -409,13 +355,14 @@ def migrate_file(path: str, output: str | None = None) -> list[Change]:
 
 def migrate_project(path: str) -> dict[str, list[Change]]:
     """
-    Rewrite the old forms of the pieces and the setups of a project in
-    the current format, in place, and mark it of the current version of
-    the format of projects (see gbkfit.project.FORMAT_VERSION).
+    Rewrite the pieces and the setups of a project of an older version of
+    the format in the current one, in place, and mark it of the current
+    version (see gbkfit.project.FORMAT_VERSION).
 
     The pieces are migrated together, as one configuration with all of
     them (so that a rule can change a piece of observations and one of
-    parameters, as one); each setup is migrated alone.
+    parameters, as one); each setup is migrated alone. The marker of the
+    project gives their version; they have no section 'version'.
 
     Parameters
     ----------
@@ -426,7 +373,8 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
     -------
     dict of str to list of Change
         The changes of each file that changed (by its path in the folder
-        of the project), with their paths in the piece or the setup.
+        of the project), with their paths in the piece or the setup; none
+        for a project of the current version.
 
     Raises
     ------
@@ -436,6 +384,8 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         If a piece or a setup cannot be read.
     """
     project = gbkfit.project.open(path)
+    if (version := project.version()) == FORMAT_VERSION:
+        return {}
     files = {
         section: [project.piece_file(section, name)
                   for name in project.names(_folder(section))]
@@ -444,7 +394,7 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         section: [_read(file) for file in section_files]
         for section, section_files in files.items()}
     by_piece: dict[tuple[str, int], list[Change]] = {}
-    for change in migrate(pieces):
+    for change in _rewrite(pieces, version):
         section, index, *rest = change.path
         by_piece.setdefault((section, index), []).append(
             Change(rest, change.message))
@@ -454,12 +404,57 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
         changes[files[section][index]] = piece_changes
     for name in project.names('setups'):
         file = os.path.join(project.path, 'setups', f'{name}.yaml')
-        if setup_changes := migrate_file(file):
+        setup = _read(file)
+        if isinstance(setup, MutableMapping) \
+                and (setup_changes := _rewrite(setup, version)):
+            _write(file, setup)
             changes[file] = setup_changes
     _mark_current(project.path)
     return {
         os.path.relpath(file, project.path): file_changes
         for file, file_changes in changes.items()}
+
+
+def _version(version: Any, from_version: int | None) -> int:
+    """
+    Return the version of the format of a configuration: its section
+    'version', or else from_version (see migrate).
+
+    Raises
+    ------
+    ConfigError
+        If neither is given, the version is not one of the format or is
+        newer than the current one, or they differ.
+    """
+    if version is None:
+        if from_version is None:
+            raise ConfigError(
+                "the configuration has no version: give that of its format "
+                "(1, before 2026-10-25; 2, before 2026-10-28)")
+        version = from_version
+    elif from_version is not None and from_version != version:
+        raise ConfigError(
+            f"the configuration is of version {version}; not "
+            f"{from_version}", ['version'])
+    if isinstance(version, bool) or version not in range(
+            1, FORMAT_VERSION + 1):
+        raise ConfigError(
+            f"the versions of the format are 1 to {FORMAT_VERSION} (that "
+            f"of this gbkfit); the configuration is of version "
+            f"{version!r}", ['version'])
+    return version
+
+
+def _rewrite(
+        config: MutableMapping[str, Any], version: int
+) -> list[Change]:
+    """
+    Rewrite a configuration of a version in the current one, in place, by
+    the rules of the versions after it.
+    """
+    return [
+        change for rule in RULES if rule.version() > version
+        for change in rule.rewrite(config)]
 
 
 def _items(
@@ -513,6 +508,19 @@ def _rename(mapping: MutableMapping[str, Any], old: str, new: str) -> None:
         mapping.update(items)
 
 
+def _insert_first(
+        mapping: MutableMapping[str, Any], key: str, value: Any
+) -> None:
+    """Set a key of a dictionary in place, as its first one."""
+    mapping.pop(key, None)
+    if isinstance(mapping, CommentedMap):
+        mapping.insert(0, key, value)
+    else:
+        items = list(mapping.items())
+        mapping.clear()
+        mapping.update([(key, value)] + items)
+
+
 def _folder(section: str) -> str:
     """Return the folder of the pieces of a section of a project."""
     return 'fitters' if section == 'fitter' else section
@@ -541,7 +549,7 @@ def _write(path: str, config: Any) -> None:
 
 
 def _mark_current(path: str) -> None:
-    """Mark a project of the current version of the format of projects."""
+    """Mark a project of the current version of the format."""
     marker = Path(path, gbkfit.project.MARKER)
     with marker.open('w') as f:
         ruamel.yaml.YAML(typ='safe').dump(dict(

@@ -160,8 +160,10 @@ def _load(config: dict[str, Any], root: pathlib.Path, driver: str) -> 'Setup':
     driver (see gbkfit.load).
     """
     import gbkfit
-    return gbkfit.load(
-        dict(config, root=str(root), driver=dict(type=driver)))
+    from gbkfit.project import FORMAT_VERSION
+    return gbkfit.load(dict(
+        config, version=FORMAT_VERSION, root=str(root),
+        driver=dict(type=driver)))
 
 
 def _rebased(info: Any, prefix: str) -> Any:
@@ -218,6 +220,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     """
     from gbkfit.observation import likelihood_parser, noise_parser
     from gbkfit.observation import observation_parser
+    from gbkfit.project import FORMAT_VERSION
     from gbkfit.utils import numutils, parseutils
     folder.mkdir(parents=True, exist_ok=True)
     if case.prepare is not None:
@@ -250,7 +253,8 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
             overwrite=True), prefix)
         info['data'] = _compacted(info['data'], folder) | data_options[i]
         observations.append(info)
-    config = dict(driver=dict(type='host')) | sections | dict(
+    config = dict(version=FORMAT_VERSION, driver=dict(type='host')) \
+        | sections | dict(
         observations=observations,
         params=dict(properties=case.trial) | case.params)
     _write_config(case, folder, numutils.nativify(config))

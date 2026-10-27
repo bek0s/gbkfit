@@ -1,5 +1,6 @@
 # thick_disk_transfer: A thick disk of gas and one of dust, seen in two cubes: on a grid (the dust dims the light behind it) and through radiative transfer (the march along each line of sight).
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

@@ -1,5 +1,6 @@
 # params_features: Two gas disks (cold and warm) of one shared warped geometry (galaxy option geometries) and a nucleus, in a cube: the position angles of the warp given as offsets (mode), ties, extra parameters of the section pdescs (the flux of the nucleus, exp(mu + sigma z)), derived values, and priors on several parameters (gauss on an expression, smooth over the warp).
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - geometries:

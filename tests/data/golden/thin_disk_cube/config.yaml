@@ -1,5 +1,6 @@
 # thin_disk_cube: A thin disk in a cube, float64: the plain path from a configuration to the chi-square.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

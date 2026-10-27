@@ -1,5 +1,6 @@
 # mcdisk_cube: A thick Monte Carlo disk of clouds of a fixed seed in a cube, float64, on a grid.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

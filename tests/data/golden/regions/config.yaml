@@ -1,5 +1,6 @@
 # regions: One galaxy in two observations of regions: the moments of Voronoi bins, and the spectra of apertures (a circle, an ellipse, a rectangle and the field).
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

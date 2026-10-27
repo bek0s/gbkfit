@@ -3,8 +3,10 @@ The front door of GBKFIT: galaxies, their observations and their
 parameters set up on drivers (see Setup), in Python or from a
 configuration (see load).
 
-A configuration (a YAML or JSON file, or a dictionary) has the sections
-'galaxies', 'observations' and 'params', and can have the sections
+A configuration (a YAML or JSON file, or a dictionary) has the section
+'version', the version of its format (see gbkfit.project.FORMAT_VERSION;
+a setup of a project has that of its project), the sections 'galaxies',
+'observations' and 'params', and can have the sections
 'driver' or 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
 'fitter' and 'parallel', and those of the tasks ('mock' and 'bootstrap';
 see gbkfit.tasks), which load leaves to them.
@@ -19,7 +21,6 @@ from typing import Any, NamedTuple, Self
 
 import ruamel.yaml
 
-import gbkfit.migration
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.outputs
@@ -367,10 +368,10 @@ def read_config(
     Raises
     ------
     ConfigError
-        If the file cannot be read, its project is invalid, a required
-        section is missing, a section is unknown (see
-        parseutils.report_unknown) or of the wrong type, or an item has an
-        old form (see gbkfit.migration).
+        If the file cannot be read, its project is invalid, it is not of
+        the current version of the format (see _check_version), a required
+        section is missing, or a section is unknown (see
+        parseutils.report_unknown) or of the wrong type.
     """
     filename = os.path.abspath(filename)
     texts = texts or {}
@@ -390,6 +391,7 @@ def read_config(
         raise ConfigError(str(e)) from e
     if project is not None and texts:
         project = gbkfit.project.Project(project.path, texts)
+    _check_version(cfg, project)
     directory = os.path.dirname(filename) if project is None \
         else project.path
     if root is not None:
@@ -491,7 +493,48 @@ def _config_file(config: Mapping[str, Any]) -> ConfigFile:
     """
     config = dict(config)
     root = os.path.abspath(_root(config) or os.curdir)
+    _check_version(config, None)
     return ConfigFile(_prepare_config(config), root, None, None, {})
+
+
+def _check_version(
+        config: Any, project: gbkfit.project.Project | None
+) -> None:
+    """
+    Remove the section 'version' of a configuration, and check that it is
+    the current version of the format (see gbkfit.project.FORMAT_VERSION);
+    a setup of a project is of the version of its project, which it need
+    not give.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration has no version, or is of another one.
+    """
+    version = config.pop('version', None) if isinstance(config, dict) \
+        else None
+    current = gbkfit.project.FORMAT_VERSION
+    if project is not None:
+        if version not in (None, project.version()):
+            raise ConfigError(
+                f"the configuration is of version {version!r}, but its "
+                f"project is of version {project.version()}", ['version'])
+        if project.version() != current:
+            raise ConfigError(
+                f"the project {project.path} is of version "
+                f"{project.version()} of the format, not {current}, that "
+                f"of this gbkfit (gbkfit-cli migrate rewrites it)")
+        return
+    if version is None:
+        raise ConfigError(
+            f"the configuration has no version: 'version: {current}' for "
+            f"the format of this gbkfit (gbkfit-cli migrate rewrites "
+            f"configurations of older ones)")
+    if version != current:
+        raise ConfigError(
+            f"the configuration is of version {version!r} of the format, "
+            f"not {current}, that of this gbkfit (gbkfit-cli migrate "
+            f"rewrites older ones)", ['version'])
 
 
 def _prepare_config(
@@ -508,8 +551,8 @@ def _prepare_config(
     Raises
     ------
     ConfigError
-        If a required section is missing, a section is of the wrong type,
-        or an item has an old form (see gbkfit.migration).
+        If a required section is missing, or a section is of the wrong
+        type.
     """
     config = {} if config is None else dict(config)
     known = required + optional
@@ -532,23 +575,7 @@ def _prepare_config(
                 raise ConfigError(
                     f"section '{s}' must be a dictionary or a list")
             config[s] = iterutils.listify(config[s])
-    _refuse_old_forms(config)
     return json.loads(json.dumps(config))
-
-
-def _refuse_old_forms(config: dict[str, Any]) -> None:
-    """
-    Refuse the old forms of the items of the sections of a configuration
-    (see gbkfit.migration.refuse_old_forms).
-    """
-    for section in ('galaxies', 'observations'):
-        for i, item in enumerate(config.get(section, [])):
-            with parseutils.config_path(section, i):
-                gbkfit.migration.refuse_old_forms(section, item)
-    for section in ('params', 'fitter'):
-        if section in config:
-            with parseutils.config_path(section):
-                gbkfit.migration.refuse_old_forms(section, config[section])
 
 
 def _merge_pdescs(

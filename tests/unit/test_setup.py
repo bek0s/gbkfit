@@ -21,6 +21,8 @@ PARAMS = dict(properties=dict(
 
 HOST = dict(type='host')
 
+VERSION = gbkfit.project.FORMAT_VERSION
+
 
 def observation(**options):
     """The configuration of an observation of GALAXY, with options."""
@@ -47,7 +49,7 @@ def test_the_front_door_is_gbkfit_load():
 def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
     # (a dictionary: its paths are relative to its section 'root')
     config = dict(
-        root=str(tmp_path), galaxies=[GALAXY],
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         observations=[image(tmp_path / 'image.fits')], params=PARAMS)
     with gbkfit.load(config) as loaded:
         evaluation = loaded.evaluate()
@@ -67,7 +69,8 @@ def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
     obs = image(tmp_path / 'image.fits') | dict(
         data=dict(data=str(tmp_path / 'image.fits')))
     with gbkfit.load(dict(
-            galaxies=[GALAXY], observations=[obs], params=PARAMS)) as loaded:
+            version=VERSION, galaxies=[GALAXY], observations=[obs],
+            params=PARAMS)) as loaded:
         expected = loaded.evaluate().objective.merits
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), observation_parser.load(obs))
@@ -96,7 +99,8 @@ def test_the_outputs_of_an_evaluation_are_its_own():
     # (the plan reuses its arrays of the models: the outputs of a second
     # evaluation must not overwrite those of the first)
     loaded = gbkfit.load(dict(
-        galaxies=[GALAXY], observations=[observation()], params=PARAMS))
+        version=VERSION, galaxies=[GALAXY], observations=[observation()],
+        params=PARAMS))
     first = loaded.outputs(loaded.evaluate())
     model = next(o for o in first.values() if o.kind == 'model')
     before = np.array(model.value.data)
@@ -106,7 +110,8 @@ def test_the_outputs_of_an_evaluation_are_its_own():
 
 def test_a_configuration_without_data_cannot_fit():
     loaded = gbkfit.load(dict(
-        galaxies=[GALAXY], observations=[observation()], params=PARAMS))
+        version=VERSION, galaxies=[GALAXY], observations=[observation()],
+        params=PARAMS))
     assert loaded.objective is None
     model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
     assert model['brightness']['d'].sum() > 0
@@ -115,15 +120,16 @@ def test_a_configuration_without_data_cannot_fit():
     # (a configuration of a fit needs data)
     with pytest.raises(ConfigError, match="needs data; these have none"):
         gbkfit.load(dict(
-            galaxies=[GALAXY], observations=[observation()], params=PARAMS,
-            fitter=dict(type='scipy.least_squares')))
+            version=VERSION, galaxies=[GALAXY], observations=[observation()],
+            params=PARAMS, fitter=dict(type='scipy.least_squares')))
 
 
 def test_the_drivers_given_replace_those_of_the_configuration():
     from gbkfit.driver.drivers.host import DriverHost
     driver = DriverHost()
     loaded = gbkfit.load(
-        dict(galaxies=[GALAXY], observations=[observation()], params=PARAMS,
+        dict(version=VERSION, galaxies=[GALAXY],
+             observations=[observation()], params=PARAMS,
              driver=dict(type='cuda')),
         drivers={None: driver})
     assert loaded.group_plan.observation_drivers() == (driver,)
@@ -134,11 +140,11 @@ def test_configs_resolve_relative_paths_against_their_root(tmp_path):
     # folder of their project)
     config = tmp_path / 'configs' / 'fit.yaml'
     config.parent.mkdir()
-    config.write_text("galaxies: {}\nroot: ../data\n")
+    config.write_text("version: 3\ngalaxies: {}\nroot: ../data\n")
     file = setup.read_config(str(config), ('galaxies',))
     assert file.config == dict(galaxies=[{}])
     assert file.root == str(tmp_path / 'data')
-    config.write_text("galaxies: {}\n")
+    config.write_text("version: 3\ngalaxies: {}\n")
     assert setup.read_config(str(config), ('galaxies',)).root == \
         str(config.parent)
     with pytest.raises(ConfigError, match="needs the sections"):
@@ -253,7 +259,7 @@ def test_driver_errors(sections, message):
 
 def test_parallel_evaluations_are_on_drivers_of_the_configuration(tmp_path):
     config = dict(
-        root=str(tmp_path), galaxies=[GALAXY],
+        version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         drivers=dict(cpu1=HOST, cpu2=HOST),
         observations=[image(tmp_path / 'image.fits') | dict(driver='cpu1')],
         params=PARAMS)

@@ -19,10 +19,15 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
-def migrate(path: str, output: str | None = None) -> None:
+def migrate(
+        path: str,
+        output: str | None = None,
+        from_version: int | None = None
+) -> None:
     """
     Rewrite a configuration file, or the pieces and setups of a project,
-    in the current format of configurations, and log the changes.
+    of an older version of the format in the current one, and log the
+    changes.
 
     Parameters
     ----------
@@ -32,23 +37,30 @@ def migrate(path: str, output: str | None = None) -> None:
     output : str, optional
         The file to write a configuration file to; by default the file
         itself, if it changes. Not for a project.
+    from_version : int, optional
+        The version of the format of a configuration file without the
+        section 'version' (see gbkfit.migration.migrate). Not for a
+        project, whose marker gives it.
 
     Raises
     ------
     ConfigError
-        If a file cannot be read, the folder is not a project of a
-        version that this one reads, or an output is given for a project.
+        If a file cannot be read, the version of a file is not valid, the
+        folder is not a project of a version that this one reads, or an
+        output or a version is given for a project.
     """
     if os.path.isdir(path):
-        if output is not None:
+        if output is not None or from_version is not None:
             raise ConfigError(
-                "a project is migrated in place; it takes no output")
+                "a project is migrated in place, from the version of its "
+                "marker; it takes no output and no from_version")
         try:
             changes = gbkfit.migration.migrate_project(path)
         except ValueError as e:
             raise ConfigError(str(e)) from e
     else:
-        changes = {path: gbkfit.migration.migrate_file(path, output)}
+        changes = {path: gbkfit.migration.migrate_file(
+            path, output, from_version)}
     for file, file_changes in changes.items():
         for change in file_changes:
             where = '.'.join(map(str, change.path))

@@ -1,5 +1,6 @@
 # thin_disk_moments: The moment maps of a thin disk, float32 (the default dtype), with weights of the items and a residual for missing values.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

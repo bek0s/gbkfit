@@ -49,8 +49,11 @@ __all__ = [
 
 
 FORMAT = 'gbkfit-project'
-# (2: the configurations of 2026-10-25 on; gbkfit.migration rewrites 1)
-FORMAT_VERSION = 2
+# The version of the format of configurations, which projects (their
+# marker) and configuration files (their section 'version') carry: 2, the
+# configurations of 2026-10-25 on, and 3, of 2026-10-28 on;
+# gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 3
 MARKER = 'gbkfit-project.yaml'
 
 # The folders of the pieces, by the sections of the configurations that
@@ -154,6 +157,13 @@ class Project:
     def path(self) -> str:
         """The folder of the project (absolute)."""
         return self._path
+
+    def version(self) -> int:
+        """
+        Return the version of the format of its pieces and setups (see
+        FORMAT_VERSION), from its marker.
+        """
+        return _marker(self._path)['version']
 
     def piece(self, section: str, name: str) -> dict[str, Any]:
         """
@@ -331,17 +341,10 @@ def open(path: str) -> Project:
         If the folder has no marker of a project, or one of another format
         or of a newer version.
     """
-    try:
-        marker = _yaml.load(Path(path, MARKER))
-    except FileNotFoundError:
-        raise ValueError(f"{path} is not a project (no {MARKER})") from None
-    if not isinstance(marker, dict) or marker.get('format') != FORMAT:
-        raise ValueError(f"{os.path.join(path, MARKER)} is not of {FORMAT}")
-    if marker.get('version', 0) > FORMAT_VERSION:
+    if (version := _marker(path)['version']) > FORMAT_VERSION:
         raise ValueError(
-            f"the project {path} is of version {marker['version']} of "
-            f"{FORMAT}, newer than this version of gbkfit reads "
-            f"({FORMAT_VERSION})")
+            f"the project {path} is of version {version} of {FORMAT}, "
+            f"newer than this version of gbkfit reads ({FORMAT_VERSION})")
     return Project(path)
 
 
@@ -529,3 +532,24 @@ def _merge_option(key: str, merged: Any, value: Any) -> Any:
 def _parameter(key: str) -> str:
     """Return the name of the parameter of a key of the properties."""
     return key.split('[', 1)[0].strip()
+
+
+def _marker(path: str) -> dict[str, Any]:
+    """
+    Return the marker of the project of a folder.
+
+    Raises
+    ------
+    ValueError
+        If the folder has no marker, or one that is not of the format of
+        projects or has no version.
+    """
+    try:
+        marker = _yaml.load(Path(path, MARKER))
+    except FileNotFoundError:
+        raise ValueError(f"{path} is not a project (no {MARKER})") from None
+    if not isinstance(marker, dict) or marker.get('format') != FORMAT \
+            or not isinstance(marker.get('version'), int):
+        raise ValueError(
+            f"{os.path.join(path, MARKER)} is not a marker of {FORMAT}")
+    return marker

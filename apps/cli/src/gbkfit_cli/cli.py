@@ -553,6 +553,11 @@ def _make_parser() -> argparse.ArgumentParser:
         'output', type=str, nargs='?',
         help="the file to write a configuration file to; by default the "
              "file itself")
+    parser_migrate.add_argument(
+        '--from-version', type=int,
+        help="the version of the format of a configuration file without "
+             "the section 'version': 1, before 2026-10-25; 2, before "
+             "2026-10-28")
 
     #
     # Parse arguments and run the appropriate task
@@ -667,7 +672,7 @@ def _run_plot(args: argparse.Namespace) -> None:
 def _run_migrate(args: argparse.Namespace) -> None:
     """Run the migrate task."""
     import gbkfit.tasks.migrate
-    gbkfit.tasks.migrate.migrate(args.path, args.output)
+    gbkfit.tasks.migrate.migrate(args.path, args.output, args.from_version)
 
 
 def main() -> None:

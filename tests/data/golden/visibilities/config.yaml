@@ -1,5 +1,6 @@
 # visibilities: The visibilities of HI channels at random baselines, smoothed by a Hanning correlator response.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

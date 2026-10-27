@@ -1,5 +1,6 @@
 # mass_rotation_pressure: A gas disk that rotates in its mass (a thick disk that follows its light, and an NFW halo; a direct distance), with the Jeans pressure support of an anisotropic dispersion (sigma_R, sigma_phi, sigma_z); moment maps; a derived vcirc at 2.2 scale lengths, and priors on it and on sigma_phi / sigma_R.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

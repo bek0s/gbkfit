@@ -1,5 +1,6 @@
 # upper_limits_fitted_noise: The moment maps of a named observation with a flux scale, of spectra blanked beyond the detection: upper limits on its masked moment 0, and a fitted noise (scale and jitter) of its moment 1.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

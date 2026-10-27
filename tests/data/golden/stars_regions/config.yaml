@@ -1,5 +1,6 @@
 # stars_regions: The kinematics of the stars of a flattened Sersic spheroid in Voronoi bins, as pPXF gives them (log velocities, a PSF and no LSF), as Jeans models are fitted to them: the mean and the dispersion of each bin (see prep.gauss_hermite_moments). Its Jeans kinematics in the gravity of its light and an NFW halo.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

@@ -1,5 +1,6 @@
 # points_particles_band: An image of a point (a nucleus) and of the particles of a table (the stars of a disk), which emit in a band.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - components:

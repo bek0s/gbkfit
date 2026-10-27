@@ -1,5 +1,6 @@
 # profile_table_mass: A galaxy of mass alone: the gas and the disk of a rotmod table of SPARC (upsilon, and D / D0 of a direct distance) and an NFW halo; its rotation curve from the table (radii in kpc at 10 Mpc), deprojected at an inclination that is a parameter; a derived dark fraction.
 # (written by make_golden.py; do not edit)
+version: 3
 driver: {type: host}
 galaxies:
 - mass:
