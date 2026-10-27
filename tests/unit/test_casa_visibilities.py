@@ -61,7 +61,7 @@ def test_the_dirty_image_of_casa_is_the_point(driver):
     from gbkfit.observation import Visibilities
     dataset = DatasetVisibilities.from_ms(str(MS), rest=REST)
     observable = Visibilities.from_data(
-        dataset, size=(61, 41), step=1, transform='sin')
+        dataset, fov=(61, 41), step=1, transform='sin')
     weights = {key: 1 / dataset[key].error() ** 2 for key in ('re', 'im')}
     dirty = observable.images(
         driver, {key: dataset[key].data() for key in ('re', 'im')},

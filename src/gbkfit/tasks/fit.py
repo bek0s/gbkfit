@@ -18,6 +18,7 @@ from typing import Any, Literal
 import gbkfit.fitting
 import gbkfit.outputs
 import gbkfit.params
+import gbkfit.project
 import gbkfit.setup
 from gbkfit.setup import ConfigFile, Setup
 from gbkfit.utils import numutils, parseutils
@@ -183,7 +184,8 @@ def bootstrap(output_dir: str, config: str) -> None:
             run.write(_RESULT, 'fit_result', result)
             run.write('fit/bootstrap.ecsv', 'bootstrap', boot.table())
             run.write(
-                'fit/bootstrap.yaml', 'bootstrap_config', bootstrap_cfg)
+                'fit/bootstrap.yaml', 'bootstrap_config',
+                dict(version=gbkfit.project.FORMAT_VERSION) | bootstrap_cfg)
     _log.info(f"bootstrap:\n{_bootstrap_summary(best, boot)}")
 
 
