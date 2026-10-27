@@ -177,10 +177,18 @@ class DiskStage(ComponentStage):
             or disk.wave_params() or disk.pressure_supported_params()
         self._plan = disk.plan(driver, 0, np.float64) if sampled else None
 
+    def light_params(self) -> tuple[str, ...]:
+        """
+        Return the names of all the parameters of its disk: its plan, which
+        samples its density and its other profiles, writes them all (its
+        state then reads none besides those of its light).
+        """
+        return tuple(self._disk.pdescs())
+
     def values(self, own: ParamValues) -> ParamValues:
         """
-        Return the values of its parameters (by its own names), with the
-        face-on light of its image traits, if any.
+        Return the values of the parameters of its disk (by its own names),
+        with the face-on light of its image traits, if any.
         """
         if self._images is None:
             return own
@@ -196,6 +204,7 @@ class DiskStage(ComponentStage):
     def state(
             self,
             values: ParamValues,
+            groundwork: object,
             mass: GalaxyMass | None,
             out_extra: Extras | None
     ) -> DiskState:

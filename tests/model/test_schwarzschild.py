@@ -186,6 +186,50 @@ def test_an_image_sees_the_light_of_stars_on_orbits(driver):
     assert np.isfinite(objective.chi2(params.evaluate()))
 
 
+def test_the_weights_are_solved_again_when_their_noise_moves(
+        driver, monkeypatch):
+    # The solve of the weights reads the noise of the bins (and their
+    # orbits), not that of an image of the galaxy: a step in the noise of
+    # the image keeps its solution, one in that of the bins solves again
+    import gbkfit.objective._orbits as orbits
+    from gbkfit.dataset import DatasetPixelBrightness
+    from gbkfit.observation import PixelBrightness
+    solved = orbits.solve_together_rows
+    solves = []
+
+    def counted(*args):
+        solves.append(args)
+        return solved(*args)
+    monkeypatch.setattr(orbits, 'solve_together_rows', counted)
+    seen = observation(bins())
+    stars = ObservationSky(
+        seen.observable(), seen.line_of_sight(), instrument=seen.instrument(),
+        lines=['stars'], data=seen.data(), dtype='float64', name='bins',
+        likelihood=LikelihoodGaussian(
+            missing_residual=3,
+            noise=dict(moment1=dict(scale=True, scale_minimum=0.5))))
+    dataset = DatasetPixelBrightness(
+        Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
+    image = ObservationSky(
+        PixelBrightness.from_data(dataset),
+        line_of_sight_parser.load(dict(type='flat')), data=dataset,
+        name='image', likelihood=LikelihoodGaussian(
+            noise=dict(brightness=dict(scale=True, scale_minimum=0.5))))
+    group = ObservationGroup([galaxy()], [stars, image])
+    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+        stars_weights=SOLVE, bins_noise_scale_moment1=1.0,
+        image_noise_scale_brightness=1.0))
+    objective = Objective(group.plan(driver), params.solves())
+    values = params.evaluate()
+    first = objective.evaluate(values).solved
+    kept = objective.evaluate(
+        values | dict(image_noise_scale_brightness=2.0)).solved
+    assert len(solves) == 1 and kept == first
+    again = objective.evaluate(
+        values | dict(bins_noise_scale_moment1=2.0)).solved
+    assert len(solves) == 2 and again != first
+
+
 def test_bins_of_stars_on_orbits_have_a_positive_sigma(driver):
     # (each series is about the sigma of its bin: 0 gave NaN models)
     n = bins().nregions()

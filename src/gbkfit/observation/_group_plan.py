@@ -8,6 +8,7 @@ linear in amplitudes of their light (LinearPieces).
 import concurrent.futures
 import contextvars
 import copy
+import functools
 import threading
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple, Self
@@ -19,11 +20,11 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
 from gbkfit.params import ParamFunctions, ParamValues
+from gbkfit.params._cache import ParamView, StageCache
 from gbkfit.params._keys import with_elements
 from gbkfit.utils import parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
-from ._orbits import (
-    OrbitRecording, OrbitSeries, orbit_recordings, orbit_weight_params)
+from ._orbits import OrbitRecording, OrbitSeries, orbit_recordings
 from .noise import Noise
 from .observables import HostModelData, ModelData
 from .observation import Observation
@@ -83,11 +84,14 @@ class GroupPlan:
     gives them as pieces (see amplitude_pieces), from which an objective
     solves them (see objective.Objective).
 
-    An evaluation skips the stage of a galaxy, the recording of orbits,
-    or the model of an observation, when the parameters it reads have
-    exactly the values of its last evaluation (see model_d): e.g. a
+    An evaluation skips each part of the stage of a galaxy, a recording
+    of orbits, or the model of an observation, when the parameters it
+    reads have exactly the values of its last evaluation, and the parts
+    it takes are those of it (see model_d and stage_caches): e.g. a
     fitter that moves the noise of an observation, or the offset of its
-    frame, evaluates no other model again.
+    frame, evaluates no other model again, and one that moves the
+    position angle of a spheroid of Jeans kinematics only the models of
+    its observations.
 
     The observations on one driver evaluate their models one after the
     other; those on different drivers (e.g. one on each GPU, for models
@@ -144,18 +148,10 @@ class GroupPlan:
                 stages.append(galaxy.plan_stage(group.sky_origin(), driver))
         self._stages = tuple(stages)
         self._lock = threading.RLock()
-        # The last evaluation of the stage of each galaxy (whose parameters
-        # are its own, but the weights of orbits, which only weigh their
-        # records), and of the model of each observation (see model_d)
-        weights = orbit_weight_params(group)
-        self._stage_lasts = tuple(
-            _LastValues(name for name in mapping.values()
-                        if name not in weights)
-            for mapping in group.mappings())
-        self._model_lasts = tuple(
-            _LastValues(group.model_params(i))
-            for i in range(len(observations)))
         self._init_recordings()
+        # The cache of the model of each observation (see model_d)
+        self._model_caches = tuple(
+            self._model_cache(i) for i in range(len(observations)))
         # The observations on each driver, and the threads of the drivers
         # when there are several (see model_d)
         on_driver: dict[int, list[int]] = {}
@@ -187,17 +183,37 @@ class GroupPlan:
     def _init_recordings(self) -> None:
         """
         Make the recordings of orbits of the observations with data (see
-        OrbitRecording), and their last evaluations (see model_d).
+        OrbitRecording), and their caches (see model_d): each takes the
+        state of its spheroid (its orbits).
         """
         self._recordings = orbit_recordings(
             self._group, self._galaxy_drivers, self._observation_drivers)
-        self._recording_lasts = tuple(
-            _LastValues(recording.record_params())
-            for recording in self._recordings)
+        caches = []
+        for recording in self._recordings:
+            g, c = recording.component()
+            caches.append(StageCache(
+                recording.reads(), (self._stages[g].state_cache(c),)))
+        self._recording_caches: tuple[StageCache[OrbitSeries], ...] = \
+            tuple(caches)
         # The recording that models each observation of one, by index
         self._recording_of = {
             i: k for k, recording in enumerate(self._recordings)
             for i in recording.observations()}
+
+    def _model_cache(self, index: int) -> StageCache[ModelData]:
+        """
+        Return a cache of the model of the observation of the given index
+        (see model_d): of those of its parameters that its model reads
+        (see ObservationGroup.model_params), or of the weights of the
+        orbits of the recording that models it (see orbit_series), which
+        it takes.
+        """
+        k = self._recording_of.get(index)
+        if k is None:
+            return StageCache(self._group.model_params(index))
+        recording = self._recordings[k]
+        return StageCache(
+            (recording.weights(),), (self._recording_caches[k],))
 
     def group(self) -> 'ObservationGroup':
         """Return the group."""
@@ -260,20 +276,20 @@ class GroupPlan:
         copied._group = group
         copied._init_recordings()
         plans = []
-        lasts = []
-        for i, (plan, last, new, old, driver) in enumerate(zip(
-                self._plans, self._model_lasts, news, olds,
+        caches = []
+        for i, (plan, cache, new, old, driver) in enumerate(zip(
+                self._plans, self._model_caches, news, olds,
                 self._observation_drivers)):
             if not _same_unit(new.data_unit(), old.data_unit()):
                 with parseutils.config_path('observations', i):
                     plan = new.plan(driver, group.seen_by(i))
-                last = _LastValues(group.model_params(i))
+                cache = copied._model_cache(i)
             elif i in copied._recording_of:
-                last = _LastValues(group.model_params(i))
+                cache = copied._model_cache(i)
             plans.append(plan)
-            lasts.append(last)
+            caches.append(cache)
         copied._plans = tuple(plans)
-        copied._model_lasts = tuple(lasts)
+        copied._model_caches = tuple(caches)
         copied._init_evaluations()
         return copied
 
@@ -296,33 +312,54 @@ class GroupPlan:
     ) -> list[GalaxyState]:
         """
         Evaluate the stage of each galaxy: its mass, and what it gives its
-        components (see GalaxyStage.evaluate); its extra outputs go to
-        out_extra, if given, with the label of the galaxy as the id
-        'galaxy'. Without them, the state of a galaxy whose parameters have
-        the values of its last evaluation is that of its last evaluation.
+        components (see GalaxyStage.evaluate), each part of it that of its
+        last evaluation if what it reads is the same; its extra outputs go
+        to out_extra, if given, with the label of the galaxy as the id
+        'galaxy'.
         """
         group = self._group
-        states = []
-        for g, (stage, last, mapping) in enumerate(zip(
-                self._stages, self._stage_lasts, group.mappings())):
-            state = None if out_extra is not None else last.get(params)
-            if state is None:
-                state = stage.evaluate(
-                    {name: params[full] for name, full in mapping.items()},
-                    None if out_extra is None
-                    else out_extra.scoped(galaxy=group.galaxy_label(g)))
-                last.keep(params, state)
-            states.append(state)
-        return states
+        return [
+            stage.evaluate(
+                {name: params[full] for name, full in mapping.items()},
+                None if out_extra is None
+                else out_extra.scoped(galaxy=group.galaxy_label(g)))
+            for g, (stage, mapping) in enumerate(
+                zip(self._stages, group.mappings()))]
 
     def galaxy_states(self, params: ParamValues) -> list[GalaxyState]:
         """
         Return the state of each galaxy in an evaluation (see
-        GalaxyStage.evaluate), as model_d evaluates it: that of its last
-        evaluation if its parameters have the same values.
+        GalaxyStage.evaluate), as model_d evaluates it: each part of it
+        that of its last evaluation if what it reads is the same.
         """
         with self._lock:
             return self._galaxy_states(params, None)
+
+    def stage_caches(self) -> dict[str, StageCache[Any]]:
+        """
+        Return the caches of the stages of its evaluations (see model_d),
+        by label: those of the parts of the stage of each galaxy (see
+        GalaxyStage.caches), as 'galaxy.{galaxy}.{part}', which read the
+        parameters of the galaxy by its own names (see
+        ObservationGroup.mappings); and those of its recordings of orbits,
+        as 'recording.{k}', and of the model of each observation, as
+        'observation.{observation}', which read those of the group. Each
+        has the names of the parameters it reads, the caches it takes and
+        its version (see StageCache).
+        """
+        group = self._group
+        caches: dict[str, StageCache[Any]] = {}
+        for g, stage in enumerate(self._stages):
+            caches |= {
+                f'galaxy.{group.galaxy_label(g)}.{name}': cache
+                for name, cache in stage.caches().items()}
+        caches |= {
+            f'recording.{k}': cache
+            for k, cache in enumerate(self._recording_caches)}
+        caches |= {
+            f'observation.{group.observation_label(i)}': cache
+            for i, cache in enumerate(self._model_caches)}
+        return caches
 
     def orbit_recordings(self) -> tuple[OrbitRecording, ...]:
         """
@@ -331,12 +368,21 @@ class GroupPlan:
         """
         return self._recordings
 
+    def orbit_caches(self) -> tuple[StageCache[OrbitSeries], ...]:
+        """
+        Return the cache of each of its recordings of orbits (see
+        orbit_series), in their order: of the parameters it reads (see
+        OrbitRecording.reads), taking the orbits of its spheroid.
+        """
+        return self._recording_caches
+
     def orbit_series(self, params: ParamValues) -> list[OrbitSeries]:
         """
         Return the orbits of each of its recordings of orbits in the series
         of the bins of its observations (see OrbitRecording.record), as
         model_d records them (with BLAS on one thread): those of its last
-        recording if the parameters they depend on have the same values.
+        recording if the parameters it reads (see OrbitRecording.reads),
+        and the orbits of its spheroid, are the same.
         The models of the observations are linear in the weights of the
         orbits there (see OrbitSeries): e.g. an objective solves the
         weights (see objective.Objective), and model_d gives the models at
@@ -354,19 +400,15 @@ class GroupPlan:
         """
         Return the orbits of each recording of orbits in the series of the
         bins of its observations, in the states of the galaxies: those of
-        its last recording if its parameters have the same values (see
-        model_d), else recorded again.
+        its last recording if what it reads is the same (see model_d), else
+        recorded again.
         """
-        series = []
         with self._timers.measure('model_orbits'):
-            for recording, last in zip(
-                    self._recordings, self._recording_lasts):
-                recorded = last.get(params)
-                if recorded is None:
-                    recorded = recording.record(params, states)
-                    last.keep(params, recorded)
-                series.append(recorded)
-        return series
+            return [
+                cache.evaluate(params, functools.partial(
+                    recording.record, states=states))
+                for recording, cache in zip(
+                    self._recordings, self._recording_caches)]
 
     def close(self) -> None:
         """
@@ -377,10 +419,10 @@ class GroupPlan:
         amplitude_pieces). The next evaluation allocates it again.
         """
         with self._lock:
-            for recording, last in zip(
-                    self._recordings, self._recording_lasts):
+            for recording, cache in zip(
+                    self._recordings, self._recording_caches):
                 recording.close()
-                last.forget()
+                cache.forget()
             self._pieces = {}
 
     def model_d(
@@ -400,13 +442,15 @@ class GroupPlan:
         ObservationGroup.model_params) have exactly the values of its last
         evaluation (by this plan, or by one with other data that shares
         its plans, see with_data) keeps the model data of that evaluation,
-        which nothing else writes; so does the stage of a galaxy (the state
-        of its mass, and what it gives its components), whose parameters
-        are its own but the weights of orbits. A recording of orbits keeps
-        the orbits of its last recording while the parameters of the models
-        of its observations but the weights of orbits keep their values
-        (with extra outputs too: it has none). NaN is never the value of
-        the last evaluation.
+        which nothing else writes; so does each part of the stage of a
+        galaxy (see GalaxyStage) whose parameters, and the parts it takes,
+        are those of its last evaluation (with extra outputs too, but the
+        states of the components). A recording of orbits keeps the orbits
+        of its last recording while the parameters it reads (see
+        OrbitRecording.reads) and the orbits of its spheroid do (with extra
+        outputs too: it has none), and the model of an observation it
+        models while those and the weights of the orbits do. NaN is never
+        the value of the last evaluation (see StageCache).
 
         After the stages of the galaxies and the recordings of orbits (on
         the drivers of the galaxies), the observations on each driver are
@@ -562,25 +606,24 @@ class GroupPlan:
         model_d).
         """
         group = self._group
-        last = self._model_lasts[index]
-        model = None if out_extra is not None else last.get(params)
-        if model is None:
-            plan = self._plans[index]
-            moved = group.moved(index, params)
-            seen = [states[g] for g in group.seen_galaxies(index)]
-            extra = None if out_extra is None else out_extra.scoped(
-                observation=group.observation_label(index))
-            k = self._recording_of.get(index)
+        plan = self._plans[index]
+        cache = self._model_caches[index]
+        seen = [states[g] for g in group.seen_galaxies(index)]
+        extra = None if out_extra is None else out_extra.scoped(
+            observation=group.observation_label(index))
+        k = self._recording_of.get(index)
+        if k is not None and extra is not None:
+            # (its extra outputs, of the orbits as they are; its model is
+            # that of the recording)
+            plan.evaluate(group.moved(index, params), seen, extra)
+
+        def model(view: ParamView) -> ModelData:
+            # (of the values of the parameters it reads)
             if k is None:
-                model = plan.evaluate(moved, seen, extra)
-            else:
-                if extra is not None:
-                    # (its extra outputs, of the orbits as they are; its
-                    # model is that of the recording)
-                    plan.evaluate(moved, seen, extra)
-                model = self._recordings[k].model_d(series[k], index, params)
-            last.keep(params, model)
-        self._d_model_data[index] = model
+                return plan.evaluate(group.moved(index, view), seen, extra)
+            return self._recordings[k].model_d(series[k], index, view)
+        evaluate = cache.evaluate if extra is None else cache.refresh
+        self._d_model_data[index] = evaluate(params, model)
 
     def _evaluate_models_at_once(
             self,
@@ -727,8 +770,8 @@ class GroupPlan:
                     for i, (noise, stream) in enumerate(zip(noises, streams))]
             finally:
                 # (the draws overwrite the model data of the observations)
-                for last in self._model_lasts:
-                    last.forget()
+                for cache in self._model_caches:
+                    cache.forget()
 
     def _mock(
             self,
@@ -768,46 +811,6 @@ class GroupPlan:
             for draw in draws[:nmocks]]
 
 
-class _LastValues:
-    """
-    The last evaluation of a stage of the evaluations of a group plan
-    (the stage of a galaxy, or the model of an observation; see
-    GroupPlan.model_d): the values of the parameters of the given names,
-    which it reads, and what it gave.
-    """
-
-    def __init__(self, names: Iterable[str]):
-        self._names = tuple(names)
-        self._values: dict[str, Any] | None = None
-        self._result: Any = None
-
-    def get(self, params: ParamValues) -> Any:
-        """
-        Return what the stage gave at its last evaluation if the values of
-        its parameters are the same (see _same); else None.
-        """
-        if self._values is None or not all(
-                _same(params[name], value)
-                for name, value in self._values.items()):
-            return None
-        return self._result
-
-    def keep(self, params: ParamValues, result: Any) -> None:
-        """
-        Keep what the stage gave at the values of its parameters (copies
-        of them).
-        """
-        self._values = {
-            name: params[name] if np.isscalar(params[name])
-            else np.array(params[name]) for name in self._names}
-        self._result = result
-
-    def forget(self) -> None:
-        """Forget the last evaluation (e.g. its memory was overwritten)."""
-        self._values = None
-        self._result = None
-
-
 def _alloc_pieces(
         driver: Driver, model: ModelData, size: int
 ) -> LinearPieces:
@@ -828,16 +831,6 @@ def _alloc_pieces(
 def _npieces(pieces: LinearPieces) -> int:
     """Return the number of the pieces of a model."""
     return len(next(iter(pieces.pieces.values())))
-
-
-def _same(a: Any, b: Any) -> bool:
-    """
-    Check whether two values of a parameter are the same: equal, element
-    by element for arrays; NaN is not the same as itself.
-    """
-    if np.isscalar(a) and np.isscalar(b):
-        return bool(a == b)
-    return np.array_equal(a, b)
 
 
 class _GroupFunctions(ParamFunctions):

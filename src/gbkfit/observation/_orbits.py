@@ -37,6 +37,10 @@ __all__ = [
 ]
 
 
+# The parameters of the frame of a spheroid whose orbits are recorded
+# (see OrbitRecording.reads)
+_FRAME_PARAMS = ('xpos', 'ypos', 'vsys', 'posa', 'incl')
+
 # The relative error of the light of the spheroid in the bins and in the
 # cells, which the orbits must hold (the constraints)
 _LIGHT_ERROR = 0.01
@@ -154,10 +158,13 @@ class OrbitRecording:
         self._galaxy = galaxy
         self._component = component
         self._spheroid = spheroid
+        # (the names of the parameters of the spheroid that its records
+        # read, its frame and its light, by its own names)
         self._names = {
-            param: mapping[name]
-            for param, name in galaxy_.component_params(component).items()}
-        self._weights = self._names[spheroid.orbit_weights()]
+            param: mapping[galaxy_.component_params(component)[param]]
+            for param in _FRAME_PARAMS + spheroid.light_params()}
+        self._weights = mapping[
+            galaxy_.component_params(component)[spheroid.orbit_weights()]]
         self._observations = tuple(observations)
         self._galaxy_driver = galaxy_driver
         self._observation_drivers = tuple(observation_drivers)
@@ -171,12 +178,10 @@ class OrbitRecording:
             observation.observable().sky_grid(
                 observation.instrument(), observation.oversampling())
             for observation in observed)
-        # (the values its records depend on: those of the models of its
-        # observations, but the weights of orbits, which only weigh them)
-        weights = orbit_weight_params(group)
-        self._record_params = tuple(dict.fromkeys(
-            name for i in observations for name in group.model_params(i)
-            if name not in weights))
+        # (and those of the offsets of the frames of its observations)
+        self._reads = tuple(dict.fromkeys((*self._names.values(), *(
+            name for observation in observed
+            for name in observation.offset_params() if name is not None))))
         self._integrator: OrbitIntegrator | None = None
         # (whether it warned of orbits cut by the most steps: once)
         self._cut_warned = False
@@ -193,13 +198,23 @@ class OrbitRecording:
         """Return the observations it models, by index."""
         return self._observations
 
-    def record_params(self) -> tuple[str, ...]:
+    def component(self) -> tuple[int, int]:
         """
-        Return the names of the parameters that its records depend on (see
-        record): those of the models of its observations (see
-        ObservationGroup.model_params), but the weights of orbits.
+        Return the index of the galaxy of the spheroid in the group, and
+        its own.
         """
-        return self._record_params
+        return self._galaxy, self._component
+
+    def reads(self) -> tuple[str, ...]:
+        """
+        Return the names of the parameters that its records read (see
+        record): those of the frame and the light of the spheroid (see
+        Spheroid.light_params), and the offsets of the frames of its
+        observations. The rest of the spheroid and the mass of its galaxy
+        set its orbits, in the state of the galaxy; the weights of the
+        orbits only weigh its records.
+        """
+        return self._reads
 
     def close(self) -> None:
         """
@@ -214,9 +229,10 @@ class OrbitRecording:
             states: Sequence[GalaxyState]
     ) -> OrbitSeries:
         """
-        Integrate the orbits at the values of the parameters, in the states
-        of the galaxies (see GroupPlan.galaxy_states), and return them in
-        the series of the bins of its observations.
+        Integrate the orbits at the values of the parameters (those it
+        reads among them, see reads), in the states of the galaxies (see
+        GroupPlan.galaxy_states), and return them in the series of the
+        bins of its observations.
 
         Raises
         ------
@@ -228,9 +244,9 @@ class OrbitRecording:
             raise ValueError(
                 f"the spheroid {self._spheroid.name()!r} has no orbits in "
                 f"the state of its galaxy")
-        names = self._names
-        values = {param: params[name] for param, name in names.items()}
-        moved = [self._group.moved(i, params) for i in self._observations]
+        values = {param: params[name] for param, name in self._names.items()}
+        shifts = [
+            self._group.frame_shifts(i, params) for i in self._observations]
         if self._integrator is None:
             self._integrator = OrbitIntegrator(
                 self._galaxy_driver, self._dtypes[0], len(state.starts),
@@ -239,12 +255,13 @@ class OrbitRecording:
                 cells=state.cell_light.shape, sky=self._grids,
                 order=self._order)
 
-        # The orbits, in the series of the data of the bins
+        # The orbits, in the series of the data of the bins, of the centre
+        # and the systemic velocity of the spheroid in the frame of each
         centres = np.array([
-            (m[names['xpos']], m[names['ypos']]) for m in moved])
+            (values['xpos'] + x, values['ypos'] + y) for x, y, _ in shifts])
         series = tuple(np.concatenate(columns) for columns in zip(*(
-            data.series(m[names['vsys']])
-            for data, m in zip(self._data, moved))))
+            data.series(values['vsys'] + v)
+            for data, (_, _, v) in zip(self._data, shifts))))
         records = self._integrator.integrate(
             state.potential, state.starts, state.turns,
             (values['posa'], values['incl']), state.cell_edges, centres,
@@ -455,19 +472,6 @@ def _cells_integral(
         if not len(squares):
             break
     return integral
-
-
-def orbit_weight_params(group: 'ObservationGroup') -> frozenset[str]:
-    """
-    Return the names of the parameters of the weights of the orbits of
-    the components of the galaxies of a group (see
-    Component.orbit_weights).
-    """
-    return frozenset(
-        mapping[galaxy.component_params(c)[component.orbit_weights()]]
-        for galaxy, mapping in zip(group.galaxies(), group.mappings())
-        for c, component in enumerate(galaxy.components())
-        if component.orbit_weights() is not None)
 
 
 def orbit_recordings(

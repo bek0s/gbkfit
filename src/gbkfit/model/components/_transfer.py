@@ -311,7 +311,7 @@ class TransferPlan:
         Add the light of the emitters that reaches the viewer to the
         output array, the 'image' or the 'scube' in outputs, with the
         parameters of each galaxy (params) and what it gives its
-        components, their states (states, see GalaxyStage.states), at the
+        components, their states (states, see GalaxyStage.evaluate), at the
         given
         positions along the line of sight (arcsec, away from the viewer,
         from any origin; all at one if None), dimmed by the opacity in

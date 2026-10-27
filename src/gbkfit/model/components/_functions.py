@@ -241,10 +241,9 @@ class GalaxyFunctions:
             The functions, by name.
         """
         if state is None:
-            values = self._stage.values(params)
-            mass = self._stage.mass(params, values)
+            mass = self._stage.mass(params)
             state_of = functools.cache(functools.partial(
-                self._stage.state, values=values, mass=mass))
+                self._stage.state, params=params, mass=mass))
         else:
             mass = state.mass
 

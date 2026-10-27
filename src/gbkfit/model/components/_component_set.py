@@ -469,7 +469,7 @@ class ComponentSetPlan:
         """
         Add the light of the emitters to the output array, the 'image' or
         the 'scube' in outputs, with the parameters of the galaxy and what
-        it gives its components, their states (see GalaxyStage.states).
+        it gives its components, their states (see GalaxyStage.evaluate).
         The extra
         outputs of each component have its name, or its position, as the
         id 'component' (e.g. 'disk' or 'component0'), and their totals

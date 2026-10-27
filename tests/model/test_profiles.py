@@ -121,11 +121,10 @@ def test_profile_of_a_table_file(tmp_path):
     assert again.distance() == observation.distance()
 
 
-def test_profile_beside_a_sky_observation(monkeypatch):
+def test_profile_beside_a_sky_observation():
     # The rotation of a disk in the mass, from a profile first and a cube
     # second: the frames are those of the cube, and the mass of the galaxy
     # is made once in an evaluation, for both
-    from gbkfit.model.components._stage import GalaxyStage
     galaxy = mass_galaxy(components=[copy.deepcopy(GAS)])
     radii = np.array([2.0, 6.0, 10.0])
     profile = ObservationProfile(['rotation_gas'], radii * u.arcsec)
@@ -133,13 +132,9 @@ def test_profile_beside_a_sky_observation(monkeypatch):
         PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)), Flat())
     group = ObservationGroup(galaxy, [profile, cube])
     params = PARAMS | GAS_PARAMS
-    masses = []
-    original = GalaxyStage.mass
-    monkeypatch.setattr(
-        GalaxyStage, 'mass',
-        lambda self, *args: masses.append(1) or original(self, *args))
-    rotation = model(group, params)['rotation_gas']
-    assert len(masses) == 1
+    plan = group.plan()
+    rotation = plan.model_h(params)[0]['rotation_gas']['d'].copy()
+    assert plan.stage_caches()['galaxy.galaxy0.mass'].version() == 1
     expected = galaxy.plan_functions().bind(params)['rotation_gas'](radii)
     np.testing.assert_allclose(rotation, expected, rtol=1e-12)
 

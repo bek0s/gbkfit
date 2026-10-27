@@ -73,17 +73,31 @@ class SpheroidMotion(abc.ABC):
         """
         return None
 
+    def state_params(self) -> tuple[str, ...]:
+        """
+        Return the names of its parameters that its state reads (see
+        state); none by default.
+        """
+        return ()
+
+    def groundwork(
+            self, light: SpheroidLight, mass: GalaxyMass | None
+    ) -> object:
+        """
+        Return the groundwork of its state in an evaluation (see state):
+        what the light of its spheroid (see Spheroid.light) and the mass of
+        its galaxy, if any, alone set of it; none by default.
+        """
+        return None
+
     @abc.abstractmethod
     def state(
-            self,
-            values: ParamValues,
-            light: SpheroidLight,
-            mass: GalaxyMass | None
+            self, values: ParamValues, groundwork: object
     ) -> ComponentState | None:
         """
         Return its state in an evaluation, if it has one: of the values of
-        the parameters of its spheroid, the light of the spheroid (see
-        Spheroid.light) and the mass of its galaxy, if any.
+        the parameters of its spheroid, those it reads among them (see
+        state_params), and its groundwork (see groundwork).
         """
         pass
 
@@ -363,12 +377,7 @@ class TraitsMotion(SpheroidMotion):
     def takes_light(self) -> bool:
         return False
 
-    def state(
-            self,
-            values: ParamValues,
-            light: SpheroidLight,
-            mass: GalaxyMass | None
-    ) -> None:
+    def state(self, values: ParamValues, groundwork: object) -> None:
         return None
 
     def sizes(self) -> dict[str, int]:

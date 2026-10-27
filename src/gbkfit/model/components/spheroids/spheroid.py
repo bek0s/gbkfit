@@ -624,6 +624,14 @@ class Spheroid(Component):
         return params['q'] if shape is not None and not shape.spherical() \
             else 1.0
 
+    def light_params(self) -> tuple[str, ...]:
+        """
+        Return the names of its parameters that its light reads (see
+        light): those of its profile and its shape.
+        """
+        shape = {} if self._shape is None else self._shape.pdescs()
+        return (*self._profile.pdescs(), *shape)
+
     def light(self, params: ParamValues) -> SpheroidLight:
         """
         Return its light at the values of its parameters, as its kinematics

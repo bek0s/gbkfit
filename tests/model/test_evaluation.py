@@ -239,17 +239,18 @@ def two_observations(driver):
 
 def counted(plan):
     """
-    Return the counts of the evaluations of the stage of the galaxy and
-    of the models of the observations of a plan of two_observations.
+    Return the counts of the evaluations of the models of the observations
+    of a plan of two_observations (the stage of its galaxy has no parts:
+    its disk takes nothing from it).
     """
-    counts = dict(galaxy=0, a=0, b=0)
+    counts = dict(a=0, b=0)
 
     def counting(name, evaluate):
         def evaluated(*args):
             counts[name] += 1
             return evaluate(*args)
         return evaluated
-    for name, part in zip(('galaxy', 'a', 'b'), plan._stages + plan._plans):
+    for name, part in zip(('a', 'b'), plan._plans):
         part.evaluate = counting(name, part.evaluate)
     return counts
 
@@ -265,14 +266,14 @@ def spectra(models):
 
 
 def test_evaluations_skip_what_reads_no_changed_parameter(driver):
-    # The offset of the frame of b moves b only: the galaxy and a are not
-    # evaluated again, and the models are those of a new plan
+    # The offset of the frame of b moves b only: a is not evaluated again,
+    # and the models are those of a new plan
     plan = two_observations(driver)
     counts = counted(plan)
     before = spectra(plan.model_h(TWO_PARAMS))
     moved = TWO_PARAMS | dict(b_dx=0.5)
     after = spectra(plan.model_h(moved))
-    assert counts == dict(galaxy=1, a=1, b=2)
+    assert counts == dict(a=1, b=2)
     for got, want in zip(
             after, spectra(two_observations(driver).model_h(moved))):
         np.testing.assert_array_equal(got, want)
@@ -280,13 +281,13 @@ def test_evaluations_skip_what_reads_no_changed_parameter(driver):
     assert not np.array_equal(after[1], before[1])
     # (the disk moves them all; extra outputs evaluate all, as NaN does)
     plan.model_h(moved | dict(pt_s=3))
-    assert counts == dict(galaxy=2, a=2, b=3)
+    assert counts == dict(a=2, b=3)
     from gbkfit.model import Extras
     plan.model_h(moved | dict(pt_s=3), Extras())
-    assert counts == dict(galaxy=3, a=3, b=4)
+    assert counts == dict(a=3, b=4)
     plan.model_h(moved | dict(pt_s=np.nan))
     plan.model_h(moved | dict(pt_s=np.nan))
-    assert counts == dict(galaxy=5, a=5, b=6)
+    assert counts == dict(a=5, b=6)
 
 
 def test_mocks_and_plans_with_other_data_evaluate_again(driver):
@@ -302,13 +303,13 @@ def test_mocks_and_plans_with_other_data_evaluate_again(driver):
     mocks = first.mock(TWO_PARAMS, noise, seed=2)
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
         np.testing.assert_array_equal(got, want)
-    assert counts == dict(galaxy=1, a=2, b=2)
+    assert counts == dict(a=2, b=2)
     second = first.with_data([mock for mock, in mocks])
     assert second._plans == first._plans
     second.model_h(TWO_PARAMS | dict(vpt_vt=100))
     for got, want in zip(spectra(first.model_h(TWO_PARAMS)), models):
         np.testing.assert_array_equal(got, want)
-    assert counts == dict(galaxy=3, a=4, b=4)
+    assert counts == dict(a=4, b=4)
 
 
 def test_observations_on_two_drivers_evaluate_at_once(driver):
@@ -360,4 +361,4 @@ def test_an_error_on_one_of_two_drivers_is_raised(driver):
     assert counts['a'] == 1
     plan._plans[1].evaluate = evaluate
     plan.model_h(TWO_PARAMS)
-    assert counts == dict(galaxy=1, a=1, b=1)
+    assert counts == dict(a=1, b=1)

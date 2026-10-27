@@ -252,9 +252,10 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         Return its parameter of the weights of the orbits of its stars, if
         they move on orbits whose weights are solved to fit the data (e.g.
         a spheroid of Schwarzschild kinematics; see objective.Objective,
-        which solves them); None by default. The state of its galaxy does
-        not depend on them: only the observations of the orbits weigh the
-        orbits by them (see observation.OrbitRecording).
+        which solves them); None by default. Its part in the stage of its
+        galaxy does not read them (see ComponentStage): only the
+        observations of the orbits weigh the orbits by them (see
+        observation.OrbitRecording).
         """
         return None
 
@@ -390,16 +391,26 @@ class ComponentStage(abc.ABC):
     The part of a component in the stage of its galaxy (see GalaxyStage):
     what the galaxy computes for it once per evaluation, for all the
     observations of the galaxy, from the values of its parameters and the
-    mass of the galaxy.
+    mass of the galaxy, in three steps, each of the values of the
+    parameters it declares (see GalaxyStage): its light (see values), the
+    groundwork of its state (see groundwork) and its state (see state).
     """
+
+    @abc.abstractmethod
+    def light_params(self) -> tuple[str, ...]:
+        """
+        Return the names of its parameters (its own names) that its light
+        reads (see values and density).
+        """
+        pass
 
     @abc.abstractmethod
     def values(self, own: ParamValues) -> ParamValues:
         """
-        Return the values of its parameters, from those of its own
-        parameters (by its own names), with those it makes before the mass
-        of the galaxy (e.g. the light of image traits): those that all its
-        part reads.
+        Return the values of the parameters of its light, from those of
+        its parameters that its light reads (see light_params; by its own
+        names), with those it makes of them (e.g. the light of image
+        traits).
         """
         pass
 
@@ -407,24 +418,46 @@ class ComponentStage(abc.ABC):
             self, values: ParamValues, kpc_per_arcsec: float
     ) -> 'ComponentDensity | None':
         """
-        Return its density at the values of its parameters (see values),
-        which the mass of its galaxy can follow (see mass.MassContext), in
-        a galaxy of the given length of an arcsec (kpc); None here.
+        Return its density at the values of the parameters of its light
+        (see values), which the mass of its galaxy can follow (see
+        mass.MassContext), in a galaxy of the given length of an arcsec
+        (kpc); None here.
+        """
+        return None
+
+    def state_params(self) -> tuple[str, ...]:
+        """
+        Return the names of its parameters (its own names) that its state
+        reads besides those of its light (see state); none here.
+        """
+        return ()
+
+    def groundwork(
+            self, values: ParamValues, mass: 'GalaxyMass | None'
+    ) -> object:
+        """
+        Return the groundwork of its state: what the values of the
+        parameters of its light (see values) and the mass of its galaxy
+        (None without mass) alone set of it (e.g. the forces in the Jeans
+        equations of a spheroid), so that a change of the other parameters
+        of its state does not compute it again; none here.
         """
         return None
 
     def state(
             self,
             values: ParamValues,
+            groundwork: object,
             mass: 'GalaxyMass | None',
             out_extra: 'Extras | None'
     ) -> ComponentState | None:
         """
-        Return what its galaxy gives it at the values of its parameters
-        (see values), in the mass of the galaxy (None without mass): its
-        state, which its plans read (see ComponentPlan.evaluate_emission);
-        none here. Its extra outputs, if wanted, go to out_extra (with the
-        id of the component).
+        Return what its galaxy gives it at the values of the parameters of
+        its light (see values) and of those its state reads (see
+        state_params), of its groundwork (see groundwork), in the mass of
+        the galaxy (None without mass): its state, which its plans read
+        (see ComponentPlan.evaluate_emission); none here. Its extra
+        outputs, if wanted, go to out_extra (with the id of the component).
         """
         return None
 

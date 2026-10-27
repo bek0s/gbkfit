@@ -3,8 +3,9 @@ The Jeans kinematics of a spheroid (JeansKinematics): its stars in a
 steady state in the gravity of its galaxy, their mean velocity and
 dispersions from the Jeans equations of a velocity ellipsoid aligned with
 the cylinder (JAM_cyl, Cappellari 2008), tabled on (R, |z|) in each
-evaluation (JeansTables, see jeans_tables), the state of their motion
-(JeansMotion).
+evaluation (JeansTables, see jeans_tables) from what the light and the
+gravity alone set of them (JeansForces, see jeans_forces), the state of
+their motion (JeansMotion).
 """
 
 import dataclasses
@@ -25,9 +26,11 @@ from ._kinematics import SpheroidKinematics, SpheroidLight, SpheroidMotion
 
 
 __all__ = [
+    'JeansForces',
     'JeansKinematics',
     'JeansMotion',
     'JeansTables',
+    'jeans_forces',
     'jeans_tables'
 ]
 
@@ -189,18 +192,36 @@ def _interpolated(
     return np.where(held, sign * np.exp(spline), spline)
 
 
-def jeans_tables(
-        kinematics_params: ParamValues,
+@dataclasses.dataclass(frozen=True)
+class JeansForces:
+    """
+    What the light of a spheroid and the gravity of its galaxy alone set
+    of its Jeans tables in one evaluation (see jeans_forces), the
+    groundwork of the tables, which its beta_z and kappa then make (see
+    jeans_tables): on the radii R and heights |z| of the tables (see
+    JeansTables), arrays of shape (nR, nz): the density nu of its light,
+    nu sigma_z^2, R d(nu sigma_z^2)/dR and R nu (-F_R) (nu times
+    (km/s)^2).
+    """
+    lnr_zero: float
+    lnr_step: float
+    nu: np.ndarray
+    nu_sz2: np.ndarray
+    r_dnu_sz2: np.ndarray
+    r_nu_force: np.ndarray
+
+
+def jeans_forces(
         light_terms: SpheroidLight,
         rmax: float,
         field: GravityField,
         kpc_per_arcsec: float
-) -> JeansTables:
+) -> JeansForces:
     """
-    Return the Jeans tables of a spheroid (see JeansKinematics): of the
-    values of its parameters beta_z and kappa, the light of its profile
-    (the arguments of light but R and z: terms, function, table), its
-    rmax (arcsec), which bounds the tables, in the gravity of its galaxy
+    Return the groundwork of the Jeans tables of a spheroid (see
+    JeansForces and JeansKinematics): of the light of its profile (the
+    arguments of light but R and z: terms, function, table), its rmax
+    (arcsec), which bounds the tables, in the gravity of its galaxy
     (field), in a galaxy of the given length of an arcsec (kpc).
 
     The integrals along z are from the heights of the tables up to
@@ -213,13 +234,6 @@ def jeans_tables(
     = dF_R/dz), so by parts it is R [int_z^inf (dnu/dR) (-F_z) dz' + nu
     F_R + int_z^inf (dnu/dz') F_R dz'].
     """
-    beta_z = float(kinematics_params['beta_z'])
-    kappa = float(kinematics_params['kappa'])
-    if not beta_z < 1:
-        raise ModelEvaluationError(
-            f"the Jeans equations have no solution at beta_z = {beta_z}: "
-            f"sigma_R^2 = sigma_z^2 / (1 - beta_z)")
-    b = 1 / (1 - beta_z)
     lnr = np.linspace(np.log(rmax / _TABLE_SPAN), np.log(rmax), _TABLE_SIZE)
     # (the heights of the tables, every _SUBSTEPS of those of the
     # integrals, which go on beyond rmax at the same step)
@@ -258,8 +272,32 @@ def jeans_tables(
         r_dnu_sz2 = R * k * (
             from_above(nu_R * -force_z) + nu * force_R
             + from_above(nu_z * force_R))
-        nu_vphi2 = b * (r_dnu_sz2 + nu_sz2) + R * k * nu * -force_R
-        sz2 = nu_sz2 / nu
+        r_nu_force = R * k * nu * -force_R
+    table = slice(None), heights
+    return JeansForces(
+        float(lnr[0]), float(lnr[1] - lnr[0]), nu[table], nu_sz2[table],
+        r_dnu_sz2[table], r_nu_force[table])
+
+
+def jeans_tables(
+        kinematics_params: ParamValues, forces: JeansForces
+) -> JeansTables:
+    """
+    Return the Jeans tables of a spheroid (see JeansKinematics): of the
+    values of its parameters beta_z and kappa, and their groundwork (see
+    jeans_forces).
+    """
+    beta_z = float(kinematics_params['beta_z'])
+    kappa = float(kinematics_params['kappa'])
+    if not beta_z < 1:
+        raise ModelEvaluationError(
+            f"the Jeans equations have no solution at beta_z = {beta_z}: "
+            f"sigma_R^2 = sigma_z^2 / (1 - beta_z)")
+    b = 1 / (1 - beta_z)
+    nu = forces.nu
+    with np.errstate(divide='ignore', invalid='ignore'):
+        nu_vphi2 = b * (forces.r_dnu_sz2 + forces.nu_sz2) + forces.r_nu_force
+        sz2 = forces.nu_sz2 / nu
         vphi2 = nu_vphi2 / nu
         sr2 = b * sz2
         rotation = vphi2 - sr2
@@ -273,16 +311,15 @@ def jeans_tables(
         # (beta_z above about 0.6 (1 - q) at their centres) without a model.
         vphi = kappa * np.sqrt(np.maximum(rotation, 0))
         sphi2 = vphi2 - vphi ** 2
-        table = slice(None), heights
         # (0 where there is no light, of no weight: the kernels interpolate
         # the tables, so they must be numbers there)
         sphi = np.sqrt(np.where(sphi2 >= 0, sphi2, np.nan))
         values = [
-            np.where(nu[table] > 0, value[table], 0.0)
+            np.where(nu > 0, value, 0.0)
             for value in (vphi, np.sqrt(sr2), sphi, np.sqrt(sz2))]
         return JeansTables(
-            float(lnr[0]), float(lnr[1] - lnr[0]),
-            float(lnr[0]), float(lnr[1] - lnr[0]), *values)
+            forces.lnr_zero, forces.lnr_step, forces.lnr_zero,
+            forces.lnr_step, *values)
 
 
 class JeansMotion(SpheroidMotion):
@@ -303,18 +340,27 @@ class JeansMotion(SpheroidMotion):
     def takes_light(self) -> bool:
         return True
 
-    def state(
-            self,
-            values: ParamValues,
-            light: SpheroidLight,
-            mass: GalaxyMass | None
-    ) -> JeansTables:
+    def state_params(self) -> tuple[str, ...]:
+        return tuple(self._kinematics.pdescs())
+
+    def groundwork(
+            self, light: SpheroidLight, mass: GalaxyMass | None
+    ) -> JeansForces:
         if mass is None:
             raise ValueError(
                 "the Jeans kinematics of a spheroid need the mass of its "
                 "galaxy")
-        return jeans_tables(
-            values, light, self._rmax, mass.field, mass.kpc_per_arcsec)
+        return jeans_forces(
+            light, self._rmax, mass.field, mass.kpc_per_arcsec)
+
+    def state(
+            self, values: ParamValues, groundwork: object
+    ) -> JeansTables:
+        if not isinstance(groundwork, JeansForces):
+            raise ValueError(
+                "the Jeans kinematics of a spheroid need the groundwork of "
+                "its tables (see JeansForces)")
+        return jeans_tables(values, groundwork)
 
     def sizes(self) -> dict[str, int]:
         return dict(jeans=4 * math.prod(table_shape()), jeans_range=4)

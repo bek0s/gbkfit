@@ -5,6 +5,7 @@ Component.orbit_weights), solved to fit the observations that see them,
 whose models are linear in them (see OrbitRecording).
 """
 
+import functools
 from collections.abc import Mapping, Sequence
 
 import numpy as np
@@ -12,6 +13,7 @@ import numpy as np
 from gbkfit.driver import DeviceArray
 from gbkfit.observation import GroupPlan, OrbitRecording, OrbitSeries
 from gbkfit.params import ParamValues, Solution, Solve, solve_together_rows
+from gbkfit.params._cache import ParamView, StageCache
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
 from .comparisons import Comparison
@@ -36,6 +38,11 @@ class OrbitSolve:
     moments, and their targets, c (data - base). The constraints of the
     light of the orbits give the rows of constraints, which count with the
     prior of the weights (see solve_together_rows).
+
+    The factors c read the parameters of the likelihoods of the
+    observations (e.g. a fitted noise) alone: a solve keeps its solution
+    while they and the recording keep theirs (see solve), e.g. while
+    another observation of the group moves.
 
     Parameters
     ----------
@@ -88,6 +95,14 @@ class OrbitSolve:
         self._elements = tuple(elements)
         self._solve = solve
         self._ones: list[dict[str, dict[str, DeviceArray | None]]] = []
+        # The cache of its solutions: of the parameters of the likelihoods
+        # of its observations, taking the orbits of its recording
+        k = group_plan.orbit_recordings().index(recording)
+        self._cache: StageCache[Solution] = StageCache(
+            (name for observation in observations
+             if observation.likelihood() is not None
+             for name in observation.likelihood().pdescs()),
+            (group_plan.orbit_caches()[k],))
 
     def recording(self) -> OrbitRecording:
         """Return the recording."""
@@ -108,9 +123,20 @@ class OrbitSolve:
     def solve(self, series: OrbitSeries, params: ParamValues) -> Solution:
         """
         Solve the weights at the values of the parameters, of the orbits
-        of its recording in the series of the bins (see
-        GroupPlan.orbit_series), and return them, with the residuals of
-        the constraints of the light before those of their prior.
+        of its recording in the series of the bins (those that the plan
+        gives at these values, see GroupPlan.orbit_series), and return
+        them, with the residuals of the constraints of the light before
+        those of their prior: those of its last solve if the parameters of
+        the likelihoods of its observations and the recording are the same
+        (see the class).
+        """
+        return self._cache.evaluate(
+            params, functools.partial(self._solved, series))
+
+    def _solved(self, series: OrbitSeries, params: ParamView) -> Solution:
+        """
+        Solve the weights (see solve), at the values of the parameters of
+        the likelihoods of its observations.
         """
         if not self._ones:
             self._prepare()

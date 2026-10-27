@@ -55,6 +55,17 @@ class _Frame(NamedTuple):
     alignment: tuple[float, float]
     offsets: tuple[str | None, str | None, str | None]
 
+    def shifts(self, params: ParamValues) -> tuple[float, float, float]:
+        """
+        Return the shifts of the centres (x and y) and of the systemic
+        velocities, by the alignment and the offsets.
+        """
+        offsets = [
+            0.0 if name is None else params[name] for name in self.offsets]
+        return (
+            self.alignment[0] + offsets[0], self.alignment[1] + offsets[1],
+            offsets[2])
+
     def moved(self, params: ParamValues) -> ParamValues:
         """
         Return the parameters with the centres and the systemic velocities
@@ -63,13 +74,8 @@ class _Frame(NamedTuple):
         """
         if self.alignment == (0, 0) and self.offsets == (None, None, None):
             return params
-        offsets = [
-            0.0 if name is None else params[name] for name in self.offsets]
-        shifts = [
-            self.alignment[0] + offsets[0], self.alignment[1] + offsets[1],
-            offsets[2]]
         moved = dict(params)
-        for names, shift in zip((self.x, self.y, self.v), shifts):
+        for names, shift in zip((self.x, self.y, self.v), self.shifts(params)):
             for name in names:
                 moved[name] = params[name] + shift
         return moved
@@ -478,6 +484,17 @@ class ObservationGroup:
         into its frame (see the class).
         """
         return self._frames[index].moved(params)
+
+    def frame_shifts(
+            self, index: int, params: ParamValues
+    ) -> tuple[float, float, float]:
+        """
+        Return how the observation of the given index moves what it sees
+        into its frame (see moved): the shifts of the centres, x and y
+        (arcsec), and of the systemic velocities (km/s), at the values of
+        the offsets of its frame (see Observation.offset_params).
+        """
+        return self._frames[index].shifts(params)
 
     def orbit_components(self, index: int) -> tuple[tuple[int, int], ...]:
         """

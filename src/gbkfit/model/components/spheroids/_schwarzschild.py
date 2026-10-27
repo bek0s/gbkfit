@@ -367,10 +367,11 @@ def _cell_light(
 class SchwarzschildMotion(SpheroidMotion):
     """
     The motion of the stars of a spheroid of SchwarzschildKinematics, of
-    the given rmax: its orbits in each evaluation (its state, see
-    orbit_library). It gives the native spheroid no kinematics: the
-    observations of its stars record its orbits (see
-    SchwarzschildKinematics).
+    the given rmax: its orbits in each evaluation (its state, and the
+    groundwork of it, see orbit_library), which its weights do not change
+    (its state reads none of its parameters). It gives the native
+    spheroid no kinematics: the observations of its stars record its
+    orbits (see SchwarzschildKinematics).
     """
 
     def __init__(self, kinematics: SchwarzschildKinematics, rmax: float):
@@ -386,17 +387,23 @@ class SchwarzschildMotion(SpheroidMotion):
     def orbit_weights(self) -> str | None:
         return 'weights'
 
-    def state(
-            self,
-            values: ParamValues,
-            light: SpheroidLight,
-            mass: GalaxyMass | None
+    def groundwork(
+            self, light: SpheroidLight, mass: GalaxyMass | None
     ) -> OrbitLibraryState:
         if mass is None:
             raise ValueError(
                 "the Schwarzschild kinematics of a spheroid need the mass of "
                 "its galaxy")
         return orbit_library(self._kinematics, light, self._rmax, mass)
+
+    def state(
+            self, values: ParamValues, groundwork: object
+    ) -> OrbitLibraryState:
+        if not isinstance(groundwork, OrbitLibraryState):
+            raise ValueError(
+                "the Schwarzschild kinematics of a spheroid need its orbits "
+                "(see OrbitLibraryState)")
+        return groundwork
 
     def sizes(self) -> dict[str, int]:
         return {}

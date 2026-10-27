@@ -27,12 +27,18 @@ class SpheroidStage(ComponentStage):
     of its light (Msun/kpc^2; see _units.mass_per_unit), if its emission
     has a unit; and its state, that of the motion of its kinematics, if
     any (see SpheroidMotion.state; e.g. the tables of its Jeans
-    kinematics).
+    kinematics), of its groundwork (see SpheroidMotion.groundwork). Its
+    light reads the parameters of its profile and its shape (see
+    Spheroid.light_params), its state those of its motion that it
+    declares (see SpheroidMotion.state_params).
     """
 
     def __init__(self, spheroid: 'Spheroid', mass_per_unit: float | None):
         self._spheroid = spheroid
         self._mass_per_unit = mass_per_unit
+
+    def light_params(self) -> tuple[str, ...]:
+        return self._spheroid.light_params()
 
     def values(self, own: ParamValues) -> ParamValues:
         return own
@@ -46,14 +52,27 @@ class SpheroidStage(ComponentStage):
                 values, spheroid.shape(), kpc_per_arcsec),
             self._mass_per_unit)
 
-    def state(
-            self,
-            values: ParamValues,
-            mass: GalaxyMass | None,
-            out_extra: Extras | None
-    ) -> ComponentState | None:
+    def state_params(self) -> tuple[str, ...]:
+        motion = self._spheroid.motion()
+        return () if motion is None else motion.state_params()
+
+    def groundwork(
+            self, values: ParamValues, mass: GalaxyMass | None
+    ) -> object:
         spheroid = self._spheroid
         motion = spheroid.motion()
         if motion is None:
             return None
-        return motion.state(values, spheroid.light(values), mass)
+        return motion.groundwork(spheroid.light(values), mass)
+
+    def state(
+            self,
+            values: ParamValues,
+            groundwork: object,
+            mass: GalaxyMass | None,
+            out_extra: Extras | None
+    ) -> ComponentState | None:
+        motion = self._spheroid.motion()
+        if motion is None:
+            return None
+        return motion.state(values, groundwork)
