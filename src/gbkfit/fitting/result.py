@@ -410,6 +410,10 @@ class FitResult:
         fraction of an MCMC sampler).
     bootstrap : Bootstrap or None
         The bootstrap of the best solution, if run (see bootstrap).
+    units : dict
+        The units of the values of the parameters and the derived values
+        that have one, by name (astropy unit strings; see
+        ParamSpace.unit).
     raw : object
         The result object of the fitter's library, for experts (not
         dumped).
@@ -426,6 +430,7 @@ class FitResult:
     message: str
     diagnostics: dict[str, Any]
     bootstrap: Bootstrap | None = None
+    units: dict[str, str] = dataclasses.field(default_factory=dict)
     raw: object = dataclasses.field(default=None, repr=False)
 
     def best(self) -> FitSolution:
@@ -457,7 +462,8 @@ class FitResult:
             if best.covariance else {}
         lines.append(
             f"{'name':<16} {'best':>12} {'std':>12} "
-            + ' '.join(f"{label + ' 16/50/84':>38}" for label in labels))
+            + ' '.join(f"{label + ' 16/50/84':>38}" for label in labels)
+            + "  unit")
         for name, value in (_free_elements(best) | best.derived).items():
             q_texts = [
                 f"{q[0]:>12.6g} {q[1]:>12.6g} {q[2]:>12.6g}"
@@ -465,7 +471,7 @@ class FitResult:
                 for column in columns]
             lines.append((
                 f"{name:<16} {value:>12.6g} {std.get(name, math.nan):>12.6g} "
-                + ' '.join(q_texts)).rstrip())
+                + ' '.join(q_texts) + '  ' + self._unit(name)).rstrip())
         if best.covariance and best.covariance.unconstrained:
             lines.append(
                 f"unconstrained directions involve: "
@@ -475,14 +481,22 @@ class FitResult:
                 f"at a bound: {list(best.covariance.at_bounds)}")
         return '\n'.join(lines)
 
+    def _unit(self, name: str) -> str:
+        """
+        Return the unit of an element or a derived value by name (e.g.
+        'vpt_vt[3]'), or '' if it has none.
+        """
+        return self.units.get(name.split('[', 1)[0], '')
+
     def info(self) -> dict[str, Any]:
         """
         Return its summary (without the arrays): what was run, the
-        solutions, the summaries of the posterior and of the bootstrap,
-        and the evidence.
+        units, the solutions, the summaries of the posterior and of the
+        bootstrap, and the evidence.
         """
         return dict(
-            fitter=self.fitter, params=self.params, versions=self.versions,
+            fitter=self.fitter, params=self.params, units=self.units,
+            versions=self.versions,
             nevals=self.nevals, time=self.time, success=self.success,
             message=self.message, diagnostics=self.diagnostics,
             evidence=None if self.evidence is None
@@ -503,7 +517,8 @@ class FitResult:
         with their weights if any (posterior.ecsv, 'posterior'), and the
         samples of the bootstrap, if run (bootstrap.ecsv, 'bootstrap').
         The tables have a column of each element (see Posterior.table,
-        Covariance.table and Bootstrap.table).
+        Covariance.table and Bootstrap.table); those of samples have its
+        unit, if any (see units).
 
         Parameters
         ----------
@@ -521,15 +536,23 @@ class FitResult:
             if solution.laplace is not None:
                 run.write(
                     f'{folder}/solutions/{i}/laplace.ecsv', 'laplace',
-                    solution.laplace.table(), solution=str(i))
+                    self._with_units(solution.laplace.table()),
+                    solution=str(i))
         if self.posterior is not None:
             run.write(
                 f'{folder}/posterior.ecsv', 'posterior',
-                self.posterior.table())
+                self._with_units(self.posterior.table()))
         if self.bootstrap is not None:
             run.write(
                 f'{folder}/bootstrap.ecsv', 'bootstrap',
-                self.bootstrap.table())
+                self._with_units(self.bootstrap.table()))
+
+    def _with_units(self, table: Table) -> Table:
+        """Return a table of samples with the units of its columns."""
+        for name in table.colnames:
+            if unit := self._unit(name):
+                table[name].unit = unit
+        return table
 
 
 def _samples_table(names: Sequence[str], samples: np.ndarray) -> Table:

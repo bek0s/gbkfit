@@ -611,3 +611,19 @@ def test_failed_derived_value():
     params = derived_params(dict(v='vcirc(b)[3]'))
     with pytest.raises(ParamEvaluationError, match="derived value 'v'"):
         params.derived_values(params.evaluate(), Functions())
+
+
+def test_parameters_and_derived_values_have_units():
+    # A label of their values, which stay plain numbers in it
+    from gbkfit.params import ParamScalarDesc, ParamSpace
+    params = ParamSpace(
+        dict(v=ParamScalarDesc(unit='km/s'), q=ParamScalarDesc()),
+        dict(v=200.0, q=0.5),
+        derived=dict(w='2 * v', z=dict(expr='v / 2', unit='km/s')))
+    assert [params.unit(name) for name in ('v', 'v[0]', 'q', 'w', 'z')] \
+        == ['km / s', 'km / s', None, None, 'km / s']
+    assert params.derived_values(params.evaluate())['z'] == 100
+    assert params.dump()['derived'] == dict(
+        w='2 * v', z=dict(expr='v / 2', unit='km / s'))
+    with pytest.raises(ConfigError, match="must be an astropy unit"):
+        ParamScalarDesc(unit='km per s')

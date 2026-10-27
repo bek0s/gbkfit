@@ -16,6 +16,7 @@ import numbers
 from collections.abc import Mapping
 from typing import Any
 
+import astropy.units
 import numpy as np
 
 from gbkfit.utils import parseutils
@@ -29,6 +30,7 @@ __all__ = [
     'ParamTable',
     'ParamVectorDesc',
     'param_tables',
+    'make_param_unit',
     'pdesc_parser',
     'load_pdescs_dict',
     'dump_pdescs_dict'
@@ -88,7 +90,12 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
     size : int
         The number of its values.
     desc : str, optional
-        What it is, for people (e.g. "the core radius (kpc)").
+        What it is, for people (e.g. "the core radius").
+    unit : str or UnitBase, optional
+        The unit of its values (an astropy unit, e.g. 'km/s'), if it has
+        one: a label of its values, which stay plain numbers in that unit
+        (in configurations, expressions and evaluations), for people and
+        outputs.
     minimum, maximum : float, optional
         Its valid range: the values for which the models that have it are
         defined (e.g. 0 for a dispersion), not the values that are likely.
@@ -97,8 +104,8 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
     Raises
     ------
     ConfigError
-        If the size is not a positive integer, or the minimum is above
-        the maximum.
+        If the size is not a positive integer, the unit is not a unit, or
+        the minimum is above the maximum.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -107,6 +114,8 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             info.update(size=self._size)
         if self._desc is not None:
             info.update(desc=self._desc)
+        if self._unit is not None:
+            info.update(unit=self._unit.to_string())
         if np.isfinite(self._minimum):
             info.update(minimum=self._minimum)
         if np.isfinite(self._maximum):
@@ -118,7 +127,8 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             size: int,
             desc: str | None,
             minimum: float | None,
-            maximum: float | None
+            maximum: float | None,
+            unit: str | astropy.units.UnitBase | None = None
     ):
         if (isinstance(size, bool) or not isinstance(size, numbers.Integral)
                 or size < 1):
@@ -133,6 +143,7 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
                 f"its maximum ({maximum})")
         self._size = int(size)
         self._desc = desc
+        self._unit = make_param_unit(unit)
         self._minimum = minimum
         self._maximum = maximum
 
@@ -148,6 +159,10 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
     def desc(self) -> str | None:
         """Return what it is, if given."""
         return self._desc
+
+    def unit(self) -> astropy.units.UnitBase | None:
+        """Return the unit of its values, if it has one."""
+        return self._unit
 
     def minimum(self) -> float:
         """Return the lowest valid value (-inf if none)."""
@@ -172,11 +187,13 @@ class ParamScalarDesc(ParamDesc):
         What it is (see ParamDesc).
     minimum, maximum : float, optional
         Its valid range (see ParamDesc).
+    unit : str or UnitBase, optional
+        The unit of its values (see ParamDesc).
 
     Raises
     ------
     ConfigError
-        If the minimum is above the maximum.
+        If the unit is not a unit, or the minimum is above the maximum.
     """
 
     @staticmethod
@@ -187,9 +204,10 @@ class ParamScalarDesc(ParamDesc):
             self,
             desc: str | None = None,
             minimum: float | None = None,
-            maximum: float | None = None
+            maximum: float | None = None,
+            unit: str | astropy.units.UnitBase | None = None
     ):
-        super().__init__(1, desc, minimum, maximum)
+        super().__init__(1, desc, minimum, maximum, unit)
 
     def is_scalar(self) -> bool:
         return True
@@ -208,6 +226,8 @@ class ParamVectorDesc(ParamDesc):
         What it is (see ParamDesc).
     minimum, maximum : float, optional
         The valid range of each element (see ParamDesc).
+    unit : str or UnitBase, optional
+        The unit of the values of its elements (see ParamDesc).
     column : ParamColumn, optional
         The column of a table it is, if any (see ParamTable): set by the
         models that declare tables, not part of configurations.
@@ -229,9 +249,10 @@ class ParamVectorDesc(ParamDesc):
             desc: str | None = None,
             minimum: float | None = None,
             maximum: float | None = None,
+            unit: str | astropy.units.UnitBase | None = None,
             column: ParamColumn | None = None
     ):
-        super().__init__(size, desc, minimum, maximum)
+        super().__init__(size, desc, minimum, maximum, unit)
         self._column = column
 
     def is_scalar(self) -> bool:
@@ -311,3 +332,20 @@ def dump_pdescs_dict(pdescs: Mapping[str, ParamDesc]) -> dict[str, Any]:
         The configuration of each description, by name.
     """
     return {name: pdesc_parser.dump(pdesc) for name, pdesc in pdescs.items()}
+
+
+def make_param_unit(
+        unit: str | astropy.units.UnitBase | None
+) -> astropy.units.UnitBase | None:
+    """
+    Return the unit of the values of a parameter (see ParamDesc). Raise
+    ConfigError if it is not a unit.
+    """
+    if unit is None:
+        return None
+    try:
+        return astropy.units.Unit(unit)
+    except (TypeError, ValueError) as e:
+        raise ConfigError(
+            f"the unit of a parameter must be an astropy unit (e.g. "
+            f"'km/s'); it is {unit!r}") from e

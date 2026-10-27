@@ -399,6 +399,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             success=run.success,
             message=run.message,
             diagnostics=diagnostics,
+            units={
+                name: unit.to_string()
+                for name in [*params.pdescs(), *params.derived()]
+                if (unit := params.unit(name)) is not None},
             raw=run.raw)
 
     @abc.abstractmethod

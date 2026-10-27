@@ -6,6 +6,7 @@ uncertainty) and the fitters, on a mock image with known parameters.
 import math
 
 import numpy as np
+from astropy.table import Table
 import pytest
 import scipy.integrate
 import scipy.stats
@@ -1382,10 +1383,14 @@ def test_summaries_show_the_free_elements_decoded():
     result = FitResult(
         fitter=dict(type='grid'), params=None, versions={},
         solutions=(solution,), posterior=None, evidence=None, nevals=1,
-        time=1.0, success=True, message='', diagnostics={})
+        time=1.0, success=True, message='', diagnostics={},
+        units=dict(v='km / s'))
     line = next(line for line in result.summary().split('\n')
                 if line.startswith('v[1] '))
-    assert line.split()[1:] == ['105', '1.25']
+    assert line.split()[1:] == ['105', '1.25', 'km', '/', 's']
+    # (the tables of samples have the units of their columns)
+    table = result._with_units(Table({'v[0]': [1.0]}))
+    assert table['v[0]'].unit == 'km / s'
 
 
 def test_the_information_criteria_take_solved_values_by_their_likelihood():

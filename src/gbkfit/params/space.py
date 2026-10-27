@@ -15,6 +15,7 @@ import numbers
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, TypeAlias
 
+import astropy.units
 import numpy as np
 import numpy.typing as npt
 
@@ -24,7 +25,7 @@ from gbkfit.params._expressions import (
 from gbkfit.params._keys import (
     InvalidKeyError, Key, element_name, element_names, parse_key)
 from gbkfit.params.modes import ParamMode, param_mode_parser
-from gbkfit.params.pdescs import ParamDesc
+from gbkfit.params.pdescs import ParamDesc, make_param_unit
 from gbkfit.params.priors import (
     Prior, PriorTruncated, PriorUniform, prior_parser)
 from gbkfit.params.solves import Solve, solve_parser
@@ -387,8 +388,10 @@ class ParamSpace(parseutils.Serializable):
         (e.g. {'type': 'gauss', 'expr': 'vt * 0.9', ...}), which the
         fitters read (see JointPrior), as they read the
         options of the free elements in the properties.
-    derived : Mapping of str to str, optional
-        The expressions of the derived values, by name, in order.
+    derived : Mapping of str to str or Mapping, optional
+        The derived values, by name, in order: the expression of each, or
+        {expr: ..., unit: ...}, with the unit of its values (an astropy
+        unit, a label as those of parameters, see ParamDesc).
     function_names : Collection of str, optional
         The names of the functions of the models that the derived values
         can use (e.g. ObservationGroup.function_names).
@@ -476,7 +479,10 @@ class ParamSpace(parseutils.Serializable):
         if self._priors:
             info['priors'] = self.priors()
         if self._derived:
-            info['derived'] = self.derived()
+            info['derived'] = {
+                name: expr if (unit := self._derived_units.get(name)) is None
+                else dict(expr=expr, unit=unit.to_string())
+                for name, expr in self._derived.items()}
         return info
 
     def __init__(
@@ -487,7 +493,7 @@ class ParamSpace(parseutils.Serializable):
             constants: Mapping[str, npt.ArrayLike] | None = None,
             modes: Mapping[str, ParamMode] | None = None,
             priors: Sequence[Mapping[str, Any]] | None = None,
-            derived: Mapping[str, str] | None = None,
+            derived: Mapping[str, str | Mapping[str, str]] | None = None,
             function_names: Collection[str] = ()
     ):
         if bad := [n for n, p in pdescs.items()
@@ -510,7 +516,7 @@ class ParamSpace(parseutils.Serializable):
             raise ConfigError(
                 "option 'derived' must be a dict of the expressions of the "
                 "derived values, by name")
-        self._derived = dict(derived or {})
+        self._derived, self._derived_units = _derived_values(derived or {})
         self._function_names = tuple(function_names)
         # The names that the properties cannot read, and why
         self._unavailable = {
@@ -599,6 +605,18 @@ class ParamSpace(parseutils.Serializable):
     def derived(self) -> dict[str, str]:
         """Return the expressions of the derived values, by name."""
         return dict(self._derived)
+
+    def unit(self, name: str) -> astropy.units.UnitBase | None:
+        """
+        Return the unit of the values of a parameter or a derived value by
+        name, or of an element (e.g. 'vpt_vt[3]'), if it has one (see
+        ParamDesc.unit).
+        """
+        name = name.split('[', 1)[0]
+        if name in self._derived_units:
+            return self._derived_units[name]
+        pdesc = self._pdescs.get(name)
+        return None if pdesc is None else pdesc.unit()
 
     def function_names(self) -> tuple[str, ...]:
         """
@@ -1493,3 +1511,31 @@ class ParamSpace(parseutils.Serializable):
 
 
 param_space_parser = parseutils.BasicParser(ParamSpace)
+
+
+def _derived_values(
+        derived: Mapping[str, str | Mapping[str, str]]
+) -> tuple[dict[str, str], dict[str, astropy.units.UnitBase]]:
+    """
+    Return the expressions of derived values (see ParamSpace), by name,
+    and the units of those that have one.
+
+    Raises
+    ------
+    ConfigError
+        If a value is neither an expression nor {expr, unit}, or its unit
+        is not a unit.
+    """
+    expressions, units = {}, {}
+    for name, value in derived.items():
+        with parseutils.config_path('derived', name):
+            if isinstance(value, Mapping):
+                if set(value) - {'expr', 'unit'} or 'expr' not in value:
+                    raise ConfigError(
+                        f"a derived value is its expression, or {{expr: "
+                        f"..., unit: ...}}; it is {dict(value)!r}")
+                if value.get('unit') is not None:
+                    units[name] = make_param_unit(value['unit'])
+                value = value['expr']
+            expressions[name] = value
+    return expressions, units
