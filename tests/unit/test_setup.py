@@ -72,8 +72,10 @@ def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), observation_parser.load(obs))
     params = ParamSpace(group.pdescs(), PARAMS['properties'])
+    # (to rounding: the host kernels sum in no fixed order)
     with gbkfit.Setup(group, params) as built:
-        assert built.evaluate().objective.merits == expected
+        assert tuple(built.evaluate().objective.merits) == pytest.approx(
+            tuple(expected), rel=1e-12)
 
 
 def test_a_setup_takes_the_parameters_of_its_group():
