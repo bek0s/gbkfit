@@ -287,6 +287,38 @@ def test_vertical_forces_of_thick_disks_are_their_stacked_sheets():
         [stacked(*point) for point in zip(R, z)], rtol=5e-4)
 
 
+def test_vertical_forces_of_thick_disks_far_above_them():
+    # At a point far above a thick disk, alone at its radius (no other
+    # heights between it and the plane), that of the disk made thin:
+    # the pull of its slab takes all of its column (it took 8 points over
+    # [0, z], and missed a disk 400 times thinner: +4778 for -2.97)
+    params = dict(log_m=10, rd=3, hz=0.3)
+    R, z = np.array([0.0, 10.0]), np.array([120.0, 120.0])
+    np.testing.assert_allclose(
+        MassDisk('d', SurfaceExponential(), VerticalSech2()).vertical_force(
+            R, z, params, CONTEXT),
+        MassDisk('d', SurfaceExponential(), VerticalThin()).vertical_force(
+            R, z, params, CONTEXT), rtol=1e-4)
+
+
+@pytest.mark.parametrize('vertical', [VerticalThin(), VerticalSech2()])
+def test_disks_give_their_forces_far_from_them(vertical):
+    # Beyond their tables (5 outer radii from their plane: 600 kpc for an
+    # exponential disk of rd = 3 kpc; and 1000 rd from its axis), the
+    # multipole series of their mass: across the edge of the tables as
+    # within them, and far away, the pull of a point of their mass
+    disk = MassDisk('d', SurfaceExponential(), vertical)
+    params = dict(log_m=10, rd=3, hz=0.3)
+    R = np.array([0.0, 60.0])
+    inside = disk.forces(R, np.full(2, 600 - 1e-6), params, CONTEXT)
+    outside = disk.forces(R, np.full(2, 600 + 1e-6), params, CONTEXT)
+    np.testing.assert_allclose(outside, inside, rtol=1e-4)
+    R, z = np.array([5e3, 4e3]), np.array([7e3, 0.0])
+    point = -G * 1e10 * np.array([R, z]) / np.hypot(R, z) ** 3
+    np.testing.assert_allclose(
+        disk.forces(R, z, params, CONTEXT), point, rtol=1e-5, atol=1e-12)
+
+
 def ring_radial_force(sigma, R, z, edges):
     """
     The radial force of a thin disk (see ring_vertical_force): the pull of

@@ -84,8 +84,8 @@ _NEAR_T, _NEAR_W = _geometric_panels(
 
 # The heights of thick disks, in units of the outer radius of the disk:
 # Gauss-Legendre points on panels of geometric widths from 1e-9 to 10
-_HEIGHTS, _HEIGHT_WEIGHTS = _geometric_panels(
-    np.concatenate(([0], np.geomspace(1e-9, 10, 22))), 8)
+_HEIGHT_EDGES = np.concatenate(([0], np.geomspace(1e-9, 10, 22)))
+_HEIGHTS, _HEIGHT_WEIGHTS = _geometric_panels(_HEIGHT_EDGES, 8)
 
 # The singular values of the weights of thick disks that are kept, relative
 # to the largest (see _thick_weights)

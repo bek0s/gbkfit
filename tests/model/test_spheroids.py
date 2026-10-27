@@ -488,6 +488,23 @@ def test_the_jeans_tables_of_a_gaussian_around_a_point_mass_are_exact():
     assert not tables.vphi.any()
 
 
+def test_the_jeans_tables_take_a_mass_disk_far_from_it():
+    # The Jeans integrals reach 100 rmax from the plane (here 480 kpc),
+    # beyond the tables of the forces of a mass disk (5 outer radii: 200
+    # kpc for rd = 1 kpc), where its far field pulls: before, they raised
+    disk = dict(
+        type='disk', name='disk', surface=dict(type='exponential'),
+        vertical=dict(type='thin'))
+    spheroid = JEANS_SPHEROID | dict(rmax=100)
+    properties = JEANS_PROPERTIES | dict(mass_disk_log_m=10, mass_disk_rd=1)
+    with_disk = galaxy_parser.load(dict(
+        components=[spheroid], mass=[dict(type='point', name='bh'), disk],
+        distance=DISTANCE)).plan_stage().evaluate(properties).states[0]
+    alone = jeans_galaxy(spheroid).plan_stage().evaluate(
+        JEANS_PROPERTIES).states[0]
+    assert np.all(with_disk.sigma_z > alone.sigma_z)
+
+
 def test_the_jeans_equations_have_no_solution_at_beta_z_1():
     # (sigma_R^2 = sigma_z^2 / (1 - beta_z): no model there, a point that
     # fitters cannot evaluate, not a ZeroDivisionError)

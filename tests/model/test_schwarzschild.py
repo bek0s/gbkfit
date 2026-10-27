@@ -122,6 +122,20 @@ def test_orbits_take_the_forces_of_a_potential():
         galaxy(gravity=dict(type='mond', interpolation='simple'))
 
 
+def test_orbits_take_a_mass_disk_far_from_it():
+    # The potential of the orbits reaches 1e4 rmax (here 300 Mpc), beyond
+    # the tables of the forces of an exponential disk (1000 rd from its
+    # axis), where its far field pulls: before, it raised
+    disk = dict(
+        type='disk', name='disk', surface=dict(type='exponential'),
+        vertical=dict(type='thin'))
+    state = galaxy(mass=GALAXY['mass'] + [disk]).plan_stage().evaluate(
+        PROPERTIES | dict(
+            stars_weights=np.ones(400), mass_disk_log_m=10,
+            mass_disk_rd=3.0)).states[0]
+    assert np.all(np.isfinite(state.potential.values))
+
+
 def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
     spectra = ObservationSky(
         PixelSpectra(size=(8, 8, 16), step=(2, 2, 20)),
