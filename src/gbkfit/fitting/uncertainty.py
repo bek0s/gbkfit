@@ -12,7 +12,7 @@ import numpy as np
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
 from gbkfit.objective import Objective
-from gbkfit.params import ParamEvaluationError, ParamKind, ParamSpace
+from gbkfit.params import ParamEvaluationError, ParamKind
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -203,15 +203,16 @@ def jacobian(
 
 
 def sample_values(
-        params: ParamSpace,
+        problem: FitProblem,
         x: np.ndarray,
         derived: Sequence[str] = ()
 ) -> np.ndarray:
     """
-    Return the values of a sample of the posterior at the given free
-    values: those of every element (see ParamSpace.element_values), then
-    those of the given elements of the derived values (see
-    ParamSpace.derived_elements), NaN where they cannot be evaluated. The
+    Return the values of a sample of the posterior of a problem at the
+    given free values: those of every element (see
+    ParamSpace.element_values), then those of the given elements of the
+    derived values (see FitProblem.derived_elements), NaN where they
+    cannot be evaluated. The
     solved elements are NaN: the objective solves them at each point, or
     integrates them out (see Objective), and the samples do not keep them.
 
@@ -220,6 +221,7 @@ def sample_values(
     ParamEvaluationError
         If the parameters cannot be evaluated there.
     """
+    params = problem.params()
     values = params.evaluate(x)
     elements = [
         np.nan if kind is ParamKind.SOLVED else value
@@ -228,7 +230,7 @@ def sample_values(
     if not derived:
         return np.array(elements)
     try:
-        derived_values = params.derived_elements(values)
+        derived_values = problem.derived_elements(values)
     except ParamEvaluationError:
         derived_values = {}
     return np.array(
@@ -337,7 +339,7 @@ def covariance(
     # with J_e the Jacobian of their values by the free values
     element_names = list(params.element_values(params.evaluate(x)))
     jac_elements = jacobian(
-        lambda points: [sample_values(params, p, derived) for p in points],
+        lambda points: [sample_values(problem, p, derived) for p in points],
         x, steps, lower, upper)
     element_std = np.where(
         _along(jac_elements / norms, vt[~keep]), np.inf,
@@ -411,7 +413,7 @@ def laplace_posterior(
     rows = []
     for point in free:
         try:
-            rows.append(sample_values(params, point, derived))
+            rows.append(sample_values(problem, point, derived))
         except ParamEvaluationError:
             pass
     names = tuple(params.kinds()) + tuple(derived)

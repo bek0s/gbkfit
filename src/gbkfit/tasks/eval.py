@@ -166,7 +166,7 @@ def _eval(
         else params.evaluate()
     run.write('params.json', 'params', dict(
         params=param_values, eparams=params.element_values(param_values),
-        derived=params.derived_values(param_values)))
+        derived=params.derived_values(param_values, group_plan.functions())))
 
     _log.info("evaluating...")
     outputs = gbkfit.outputs.evaluation_outputs(

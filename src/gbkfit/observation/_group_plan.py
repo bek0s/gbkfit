@@ -94,6 +94,7 @@ class GroupPlan:
         self._group = group
         self._galaxy_drivers = tuple(galaxy_drivers)
         self._observation_drivers = tuple(observation_drivers)
+        self._functions = _GroupFunctions(group, self._galaxy_drivers)
         plans = []
         for i, (observation, driver) in enumerate(
                 zip(observations, self._observation_drivers)):
@@ -212,26 +213,17 @@ class GroupPlan:
         copied._init_evaluations()
         return copied
 
-    def plan_functions(self) -> ParamFunctions:
+    def functions(self) -> ParamFunctions:
         """
-        Plan the functions of the galaxies, for the derived values of the
-        parameters (see ParamSpace): those of each galaxy (see
-        Galaxy.plan_functions), on the driver of its stage, prefixed as its
-        parameters (e.g. 'north_vcirc'), and the gravitational constant G
-        ((km/s)^2 kpc / Msun). They have their own stages and plans, apart
-        from those of its evaluations (which may run at the same time).
-
-        Returns
-        -------
-        ParamFunctions
-            The functions.
+        Return the functions of the galaxies, for the derived values of
+        the parameters (see ParamSpace.derived_values): those of each
+        galaxy (see Galaxy.plan_functions), on the driver of its stage,
+        prefixed as its parameters (e.g. 'north_vcirc'), and the
+        gravitational constant G ((km/s)^2 kpc / Msun). They are planned
+        at their first use, with their own stages and plans, apart from
+        those of its evaluations (which may run at the same time).
         """
-        group = self._group
-        galaxies = zip(group.galaxies(), self._galaxy_drivers)
-        return _GroupFunctions(
-            [galaxy.plan_functions(group.sky_origin(), driver)
-             for galaxy, driver in galaxies],
-            group.mappings(), group.prefixes())
+        return self._functions
 
     def _galaxy_states(
             self,
@@ -582,31 +574,31 @@ def _same(a: Any, b: Any) -> bool:
 
 class _GroupFunctions(ParamFunctions):
     """
-    The functions of the galaxies of a group (see
-    GroupPlan.plan_functions): those of each galaxy, the mapping of its
-    parameters to those of the group, and its prefix.
+    The functions of the galaxies of a group (see GroupPlan.functions):
+    those of each galaxy, planned on the driver of its stage at their
+    first binding.
     """
 
-    def __init__(
-            self,
-            functions: Sequence[GalaxyFunctions],
-            mappings: Sequence[dict[str, str]],
-            prefixes: Sequence[str]
-    ):
-        self._functions = tuple(functions)
-        self._mappings = tuple(mappings)
-        self._prefixes = tuple(prefixes)
+    def __init__(self, group: 'ObservationGroup', drivers: Sequence[Driver]):
+        self._group = group
+        self._drivers = tuple(drivers)
+        self._functions: tuple[GalaxyFunctions, ...] | None = None
+        self._lock = threading.Lock()
 
     def names(self) -> tuple[str, ...]:
-        return ('G',) + tuple(
-            f'{prefix}{name}'
-            for functions, prefix in zip(self._functions, self._prefixes)
-            for name in functions.names())
+        return self._group.function_names()
 
     def bind(self, values: ParamValues) -> dict[str, Any]:
+        group = self._group
+        with self._lock:
+            if self._functions is None:
+                self._functions = tuple(
+                    galaxy.plan_functions(group.sky_origin(), driver)
+                    for galaxy, driver in zip(
+                        group.galaxies(), self._drivers))
         bound: dict[str, Any] = dict(G=G)
         for functions, mapping, prefix in zip(
-                self._functions, self._mappings, self._prefixes):
+                self._functions, group.mappings(), group.prefixes()):
             own = functions.bind(
                 {name: values[full] for name, full in mapping.items()})
             bound |= {f'{prefix}{name}': value for name, value in own.items()}

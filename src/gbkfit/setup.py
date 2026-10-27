@@ -1,6 +1,7 @@
 """
-The front door of GBKFIT: a configuration set up as the objects it
-describes (see load and Setup).
+The front door of GBKFIT: galaxies, their observations and their
+parameters set up on drivers (see Setup), in Python or from a
+configuration (see load).
 
 A configuration (a YAML or JSON file, or a dictionary) has the sections
 'galaxies', 'observations' and 'params', and can have the sections
@@ -30,7 +31,7 @@ from gbkfit.fitting import (
 from gbkfit.objective import Evaluation, Objective
 from gbkfit.observation import DepthGroup, GroupPlan, ObservationGroup
 from gbkfit.params import (
-    ParamDesc, ParamFunctions, ParamSpace, ParamValues,
+    ParamDesc, ParamSpace, ParamValues,
     joint_prior_residuals, load_pdescs_dict, param_space_parser)
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -94,23 +95,115 @@ class SetupEvaluation:
     objective: Evaluation | None
 
 
-@dataclasses.dataclass(frozen=True)
 class Setup:
     """
-    What a configuration sets up (see load): the plan of the observations
-    of its galaxies on its drivers (see ObservationGroup.plan), its
-    parameters, its objective if every observation has data, its fitter
-    if it has one (its section 'fitter'), and its pool of evaluations if
-    it has one (its section 'parallel'; see EvaluationPool).
+    Galaxies, their observations and their parameters, set up on drivers:
+    the plan of the group (see ObservationGroup.plan), the parameters, the
+    objective if every observation has data, the fitter if given, and
+    the pool of evaluations if given (see EvaluationPool). load sets up a
+    configuration as one.
 
     It holds the memory of its objective and the threads of its pool
     until it is closed (see close; e.g. at the end of a with block).
+
+    Parameters
+    ----------
+    group : ObservationGroup
+        The galaxies and their observations.
+    params : ParamSpace
+        The parameters, of the group: of its parameters, constants and
+        functions (see ObservationGroup.pdescs, constants and
+        function_names).
+    fitter : Fitter, optional
+        The fitter of its fits (see fit).
+    driver : Driver, optional
+        The driver of the galaxies and the observations; the host by
+        default.
+    drivers : Mapping of str to Driver, optional
+        Other drivers of some of them, by their labels (see
+        ObservationGroup.plan).
+    parallel : Sequence of Driver, optional
+        The drivers of copies of the objective, which evaluate batches of
+        points at once (see EvaluationPool).
+
+    Raises
+    ------
+    ConfigError
+        If the parameters are not of the group, the fitter does not take
+        their free elements (see Fitter.load_fit_params), a prior on
+        several parameters is invalid, a fitter or parallel drivers are
+        given and an observation has no data, or the group cannot be
+        planned (see ObservationGroup.plan).
+
+    Examples
+    --------
+    >>> group = ObservationGroup(galaxy, observation)
+    >>> params = ParamSpace(
+    ...     group.pdescs(), dict(incl=60, vpt_vt=dict(min=50, max=300)),
+    ...     constants=group.constants())
+    >>> with Setup(group, params, fitter=FitterScipyLeastSquares(),
+    ...            driver=DriverCuda()) as setup:
+    ...     result = setup.fit()
     """
-    group_plan: GroupPlan
-    params: ParamSpace
-    objective: Objective | None
-    fitter: Fitter | None
-    pool: EvaluationPool | None
+
+    def __init__(
+            self,
+            group: ObservationGroup,
+            params: ParamSpace,
+            fitter: Fitter | None = None,
+            driver: Driver | None = None,
+            drivers: Mapping[str, Driver] | None = None,
+            parallel: Sequence[Driver] | None = None
+    ):
+        if missing := [n for n in group.pdescs() if n not in params.pdescs()]:
+            raise ConfigError(
+                f"the parameters are not those of the group: they lack "
+                f"{missing}")
+        if unknown := sorted(
+                set(params.function_names()) - set(group.function_names())):
+            raise ConfigError(
+                f"the galaxies have no functions {unknown}; they have "
+                f"{list(group.function_names())}")
+        if fitter is not None:
+            with parseutils.config_path('params', 'properties'):
+                fitter.load_fit_params(params)
+            with parseutils.config_path('params'):
+                joint_prior_residuals(params)
+        self._group_plan = group.plan(driver, drivers)
+        self._params = params
+        self._objective = None
+        if fitter is not None or parallel is not None or all(
+                obs.data() is not None for obs in group.observations()):
+            _log.info("setting up objective...")
+            self._objective = Objective(self._group_plan, params.solves())
+        self._fitter = fitter
+        self._pool = None if parallel is None \
+            else EvaluationPool(self._objective, parallel)
+
+    @property
+    def group_plan(self) -> GroupPlan:
+        """The plan of the group."""
+        return self._group_plan
+
+    @property
+    def params(self) -> ParamSpace:
+        """The parameters."""
+        return self._params
+
+    @property
+    def objective(self) -> Objective | None:
+        """The objective, or None if an observation has no data."""
+        return self._objective
+
+    @property
+    def fitter(self) -> Fitter | None:
+        """The fitter, if given."""
+        return self._fitter
+
+    @property
+    def pool(self) -> EvaluationPool | None:
+        """The pool of evaluations, if given."""
+        return self._pool
 
     def evaluate(
             self, free: Mapping[str, float] | Sequence[float] | None = None
@@ -363,19 +456,13 @@ def load(
         if drivers is None:
             drivers = _load_drivers(cfg)
         group = _load_observation_group(cfg)
-        group_plan = _load_group_plan(cfg, group, drivers)
+        driver, placed = _load_placement(cfg, group, drivers)
         _log.info("setting up params...")
         params = _load_params(
-            cfg, group.pdescs(), group.constants(),
-            group_plan.plan_functions())
-        objective = None
-        if 'fitter' in cfg or 'parallel' in cfg or all(
-                obs.data() is not None for obs in group.observations()):
-            _log.info("setting up objective...")
-            objective = Objective(group_plan, params.solves())
-        fitter = _load_fitter(cfg, params)
-        pool = _load_pool(cfg, objective, drivers)
-    return Setup(group_plan, params, objective, fitter, pool)
+            cfg, group.pdescs(), group.constants(), group.function_names())
+        fitter = _load_fitter(cfg)
+        parallel = _load_parallel(cfg, drivers)
+        return Setup(group, params, fitter, driver, placed, parallel)
 
 
 def _root(config: Any) -> str | None:
@@ -517,7 +604,7 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     and observations name lines and bands of the catalogue of GBKFIT and
     of the sections 'lines' and 'bands' of the configuration (see
     LineCatalogue). Their option driver places them on a driver of the
-    configuration (see _load_group_plan).
+    configuration (see _load_placement).
     """
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
     ngalaxies = len(cfg['galaxies'])
@@ -539,22 +626,23 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
 def _without_driver(infos: Sequence[Any]) -> list[Any]:
     """
     Return the configurations of galaxies or observations without their
-    option driver (see _load_group_plan).
+    option driver (see _load_placement).
     """
     return [
         {key: value for key, value in info.items() if key != 'driver'}
         if isinstance(info, dict) else info for info in infos]
 
 
-def _load_group_plan(
+def _load_placement(
         cfg: dict[str, Any],
         group: ObservationGroup,
         drivers: Mapping[str | None, Driver]
-) -> GroupPlan:
+) -> tuple[Driver | None, dict[str, Driver] | None]:
     """
-    Return the plan of the galaxies and observations of a configuration
-    (see _load_observation_group and ObservationGroup.plan) on its
-    drivers.
+    Return where the galaxies and observations of a configuration (see
+    _load_observation_group) go among its drivers, as Setup takes it: the
+    driver of all of them, or else the driver of each, by its label (see
+    ObservationGroup.plan).
 
     The option driver of a galaxy or an observation is not a driver but
     the name of one of the drivers of the configuration, which declares
@@ -594,20 +682,26 @@ def _load_group_plan(
             if g in group.seen_galaxies(i)}
         galaxy_drivers.append(
             next(iter(seen_on.values())) if len(seen_on) == 1 else host)
-    return GroupPlan(group, galaxy_drivers, observation_drivers)
+    placed = galaxy_drivers + observation_drivers
+    if len({id(driver) for driver in placed}) == 1:
+        return placed[0], None
+    labels = [
+        group.galaxy_label(g) for g in range(len(galaxy_drivers))] + [
+        group.observation_label(i) for i in range(len(observation_drivers))]
+    return None, dict(zip(labels, placed))
 
 
 def _load_params(
         cfg: dict[str, Any],
         pdescs: dict[str, ParamDesc],
         constants: dict[str, Any],
-        functions: ParamFunctions | None = None
+        function_names: Sequence[str] = ()
 ) -> ParamSpace:
     """
     Return the parameters of a configuration (its section 'params'), with
     the descriptions of the parameters of the galaxies and those of its
-    optional section 'pdescs', and the functions of the galaxies that its
-    derived values can use.
+    optional section 'pdescs', and the names of the functions of the
+    galaxies that its derived values can use.
     """
     if 'pdescs' in cfg:
         with parseutils.config_path('pdescs'):
@@ -615,37 +709,29 @@ def _load_params(
     with parseutils.config_path('params'):
         return param_space_parser.load(
             cfg['params'], pdescs=pdescs, constants=constants,
-            functions=functions)
+            function_names=function_names)
 
 
-def _load_fitter(cfg: dict[str, Any], params: ParamSpace) -> Fitter | None:
+def _load_fitter(cfg: dict[str, Any]) -> Fitter | None:
     """
     Return the fitter of a configuration (its section 'fitter'), if it
-    has one, with the free properties and the priors on several
-    parameters checked for it (before a fit starts).
+    has one.
     """
     if 'fitter' not in cfg:
         return None
     _log.info("setting up fitter...")
     with parseutils.config_path('fitter'):
-        fitter = fitter_parser.load(cfg['fitter'])
-    with parseutils.config_path('params', 'properties'):
-        fitter.load_fit_params(params)
-    with parseutils.config_path('params'):
-        joint_prior_residuals(params)
-    return fitter
+        return fitter_parser.load(cfg['fitter'])
 
 
-def _load_pool(
+def _load_parallel(
         cfg: dict[str, Any],
-        objective: Objective | None,
         drivers: Mapping[str | None, Driver]
-) -> EvaluationPool | None:
+) -> list[Driver] | None:
     """
-    Return the pool of the section 'parallel' of a configuration, if it
-    has one: {drivers: [names]}, copies of its objective (which it has,
-    see load) on those of the drivers of the configuration (see
-    EvaluationPool).
+    Return the drivers of the section 'parallel' of a configuration, if it
+    has one: {drivers: [names]}, those of the drivers of the
+    configuration where copies of its objective go (see Setup).
 
     Raises
     ------
@@ -664,10 +750,9 @@ def _load_pool(
                 "option 'drivers' must be a list of the names of drivers of "
                 "the configuration (section 'drivers')")
         with parseutils.config_path('drivers'):
-            pool_drivers = [
+            return [
                 driver_by_name(name, drivers, 'parallel evaluations')
                 for name in names]
-    return EvaluationPool(objective, pool_drivers)
 
 
 def _load_depth_order(

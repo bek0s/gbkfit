@@ -390,7 +390,8 @@ def bootstrap(
         for dataset, model, noise in zip(
             objective.datasets(), models, noises)]
     try:
-        derived = tuple(params.derived_elements(values))
+        derived = tuple(params.derived_elements(
+            values, objective.group_plan().functions()))
     except ParamEvaluationError:
         derived = ()
     names = tuple(params.kinds()) + derived

@@ -357,8 +357,11 @@ class ParamSpace(parseutils.Serializable):
     parameters, which no expression of them can (e.g. the circular
     velocity of a mass model at 2.2 disk scale lengths): expressions, by
     name, that can also use the functions of the models (e.g.
-    'vcirc(2.2 * mass_stars_rd)'; see ParamFunctions and
-    GroupPlan.plan_functions), and the derived values before them.
+    'vcirc(2.2 * mass_stars_rd)'; see ParamFunctions), and the derived
+    values before them. The parameters know the names of the functions;
+    the functions themselves (which run parts of the models on a driver,
+    see GroupPlan.functions) are given where the derived values are
+    evaluated.
     They are evaluated after the parameters (see derived_values), so the
     properties cannot read them; the priors on several parameters can
     (see expression), and the fitters report them (see FitSolution).
@@ -386,8 +389,9 @@ class ParamSpace(parseutils.Serializable):
         options of the free elements in the properties.
     derived : Mapping of str to str, optional
         The expressions of the derived values, by name, in order.
-    functions : ParamFunctions, optional
-        The functions of the models that the derived values can use.
+    function_names : Collection of str, optional
+        The names of the functions of the models that the derived values
+        can use (e.g. ObservationGroup.function_names).
 
     Raises
     ------
@@ -403,7 +407,7 @@ class ParamSpace(parseutils.Serializable):
             info: dict[str, Any],
             pdescs: Mapping[str, ParamDesc],
             constants: Mapping[str, npt.ArrayLike] | None = None,
-            functions: ParamFunctions | None = None
+            function_names: Collection[str] = ()
     ) -> 'ParamSpace':
         """
         Load the parameters from their configuration: their properties,
@@ -418,8 +422,9 @@ class ParamSpace(parseutils.Serializable):
             The descriptions of the parameters, by name.
         constants : Mapping, optional
             The values that expressions can use, by name.
-        functions : ParamFunctions, optional
-            The functions of the models that derived values can use.
+        function_names : Collection of str, optional
+            The names of the functions of the models that derived values
+            can use.
 
         Returns
         -------
@@ -452,10 +457,11 @@ class ParamSpace(parseutils.Serializable):
         opts = parseutils.parse_options_for_callable(
             info, cls.__init__,
             ignore_params=[
-                'pdescs', 'properties', 'constants', 'derived', 'functions'])
+                'pdescs', 'properties', 'constants', 'derived',
+                'function_names'])
         return cls(
             pdescs, properties, **opts, constants=constants, derived=derived,
-            functions=functions)
+            function_names=function_names)
 
     def dump(self) -> dict[str, Any]:
         info: dict[str, Any] = dict(properties={
@@ -482,7 +488,7 @@ class ParamSpace(parseutils.Serializable):
             modes: Mapping[str, ParamMode] | None = None,
             priors: Sequence[Mapping[str, Any]] | None = None,
             derived: Mapping[str, str] | None = None,
-            functions: ParamFunctions | None = None
+            function_names: Collection[str] = ()
     ):
         if bad := [n for n, p in pdescs.items()
                    if not isinstance(p, ParamDesc)]:
@@ -505,9 +511,7 @@ class ParamSpace(parseutils.Serializable):
                 "option 'derived' must be a dict of the expressions of the "
                 "derived values, by name")
         self._derived = dict(derived or {})
-        self._functions = functions
-        self._function_names = () if functions is None \
-            else tuple(functions.names())
+        self._function_names = tuple(function_names)
         # The names that the properties cannot read, and why
         self._unavailable = {
             name: "it is a derived value, evaluated after the parameters"
@@ -596,20 +600,25 @@ class ParamSpace(parseutils.Serializable):
         """Return the expressions of the derived values, by name."""
         return dict(self._derived)
 
-    def functions(self) -> ParamFunctions | None:
-        """Return the functions of the models, if given."""
-        return self._functions
+    def function_names(self) -> tuple[str, ...]:
+        """
+        Return the names of the functions of the models that the derived
+        values can use.
+        """
+        return self._function_names
 
     def expression(
             self,
-            source: str
+            source: str,
+            functions: ParamFunctions | None = None
     ) -> Callable[[ParamValues], np.ndarray]:
         """
         Return a function of the values of the parameters (see evaluate)
         that evaluates an expression of them, of the constants and of the
         derived values, as those of the properties (e.g. 'np.diff(posa)',
         'vt[4] * 0.9', 'v22 / 200'), into an array of floats. The derived
-        values it reads are evaluated with it (see derived_values).
+        values it reads are evaluated with it, with the given functions of
+        the models (see derived_values).
 
         Raises
         ------
@@ -634,7 +643,7 @@ class ParamSpace(parseutils.Serializable):
             namespace = constants | dict(values)
             if expression.uses:
                 namespace |= self._finite_derived_values(
-                    values, expression.uses)
+                    values, expression.uses, functions)
             return np.atleast_1d(np.asarray(
                 expression.evaluate(namespace), dtype=float))
         return evaluate
@@ -743,6 +752,7 @@ class ParamSpace(parseutils.Serializable):
     def derived_values(
             self,
             values: ParamValues,
+            functions: ParamFunctions | None = None,
             names: Collection[str] | None = None
     ) -> ParamValues:
         """
@@ -753,6 +763,9 @@ class ParamSpace(parseutils.Serializable):
         ----------
         values : ParamValues
             The values of the parameters (see evaluate).
+        functions : ParamFunctions, optional
+            The functions of the models (e.g. GroupPlan.functions), which
+            the derived values that call them need.
         names : Collection of str, optional
             The derived values wanted (they are evaluated with those they
             read); all by default.
@@ -766,15 +779,24 @@ class ParamSpace(parseutils.Serializable):
 
         Raises
         ------
+        ValueError
+            If a derived value calls a function of the models, and they
+            are not given.
         ParamEvaluationError
             If an expression fails (e.g. a function of the models at radii
             outside its disk).
         """
         needed = self._needed_derived(names)
         namespace: dict[str, Any] = self._constants | dict(values)
-        if any(set(self._derived_expressions[name].uses)
-               & set(self._function_names) for name in needed):
-            namespace |= self._functions.bind(values)
+        if calling := sorted(
+                name for name in needed
+                if set(self._derived_expressions[name].uses)
+                & set(self._function_names)):
+            if functions is None:
+                raise ValueError(
+                    f"the derived values {calling} call functions of the "
+                    f"models: give them (see GroupPlan.functions)")
+            namespace |= functions.bind(values)
         derived = {}
         for name, expression in self._derived_expressions.items():
             if name not in needed:
@@ -790,19 +812,27 @@ class ParamSpace(parseutils.Serializable):
                 float(result) if result.ndim == 0 else result
         return derived
 
-    def derived_elements(self, values: ParamValues) -> dict[str, float]:
+    def derived_elements(
+            self,
+            values: ParamValues,
+            functions: ParamFunctions | None = None
+    ) -> dict[str, float]:
         """
         Return the value of each element of each derived value (see
-        derived_values), by element name (e.g. 'v22', 'vs[1]'; the
-        elements of an array in its flat order).
+        derived_values, with the given functions of the models), by
+        element name (e.g. 'v22', 'vs[1]'; the elements of an array in its
+        flat order).
 
         Raises
         ------
+        ValueError
+            If a derived value calls a function of the models, and they
+            are not given.
         ParamEvaluationError
             If an expression fails.
         """
         elements = {}
-        for name, value in self.derived_values(values).items():
+        for name, value in self.derived_values(values, functions).items():
             if np.ndim(value) == 0:
                 elements[name] = float(value)
                 continue
@@ -830,7 +860,10 @@ class ParamSpace(parseutils.Serializable):
         return needed
 
     def _finite_derived_values(
-            self, values: ParamValues, names: Collection[str]
+            self,
+            values: ParamValues,
+            names: Collection[str],
+            functions: ParamFunctions | None
     ) -> ParamValues:
         """
         Return the derived values that an expression reads (see
@@ -841,7 +874,7 @@ class ParamSpace(parseutils.Serializable):
         ParamEvaluationError
             If one fails or is not finite.
         """
-        derived = self.derived_values(values, names)
+        derived = self.derived_values(values, functions, names)
         if bad := [
                 f"'{name}' is {derived[name]}" for name in sorted(names)
                 if not np.all(np.isfinite(derived[name]))]:
@@ -885,7 +918,7 @@ class ParamSpace(parseutils.Serializable):
                 else self._start_property(key, parsed, prop, starts)
         return ParamSpace(
             self._pdescs, properties, self._transforms, self._constants,
-            self._modes, self._priors, self._derived, self._functions)
+            self._modes, self._priors, self._derived, self._function_names)
 
     def element_values(self, values: ParamValues) -> dict[str, float]:
         """

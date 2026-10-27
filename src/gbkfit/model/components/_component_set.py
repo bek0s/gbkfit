@@ -386,6 +386,13 @@ class ComponentSet:
         """
         return GalaxyFunctions(self, driver, redshift, sky_origin)
 
+    def function_names(self) -> tuple[str, ...]:
+        """
+        Return the names of the functions of a galaxy of the components
+        (see plan_functions), without planning them.
+        """
+        return GalaxyFunctions.names_of(self)
+
     def plan(
             self,
             driver: Driver,

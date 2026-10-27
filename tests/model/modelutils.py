@@ -84,5 +84,6 @@ def config_group_plan(config):
     drivers, as gbkfit.load loads it.
     """
     from gbkfit import setup
-    return setup._load_group_plan(
-        config, config_group(config), setup._load_drivers(config))
+    group = config_group(config)
+    return group.plan(*setup._load_placement(
+        config, group, setup._load_drivers(config)))

@@ -369,6 +369,13 @@ class Galaxy(parseutils.Serializable):
         return self._component_set.plan_functions(
             _or_host(driver), self.redshift(), sky_origin)
 
+    def function_names(self) -> tuple[str, ...]:
+        """
+        Return the names of the functions of the galaxy (see
+        plan_functions), without planning them.
+        """
+        return self._component_set.function_names()
+
     def plan(
             self,
             driver: Driver,

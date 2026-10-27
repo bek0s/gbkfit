@@ -352,7 +352,7 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
                 summary(r) for r in objective.residual_vector_h(values, True)],
             solved=summary(list(evaluation.solved.values()))
             if params.solves() else None)
-        derived = params.derived_values(values)
+        derived = params.derived_values(values, group_plan.functions())
         golden['derived'] = {
             name: summary(value) for name, value in derived.items()}
         if params.priors():

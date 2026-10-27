@@ -58,6 +58,38 @@ def test_a_configuration_with_data_sets_up_its_objective(tmp_path):
             output.kind for output in outputs.values()}
 
 
+def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
+    # (of the objects of the sections of the configuration: the group of
+    # its galaxies and observations, and its parameters)
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import ObservationGroup, observation_parser
+    from gbkfit.params import ParamSpace
+    obs = image(tmp_path / 'image.fits') | dict(
+        data=dict(data=str(tmp_path / 'image.fits')))
+    with gbkfit.load(dict(
+            galaxies=[GALAXY], observations=[obs], params=PARAMS)) as loaded:
+        expected = loaded.evaluate().objective.merits
+    group = ObservationGroup(
+        galaxy_parser.load(GALAXY), observation_parser.load(obs))
+    params = ParamSpace(group.pdescs(), PARAMS['properties'])
+    with gbkfit.Setup(group, params) as built:
+        assert built.evaluate().objective.merits == expected
+
+
+def test_a_setup_takes_the_parameters_of_its_group():
+    from gbkfit.model import galaxy_parser
+    from gbkfit.observation import ObservationGroup, observation_parser
+    from gbkfit.params import ParamScalarDesc, ParamSpace
+    group = ObservationGroup(
+        galaxy_parser.load(GALAXY), observation_parser.load(observation()))
+    with pytest.raises(ConfigError, match="they lack"):
+        gbkfit.Setup(group, ParamSpace(dict(a=ParamScalarDesc()), dict(a=1)))
+    params = ParamSpace(
+        group.pdescs(), PARAMS['properties'], function_names=['vcirc'])
+    with pytest.raises(ConfigError, match=r"no functions \['vcirc'\]"):
+        gbkfit.Setup(group, params)
+
+
 def test_the_outputs_of_an_evaluation_are_its_own():
     # (the plan reuses its arrays of the models: the outputs of a second
     # evaluation must not overwrite those of the first)
@@ -120,8 +152,9 @@ def load_plan(galaxy=GALAXY, **sections):
     the sections of a configuration, on its drivers.
     """
     cfg = dict(galaxies=[galaxy]) | sections
-    return setup._load_group_plan(
-        cfg, setup._load_observation_group(cfg), setup._load_drivers(cfg))
+    group = setup._load_observation_group(cfg)
+    return group.plan(*setup._load_placement(
+        cfg, group, setup._load_drivers(cfg)))
 
 
 def test_observations_use_the_drivers_of_the_configuration():

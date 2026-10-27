@@ -312,7 +312,7 @@ def test_the_outputs_have_the_solved_scales(driver):
     spectra = model(driver)
     error = 1e-3 * spectra.max()
     obj, params = objective(driver, 2 * spectra, error)
-    setup = Setup(obj.group_plan(), params, obj, None, None)
+    setup = Setup(obj.group(), params, driver=driver)
     outputs = {
         x.kind: x.value for x in setup.outputs(setup.evaluate()).values()}
     scales = best_scales(spectra, 2 * spectra, error)

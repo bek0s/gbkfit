@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 import scipy.linalg
 
-from .space import ParamSpace, ParamValues
+from .space import ParamFunctions, ParamSpace, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -60,10 +60,16 @@ class JointPrior(parseutils.TypedSerializable, abc.ABC):
     """
 
     @abc.abstractmethod
-    def residuals(self, params: ParamSpace) -> Residuals:
+    def residuals(
+            self,
+            params: ParamSpace,
+            functions: ParamFunctions | None = None
+    ) -> Residuals:
         """
         Return the function of the residuals of the prior, of the values
-        of the parameters of a space (whose expressions it compiles).
+        of the parameters of a space (whose expressions it compiles), with
+        the functions of the models that the derived values they read
+        call (see ParamSpace.derived_values).
 
         Raises
         ------
@@ -112,8 +118,12 @@ class JointPriorGauss(JointPrior):
         self._mean = mean
         self._std = std
 
-    def residuals(self, params: ParamSpace) -> Residuals:
-        expression = params.expression(self._expr)
+    def residuals(
+            self,
+            params: ParamSpace,
+            functions: ParamFunctions | None = None
+    ) -> Residuals:
+        expression = params.expression(self._expr, functions)
         mean = np.asarray(self._mean, dtype=float)
         std = np.asarray(self._std, dtype=float)
         return lambda values: ((expression(values) - mean) / std).ravel()
@@ -179,10 +189,14 @@ class JointPriorSmooth(JointPrior):
         self._std = std
         self._positions = positions
 
-    def residuals(self, params: ParamSpace) -> Residuals:
-        expression = params.expression(self._expr)
+    def residuals(
+            self,
+            params: ParamSpace,
+            functions: ParamFunctions | None = None
+    ) -> Residuals:
+        expression = params.expression(self._expr, functions)
         positions = None if self._positions is None \
-            else params.expression(self._positions)
+            else params.expression(self._positions, functions)
 
         def residuals(values: ParamValues) -> np.ndarray:
             x = expression(values)
@@ -296,8 +310,12 @@ class JointPriorSmooth2D(JointPrior):
         self._order = order
         self._std = std
 
-    def residuals(self, params: ParamSpace) -> Residuals:
-        expression = params.expression(self._expr)
+    def residuals(
+            self,
+            params: ParamSpace,
+            functions: ParamFunctions | None = None
+    ) -> Residuals:
+        expression = params.expression(self._expr, functions)
         nx, ny = self._size
 
         def residuals(values: ParamValues) -> np.ndarray:
@@ -372,8 +390,12 @@ class JointPriorBound(JointPrior):
         self._lower = lower
         self._upper = upper
 
-    def residuals(self, params: ParamSpace) -> Residuals:
-        expression = params.expression(self._expr)
+    def residuals(
+            self,
+            params: ParamSpace,
+            functions: ParamFunctions | None = None
+    ) -> Residuals:
+        expression = params.expression(self._expr, functions)
 
         def residuals(values: ParamValues) -> np.ndarray:
             g = expression(values).ravel()
@@ -441,8 +463,13 @@ class JointPriorMVN(JointPrior):
         self._mean = tuple(float(m) for m in mean)
         self._cov = tuple(tuple(float(c) for c in row) for row in cov)
 
-    def residuals(self, params: ParamSpace) -> Residuals:
-        expressions = [params.expression(expr) for expr in self._exprs]
+    def residuals(
+            self,
+            params: ParamSpace,
+            functions: ParamFunctions | None = None
+    ) -> Residuals:
+        expressions = [
+            params.expression(expr, functions) for expr in self._exprs]
         mean = np.array(self._mean)
 
         def residuals(values: ParamValues) -> np.ndarray:
@@ -470,18 +497,24 @@ joint_prior_parser.register(JointPriorBound)
 joint_prior_parser.register(JointPriorMVN)
 
 
-def joint_prior_residuals(params: ParamSpace) -> list[Residuals]:
+def joint_prior_residuals(
+        params: ParamSpace,
+        functions: ParamFunctions | None = None
+) -> list[Residuals]:
     """
     Return the residual functions of the priors on several parameters of
-    a parameter space (its priors: see ParamSpace), in order.
+    a parameter space (its priors: see ParamSpace), in order, with the
+    functions of the models that the derived values they read call (see
+    ParamSpace.derived_values).
 
     Raises
     ------
     ConfigError
         If a prior is invalid (with the path 'priors[i]').
     """
-    functions = []
+    residuals = []
     for i, info in enumerate(params.priors()):
         with parseutils.config_path('priors', i):
-            functions.append(joint_prior_parser.load(info).residuals(params))
-    return functions
+            residuals.append(
+                joint_prior_parser.load(info).residuals(params, functions))
+    return residuals

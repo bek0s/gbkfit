@@ -163,7 +163,8 @@ class FitProblem:
         self._priors = None if priors is None else tuple(priors)
         if self._priors is not None and set(self._priors) == {None}:
             self._priors = None
-        self._joint = joint_prior_residuals(params)
+        self._joint = joint_prior_residuals(
+            params, objective.group_plan().functions())
         self._precision = max(
             float(np.finfo(obs.dtype()).eps)
             for obs in objective.group().observations())
@@ -246,6 +247,20 @@ class FitProblem:
         if self._best_x is None:
             return None
         return self._best_x.copy(), self._best_chi2
+
+    def derived_elements(self, values: ParamValues) -> dict[str, float]:
+        """
+        Return the value of each element of each derived value at the
+        values of the parameters, with the functions of the models of the
+        objective (see ParamSpace.derived_elements).
+
+        Raises
+        ------
+        ParamEvaluationError
+            If an expression fails.
+        """
+        return self._params.derived_elements(
+            values, self._objective.group_plan().functions())
 
     def evaluate(self, x: npt.ArrayLike) -> ParamValues:
         """

@@ -242,8 +242,8 @@ def test_functions_of_a_group_prefixed():
     group = ObservationGroup([galaxy], [ObservationSky(
         PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)),
         line_of_sight_parser.load(dict(type='grid')))])
-    functions = group.plan().plan_functions()
-    assert functions.names() == ('G',) + tuple(
+    functions = group.plan().functions()
+    assert functions.names() == group.function_names() == ('G',) + tuple(
         f'north_{name}' for name in galaxy.plan_functions().names())
     bound = functions.bind({f'north_{k}': v for k, v in PARAMS.items()})
     assert bound['G'] == pytest.approx(G, rel=1e-6)
@@ -268,8 +268,8 @@ def test_derived_values_of_a_group():
             v_bh='vcirc_bh(2.0)', m_bh='v_bh ** 2 * 2.0 / G',
             v_sigma='rotation_gas(10) / dispersion_gas(10)')),
         pdescs=group.pdescs(), constants=group.constants(),
-        functions=group.plan().plan_functions())
-    derived = params.derived_values(params.evaluate())
+        function_names=group.function_names())
+    derived = params.derived_values(params.evaluate(), group.plan().functions())
     assert derived['v_bh'] == pytest.approx(np.sqrt(G * 1e10 / 2), rel=1e-9)
     assert derived['m_bh'] == pytest.approx(1e10, rel=1e-9)
     bound = gas_galaxy().plan_functions().bind(PARAMS)

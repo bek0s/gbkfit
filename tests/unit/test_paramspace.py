@@ -544,36 +544,38 @@ class Functions(ParamFunctions):
         return dict(vcirc=lambda R: values['a'] * np.asarray(R), G=2.0)
 
 
-def derived_params(derived, properties=None, functions=None):
-    """Parameters a and b, with derived values (see Functions)."""
+def derived_params(derived, properties=None):
+    """
+    Parameters a and b, with derived values that can call the functions
+    of Functions.
+    """
     return param_space_parser.load(
         dict(properties=properties or dict(a=3, b={'value': 2}),
              derived=derived),
-        pdescs=make_pdescs(a=S, b=S),
-        functions=functions or Functions())
+        pdescs=make_pdescs(a=S, b=S), function_names=Functions().names())
 
 
 def test_derived_values():
     # Each derived value reads the functions, and those before it; only
     # those wanted are evaluated, with those they read, and the functions
-    # are bound only for those that use them
+    # are bound only for those that use them (and needed only then)
     functions = Functions()
-    params = derived_params(
-        dict(v='vcirc(2 * b)', m='v ** 2 / G', c='a + 1',
-             vs='vcirc(np.array([1, 2]))'),
-        functions=functions)
+    params = derived_params(dict(
+        v='vcirc(2 * b)', m='v ** 2 / G', c='a + 1',
+        vs='vcirc(np.array([1, 2]))'))
     values = params.evaluate()
-    derived = params.derived_values(values)
+    derived = params.derived_values(values, functions)
     np.testing.assert_array_equal(derived.pop('vs'), [3, 6])
     assert derived == dict(v=12, m=72, c=4)
-    assert params.derived_values(values, ['m']) == dict(v=12, m=72)
+    assert params.derived_values(values, functions, ['m']) == dict(v=12, m=72)
     assert functions.nbinds == 2
-    assert params.derived_values(values, ['c']) == dict(c=4)
-    assert functions.nbinds == 2
+    assert params.derived_values(values, names=['c']) == dict(c=4)
+    with pytest.raises(ValueError, match=r"\['m', 'v'\] call functions"):
+        params.derived_values(values, names=['m'])
     dumped = params.dump()
     assert dumped['derived'] == params.derived()
     assert params.with_values(dict(b=1)).derived_values(
-        params.evaluate([1]), ['v']) == dict(v=6)
+        params.evaluate([1]), functions, ['v']) == dict(v=6)
 
 
 @pytest.mark.parametrize('derived, properties, message', [
@@ -597,14 +599,15 @@ def test_expressions_read_derived_values():
     # derived values they read must be finite)
     params = derived_params(dict(v='vcirc(b)', w='v * np.nan'))
     values = params.evaluate()
-    np.testing.assert_array_equal(params.expression('v / 2')(values), [3])
+    np.testing.assert_array_equal(
+        params.expression('v / 2', Functions())(values), [3])
     with pytest.raises(ConfigError, match='derive a value with it'):
         params.expression('vcirc(1)')
     with pytest.raises(ParamEvaluationError, match="'w' is nan"):
-        params.expression('w')(values)
+        params.expression('w', Functions())(values)
 
 
 def test_failed_derived_value():
     params = derived_params(dict(v='vcirc(b)[3]'))
     with pytest.raises(ParamEvaluationError, match="derived value 'v'"):
-        params.derived_values(params.evaluate())
+        params.derived_values(params.evaluate(), Functions())

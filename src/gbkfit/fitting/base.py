@@ -454,7 +454,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         values = params.evaluate(x, evaluation.solved)
         problems = []
         try:
-            derived = params.derived_elements(values)
+            derived = problem.derived_elements(values)
         except ParamEvaluationError as e:
             derived = {}
             problems.append(('derived_errors', f"no derived values: {e}"))
@@ -613,7 +613,7 @@ def _posterior(
         if weights is not None and weights[i] == 0:
             continue
         try:
-            row = sample_values(params, x, derived)
+            row = sample_values(problem, x, derived)
         except ParamEvaluationError:
             continue
         if unused is not None:

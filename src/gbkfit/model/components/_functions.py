@@ -123,19 +123,21 @@ class GalaxyFunctions:
             sky_origin: tuple[float, float] | None = None
     ):
         components = component_set.components()
-        mass_model = component_set.mass_model()
         self._component_set = component_set
         self._stage = GalaxyStage(component_set, driver, redshift, sky_origin)
-        # The disks with velocity or dispersion traits, by the index of
-        # their component, and the suffixes of their functions
-        self._suffixes = {
-            i: '' if cmp.name() is None else f'_{cmp.name()}'
-            for i, cmp in enumerate(components)
-            if (disk := cmp.density_disk()) is not None
-            and (disk.traits('vpt') or disk.traits('dpt'))}
+        self._suffixes = _disk_suffixes(component_set)
         self._disk_plans = {
             i: components[i].density_disk().plan(driver, 0, np.float64)
             for i in self._suffixes}
+        self._names = self.names_of(component_set)
+
+    @staticmethod
+    def names_of(component_set: 'ComponentSet') -> tuple[str, ...]:
+        """
+        Return the names of the functions of a galaxy of the given
+        components (see the class), without planning them.
+        """
+        mass_model = component_set.mass_model()
         names = []
         if mass_model is not None:
             names += ['vcirc', 'vnewton'] + [
@@ -151,9 +153,9 @@ class GalaxyFunctions:
                 f'slope_{cmp.name()}' for cmp in mass_model.components()
                 if cmp.gives_enclosed_mass()]
             names += ['kpc_per_arcsec']
-        for suffix in self._suffixes.values():
+        for suffix in _disk_suffixes(component_set).values():
             names += [f'rotation{suffix}', f'dispersion{suffix}']
-        self._names = tuple(names)
+        return tuple(names)
 
     @staticmethod
     def family(name: str) -> str | None:
@@ -458,3 +460,16 @@ def _density_slope(
         second = (hi - 2 * mid + lo) / h ** 2
         slope = np.where(first > 0, first + second / first - 3, np.nan)
     return slope.reshape(radii.shape)
+
+
+def _disk_suffixes(component_set: 'ComponentSet') -> dict[int, str]:
+    """
+    Return the disks of a galaxy with velocity or dispersion traits, by
+    the index of their component: the suffixes of their functions (see
+    GalaxyFunctions).
+    """
+    return {
+        i: '' if cmp.name() is None else f'_{cmp.name()}'
+        for i, cmp in enumerate(component_set.components())
+        if (disk := cmp.density_disk()) is not None
+        and (disk.traits('vpt') or disk.traits('dpt'))}

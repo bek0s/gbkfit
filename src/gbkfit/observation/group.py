@@ -422,6 +422,19 @@ class ObservationGroup:
         """Return the constants of the galaxies, prefixed."""
         return self._constants
 
+    def function_names(self) -> tuple[str, ...]:
+        """
+        Return the names of the functions of the galaxies that the derived
+        values of the parameters can use (see GroupPlan.functions),
+        without planning them: those of each galaxy (see
+        Galaxy.function_names), prefixed as its parameters, and the
+        gravitational constant G.
+        """
+        return ('G',) + tuple(
+            f'{prefix}{name}'
+            for galaxy, prefix in zip(self._galaxies, self._prefixes)
+            for name in galaxy.function_names())
+
     def galaxy_label(self, index: int) -> str:
         """
         Return the id of the galaxy of the given index in the extra
