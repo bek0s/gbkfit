@@ -1,12 +1,15 @@
 """
-Tests for the parameter descriptions, and the parsing of the keys and the
-expressions of parameter properties. Their behaviour as a whole is tested
-in test_paramspace.py.
+Tests for the parameter descriptions (and the units of those of the
+models), and the parsing of the keys and the expressions of parameter
+properties. Their behaviour as a whole is tested in test_paramspace.py.
 """
+
+import pathlib
 
 import numpy as np
 import pytest
 
+import gbkfit
 from gbkfit.params._expressions import Expression, InvalidExpressionError
 from gbkfit.params._keys import InvalidKeyError, parse_key
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc, pdesc_parser
@@ -48,6 +51,33 @@ def test_param_desc_vector():
 def test_invalid_param_descs(make, message):
     with pytest.raises(ConfigError, match=message):
         make()
+
+
+GOLDEN_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
+
+# Golden configurations of most kinds of parameters, each with those of its
+# parameters that have no unit: the light of components whose emission has
+# none (in the units of the data: the amplitudes of their density traits
+# and light profiles, the flux of points), the mass per unit of that
+# light, and the jitter of a noise of data of no unit
+UNITLESS_PARAMS = dict(
+    blobs_maps_selection={'pt_a', 'pt1_a', 'pt2_a'},
+    disk_cone_lines={'disk_pt_a', 'cone_pt_a'},
+    dust_extinction_band=set(),
+    equilibrium_heights_mond={'gas_pt_a', 'mass_gas_upsilon'},
+    lens_foreground={'pt_a'},
+    points_particles_band={'nucleus_flux'},
+    profile_table_mass=set(),
+    spiral_bar_flows={'gas_pt_a'},
+    stars_orbits={'stars_i0', 'mass_lum_upsilon'},
+    upper_limits_fitted_noise={'pt_a', 'halpha_noise_jitter_moment1'})
+
+
+@pytest.mark.parametrize('case, unitless', UNITLESS_PARAMS.items())
+def test_params_of_models_have_units(case, unitless):
+    group = gbkfit.describe(str(GOLDEN_DIR / case / 'config.yaml')).group
+    assert {name for name, pdesc in group.pdescs().items()
+            if pdesc.unit() is None} == unitless
 
 
 PDESCS = dict(a=ParamScalarDesc(), v=ParamVectorDesc(12))

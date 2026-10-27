@@ -4,6 +4,7 @@ import typing
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
+import astropy.units
 import numpy as np
 import numpy.typing as npt
 
@@ -16,7 +17,7 @@ from .._nodal import (
     NodalTraits, TraitParams, fill_param_values, native_traits, subring_radii)
 from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
-from ..geometries import GEOMETRY_PARAMS
+from ..geometries import GEOMETRY_PARAMS, GEOMETRY_UNITS
 from ..parts import (
     CentralEquilibrium, Equilibrium, JeansEquilibrium,
     SelfGravitatingEquilibrium)
@@ -35,8 +36,10 @@ TRAIT_KINDS = (
 
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
-    """Return the parameter of the given name, node-wise if nw."""
-    return {key: ParamVectorDesc(nnodes) if nw else ParamScalarDesc()}
+    """Return the geometric parameter of the given name, node-wise if nw."""
+    unit = GEOMETRY_UNITS[key]
+    return {key: ParamVectorDesc(nnodes, unit=unit) if nw
+            else ParamScalarDesc(unit=unit)}
 
 
 class NodalDisk(abc.ABC):
@@ -50,6 +53,7 @@ class NodalDisk(abc.ABC):
             interp: type[Interpolator],
             traits_: dict[str, Sequence[Trait]],
             prefixes: dict[str, str | Sequence[str]],
+            density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
             equilibrium: Equilibrium | None = None
     ):
@@ -58,10 +62,11 @@ class NodalDisk(abc.ABC):
         can leave kinds out (no traits). prefixes has the prefix of the
         parameters of the traits of each kind in traits_ (e.g. 'pt' for
         the density polar traits), or of each of its traits (e.g.
-        'op_halpha_'). opacity_lines has the line of each trait of line
-        opacity ('opt'): its index among the lines of the emission.
-        equilibrium is its vertical equilibrium, if any (see
-        parts.Equilibrium).
+        'op_halpha_'). density_units has the unit of the density of the
+        density polar traits of each kind, if known (see NodalTraits).
+        opacity_lines has the line of each trait of line opacity ('opt'):
+        its index among the lines of the emission. equilibrium is its
+        vertical equilibrium, if any (see parts.Equilibrium).
         """
 
         subrnodes = subring_radii(rnodes, rstep)
@@ -73,7 +78,8 @@ class NodalDisk(abc.ABC):
         self._subrnodes = subrnodes
         self._interp = interp
         self._traits = NodalTraits(
-            TRAIT_KINDS, traits_, prefixes, rnodes, subrnodes, interp)
+            TRAIT_KINDS, traits_, prefixes, density_units, rnodes,
+            subrnodes, interp)
         self._opacity_lines = tuple(opacity_lines)
         self._equilibrium = equilibrium
 

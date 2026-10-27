@@ -462,16 +462,17 @@ class ObservationSky(Observation):
         if (scale := self.flux_scale()) is not None:
             name, kind = scale
             desc = f"the flux scale of observation {self._name}"
-            flux_scale[name] = ParamScalarDesc(desc=desc, minimum=0) \
+            flux_scale[name] = ParamScalarDesc(desc=desc, minimum=0, unit='') \
                 if kind.axis is None \
-                else ParamVectorDesc(kind.size, desc=desc, minimum=0)
+                else ParamVectorDesc(kind.size, desc=desc, minimum=0, unit='')
         descs = (
-            "the offset of its frame to the west (arcsec)",
-            "the offset of its frame to the north (arcsec)",
-            "the offset of its velocities (km/s)")
+            ("the offset of its frame to the west", 'arcsec'),
+            ("the offset of its frame to the north", 'arcsec'),
+            ("the offset of its velocities", 'km/s'))
         offsets = {
-            param: ParamScalarDesc(desc=f"{desc}, of observation {self._name}")
-            for param, desc in zip(self.offset_params(), descs)
+            param: ParamScalarDesc(
+                desc=f"{desc}, of observation {self._name}", unit=unit)
+            for param, (desc, unit) in zip(self.offset_params(), descs)
             if param is not None}
         return flux_scale | offsets | self._foreground.pdescs() \
             | super().pdescs()

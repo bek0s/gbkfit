@@ -20,7 +20,7 @@ from ._units import DataUnit
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
-from .geometries import Geometry
+from .geometries import GEOMETRY_UNITS, Geometry
 from .lines import Band, LineCatalogue, LinePlacement
 from .points import band_light, line_light
 from .roles import (
@@ -428,7 +428,9 @@ class Particles(Component):
         else:
             self._bands = emission.bands()
             light = self._bands
-        pdescs = {name: ParamScalarDesc() for name in names}
+        pdescs = {
+            name: ParamScalarDesc(unit=GEOMETRY_UNITS[name])
+            for name in names}
         if repeated := sorted(set(light.pdescs()) & set(pdescs)):
             raise ConfigError(
                 f"the parameters of the flux ratios have the names of other "

@@ -19,6 +19,7 @@ from .._native import EmissionSetup, NativeComponentPlan, emission_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args,
     with_default_height_traits)
+from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..geometries import Geometry
@@ -199,6 +200,9 @@ def make_disk(
     options = dict(
         loose=bool(loose), tilted=bool(tilted), **node_args,
         traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
+        density_units=dict(
+            rpt=_units.density_unit(emission),
+            opt=_units.line_opacity_unit(emission)),
         opacity_lines=opacity_lines,
         equilibrium=None if kinematics is None else kinematics.equilibrium())
     if clouds is None:

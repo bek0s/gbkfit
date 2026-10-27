@@ -15,7 +15,8 @@ import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import (
-    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
+    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc,
+    pdescs_with_units)
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ...mass._numerics import (
@@ -32,7 +33,7 @@ from .._native import (
 from .._units import DataUnit, mass_per_unit
 from ..base import (
     Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
-from ..geometries import Geometry
+from ..geometries import GEOMETRY_UNITS, Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -200,11 +201,12 @@ class LightSersic(LightProfile):
         return dict(
             ie=ParamScalarDesc(
                 desc="the surface brightness at the effective radius, "
-                     "face-on (the unit of the emission)"),
+                     "face-on"),
             re=ParamScalarDesc(
-                desc="the effective radius (arcsec)", minimum=0),
+                desc="the effective radius", minimum=0, unit='arcsec'),
             n=ParamScalarDesc(
-                desc="the Sersic index", minimum=0.3, maximum=12))
+                desc="the Sersic index", minimum=0.3, maximum=12,
+                unit=''))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('ie',)
@@ -334,13 +336,13 @@ class LightMGE(LightProfile):
         return dict(
             i0=ParamVectorDesc(
                 n, desc="the peak surface brightness of each Gaussian, "
-                        "face-on (the unit of the emission)"),
+                        "face-on"),
             sigma=ParamVectorDesc(
-                n, desc="the dispersion of each Gaussian (arcsec)",
-                minimum=0),
+                n, desc="the dispersion of each Gaussian", minimum=0,
+                unit='arcsec'),
             q=ParamVectorDesc(
                 n, desc="the intrinsic axis ratio of each Gaussian "
-                        "(height over width)", minimum=0))
+                        "(height over width)", minimum=0, unit=''))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('i0',)
@@ -448,12 +450,9 @@ spheroid_kinematics_parser = parseutils.TypedParser(SpheroidKinematics, [
 # The geometric parameters of a spheroid: its centre, the orientation of
 # its axis unless it is a sphere without kinematics, and with kinematics,
 # its systemic velocity
-GEOMETRY_PDESCS = dict(
-    xpos=ParamScalarDesc(),
-    ypos=ParamScalarDesc(),
-    posa=ParamScalarDesc(),
-    incl=ParamScalarDesc(),
-    vsys=ParamScalarDesc())
+GEOMETRY_PDESCS = {
+    name: ParamScalarDesc(unit=GEOMETRY_UNITS[name])
+    for name in ('xpos', 'ypos', 'posa', 'incl', 'vsys')}
 
 
 class Spheroid(Component):
@@ -590,7 +589,11 @@ class Spheroid(Component):
             if name in ('xpos', 'ypos')
             or (name in ('posa', 'incl') and axis)
             or (name == 'vsys' and kinematics is not None)}
-        own = self._geometry_pdescs | profile.pdescs() \
+        # (the amplitudes of the profile in the unit of its light)
+        light = pdescs_with_units(
+            profile.pdescs(),
+            dict.fromkeys(profile.amplitudes(), emission.unit()))
+        own = self._geometry_pdescs | light \
             | (shape.pdescs() if shape is not None else {}) \
             | (self._motion.pdescs() if self._motion is not None else {})
         self._bands = make_bands(own, emission)
@@ -649,9 +652,10 @@ class Spheroid(Component):
     ) -> np.ndarray:
         """
         Return its surface density (its projection on the sky, in the unit
-        of its emission per arcsec^2) at the values of its parameters, at
-        the points (x, y) of the sky from its centre (arcsec, as xpos and
-        ypos): the sum of the terms of its projection (see
+        of its emission, itself per area of the sky) at the values of its
+        parameters, at the points (x, y) of the sky from its centre
+        (arcsec, as xpos and ypos): the sum of the terms of its projection
+        (see
         LightProfile.projected_terms), as its images have it.
         """
         p = np.radians(params.get('posa', 0.0))

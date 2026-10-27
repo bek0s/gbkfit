@@ -137,6 +137,9 @@ class MassDisk(MassComponent):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._surface.pdescs() | self._vertical.pdescs()
 
+    def mass_ratios(self) -> dict[str, str]:
+        return self._surface.mass_ratios()
+
     def vcirc2(
             self,
             R: npt.ArrayLike,

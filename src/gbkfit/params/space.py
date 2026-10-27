@@ -15,7 +15,6 @@ import numbers
 from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any, TypeAlias
 
-import astropy.units
 import numpy as np
 import numpy.typing as npt
 
@@ -25,7 +24,7 @@ from gbkfit.params._expressions import (
 from gbkfit.params._keys import (
     InvalidKeyError, Key, element_name, element_names, parse_key)
 from gbkfit.params.modes import ParamMode, param_mode_parser
-from gbkfit.params.pdescs import ParamDesc, make_param_unit
+from gbkfit.params.pdescs import ParamDesc, ParamUnit, make_param_unit
 from gbkfit.params.priors import (
     Prior, PriorTruncated, PriorUniform, prior_parser)
 from gbkfit.params.solves import Solve, solve_parser
@@ -606,7 +605,7 @@ class ParamSpace(parseutils.Serializable):
         """Return the expressions of the derived values, by name."""
         return dict(self._derived)
 
-    def unit(self, name: str) -> astropy.units.UnitBase | None:
+    def unit(self, name: str) -> ParamUnit | None:
         """
         Return the unit of the values of a parameter or a derived value by
         name, or of an element (e.g. 'vpt_vt[3]'), if it has one (see
@@ -1515,7 +1514,7 @@ param_space_parser = parseutils.BasicParser(ParamSpace)
 
 def _derived_values(
         derived: Mapping[str, str | Mapping[str, str]]
-) -> tuple[dict[str, str], dict[str, astropy.units.UnitBase]]:
+) -> tuple[dict[str, str], dict[str, ParamUnit]]:
     """
     Return the expressions of derived values (see ParamSpace), by name,
     and the units of those that have one.

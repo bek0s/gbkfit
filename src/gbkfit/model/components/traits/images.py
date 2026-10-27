@@ -318,6 +318,7 @@ class RPTraitImage(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
+        # (a has no unit: that of the image is not known)
         nx, ny = self._size
         params = dict(
             m=ParamVectorDesc(
@@ -327,10 +328,16 @@ class RPTraitImage(RPTrait):
         if self._offsets:
             params |= dict(
                 dx=ParamScalarDesc(
-                    desc="the offset of the image to the west (arcsec)"),
+                    desc="the offset of the image to the west",
+                    unit='arcsec'),
                 dy=ParamScalarDesc(
-                    desc="the offset of the image to the north (arcsec)"))
+                    desc="the offset of the image to the north",
+                    unit='arcsec'))
         return params
+
+    def amplitudes(self) -> tuple[str, ...]:
+        # (the light of the cells, m; a is per unit of the image)
+        return ('m',)
 
     def from_galaxy(self) -> ImageInput:
         return ImageInput(('m',))

@@ -7,6 +7,7 @@ import abc
 from collections.abc import Sequence
 from typing import Any
 
+import astropy.units
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
@@ -16,6 +17,7 @@ from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import NodalTraits, native_traits, subring_radii
 from ..base import (
     ComponentState, FieldsLayout, FrameParams, NativeGrid)
+from ..geometries import GEOMETRY_UNITS
 from ..traits import Trait
 
 
@@ -38,16 +40,12 @@ SIDES = ('both', 'positive', 'negative')
 
 # The geometric parameters of a cone: its systemic velocity (only with
 # velocity traits), its apex, its axis and its wall
-GEOMETRY_PDESCS = dict(
-    vsys=ParamScalarDesc(),
-    xpos=ParamScalarDesc(),
-    ypos=ParamScalarDesc(),
-    posa=ParamScalarDesc(),
-    incl=ParamScalarDesc(),
+GEOMETRY_PDESCS = {
+    name: ParamScalarDesc(unit=unit) for name, unit in GEOMETRY_UNITS.items()
+} | dict(
     wall=ParamScalarDesc(
-        desc="the angle of the mid-surface of the walls from the axis "
-             "(degrees)",
-        minimum=0, maximum=90))
+        desc="the angle of the mid-surface of the walls from the axis",
+        minimum=0, maximum=90, unit='deg'))
 
 
 class NodalCone(abc.ABC):
@@ -67,13 +65,15 @@ class NodalCone(abc.ABC):
             rstep: float,
             interp: type[Interpolator],
             traits_: dict[str, Sequence[Trait]],
-            prefixes: dict[str, str]
+            prefixes: dict[str, str],
+            density_units: dict[str, astropy.units.UnitBase | None]
     ):
         """
         traits_ has the traits of each kind, keyed as in TRAIT_KINDS, and
         can leave kinds out (no traits); prefixes has the prefix of the
         parameters of the traits of each kind in traits_ (e.g. 'pt' for the
-        density polar traits).
+        density polar traits); density_units has the unit of the density
+        of the density polar traits, if known (see NodalTraits).
         """
         subrnodes = subring_radii(rnodes, rstep)
         self._sides = sides
@@ -82,7 +82,8 @@ class NodalCone(abc.ABC):
         self._subrnodes = subrnodes
         self._interp = interp
         self._traits = NodalTraits(
-            TRAIT_KINDS, traits_, prefixes, rnodes, subrnodes, interp)
+            TRAIT_KINDS, traits_, prefixes, density_units, rnodes,
+            subrnodes, interp)
         self._geometry_pdescs = {
             name: pdesc for name, pdesc in GEOMETRY_PDESCS.items()
             if name != 'vsys' or self.traits('vpt')}

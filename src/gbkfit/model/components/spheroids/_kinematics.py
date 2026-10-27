@@ -362,9 +362,10 @@ class TraitsMotion(SpheroidMotion):
             interp: type[Interpolator]
     ):
         self._subrnodes = subring_radii(rnodes, rstep)
+        # (no density traits: no units of densities)
         self._traits = NodalTraits(
-            TRAIT_KINDS, traits_, TRAIT_PREFIXES, rnodes, self._subrnodes,
-            interp)
+            TRAIT_KINDS, traits_, TRAIT_PREFIXES, {}, rnodes,
+            self._subrnodes, interp)
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._traits.pdescs()

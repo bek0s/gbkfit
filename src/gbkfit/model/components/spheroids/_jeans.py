@@ -81,10 +81,11 @@ class JeansKinematics(SpheroidKinematics):
         return dict(
             beta_z=ParamScalarDesc(
                 desc="the anisotropy, 1 - sigma_z^2 / sigma_R^2",
-                maximum=1),
+                maximum=1, unit=''),
             kappa=ParamScalarDesc(
                 desc="the rotation, the share of <v_phi^2> - sigma_R^2 "
-                     "whose square root is the mean rotation"))
+                     "whose square root is the mean rotation",
+                unit=''))
 
     def uses_mass(self) -> bool:
         return True

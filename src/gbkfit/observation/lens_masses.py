@@ -264,7 +264,8 @@ class LensDeflectionMap(LensMass):
         if not self._scaled:
             return {}
         return dict(scale=ParamScalarDesc(
-            "the scale of the deflection (e.g. D_LS / D_S)", minimum=0))
+            "the scale of the deflection (e.g. D_LS / D_S)", minimum=0,
+            unit=''))
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
@@ -314,7 +315,8 @@ class LensSIE(LensMass):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(theta_e=ParamScalarDesc(
-            "the Einstein radius (arcsec)", minimum=0)) | _ellipse_pdescs()
+            "the Einstein radius", minimum=0, unit='arcsec')
+        ) | _ellipse_pdescs()
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
@@ -361,10 +363,10 @@ class LensEPL(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             theta_e=ParamScalarDesc(
-                "the Einstein radius (arcsec)", minimum=0),
+                "the Einstein radius", minimum=0, unit='arcsec'),
             slope=ParamScalarDesc(
                 "the slope of the density (2 = isothermal)",
-                minimum=1, maximum=3)) | _ellipse_pdescs()
+                minimum=1, maximum=3, unit='')) | _ellipse_pdescs()
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
@@ -410,8 +412,10 @@ class LensNFW(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             kappa_s=ParamScalarDesc(
-                "the convergence scale (rho_s r_s / Sigma_cr)", minimum=0),
-            r_s=ParamScalarDesc("the scale radius (arcsec)", minimum=0)
+                "the convergence scale (rho_s r_s / Sigma_cr)", minimum=0,
+                unit=''),
+            r_s=ParamScalarDesc(
+                "the scale radius", minimum=0, unit='arcsec')
         ) | _ellipse_pdescs()
 
     def deflection(
@@ -488,9 +492,10 @@ class LensMultipole(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             theta_e=ParamScalarDesc(
-                "the Einstein radius of its lens (arcsec)", minimum=0),
-            a=ParamScalarDesc("the strength"),
-            pa=ParamScalarDesc("the position angle (degrees)"),
+                "the Einstein radius of its lens", minimum=0,
+                unit='arcsec'),
+            a=ParamScalarDesc("the strength", unit=''),
+            pa=ParamScalarDesc("the position angle", unit='deg'),
         ) | _centre_pdescs()
 
     def deflection(
@@ -541,8 +546,8 @@ class LensShear(LensMass):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
-            gamma=ParamScalarDesc("the strength", minimum=0),
-            pa=ParamScalarDesc("the position angle (degrees)"))
+            gamma=ParamScalarDesc("the strength", minimum=0, unit=''),
+            pa=ParamScalarDesc("the position angle", unit='deg'))
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
@@ -562,16 +567,17 @@ lens_mass_parser = parseutils.TypedParser(LensMass, [
 def _centre_pdescs() -> dict[str, ParamScalarDesc]:
     """Return the parameters of the centre of a mass."""
     return dict(
-        x=ParamScalarDesc("the centre along x (arcsec)"),
-        y=ParamScalarDesc("the centre along y (arcsec)"))
+        x=ParamScalarDesc("the centre along x", unit='arcsec'),
+        y=ParamScalarDesc("the centre along y", unit='arcsec'))
 
 
 def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
     """Return the parameters of the shape of an elliptical mass."""
     return dict(
         # (q > 0 keeps the deflection finite)
-        q=ParamScalarDesc("the axis ratio", minimum=1e-3, maximum=1),
-        pa=ParamScalarDesc("the position angle (degrees)"),
+        q=ParamScalarDesc(
+            "the axis ratio", minimum=1e-3, maximum=1, unit=''),
+        pa=ParamScalarDesc("the position angle", unit='deg'),
     ) | _centre_pdescs()
 
 

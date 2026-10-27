@@ -285,7 +285,7 @@ class Lines:
         self._ratios = {} if lines is None else {
             f'{line.name()}_ratio': ParamScalarDesc(
                 desc=f"the flux of line {line.name()} relative to line "
-                     f"{lines[0].name()}")
+                     f"{lines[0].name()}", unit='')
             for line in lines[1:]}
 
     def lines(self) -> tuple[Line, ...] | None:
@@ -525,7 +525,7 @@ class Bands:
         self._ratios = {} if bands is None else {
             f'{band.name()}_ratio': ParamScalarDesc(
                 desc=f"the flux in band {band.name()} relative to that in "
-                     f"band {bands[0].name()}")
+                     f"band {bands[0].name()}", unit='')
             for band in bands[1:]}
 
     def bands(self) -> tuple[Band, ...] | None:

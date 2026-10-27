@@ -11,10 +11,11 @@ ParamTable), whose rows are e.g. the blobs of a mixture trait.
 """
 
 import abc
+import copy
 import dataclasses
 import numbers
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, Self, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -30,11 +31,18 @@ __all__ = [
     'ParamTable',
     'ParamVectorDesc',
     'param_tables',
+    'ParamUnit',
     'make_param_unit',
     'pdesc_parser',
+    'pdescs_with_units',
     'load_pdescs_dict',
     'dump_pdescs_dict'
 ]
+
+
+# The unit of the values of a parameter: an astropy unit, or a unit of
+# their logarithm (e.g. dex(solMass), see ParamDesc)
+ParamUnit: TypeAlias = astropy.units.UnitBase | astropy.units.FunctionUnitBase
 
 
 class ParamTable:
@@ -128,7 +136,7 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             desc: str | None,
             minimum: float | None,
             maximum: float | None,
-            unit: str | astropy.units.UnitBase | None = None
+            unit: str | ParamUnit | None = None
     ):
         if (isinstance(size, bool) or not isinstance(size, numbers.Integral)
                 or size < 1):
@@ -160,9 +168,35 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         """Return what it is, if given."""
         return self._desc
 
-    def unit(self) -> astropy.units.UnitBase | None:
+    def unit(self) -> ParamUnit | None:
         """Return the unit of its values, if it has one."""
         return self._unit
+
+    def with_unit(self, unit: str | ParamUnit | None) -> Self:
+        """
+        Return a copy of it of another unit: for the models whose parts
+        describe parameters whose unit the model knows (e.g. the
+        amplitudes of the density traits of a component, in the unit of
+        its light).
+
+        Parameters
+        ----------
+        unit : str or UnitBase, optional
+            The unit of its values (see ParamDesc); None if not known.
+
+        Returns
+        -------
+        ParamDesc
+            The copy (of the same column of a table, if any).
+
+        Raises
+        ------
+        ConfigError
+            If the unit is not a unit.
+        """
+        pdesc = copy.copy(self)
+        pdesc._unit = make_param_unit(unit)
+        return pdesc
 
     def minimum(self) -> float:
         """Return the lowest valid value (-inf if none)."""
@@ -205,7 +239,7 @@ class ParamScalarDesc(ParamDesc):
             desc: str | None = None,
             minimum: float | None = None,
             maximum: float | None = None,
-            unit: str | astropy.units.UnitBase | None = None
+            unit: str | ParamUnit | None = None
     ):
         super().__init__(1, desc, minimum, maximum, unit)
 
@@ -249,7 +283,7 @@ class ParamVectorDesc(ParamDesc):
             desc: str | None = None,
             minimum: float | None = None,
             maximum: float | None = None,
-            unit: str | astropy.units.UnitBase | None = None,
+            unit: str | ParamUnit | None = None,
             column: ParamColumn | None = None
     ):
         super().__init__(size, desc, minimum, maximum, unit)
@@ -334,9 +368,42 @@ def dump_pdescs_dict(pdescs: Mapping[str, ParamDesc]) -> dict[str, Any]:
     return {name: pdesc_parser.dump(pdesc) for name, pdesc in pdescs.items()}
 
 
+def pdescs_with_units(
+        pdescs: Mapping[str, ParamDesc],
+        units: Mapping[str, str | ParamUnit | None]
+) -> dict[str, ParamDesc]:
+    """
+    Return descriptions of parameters with some of other units (see
+    ParamDesc.with_unit): for the models whose parts describe parameters
+    whose units the model knows.
+
+    Parameters
+    ----------
+    pdescs : Mapping
+        The descriptions, by name.
+    units : Mapping
+        The other units (None if not known), by the names of the
+        parameters that take them; names that are not in pdescs are
+        ignored.
+
+    Returns
+    -------
+    dict
+        The descriptions, by name.
+
+    Raises
+    ------
+    ConfigError
+        If a unit is not a unit.
+    """
+    return {
+        name: pdesc.with_unit(units[name]) if name in units else pdesc
+        for name, pdesc in pdescs.items()}
+
+
 def make_param_unit(
-        unit: str | astropy.units.UnitBase | None
-) -> astropy.units.UnitBase | None:
+        unit: str | ParamUnit | None
+) -> ParamUnit | None:
     """
     Return the unit of the values of a parameter (see ParamDesc). Raise
     ConfigError if it is not a unit.

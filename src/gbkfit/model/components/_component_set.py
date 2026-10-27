@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
@@ -52,7 +52,10 @@ def _with_mass_params(
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the components of a galaxy, and those of its
-    distance, its mass and its gravity (if any; Newtonian by default).
+    distance, its mass and its gravity (if any; Newtonian by default), with
+    the mass per unit of the density of a component (see
+    MassModel.mass_ratios) in the unit that the emission of the component
+    gives it (see _units.mass_ratio_unit).
     Raise ConfigError if the distance or the gravity is given without mass
     (their only user), the mass has no distance, a component needs what
     the galaxy does not give (see Component.needs: e.g. the mass), a mass
@@ -101,7 +104,11 @@ def _with_mass_params(
                 f"shares of the components in the squared circular velocity "
                 f"(its dark fraction), which it does not give: {e.message}"
             ) from None
-    taken = distance.pdescs() | mass_model.pdescs() | gravity.pdescs()
+    emissions = {cmp.name(): cmp.emission() for cmp in components}
+    mass = pdescs_with_units(mass_model.pdescs(), {
+        name: _units.mass_ratio_unit(emissions[followed])
+        for name, followed in mass_model.mass_ratios().items()})
+    taken = distance.pdescs() | mass | gravity.pdescs()
     if repeated := sorted(params.keys() & taken.keys()):
         raise ConfigError(
             f"the parameters of the distance, the mass and the gravity have "

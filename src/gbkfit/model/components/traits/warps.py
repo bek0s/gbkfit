@@ -115,5 +115,5 @@ class ZPTraitNWHarmonic(ZPTrait):
         return (self.zmax(), self._option(Harmonic).order)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return self._option(Harmonic).params(nnodes) | dict(
+        return self._option(Harmonic).params(nnodes, unit='arcsec') | dict(
             a=self._amplitude_desc(nnodes))

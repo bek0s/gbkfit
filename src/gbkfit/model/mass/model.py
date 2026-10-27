@@ -167,6 +167,18 @@ class MassModel(parseutils.Serializable):
         """Return its parameters, by name."""
         return self._pdescs
 
+    def mass_ratios(self) -> dict[str, str]:
+        """
+        Return its parameters that are the mass of one of its components
+        per unit of the density of a component of its galaxy (see
+        MassComponent.mass_ratios), each with the name of the component
+        of the galaxy.
+        """
+        return {
+            mapping[name]: followed
+            for component, mapping in zip(self._components, self._mappings)
+            for name, followed in component.mass_ratios().items()}
+
     def vcirc2(
             self,
             R: npt.ArrayLike,

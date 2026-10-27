@@ -14,6 +14,7 @@ from . import _detail
 
 __all__ = [
     'GEOMETRY_PARAMS',
+    'GEOMETRY_UNITS',
     'Geometry',
     'geometry_parser'
 ]
@@ -24,6 +25,11 @@ __all__ = [
 # systemic velocity) or tilted (the position angle and the inclination)
 GEOMETRY_PARAMS = dict(
     vsys='loose', xpos='loose', ypos='loose', posa='tilted', incl='tilted')
+
+# The units of the geometric parameters of the components (and of those of
+# the same names of the components without geometries, e.g. particles)
+GEOMETRY_UNITS = dict(
+    vsys='km/s', xpos='arcsec', ypos='arcsec', posa='deg', incl='deg')
 
 
 class Geometry(parseutils.Serializable):

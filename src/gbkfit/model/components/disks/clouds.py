@@ -5,6 +5,7 @@ The disks made of clouds (see Clouds).
 from collections.abc import Sequence
 from typing import Any, Self
 
+import astropy.units
 import numpy as np
 
 from gbkfit.driver import Driver
@@ -96,12 +97,13 @@ class CloudDisk(_disk.NodalDisk):
             interp: type[Interpolator],
             traits_: dict[str, Sequence[traits.Trait]],
             prefixes: dict[str, str | Sequence[str]],
+            density_units: dict[str, astropy.units.UnitBase | None],
             opacity_lines: Sequence[int] = (),
             equilibrium: Equilibrium | None = None
     ):
         super().__init__(
             loose, tilted, rnodes, rstep, interp, traits_, prefixes,
-            opacity_lines, equilibrium)
+            density_units, opacity_lines, equilibrium)
         self._clouds = clouds
 
     def clouds(self) -> Clouds:

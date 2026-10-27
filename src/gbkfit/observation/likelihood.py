@@ -6,6 +6,7 @@ from collections.abc import Callable, Mapping, Sequence
 from numbers import Real
 from typing import Any, Literal, Self
 
+import astropy.units
 import numpy as np
 
 from gbkfit.dataset import Dataset, NoiseCorrelation
@@ -67,7 +68,20 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         return likelihood
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        """Return the parameters of the likelihood, by name."""
+        """
+        Return the parameters of the likelihood, by name; those whose
+        units depend on the data have none (see param_units).
+        """
+        return {}
+
+    def param_units(
+            self, data: Dataset
+    ) -> dict[str, astropy.units.UnitBase | None]:
+        """
+        Return the units of its parameters that depend on the data of its
+        observation (e.g. the jitter of a fitted noise, in the unit of its
+        data item), if known, by name; none here.
+        """
         return {}
 
     def check(self, keys: Sequence[str], data: Dataset) -> None:
@@ -315,9 +329,26 @@ class LikelihoodGaussian(Likelihood):
             if jitter is not None:
                 pdescs[jitter] = ParamScalarDesc(
                     desc=f"the jitter of {key}, which adds to its errors in "
-                         f"quadrature (in its unit)",
+                         "quadrature",
                     minimum=0)
         return pdescs
+
+    def param_units(
+            self, data: Dataset
+    ) -> dict[str, astropy.units.UnitBase | None]:
+        # The jitter is in the unit of its data item, and so is the scale
+        # of an item without errors (the noise itself); that of errors
+        # has none
+        units = {}
+        for key in self._noise:
+            scale, jitter = self.noise_params(key)
+            item = data[key]
+            if scale is not None:
+                units[scale] = item.unit() if item.error() is None \
+                    else astropy.units.dimensionless_unscaled
+            if jitter is not None:
+                units[jitter] = item.unit()
+        return units
 
     def check(self, keys: Sequence[str], data: Dataset) -> None:
         """

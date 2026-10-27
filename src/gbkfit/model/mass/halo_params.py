@@ -96,19 +96,24 @@ class Overdensity:
 def parameterisation_pdescs(
         parameterisation: str) -> dict[str, ParamScalarDesc]:
     """Return the parameters of a parameterisation, by name."""
-    c = ParamScalarDesc(desc="the concentration, r_D / r_s", minimum=0)
+    c = ParamScalarDesc(
+        desc="the concentration, r_D / r_s", minimum=0, unit='')
     return dict(
         mass_concentration=dict(
-            log_m=ParamScalarDesc(desc="log10 of the mass M_D (Msun)"), c=c),
+            log_m=ParamScalarDesc(
+                desc="log10 of the mass M_D", unit='dex(solMass)'),
+            c=c),
         velocity_concentration=dict(
             v=ParamScalarDesc(
-                desc="the circular velocity V_D at r_D (km/s)", minimum=0),
+                desc="the circular velocity V_D at r_D", minimum=0,
+                unit='km/s'),
             c=c),
         density_radius=dict(
             log_rho=ParamScalarDesc(
-                desc="log10 of the scale density rho_s (Msun/kpc^3)"),
+                desc="log10 of the scale density rho_s",
+                unit='dex(solMass / kpc3)'),
             rs=ParamScalarDesc(
-                desc="the scale radius r_s (kpc)", minimum=0)),
+                desc="the scale radius r_s", minimum=0, unit='kpc')),
     )[parameterisation]
 
 

@@ -289,16 +289,20 @@ class Blobs(TraitOption):
     def consts(self) -> tuple[float, ...]:
         return (self.nblobs,)
 
-    def params(self, shape: bool) -> dict[str, ParamDesc]:
+    def params(self, shape: bool, unit: str | None) -> dict[str, ParamDesc]:
         """
         Return the parameters of the blobs: the columns of their table
-        (with the shape b of the 7-parameter mixtures).
+        (with the shape b of the 7-parameter mixtures), of the amplitudes a
+        of the given unit (None for a density, whose component knows it).
         """
+        units = dict(
+            r='arcsec', t='deg', a=unit, s='arcsec', b='', q='', p='deg')
         names = ('r', 't', 'a', 's', 'b', 'q', 'p') if shape \
             else ('r', 't', 'a', 's', 'q', 'p')
         return {
-            name: ParamVectorDesc(self.nblobs, column=ParamColumn(
-                self.table, name))
+            name: ParamVectorDesc(
+                self.nblobs, unit=units[name],
+                column=ParamColumn(self.table, name))
             for name in names}
 
     def azimuthal_edges(
@@ -345,14 +349,15 @@ class Harmonic(TraitOption):
     def consts(self) -> tuple[float, ...]:
         return (self.order,)
 
-    def params(self, nnodes: int) -> dict[str, ParamDesc]:
+    def params(self, nnodes: int, unit: str | None) -> dict[str, ParamDesc]:
         """
         Return the node-wise parameters of the harmonic: a, the amplitude,
+        of the given unit (None for a density, whose component knows it),
         and p (but for order 0), the azimuth of a maximum.
         """
-        params = dict(a=ParamVectorDesc(nnodes))
+        params = dict(a=ParamVectorDesc(nnodes, unit=unit))
         if self.order > 0:
-            params.update(p=ParamVectorDesc(nnodes))
+            params.update(p=ParamVectorDesc(nnodes, unit='deg'))
         return params
 
 
@@ -460,12 +465,12 @@ class Spiral(TraitOption):
         and o with it or if pattern_speed.
         """
         dispersion = self.wavenumber == 'dispersion'
-        params = dict(p=ParamScalarDesc())
+        params = dict(p=ParamScalarDesc(unit='deg'))
         if dispersion:
-            params['c'] = ParamScalarDesc()
-        params['e'] = ParamScalarDesc()
+            params['c'] = ParamScalarDesc(unit='km/s')
+        params['e'] = ParamScalarDesc(unit='')
         if dispersion or pattern_speed:
-            params['o'] = ParamScalarDesc()
+            params['o'] = ParamScalarDesc(unit='km / (s arcsec)')
         return params
 
     def params_rnw(
@@ -476,8 +481,10 @@ class Spiral(TraitOption):
         first (the kernels read them there), and k
         with a given wavenumber.
         """
-        names = list(tables) + (['k'] if self.wavenumber == 'given' else [])
-        return {name: ParamVectorDesc(nnodes) for name in names}
+        params = {name: ParamVectorDesc(nnodes) for name in tables}
+        if self.wavenumber == 'given':
+            params['k'] = ParamVectorDesc(nnodes, unit='1 / arcsec')
+        return params
 
     def wavenumber_at(
             self,

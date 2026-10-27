@@ -313,7 +313,7 @@ class ProfileEinasto(ProfileHalo):
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(alpha=ParamScalarDesc(
-            desc="the shape of the profile", minimum=0))
+            desc="the shape of the profile", minimum=0, unit=''))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -363,9 +363,11 @@ class ProfileZhao(ProfileHalo):
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             alpha=ParamScalarDesc(
-                desc="the sharpness of the transition", minimum=0),
-            beta=ParamScalarDesc(desc="the outer slope"),
-            gamma=ParamScalarDesc(desc="the inner slope", maximum=3))
+                desc="the sharpness of the transition", minimum=0,
+                unit=''),
+            beta=ParamScalarDesc(desc="the outer slope", unit=''),
+            gamma=ParamScalarDesc(
+                desc="the inner slope", maximum=3, unit=''))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -403,7 +405,8 @@ class ProfileDekelZhao(ProfileHalo):
         return 'dekel_zhao'
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
-        return dict(a=ParamScalarDesc(desc="the inner slope", maximum=3))
+        return dict(a=ParamScalarDesc(
+            desc="the inner slope", maximum=3, unit=''))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -456,9 +459,11 @@ class ProfileCoreNFW(ProfileHalo):
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
-            rc=ParamScalarDesc(desc="the core radius r_c (kpc)", minimum=0),
+            rc=ParamScalarDesc(
+                desc="the core radius r_c", minimum=0, unit='kpc'),
             n=ParamScalarDesc(
-                desc="the strength of the core", minimum=0, maximum=1))
+                desc="the strength of the core", minimum=0, maximum=1,
+                unit=''))
 
     def _shape_values(
             self, params: ParamValues, r_s: float) -> dict[str, float]:
@@ -516,7 +521,7 @@ class ProfileNFWTruncated(ProfileHalo):
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(rt=ParamScalarDesc(
-            desc="the truncation radius r_t (kpc)", minimum=0))
+            desc="the truncation radius r_t", minimum=0, unit='kpc'))
 
     def _shape_values(
             self, params: ParamValues, r_s: float) -> dict[str, float]:

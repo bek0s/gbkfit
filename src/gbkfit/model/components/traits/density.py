@@ -321,7 +321,7 @@ class RPTraitExponential(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -359,7 +359,7 @@ class RPTraitGauss(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -398,8 +398,8 @@ class RPTraitGGauss(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'),
+            b=ParamScalarDesc(unit=''))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -438,7 +438,7 @@ class RPTraitLorentz(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -476,8 +476,8 @@ class RPTraitMoffat(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'),
+            b=ParamScalarDesc(unit=''))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -515,7 +515,7 @@ class RPTraitSech2(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
             a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -564,7 +564,7 @@ class RPTraitMixtureExponential(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False)
+        return self._option(Blobs).params(shape=False, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -612,7 +612,7 @@ class RPTraitMixtureGauss(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False)
+        return self._option(Blobs).params(shape=False, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -661,7 +661,7 @@ class RPTraitMixtureGGauss(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True)
+        return self._option(Blobs).params(shape=True, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -710,7 +710,7 @@ class RPTraitMixtureMoffat(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True)
+        return self._option(Blobs).params(shape=True, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -817,7 +817,7 @@ class RPTraitNWHarmonic(RPTrait):
         return self._option(Harmonic).order == 0
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return self._option(Harmonic).params(nnodes)
+        return self._option(Harmonic).params(nnodes, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -871,7 +871,7 @@ class RPTraitNWDistortion(RPTrait):
         return False
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return params_nw_distortion(nnodes)
+        return params_nw_distortion(nnodes, unit=None)
 
     def azimuthal_edges(
             self,

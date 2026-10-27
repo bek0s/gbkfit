@@ -9,7 +9,7 @@ from astropy.table import Table
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import DataUnit
-from gbkfit.params import ParamDesc
+from gbkfit.params import ParamDesc, pdescs_with_units
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._scene import SeenGalaxies
@@ -142,9 +142,14 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         Return its parameters: here those of the fitted noise of its
         likelihood, e.g. '{name}_noise_scale_{item}' (see
-        LikelihoodGaussian); kinds add their own.
+        LikelihoodGaussian), with the units that its data give them (see
+        Likelihood.param_units); kinds add their own.
         """
-        return {} if self._likelihood is None else self._likelihood.pdescs()
+        if self._likelihood is None:
+            return {}
+        return pdescs_with_units(
+            self._likelihood.pdescs(),
+            self._likelihood.param_units(self._data))
 
     def offset_params(self) -> tuple[str | None, str | None, str | None]:
         """

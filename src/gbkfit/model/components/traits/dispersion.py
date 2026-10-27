@@ -87,7 +87,7 @@ class DPTraitUniform(DPTrait):
         return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc())
+        return dict(a=ParamScalarDesc(unit='km/s'))
 
 
 class DPTraitExponential(DPTrait):
@@ -129,8 +129,8 @@ class DPTraitExponential(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            a=ParamScalarDesc(unit='km/s'),
+            s=ParamScalarDesc(unit='arcsec'))
 
 
 class DPTraitGauss(DPTrait):
@@ -173,8 +173,8 @@ class DPTraitGauss(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            a=ParamScalarDesc(unit='km/s'),
+            s=ParamScalarDesc(unit='arcsec'))
 
 
 class DPTraitGGauss(DPTrait):
@@ -218,9 +218,9 @@ class DPTraitGGauss(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
+            a=ParamScalarDesc(unit='km/s'),
+            s=ParamScalarDesc(unit='arcsec'),
+            b=ParamScalarDesc(unit=''))
 
 
 class DPTraitLorentz(DPTrait):
@@ -263,8 +263,8 @@ class DPTraitLorentz(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            a=ParamScalarDesc(unit='km/s'),
+            s=ParamScalarDesc(unit='arcsec'))
 
 
 class DPTraitMoffat(DPTrait):
@@ -307,9 +307,9 @@ class DPTraitMoffat(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
+            a=ParamScalarDesc(unit='km/s'),
+            s=ParamScalarDesc(unit='arcsec'),
+            b=ParamScalarDesc(unit=''))
 
 
 class DPTraitSech2(DPTrait):
@@ -351,8 +351,8 @@ class DPTraitSech2(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc())
+            a=ParamScalarDesc(unit='km/s'),
+            s=ParamScalarDesc(unit='arcsec'))
 
 
 class DPTraitMixtureExponential(DPTrait):
@@ -401,7 +401,7 @@ class DPTraitMixtureExponential(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False)
+        return self._option(Blobs).params(shape=False, unit='km/s')
 
 
 class DPTraitMixtureGauss(DPTrait):
@@ -450,7 +450,7 @@ class DPTraitMixtureGauss(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False)
+        return self._option(Blobs).params(shape=False, unit='km/s')
 
 
 class DPTraitMixtureGGauss(DPTrait):
@@ -500,7 +500,7 @@ class DPTraitMixtureGGauss(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True)
+        return self._option(Blobs).params(shape=True, unit='km/s')
 
 
 class DPTraitMixtureMoffat(DPTrait):
@@ -549,7 +549,7 @@ class DPTraitMixtureMoffat(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True)
+        return self._option(Blobs).params(shape=True, unit='km/s')
 
 
 class DPTraitNWUniform(DPTrait):
@@ -596,7 +596,7 @@ class DPTraitNWUniform(DPTrait):
         return True
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(nnodes))
+        return dict(a=ParamVectorDesc(nnodes, unit='km/s'))
 
 
 class DPTraitNWHarmonic(DPTrait):
@@ -651,7 +651,7 @@ class DPTraitNWHarmonic(DPTrait):
         return self._option(Harmonic).order == 0
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return self._option(Harmonic).params(nnodes)
+        return self._option(Harmonic).params(nnodes, unit='km/s')
 
 
 class DPTraitNWDistortion(DPTrait):
@@ -701,7 +701,7 @@ class DPTraitNWDistortion(DPTrait):
         return False
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return params_nw_distortion(nnodes)
+        return params_nw_distortion(nnodes, unit='km/s')
 
     def azimuthal_edges(
             self,

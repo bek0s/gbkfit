@@ -79,10 +79,12 @@ class RHTraitP1(RHTrait, abc.ABC):
             Zmax(zmax), Nodes(rnodes), Sampling(sampling), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else dict(s=ParamScalarDesc())
+        return {} if self.rnodes() else dict(
+            s=ParamScalarDesc(unit='arcsec'))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else dict(s=ParamVectorDesc(nrnodes))
+        return {} if not self.rnodes() else dict(
+            s=ParamVectorDesc(nrnodes, unit='arcsec'))
 
 
 class RHTraitP2(RHTrait, abc.ABC):
@@ -102,13 +104,13 @@ class RHTraitP2(RHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else dict(
-            s=ParamScalarDesc(),
-            b=ParamScalarDesc())
+            s=ParamScalarDesc(unit='arcsec'),
+            b=ParamScalarDesc(unit=''))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.rnodes() else dict(
-            s=ParamVectorDesc(nrnodes),
-            b=ParamVectorDesc(nrnodes))
+            s=ParamVectorDesc(nrnodes, unit='arcsec'),
+            b=ParamVectorDesc(nrnodes, unit=''))
 
 
 class RHTraitUniform(RHTraitP1):
@@ -474,7 +476,7 @@ class VHTraitMass(VHTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return {
-            name: ParamVectorDesc(nnodes)
+            name: ParamVectorDesc(nnodes, unit='')
             for name in self.from_galaxy().params}
 
     def from_galaxy(self) -> RotationFactorsInput:
@@ -506,11 +508,11 @@ class VHTraitP1(VHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else {
-            self.param_name(): ParamScalarDesc()}
+            self.param_name(): ParamScalarDesc(unit='arcsec')}
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.rnodes() else {
-            self.param_name(): ParamVectorDesc(nrnodes)}
+            self.param_name(): ParamVectorDesc(nrnodes, unit='arcsec')}
 
 
 class VHTraitLinear(VHTraitP1):
@@ -664,11 +666,11 @@ class DHTraitP1(DHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else {
-            self.param_name(): ParamScalarDesc()}
+            self.param_name(): ParamScalarDesc(unit='arcsec')}
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.rnodes() else {
-            self.param_name(): ParamVectorDesc(nrnodes)}
+            self.param_name(): ParamVectorDesc(nrnodes, unit='arcsec')}
 
 
 class DHTraitLinear(DHTraitP1):

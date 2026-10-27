@@ -270,6 +270,16 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         """Return its parameters, by name."""
         pass
 
+    def mass_ratios(self) -> dict[str, str]:
+        """
+        Return its parameters that are its mass per unit of the density
+        of a component of its galaxy that it follows (e.g. upsilon), each
+        with the name of the component: their unit depends on that of the
+        density, which its galaxy knows and sets (their descriptions have
+        none); none here.
+        """
+        return {}
+
     @abc.abstractmethod
     def vcirc2(
             self,

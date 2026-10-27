@@ -11,7 +11,7 @@ opacity (see OpacityScales).
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, TypeGuard
 
 import astropy.constants as const
 import astropy.units as u
@@ -23,7 +23,7 @@ from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:
     from .base import Component
-    from .roles import Emission
+    from .roles import Emission, LineEmission
 
 
 __all__ = [
@@ -35,10 +35,13 @@ __all__ = [
     'check_band_unit',
     'check_line_unit',
     'check_line_units_agree',
+    'density_unit',
     'is_hi_unit',
     'line_factor',
     'line_factors',
-    'mass_per_unit'
+    'line_opacity_unit',
+    'mass_per_unit',
+    'mass_ratio_unit'
 ]
 
 
@@ -173,14 +176,11 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
     light). The light is that of the galaxy as it emits it (see
     line_factor), so this holds at any redshift. None without a unit.
     """
-    # (imported here: roles imports this module)
-    from .roles import LineEmission
     unit = None if emission is None else emission.unit()
     if unit is None:
         return None
     per_kpc2 = u.Msun / u.kpc ** 2
-    if not isinstance(emission, LineEmission) \
-            or emission.lines().names()[:1] != (HI_LINE,):
+    if not _emits_hi(emission):
         return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
     frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
     frame = _frame(gridutils.VelocityConvention(frequency), 0.0, frequency)
@@ -188,6 +188,56 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
     temperature = intensity.to(u.K, u.brightness_temperature(frequency))
     column = temperature * (u.km / u.s) * _HI_COLUMN
     return (column * _H_MASS).to_value(per_kpc2)
+
+
+def density_unit(emission: 'Emission | None') -> u.UnitBase | None:
+    """
+    Return the unit of the density of a component of the given emission
+    (see parts.Density), if known: that of its light, if it emits (none
+    if its emission has none: its light is in the units of the data of
+    each observation of it); without emission, its density is the optical
+    depth of its dust, dimensionless.
+    """
+    return u.dimensionless_unscaled if emission is None else emission.unit()
+
+
+def mass_ratio_unit(emission: 'Emission | None') -> u.UnitBase | None:
+    """
+    Return the unit of upsilon, the mass per unit of the density of a
+    component of the given emission that a mass component follows (see
+    mass_per_unit), if known: without emission, Msun/kpc^2 (per unit of
+    the optical depth of its dust); with a unit of its emission, none for
+    HI (a ratio of masses), else Msun/pc^2 per unit; without one, none is
+    known (Msun/kpc^2 per unit of the data).
+    """
+    if emission is None:
+        return u.Msun / u.kpc ** 2
+    unit = emission.unit()
+    if unit is None:
+        return None
+    if _emits_hi(emission):
+        return u.dimensionless_unscaled
+    return u.Msun / u.pc ** 2 / unit
+
+
+def line_opacity_unit(emission: 'Emission | None') -> u.UnitBase | None:
+    """
+    Return the unit of the coefficients of the line opacity of a component
+    of the given emission (1/S, see disks.LineOpacity and OpacityScales),
+    if known: 1/K with a unit of its emission (S in K); none without one
+    (S in the units of the data).
+    """
+    if emission is None or emission.unit() is None:
+        return None
+    return 1 / u.K
+
+
+def _emits_hi(emission: 'Emission') -> TypeGuard['LineEmission']:
+    """Check whether an emission is of HI: its first line is hi21."""
+    # (imported here: roles imports this module)
+    from .roles import LineEmission
+    return isinstance(emission, LineEmission) \
+        and emission.lines().names()[:1] == (HI_LINE,)
 
 
 class DataUnit(NamedTuple):

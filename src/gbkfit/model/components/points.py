@@ -15,7 +15,7 @@ from ._units import DataUnit, band_factors, line_factors
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
-from .geometries import Geometry
+from .geometries import GEOMETRY_UNITS, Geometry
 from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from .roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -35,26 +35,37 @@ def _check_geometry(geometry: Geometry | Literal['galaxy', 'own']) -> None:
             f"'own'")
 
 
-def point_pdescs(spectral: bool, depth: bool) -> dict[str, ParamScalarDesc]:
+def point_pdescs(
+        spectral: bool,
+        depth: bool,
+        flux_unit: astropy.units.UnitBase | None
+) -> dict[str, ParamScalarDesc]:
     """
     Return the parameters of a point component: its position (xpos, ypos,
-    and depth if it has one) and flux, and for spectral ones its systemic
-    velocity and dispersion.
+    and depth if it has one) and flux (of the given unit, if known), and
+    for spectral ones its systemic velocity and dispersion.
     """
+    units = GEOMETRY_UNITS | dict(depth='arcsec', flux=flux_unit, disp='km/s')
     names = ('xpos', 'ypos') + (('depth',) if depth else ()) + ('flux',) \
         + (('vsys', 'disp') if spectral else ())
-    return {name: ParamScalarDesc() for name in names}
+    return {name: ParamScalarDesc(unit=units[name]) for name in names}
 
 
 def _light_pdescs(
-        light: Lines | Bands, spectral: bool, depth: bool
+        light: Lines | Bands,
+        spectral: bool,
+        depth: bool,
+        unit: astropy.units.UnitBase | None
 ) -> dict[str, ParamScalarDesc]:
     """
     Return the parameters of a point with the given lines (a spectral
-    point) or bands. Raise ConfigError if their flux ratios have the names
+    point) or bands, and the unit of its light (if any): its flux is in
+    that unit (a density per solid angle) times arcsec^2. Raise
+    ConfigError if the flux ratios of its lines or bands have the names
     of its other parameters.
     """
-    pdescs = point_pdescs(spectral=spectral, depth=depth)
+    flux_unit = None if unit is None else unit * astropy.units.arcsec ** 2
+    pdescs = point_pdescs(spectral, depth, flux_unit)
     if repeated := sorted(set(light.pdescs()) & set(pdescs)):
         raise ConfigError(
             f"the parameters of the flux ratios have the names of other "
@@ -370,10 +381,12 @@ class Point(Component):
         self._bands = None
         if isinstance(emission, LineEmission):
             self._lines = emission.lines()
-            self._pdescs = _light_pdescs(self._lines, True, depth)
+            self._pdescs = _light_pdescs(
+                self._lines, True, depth, emission.unit())
         if isinstance(emission, BandEmission):
             self._bands = emission.bands()
-            self._pdescs = _light_pdescs(self._bands, False, depth)
+            self._pdescs = _light_pdescs(
+                self._bands, False, depth, emission.unit())
 
     def depth(self) -> bool:
         """Check whether its depth along the line of sight is a parameter."""

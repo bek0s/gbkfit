@@ -125,10 +125,13 @@ class ProfileSersic(SpheroidProfile):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
-            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
-            re=ParamScalarDesc(desc="the effective radius (kpc)", minimum=0),
+            log_m=ParamScalarDesc(
+                desc="log10 of the mass", unit='dex(solMass)'),
+            re=ParamScalarDesc(
+                desc="the effective radius", minimum=0, unit='kpc'),
             n=ParamScalarDesc(
-                desc="the Sersic index", minimum=0.3, maximum=12))
+                desc="the Sersic index", minimum=0.3, maximum=12,
+                unit=''))
 
     def density(
             self,
@@ -199,8 +202,10 @@ class ProfileGaussian(SpheroidProfile):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
-            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
-            sigma=ParamScalarDesc(desc="the dispersion (kpc)", minimum=0))
+            log_m=ParamScalarDesc(
+                desc="log10 of the mass", unit='dex(solMass)'),
+            sigma=ParamScalarDesc(
+                desc="the dispersion", minimum=0, unit='kpc'))
 
     def density(
             self,
@@ -304,8 +309,8 @@ class ProfileNodewise(SpheroidProfile):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1,
-            desc="log10 of the projected density (Msun/kpc^2) at each node "
-                 "but the last"))
+            desc="log10 of the projected density at each node but the "
+                 "last", unit='dex(solMass / kpc2)'))
 
     def density(
             self,

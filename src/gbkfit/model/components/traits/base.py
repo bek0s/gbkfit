@@ -273,6 +273,15 @@ class RPTrait(PTrait, abc.ABC):
         pressure_support).
         """
 
+    def amplitudes(self) -> tuple[str, ...]:
+        """
+        Return the names of its parameters in the unit of its density
+        (e.g. its amplitude): their descriptions have no unit, which its
+        component sets (e.g. the unit of its light, see NodalTraits).
+        Here, a.
+        """
+        return ('a',)
+
 
 class RHTrait(HTrait, abc.ABC):
     """
@@ -415,8 +424,8 @@ class ZPTrait(PTrait, abc.ABC):
     def _amplitude_desc(self, nnodes: int) -> ParamVectorDesc:
         """Return the description of its node-wise amplitude, a."""
         return ParamVectorDesc(
-            nnodes, desc="the amplitude of the displacement (arcsec)",
-            minimum=-self.zmax(), maximum=self.zmax())
+            nnodes, desc="the amplitude of the displacement",
+            minimum=-self.zmax(), maximum=self.zmax(), unit='arcsec')
 
 
 class SPTrait(PTrait, abc.ABC):
@@ -457,15 +466,17 @@ def trait_desc(cls: type[Trait]) -> str:
     return parseutils.make_typed_desc(cls, label)
 
 
-def params_nw_distortion(nnodes: int) -> dict[str, ParamDesc]:
+def params_nw_distortion(
+        nnodes: int, unit: str | None) -> dict[str, ParamDesc]:
     """
     Return the node-wise parameters of a distortion (see
-    RPTraitNWDistortion): its amplitude a, azimuth p and width s.
+    RPTraitNWDistortion): its amplitude a, of the given unit (None for a
+    density, whose component knows it), azimuth p and width s.
     """
     return dict(
-        a=ParamVectorDesc(nnodes),
-        p=ParamVectorDesc(nnodes),
-        s=ParamVectorDesc(nnodes))
+        a=ParamVectorDesc(nnodes, unit=unit),
+        p=ParamVectorDesc(nnodes, unit='deg'),
+        s=ParamVectorDesc(nnodes, unit='arcsec'))
 
 
 def splits_nw_distortion(

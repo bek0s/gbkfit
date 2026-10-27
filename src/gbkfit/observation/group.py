@@ -193,8 +193,8 @@ class ObservationGroup:
         self._pdescs |= {
             separation: ParamScalarDesc(
                 desc="the position of the galaxy along the line of sight "
-                     "from the first of its group (arcsec, away from the "
-                     "viewer)")
+                     "from the first of its group (away from the viewer)",
+                unit='arcsec')
             for separation in self._separations.values()}
         # The parameters of the observations (e.g. their flux scales)
         for observation in self._observations:

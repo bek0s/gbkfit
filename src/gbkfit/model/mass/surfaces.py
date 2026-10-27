@@ -191,6 +191,14 @@ class DiskSurface(parseutils.TypedSerializable, abc.ABC):
         """Return its parameters, by name."""
         pass
 
+    def mass_ratios(self) -> dict[str, str]:
+        """
+        Return its parameters that are its mass per unit of the density
+        of the component that it follows, with the name of the component
+        (see MassComponent.mass_ratios); none here.
+        """
+        return {}
+
     @abc.abstractmethod
     def surface_density(
             self,
@@ -292,8 +300,10 @@ class SurfaceExponential(DiskSurface):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
-            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
-            rd=ParamScalarDesc(desc="the scale length (kpc)", minimum=0))
+            log_m=ParamScalarDesc(
+                desc="log10 of the mass", unit='dex(solMass)'),
+            rd=ParamScalarDesc(
+                desc="the scale length", minimum=0, unit='kpc'))
 
     def surface_density(
             self,
@@ -435,11 +445,13 @@ class SurfaceGaussianRing(DiskSurface):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
-            log_m=ParamScalarDesc(desc="log10 of the mass (Msun)"),
+            log_m=ParamScalarDesc(
+                desc="log10 of the mass", unit='dex(solMass)'),
             r_peak=ParamScalarDesc(
-                desc="the radius of the peak (kpc)", minimum=0),
+                desc="the radius of the peak", minimum=0, unit='kpc'),
             fwhm=ParamScalarDesc(
-                desc="the full width at half maximum (kpc)", minimum=0))
+                desc="the full width at half maximum", minimum=0,
+                unit='kpc'))
 
     def surface_density(
             self,
@@ -566,8 +578,8 @@ class SurfaceNodewise(DiskSurface):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1,
-            desc="log10 of the surface density (Msun/kpc^2) at each node "
-                 "but the last"))
+            desc="log10 of the surface density at each node but the last",
+            unit='dex(solMass / kpc2)'))
 
     def surface_density(
             self,
@@ -704,6 +716,9 @@ class SurfaceComponent(DiskSurface):
         return dict(upsilon=ParamScalarDesc(
             desc="the mass per unit of the density of the component (see "
                  "SurfaceComponent)", minimum=0))
+
+    def mass_ratios(self) -> dict[str, str]:
+        return dict(upsilon=self._component)
 
     def surface_density(
             self,

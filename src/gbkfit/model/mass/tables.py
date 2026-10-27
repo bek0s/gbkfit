@@ -183,7 +183,7 @@ class MassTable(MassComponent):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
             desc="the ratio of its mass to that of its table (e.g. a "
-                 "mass-to-light ratio)"))
+                 "mass-to-light ratio)", unit=''))
 
     def gives_enclosed_mass(self) -> bool:
         return False

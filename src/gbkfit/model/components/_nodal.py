@@ -8,24 +8,25 @@ their radial nodes (parse_component_rnode_args).
 """
 
 import typing
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+import astropy.units
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math import interpolation
 from gbkfit.math.interpolation import Interpolator
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._detail import parse_nodes
 from ._native import ParamBuffer
 from .traits import (
     DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, ImageInput,
-    PressureSupport, RotationFactorsInput, RotationInput, Trait, VPTrait,
-    WaveInput, trait_desc)
+    PressureSupport, RPTrait, RotationFactorsInput, RotationInput, Trait,
+    VPTrait, WaveInput, trait_desc)
 
 
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
@@ -128,23 +129,28 @@ def _trait_params(
         traits_: Sequence[Trait],
         prefix: str | Sequence[str] | None,
         nrnodes: int,
-        nsubrnodes: int
+        nsubrnodes: int,
+        density_unit: astropy.units.UnitBase | None
 ) -> TraitParams:
     """
     Return the parameters of the traits of one kind, of the given prefix
     (followed by the index of each trait after the first), or of the given
     prefix of each trait. A node-wise parameter has a value for each node,
-    or for each subnode if its trait samples it at the subnodes.
+    or for each subnode if its trait samples it at the subnodes. The
+    amplitudes of density polar traits are in the given unit of their
+    density (None if not known).
     """
     params_list = []
     for trait in traits_:
         sampling = trait.sampling()
         nnodes = nsubrnodes if sampling == 'subrings' else nrnodes
+        units = dict.fromkeys(trait.amplitudes(), density_unit) \
+            if isinstance(trait, RPTrait) else {}
+        params_sm = pdescs_with_units(trait.params_sm(), units)
+        params_rnw = pdescs_with_units(trait.params_rnw(nnodes), units)
         params_list.append(
-            {name: (pdesc, None)
-             for name, pdesc in trait.params_sm().items()}
-            | {name: (pdesc, sampling)
-               for name, pdesc in trait.params_rnw(nnodes).items()})
+            {name: (pdesc, None) for name, pdesc in params_sm.items()}
+            | {name: (pdesc, sampling) for name, pdesc in params_rnw.items()})
     prefixes = list(prefix) if iterutils.is_sequence(prefix) \
         else parseutils.item_prefixes(
             [trait.name() for trait in traits_], 'traits', prefix, True)
@@ -243,7 +249,10 @@ class NodalTraits:
     prefixes (e.g. 'pt' for the density polar traits), or with that of
     each trait (e.g. 'op_halpha_'), and those node-wise with a value for
     each node, or for each subnode where their trait samples them. A kind
-    without traits has no parameters.
+    without traits has no parameters. The amplitudes of the density polar
+    traits of a kind (see RPTrait.amplitudes) are in the unit of their
+    density in density_units (e.g. of 'rpt', that of the light of a
+    component that emits), or have none if it is not known (or not given).
     """
 
     def __init__(
@@ -251,6 +260,7 @@ class NodalTraits:
             kinds: Sequence[str],
             traits_: dict[str, Sequence[Trait]],
             prefixes: dict[str, str | Sequence[str]],
+            density_units: Mapping[str, astropy.units.UnitBase | None],
             rnodes: Sequence[float],
             subrnodes: Sequence[float],
             interp: type[Interpolator]
@@ -262,7 +272,7 @@ class NodalTraits:
         self._params = {
             kind: _trait_params(
                 traits_of_kind, prefixes.get(kind), len(rnodes),
-                len(subrnodes))
+                len(subrnodes), density_units.get(kind))
             for kind, traits_of_kind in self._traits.items()}
         # The parameters whose values are the circular velocity of the
         # mass of their galaxy, and the radii of their values

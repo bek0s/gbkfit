@@ -17,6 +17,7 @@ from .._native import NativeComponentPlan, emission_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args,
     with_default_height_traits)
+from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, LineCatalogue, Lines
@@ -179,7 +180,8 @@ def make_cone(
     node_args = parse_component_rnode_args(
         rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
     return cone_class(
-        sides=sides, **node_args, traits_=traits_, prefixes=TRAIT_PREFIXES)
+        sides=sides, **node_args, traits_=traits_, prefixes=TRAIT_PREFIXES,
+        density_units=dict(rpt=_units.density_unit(emission)))
 
 
 def cone_plan(
