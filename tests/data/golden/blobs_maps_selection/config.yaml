@@ -16,6 +16,7 @@ galaxies:
         size: [4, 4]
         step: 2
     kinematics:
+      type: traits
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}

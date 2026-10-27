@@ -38,7 +38,8 @@ from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
 from ._jeans import JeansKinematics
 from ._kinematics import (
-    SpheroidKinematics, SpheroidLight, SpheroidMotion, TraitsKinematics)
+    SpheroidKinematics, SpheroidLight, SpheroidMotion,
+    SpheroidTraitsKinematics)
 from ._schwarzschild import SchwarzschildKinematics
 from ._stage import SpheroidStage
 
@@ -440,7 +441,7 @@ light_profile_parser = parseutils.TypedParser(LightProfile, [
 
 spheroid_kinematics_parser = parseutils.TypedParser(SpheroidKinematics, [
     JeansKinematics,
-    TraitsKinematics,
+    SpheroidTraitsKinematics,
     SchwarzschildKinematics])
 
 
@@ -493,7 +494,7 @@ class Spheroid(Component):
         the sphere; none for a profile with its own axis ratios.
     kinematics : SpheroidKinematics, optional
         How its stars move: in the gravity of its galaxy (JeansKinematics)
-        or as traits give (TraitsKinematics); none by default.
+        or as traits give (SpheroidTraitsKinematics); none by default.
     geometry : Geometry, 'galaxy' or 'own', optional
         The geometry whose centre and axis it shares: that of its galaxy
         (by default), a named one (not a loose or tilted one), or none

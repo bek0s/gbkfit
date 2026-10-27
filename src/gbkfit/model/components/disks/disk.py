@@ -23,7 +23,7 @@ from ..lines import Band, LineCatalogue
 from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
-from ..parts import Density, Kinematics
+from ..parts import Density, DiskTraitsKinematics
 
 
 __all__ = [
@@ -46,8 +46,9 @@ class Disk(Component):
     ----------
     density : Density
         Its density (thick with height traits).
-    kinematics : Kinematics, optional
-        How it moves; required to emit lines.
+    kinematics : DiskTraitsKinematics, optional
+        How it moves (with its vertical equilibrium, if any); required to
+        emit lines.
     emission : Emission, optional
         The light it emits.
     opacity : Opacity, optional
@@ -125,7 +126,7 @@ class Disk(Component):
     def __init__(
             self,
             density: Density,
-            kinematics: Kinematics | None = None,
+            kinematics: DiskTraitsKinematics | None = None,
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
@@ -164,7 +165,7 @@ class Disk(Component):
         """Return its density."""
         return self._density
 
-    def kinematics(self) -> Kinematics | None:
+    def kinematics(self) -> DiskTraitsKinematics | None:
         """Return its kinematics, if any."""
         return self._kinematics
 

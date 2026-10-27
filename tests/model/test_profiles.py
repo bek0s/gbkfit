@@ -33,7 +33,8 @@ GAS = dict(
     type='disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)),
     density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
+    kinematics=dict(type='traits',
+                    vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
 GAS_PARAMS = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0,

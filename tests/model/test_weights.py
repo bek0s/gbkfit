@@ -33,7 +33,7 @@ def config(driver, observable, weights, component=None):
         type='disk', name='gas', rnodes=list(range(0, 12)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
-            vptraits=dict(type='uniform', direction='tan'),
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
     return dict(

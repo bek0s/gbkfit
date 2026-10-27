@@ -1,7 +1,7 @@
 """
 The forces of axisymmetric mass disks anywhere, the radial force F_R(R,
 z) = -dPhi/dR and the vertical force F_z(R, z) = -dPhi/dz (for the
-jeans equilibrium of the disks of a galaxy, see parts.Kinematics), from
+jeans equilibrium of the disks of a galaxy, see parts.JeansEquilibrium), from
 the pull of their rings off their plane, as their circular velocity in
 it (see _disk_gravity).
 

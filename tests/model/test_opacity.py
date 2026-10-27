@@ -39,7 +39,7 @@ def spectral_cube_case(driver, with_opacity):
     components = [dict(
         DISK, name='gas', density=THICK_DENSITY,
         kinematics=dict(
-            vptraits=dict(type='arctan', direction='tan'),
+            type='traits', vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=LINES)]
     if with_opacity:
@@ -172,7 +172,7 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
     gas = dict(
         disk, name='gas', density=THICK_DENSITY,
         kinematics=dict(
-            vptraits=dict(type='nw_uniform', direction='rad'),
+            type='traits', vptraits=dict(type='nw_uniform', direction='rad'),
             dptraits=dict(type='uniform')),
         emission=LINES)
     properties = dict(
@@ -253,6 +253,7 @@ THIN_DENSITY = dict(ptraits=dict(type='exponential'))
 THIN_GAS = dict(
     DISK, name='gas', density=THIN_DENSITY,
     kinematics=dict(
+        type='traits',
         vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
     emission=LINES)
 
@@ -368,7 +369,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
         gas = dict(
             DISK, name='gas', density=THIN_DENSITY, emission=emission,
             kinematics=dict(
-                vptraits=dict(type='arctan', direction='tan'),
+                type='traits', vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform')))
         properties = dict(
             gas_vsys=0, gas_xpos=0, gas_ypos=0, gas_posa=0, gas_incl=0,

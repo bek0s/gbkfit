@@ -16,6 +16,7 @@ galaxies:
         step: 0.4
         offsets: true
     kinematics:
+      type: traits
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}

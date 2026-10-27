@@ -29,8 +29,9 @@ DISK = dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=10)),
     kinematics=dict(
+        type='traits',
         vptraits=dict(type='mass'), dptraits=dict(type='uniform'),
-        equilibrium='central'),
+        equilibrium=dict(type='central')),
     emission=dict(type='lines'))
 MASS = [dict(
     type='disk', name='stars', surface=dict(type='exponential'),
@@ -141,7 +142,7 @@ def test_mond_without_a0_is_newtonian_gravity():
 
 @pytest.mark.parametrize('disk, mass, message', [
     (with_kinematics(
-        equilibrium='self_gravitating', equilibrium_density='stars'), MASS,
+        equilibrium=dict(type='self_gravitating', density='stars')), MASS,
      "self_gravitating equilibrium of the component 'gas'"),
     (with_kinematics(
         vptraits=dict(type='mass', pressure_support='self_gravitating')),
@@ -326,7 +327,8 @@ def test_palatini_corrections_of_the_density_gradient():
 # that follows the gas
 THIN_DISK = DISK | dict(
     density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(vptraits=dict(type='mass'), dptraits=dict(type='uniform')))
+    kinematics=dict(type='traits',
+                    vptraits=dict(type='mass'), dptraits=dict(type='uniform')))
 GAS_MASS = dict(
     type='disk', name='gas', surface=dict(type='component', component='gas'),
     vertical=dict(type='component', component='gas'))

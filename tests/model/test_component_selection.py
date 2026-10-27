@@ -27,7 +27,7 @@ def disk(name, density=THIN):
         rnodes=list(range(0, 14)),
         density=density,
         kinematics=dict(
-            vptraits=dict(type='arctan', direction='tan'),
+            type='traits', vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
 

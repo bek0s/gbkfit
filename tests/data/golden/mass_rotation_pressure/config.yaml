@@ -13,6 +13,7 @@ galaxies:
     density:
       ptraits: {type: exponential}
     kinematics:
+      type: traits
       vptraits: {type: mass, pressure_support: jeans}
       dptraits:
       - {type: uniform, direction: rad}

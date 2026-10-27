@@ -3,7 +3,7 @@ The radial profiles of a disk, as its galaxy takes them for gravity: the
 azimuthal means of its traits, for the mass components that follow it
 (see mass.DiskDensity), for its pressure support (see
 traits.VPTraitMass), and its rms height, rotation and jeans dispersion,
-for its vertical equilibrium (see parts.Kinematics); its rotation, for
+for its vertical equilibrium (see parts.Equilibrium); its rotation, for
 its density waves (see traits.VPTraitSpiral); and its rotation and
 dispersion, for the functions of its galaxy (see GalaxyFunctions).
 """
@@ -204,14 +204,14 @@ def _isotropic(disk: NodalDisk) -> bool:
     Check whether the dispersion of a disk is the same along every
     direction: its dispersion polar traits and the dispersion of its
     vertical equilibrium, if any, isotropic (see traits and
-    parts.Kinematics).
+    parts.Equilibrium).
     """
     equilibrium = disk.equilibrium()
     return all(
         trait.direction() == DPT_DIRECTION_DEFAULT
         for trait in disk.traits('dpt')) and (
             equilibrium is None
-            or equilibrium.direction == EQUILIBRIUM_DIRECTION_DEFAULT)
+            or equilibrium.direction() == EQUILIBRIUM_DIRECTION_DEFAULT)
 
 
 def _dispersions(
@@ -230,7 +230,7 @@ def _dispersions(
     it adds to (every one, or 'ver' only).
     """
     equilibrium = disk.equilibrium()
-    vertical = equilibrium is not None and equilibrium.direction == 'ver'
+    vertical = equilibrium is not None and equilibrium.direction() == 'ver'
     result = []
     for direction in directions:
         rows = [
@@ -446,7 +446,8 @@ def jeans_dispersions(
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the jeans equilibrium of a thick disk
-    (see parts.Kinematics) at radii (arcsec, on the disk): sigma^2 = int_0^inf
+    (see parts.JeansEquilibrium) at radii (arcsec, on the disk): sigma^2 =
+    int_0^inf
     rho(z) (-F_z(R, z)) dz / rho(0), the weight of the column of the disk
     above its midplane over its density there, with its density of
     rms_heights (on its heights) and the vertical force F_z of the mass
@@ -627,7 +628,7 @@ def dispersion(
         The radii (arcsec).
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see parts.Kinematics), interpolated linearly
+        subnodes (km/s, see parts.Equilibrium), interpolated linearly
         between them, as the disk is evaluated.
     direction : str, optional
         The direction: 'rad', 'tan' or 'ver'.
@@ -722,7 +723,7 @@ def pressure_support(
         the radii (Msun/kpc^2 with heights; required with them).
     equilibrium : np.ndarray, optional
         The dispersion of the vertical equilibrium of the disk at its
-        subnodes (km/s, see parts.Kinematics), interpolated linearly
+        subnodes (km/s, see parts.Equilibrium), interpolated linearly
         between them, as the disk is evaluated.
     heights : np.ndarray, optional
         The heights (arcsec) above the midplane; by default, the midplane.

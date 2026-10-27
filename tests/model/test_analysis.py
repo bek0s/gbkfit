@@ -202,7 +202,8 @@ def test_the_geometry_of_a_model_is_found(driver):
     galaxy = dict(components=[dict(
         type='disk', loose=False, tilted=False, rnodes=list(range(0, 21)),
         density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(vptraits=dict(type='arctan', direction='tan'),
+        kinematics=dict(type='traits',
+                        vptraits=dict(type='arctan', direction='tan'),
                         dptraits=dict(type='uniform')),
         emission=dict(type='lines'))])
     plan = group_plan([dict(

@@ -32,7 +32,8 @@ def disk(type_, rnodes, vptraits, thick=False, **options):
     return dict(
         type='disk', loose=False, tilted=False, rnodes=rnodes,
         density=density,
-        kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
+        kinematics=dict(type='traits',
+                        vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines'), **mcdisk_options, **options)
 
 

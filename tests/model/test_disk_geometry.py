@@ -37,7 +37,7 @@ def spectral_cube_case(driver, **component):
             rnodes=list(range(0, 12)),
             density=dict(ptraits=EXPONENTIAL),
             kinematics=dict(
-                vptraits=dict(type='uniform', direction='tan'),
+                type='traits', vptraits=dict(type='uniform', direction='tan'),
                 dptraits=dict(type='uniform')),
             emission=LINES,
             **component)]))
@@ -68,6 +68,7 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
         rnodes=list(range(0, 16, 2)),
         density=dict(ptraits=EXPONENTIAL, htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=LINES)
     if disk == 'clouds':

@@ -83,6 +83,7 @@ components:
   density:
     ptraits: {type: exponential}
   kinematics:
+    type: traits
     vptraits: {type: arctan, direction: tan}
     dptraits: {type: uniform}
   emission: {type: lines}

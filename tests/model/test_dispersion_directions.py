@@ -22,7 +22,7 @@ def disk(dptraits, thick=False):
         type='disk', loose=False, tilted=False,
         rnodes=list(range(0, 21, 2)), density=density,
         kinematics=dict(
-            vptraits=dict(type='uniform', direction='tan'),
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
             dptraits=dptraits),
         emission=dict(type='lines'))
 
@@ -102,11 +102,9 @@ def kinematics(**options):
      "no dispersion trait for the direction 'ver'; give one, or an 'iso'"),
     (dict(dptraits=dict(type='uniform', direction='out')),
      "direction must be one of"),
-    (dict(dptraits=dict(type='uniform'), equilibrium_direction='ver'),
-     "it needs equilibrium"),
-    (dict(dptraits=dict(type='uniform'), equilibrium='central',
-          equilibrium_direction='rad'),
-     r"equilibrium_direction must be one of \['iso', 'ver'\]"),
+    (dict(dptraits=dict(type='uniform'),
+          equilibrium=dict(type='central', direction='rad')),
+     r"equilibrium must be one of \['iso', 'ver'\]"),
 ])
 def test_dispersion_directions_are_checked(options, message):
     with pytest.raises(ConfigError, match=message):
@@ -120,7 +118,7 @@ def test_a_cone_has_isotropic_dispersion_only():
             ptraits=dict(type='uniform'),
             htraits=dict(type='gauss', zmax=1.5)),
         kinematics=dict(
-            vptraits=dict(type='uniform', direction='out'),
+            type='traits', vptraits=dict(type='uniform', direction='out'),
             dptraits=DIRECTIONS),
         emission=dict(type='lines'))
     with pytest.raises(
@@ -132,9 +130,9 @@ def test_dispersion_directions_are_dumped():
     # (but the isotropic ones, by default)
     info = kinematics(
         dptraits=[dict(type='uniform')] + DIRECTIONS[:1],
-        equilibrium='central', equilibrium_direction='ver')
+        equilibrium=dict(type='central', direction='ver'))
     dumped = galaxy_parser.dump(galaxy_parser.load(copy.deepcopy(info)))
     dumped = dumped['components'][0]['kinematics']
     assert dumped['dptraits'] == [
         dict(type='uniform'), dict(type='uniform', direction='rad')]
-    assert dumped['equilibrium_direction'] == 'ver'
+    assert dumped['equilibrium'] == dict(type='central', direction='ver')

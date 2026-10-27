@@ -16,7 +16,7 @@ from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band, LineCatalogue
-from ..parts import Density, Kinematics
+from ..parts import ConeTraitsKinematics, Density
 from ..roles import STARS, Emission, Opacity
 from .._detail import geometry_desc
 from ..geometries import Geometry
@@ -43,7 +43,7 @@ class Cone(Component):
     ----------
     density : Density
         Its density, with height traits.
-    kinematics : Kinematics, optional
+    kinematics : ConeTraitsKinematics, optional
         How it moves; required to emit lines. Its velocity traits are
         around the axis ('tan') or out of the apex ('out').
     emission : Emission, optional
@@ -102,7 +102,7 @@ class Cone(Component):
     def __init__(
             self,
             density: Density,
-            kinematics: Kinematics | None = None,
+            kinematics: ConeTraitsKinematics | None = None,
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
@@ -137,7 +137,7 @@ class Cone(Component):
         """Return its density."""
         return self._density
 
-    def kinematics(self) -> Kinematics | None:
+    def kinematics(self) -> ConeTraitsKinematics | None:
         """Return its kinematics, if any."""
         return self._kinematics
 

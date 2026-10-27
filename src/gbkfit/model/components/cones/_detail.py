@@ -20,7 +20,8 @@ from .._nodal import (
 from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, LineCatalogue, Lines
-from ..parts import Density, Kinematics, density_parser, kinematics_parser
+from ..parts import (
+    ConeTraitsKinematics, Density, cone_kinematics_parser, density_parser)
 from ..roles import (
     DustOpacity, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
@@ -88,7 +89,7 @@ def load_cone_component(
     """
     for parser, key, required in (
             (density_parser, 'density', True),
-            (kinematics_parser, 'kinematics', False),
+            (cone_kinematics_parser, 'kinematics', False),
             (opacity_parser, 'opacity', False),
             (traits.spt_parser, 'sptraits', False)):
         parseutils.load_option_and_update_info(
@@ -102,7 +103,7 @@ def dump_cone_component(
         component: Component,
         cone: _cone.NodalCone,
         density: Density,
-        kinematics: Kinematics | None
+        kinematics: ConeTraitsKinematics | None
 ) -> dict[str, Any]:
     """Return the configuration of a cone component made of the given cone."""
     info = dict(type=component.type()) | dump_name(component) \
@@ -110,7 +111,7 @@ def dump_cone_component(
         sides=cone.sides(), rnodes=list(cone.rnodes()), rstep=cone.rstep(),
         interp=cone.interp().type(), density=density.dump())
     if kinematics is not None:
-        info.update(kinematics=kinematics.dump())
+        info.update(kinematics=cone_kinematics_parser.dump(kinematics))
     if component.emission() is not None:
         info.update(emission=emission_parser.dump(component.emission()))
     if component.opacity() is not None:
@@ -123,7 +124,7 @@ def dump_cone_component(
 def make_cone(
         cone_class: type[_cone.NodalCone],
         density: Density,
-        kinematics: Kinematics | None,
+        kinematics: ConeTraitsKinematics | None,
         emission: Emission | None,
         opacity: Opacity | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
@@ -157,9 +158,6 @@ def make_cone(
             "walls")
     if isinstance(emission, LineEmission) and kinematics is None:
         raise ConfigError("a cone that emits lines needs kinematics")
-    if kinematics is not None and kinematics.equilibrium() is not None:
-        raise ConfigError(
-            "a cone has no vertical equilibrium: that is of disks")
     if opacity is not None and not isinstance(opacity, DustOpacity):
         raise ConfigError("the opacity of a cone is dust (type: dust)")
     sptraits = iterutils.tuplify(sptraits)

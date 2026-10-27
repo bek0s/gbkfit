@@ -12,7 +12,7 @@ import numpy as np
 # --- Pieces of the recipes ---------------------------------------------------
 
 _ROTATION = dict(
-    vptraits=dict(type='arctan', direction='tan'),
+    type='traits', vptraits=dict(type='arctan', direction='tan'),
     dptraits=dict(type='uniform'))
 
 _THICK = dict(
@@ -171,7 +171,7 @@ _WARPED_DISK = dict(
     galaxies=[dict(components=[_disk(
         geometry='own', loose=True, tilted=True, rnodes=[0, 4, 8, 12, 16],
         kinematics=dict(
-            vptraits=[
+            type='traits', vptraits=[
                 dict(type='arctan', direction='tan'),
                 dict(type='nw_harmonic', direction='rad', order=2),
                 dict(type='uniform', direction='ver')],
@@ -249,7 +249,7 @@ _CONE = dict(
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
-        vptraits=dict(type='uniform', direction='out'),
+        type='traits', vptraits=dict(type='uniform', direction='out'),
         dptraits=dict(type='uniform')),
     emission=_HALPHA_NII)
 

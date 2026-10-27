@@ -11,6 +11,7 @@ galaxies:
     density:
       ptraits: {type: exponential}
     kinematics:
+      type: traits
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission:
@@ -28,6 +29,7 @@ galaxies:
       ptraits: {type: uniform}
       htraits: {type: gauss, zmax: 1}
     kinematics:
+      type: traits
       vptraits: {type: uniform, direction: out}
       dptraits: {type: uniform}
     emission:

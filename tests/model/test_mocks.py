@@ -18,7 +18,7 @@ def disk(emission):
         type='disk', loose=False, tilted=False, rnodes=list(range(0, 10)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
-            vptraits=dict(type='arctan', direction='tan'),
+            type='traits', vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=dict(type=emission))
 

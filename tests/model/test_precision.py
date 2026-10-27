@@ -11,6 +11,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 
 
 KINEMATICS = dict(
+    type='traits',
     vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform'))
 THIN_DISK = dict(
     type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),

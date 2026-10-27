@@ -16,6 +16,7 @@ LINES = dict(type='lines')
 PARTS = dict(
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
+        type='traits',
         vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
     emission=LINES)
 
@@ -120,7 +121,7 @@ OUTFLOW = dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
-        vptraits=dict(type='uniform', direction='out'),
+        type='traits', vptraits=dict(type='uniform', direction='out'),
         dptraits=dict(type='uniform')),
     emission=LINES)
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES)

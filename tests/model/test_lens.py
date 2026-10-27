@@ -138,7 +138,7 @@ def test_constant_deflection_moves_the_source(driver, observable):
     if observable['type'] == 'pixel_spectra':
         galaxy = dict(components=[DISK | dict(
             kinematics=dict(
-                vptraits=dict(type='arctan', direction='tan'),
+                type='traits', vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform')),
             emission=dict(type='lines'))])
         properties = PROPERTIES | dict(

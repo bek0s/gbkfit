@@ -113,14 +113,14 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
 
     - the forces anywhere (off the plane too), which the jeans
       equilibrium and the rotation at each height take (see check_forces,
-      parts.Kinematics and traits.VHTraitMass)
+      parts.JeansEquilibrium and traits.VHTraitMass)
     - forces that are the gradient of a potential, in which orbits keep
       their energy, as the orbits of Schwarzschild models take (see
       check_potential)
     - the vertical structure of self-gravitating isothermal sheets,
       which the self_gravitating equilibrium and pressure support take
-      (see check_self_gravitating_sheets, parts.Kinematics and
-      traits.VPTraitMass)
+      (see check_self_gravitating_sheets, parts.SelfGravitatingEquilibrium
+      and traits.VPTraitMass)
     - the shares of the components in the squared circular velocity,
       which the dark fraction of a spheroid takes (see check_shares and
       mass.DarkFraction)

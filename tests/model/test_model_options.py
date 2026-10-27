@@ -24,7 +24,7 @@ DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 
 THIN = dict(ptraits=EXPONENTIAL)
 THICK = dict(ptraits=EXPONENTIAL, htraits=SECH2)
-KINEMATICS = dict(vptraits=ARCTAN, dptraits=UNIFORM)
+KINEMATICS = dict(type='traits', vptraits=ARCTAN, dptraits=UNIFORM)
 
 # A component of each kind, with its required options
 BAND_THIN = dict(DISK, type='disk', density=THIN, emission=dict(type='band'))
@@ -232,7 +232,7 @@ def test_trait_names_prefix_their_parameters():
     inflow = dict(type='uniform', direction='rad', name='inflow')
     rotation = ARCTAN | dict(name='rot')
     info = dict(components=[LINES_THIN | dict(kinematics=dict(
-        vptraits=[inflow, rotation], dptraits=UNIFORM))])
+        type='traits', vptraits=[inflow, rotation], dptraits=UNIFORM))])
     galaxy = galaxy_parser.load(info)
     assert {'inflow_vr', 'rot_rt', 'rot_vt', 'dpt_a'} <= set(galaxy.pdescs())
     dumped = galaxy_parser.dump(galaxy)
@@ -247,7 +247,7 @@ def test_trait_names_prefix_their_parameters():
      r"cannot share a name; repeated: \['rot'\]")])
 def test_trait_names_are_all_or_none_and_unique(vptraits, dptraits, message):
     info = dict(components=[LINES_THIN | dict(kinematics=dict(
-        vptraits=vptraits, dptraits=dptraits))])
+        type='traits', vptraits=vptraits, dptraits=dptraits))])
     assert re.search(message, galaxy_error(info))
 
 

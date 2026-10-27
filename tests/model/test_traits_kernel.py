@@ -93,6 +93,10 @@ def trait_configs(parser):
     return configs
 
 
+# The options of the parts of a disk besides their traits
+PARTS = dict(density={}, kinematics=dict(type='traits'))
+
+
 def cases():
     for kind, (_, _, parser) in KINDS.items():
         for config in trait_configs(parser):
@@ -116,7 +120,7 @@ def thick_disk(name, traits_, **roles):
         if part is None:
             disk[option] = trait
         else:
-            disk.setdefault(part, {})[option] = trait
+            disk.setdefault(part, dict(PARTS[part]))[option] = trait
     return disk
 
 

@@ -18,7 +18,7 @@ from gbkfit.utils.parseutils import ConfigError
 def disk(emission):
     """A thin exponential disk of the given emission, rotating."""
     kinematics = dict(
-        vptraits=dict(type='arctan', direction='tan'),
+        type='traits', vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform'))
     return galaxy_parser.load(dict(components=[dict(
         type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),

@@ -61,7 +61,7 @@ def evaluate_mmaps(driver, observable, **properties):
         rnodes=list(range(0, 12)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
-            vptraits=dict(type='arctan', direction='tan'),
+            type='traits', vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))
     group = ObservationGroup([galaxy], [ObservationSky(observable, Flat())])

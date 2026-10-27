@@ -22,7 +22,7 @@ DISK = dict(loose=False, tilted=False, rnodes=[0, 2, 4, 6, 8])
 
 THIN = dict(ptraits=EXPONENTIAL)
 THICK = dict(ptraits=EXPONENTIAL, htraits=SECH2)
-KINEMATICS = dict(vptraits=ARCTAN, dptraits=UNIFORM)
+KINEMATICS = dict(type='traits', vptraits=ARCTAN, dptraits=UNIFORM)
 
 BAND = dict(type='band')
 LINES = dict(type='lines')

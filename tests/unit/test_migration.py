@@ -158,3 +158,18 @@ def test_the_old_observation_options_are_migrated():
     migration.migrate(dict(observations=[observation]), 1)
     assert observation == OBSERVATION | dict(
         oversampling=[2, 2, 1], pixel_weights=dict(component='disk'))
+
+
+def test_kinematics_are_migrated_to_typed_ones():
+    components = [
+        dict(type='disk', kinematics=dict(
+            vptraits=dict(type='mass'), equilibrium='self_gravitating',
+            equilibrium_density='gas', equilibrium_direction='ver')),
+        dict(type='cone', kinematics=dict(vptraits=dict(type='uniform'))),
+        dict(type='spheroid', kinematics=dict(type='jeans'))]
+    migration.migrate(dict(galaxies=[dict(components=components)]), 2)
+    assert [c['kinematics'] for c in components] == [
+        dict(type='traits', vptraits=dict(type='mass'), equilibrium=dict(
+            type='self_gravitating', density='gas', direction='ver')),
+        dict(type='traits', vptraits=dict(type='uniform')),
+        dict(type='jeans')]

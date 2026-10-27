@@ -17,7 +17,9 @@ from .._nodal import (
 from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
 from ..geometries import GEOMETRY_PARAMS
-from ..parts import Equilibrium
+from ..parts import (
+    CentralEquilibrium, Equilibrium, JeansEquilibrium,
+    SelfGravitatingEquilibrium)
 from ..traits import PressureSupport, Trait
 
 if TYPE_CHECKING:
@@ -58,7 +60,8 @@ class NodalDisk(abc.ABC):
         the density polar traits), or of each of its traits (e.g.
         'op_halpha_'). opacity_lines has the line of each trait of line
         opacity ('opt'): its index among the lines of the emission.
-        equilibrium is its vertical equilibrium, if any (see Kinematics).
+        equilibrium is its vertical equilibrium, if any (see
+        parts.Equilibrium).
         """
 
         subrnodes = subring_radii(rnodes, rstep)
@@ -136,7 +139,7 @@ class NodalDisk(abc.ABC):
 
     def equilibrium(self) -> Equilibrium | None:
         """
-        Return its vertical equilibrium, if any (see Kinematics): its
+        Return its vertical equilibrium, if any (see parts.Equilibrium): its
         galaxy gives its plans the dispersion of the equilibrium at its
         subnodes (see DiskState).
         """
@@ -200,7 +203,7 @@ class NodalDisk(abc.ABC):
         """
         Check whether it takes anything from the mass of its galaxy, when
         there is one: it rotates in it (see circular_velocity_params), or
-        it is in a vertical equilibrium (see Kinematics).
+        it is in a vertical equilibrium (see parts.Equilibrium).
         """
         return bool(self.circular_velocity_params()) \
             or self._equilibrium is not None
@@ -235,9 +238,9 @@ class NodalDisk(abc.ABC):
         equilibrium = self._equilibrium
         if equilibrium is None:
             return tuple(needs)
-        if equilibrium.mode != 'central':
+        if not isinstance(equilibrium, CentralEquilibrium):
             needs.append(NeedsMass(
-                f"the vertical equilibrium {equilibrium.mode!r} of the "
+                f"the vertical equilibrium {equilibrium.type()!r} of the "
                 f"component {label} needs the mass of its galaxy"))
         elif not any(
                 trait.direction() == 'tan' for trait in self.traits('vpt')):
@@ -246,16 +249,14 @@ class NodalDisk(abc.ABC):
                 f"the circular velocity of the mass of its galaxy, or "
                 f"without mass, the rotation of its disk; it has neither: "
                 f"give it tangential velocity traits, or the galaxy mass"))
-        if equilibrium.mode == 'jeans':
+        if isinstance(equilibrium, JeansEquilibrium):
             needs.append(NeedsForces(
                 f"the jeans equilibrium of the component {label} takes the "
                 f"vertical force of the gravity of its galaxy"))
-        if equilibrium.density is not None \
-                or equilibrium.mode == 'self_gravitating':
+        if isinstance(equilibrium, SelfGravitatingEquilibrium):
             needs.append(NeedsMassDensities(
-                () if equilibrium.density is None else (equilibrium.density,),
-                equilibrium.mode == 'self_gravitating',
-                f"the {equilibrium.mode} equilibrium of the component "
+                (equilibrium.density(),), True,
+                f"the self_gravitating equilibrium of the component "
                 f"{label}"))
         return tuple(needs)
 
@@ -368,7 +369,7 @@ class DiskPlan(NativePlan):
             deq=buffer.device('deq')
             if disk.equilibrium() is not None else None,
             deq_vertical=disk.equilibrium() is not None
-            and disk.equilibrium().direction == 'ver')
+            and disk.equilibrium().direction() == 'ver')
 
         self._disk = disk
         self._driver = driver

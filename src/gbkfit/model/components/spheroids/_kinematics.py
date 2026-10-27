@@ -1,7 +1,7 @@
 """
 The kinematics of a spheroid (SpheroidKinematics): how its stars move,
 in the gravity of its galaxy (JeansKinematics, see _jeans) or as its
-traits give (TraitsKinematics); and their motion in one spheroid
+traits give (SpheroidTraitsKinematics); and their motion in one spheroid
 (SpheroidMotion): their parameters, and their values in its plan.
 """
 
@@ -24,7 +24,7 @@ from .._nodal import (
     subring_radii, with_default_height_traits)
 from .._stage import GalaxyMass
 from ..base import ComponentState
-from ..parts import Kinematics
+from ..parts import KinematicTraits
 
 
 __all__ = [
@@ -32,7 +32,7 @@ __all__ = [
     'SpheroidKinematics',
     'SpheroidLight',
     'SpheroidMotion',
-    'TraitsKinematics',
+    'SpheroidTraitsKinematics',
     'TraitsMotion'
 ]
 
@@ -186,15 +186,16 @@ class SpheroidKinematics(parseutils.TypedSerializable, abc.ABC):
                         f"plane"))
 
 
-# The kinds of the traits of TraitsKinematics: velocity (v) and dispersion
-# (d) polar (p) and height (h) traits, and the prefix of the parameters of
-# each
+# The kinds of the traits of SpheroidTraitsKinematics: velocity (v) and
+# dispersion (d) polar (p) and height (h) traits, and the prefix of the
+# parameters of each
 TRAIT_KINDS = ('vpt', 'vht', 'dpt', 'dht')
 TRAIT_PREFIXES = dict(vpt='vpt', vht='vht', dpt='dpt', dht='dht')
 
-# The traits that the stars of a spheroid take (see TraitsKinematics): the
-# polar traits of the radius and the azimuth alone (as a cone: not the
-# mixtures, maps and distortions of the plane of a disk); velocity traits
+# The traits that the stars of a spheroid take (see
+# SpheroidTraitsKinematics): the polar traits of the radius and the
+# azimuth alone (as a cone: not the mixtures, maps and distortions of the
+# plane of a disk); velocity traits
 # around the axis only ('tan': stars do not flow out), and not the
 # rotation in the gravity of the galaxy (mass: that is JeansKinematics)
 # nor the flows in the wedges, bars and spiral waves of a disk; dispersion
@@ -219,7 +220,7 @@ SPHEROID_TRAITS = TraitTable('spheroid', dict(
     ('tan',), tuple(traits.DPT_DIRECTIONS))
 
 
-class TraitsKinematics(SpheroidKinematics):
+class SpheroidTraitsKinematics(SpheroidKinematics):
     """
     The kinematics of the stars of a spheroid given by traits (see
     traits), as those of a thick disk whose spin axis is the axis of the
@@ -265,7 +266,7 @@ class TraitsKinematics(SpheroidKinematics):
     Raises
     ------
     ConfigError
-        If the traits are not valid (see parts.Kinematics), a spheroid
+        If the traits are not valid (see parts.KinematicTraits), a spheroid
         does not take one of them (see SPHEROID_TRAITS), or the nodes are
         not valid.
     """
@@ -275,19 +276,13 @@ class TraitsKinematics(SpheroidKinematics):
         return 'traits'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'TraitsKinematics':
-        for parser, key, required in (
-                (traits.vpt_parser, 'vptraits', True),
-                (traits.dpt_parser, 'dptraits', True),
-                (traits.vht_parser, 'vhtraits', False),
-                (traits.dht_parser, 'dhtraits', False)):
-            parseutils.load_option_and_update_info(
-                parser, info, key, required=required)
+    def load(cls, info: dict[str, Any]) -> 'SpheroidTraitsKinematics':
+        KinematicTraits.load_options(info)
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
-        info = super().dump() | self._kinematics.dump()
+        info = super().dump() | self._traits.dump()
         if self._nodes is not None:
             info.update(rnodes=list(self._nodes['rnodes']))
         if self._rstep is not None:
@@ -311,7 +306,7 @@ class TraitsKinematics(SpheroidKinematics):
             rstep: float | None = None,
             interp: str = 'linear'
     ):
-        self._kinematics = Kinematics(vptraits, dptraits, vhtraits, dhtraits)
+        self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
         SPHEROID_TRAITS.check(self.traits())
         given = (rnmin, rnmax, rnsep, rnlen, rnodes) != (None,) * 5
         self._nodes = parse_component_rnode_args(
@@ -325,7 +320,7 @@ class TraitsKinematics(SpheroidKinematics):
         Return its traits by kind (see TRAIT_KINDS), with the height traits
         of the factor one where none are given.
         """
-        kinematics = self._kinematics
+        kinematics = self._traits
         return dict(
             vpt=kinematics.vptraits(), dpt=kinematics.dptraits(),
             vht=with_default_height_traits(
@@ -354,8 +349,8 @@ class TraitsKinematics(SpheroidKinematics):
 
 class TraitsMotion(SpheroidMotion):
     """
-    The motion of the stars of a spheroid of TraitsKinematics: its traits
-    on its radial nodes (see NodalTraits), evaluated at its subnodes,
+    The motion of the stars of a spheroid of SpheroidTraitsKinematics: its
+    traits on its radial nodes (see NodalTraits), evaluated at its subnodes,
     whose parameters are written to a group of the buffer for each kind.
     """
 

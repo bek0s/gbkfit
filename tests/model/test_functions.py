@@ -28,8 +28,8 @@ GAS = dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=10)),
     kinematics=dict(
-        vptraits=dict(type='mass', pressure_support='jeans'),
-        dptraits=dict(type='uniform'), equilibrium='central'),
+        type='traits', vptraits=dict(type='mass', pressure_support='jeans'),
+        dptraits=dict(type='uniform'), equilibrium=dict(type='central')),
     emission=dict(type='lines'))
 MASS = [
     dict(type='point', name='bh'),
@@ -44,7 +44,7 @@ DISK = dict(
     type='disk', loose=False, tilted=False, rnodes=list(range(0, 21, 2)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
-        vptraits=dict(type='arctan', direction='tan'),
+        type='traits', vptraits=dict(type='arctan', direction='tan'),
         dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
 DISK_PARAMS = dict(

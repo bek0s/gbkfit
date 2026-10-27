@@ -1346,7 +1346,7 @@ MASS_PROPERTIES = dict(
 DISK = dict(
     loose=False, tilted=False, rnodes=list(range(0, 21, 2)), rstep=0.5,
     density=dict(ptraits=dict(type='exponential')),
-    kinematics=dict(dptraits=dict(type='uniform')),
+    kinematics=dict(type='traits', dptraits=dict(type='uniform')),
     emission=dict(type='lines'))
 
 DISK_PROPERTIES = dict(
@@ -1358,6 +1358,7 @@ def test_the_mass_of_a_galaxy_at_a_direct_distance_is_of_its_epoch():
     # (5.5 times that of today at z = 1.5), as by a distance of redshift
     galaxy = galaxy_parser.load(dict(
         components=[DISK | dict(type='disk', kinematics=dict(
+            type='traits',
             vptraits=dict(type='mass'), dptraits=dict(type='uniform')))],
         mass=copy.deepcopy(MASS), distance=copy.deepcopy(DISTANCE),
         redshift=1.5))
@@ -1516,6 +1517,7 @@ def test_disk_densities_are_azimuthal_means(driver):
             dict(type='exponential'), dict(type='nw_harmonic', order=2),
             dict(type='mixture_gauss', nblobs=1)]),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
         sptraits=dict(type='rrange'),
         emission=dict(type='lines')))
@@ -1552,6 +1554,7 @@ def test_disk_densities_are_exact_at_jumps(driver):
             dict(type='exponential'),
             dict(type='map', size=[6, 4], step=2.0)]),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='uniform', direction='tan'), dptraits=dict(type='uniform')),
         sptraits=dict(type='azrange'),
         emission=dict(type='lines')))
@@ -1599,6 +1602,7 @@ def test_disk_densities_see_small_blobs(driver):
             dict(type='mixture_ggauss', nblobs=1),
             dict(type='nw_distortion')]),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='uniform', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines')))
     params = dict(
@@ -1756,6 +1760,7 @@ def test_pressure_support_is_the_jeans_equation(driver):
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='mass'), dptraits=dict(type='exponential')),
         emission=dict(type='lines')))
     params = dict(
@@ -1790,7 +1795,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
         rnodes=list(range(0, 21, 2)), rstep=0.5,
         density=dict(ptraits=ptrait, htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
-            vptraits=dict(
+            type='traits', vptraits=dict(
                 type='mass', pressure_support='self_gravitating'),
             dptraits=dict(type='exponential')),
         emission=dict(type='lines')))
@@ -2130,12 +2135,12 @@ def test_rotation_at_each_height_option():
 
 def test_one_mass_trait_per_disk():
     from gbkfit.model.components import traits
-    from gbkfit.model.components.parts import Kinematics
-    Kinematics(
+    from gbkfit.model.components.parts import KinematicTraits
+    KinematicTraits(
         [traits.VPTraitMass(), traits.VPTraitNWUniform('rad')],
         traits.DPTraitUniform())
     with pytest.raises(ConfigError, match="at most one velocity trait"):
-        Kinematics(
+        KinematicTraits(
             [traits.VPTraitMass(), traits.VPTraitMass('jeans')],
             traits.DPTraitUniform())
 

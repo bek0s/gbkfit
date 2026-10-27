@@ -14,9 +14,10 @@ galaxies:
       ptraits: {type: exponential}
       htraits: {type: sech2, zmax: 6}
     kinematics:
+      type: traits
       vptraits: {type: mass, pressure_support: jeans}
       dptraits: {type: uniform}
-      equilibrium: jeans
+      equilibrium: {type: jeans}
       vhtraits: {type: mass, zmax: 6}
     emission: {type: lines}
   mass:

@@ -24,7 +24,8 @@ def line_disk(vptraits, **options):
         type='disk', loose=False, tilted=False,
         rnodes=list(range(0, 12)),
         density=dict(ptraits=dict(type='exponential')),
-        kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
+        kinematics=dict(type='traits',
+                        vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines')) | options])
 
 
@@ -74,6 +75,7 @@ plan = group_plan([dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))])
 params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
@@ -159,6 +161,7 @@ def test_incompatible_observations_are_rejected_before_evaluation(
         emission=dict(type=emission))
     if emission == 'lines':
         component |= dict(kinematics=dict(
+            type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')))
     case = dict(
         driver=dict(type='host'), observable=observable,

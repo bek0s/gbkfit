@@ -15,6 +15,7 @@ galaxies:
       ptraits: {type: exponential}
       htraits: {type: sech2, zmax: 6}
     kinematics:
+      type: traits
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}
@@ -40,6 +41,7 @@ galaxies:
       ptraits: {type: exponential}
       htraits: {type: sech2, zmax: 6}
     kinematics:
+      type: traits
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}

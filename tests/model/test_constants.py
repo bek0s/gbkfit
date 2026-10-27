@@ -26,7 +26,8 @@ def disk(vptraits, density=None, **options):
     return dict(
         type='disk', loose=False, tilted=False, rnodes=RNODES,
         density=density,
-        kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
+        kinematics=dict(type='traits',
+                        vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines')) | options
 
 

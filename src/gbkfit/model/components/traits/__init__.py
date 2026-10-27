@@ -80,7 +80,7 @@ three seen along it: sqrt(sigma_phi^2 cos^2(theta) sin^2(incl) +
 sigma_R^2 sin^2(theta) sin^2(incl) + sigma_z^2 cos^2(incl)), the
 dispersion of the isotropic traits alone where all are isotropic. Once
 a trait is along a direction, every direction needs a trait: its own or
-an isotropic one (see parts.Kinematics). The dispersion on the line of
+an isotropic one (see parts.KinematicTraits). The dispersion on the line of
 sight sets only two of the three at each radius, sigma_phi^2
 sin^2(incl) + sigma_z^2 cos^2(incl) (on the major axis) and sigma_R^2
 sin^2(incl) + sigma_z^2 cos^2(incl) (on the minor axis): a fit needs a

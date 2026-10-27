@@ -15,7 +15,7 @@ def test_mixture_blobs_are_tables_of_their_galaxy():
         density=dict(ptraits=[
             dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)]),
         kinematics=dict(
-            vptraits=dict(type='uniform', direction='tan'),
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
             dptraits=[
                 dict(type='uniform'),
                 dict(type='mixture_ggauss', nblobs=2)]),

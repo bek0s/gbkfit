@@ -270,12 +270,60 @@ class _ObservationRenames(Rule):
         return changes
 
 
+class _TypedKinematics(Rule):
+    """
+    The kinematics of every component are typed (2026-10-28): those of
+    disks and cones, by traits, are of the type 'traits', as those of
+    spheroids were, and the vertical equilibrium of a disk is one typed
+    option of them: equilibrium: {type: <equilibrium>, density:
+    <equilibrium_density>, direction: <equilibrium_direction>}.
+    """
+
+    _OPTIONS = dict(
+        equilibrium_density='density', equilibrium_direction='direction')
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for galaxy_path, galaxy in _items(config, 'galaxies'):
+            for path, component in _components(galaxy):
+                kinematics = component.get('kinematics')
+                if not isinstance(kinematics, MutableMapping) \
+                        or 'type' in kinematics:
+                    continue
+                _insert_first(kinematics, 'type', 'traits')
+                message = "type: traits"
+                if 'equilibrium' in kinematics:
+                    kinematics['equilibrium'] = self._equilibrium(kinematics)
+                    message += ", equilibrium options -> equilibrium: {type}"
+                changes.append(Change(
+                    galaxy_path + path + ['kinematics'], message))
+        return changes
+
+    def _equilibrium(
+            self, kinematics: MutableMapping[str, Any]
+    ) -> dict[str, Any] | None:
+        """
+        Remove the options of the vertical equilibrium of kinematics, and
+        return it in its new form.
+        """
+        options = {
+            new: kinematics.pop(old) for old, new in self._OPTIONS.items()
+            if old in kinematics}
+        mode = kinematics['equilibrium']
+        return None if mode is None else dict(type=mode) | options
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
     _DiskTypes(),
     _OwnGeometries(),
     _ObservationRenames(),
+    _TypedKinematics(),
 )
 
 

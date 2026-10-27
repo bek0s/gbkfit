@@ -101,7 +101,7 @@ def test_the_velocity_of_each_voxel(
     # cos(incl)) / r (r the distance from the apex)
     cone = HOLLOW | dict(
         kinematics=dict(
-            vptraits=dict(type='uniform', direction=direction),
+            type='traits', vptraits=dict(type='uniform', direction=direction),
             dptraits=UNIFORM),
         emission=LINES)
     observable = dict(
@@ -184,6 +184,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
 
 
 KINEMATICS = dict(
+    type='traits',
     vptraits=dict(type='uniform', direction='out'), dptraits=UNIFORM)
 
 

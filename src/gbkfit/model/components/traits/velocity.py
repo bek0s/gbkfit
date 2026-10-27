@@ -899,7 +899,7 @@ class VPTraitMass(VPTrait):
     height traits at z = 0, or its density traits if thin: the equation
     of a thin disk) and of rho sigma^2, sigma its velocity dispersion at
     the midplane (with the dispersion of the vertical equilibrium of its
-    disk in quadrature, if any, see parts.Kinematics; azimuthal means as
+    disk in quadrature, if any, see parts.Equilibrium; azimuthal means as
     those of mass.SurfaceComponent); the derivative by the second-order
     three-point formula on the rings; NaN without density. With
     'self_gravitating', the same for a disk whose thickness its own

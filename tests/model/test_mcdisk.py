@@ -140,7 +140,7 @@ def test_mcdisk_height_traits_of_a_distorted_disk_match_smdisk(driver):
     # The velocity height traits depend on the height above the
     # (distorted) midplane, in both disks
     component = DISTORTION | dict(
-        kinematics=dict(vhtraits=dict(type='exponential')))
+        kinematics=dict(type='traits', vhtraits=dict(type='exponential')))
     properties = DISTORTED | dict(vht_s=1)
     smdisk = evaluate_disk('smdisk', driver.type(), component, properties)
     mcdisk = evaluate_disk(
@@ -427,6 +427,7 @@ def test_mcdisk_distortion_brightness_matches_smdisk(driver):
 def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
     # Dispersion traits are evaluated at the clouds, like at the voxels
     component = dict(clouds=dict(cflux=1e-5), kinematics=dict(
+        type='traits',
         dptraits=[dict(type='uniform'), dict(type='mixture_gauss', nblobs=2)]))
     properties = {
         'dpt_a': 10, **{k.replace('pt_', 'dpt1_'): v
@@ -441,7 +442,8 @@ def test_mcdisk_dispersion_mixture_matches_smdisk(driver):
 def test_mcdisk_dispersion_directions_match_smdisk(driver):
     # The dispersion of a cloud is the velocity ellipsoid on its line of
     # sight, as that of a voxel
-    component = dict(clouds=dict(cflux=1e-5), kinematics=dict(dptraits=[
+    component = dict(clouds=dict(cflux=1e-5), kinematics=dict(type='traits',
+                                                              dptraits=[
         dict(type='uniform', direction='rad'),
         dict(type='uniform', direction='tan'),
         dict(type='uniform', direction='ver')]))

@@ -109,7 +109,7 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
         mass=[dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
         distance=dict(type='direct'))
     kinematics = dict(
-        vptraits=dict(type='mass', pressure_support='jeans'),
+        type='traits', vptraits=dict(type='mass', pressure_support='jeans'),
         dptraits=dict(type='uniform'))
     params = GEOMETRY | dict(
         vsys=0, distance=100, mass_halo_log_m=12, mass_halo_c=10, dpt_a=15)
@@ -146,7 +146,8 @@ def rotating_disk_of_image(path):
     galaxy = disk(trait) | dict(
         mass=[dict(type='point', name='bh')], distance=dict(type='direct'))
     galaxy['components'][0]['kinematics'] = dict(
-        vptraits=dict(type='mass'), dptraits=dict(type='uniform'))
+        type='traits', vptraits=dict(type='mass'),
+        dptraits=dict(type='uniform'))
     return galaxy
 
 

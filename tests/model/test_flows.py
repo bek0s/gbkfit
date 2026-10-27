@@ -31,7 +31,8 @@ def disk_config(vptraits, ptraits=None):
     return dict(
         type='disk', loose=False, tilted=False, rnodes=RNODES,
         density=dict(ptraits=ptraits or dict(type='exponential')),
-        kinematics=dict(vptraits=vptraits, dptraits=dict(type='uniform')),
+        kinematics=dict(type='traits',
+                        vptraits=vptraits, dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
 
 
@@ -114,6 +115,7 @@ def test_cones_take_no_flows_of_the_plane_of_a_disk():
                     ptraits=dict(type='uniform'),
                     htraits=dict(type='gauss', zmax=1.5)),
                 kinematics=dict(
+                    type='traits',
                     vptraits=trait, dptraits=dict(type='uniform')),
                 emission=dict(type='lines')))
 

@@ -29,7 +29,8 @@ from . import _disk
 from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
 from .opacity import LineOpacity
-from ..parts import Density, Kinematics, density_parser, kinematics_parser
+from ..parts import (
+    Density, DiskTraitsKinematics, density_parser, disk_kinematics_parser)
 
 
 __all__ = [
@@ -83,7 +84,7 @@ def load_disk_component(
     """
     for parser, key, required in (
             (density_parser, 'density', True),
-            (kinematics_parser, 'kinematics', False),
+            (disk_kinematics_parser, 'kinematics', False),
             (opacity_parser, 'opacity', False),
             (traits.zpt_parser, 'zptraits', False),
             (traits.spt_parser, 'sptraits', False)):
@@ -98,7 +99,7 @@ def dump_disk_component(
         component: Component,
         disk: _disk.NodalDisk,
         density: Density,
-        kinematics: Kinematics | None
+        kinematics: DiskTraitsKinematics | None
 ) -> dict[str, Any]:
     """
     Return the configuration of a disk component made of the given disk,
@@ -117,7 +118,7 @@ def dump_disk_component(
         rstep=disk.rstep(), interp=disk.interp().type(),
         density=density.dump())
     if kinematics is not None:
-        info.update(kinematics=kinematics.dump())
+        info.update(kinematics=disk_kinematics_parser.dump(kinematics))
     if component.emission() is not None:
         info.update(emission=emission_parser.dump(component.emission()))
     if component.opacity() is not None:
@@ -132,7 +133,7 @@ def dump_disk_component(
 
 def make_disk(
         density: Density,
-        kinematics: Kinematics | None,
+        kinematics: DiskTraitsKinematics | None,
         emission: Emission | None,
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
@@ -292,7 +293,7 @@ def line_opacity_traits(
 
 def _disk_traits(
         density: Density,
-        kinematics: Kinematics | None,
+        kinematics: DiskTraitsKinematics | None,
         emission: Emission | None,
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,

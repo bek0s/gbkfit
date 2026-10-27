@@ -25,6 +25,7 @@ def component(name, **emission):
         rnodes=list(range(0, 14)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines', **emission))
 

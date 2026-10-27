@@ -32,6 +32,7 @@ def _disk(
     return dict(type='disk', name=name) | rings | dict(
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
+            type='traits',
             vptraits=vptraits, dptraits=dptraits or dict(type='uniform')),
         emission=dict(type='lines')) | options
 
@@ -136,7 +137,7 @@ _MASS_ROTATION_PRESSURE = dict(
 
 _C2_GAS = _thick(
     _disk('gas', vptraits=dict(type='mass', pressure_support='jeans')),
-    equilibrium='jeans', vhtraits=dict(type='mass', zmax=6))
+    equilibrium=dict(type='jeans'), vhtraits=dict(type='mass', zmax=6))
 
 # (a Sersic bulge, not an exponential disk, whose forces off its plane
 # cost some 9 s of tables in each process)

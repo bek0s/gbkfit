@@ -33,6 +33,7 @@ def disk(kind='smooth', thick=True):
         type='disk', loose=False, tilted=False, rnmin=0, rnmax=10, rnsep=1,
         density=density,
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines')) | clouds
 
@@ -135,6 +136,7 @@ def test_a_point_is_a_layer_at_its_depth(driver):
 # radiative transfer
 LINES = dict(type='lines')
 KINEMATICS = dict(
+    type='traits',
     vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform'))
 THICK = dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
@@ -151,7 +153,7 @@ OUTFLOW = dict(
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
-        vptraits=dict(type='uniform', direction='out'),
+        type='traits', vptraits=dict(type='uniform', direction='out'),
         dptraits=dict(type='uniform')),
     emission=LINES)
 

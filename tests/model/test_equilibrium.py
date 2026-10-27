@@ -1,5 +1,5 @@
 """
-Tests of the vertical equilibrium of disks (see parts.Kinematics): the
+Tests of the vertical equilibrium of disks (see parts.Equilibrium): the
 dispersion that holds a thick disk up in the gravity of its galaxy, in
 quadrature with that of its dispersion traits.
 """
@@ -29,9 +29,12 @@ DISK = dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=10)),
     kinematics=dict(
-        vptraits=dict(type='arctan', direction='tan'),
-        dptraits=dict(type='uniform'), equilibrium='central'),
+        type='traits', vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform'), equilibrium=dict(type='central')),
     emission=dict(type='lines'))
+
+# The equilibrium in the gravity of the mass component 'gas'
+SELF_GRAVITATING = dict(type='self_gravitating', density='gas')
 
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, ht_s=1,
@@ -88,13 +91,14 @@ def test_central_equilibrium_is_the_dispersion_of_the_rotation(
 
 @pytest.mark.parametrize('disk_type', ['smooth', 'clouds'])
 def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
-    # With equilibrium_direction 'ver', the dispersion of the equilibrium
+    # With the direction 'ver', the dispersion of the equilibrium
     # is sigma_z alone: the disk is that of traits of sigma_R = sigma_phi
     # = 0 and sigma_z of h V / R at its subnodes
     disk = DISK | dict(type='disk')
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
-    balanced = galaxy(with_kinematics(disk, equilibrium_direction='ver'))
+    balanced = galaxy(with_kinematics(
+        disk, equilibrium=dict(type='central', direction='ver')))
     given = galaxy(with_kinematics(
         disk, dptraits=[
             dict(type='uniform', direction='rad'),
@@ -133,7 +137,8 @@ def test_central_equilibrium_in_the_mass_of_the_galaxy():
     np.testing.assert_array_equal(
         states[0].equilibrium, table['sigma'])
     dumped = galaxy_parser.dump(balanced)
-    assert dumped['components'][0]['kinematics']['equilibrium'] == 'central'
+    assert dumped['components'][0]['kinematics']['equilibrium'] == \
+        dict(type='central')
 
 
 def test_self_gravitating_equilibrium_in_a_mass_disk():
@@ -145,7 +150,7 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
         vertical=dict(type='thin'))]
     balanced = galaxy(
         with_kinematics(
-            DISK, equilibrium='self_gravitating', equilibrium_density='gas'),
+            DISK, equilibrium=SELF_GRAVITATING),
         mass=mass, distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_gas_log_m=9, mass_gas_rd=0.3)
     extra = Extras()
@@ -161,14 +166,14 @@ def test_self_gravitating_equilibrium_in_a_mass_disk():
     np.testing.assert_array_equal(
         states[0].equilibrium, table['sigma'])
     kinematics = galaxy_parser.dump(balanced)['components'][0]['kinematics']
-    assert kinematics['equilibrium_density'] == 'gas'
+    assert kinematics['equilibrium'] == SELF_GRAVITATING
 
 
 def test_self_gravitating_equilibrium_in_its_own_mass_disk():
     # Sigma of a mass disk that follows the disk: upsilon times its density
     # at its subnodes (exact for its exponential there)
     disk = with_kinematics(
-        DISK, equilibrium='self_gravitating', equilibrium_density='gas') \
+        DISK, equilibrium=SELF_GRAVITATING) \
         | dict(name='gas', geometry='own')
     balanced = galaxy(
         disk, mass=[dict(
@@ -216,7 +221,7 @@ def test_jeans_equilibrium_in_a_point_mass():
     # sigma^2 = int_0^zmax rho(z) G M z / (R^2 + z^2)^(3/2) dz / rho(0)
     # (kpc), rho the Gaussian of the disk; at the centre, the next subnode
     balanced = galaxy(
-        with_kinematics(DISK, equilibrium='jeans'),
+        with_kinematics(DISK, equilibrium=dict(type='jeans')),
         mass=[dict(type='point', name='bh')],
         distance=dict(type='direct', cosmology='Planck18'))
     params = PROPERTIES | dict(distance=10, mass_bh_log_m=10)
@@ -240,7 +245,7 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
     # In its own gravity alone (a mass disk of its density), a layer thin
     # against its radius is the isothermal slab of the self-gravitating
     # equilibrium: sigma^2 = 2 sqrt(3) G Sigma h, to about h / rd
-    disk = with_kinematics(DISK, equilibrium='jeans') | dict(
+    disk = with_kinematics(DISK, equilibrium=dict(type='jeans')) | dict(
         name='gas', geometry='own', density=dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=2)))
@@ -265,17 +270,17 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
 
 
 @pytest.mark.parametrize('disk, info, message', [
-    (with_kinematics(DISK, equilibrium_density='gas'), {},
-     "required for it, and only for it"),
-    (with_kinematics(DISK, equilibrium='self_gravitating'), {},
-     "required for it, and only for it"),
+    (with_kinematics(DISK, equilibrium=dict(type='central', density='gas')),
+     {}, "unknown options"),
+    (with_kinematics(DISK, equilibrium=dict(type='self_gravitating')), {},
+     "density"),
     (with_kinematics(
-        DISK, equilibrium='self_gravitating', equilibrium_density='gas'),
+        DISK, equilibrium=SELF_GRAVITATING),
      {}, "needs the mass of its galaxy"),
-    (with_kinematics(DISK, equilibrium='jeans'), {},
+    (with_kinematics(DISK, equilibrium=dict(type='jeans')), {},
      "needs the mass of its galaxy"),
     (with_kinematics(
-        DISK, equilibrium='self_gravitating', equilibrium_density='dust'),
+        DISK, equilibrium=dict(type='self_gravitating', density='dust')),
      dict(mass=[dict(type='point', name='gas')],
           distance=dict(type='direct')), "which its galaxy does not have")])
 def test_self_gravitating_equilibrium_is_checked(disk, info, message):
@@ -288,21 +293,21 @@ def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
         "def vcirc2(R, params):\n    return 100 * R\n")
     with pytest.raises(ConfigError, match=r"\['mine'\] do not give"):
         galaxy(
-            with_kinematics(DISK, equilibrium='jeans'),
+            with_kinematics(DISK, equilibrium=dict(type='jeans')),
             mass=[dict(type='user', name='mine',
                        file=str(tmp_path / 'curve.py'), func='vcirc2')],
             distance=dict(type='direct'))
 
 
 @pytest.mark.parametrize('disk, message', [
-    (with_kinematics(DISK, equilibrium='thin'), "equilibrium must be one of"),
+    (with_kinematics(DISK, equilibrium=dict(type='thin')), "'thin'"),
     (DISK | dict(density=dict(ptraits=dict(type='exponential'))),
      "needs density height traits"),
     (with_kinematics(DISK, vptraits=dict(type='arctan', direction='rad')),
      "it has neither"),
     ({key: value for key, value in DISK.items()
       if key not in ('loose', 'tilted')} | dict(type='cone'),
-     "a cone has no vertical equilibrium")])
+     "unknown options")])
 def test_equilibrium_is_checked(disk, message):
     with pytest.raises(ConfigError, match=message):
         galaxy(disk)

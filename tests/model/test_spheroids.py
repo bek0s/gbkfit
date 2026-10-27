@@ -4,7 +4,7 @@ exact projections of their profiles, the mean density near the centre
 of a cusp, and their options; the mass that follows their light
 (mass.MassLightSpheroid); their Jeans kinematics (JeansKinematics),
 against exact and independent solutions, and in spectral cubes of stars;
-and the kinematics of their traits (TraitsKinematics).
+and the kinematics of their traits (SpheroidTraitsKinematics).
 """
 
 import functools
@@ -388,6 +388,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
         type='disk', name='gas', rnodes=list(range(0, 13, 2)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
     disk_properties = dict(vsys=0, gas_pt_a=1, gas_pt_s=4, gas_dpt_a=15)

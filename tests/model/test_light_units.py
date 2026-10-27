@@ -35,6 +35,7 @@ def disk(unit=None, lines=('hi21',), thick=False):
     return dict(
         type='disk', rnodes=list(range(0, 121, 20)), density=density,
         kinematics=dict(
+            type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=emission)
 
