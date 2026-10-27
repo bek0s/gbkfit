@@ -18,6 +18,7 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
 from .base import ComponentState
 from .disks._profiles import dispersion, rotation
+from .disks.disk import Disk
 from ._stage import GalaxyMass, GalaxyStage, GalaxyState
 
 if TYPE_CHECKING:
@@ -128,9 +129,13 @@ class GalaxyFunctions:
         self._component_set = component_set
         self._stage = GalaxyStage(component_set, driver, redshift, sky_origin)
         self._suffixes = _disk_suffixes(component_set)
-        self._disk_plans = {
-            i: components[i].density_disk().plan(driver, 0, np.float64)
+        # (the components of the suffixes are disks)
+        self._disks = {
+            i: typing.cast(Disk, components[i]).density_disk()
             for i in self._suffixes}
+        self._disk_plans = {
+            i: disk.plan(driver, 0, np.float64)
+            for i, disk in self._disks.items()}
         self._names = self.names_of(component_set)
 
     @staticmethod
@@ -206,8 +211,7 @@ class GalaxyFunctions:
         """
         for index, suffix in self._suffixes.items():
             if name in (f'rotation{suffix}', f'dispersion{suffix}'):
-                rnodes = self._component_set.components()[
-                    index].density_disk().rnodes()
+                rnodes = self._disks[index].rnodes()
                 return float(rnodes[0]), float(rnodes[-1])
         return None
 
@@ -294,7 +298,7 @@ class GalaxyFunctions:
         parameters of the galaxy and with what its galaxy gives it (its
         state, by the index of its component).
         """
-        disk = self._component_set.components()[index].density_disk()
+        disk = self._disks[index]
         radii = self._radii(index, R, 'rotation')
         return rotation(
             disk, self._disk_plans[index], self._disk_params(index, params),
@@ -315,7 +319,7 @@ class GalaxyFunctions:
         at the values of the parameters of the galaxy and with what its
         galaxy gives it (its state, by the index of its component).
         """
-        disk = self._component_set.components()[index].density_disk()
+        disk = self._disks[index]
         radii = self._radii(index, R, 'dispersion')
         state = typing.cast('DiskState | None', state_of(index))
         return dispersion(
@@ -343,8 +347,7 @@ class GalaxyFunctions:
             If a radius is outside the disk: below its first radial node,
             or above its last.
         """
-        component = self._component_set.components()[index]
-        rnodes = component.density_disk().rnodes()
+        rnodes = self._disks[index].rnodes()
         radii = np.asarray(R, dtype=float)
         if not np.all((rnodes[0] <= radii) & (radii <= rnodes[-1])):
             name = f'{what}{self._suffixes[index]}'
@@ -463,5 +466,6 @@ def _disk_suffixes(component_set: 'ComponentSet') -> dict[int, str]:
     return {
         i: '' if cmp.name() is None else f'_{cmp.name()}'
         for i, cmp in enumerate(component_set.components())
-        if (disk := cmp.density_disk()) is not None
-        and (disk.traits('vpt') or disk.traits('dpt'))}
+        if isinstance(cmp, Disk)
+        and (cmp.density_disk().traits('vpt')
+             or cmp.density_disk().traits('dpt'))}

@@ -26,6 +26,7 @@ from ._stage import GalaxyStage
 from ._transfer import LineResolution
 from ._units import DataUnit
 from .base import Component, ComponentState, DepthAxis, OpacityCubes
+from .disks.disk import Disk
 from .geometries import Geometry
 from .lines import Band
 
@@ -87,8 +88,7 @@ def _with_mass_params(
     # (of density height traits, as the densities that mass disks follow:
     # see DiskDensity.thick)
     thick = [cmp.name() for cmp in components
-             if cmp.density_disk() is not None
-             and cmp.density_disk().traits('rht')]
+             if isinstance(cmp, Disk) and cmp.density_disk().traits('rht')]
     gravity.check_mass_model(mass_model, thick)
     for mass_component in mass_model.components():
         if not mass_component.takes_shares():

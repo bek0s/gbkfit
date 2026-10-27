@@ -17,7 +17,6 @@ if TYPE_CHECKING:
     from ._needs import Need
     from ._stage import GalaxyMass
     from ._units import DataUnit
-    from .disks._disk import NodalDisk, DiskPlan
 
 
 __all__ = [
@@ -273,14 +272,6 @@ class Component(parseutils.TypedSerializable, abc.ABC):
         """
         return None
 
-    def density_disk(self) -> 'NodalDisk | None':
-        """
-        Return its disk, if it is made of one: the mass of its galaxy can
-        follow the density of the disk (see mass.SurfaceComponent and
-        mass.VerticalComponent). None here.
-        """
-        return None
-
     def density_kind(self) -> 'type[ComponentDensity] | None':
         """
         Return the kind of the density that it gives the mass of its
@@ -453,9 +444,13 @@ class ComponentPlan(abc.ABC):
     of radiative transfer, the fields of the light instead of the light.
     """
 
-    def disk_plan(self) -> 'DiskPlan | None':
-        """Return the plan of its disk, if it is made of one; none here."""
-        return None
+    def warn_truncation(self, params: ParamValues, label: str) -> None:
+        """
+        Log a warning where an option of the component shapes it rather
+        than holds it, at the values of its parameters (e.g. the zmax of a
+        height trait of a disk), with its label (its name, or its
+        position) in the message; none here.
+        """
 
     @abc.abstractmethod
     def evaluate_emission(

@@ -2,6 +2,7 @@
 Helpers of the disk component (Disk).
 """
 
+import logging
 from collections.abc import Sequence
 from typing import Any
 
@@ -9,6 +10,7 @@ import astropy.units
 import numpy as np
 
 from gbkfit.driver import Driver
+from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
@@ -37,6 +39,16 @@ __all__ = [
     'load_disk_component',
     'make_disk'
 ]
+
+
+_log = logging.getLogger(__name__)
+
+# The share of the profile of a density height trait beyond its zmax
+# above which a warning says that zmax shapes the density, and the
+# azimuths where the displacements of vertical distortion traits are
+# checked against their zmax (see DiskComponentPlan.warn_truncation)
+_MAX_CUT = 0.01
+_CUT_AZIMUTHS = 64
 
 
 # The prefix of the parameters of the traits of each kind
@@ -375,7 +387,7 @@ def disk_plan(
         lines, bands, unit, spectral, names, band, emits, data_unit,
         redshift, disk.opacity_lines())
     return DiskComponentPlan(
-        driver,
+        driver, disk,
         disk.plan(driver, emission.nlines, dtype, emission.opacity_rows),
         emission, opacity_ratios)
 
@@ -389,15 +401,44 @@ class DiskComponentPlan(NativeComponentPlan):
     def __init__(
             self,
             driver: Driver,
+            disk: _disk.NodalDisk,
             disk_plan_: _disk.DiskPlan,
             emission: EmissionSetup,
             opacity_ratios: np.ndarray | None = None
     ):
         super().__init__(driver, disk_plan_, emission, opacity_ratios)
+        self._disk = disk
         self._disk_plan = disk_plan_
 
     def disk_plan(self) -> _disk.DiskPlan:
+        """Return the plan of its disk."""
         return self._disk_plan
+
+    def warn_truncation(self, params: ParamValues, label: str) -> None:
+        """
+        Log a warning for each density height trait of its disk whose zmax
+        cuts more than 1% of its profile at a ring, and for each vertical
+        distortion trait whose zmax limits its displacement somewhere (at a
+        ring, at azimuths around it): zmax then shapes the disk, rather
+        than holding it (see RHTrait and ZPTrait).
+        """
+        disk = self._disk
+        for index, cut, radius in _height_cuts(disk, params):
+            if cut > _MAX_CUT:
+                trait = disk.traits('rht')[index]
+                _log.warning(
+                    f"{label}: the zmax ({trait.zmax():g} arcsec) of its "
+                    f"density height trait {index} ({trait.type()}) cuts "
+                    f"{cut:.1%} of its profile at the radius {radius:g}: "
+                    f"zmax shapes the density there; raise it")
+        for index, radius in _limited_displacements(
+                disk, self._disk_plan, params):
+            trait = disk.traits('zpt')[index]
+            _log.warning(
+                f"{label}: the zmax ({trait.zmax():g} arcsec) of its "
+                f"vertical distortion trait {index} ({trait.type()}) "
+                f"limits its displacement at the radius {radius:g}: "
+                f"zmax shapes the disk there; raise it")
 
 
 def check_traits_common(traits_: Sequence[traits.Trait]) -> None:
@@ -412,3 +453,69 @@ def check_traits_common(traits_: Sequence[traits.Trait]) -> None:
             parseutils.warn(
                 f"the use of {trait_desc} is discouraged; "
                 f"it may result in density overestimation due to aliasing")
+
+
+def _height_cuts(
+        disk: _disk.NodalDisk, params: ParamValues
+) -> list[tuple[int, float, float]]:
+    """
+    Return, for each density height trait of a disk (with its
+    parameters), the largest share of its profile that its zmax cuts (see
+    RHTrait), over its rings, and the radius where it does: (the index of
+    the trait, the share, the radius).
+    """
+    radii = np.asarray(disk.rnodes())
+    trait_params = disk.trait_params('rht')
+    cuts = []
+    for index, (trait, names) in enumerate(zip(
+            disk.traits('rht'), trait_params.pnames)):
+        values = [
+            _at_radii(disk, params[names[name]], radii)
+            for name in ('s', 'b') if name in names]
+        zmax = trait.zmax()
+        cut = 1 - (trait.cdf(zmax, *values) - trait.cdf(-zmax, *values))
+        ring = int(np.argmax(cut))
+        cuts.append((index, float(cut[ring]), float(radii[ring])))
+    return cuts
+
+
+def _limited_displacements(
+        disk: _disk.NodalDisk, plan: _disk.DiskPlan, params: ParamValues
+) -> list[tuple[int, float]]:
+    """
+    Return, for each vertical distortion trait of a disk (with its plan
+    and parameters) whose zmax limits its displacement somewhere (see
+    ZPTrait), over its rings and azimuths around them, the index of the
+    trait and the first radius where it does.
+    """
+    if not disk.traits('zpt'):
+        return []
+    radii = np.asarray(disk.rnodes())
+    azimuths = np.linspace(0, 360, _CUT_AZIMUTHS, endpoint=False)
+    displacements = plan.evaluate_polar_traits(
+        params, 'zpt', radii[:, None], azimuths)
+    limited = []
+    for index, (trait, values) in enumerate(zip(
+            disk.traits('zpt'), displacements)):
+        # (a limited displacement is zmax, in the precision of the kernels)
+        zmax = values.dtype.type(trait.zmax())
+        rings = np.flatnonzero((np.abs(values) >= zmax).any(axis=1))
+        if rings.size:
+            limited.append((index, float(radii[rings[0]])))
+    return limited
+
+
+def _at_radii(
+        disk: _disk.NodalDisk, values: float | np.ndarray, radii: np.ndarray
+) -> np.ndarray:
+    """
+    Return the values of a parameter of a trait of a disk at the given
+    radii: one value, or the node-wise values at the nodes or the
+    subnodes of the disk, interpolated linearly.
+    """
+    values = np.asarray(values, dtype=float)
+    if values.ndim == 0:
+        return np.full(len(radii), float(values))
+    nodes = disk.rnodes() if len(values) == len(disk.rnodes()) \
+        else disk.subrnodes()
+    return np.interp(radii, nodes, values)

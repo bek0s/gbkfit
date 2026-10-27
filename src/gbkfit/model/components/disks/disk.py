@@ -197,6 +197,10 @@ class Disk(Component):
         return self._disk.bounding_radius()
 
     def density_disk(self) -> _disk.NodalDisk:
+        """
+        Return its disk: the mass of its galaxy can follow the density of
+        the disk (see mass.SurfaceComponent and mass.VerticalComponent).
+        """
         return self._disk
 
     def density_kind(self) -> 'type[DiskDensity]':

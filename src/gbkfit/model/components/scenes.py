@@ -24,6 +24,7 @@ from ._transfer import (
     MAX_SUBCHANNELS, LineResolution, TransferPlan, warn_resolution)
 from ._units import DataUnit
 from .base import ComponentState, DepthAxis, FrameParams
+from .disks.disk import Disk
 from .lines import Band
 from .roles import STARS, DustOpacity
 from .traits import RPTraitImage
@@ -167,8 +168,8 @@ class Scene:
             trait
             for galaxy, emitters in zip(self._galaxies, self._emitters)
             for i in emitters
-            if (disk := galaxy.components()[i].density_disk()) is not None
-            for trait in disk.traits('rpt')
+            if isinstance(component := galaxy.components()[i], Disk)
+            for trait in component.density_disk().traits('rpt')
             if isinstance(trait, RPTraitImage))
 
     def frame_params(self, name: str) -> FrameParams:

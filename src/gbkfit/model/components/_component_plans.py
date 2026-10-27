@@ -18,7 +18,6 @@ from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._units import DataUnit
 from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
-from .disks._disk import NodalDisk, DiskPlan
 from .extinction import ExtinctionLaw
 from .lines import Band
 from .roles import DustOpacity
@@ -37,12 +36,10 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# The share of the profile of a density height trait beyond its zmax
-# above which a warning says that zmax shapes the density, and the
-# azimuths where the displacements of vertical distortion traits are
-# checked against their zmax (see ComponentPlans.warn_truncation)
+# The share of the light of a component beyond its extent above which a
+# warning says that the extent shapes it (see
+# ComponentPlans.warn_truncation)
 _MAX_CUT = 0.01
-_CUT_AZIMUTHS = 64
 
 # The voxels whose light the resolution of the light checks: those with at
 # least this share of the light of the brightest voxel of their component
@@ -256,14 +253,11 @@ class ComponentPlans:
 
     def warn_truncation(self, params: dict[int, ParamValues]) -> None:
         """
-        Log a warning for each density height trait of the disks it
-        evaluates, with the parameters of each by index (see params),
-        whose zmax cuts more than 1% of its profile at a ring, and for
-        each vertical distortion trait whose zmax limits its displacement
-        somewhere (at a ring, at azimuths around it): zmax then shapes the
-        disk, rather than holding it (see RHTrait and ZPTrait); and for
-        each component whose extent cuts more than 1% of its light on a
-        grid with a depth axis (see Component.extent_cut).
+        Log a warning for each component it evaluates, with the parameters
+        of each by index (see params), whose extent cuts more than 1% of
+        its light on a grid with a depth axis (see Component.extent_cut),
+        and where an option of a component shapes it rather than holds it
+        (see ComponentPlan.warn_truncation).
         """
         components = self._component_set.components()
         for i, plan in self.plans.items():
@@ -274,26 +268,7 @@ class ComponentPlans:
                 _log.warning(
                     f"{_label(components, i)}: its {option} cuts "
                     f"{cut:.1%} of its light: {option} shapes it; raise it")
-            disk = components[i].density_disk()
-            if disk is None or not disk.traits('rht'):
-                continue
-            label = _label(components, i)
-            for index, cut, radius in _height_cuts(disk, params[i]):
-                if cut > _MAX_CUT:
-                    trait = disk.traits('rht')[index]
-                    _log.warning(
-                        f"{label}: the zmax ({trait.zmax():g} arcsec) of its "
-                        f"density height trait {index} ({trait.type()}) cuts "
-                        f"{cut:.1%} of its profile at the radius {radius:g}: "
-                        f"zmax shapes the density there; raise it")
-            for index, radius in _limited_displacements(
-                    disk, plan.disk_plan(), params[i]):
-                trait = disk.traits('zpt')[index]
-                _log.warning(
-                    f"{label}: the zmax ({trait.zmax():g} arcsec) of its "
-                    f"vertical distortion trait {index} ({trait.type()}) "
-                    f"limits its displacement at the radius {radius:g}: "
-                    f"zmax shapes the disk there; raise it")
+            plan.warn_truncation(params[i], _label(components, i))
 
     def light_resolution(
             self,
@@ -594,69 +569,3 @@ def _same_wavelength(a: float | None, b: float | None) -> bool:
     if a is None or b is None:
         return a is b
     return bool(np.isclose(a, b, rtol=1e-9, atol=0))
-
-
-def _height_cuts(
-        disk: NodalDisk, params: ParamValues
-) -> list[tuple[int, float, float]]:
-    """
-    Return, for each density height trait of a disk (with its
-    parameters), the largest share of its profile that its zmax cuts (see
-    RHTrait), over its rings, and the radius where it does: (the index of
-    the trait, the share, the radius).
-    """
-    radii = np.asarray(disk.rnodes())
-    trait_params = disk.trait_params('rht')
-    cuts = []
-    for index, (trait, names) in enumerate(zip(
-            disk.traits('rht'), trait_params.pnames)):
-        values = [
-            _at_radii(disk, params[names[name]], radii)
-            for name in ('s', 'b') if name in names]
-        zmax = trait.zmax()
-        cut = 1 - (trait.cdf(zmax, *values) - trait.cdf(-zmax, *values))
-        ring = int(np.argmax(cut))
-        cuts.append((index, float(cut[ring]), float(radii[ring])))
-    return cuts
-
-
-def _limited_displacements(
-        disk: NodalDisk, plan: DiskPlan, params: ParamValues
-) -> list[tuple[int, float]]:
-    """
-    Return, for each vertical distortion trait of a disk (with its plan
-    and parameters) whose zmax limits its displacement somewhere (see
-    ZPTrait), over its rings and azimuths around them, the index of the
-    trait and the first radius where it does.
-    """
-    if not disk.traits('zpt'):
-        return []
-    radii = np.asarray(disk.rnodes())
-    azimuths = np.linspace(0, 360, _CUT_AZIMUTHS, endpoint=False)
-    displacements = plan.evaluate_polar_traits(
-        params, 'zpt', radii[:, None], azimuths)
-    limited = []
-    for index, (trait, values) in enumerate(zip(
-            disk.traits('zpt'), displacements)):
-        # (a limited displacement is zmax, in the precision of the kernels)
-        zmax = values.dtype.type(trait.zmax())
-        rings = np.flatnonzero((np.abs(values) >= zmax).any(axis=1))
-        if rings.size:
-            limited.append((index, float(radii[rings[0]])))
-    return limited
-
-
-def _at_radii(
-        disk: NodalDisk, values: float | np.ndarray, radii: np.ndarray
-) -> np.ndarray:
-    """
-    Return the values of a parameter of a trait of a disk at the given
-    radii: one value, or the node-wise values at the nodes or the
-    subnodes of the disk, interpolated linearly.
-    """
-    values = np.asarray(values, dtype=float)
-    if values.ndim == 0:
-        return np.full(len(radii), float(values))
-    nodes = disk.rnodes() if len(values) == len(disk.rnodes()) \
-        else disk.subrnodes()
-    return np.interp(radii, nodes, values)
