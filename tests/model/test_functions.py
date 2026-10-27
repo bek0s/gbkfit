@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from gbkfit.model import Extras, galaxy_parser
+from gbkfit.utils.gridutils import SpectralAxis
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)
@@ -240,7 +241,9 @@ def test_functions_of_a_group_prefixed():
         ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     galaxy = gas_galaxy(name='north')
     group = ObservationGroup([galaxy], [ObservationSky(
-        PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)),
+        PixelSpectra(
+            size=(8, 8), step=(1, 1),
+            spectral=SpectralAxis(size=5, step=10, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid')))])
     functions = group.plan().functions()
     assert functions.names() == group.function_names() == ('G',) + tuple(
@@ -261,7 +264,9 @@ def test_derived_values_of_a_group():
         ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import param_space_parser
     group = ObservationGroup([gas_galaxy()], [ObservationSky(
-        PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)),
+        PixelSpectra(
+            size=(8, 8), step=(1, 1),
+            spectral=SpectralAxis(size=5, step=10, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid')))])
     params = param_space_parser.load(
         dict(properties=PARAMS, derived=dict(

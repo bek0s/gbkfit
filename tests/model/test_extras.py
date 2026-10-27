@@ -34,13 +34,17 @@ CASES = dict(
         dict(components=[DISK]),
         (12, 16), None),
     pixel_spectra=(
-        dict(type='pixel_spectra', size=[16, 12, 20], step=[1, 1, 10],
-             rval=[150, 2, 0], psf=dict(type='gauss', sigma=1)),
+        dict(
+            type='pixel_spectra', size=[16, 12], step=[1, 1], rval=[150, 2],
+            spectral=dict(size=20, step=10, rval=0, convention='relativistic'),
+            psf=dict(type='gauss', sigma=1)),
         dict(components=[LINE_DISK]),
         (20, 12, 16), 2),
     slit_spectra=(
-        dict(type='slit_spectra', size=[16, 20], step=[1, 10],
-             psf=dict(type='gauss', sigma=1)),
+        dict(
+            type='slit_spectra', size=[16], step=[1],
+            spectral=dict(size=20, step=10, convention='relativistic'),
+            psf=dict(type='gauss', sigma=1)),
         dict(components=[LINE_DISK]),
         (20, 16), 1))
 
@@ -104,7 +108,9 @@ def test_model_extras_are_on_the_sky(evaluate_cases, name):
     dcube_hi = extra.get('dcube_hi')
     assert isinstance(bdata, gridutils.GridData)
     assert bdata.data.ndim == 2 and bdata.spectral_axis is None
-    assert bdata.coords == dcube_hi.coords.axes(0, 1)
+    # (the sky of the cube, without the convention of its spectral axis)
+    assert bdata.coords == dcube_hi.coords.axes(0, 1)._replace(
+        convention=None)
 
 
 def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
@@ -119,7 +125,7 @@ def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
     _, extra = evaluate_cases([case], PROPERTIES | dict(ht_s=1))
     bdata = extra.get('bdata', component='component0')
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
-    sky = extra.get('dcube_hi').coords.axes(0, 1)
+    sky = extra.get('dcube_hi').coords.axes(0, 1)._replace(convention=None)
     assert bdata.coords.axes(0, 1) == sky
     assert bdata.coords.axes(2) == gridutils.Coords((0.5,), (4.5,), (0.0,), 0)
 

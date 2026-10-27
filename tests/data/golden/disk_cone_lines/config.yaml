@@ -42,14 +42,13 @@ observations:
   name: cube
   flux_scale: per_spectrum
   data:
-    step: [0.6, 0.6, 50]
-    rpix: [11.5, 11.5, 19.5]
-    rval: [0, 0, 450]
+    step: [0.6, 0.6]
+    rpix: [11.5, 11.5]
+    rval: [0, 0]
     rota: 0
-    rest: 6.562800000000002e-07 m
-    medium: vacuum
     data: cube_spectra_d.fits
     error: 0.00015
+    spectral: {step: 50, rpix: 19.5, rval: 450, rest: 6.562800000000002e-07 m, medium: vacuum}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: grid

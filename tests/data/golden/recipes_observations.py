@@ -59,12 +59,15 @@ _DISK_TRIAL = dict(
     dpt_a=dict(value=30, min=5, max=80))
 
 _CUBE = _sky(
-    dict(type='pixel_spectra', size=[24, 24, 40], step=[0.5, 0.5, 20]),
+    dict(
+        type='pixel_spectra', size=[24, 24], step=[0.5, 0.5],
+        spectral=dict(size=40, step=20, convention='relativistic')),
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 _MOMENTS = _sky(
-    dict(type='pixel_moments', size=[24, 24], spec_size=60, spec_step=10,
-         spec_convention='relativistic'),
+    dict(
+        type='pixel_moments', size=[24, 24],
+        spectral=dict(size=60, step=10, convention='relativistic')),
     instrument=dict(psf=_PSF, lsf=_LSF))
 
 
@@ -117,14 +120,16 @@ def _small_cube(**options: Any) -> dict[str, Any]:
     observations), with options of its observable.
     """
     return _sky(
-        dict(type='pixel_spectra', size=[20, 20, 40], step=[0.5, 0.5, 20])
+        dict(
+            type='pixel_spectra', size=[20, 20], step=[0.5, 0.5],
+            spectral=dict(size=40, step=20, convention='relativistic'))
         | options, instrument=dict(psf=_PSF, lsf=_LSF))
 
 
 # A grism of one pixel (1 arcsec) along x per channel of 30 km/s at 4 um
 # (a channel spans 4 um * 30 / c)
 _GRISM = dict(
-    spec_size=21, spec_step=30, spec_rest='4 um', step=[1, 1],
+    spectral=dict(size=21, step=30, rest='4 um'), step=[1, 1],
     trace=dict(type='polynomial', wave='4 um', dx=[0, _C_KMS / (4 * 30)]))
 
 
@@ -286,9 +291,12 @@ CASES: list[dict[str, Any]] = [
         galaxies=[dict(redshift=0.03, components=[_thin_disk(
             emission=dict(type='lines', lines=['halpha', 'nii6583']))])],
         observations=[_sky(
-            dict(type='pixel_spectra', size=[20, 20, 50],
-                 step=[0.5, 0.5, 30], rval=[0, 0, 9300],
-                 rest='6564.61 Angstrom', convention='log'),
+            dict(
+                type='pixel_spectra', size=[20, 20], step=[0.5, 0.5],
+                rval=[0, 0],
+                spectral=dict(
+                    size=50, step=30, rval=9300, convention='log',
+                    rest='6564.61 Angstrom')),
             instrument=dict(psf=_PSF, lsf=_LSF))],
         truth=_DISK_TRUTH | dict(nii6583_ratio=0.3),
         trial=_DISK_TRIAL | dict(
@@ -300,8 +308,10 @@ CASES: list[dict[str, Any]] = [
             "its step.",
         galaxies=_DISK,
         observations=[_sky(
-            dict(type='slit_spectra', size=[40, 40], step=[0.5, 20],
-                 rota=30, slit_width=1.5),
+            dict(
+                type='slit_spectra', size=[40], step=[0.5],
+                spectral=dict(size=40, step=20, convention='relativistic'),
+                rota=30, slit_width=1.5),
             instrument=dict(psf=_PSF, lsf=_LSF))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.0005)]),
@@ -345,14 +355,15 @@ CASES: list[dict[str, Any]] = [
             "ellipse, a rectangle and the field).",
         galaxies=_DISK,
         observations=[
-            _sky(dict(type='region_moments',
-                      regions=dict(type='bins', file='bins.fits'),
-                      spec_size=60, spec_step=10,
-                      spec_convention='relativistic'),
+            _sky(dict(
+                type='region_moments',
+                regions=dict(type='bins', file='bins.fits'),
+                spectral=dict(size=60, step=10, convention='relativistic')),
                  instrument=dict(psf=_PSF, lsf=_LSF)),
-            _sky(dict(type='region_spectra', size=[24, 24], step=[0.5, 0.5],
-                      spec_size=40, spec_step=20,
-                      regions=dict(type='apertures', apertures=[
+            _sky(dict(
+                type='region_spectra', size=[24, 24], step=[0.5, 0.5],
+                spectral=dict(size=40, step=20, convention='relativistic'),
+                regions=dict(type='apertures', apertures=[
                           dict(type='circle', x=1, y=-1, radius=1.5),
                           dict(type='ellipse', x=0, y=0, a=4, b=2, posa=40),
                           dict(type='rectangle', x=-1, y=1, length=8,
@@ -376,11 +387,11 @@ CASES: list[dict[str, Any]] = [
                   dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
             distance=dict(type='direct', cosmology='Planck18'))],
         observations=[_sky(
-            dict(type='region_moments',
-                 regions=dict(type='bins', file='bins.fits'),
-                 orders=[1, 2], method='moments', spec_size=101,
-                 spec_step=10, spec_rest='5000 Angstrom',
-                 spec_convention='log'),
+            dict(
+                type='region_moments',
+                regions=dict(type='bins', file='bins.fits'), orders=[1, 2],
+                method='moments',
+                spectral=dict(size=101, step=10, convention='log')),
             line_of_sight=dict(type='grid', depth=dict(step=0.5)),
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_STARS_TRUTH, trial=_STARS_TRIAL,
@@ -399,11 +410,11 @@ CASES: list[dict[str, Any]] = [
                                  turns=20)),
         mock_galaxies=_mge_stars(dict(type='jeans')),
         observations=[_sky(
-            dict(type='region_moments',
-                 regions=dict(type='bins', file='bins.fits'),
-                 orders=[1, 2, 3, 4], method='gauss_hermite', spec_size=101,
-                 spec_step=10, spec_rest='5000 Angstrom',
-                 spec_convention='log'),
+            dict(
+                type='region_moments',
+                regions=dict(type='bins', file='bins.fits'),
+                orders=[1, 2, 3, 4], method='gauss_hermite',
+                spectral=dict(size=101, step=10, convention='log')),
             line_of_sight=dict(type='grid', depth=dict(step=0.5)),
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_MGE_STARS_TRUTH | dict(stars_beta_z=0.0, stars_kappa=0.5),
@@ -453,9 +464,10 @@ CASES: list[dict[str, Any]] = [
             "in the disk, smoothed.",
         galaxies=[dict(components=[_thin_disk(name='gas', geometry='own')])],
         observations=[_sky(
-            dict(type='pixel_spectra', size=[16, 16, 32],
-                 step=[0.75, 0.75, 25], smooth_weights=True,
-                 median_size=3),
+            dict(
+                type='pixel_spectra', size=[16, 16], step=[0.75, 0.75],
+                spectral=dict(size=32, step=25, convention='relativistic'),
+                smooth_weights=True, median_size=3),
             oversampling=[2, 2, 1],
             pixel_weights=dict(component='gas', traits=dict(
                 type='azimuth_power', power=1)),
@@ -496,7 +508,9 @@ CASES: list[dict[str, Any]] = [
             "its residuals.",
         galaxies=_DISK,
         observations=[_sky(
-            dict(type='pixel_spectra', size=[16, 16, 30], step=[1, 1, 20]),
+            dict(
+                type='pixel_spectra', size=[16, 16], step=[1, 1],
+                spectral=dict(size=30, step=20, convention='relativistic')),
             instrument=dict(psf=dict(type='gauss', sigma=1.2), lsf=_LSF))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.0002) | dict(

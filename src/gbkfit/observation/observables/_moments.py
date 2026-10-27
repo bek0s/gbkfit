@@ -12,7 +12,7 @@ import gbkfit.math
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
-from gbkfit.utils import parseutils
+from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube, _detail
 from .base import ModelData
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 # The default channel width (km/s) of the spectral axis of the cube that
-# moments are computed from, and its default size (km/s)
+# moments are computed from, and its default span (km/s)
 SPEC_STEP = 1
 SPEC_RANGE = 1000
 
@@ -37,63 +37,67 @@ METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
 _MAX_ORDERS = dict(moments=7, gaussian_fit=2, gauss_hermite=4)
 
 # The smallest dispersion (km/s) a spectral axis derived from the data
-# leaves room for (see spectral_axis_from_data)
+# leaves room for (see spectral_axis)
 _MIN_DISPERSION = 100
 
 
-def default_spec_size(spec_step: float) -> int:
-    """Return the number of channels of spec_step (km/s) in SPEC_RANGE."""
-    return int(gbkfit.math.roundu_odd(SPEC_RANGE / spec_step))
-
-
-def spectral_axis_from_data(
-        dataset: Dataset,
-        spec_step: float,
-        spec_size: int | None = None,
-        spec_rval: float | None = None
-) -> dict[str, Any]:
+def spectral_axis(
+        spectral: gridutils.SpectralAxis,
+        dataset: Dataset | None = None
+) -> gridutils.SpectralAxis:
     """
-    Return the size and the centre of a spectral axis with the given
-    channel width that covers the velocities of a dataset of moments: the
-    range of moment1, and three times the largest dispersion on each side.
-    That is the largest value of moment2, but at least _MIN_DISPERSION
-    (also without moment2), so that the lines of a model with a larger
-    dispersion than the data's are not cut. A given size or centre is
-    kept: the centre is that of the range, and the size covers the range
-    around the centre. Without moment1, they are the defaults (the size
-    None, the centre 0).
+    Return the spectral axis of the cube that moments are measured from:
+    the given one, with the defaults of the options not given: the step
+    SPEC_STEP; the size and the velocity rval, at the channel rpix (the
+    centre by default), that cover the velocities of the moments of the
+    data, if they have moment 1, or else SPEC_RANGE and 0. The velocities
+    of the data are the range of moment1, and three times the largest
+    dispersion on each side: that is the largest value of moment2, but at
+    least _MIN_DISPERSION (also without moment2), so that the lines of a
+    model with a larger dispersion than the data's are not cut. A given
+    size or rval is kept: rval is that of the centre of the range, and the
+    size covers the range around rval.
+
+    Raises
+    ------
+    ConfigError
+        If the convention of its velocities is not known (see
+        gridutils.check_convention).
     """
-    if 'moment1' not in dataset:
-        spec_rval = 0 if spec_rval is None else spec_rval
-        return dict(spec_size=spec_size, spec_rval=spec_rval)
-    velocity = dataset['moment1'].data()
-    dispersion = _MIN_DISPERSION
-    if 'moment2' in dataset:
-        dispersion = max(dispersion, np.nanmax(dataset['moment2'].data()))
-    margin = 3 * dispersion
-    vmin = np.nanmin(velocity) - margin
-    vmax = np.nanmax(velocity) + margin
-    if spec_rval is None:
-        spec_rval = float((vmin + vmax) / 2)
-    if spec_size is None:
-        half = max(vmax - spec_rval, spec_rval - vmin)
-        spec_size = int(gbkfit.math.roundu_odd(2 * half / spec_step))
-    return dict(spec_size=spec_size, spec_rval=spec_rval)
+    gridutils.check_convention(spectral)
+    step = spectral.step() or SPEC_STEP
+    size, rval = spectral.size(), spectral.rval()
+    if dataset is not None and 'moment1' in dataset:
+        velocity = dataset['moment1'].data()
+        dispersion = _MIN_DISPERSION
+        if 'moment2' in dataset:
+            dispersion = max(dispersion, np.nanmax(dataset['moment2'].data()))
+        margin = 3 * dispersion
+        vmin = np.nanmin(velocity) - margin
+        vmax = np.nanmax(velocity) + margin
+        if rval is None:
+            rval = float((vmin + vmax) / 2)
+        if size is None:
+            half = max(vmax - rval, rval - vmin)
+            size = int(gbkfit.math.roundu_odd(2 * half / step))
+    if size is None:
+        size = int(gbkfit.math.roundu_odd(SPEC_RANGE / step))
+    return spectral.replaced(gridutils.SpectralAxis(
+        size=size, step=step,
+        rpix=size / 2 - 0.5 if spectral.rpix() is None else spectral.rpix(),
+        rval=0.0 if rval is None else rval))
 
 
 def check_moment_options(
         orders: Sequence[int],
         flux_floor: float,
-        method: str,
-        spec_size: int | None,
-        spec_step: float
+        method: str
 ) -> tuple[int, ...]:
     """
     Return the moment orders, sorted and unique. Raise ConfigError unless
     they are valid for the method (see METHODS; a Gaussian has moments 0
-    to 2, a Gauss-Hermite series 0 to 4), the flux floor is from 0 to
-    below 1, and the spectral axis has channels (if its size is given) of
-    a positive width.
+    to 2, a Gauss-Hermite series 0 to 4), and the flux floor is from 0 to
+    below 1.
     """
     if method not in METHODS:
         raise ConfigError(
@@ -110,29 +114,7 @@ def check_moment_options(
         raise ConfigError(
             f"flux_floor is a fraction of the flux of the brightest "
             f"spectrum, from 0 to below 1; it is {flux_floor}")
-    _detail.check_positive('spec_step', spec_step)
-    if spec_size is not None and spec_size < 1:
-        raise ConfigError(f"spec_size must be at least 1; it is {spec_size}")
     return orders
-
-
-def check_velocities(
-        spec_rest: str | astropy.units.Quantity | None,
-        spec_convention: str | None
-) -> None:
-    """
-    Raise ConfigError unless the convention of the velocities of the maps
-    is given (its rest, or 'relativistic' without one): the maps of the
-    data were measured in one, and none is right for all (e.g. radio for
-    HI, optical for lines of stars and ionised gas; at 5000 km/s, the
-    rotation of the others differs by 1.6%).
-    """
-    if spec_rest is None and spec_convention is None:
-        raise ConfigError(
-            "the velocities of moment maps need their convention: give "
-            "spec_rest (e.g. '1420.405752 MHz' for the radio velocities of "
-            "HI, or '6562.8 Angstrom' for optical ones), or spec_convention "
-            "'relativistic'")
 
 
 def check_moment_units(dataset: Dataset, method: str) -> None:
@@ -182,20 +164,20 @@ def spectra_dcube(
 ) -> _dcube.DCube:
     """
     Return the DCube of the spectra that the moments of an observable are
-    measured from: on its spatial grid, with its spectral axis centred on
-    spec_rval, smoothed by the median filter of median_size (if given; see
-    DCube).
+    measured from: on its spatial grid and its spectral axis (see
+    spectral_axis), smoothed by the median filter of median_size (if
+    given; see DCube).
     """
-    spec_size = observable.spec_size()
+    spectral = observable.spectral()
     return _dcube.DCube(
-        size=observable.size() + (spec_size,),
-        step=observable.step() + (observable.spec_step(),),
-        rpix=observable.rpix() + (spec_size / 2 - 0.5,),
-        rval=observable.rval() + (observable.spec_rval(),),
+        size=observable.size() + (spectral.size(),),
+        step=observable.step() + (spectral.step(),),
+        rpix=observable.rpix() + (spectral.rpix(),),
+        rval=observable.rval() + (spectral.rval(),),
         rota=observable.rota(),
-        rest=observable.spec_rest(),
-        medium=observable.spec_medium(),
-        convention=observable.spec_convention(),
+        rest=spectral.rest(),
+        medium=spectral.medium(),
+        convention=spectral.convention(),
         oversampling=tuple(oversampling) + (1,),
         primary_beam=instrument.primary_beam(),
         psf=instrument.psf(),

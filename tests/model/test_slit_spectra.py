@@ -6,6 +6,7 @@ along a slit, which must match a row of a spectral cube.
 import copy
 import gbkfit.model
 import gbkfit.params
+from gbkfit.utils.gridutils import SpectralAxis
 import numpy as np
 import pytest
 from modelutils import group_plan
@@ -41,9 +42,11 @@ def test_slit_spectra_matches_the_central_row_of_pixel_spectra(driver, psf, rota
     # centred on the slit, which passes through the reference position
     common = dict(rota=rota, psf=psf, lsf=dict(type='gauss', sigma=15))
     scube = evaluate(driver, dict(
-        type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10], **common))
+        type='pixel_spectra', size=[32, 41], step=[1, 1],
+        spectral=dict(size=51, step=10, convention='relativistic'), **common))
     lslit = evaluate(driver, dict(
-        type='slit_spectra', size=[32, 51], step=[1, 10], **common))
+        type='slit_spectra', size=[32], step=[1],
+        spectral=dict(size=51, step=10, convention='relativistic'), **common))
     assert lslit.shape == (51, 32)
     np.testing.assert_allclose(
         lslit, scube[:, 20, :], rtol=1e-4, atol=1e-5 * scube.max())
@@ -52,9 +55,12 @@ def test_slit_spectra_matches_the_central_row_of_pixel_spectra(driver, psf, rota
 def test_slit_spectra_width_is_the_mean_of_its_rows(driver):
     # A slit of 3 pixels is the mean of the 3 central rows of a cube
     scube = evaluate(driver, dict(
-        type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10]))
+        type='pixel_spectra', size=[32, 41], step=[1, 1],
+        spectral=dict(size=51, step=10, convention='relativistic')))
     lslit = evaluate(driver, dict(
-        type='slit_spectra', size=[32, 51], step=[1, 10], slit_width=3))
+        type='slit_spectra', size=[32], step=[1],
+        spectral=dict(size=51, step=10, convention='relativistic'),
+        slit_width=3))
     np.testing.assert_allclose(
         lslit, scube[:, 19:22, :].mean(axis=1), rtol=1e-4,
         atol=1e-5 * scube.max())
@@ -66,11 +72,12 @@ def test_slit_spectra_objective_residual(driver):
     from gbkfit.dataset import DatasetSlitSpectra
     from gbkfit.objective import Objective
     observable = dict(
-        type='slit_spectra', size=[32, 51], step=[1, 10], rota=30)
+        type='slit_spectra', size=[32], step=[1],
+        spectral=dict(size=51, step=10, convention='relativistic'), rota=30)
     model = evaluate(driver, observable)
     dataset = DatasetSlitSpectra(
-        Data(model + 1, error=np.full_like(model, 2)), step=(1, 10),
-        rota=30)
+        Data(model + 1, error=np.full_like(model, 2)), step=(1,),
+        spectral=SpectralAxis(step=10, convention='relativistic'), rota=30)
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
         Flat, ObservationGroup, ObservationSky, observable_parser)
@@ -95,7 +102,9 @@ def test_hanning_smoothing_of_the_channels(driver):
     # A Gaussian LSF convolved with the Hanning smoothing of the channels
     # is the Gaussian LSF and then 1/4, 1/2 and 1/4 of each channel in
     # the channel before, itself and the one after
-    observable = dict(type='slit_spectra', size=[32, 61], step=[1, 10])
+    observable = dict(
+        type='slit_spectra', size=[32], step=[1],
+        spectral=dict(size=61, step=10, convention='relativistic'))
     gauss = dict(type='gauss', sigma=15)
     plain = evaluate(driver, observable | dict(lsf=gauss))
     smoothed = evaluate(driver, observable | dict(lsf=dict(

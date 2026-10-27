@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
@@ -32,8 +31,8 @@ class PixelMoments(Observable):
     instrument, as the data items moment0 to moment7.
 
     The moments are measured from a spectral cube with the spatial axes
-    of the maps, and a spectral axis of spec_size channels of spec_step
-    centred on spec_rval (km/s).
+    of the maps, and a spectral axis (spectral; see _moments.spectral_axis
+    for its defaults).
 
     Its configuration has the options below, but those of the grid and
     the orders when it has data, which give them (see from_data).
@@ -42,6 +41,14 @@ class PixelMoments(Observable):
     ----------
     size : Sequence of int
         The number of pixels of the maps (nx, ny).
+    spectral : SpectralAxis
+        The spectral axis of the cube the maps are measured from (see
+        gridutils.SpectralAxis), and the convention of the velocities of
+        the maps, as the data were measured, which is required (or its
+        rest; see gridutils.check_convention): none is right for all data
+        (e.g. radio for HI, optical for lines of ionised gas, log for the
+        stars of pPXF). By default, its channels are of 1 km/s and span
+        1000 km/s, centred on 0.
     step, rpix, rval : Sequence of float, optional
         The world coordinates of the maps (see gridutils.Coords); rpix is
         the centre by default.
@@ -56,26 +63,6 @@ class PixelMoments(Observable):
         mask and their likelihood (e.g. upper limits).
     orders : Sequence of int, optional
         The orders of the moments.
-    spec_size : int, optional
-        The number of channels of the spectral axis; by default, it spans
-        1000 km/s.
-    spec_step : float, optional
-        The width of the channels (km/s).
-    spec_rval : float, optional
-        The centre of the spectral axis (km/s).
-    spec_rest : str or Quantity, optional
-        The rest wavelength or frequency of the velocities of the spectral
-        axis, if known (see gridutils.make_rest).
-    spec_medium : str, optional
-        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
-        default) or 'air' (see gridutils.make_medium).
-    spec_convention : str, optional
-        The convention of the velocities of the maps, as the data were
-        measured: of a rest wavelength, 'optical' (its default) or 'log';
-        of a rest frequency, 'radio'; without a rest, 'relativistic' (see
-        gridutils.make_convention). A rest or the convention is required:
-        none is right for all data (e.g. radio for HI, optical for lines
-        of stars and ionised gas).
     method : str, optional
         How the maps are measured from the spectra, as the maps of the
         data were: 'moments'; 'gaussian_fit' (the flux, centre and
@@ -90,14 +77,14 @@ class PixelMoments(Observable):
         of cubes of KMOS3D): each channel takes the median of the square of
         the size about each pixel, with zero beyond the edges (see DCube).
         The median of a sum is not the sum of the medians: the channels of
-        the model (spec_step) are then those of that cube. None by default.
+        the model (the step of spectral) are then those of that cube. None
+        by default.
 
     Raises
     ------
     ConfigError
         If the orders are not valid for the method, flux_floor is not from
-        0 to below 1, neither spec_rest nor spec_convention is given,
-        spec_size is less than 1, spec_step is not positive, or
+        0 to below 1, the convention of the velocities is not known, or
         median_size is not an odd number of at least 3.
     """
 
@@ -128,13 +115,8 @@ class PixelMoments(Observable):
     def from_data(
             cls,
             dataset: DatasetPixelMoments,
+            spectral: gridutils.SpectralAxis,
             flux_floor: float = 1e-6,
-            spec_size: int | None = None,
-            spec_step: float = _moments.SPEC_STEP,
-            spec_rval: float | None = None,
-            spec_rest: str | astropy.units.Quantity | None = None,
-            spec_medium: str | None = None,
-            spec_convention: str | None = None,
             method: str = 'moments',
             median_size: int | None = None
     ) -> 'PixelMoments':
@@ -146,14 +128,13 @@ class PixelMoments(Observable):
         ----------
         dataset : DatasetPixelMoments
             The moment maps.
-        flux_floor, spec_step, spec_rest, spec_medium, spec_convention, \
-                method, median_size : optional
+        spectral : SpectralAxis
+            As that of PixelMoments. Its size and rval by default, with
+            moment 1, cover the velocities of the data: the range of moment
+            1, and three times the largest dispersion (moment 2, but at
+            least 100 km/s) on each side.
+        flux_floor, method, median_size : optional
             As those of PixelMoments.
-        spec_size, spec_rval : optional
-            As those of PixelMoments. By default, with moment 1, the
-            spectral axis covers the velocities of the data: the range of
-            moment 1, and three times the largest dispersion (moment 2,
-            but at least 100 km/s) on each side.
 
         Returns
         -------
@@ -169,12 +150,9 @@ class PixelMoments(Observable):
         cls._require_dataset_class(dataset)
         return cls(
             **_detail.grid_options(dataset.grid()),
-            **_moments.spectral_axis_from_data(
-                dataset, spec_step, spec_size, spec_rval),
-            flux_floor=flux_floor, orders=dataset.orders(),
-            spec_step=spec_step, spec_rest=spec_rest,
-            spec_medium=spec_medium, spec_convention=spec_convention,
-            method=method, median_size=median_size)
+            spectral=_moments.spectral_axis(spectral, dataset),
+            flux_floor=flux_floor, orders=dataset.orders(), method=method,
+            median_size=median_size)
 
     def dump(
             self,
@@ -190,32 +168,22 @@ class PixelMoments(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
+            spectral=self._spectral.dump(),
             flux_floor=self._flux_floor,
             orders=self._orders,
-            spec_size=self._spec_size,
-            spec_step=self._spec_step,
-            spec_rval=self._spec_rval,
-            spec_rest=_detail.dump_rest(self._spec_rest),
-            spec_medium=self._spec_medium,
-            spec_convention=self._spec_convention,
             method=self._method,
             median_size=self._median_size), data)
 
     def __init__(
             self,
             size: Sequence[int],
+            spectral: gridutils.SpectralAxis,
             step: Sequence[float] = (1, 1),
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] = (0, 0),
             rota: float = 0,
             flux_floor: float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
-            spec_size: int | None = None,
-            spec_step: float = _moments.SPEC_STEP,
-            spec_rval: float = 0,
-            spec_rest: str | astropy.units.Quantity | None = None,
-            spec_medium: str | None = None,
-            spec_convention: str | None = None,
             method: str = 'moments',
             median_size: int | None = None
     ):
@@ -223,20 +191,10 @@ class PixelMoments(Observable):
         _detail.check_median_size(median_size)
         self._median_size = median_size
         self._orders = _moments.check_moment_options(
-            orders, flux_floor, method, spec_size, spec_step)
-        if spec_size is None:
-            spec_size = _moments.default_spec_size(spec_step)
+            orders, flux_floor, method)
+        self._spectral = _moments.spectral_axis(spectral)
         self._flux_floor = flux_floor
         self._method = method
-        self._spec_size = spec_size
-        self._spec_step = spec_step
-        self._spec_rval = spec_rval
-        self._spec_rest = gridutils.make_rest(spec_rest)
-        self._spec_medium = gridutils.make_medium(
-            spec_medium, self._spec_rest)
-        _moments.check_velocities(spec_rest, spec_convention)
-        self._spec_convention = gridutils.make_convention(
-            spec_convention, self._spec_rest)
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
@@ -267,23 +225,11 @@ class PixelMoments(Observable):
     def method(self) -> str:
         return self._method
 
-    def spec_size(self) -> int:
-        return self._spec_size
-
-    def spec_step(self) -> float:
-        return self._spec_step
-
-    def spec_rval(self) -> float:
-        return self._spec_rval
-
-    def spec_rest(self) -> astropy.units.Quantity | None:
-        return self._spec_rest
-
-    def spec_medium(self) -> str | None:
-        return self._spec_medium
-
-    def spec_convention(self) -> str | None:
-        return self._spec_convention
+    def spectral(self) -> gridutils.SpectralAxis:
+        """
+        Return the spectral axis of the cube the maps are measured from.
+        """
+        return self._spectral
 
     def check_instrument(self, instrument: Instrument) -> None:
         _moments.warn_unmasked_noise(self._flux_floor, instrument)

@@ -68,7 +68,9 @@ def test_rota_is_the_position_angle_of_the_y_axis(rota):
 
 def test_write_and_read_back_long_slit():
     # The position along the slit is an offset from its reference pixel
-    coords = gridutils.Coords((2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0)
+    coords = gridutils.Coords(
+        (2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0,
+        convention='relativistic')
     fitsutils.write_data(
         'data.fits', np.ones((11, 32), np.float32), coords, spectral_axis=1)
     _, coords_read = fitsutils.read_data('data.fits')
@@ -342,19 +344,26 @@ def test_rest_can_be_given():
         fitsutils.read_data('velo.fits', rest='6562.8 Angstrom')
 
 
-@pytest.mark.parametrize('rest, ctype, keyword', [
-    ('6562.8 Angstrom', 'VOPT', 'RESTWAV'),
-    ('1420.405752 MHz', 'VRAD', 'RESTFRQ'),
-    (None, 'VRAD', None)])
-def test_rest_round_trip(rest, ctype, keyword):
+@pytest.mark.parametrize('rest, convention, ctype, keyword', [
+    ('6562.8 Angstrom', None, 'VOPT', 'RESTWAV'),
+    ('1420.405752 MHz', None, 'VRAD', 'RESTFRQ'),
+    (None, None, 'VELO', None),
+    # (conventions without a rest; log velocities as a linear axis)
+    (None, 'radio', 'VRAD', None),
+    (None, 'optical', 'VOPT', None),
+    (None, 'log', 'VLOG', None)])
+def test_rest_round_trip(rest, convention, ctype, keyword):
     grid = gridutils.make_grid(
-        (24, 20, 6), (1, 1, 10), spectral_axis=2, rest=rest)
+        (24, 20, 6), (1, 1, 10), spectral_axis=2, rest=rest,
+        convention=convention)
     fitsutils.write_data(
         'data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
     header = fits.getheader('data.fits')
     assert header['CTYPE3'] == ctype
     assert keyword is None or keyword in header
     coords = fitsutils.read_data('data.fits')[1]
+    assert coords.convention == (
+        gridutils.make_convention(convention, coords.rest) or 'relativistic')
     if rest is None:
         assert coords.rest is None
     else:

@@ -55,8 +55,8 @@ def _moments(
     return dict(
         type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
         observable=dict(
-            type='pixel_moments', size=[size, size], spec_size=60,
-            spec_step=10, spec_convention='relativistic'),
+            type='pixel_moments', size=[size, size],
+            spectral=dict(size=60, step=10, convention='relativistic')),
         instrument=_INSTRUMENT) | options
 
 
@@ -68,10 +68,15 @@ _MOMENTS_LIKELIHOOD = dict(type='gaussian', missing_residual=3)
 def _cube(
         size: list[int], line_of_sight: str = 'grid', **options: Any
 ) -> dict[str, Any]:
-    """A sky observation of a spectral cube, float64."""
+    """
+    A sky observation of a spectral cube of the size (nx, ny, nz), float64.
+    """
     return dict(
         type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
-        observable=dict(type='pixel_spectra', size=size, step=[1, 1, 15]),
+        observable=dict(
+            type='pixel_spectra', size=size[:2], step=[1, 1],
+            spectral=dict(
+                size=size[2], step=15, convention='relativistic')),
         instrument=_INSTRUMENT) | options
 
 

@@ -15,6 +15,7 @@ from gbkfit.objective import Objective
 from gbkfit.observation import (
     Flat, NoiseGauss, ObservationGroup, ObservationProfile, ObservationSky,
     PixelBrightness, PixelSpectra, observation_parser)
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -130,7 +131,10 @@ def test_profile_beside_a_sky_observation():
     radii = np.array([2.0, 6.0, 10.0])
     profile = ObservationProfile(['rotation_gas'], radii * u.arcsec)
     cube = ObservationSky(
-        PixelSpectra(size=(8, 8, 5), step=(1, 1, 10)), Flat())
+        PixelSpectra(
+            size=(8, 8), step=(1, 1),
+            spectral=SpectralAxis(
+                size=5, step=10, convention='relativistic')), Flat())
     group = ObservationGroup(galaxy, [profile, cube])
     params = PARAMS | GAS_PARAMS
     plan = group.plan()

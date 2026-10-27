@@ -90,14 +90,16 @@ components:
 """,
     'observations': """\
 # An observation: here a cube of 48 x 48 spaxels of 1 arcsec and 40
-# channels of 10 km/s, with Gaussian PSF and LSF. To fit data, give them
-# instead of the size (paths relative to the project):
-#   data: {data: data/cube.fits, error: data/error.fits, step: [1, 1, 10]}
+# channels of 10 km/s of radio velocities (as of HI; optical for lines of
+# ionised gas), with Gaussian PSF and LSF. To fit data, give them instead
+# of the grid (paths relative to the project):
+#   data: {data: data/cube.fits, error: data/error.fits}
 type: sky
 observable:
   type: pixel_spectra
-  size: [48, 48, 40]
-  step: [1, 1, 10]
+  size: [48, 48]
+  step: [1, 1]
+  spectral: {size: 40, step: 10, convention: radio}
 line_of_sight: {type: flat}
 instrument:
   psf: {type: gauss, sigma: 1.5}

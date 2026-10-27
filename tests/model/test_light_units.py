@@ -12,6 +12,7 @@ from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
     ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -49,12 +50,14 @@ def model(
     along a line of sight of the given type.
     """
     observable = PixelSpectra(
-        size=SIZE, step=STEP, rval=(0, 0, 470), rest=HI)
+        size=SIZE[:2], step=STEP[:2], rval=(0, 0), spectral=SpectralAxis(
+            size=SIZE[2], step=STEP[2], rval=470, rest=HI))
     data = None
     if data_unit is not None:
         data = DatasetPixelSpectra(
             Data(np.zeros(SIZE[::-1]), unit=data_unit, beam=beam),
-            step=STEP, rval=(0, 0, 470), rest=HI)
+            step=STEP[:2], rval=(0, 0),
+            spectral=SpectralAxis(step=STEP[2], rval=470, rest=HI))
     galaxy = dict(components=components)
     if redshift is not None:
         galaxy.update(redshift=redshift)

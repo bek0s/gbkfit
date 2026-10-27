@@ -35,8 +35,9 @@ observations:
   line_of_sight: {type: grid}
   observable:
     type: pixel_spectra
-    size: [32, 32, 41]
-    step: [0.5, 0.5, 20]
+    size: [32, 32]
+    step: [0.5, 0.5]
+    spectral: {size: 41, step: 20, convention: relativistic}
   instrument:
     psf: {type: gauss, sigma: 1.0}
     lsf: {type: gauss, sigma: 30.0}

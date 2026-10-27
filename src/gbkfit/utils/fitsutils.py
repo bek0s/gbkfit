@@ -19,7 +19,8 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 
-from gbkfit.utils.gridutils import Coords, make_medium, make_rest
+from gbkfit.utils.gridutils import (
+    Coords, make_convention, make_medium, make_rest)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -47,6 +48,15 @@ __all__ = [
 
 # The spectral axis types that are velocities (FITS WCS Paper III)
 VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
+
+# The conventions of the velocities of each type of spectral axis, and
+# the types of the conventions (as written; log velocities are written as
+# WAVE-LOG, or without a rest wavelength as a linear axis of the type
+# VLOG, which FITS does not define)
+_CONVENTIONS_OF_TYPES = dict(
+    VRAD='radio', VOPT='optical', VELO='relativistic', VLOG='log')
+_TYPES_OF_CONVENTIONS = {
+    convention: type_ for type_, convention in _CONVENTIONS_OF_TYPES.items()}
 
 _KM_S = astropy.units.km / astropy.units.s
 
@@ -366,9 +376,12 @@ def coords_from_wcs(
     Return the world coordinates of the model (see Coords) of a WCS.
 
     rpix is the reference pixel (CRPIX - 1), and rval the world position
-    there (CRVAL). Either can be given instead, and the other is computed
-    from the WCS. The rest of the spectral axis is that of the WCS
-    (RESTWAV or RESTFRQ), or rest, if given. Celestial axes of another
+    there (CRVAL). Either can be given instead, for each axis, and the
+    other is computed from the WCS (the axes are uncoupled, but the
+    celestial ones, which take the same one). The rest of the spectral
+    axis is that of the WCS (RESTWAV or RESTFRQ), or rest, if given, and
+    the convention of its velocities that of its type (see
+    _spectral_convention). Celestial axes of another
     frame than ICRS (e.g. Galactic, or FK4) are turned into it: the RA and
     Dec of the reference pixel, and the rotation of the pixel grid from
     north of ICRS there (exact at it; the frames differ by more, a hair
@@ -381,9 +394,9 @@ def coords_from_wcs(
     wcs : astropy.wcs.WCS
         World coordinates, with the axes in the orientation of the model
         (see to_model_axes).
-    rpix, rval : Sequence[float], optional
+    rpix, rval : Sequence[float or None], optional
         The reference pixel or value, in the units of the model, a value
-        for each axis or one for all.
+        for each axis (None: not given) or one for all.
     rest : str or Quantity, optional
         The rest of the spectral axis (see gridutils.make_rest).
     medium : str, optional
@@ -421,19 +434,25 @@ def coords_from_wcs(
         if axis in (lng, lat)
         else linear[axis, axis] * scale[axis]
         for axis in range(naxis)]
-    if rpix is not None:
-        rpix = np.broadcast_to(np.asarray(rpix, float), naxis)
-    if rval is not None:
-        rval = np.broadcast_to(np.asarray(rval, float), naxis)
-    if rpix is None and rval is None:
-        rpix = (wcs.wcs.crpix - 1).tolist()
-        rval = np.multiply(wcs.wcs.crval, scale).tolist()
-    elif rpix is None:
-        world = np.divide(rval, scale)
-        rpix = np.ravel(wcs.world_to_pixel_values(*world)).tolist()
-    elif rval is None:
-        world = np.ravel(wcs.pixel_to_world_values(*rpix))
-        rval = np.multiply(world, scale).tolist()
+    # (NaN where not given; an axis takes the other one of the WCS, at the
+    # values of the header on the other axes, which do not change it)
+    rpix, rval = (
+        np.full(naxis, np.nan) if value is None
+        else np.broadcast_to(np.asarray(value, float), naxis)
+        if np.ndim(value) == 0
+        else np.array([np.nan if x is None else x for x in value], float)
+        for value in (rpix, rval))
+    header_rpix = wcs.wcs.crpix - 1
+    header_rval = np.multiply(wcs.wcs.crval, scale)
+    pixel = np.where(np.isnan(rpix), header_rpix, rpix)
+    world = np.where(np.isnan(rval), wcs.wcs.crval, np.divide(rval, scale))
+    rval_at_rpix = np.ravel(wcs.pixel_to_world_values(*pixel)) * scale
+    rpix_at_rval = np.ravel(wcs.world_to_pixel_values(*world))
+    rpix, rval = (
+        np.where(~np.isnan(rpix), rpix, np.where(
+            np.isnan(rval), header_rpix, rpix_at_rval)).tolist(),
+        np.where(~np.isnan(rval), rval, np.where(
+            np.isnan(rpix), header_rval, rval_at_rpix)).tolist())
     if lng >= 0:
         rval, rota = _to_icrs(source, wcs, list(rval), rota)
     rest = _spectral_rest(source, wcs, make_rest(rest))
@@ -442,7 +461,7 @@ def coords_from_wcs(
         tuple(float(x) for x in rpix),
         tuple(float(x) for x in rval),
         float(rota),
-        rest, make_medium(medium, rest))
+        rest, make_medium(medium, rest), _spectral_convention(wcs))
 
 
 def model_axis_order(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
@@ -819,13 +838,15 @@ def _velocity_header(coords, n, index=None):
     """
     Return the header keywords of the spectral axis, FITS axis n, whose
     world coordinates are those of axis index of coords (by default
-    n - 1): optical velocities with a rest wavelength, radio velocities
-    with a rest frequency or without a rest, and the logarithmic
-    wavelengths (WAVE-LOG) of the log velocities of a rest wavelength.
+    n - 1): velocities of the type of their convention (VOPT, VRAD or
+    VELO; that of the rest by default), with the rest, if any, and the
+    logarithmic wavelengths (WAVE-LOG) of log velocities of a rest
+    wavelength (without one, VLOG, see _CONVENTIONS_OF_TYPES).
     """
     index = n - 1 if index is None else index
     rest = coords.rest
-    if coords.convention == 'log':
+    convention = make_convention(coords.convention, rest) or 'relativistic'
+    if convention == 'log' and rest is not None:
         crval = rest.value * np.exp(coords.rval[index] / _C)
         return {
             f'CTYPE{n}': 'WAVE-LOG', f'CUNIT{n}': 'm',
@@ -833,13 +854,13 @@ def _velocity_header(coords, n, index=None):
             f'CRPIX{n}': coords.rpix[index] + 1, f'CRVAL{n}': crval,
             'RESTWAV': rest.value, 'AIRORVAC': _HEADER_MEDIUMS[coords.medium]}
     header = {
-        f'CTYPE{n}': 'VRAD', f'CUNIT{n}': 'km/s',
+        f'CTYPE{n}': _TYPES_OF_CONVENTIONS[convention], f'CUNIT{n}': 'km/s',
         f'CDELT{n}': coords.step[index],
         f'CRPIX{n}': coords.rpix[index] + 1,
         f'CRVAL{n}': coords.rval[index]}
     if rest is not None and rest.unit == astropy.units.m:
         header.update({
-            f'CTYPE{n}': 'VOPT', 'RESTWAV': rest.value,
+            'RESTWAV': rest.value,
             'AIRORVAC': _HEADER_MEDIUMS[coords.medium]})
     elif rest is not None:
         header.update(RESTFRQ=rest.value)
@@ -935,6 +956,20 @@ def with_velocity_convention(
     header = header.copy()
     header['VELREF'] = _AIPS_FRAMES[frame] + (256 if velocity == 'radio' else 0)
     return header
+
+
+def _spectral_convention(wcs):
+    """
+    Return the convention of the velocities of the spectral axis (see
+    Coords) of its type: radio (VRAD), optical (VOPT), relativistic (VELO)
+    or log (VLOG, a linear axis for FITS); None without one.
+    """
+    types = [ctype[:4] for ctype in wcs.wcs.ctype]
+    if wcs.wcs.spec >= 0:
+        types = [types[wcs.wcs.spec]]
+    return next(
+        (_CONVENTIONS_OF_TYPES[t] for t in types
+         if t in _CONVENTIONS_OF_TYPES), None)
 
 
 def _spectral_rest(source, wcs, rest):

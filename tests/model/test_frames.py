@@ -13,6 +13,7 @@ from gbkfit.observation import (
     Flat, ObservationGroup, ObservationSky, PixelMoments, SlitSpectra,
     observable_parser, observation_parser)
 from gbkfit.params import ParamSpace
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -48,9 +49,11 @@ def moments(driver, offsets=None, origin=ORIGIN, **values):
     """
     observations = [
         ObservationSky(
-            PixelMoments(size=(32, 32), rval=rval, spec_size=81,
-                         spec_step=5, orders=(0, 1),
-                         spec_convention='relativistic'),
+            PixelMoments(
+                size=(32, 32), rval=rval,
+                spectral=SpectralAxis(
+                    size=81, step=5, convention='relativistic'),
+                orders=(0, 1)),
             Flat(), name=name, offsets=offsets if name == 'b' else None)
         for name, rval in (('a', ORIGIN), ('b', origin))]
     group = ObservationGroup([galaxy_parser.load(GALAXY)], observations)
@@ -71,8 +74,9 @@ def test_offsets_move_all_that_an_observation_sees(driver):
 
 
 def test_offsets_are_parameters_of_named_observations():
-    observable = PixelMoments(size=(8, 8), spec_size=11, orders=(0,),
-                              spec_convention='relativistic')
+    observable = PixelMoments(
+        size=(8, 8), spectral=SpectralAxis(size=11, convention='relativistic'),
+        orders=(0,))
     observation = ObservationSky(
         observable, Flat(), name='sinfoni', offsets=dict(position=True))
     assert set(observation.pdescs()) == {'sinfoni_dx', 'sinfoni_dy'}
@@ -88,8 +92,10 @@ def test_a_galaxy_needs_an_observation_without_offsets():
     # (offsets alone would move its centre with nothing to place it)
     observations = [
         ObservationSky(
-            PixelMoments(size=(8, 8), spec_size=11, orders=(0,),
-                         spec_convention='relativistic'), Flat(),
+            PixelMoments(
+                size=(8, 8),
+                spectral=SpectralAxis(size=11, convention='relativistic'),
+                orders=(0,)), Flat(),
             name=name, offsets=dict(position=True))
         for name in ('a', 'b')]
     with pytest.raises(ConfigError, match="offsets of position; one needs"):
@@ -120,7 +126,11 @@ def test_frames_far_apart_are_warned_of(driver, caplog):
 
 
 def test_slits_have_the_coordinates_of_their_reference_point():
-    slit = SlitSpectra(size=(10, 11), sky_rval=(49.5, -66.5))
+    slit = SlitSpectra(
+        size=(10,), spectral=SpectralAxis(size=11, convention='relativistic'),
+        sky_rval=(49.5, -66.5))
     assert slit.sky_rval() == (49.5, -66.5)
     assert observable_parser.load(slit.dump()).sky_rval() == (49.5, -66.5)
-    assert SlitSpectra(size=(10, 11)).sky_rval() == (0, 0)
+    slit = SlitSpectra(
+        size=(10,), spectral=SpectralAxis(size=11, convention='relativistic'))
+    assert slit.sky_rval() == (0, 0)

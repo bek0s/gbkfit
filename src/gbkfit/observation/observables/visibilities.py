@@ -213,9 +213,9 @@ class Visibilities(Observable):
         channel = _C_KMS * abs(frequencies[1] - frequencies[0]) / rest
         velocity = _C_KMS * (1 - frequencies.max() / rest)
         super().__init__(
-            size + (coverage.nchannels(),), step + (channel,),
-            tuple(rpix) + (0,), tuple(rval) + (velocity,), rota,
-            coverage.rest())
+            size, step, rpix, rval, rota, gridutils.SpectralAxis(
+                size=coverage.nchannels(), step=channel, rpix=0,
+                rval=velocity, convention='radio', rest=coverage.rest()))
         self._coverage = coverage
         self._transform = transform
         self._eps = eps

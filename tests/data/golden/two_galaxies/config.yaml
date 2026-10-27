@@ -50,12 +50,13 @@ observations:
 - type: sky
   galaxies: [front, back]
   data:
-    step: [1, 1, 15]
-    rpix: [9.5, 9.5, 14.5]
-    rval: [0, 0, 0]
+    step: [1, 1]
+    rpix: [9.5, 9.5]
+    rval: [0, 0]
     rota: 0
     data: observation0_spectra_d.fits
     error: 0.0005
+    spectral: {step: 15, rpix: 14.5, rval: 0}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: transfer
@@ -92,9 +93,12 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: pixel_moments, flux_floor: 1.0e-06, spec_size: 60, spec_step: 10,
-    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: relativistic,
-    method: moments, median_size: null}
+  observable:
+    type: pixel_moments
+    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+    flux_floor: 1.0e-06
+    method: moments
+    median_size: null
   oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64

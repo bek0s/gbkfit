@@ -87,12 +87,14 @@ def test_visibilities_are_the_transform_of_the_flux_of_the_cube(driver):
     # highest frequency: V = sum of its surface brightness times the area
     # of the pixels, at their directions
     from gbkfit.observation import Visibilities
-    grid = Visibilities(COVERAGE, **GRID).grid()
+    visibilities_ = Visibilities(COVERAGE, **GRID)
+    grid = visibilities_.grid()
     coords = grid.coords
     cube = evaluate(driver, DISK, dict(
-        type='pixel_spectra', size=list(grid.size), step=list(coords.step),
-        rpix=list(coords.rpix), rval=list(coords.rval),
-        rest=str(coords.rest)), DISK_PROPERTIES)['spectra']
+        type='pixel_spectra', size=list(grid.size[:2]),
+        step=list(coords.step[:2]), rpix=list(coords.rpix[:2]),
+        rval=list(coords.rval[:2]), spectral=visibilities_.spectral().dump()),
+        DISK_PROPERTIES)['spectra']
     images = cube[::-1].reshape(len(cube), -1).astype(float)
     expected = np.einsum('ckj,cj->ck', phases(grid.spatial()), images)
     result = visibilities(driver, DISK, DISK_PROPERTIES)

@@ -129,7 +129,9 @@ def test_deflection_of_a_rotated_map():
 
 
 @pytest.mark.parametrize('observable', [
-    IMAGE, dict(type='pixel_spectra', size=[32, 41, 31], step=[1, 1, 20])])
+    IMAGE, dict(
+        type='pixel_spectra', size=[32, 41], step=[1, 1],
+        spectral=dict(size=31, step=20, convention='relativistic'))])
 def test_constant_deflection_moves_the_source(driver, observable):
     # With a constant deflection alpha, the image is the source moved by
     # alpha: the galaxy with its centre moved by alpha

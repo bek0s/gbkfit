@@ -366,7 +366,8 @@ class LineFactors:
                 f"{unitutils.format_unit(source)!r} is that of the galaxy as "
                 f"it emits it, which the data see dimmed by the redshift of "
                 f"each line: the spectral axis needs its rest (RESTFRQ or "
-                f"RESTWAV in the header of the data, or the option rest)")
+                f"RESTWAV in the header of the data, or spectral: {{rest: "
+                f"...}})")
         self._convention = gridutils.VelocityConvention.of(coords)
         self._placement = LinePlacement(redshifts, spectral)
         # (the velocity of each line on the axis at the systemic velocity 0)

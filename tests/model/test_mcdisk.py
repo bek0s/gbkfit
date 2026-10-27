@@ -368,7 +368,8 @@ def test_mcdisk_velocity_is_the_mean_of_the_clouds(driver):
     observation = config['observations'][0]
     observation['instrument'] = {}
     observation['observable'] = dict(
-        type='pixel_spectra', size=[48, 48, 120], step=[1, 1, 5])
+        type='pixel_spectra', size=[48, 48], step=[1, 1],
+        spectral=dict(size=120, step=5, convention='relativistic'))
     plan = config_group_plan(config)
     params = gbkfit.params.ParamSpace(
         plan.group().pdescs(), config['params']['properties'])

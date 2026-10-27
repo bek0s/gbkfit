@@ -1,13 +1,13 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.dataset import Data, Dataset, DatasetPixelSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LineEmission
+from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from .base import FluxScale, ModelData, Observable
 
@@ -35,22 +35,15 @@ class PixelSpectra(Observable):
     Parameters
     ----------
     size : Sequence of int
-        The number of pixels of the cube (nx, ny, nz).
+        The number of pixels of the cube on the sky (nx, ny).
+    spectral : SpectralAxis
+        The spectral axis of the cube: its size, its world coordinates and
+        the convention of its velocities (see gridutils.make_cube_grid).
     step, rpix, rval : Sequence of float, optional
-        The world coordinates of the cube (see gridutils.Coords; the
-        spectral axis in km/s); rpix is the centre by default.
+        The world coordinates of the cube on the sky (see
+        gridutils.Coords); rpix is the centre by default.
     rota : float, optional
         The rotation of the cube on the sky.
-    rest : str or Quantity, optional
-        The rest wavelength or frequency of the velocities of the spectral
-        axis, if known (see gridutils.make_rest).
-    medium : str, optional
-        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
-        default) or 'air' (see gridutils.make_medium).
-    convention : str, optional
-        The convention of the velocities of a rest: 'optical' (the default
-        of a rest wavelength), 'log' (of an axis uniform in ln w), or
-        'radio' (see gridutils.make_convention).
     smooth_weights : bool, optional
         Whether the weights of the model are smoothed by the PSF and the
         LSF, as the model is.
@@ -64,7 +57,8 @@ class PixelSpectra(Observable):
     Raises
     ------
     ConfigError
-        If median_size is not an odd number of at least 3.
+        If the spectral axis is not valid (see gridutils.make_cube_grid),
+        or median_size is not an odd number of at least 3.
     """
 
     dataset_class = DatasetPixelSpectra
@@ -83,7 +77,7 @@ class PixelSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetPixelSpectra | None = None
     ) -> 'PixelSpectra':
-        return _detail.load_observable(cls, info, dataset, 3)
+        return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod
     def from_data(
@@ -127,32 +121,22 @@ class PixelSpectra(Observable):
     ) -> dict[str, Any]:
         return _detail.without_options_from_data(self, dict(
             type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
-            rest=_detail.dump_rest(self.rest()),
-            medium=self.medium(),
-            convention=self.convention(),
+            **_detail.dump_grid(self.grid()),
             smooth_weights=self._smooth_weights,
             median_size=self._median_size), data)
 
     def __init__(
             self,
             size: Sequence[int],
-            step: Sequence[float] = (1, 1, 1),
+            spectral: gridutils.SpectralAxis,
+            step: Sequence[float] = (1, 1),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0, 0, 0),
+            rval: Sequence[float] = (0, 0),
             rota: float = 0,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None,
-            convention: str | None = None,
             smooth_weights: bool = False,
             median_size: int | None = None
     ):
-        super().__init__(
-            size, step, rpix, rval, rota, rest, medium, convention)
+        super().__init__(size, step, rpix, rval, rota, spectral)
         _detail.check_median_size(median_size)
         self._smooth_weights = smooth_weights
         self._median_size = median_size

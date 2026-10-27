@@ -40,7 +40,9 @@ PROPERTIES = dict(
     ha_pt_a=1, ha_pt_s=4, ha_vpt_rt=2, ha_vpt_vt=150, ha_dpt_a=20,
     co_pt_a=2, co_pt_s=2, co_vpt_rt=2, co_vpt_vt=150, co_dpt_a=8)
 
-SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10])
+SCUBE = dict(
+    type='pixel_spectra', size=[32, 41], step=[1, 1],
+    spectral=dict(size=51, step=10, convention='relativistic'))
 
 
 def observation(components=None, **options):

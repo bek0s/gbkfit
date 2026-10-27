@@ -10,6 +10,7 @@ import gbkfit.params
 import numpy as np
 import pytest
 from gbkfit.observation.observables.slitless_spectra import pixel_footprint
+from gbkfit.utils.gridutils import SpectralAxis
 from modelutils import group_plan, observation_group
 
 
@@ -31,8 +32,9 @@ PROPERTIES = dict(
 # the spectral axis
 SIZE, NZ, STEP = (16, 12), 21, 30
 SLITLESS = dict(
-    type='slitless_spectra', size=list(SIZE), spec_size=NZ,
-    spec_step=STEP, spec_rest='4 um', trace=dict(
+    type='slitless_spectra', size=list(SIZE),
+    spectral=dict(size=NZ, step=STEP, rest='4 um'),
+    trace=dict(
         type='polynomial', wave='4 um', dx=[0, 2.99792458e5 / (4 * STEP)]))
 
 
@@ -113,9 +115,10 @@ def test_slitless_spectra_are_the_cube_dispersed(driver, psf):
     width, height = SIZE
     image = evaluate(driver, SLITLESS | dict(psf=psf))
     cube = evaluate(driver, dict(
-        type='pixel_spectra', size=[width + 2 * reach, height, NZ],
-        step=[1, 1, STEP],
-        rpix=[(width - 1) / 2 + reach, (height - 1) / 2, (NZ - 1) / 2],
+        type='pixel_spectra', size=[width + 2 * reach, height], step=[1, 1],
+        rpix=[(width - 1) / 2 + reach, (height - 1) / 2],
+        spectral=dict(
+            size=NZ, step=STEP, rpix=(NZ - 1) / 2, convention='relativistic'),
         psf=psf))
     expected = np.zeros(image.shape)
     for k in range(NZ):
@@ -162,7 +165,8 @@ def test_slitless_spectra_refuse_an_lsf_and_frequencies():
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
             line_of_sight=dict(type='flat'),
-            observable=SLITLESS | dict(spec_rest='1420 MHz'))])
+            observable=SLITLESS | dict(spectral=dict(
+                size=NZ, step=STEP, rest='1420 MHz')))])
 
 
 def test_grismconf_traces_follow_their_parameter():
@@ -238,8 +242,8 @@ def test_traces_that_vary_across_the_detector_move_each_pixel():
     trace = traces.TraceGrismConf(
         displ=[[4], [1e-4]], dispx=[[0, 0.05, 0], [4]], dispy=[[0]])
     observable = SlitlessSpectra(
-        size=[40, 6], spec_step=30, spec_rest='4 um', trace=trace,
-        spec_size=3)
+        size=[40, 6], spectral=SpectralAxis(size=3, step=30, rest='4 um'),
+        trace=trace)
     edges = observable._channel_edges()
     offset, size = observable._sky(edges)
     matrix = observable._dispersion(edges, size, offset).tocsc()
@@ -320,7 +324,8 @@ def test_shutters_let_through_the_light_of_their_sky(driver):
         type='shutters', size=[1, 2], pitch=3, count=2,
         centre=[-2.5, -0.5]))
     cube = evaluate(driver, dict(
-        type='pixel_spectra', size=[width, height, NZ], step=[1, 1, STEP]))
+        type='pixel_spectra', size=[width, height], step=[1, 1],
+        spectral=dict(size=NZ, step=STEP, convention='relativistic')))
     np.testing.assert_allclose(
         evaluate(driver, shutters),
         disperse_by_hand(cube, [3, 4, 6, 7], 5, width),

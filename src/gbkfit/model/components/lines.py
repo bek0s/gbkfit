@@ -363,8 +363,8 @@ class Lines:
                 "the lines of a component need the rest wavelength or "
                 "frequency that the velocities of the spectral axis refer "
                 "to: RESTWAV or RESTFRQ in the header of the data, or the "
-                "rest option of the observable (spec_rest for moments and "
-                "spectra in regions)")
+                "rest of the spectral axis of the observable (spectral: "
+                "{rest: ...})")
         # (wavelengths in vacuum, but that of a rest wavelength in air)
         emitted = np.array([
             line.rest().to_value(astropy.units.m, astropy.units.spectral())
@@ -418,7 +418,8 @@ class Lines:
             raise ConfigError(
                 "a line without a name is at the rest of the spectral axis, "
                 "which its frequency needs: RESTWAV or RESTFRQ in the header "
-                "of the data, or the rest option of the observable")
+                "of the data, or the rest of the spectral axis of the "
+                "observable (spectral: {rest: ...})")
         frequency = rest.to_value(astropy.units.Hz, astropy.units.spectral())
         if spectral.coords.medium == 'air':
             frequency /= gridutils.air_refractive_index(

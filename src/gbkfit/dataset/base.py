@@ -37,7 +37,9 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
     pixels).
 
     A dataset is a read-only mapping of the names of its items to the
-    items. A subclass declares the number of axes of its items (ndim).
+    items. A subclass declares the number of axes of its items (ndim),
+    and the index of their spectral axis, if any (spectral_axis, FITS
+    order).
 
     Parameters
     ----------
@@ -51,6 +53,8 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
     """
 
     ndim: int
+
+    spectral_axis: int | None = None
 
     def __init__(self, items: Mapping[str, Data]):
         if not items:

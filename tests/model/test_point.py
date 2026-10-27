@@ -100,8 +100,10 @@ def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, n):
     # The lsf is drawn on the oversampled channels at their width: the
     # spectrum of a point has the variance of the line, the lsf and a
     # channel (10^2 / 12), at any oversampling
-    scube = dict(type='pixel_spectra', size=[4, 4, 101], step=[0.5, 0.5, 10],
-                 oversampling=[1, 1, n], lsf=dict(type='gauss', sigma=30))
+    scube = dict(
+        type='pixel_spectra', size=[4, 4], step=[0.5, 0.5],
+        spectral=dict(size=101, step=10, convention='relativistic'),
+        oversampling=[1, 1, n], lsf=dict(type='gauss', sigma=30))
     cube = evaluate(driver, LINE_POINT, scube, dict(
         xpos=0.25, ypos=0.25, flux=1, vsys=0, disp=10))
     velocity = (np.arange(101) - 50) * 10
@@ -114,7 +116,9 @@ def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, n):
 def test_point_in_a_cube(driver, line_of_sight):
     # The spectrum of the point is a Gaussian of its flux, velocity and
     # dispersion (the mean of the line over each channel)
-    scube = dict(type='pixel_spectra', size=[10, 8, 41], step=[0.5, 0.5, 10])
+    scube = dict(
+        type='pixel_spectra', size=[10, 8], step=[0.5, 0.5],
+        spectral=dict(size=41, step=10, convention='relativistic'))
     cube = evaluate(driver, LINE_POINT, scube, dict(
         xpos=0.25, ypos=1.25, flux=2, vsys=33, disp=25), line_of_sight)
     spectrum = cube[:, 6, 5]
@@ -134,8 +138,9 @@ def test_point_with_lines(driver):
              dict(name='nii6583', rest='6583.45 Angstrom')]
     galaxy = dict(components=[dict(
         type='point', emission=dict(type='lines', lines=lines))])
-    scube = dict(type='pixel_spectra', size=[10, 8, 301], step=[0.5, 0.5, 10],
-                 rval=[0, 0, 500], rest='6562.8 Angstrom')
+    scube = dict(
+        type='pixel_spectra', size=[10, 8], step=[0.5, 0.5], rval=[0, 0],
+        spectral=dict(size=301, step=10, rval=500, rest='6562.8 Angstrom'))
     cube = evaluate(driver, galaxy, scube, dict(
         xpos=0, ypos=0, flux=1, vsys=0, disp=30, nii6583_ratio=0.5))
     # Both lines, the second with half the flux of the first

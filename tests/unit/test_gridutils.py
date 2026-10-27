@@ -62,21 +62,24 @@ def test_make_grid_errors(options, message):
 
 def test_velocity_conventions_follow_the_rest():
     # Of a rest wavelength, optical by default or log; of a frequency,
-    # radio; none without a rest
+    # radio; without a rest, any, none by default
     wave = gridutils.make_rest('6563 Angstrom')
     freq = gridutils.make_rest('1420 MHz')
     assert gridutils.make_convention(None, wave) == 'optical'
     assert gridutils.make_convention('log', wave) == 'log'
     assert gridutils.make_convention(None, freq) == 'radio'
     assert gridutils.make_convention(None, None) is None
-    for convention, rest in (('radio', wave), ('log', freq), ('log', None)):
+    for convention in gridutils.CONVENTIONS:
+        assert gridutils.make_convention(convention, None) == convention
+    for convention, rest in (
+            ('radio', wave), ('log', freq), ('fast', None)):
         with pytest.raises(ConfigError, match="convention"):
             gridutils.make_convention(convention, rest)
 
 
 @pytest.mark.parametrize('rest, convention', [
     ('6563 Angstrom', None), ('6563 Angstrom', 'log'), ('1420 MHz', None),
-    (None, None)])
+    (None, None), (None, 'optical'), (None, 'log'), (None, 'radio')])
 def test_velocity_conventions_place_light(rest, convention):
     # Each convention turns velocities into the 1 + z of their light and
     # back, and a km/s of motion (which changes 1 + z by D / c) moves the

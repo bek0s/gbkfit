@@ -12,6 +12,7 @@ from gbkfit.observation import (
     Flat, LikelihoodGaussian, ObservationSky, PixelBrightness, PixelMoments,
     observation_parser)
 from gbkfit.utils import parseutils
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -21,11 +22,11 @@ def test_observable_from_data():
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))},
         step=2, rota=30)
-    observable = PixelMoments.from_data(data, spec_step=5,
-                                        spec_convention='relativistic')
+    observable = PixelMoments.from_data(
+        data, spectral=SpectralAxis(step=5, convention='relativistic'))
     assert observable.grid() == data.grid()
     assert observable.orders() == (0, 1)
-    assert observable.spec_rval() == 1500
+    assert observable.spectral().rval() == 1500
     ObservationSky(
         observable, Flat(), data=data,
         likelihood=LikelihoodGaussian(missing_residual=3))
@@ -41,7 +42,8 @@ def test_spectra_keep_the_convention_of_their_data(
     import gbkfit.dataset
     import gbkfit.observation
     data = getattr(gbkfit.dataset, dataset_class)(
-        Data(np.zeros(shape)), rest='6564.61 Angstrom', convention='log')
+        Data(np.zeros(shape)),
+        spectral=SpectralAxis(convention='log', rest='6564.61 Angstrom'))
     observable = getattr(gbkfit.observation, observable_class).from_data(data)
     assert observable.grid() == data.grid()
     assert observable.grid().coords.convention == 'log'
@@ -52,15 +54,17 @@ def test_a_model_that_can_lack_values_needs_their_residual():
     # the mask cutoff, and the residual there is the user's choice
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
-    observable = PixelMoments.from_data(data, spec_step=5,
-                                        spec_convention='relativistic')
+    observable = PixelMoments.from_data(
+        data, spectral=SpectralAxis(step=5, convention='relativistic'))
     with pytest.raises(ConfigError, match="option missing_residual"):
         ObservationSky(observable, Flat(), data=data)
 
 
 def test_observable_options_are_checked():
     with pytest.raises(ConfigError, match="flux_floor is a fraction"):
-        PixelMoments(size=(8, 8), flux_floor=1, spec_convention='relativistic')
+        PixelMoments(
+            size=(8, 8), flux_floor=1,
+            spectral=SpectralAxis(convention='relativistic'))
     with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
         ObservationSky(
             PixelBrightness(size=(8, 8)), Flat(),
@@ -85,7 +89,9 @@ def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
             type='sky',
             line_of_sight=dict(type='flat'),
             observable=dict(
-                type='pixel_spectra', size=[4, 4, 4], smooth_weights=True))])
+                type='pixel_spectra', size=[4, 4],
+                spectral=dict(size=4, convention='relativistic'),
+                smooth_weights=True))])
     assert "observations[0] [sky]: smooth_weights is true" in caplog.text
 
 
@@ -119,7 +125,7 @@ def test_likelihoods_name_items_of_their_observation(options, message):
     with pytest.raises(ConfigError, match=message):
         ObservationSky(
             PixelMoments.from_data(
-                data, spec_step=5, spec_convention='relativistic'),
+                data, spectral=SpectralAxis(step=5, convention='relativistic')),
             Flat(), data=data,
             likelihood=LikelihoodGaussian(missing_residual=3, **options))
 
@@ -130,7 +136,9 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.objective.comparisons import comparison
     from gbkfit.observation import PixelSpectra
-    data = DatasetPixelSpectra(Data(np.ones((10, 4, 4))))
+    data = DatasetPixelSpectra(
+        Data(np.ones((10, 4, 4))),
+        spectral=SpectralAxis(convention='relativistic'))
     observation = ObservationSky(
         PixelSpectra.from_data(data), Flat(), data=data,
         likelihood=LikelihoodGaussian(

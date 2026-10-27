@@ -44,10 +44,13 @@ def load_observable(
     Load an observable of class cls from its configuration: with its
     __init__, or with its from_data and the given dataset, whose options
     it must not repeat. The options of the grid with one value per axis
-    (ndim of them) are made lists.
+    (on the sky, ndim of them) are made lists, and its spectral axis is
+    loaded (see gridutils.SpectralAxis).
     """
     parseutils.sanitize_dimensional_options(info, dict(
         size=int, step=float, rpix=float, rval=float), ndim)
+    parseutils.load_option_and_update_info(
+        gridutils.spectral_axis_parser, info, 'spectral')
     if dataset is None:
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
@@ -59,27 +62,39 @@ def load_observable(
 def grid_options(grid: gridutils.Grid) -> dict[str, Any]:
     """
     Return the options of the grid of an observable (size, step, rpix,
-    rval, rota, and rest, medium and convention with a spectral axis) of
-    the given grid.
+    rval and rota, of the axes on the sky, and spectral, its spectral axis
+    after them, if any) of the given grid.
     """
     coords = grid.coords
+    axes = slice(None) if grid.spectral_axis is None \
+        else slice(grid.spectral_axis)
     options = dict(
-        size=grid.size, step=coords.step, rpix=coords.rpix, rval=coords.rval,
-        rota=coords.rota)
+        size=grid.size[axes], step=coords.step[axes], rpix=coords.rpix[axes],
+        rval=coords.rval[axes], rota=coords.rota)
     if grid.spectral_axis is not None:
-        options.update(
-            rest=coords.rest, medium=coords.medium,
-            convention=coords.convention)
+        options.update(spectral=gridutils.SpectralAxis.of(grid))
+    return options
+
+
+def dump_grid(grid: gridutils.Grid) -> dict[str, Any]:
+    """Return the configuration of the grid of an observable."""
+    options = grid_options(grid)
+    if 'spectral' in options:
+        options['spectral'] = options['spectral'].dump()
     return options
 
 
 def dataset_grid_options(grid: gridutils.Grid) -> dict[str, Any]:
     """
     Return the options of the grid of a dataset on the grid of an
-    observable: its grid options but the size, which the data give.
+    observable: its grid options but the sizes, which the data give.
     """
     options = grid_options(grid)
     del options['size']
+    if 'spectral' in options:
+        options['spectral'] = gridutils.SpectralAxis(**{
+            key: value for key, value in options['spectral'].dump().items()
+            if key != 'size'})
     return options
 
 
@@ -147,11 +162,6 @@ def warn_unsmoothed_weights(
         parseutils.warn(
             "smooth_weights is true, but the instrument has no PSF or LSF "
             "to smooth the weights with")
-
-
-def dump_rest(rest: astropy.units.Quantity | None) -> str | None:
-    """Return the option of the rest of a spectral axis."""
-    return None if rest is None else str(rest)
 
 
 def spatial_grid_of_regions(

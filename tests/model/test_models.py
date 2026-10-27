@@ -61,7 +61,8 @@ CASES = dict(
     kinematics_2d=(
         dict(
             observable=dict(
-                type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
+                type='pixel_spectra', size=[20, 16], step=[1, 1],
+                spectral=dict(size=11, step=30, convention='relativistic')),
             line_of_sight=dict(type='flat'),
             galaxy=dict(components=[
                 smdisk(
@@ -137,7 +138,8 @@ CASES = dict(
     kinematics_3d=(
         dict(
             observable=dict(
-                type='pixel_spectra', size=[20, 16, 11], step=[1, 1, 30]),
+                type='pixel_spectra', size=[20, 16], step=[1, 1],
+                spectral=dict(size=11, step=30, convention='relativistic')),
             line_of_sight=dict(
                 type='grid', depth=dict(extent=14 * 1.5, step=1.5)),
             galaxy=dict(components=[

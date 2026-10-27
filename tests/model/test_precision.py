@@ -33,20 +33,27 @@ GRID = dict(type='grid')
 CASES = {
     '2d spectra': (
         dict(components=[THIN_DISK]),
-        dict(type='pixel_spectra', size=[33, 32, 40], step=[1, 1, 12]),
+        dict(
+            type='pixel_spectra', size=[33, 32], step=[1, 1],
+            spectral=dict(size=40, step=12, convention='relativistic')),
         FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     '3d spectra': (
         dict(components=[THICK_DISK]),
-        dict(type='pixel_spectra', size=[33, 32, 40], step=[1, 1, 12]),
+        dict(
+            type='pixel_spectra', size=[33, 32], step=[1, 1],
+            spectral=dict(size=40, step=12, convention='relativistic')),
         GRID, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'moments': (
         dict(components=[THIN_DISK]),
-        dict(type='pixel_moments', size=[33, 32], step=[1, 1],
-             spec_convention='relativistic'),
+        dict(
+            type='pixel_moments', size=[33, 32], step=[1, 1],
+            spectral=dict(convention='relativistic')),
         FLAT, dict(psf=GAUSS_PSF, lsf=GAUSS_LSF)),
     'varying psf': (
         dict(components=[THIN_DISK]),
-        dict(type='pixel_spectra', size=[33, 32, 40], step=[1, 1, 12]),
+        dict(
+            type='pixel_spectra', size=[33, 32], step=[1, 1],
+            spectral=dict(size=40, step=12, convention='relativistic')),
         FLAT, dict(psf=VARYING_PSF, lsf=GAUSS_LSF))}
 
 

@@ -79,7 +79,9 @@ def test_images_see_components_in_their_band(driver, band, message):
 def test_only_images_have_a_band(driver):
     case = dict(
         driver=dict(type=driver.type()),
-        observable=dict(type='pixel_spectra', size=[8, 8, 10]),
+        observable=dict(
+            type='pixel_spectra', size=[8, 8],
+            spectral=dict(size=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             STARS, emission=dict(type='lines'),

@@ -42,7 +42,9 @@ FLAT = dict(type='flat')
 GRID = dict(type='grid')
 
 IMAGE = dict(type='pixel_brightness', size=[8, 8])
-CUBE = dict(type='pixel_spectra', size=[8, 8, 8])
+CUBE = dict(
+    type='pixel_spectra', size=[8, 8],
+    spectral=dict(size=8, convention='relativistic'))
 
 # Each kind of observation (an image or a spectral cube, along a flat or
 # a grid line of sight): its observable and line of sight, and a

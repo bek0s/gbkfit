@@ -37,8 +37,11 @@ def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
             oversampling=list(oversampling),
             line_of_sight=dict(type='flat'),
             instrument=dict(psf=psf, lsf=lsf),
-            observable=dict(type='pixel_spectra', size=list(SIZE),
-                            step=list(STEP))))])
+            observable=dict(
+                type='pixel_spectra', size=list(SIZE[:2]),
+                step=list(STEP[:2]), spectral=dict(
+                    size=SIZE[2], step=STEP[2],
+                    convention='relativistic'))))])
     params = gbkfit.params.ParamSpace(
         group.pdescs(), PROPERTIES).evaluate()
     return group.plan(driver).model_h(params)[0]['spectra']['d'].copy()

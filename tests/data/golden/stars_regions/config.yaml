@@ -41,9 +41,11 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: null
-  observable: {type: region_moments, flux_floor: 1.0e-06, spec_size: 101, spec_step: 10,
-    spec_rval: 0, spec_rest: 5.000000000000001e-07 m, spec_medium: vacuum, spec_convention: log,
-    method: moments}
+  observable:
+    type: region_moments
+    spectral: {size: 101, step: 10.0, rpix: 50.0, rval: 0.0, convention: log}
+    flux_floor: 1.0e-06
+    method: moments
   oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64

@@ -49,7 +49,8 @@ def case(driver, galaxy):
         driver=dict(type=driver.type()), galaxy=dict(components=[galaxy]),
         line_of_sight=dict(type='grid'),
         observable=dict(
-            type='pixel_spectra', size=[48, 48, 50], step=[1, 1, 10]))
+            type='pixel_spectra', size=[48, 48], step=[1, 1],
+            spectral=dict(size=50, step=10, convention='relativistic')))
 
 
 @pytest.mark.parametrize('thick', [False, True])

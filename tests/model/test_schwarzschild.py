@@ -23,6 +23,7 @@ from gbkfit.observation._orbits import _bins_light
 from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
 from gbkfit.utils import gridutils
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 from test_spheroids import hernquist_mge
 
@@ -77,8 +78,8 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
         for m in range(1, 5)}, regions)
     return ObservationSky(
         RegionMoments.from_data(
-            dataset, method='gauss_hermite', spec_convention='log',
-            spec_rest='5000 Angstrom'),
+            dataset, method='gauss_hermite',
+            spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         instrument=Instrument(psf=None if psf is None else PSFGauss(psf)),
         lines=['stars'], data=dataset, dtype='float64',
@@ -149,7 +150,10 @@ def test_orbits_take_a_mass_disk_far_from_it():
 
 def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
     spectra = ObservationSky(
-        PixelSpectra(size=(8, 8, 16), step=(2, 2, 20)),
+        PixelSpectra(
+            size=(8, 8), step=(2, 2),
+            spectral=SpectralAxis(
+                size=16, step=20, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         lines=['stars'])
     with pytest.raises(ConfigError, match="spectral cubes do not see them"):
@@ -357,8 +361,9 @@ def test_the_outputs_show_the_orbits_in_pixels_and_cells(driver):
     plan = _moments.MomentsPlan(
         driver, (spectra.shape[1], 1), moments.orders(),
         moments.flux_floor(), moments.method(), np.float64)
-    step = moments.spec_step()
-    zero = moments.spec_rval() - (moments.spec_size() / 2 - 0.5) * step
+    spectral = moments.spectral()
+    step = spectral.step()
+    zero = spectral.rval() - spectral.rpix() * step
     measured = plan.evaluate(
         (1.0, 1.0, step), (0.0, 0.0, zero),
         driver.mem_copy_h2d(np.ascontiguousarray(spectra[:, None, :])), None)
@@ -535,8 +540,8 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
         4: Data(mock.h[:, 1], error=mock.h_error[:, 1])}, regions)
     obs = ObservationSky(
         RegionMoments.from_data(
-            dataset, method='gauss_hermite', spec_convention='log',
-            spec_rest='5000 Angstrom'),
+            dataset, method='gauss_hermite',
+            spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         instrument=Instrument(psf=PSFGauss(0.5 / np.sqrt(8 * np.log(2)))),
         lines=['stars'], data=dataset,
@@ -605,9 +610,9 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
     los = line_of_sight_parser.load(dict(type='grid', depth=dict(step=0.5)))
     instrument = Instrument(psf=PSFGauss(0.4))
     moments = RegionMoments(
-        regions, orders=[1, 2, 3, 4], method='gauss_hermite', spec_size=241,
-        spec_step=10, spec_rval=0, spec_rest='5000 Angstrom',
-        spec_convention='log')
+        regions, orders=[1, 2, 3, 4], method='gauss_hermite',
+        spectral=SpectralAxis(
+            size=241, step=10, rval=0, convention='log', rest='5000 Angstrom'))
     model = ObservationGroup(
         [stars(dict(type='jeans'))],
         [ObservationSky(moments, los, instrument=instrument, lines=['stars'],
@@ -620,8 +625,8 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
         for m in range(1, 5)}, regions)
     obs = ObservationSky(
         RegionMoments.from_data(
-            dataset, method='gauss_hermite', spec_convention='log',
-            spec_rest='5000 Angstrom'),
+            dataset, method='gauss_hermite',
+            spectral=SpectralAxis(convention='log', rest='5000 Angstrom')),
         los, instrument=instrument, lines=['stars'], data=dataset,
         likelihood=LikelihoodGaussian(missing_residual=3))
     group = ObservationGroup([stars(dict(

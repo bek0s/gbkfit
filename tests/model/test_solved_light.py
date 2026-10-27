@@ -19,6 +19,7 @@ from gbkfit.observation import (
     LikelihoodGaussian, ObservationGroup, ObservationSky, PixelBrightness,
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -135,7 +136,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
             dptraits=dict(type='uniform')))
         moments = DatasetPixelMoments({1: Data(data, error=data + 1)})
         observable = PixelMoments.from_data(
-            moments, spec_convention='relativistic')
+            moments, spectral=SpectralAxis(convention='relativistic'))
         obs = ObservationSky(
             observable, line_of_sight_parser.load(
                 dict(type='grid', depth=dict(step=0.5))),

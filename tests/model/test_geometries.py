@@ -20,7 +20,9 @@ PARTS = dict(
         vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
     emission=LINES)
 
-OBSERVABLE = dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10])
+OBSERVABLE = dict(
+    type='pixel_spectra', size=[24, 24], step=[1, 1],
+    spectral=dict(size=31, step=10, convention='relativistic'))
 
 # The properties of a warped disk, and of the traits of two disks
 GEOMETRY = dict(

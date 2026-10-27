@@ -48,7 +48,8 @@ def spectral_cube_case(driver, with_opacity):
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+            type='pixel_spectra', size=[32, 32], step=[1, 1],
+            spectral=dict(size=41, step=10, convention='relativistic')),
         line_of_sight=dict(type='grid'),
         galaxy=dict(components=components))
 
@@ -184,7 +185,8 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
         case = dict(
             driver=dict(type=driver.type()),
             observable=dict(
-                type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+                type='pixel_spectra', size=[32, 32], step=[1, 1],
+                spectral=dict(size=41, step=10, convention='relativistic')),
             line_of_sight=dict(type='grid'),
             galaxy=dict(components=components))
         data, _ = evaluate_cases([case], properties)
@@ -264,7 +266,9 @@ THIN_GAS_PROPERTIES = dict(
 
 @pytest.mark.parametrize('observable, key', [
     (dict(type='pixel_brightness', size=[32, 32]), 'brightness'),
-    (dict(type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+    (dict(
+        type='pixel_spectra', size=[32, 32], step=[1, 1],
+        spectral=dict(size=41, step=10, convention='relativistic')),
      'spectra')])
 def test_a_grid_sees_a_thin_disk_as_the_sky_does(
         driver, evaluate_cases, observable, key):
@@ -392,8 +396,9 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 81], step=[1, 1, 25],
-            rval=[0, 0, 500], rest='6564.61 Angstrom'),
+            type='pixel_spectra', size=[24, 24], step=[1, 1], rval=[0, 0],
+            spectral=dict(
+                size=81, step=25, rval=500, rest='6564.61 Angstrom')),
         line_of_sight=dict(
             type='grid', depth=dict(extent=40 * 0.25, step=0.25)),
         galaxy=dict(components=[gas] + dusts),

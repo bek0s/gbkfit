@@ -37,9 +37,11 @@ observations:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
     lsf: {type: gauss, sigma: 20}
-  observable: {type: region_moments, flux_floor: 1.0e-06, spec_size: 60, spec_step: 10,
-    spec_rval: 0, spec_rest: null, spec_medium: null, spec_convention: relativistic,
-    method: moments}
+  observable:
+    type: region_moments
+    spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
+    flux_floor: 1.0e-06
+    method: moments
   oversampling: [1, 1]
   dtype: float64
   fft_dtype: float64
@@ -52,13 +54,9 @@ observations:
       - {type: ellipse, x: 0, y: 0, a: 4, b: 2, posa: 40}
       - {type: rectangle, x: -1, y: 1, length: 8, width: 1, posa: 130}
       - {type: field}
-    step: 20
-    rpix: 19.5
-    rval: 0
-    rest: null
-    medium: null
     data: observation1_spectra_d.fits
     error: observation1_spectra_e.fits
+    spectral: {step: 20, rpix: 19.5, rval: 0, rest: null, medium: null}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}

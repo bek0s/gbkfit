@@ -143,26 +143,34 @@ OBSERVABLES = dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10),
         dict(psf=GAUSS, lsf=None), [2, 1]),
     pixel_spectra=(dict(
-        size=[20, 16, 11], step=[2, 1, 10], rpix=[3, 4, 5], rval=[1, 2, 3],
-        rota=10, smooth_weights=True,
-        rest='6.56461e-07 m', convention='log'),
+        size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
+        spectral=dict(
+            size=11, step=10, rpix=5, rval=3, convention='log',
+            rest='6.56461e-07 m', medium='air'),
+        smooth_weights=True),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1, 1]),
     slit_spectra=(dict(
-        size=[20, 11], step=[2, 10], rpix=[3, 5], rval=[1, 3], rota=10,
-        slit_width=3, smooth_weights=True,
-        rest='6.56461e-07 m', convention='log'),
+        size=[20], step=[2], rpix=[3], rval=[1], rota=10,
+        spectral=dict(
+            size=11, step=10, rpix=5, rval=3, convention='log',
+            rest='6.56461e-07 m', medium='air'),
+        slit_width=3, smooth_weights=True),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]),
     slitless_spectra=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
-        spec_size=11, spec_step=30, spec_rval=5, spec_rest='4e-06 m',
-        spec_medium='air', spec_convention='log', trace=dict(
+        spectral=dict(
+            size=11, step=30, rpix=4, rval=5, convention='log',
+            rest='4e-06 m', medium='air'),
+        trace=dict(
             type='polynomial', wave='3.9e-06 m', dx=[1, 2000],
             dy=[0.5, 10])),
         dict(psf=GAUSS, lsf=None), [2, 1]),
     pixel_moments=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
-        flux_floor=0.1, orders=[0, 1], spec_size=201, spec_step=2,
-        spec_rval=1500, spec_rest='6.56461e-07 m', spec_convention='log'),
+        flux_floor=0.1, orders=[0, 1],
+        spectral=dict(
+            size=201, step=2, rpix=99, rval=1500, convention='log',
+            rest='6.56461e-07 m')),
         dict(psf=GAUSS, lsf=GAUSS), [2, 1]))
 
 

@@ -18,12 +18,13 @@ galaxies:
 observations:
 - type: sky
   data:
-    step: [0.5, 0.5, 20]
-    rpix: [11.5, 11.5, 19.5]
-    rval: [0, 0, 0]
+    step: [0.5, 0.5]
+    rpix: [11.5, 11.5]
+    rval: [0, 0]
     rota: 0
     data: observation0_spectra_d.fits
     error: 0.002
+    spectral: {step: 20, rpix: 19.5, rval: 0}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}

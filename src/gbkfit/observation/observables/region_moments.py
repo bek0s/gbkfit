@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import astropy.units
 import numpy as np
 import scipy.signal
 import scipy.sparse
@@ -57,8 +56,8 @@ class RegionMoments(Observable):
     Those are of the distribution of the velocities of the stars itself
     (the fit of the spectra took the LSF out), seen through the PSF: the
     instrument of their observation has a PSF and no LSF. The velocities
-    of pPXF are c ln(1 + z), the convention 'log' (with any spec_rest
-    wavelength: the light of stars has no rest). Models that predict the
+    of pPXF are c ln(1 + z), the convention 'log' (without a rest: the
+    light of stars has none). Models that predict the
     mean and the dispersion of the stars, but not the shape of their
     distribution (e.g. Jeans kinematics, see model.SpheroidKinematics),
     are fitted to the mean and the dispersion of the series of pPXF (see
@@ -70,12 +69,13 @@ class RegionMoments(Observable):
     ----------
     regions : Regions
         The regions.
+    spectral : SpectralAxis
+        As that of PixelMoments.
     size, step, rpix, rval, rota : optional
         The spatial grid of the cube (see gridutils.make_grid), for
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
-    flux_floor, orders, spec_size, spec_step, spec_rval, spec_rest, \
-spec_medium, spec_convention, method : optional
+    flux_floor, orders, method : optional
         As those of PixelMoments: the regions whose moment 0 is not above
         flux_floor times the largest of the regions are masked.
 
@@ -120,18 +120,13 @@ spec_medium, spec_convention, method : optional
     def from_data(
             cls,
             dataset: DatasetRegionMoments,
+            spectral: gridutils.SpectralAxis,
             size: Sequence[int] | None = None,
             step: Sequence[float] | None = None,
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] | None = None,
             rota: float | None = None,
             flux_floor: float = 1e-6,
-            spec_size: int | None = None,
-            spec_step: float = _moments.SPEC_STEP,
-            spec_rval: float | None = None,
-            spec_rest: str | astropy.units.Quantity | None = None,
-            spec_medium: str | None = None,
-            spec_convention: str | None = None,
             method: str = 'moments'
     ) -> 'RegionMoments':
         """
@@ -142,11 +137,12 @@ spec_medium, spec_convention, method : optional
         ----------
         dataset : DatasetRegionMoments
             The moments.
+        spectral : SpectralAxis
+            As that of PixelMoments.from_data.
         size, step, rpix, rval, rota : optional
             As those of RegionMoments: the spatial grid of the cube, for
             regions on the sky.
-        flux_floor, spec_size, spec_step, spec_rval, spec_rest, \
-spec_medium, method : optional
+        flux_floor, method : optional
             As those of PixelMoments.from_data.
 
         Returns
@@ -162,13 +158,9 @@ spec_medium, method : optional
         """
         cls._require_dataset_class(dataset)
         return cls(
-            dataset.regions(), size, step, rpix, rval, rota,
-            **_moments.spectral_axis_from_data(
-                dataset, spec_step, spec_size, spec_rval),
-            flux_floor=flux_floor, orders=dataset.orders(),
-            spec_step=spec_step, spec_rest=spec_rest,
-            spec_medium=spec_medium, spec_convention=spec_convention,
-            method=method)
+            dataset.regions(), _moments.spectral_axis(spectral, dataset),
+            size, step, rpix, rval, rota, flux_floor=flux_floor,
+            orders=dataset.orders(), method=method)
 
     def dump(
             self,
@@ -185,18 +177,14 @@ spec_medium, method : optional
                     overwrite=overwrite),
                 orders=self._orders)
         return info | _detail.dump_spatial_grid(self, self._regions) | dict(
+            spectral=self._spectral.dump(),
             flux_floor=self._flux_floor,
-            spec_size=self._spec_size,
-            spec_step=self._spec_step,
-            spec_rval=self._spec_rval,
-            spec_rest=_detail.dump_rest(self._spec_rest),
-            spec_medium=self._spec_medium,
-            spec_convention=self._spec_convention,
             method=self._method)
 
     def __init__(
             self,
             regions: Regions,
+            spectral: gridutils.SpectralAxis,
             size: Sequence[int] | None = None,
             step: Sequence[float] | None = None,
             rpix: Sequence[float] | None = None,
@@ -204,12 +192,6 @@ spec_medium, method : optional
             rota: float | None = None,
             flux_floor: float = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
-            spec_size: int | None = None,
-            spec_step: float = _moments.SPEC_STEP,
-            spec_rval: float = 0,
-            spec_rest: str | astropy.units.Quantity | None = None,
-            spec_medium: str | None = None,
-            spec_convention: str | None = None,
             method: str = 'moments'
     ):
         spatial = _detail.spatial_grid_of_regions(
@@ -218,21 +200,11 @@ spec_medium, method : optional
         super().__init__(
             spatial.size, coords.step, coords.rpix, coords.rval, coords.rota)
         self._orders = _moments.check_moment_options(
-            orders, flux_floor, method, spec_size, spec_step)
-        if spec_size is None:
-            spec_size = _moments.default_spec_size(spec_step)
+            orders, flux_floor, method)
+        self._spectral = _moments.spectral_axis(spectral)
         self._regions = regions
         self._flux_floor = flux_floor
         self._method = method
-        self._spec_size = spec_size
-        self._spec_step = spec_step
-        self._spec_rval = spec_rval
-        self._spec_rest = gridutils.make_rest(spec_rest)
-        self._spec_medium = gridutils.make_medium(
-            spec_medium, self._spec_rest)
-        _moments.check_velocities(spec_rest, spec_convention)
-        self._spec_convention = gridutils.make_convention(
-            spec_convention, self._spec_rest)
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
@@ -250,23 +222,11 @@ spec_medium, method : optional
     def method(self) -> str:
         return self._method
 
-    def spec_size(self) -> int:
-        return self._spec_size
-
-    def spec_step(self) -> float:
-        return self._spec_step
-
-    def spec_rval(self) -> float:
-        return self._spec_rval
-
-    def spec_rest(self) -> astropy.units.Quantity | None:
-        return self._spec_rest
-
-    def spec_medium(self) -> str | None:
-        return self._spec_medium
-
-    def spec_convention(self) -> str | None:
-        return self._spec_convention
+    def spectral(self) -> gridutils.SpectralAxis:
+        """
+        Return the spectral axis of the cube the moments are measured from.
+        """
+        return self._spectral
 
     def keys(self) -> tuple[str, ...]:
         return tuple(f'moment{i}' for i in self._orders)
@@ -529,10 +489,10 @@ class OrbitMomentsPlan(ObservablePlan):
         self._nregions = nregions
         # (the spectral axis: its channels, their width, and the velocity
         # of the centre of the first)
-        self._nchannels = moments.spec_size()
-        self._step = moments.spec_step()
-        self._zero = moments.spec_rval() \
-            - (self._nchannels / 2 - 0.5) * self._step
+        spectral = moments.spectral()
+        self._nchannels = spectral.size()
+        self._step = spectral.step()
+        self._zero = spectral.rval() - spectral.rpix() * self._step
         self._spectra = driver.mem_alloc_d(
             (self._nchannels, 1, nregions), dtype)
         self._moments = _moments.MomentsPlan(
@@ -549,10 +509,9 @@ class OrbitMomentsPlan(ObservablePlan):
         coords = grid.coords
         self._cube_coords = gridutils.Coords(
             coords.step[:2] + (self._step,),
-            coords.rpix[:2] + (self._nchannels / 2 - 0.5,),
-            coords.rval[:2] + (moments.spec_rval(),), coords.rota,
-            moments.spec_rest(), moments.spec_medium(),
-            moments.spec_convention())
+            coords.rpix[:2] + (spectral.rpix(),),
+            coords.rval[:2] + (spectral.rval(),), coords.rota,
+            spectral.rest(), spectral.medium(), spectral.convention())
         self._map_coords = coords
         self._cube_grid = gridutils.Grid(
             (shape[1], shape[0], self._nchannels), self._cube_coords, 2)

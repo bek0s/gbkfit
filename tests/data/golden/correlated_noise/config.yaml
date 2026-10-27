@@ -18,14 +18,15 @@ galaxies:
 observations:
 - type: sky
   data:
-    step: [1, 1, 20]
-    rpix: [7.5, 7.5, 14.5]
-    rval: [0, 0, 0]
+    step: [1, 1]
+    rpix: [7.5, 7.5]
+    rval: [0, 0]
     rota: 0
     data: observation0_spectra_d.fits
     error: 0.0002
     spatial_correlation: {type: gauss, sigma: 1.2}
     spectral_correlation: {type: gauss, sigma: 25}
+    spectral: {step: 20, rpix: 14.5, rval: 0}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}

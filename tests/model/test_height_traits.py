@@ -31,7 +31,9 @@ PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=75,
     pt_a=1, pt_s=4, ht_s=1, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
-SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 20])
+SCUBE = dict(
+    type='pixel_spectra', size=[32, 41], step=[1, 1],
+    spectral=dict(size=51, step=20, convention='relativistic'))
 
 
 def observe(driver, component):

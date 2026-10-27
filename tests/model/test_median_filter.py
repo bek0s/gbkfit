@@ -12,6 +12,7 @@ from gbkfit.observation import (
     Flat, ObservationGroup, ObservationSky, PixelBrightness, PixelMoments,
     PixelSpectra, observable_parser)
 from gbkfit.params import ParamSpace
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -56,10 +57,15 @@ def test_images_and_cubes_are_filtered_on_the_sky(driver):
         driver, PixelBrightness(size=(24, 20)), disk('band'), 'brightness')
     np.testing.assert_array_equal(image, zero_padded_median(plain, 3))
     cube = model(
-        driver, PixelSpectra(size=(24, 20, 41), step=(1, 1, 10),
-                             median_size=5), disk('lines'), 'spectra')
+        driver, PixelSpectra(
+            size=(24, 20), step=(1, 1),
+            spectral=SpectralAxis(size=41, step=10, convention='relativistic'),
+            median_size=5), disk('lines'), 'spectra')
     plain = model(
-        driver, PixelSpectra(size=(24, 20, 41), step=(1, 1, 10)),
+        driver, PixelSpectra(
+            size=(24, 20), step=(1, 1),
+            spectral=SpectralAxis(
+                size=41, step=10, convention='relativistic')),
         disk('lines'), 'spectra')
     np.testing.assert_array_equal(cube, zero_padded_median(plain, 5))
 
@@ -67,11 +73,13 @@ def test_images_and_cubes_are_filtered_on_the_sky(driver):
 def test_moment_maps_are_of_the_filtered_spectra(driver):
     # (the cube of the spectra, an extra output, is that of the filter)
     filtered, plain = Extras(), Extras()
-    model(driver, PixelMoments(size=(24, 20), orders=(0, 1), median_size=3,
-                               spec_convention='relativistic'),
+    model(driver, PixelMoments(
+        size=(24, 20), orders=(0, 1), median_size=3,
+        spectral=SpectralAxis(convention='relativistic')),
           disk('lines'), 'moment1', filtered)
-    model(driver, PixelMoments(size=(24, 20), orders=(0, 1),
-                               spec_convention='relativistic'), disk('lines'),
+    model(driver, PixelMoments(
+        size=(24, 20), orders=(0, 1),
+        spectral=SpectralAxis(convention='relativistic')), disk('lines'),
           'moment1', plain)
     np.testing.assert_array_equal(
         filtered.get('dcube_lo').data,
@@ -86,7 +94,9 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
     from gbkfit.observation import NoiseGauss
     assert PixelBrightness(size=(8, 8)).linear_in_light()
     assert not PixelBrightness(size=(8, 8), median_size=3).linear_in_light()
-    assert not PixelSpectra(size=(8, 8, 5), median_size=3).linear_in_light()
+    assert not PixelSpectra(
+        size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
+        median_size=3).linear_in_light()
     group = ObservationGroup(disk('band'), ObservationSky(
         PixelBrightness(size=(24, 20), median_size=3), Flat()))
     params = ParamSpace(group.pdescs(), {
@@ -99,7 +109,9 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
 
 
 def test_the_median_size_is_an_odd_number_of_at_least_3():
-    observable = PixelSpectra(size=(8, 8, 5), median_size=3)
+    observable = PixelSpectra(
+        size=(8, 8), spectral=SpectralAxis(size=5, convention='relativistic'),
+        median_size=3)
     assert observable_parser.load(observable.dump()).dump() \
         == observable.dump()
     for size in (1, 4, 2.0):

@@ -19,6 +19,7 @@ from gbkfit.observation import (
     PixelBrightness, PixelMoments, observable_parser)
 from gbkfit.params import (
     ParamSpace, SolveGaussian, solve_together, solve_together_rows)
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -333,7 +334,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1, 2],
-        spec_convention='relativistic')))
+        spectral=dict(convention='relativistic'))))
     model = image.model_h(
         ParamSpace(image.group().pdescs(), DISK).evaluate())[0]
     errors = dict(moment0=0.01, moment1=5.0, moment2=5.0)
@@ -342,7 +343,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
             (24, 24), errors[f'moment{order}']))
         for order in (0, 1, 2)})
     observable = PixelMoments.from_data(
-        dataset, spec_convention='relativistic')
+        dataset, spectral=SpectralAxis(convention='relativistic'))
     objective = Objective(group(observable, dataset))
     truth = ParamSpace(objective.pdescs(), DISK).evaluate()
     compact = ParamSpace(
@@ -377,14 +378,14 @@ def test_values_the_model_lacks_take_no_noise(driver):
             galaxy_parser.load(KINEMATICS), observation).plan(driver)
     image = group(observable_parser.load(dict(
         type='pixel_moments', size=[24, 24], orders=[0, 1],
-        spec_convention='relativistic')))
+        spectral=dict(convention='relativistic'))))
     model = image.model_h(
         ParamSpace(image.group().pdescs(), DISK).evaluate())[0]
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full((24, 24), 5.0))
         for order in (0, 1)})
     observable = PixelMoments.from_data(
-        dataset, spec_convention='relativistic')
+        dataset, spectral=SpectralAxis(convention='relativistic'))
     objective = Objective(group(observable, dataset))
     compact = ParamSpace(objective.pdescs(), DISK | dict(
         pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()

@@ -30,6 +30,7 @@ from gbkfit.model.mass import (
     VerticalGauss, VerticalSech2, VerticalThin, mass_component_parser)
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.params import ModelEvaluationError
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -1419,7 +1420,10 @@ def evaluate(driver, galaxy, line_of_sight, properties):
         ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
     group = ObservationGroup([galaxy], [ObservationSky(
-        PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
+        PixelSpectra(
+            size=(32, 32), step=(1, 1),
+            spectral=SpectralAxis(
+                size=51, step=10, convention='relativistic')),
         line_of_sight_parser.load(dict(type=line_of_sight)))])
     params = ParamSpace(group.pdescs(), properties)
     return group.plan(driver).model_h(
@@ -2167,7 +2171,10 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
         DISTANCE)
     group = ObservationGroup([galaxy], [
         ObservationSky(
-            PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
+            PixelSpectra(
+                size=(32, 32), step=(1, 1),
+                spectral=SpectralAxis(
+                    size=51, step=10, convention='relativistic')),
             line_of_sight_parser.load(dict(type='flat')), dtype=dtype,
             name=name)
         for name, dtype in (('single', 'float32'), ('double', 'float64'))])

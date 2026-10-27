@@ -39,15 +39,20 @@ def _disk(**options: Any) -> dict[str, Any]:
 
 def _cube(
         size: list[int], step: list[float], line_of_sight: str = 'flat',
-        **observable: Any
+        spectral: dict[str, Any] | None = None, **observable: Any
 ) -> dict[str, Any]:
     """
-    An observation of a spectral cube, float64, with a psf and an lsf,
-    and the given options of its observable.
+    An observation of a spectral cube of the size and the step (x, y and
+    the spectral axis), float64, with a psf and an lsf, and the given
+    options of its observable and of its spectral axis (of relativistic
+    velocities by default).
     """
+    spectral = spectral or dict(convention='relativistic')
     return dict(
         type='sky', line_of_sight=dict(type=line_of_sight), dtype='float64',
-        observable=dict(type='pixel_spectra', size=size, step=step)
+        observable=dict(
+            type='pixel_spectra', size=size[:2], step=step[:2],
+            spectral=dict(size=size[2], step=step[2]) | spectral)
         | observable,
         instrument=dict(psf=_PSF, lsf=_LSF))
 
@@ -62,8 +67,9 @@ def _moments(
     return dict(
         type='sky', line_of_sight=dict(type='flat'), dtype='float64',
         observable=dict(
-            type='pixel_moments', size=size, step=step, spec_size=60,
-            spec_step=10, spec_convention='relativistic') | observable,
+            type='pixel_moments', size=size, step=step,
+            spectral=dict(
+                size=60, step=10, convention='relativistic')) | observable,
         instrument=dict(psf=_PSF, lsf=_LSF))
 
 
@@ -265,8 +271,8 @@ _DISK_CONE_LINES = dict(
     galaxies=[dict(components=[
         _disk(name='disk', geometry='own', emission=_HALPHA_NII), _CONE])],
     observations=[_cube(
-        [24, 24, 40], [0.6, 0.6, 50], 'grid', rval=[0, 0, 450],
-        rest='6562.8 Angstrom') | dict(
+        [24, 24, 40], [0.6, 0.6, 50], 'grid',
+        spectral=dict(rval=450, rest='6562.8 Angstrom')) | dict(
             name='cube', flux_scale='per_spectrum')],
     truth=_prefixed('disk', _DISK_TRUTH | dict(nii_ratio=0.3))
     | _prefixed('cone', _CONE_TRUTH) | dict(cube_flux_scale=1),

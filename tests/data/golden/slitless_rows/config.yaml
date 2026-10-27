@@ -35,12 +35,8 @@ observations:
     lsf: null
   observable:
     type: slitless_spectra
-    spec_size: 21
-    spec_step: 30
-    spec_rval: 0
-    spec_rest: 4e-06 m
-    spec_medium: vacuum
-    spec_convention: optical
+    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical,
+      rest: 4e-06 m}
     trace:
       type: polynomial
       wave: 4e-06 m

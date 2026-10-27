@@ -30,7 +30,8 @@ def spectral_cube_case(driver, **component):
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+            type='pixel_spectra', size=[32, 32], step=[1, 1],
+            spectral=dict(size=41, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             type='disk',
@@ -76,7 +77,8 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[33, 33, 41], step=[1, 1, 10],
+            type='pixel_spectra', size=[33, 33], step=[1, 1],
+            spectral=dict(size=41, step=10, convention='relativistic'),
             rota=rota, psf=psf),
         line_of_sight=dict(type='grid'),
         galaxy=dict(components=[component]))

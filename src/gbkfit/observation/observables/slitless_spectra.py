@@ -296,8 +296,8 @@ class SlitlessSpectra(Observable):
 
     The model is a spectral cube of the sky around the image, seen
     through the instrument (its PSF, which can vary with wavelength), of
-    spec_size channels of spec_step centred on spec_rval (km/s, whose
-    wavelengths are spec_rest (1 + v / c)). Each of its pixels and
+    the channels of its spectral axis (km/s, whose wavelengths are rest (1
+    + v / c), or rest exp(v / c) of log velocities). Each of its pixels and
     channels lands on the detector moved by the trace (dx, dy) of the
     wavelengths of the channel: its light is spread evenly from the
     position of the start of the channel to that of its end (see
@@ -345,13 +345,13 @@ class SlitlessSpectra(Observable):
     ----------
     size : Sequence of int
         The number of pixels of the image (nx, ny).
-    spec_step : float
-        The width of the channels of the model (km/s); a channel narrower
-        than a pixel of the detector along the trace is needed to resolve
-        the lines.
-    spec_rest : str or Quantity
-        The rest wavelength of the velocities of the spectral axis (see
-        gridutils.make_rest).
+    spectral : SpectralAxis
+        The spectral axis of the model (see gridutils.SpectralAxis): its
+        step, the width of its channels (km/s), is required (a channel
+        narrower than a pixel of the detector along the trace is needed
+        to resolve the lines), and its rest wavelength, which the trace
+        takes; its velocities are optical (the default) or log. By
+        default, its channels span 1000 km/s, centred on 0.
     trace : Trace
         The trace of the disperser.
     step, rpix, rval : Sequence of float, optional
@@ -359,17 +359,6 @@ class SlitlessSpectra(Observable):
         is the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
-    spec_size : int, optional
-        The number of channels of the model; by default, they span 1000
-        km/s.
-    spec_rval : float, optional
-        The centre of the spectral axis (km/s).
-    spec_medium : str, optional
-        The medium of the wavelengths: 'vacuum' (the default) or 'air'
-        (see gridutils.make_medium).
-    spec_convention : str, optional
-        The convention of the velocities: 'optical' (the default) or 'log'
-        (see gridutils.make_convention).
     aperture : Aperture, optional
         The aperture in front of the disperser, if any.
     exposures : Exposure or Sequence of Exposure, optional
@@ -383,9 +372,8 @@ class SlitlessSpectra(Observable):
     Raises
     ------
     ConfigError
-        If spec_step is not positive, spec_size is less than 1, spec_rest
-        is not a wavelength, there are no exposures, or sky_sampling is
-        not an integer of at least 1.
+        If the spectral axis has no step or no rest wavelength, there are
+        no exposures, or sky_sampling is not an integer of at least 1.
     """
 
     dataset_class = DatasetSlitlessSpectra
@@ -418,13 +406,8 @@ class SlitlessSpectra(Observable):
     def from_data(
             cls,
             dataset: DatasetSlitlessSpectra,
-            spec_step: float,
-            spec_rest: str | astropy.units.Quantity,
+            spectral: gridutils.SpectralAxis,
             trace: Trace,
-            spec_size: int | None = None,
-            spec_rval: float = 0,
-            spec_medium: str | None = None,
-            spec_convention: str | None = None,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: int = 1,
@@ -437,10 +420,9 @@ class SlitlessSpectra(Observable):
         ----------
         dataset : DatasetSlitlessSpectra
             The image.
-        spec_step, spec_rest, trace :
+        spectral, trace :
             As those of SlitlessSpectra.
-        spec_size, spec_rval, spec_medium, spec_convention, aperture,
-        exposures, sky_sampling, resampled : optional
+        aperture, exposures, sky_sampling, resampled : optional
             As those of SlitlessSpectra.
 
         Returns
@@ -456,10 +438,8 @@ class SlitlessSpectra(Observable):
         """
         cls._require_dataset_class(dataset)
         return cls(
-            **_detail.grid_options(dataset.grid()), spec_step=spec_step,
-            spec_rest=spec_rest, trace=trace, spec_size=spec_size,
-            spec_rval=spec_rval, spec_medium=spec_medium,
-            spec_convention=spec_convention, aperture=aperture,
+            **_detail.grid_options(dataset.grid()), spectral=spectral,
+            trace=trace, aperture=aperture,
             exposures=exposures, sky_sampling=sky_sampling,
             resampled=resampled)
 
@@ -477,12 +457,7 @@ class SlitlessSpectra(Observable):
             rpix=self.rpix(),
             rval=self.rval(),
             rota=self.rota(),
-            spec_size=self._spec_size,
-            spec_step=self._spec_step,
-            spec_rval=self._spec_rval,
-            spec_rest=_detail.dump_rest(self._spec_rest),
-            spec_medium=self._spec_medium,
-            spec_convention=self._spec_convention,
+            spectral=self._spectral.dump(),
             trace=trace_parser.dump(
                 self._trace, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite),
@@ -494,40 +469,27 @@ class SlitlessSpectra(Observable):
     def __init__(
             self,
             size: Sequence[int],
-            spec_step: float,
-            spec_rest: str | astropy.units.Quantity,
+            spectral: gridutils.SpectralAxis,
             trace: Trace,
             step: Sequence[float] = (1, 1),
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] = (0, 0),
             rota: float = 0,
-            spec_size: int | None = None,
-            spec_rval: float = 0,
-            spec_medium: str | None = None,
-            spec_convention: str | None = None,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
             sky_sampling: int = 1,
             resampled: bool = False
     ):
         super().__init__(size, step, rpix, rval, rota)
-        _detail.check_positive('spec_step', spec_step)
-        if spec_size is None:
-            spec_size = _moments.default_spec_size(spec_step)
-        if spec_size < 1:
-            raise ConfigError(f"spec_size must be at least 1; it is {spec_size}")
-        rest = gridutils.make_rest(spec_rest)
-        if rest is None or rest.unit != astropy.units.m:
+        rest = spectral.rest()
+        if spectral.step() is None or rest is None \
+                or rest.unit != astropy.units.m:
             raise ConfigError(
-                f"the spectral axis of slitless spectra needs a rest "
-                f"wavelength (spec_rest); it is {spec_rest!r}")
-        self._spec_size = spec_size
-        self._spec_step = spec_step
-        self._spec_rval = spec_rval
-        self._spec_rest = rest
-        self._spec_medium = gridutils.make_medium(spec_medium, rest)
-        self._spec_convention = gridutils.make_convention(
-            spec_convention, rest)
+                "the spectral axis of slitless spectra needs the width of its "
+                "channels (step) and a rest wavelength (rest)")
+        self._spectral = _moments.spectral_axis(spectral.replaced(
+            gridutils.SpectralAxis(convention=gridutils.make_convention(
+                spectral.convention(), rest))))
         exposures = (Exposure(),) if exposures is None \
             else iterutils.tuplify(exposures)
         if not exposures:
@@ -543,29 +505,9 @@ class SlitlessSpectra(Observable):
         self._sky_sampling = sky_sampling
         self._resampled = resampled
 
-    def spec_size(self) -> int:
-        """Return the number of channels of the model."""
-        return self._spec_size
-
-    def spec_step(self) -> float:
-        """Return the width of the channels of the model (km/s)."""
-        return self._spec_step
-
-    def spec_rval(self) -> float:
-        """Return the centre of the spectral axis (km/s)."""
-        return self._spec_rval
-
-    def spec_rest(self) -> astropy.units.Quantity:
-        """Return the rest wavelength of the spectral axis."""
-        return self._spec_rest
-
-    def spec_medium(self) -> str:
-        """Return the medium of the wavelengths."""
-        return self._spec_medium
-
-    def spec_convention(self) -> str:
-        """Return the convention of the velocities of the rest."""
-        return self._spec_convention
+    def spectral(self) -> gridutils.SpectralAxis:
+        """Return the spectral axis of the model."""
+        return self._spectral
 
     def trace(self) -> Trace:
         """Return the trace of the disperser."""
@@ -650,17 +592,18 @@ class SlitlessSpectra(Observable):
         rpix, step, k = self.rpix(), self.step(), self._sky_sampling
         # (the centre of sub-pixel i of the sky is at offset - 1/2 + (i +
         # 1/2) / k pixels of the image)
+        spectral = self._spectral
         dcube = _dcube.DCube(
-            size=(size[0] * k, size[1] * k, self._spec_size),
-            step=(step[0] / k, step[1] / k, self._spec_step),
+            size=(size[0] * k, size[1] * k, spectral.size()),
+            step=(step[0] / k, step[1] / k, spectral.step()),
             rpix=((rpix[0] - offset[0] + 0.5) * k - 0.5,
                   (rpix[1] - offset[1] + 0.5) * k - 0.5,
-                  self._spec_size / 2 - 0.5),
-            rval=self.rval() + (self._spec_rval,),
+                  spectral.rpix()),
+            rval=self.rval() + (spectral.rval(),),
             rota=self.rota(),
-            rest=self._spec_rest,
-            medium=self._spec_medium,
-            convention=self._spec_convention,
+            rest=spectral.rest(),
+            medium=spectral.medium(),
+            convention=spectral.convention(),
             oversampling=tuple(oversampling) + (1,),
             primary_beam=instrument.primary_beam(),
             psf=instrument.psf(),
@@ -676,15 +619,17 @@ class SlitlessSpectra(Observable):
     def _channel_edges(self) -> np.ndarray:
         """
         Return the wavelengths (m) of the edges of each channel of the
-        model (one row each) at their velocities: spec_rest (1 + v / c) of
-        optical velocities, spec_rest exp(v / c) of log ones.
+        model (one row each) at their velocities: rest (1 + v / c) of
+        optical velocities, rest exp(v / c) of log ones.
         """
-        step, n = self._spec_step, self._spec_size
-        centres = self._spec_rval + step * (np.arange(n) - (n - 1) / 2)
+        spectral = self._spectral
+        step, rest = spectral.step(), spectral.rest().value
+        centres = spectral.rval() + step * (
+            np.arange(spectral.size()) - spectral.rpix())
         velocities = centres[:, None] + np.array([-0.5, 0.5]) * step
-        if self._spec_convention == 'log':
-            return self._spec_rest.value * np.exp(velocities / _C)
-        return self._spec_rest.value * (1 + velocities / _C)
+        if spectral.convention() == 'log':
+            return rest * np.exp(velocities / _C)
+        return rest * (1 + velocities / _C)
 
     def _pixels(self, offset: Sequence[float]) -> np.ndarray:
         """Return an offset (arcsec along the axes of the image) in pixels."""
@@ -848,7 +793,7 @@ class SlitlessSpectra(Observable):
         p = p[entry] + base[box, 0]
         q = q[entry] + base[box, 1]
         weights = weights[entry] * np.prod(sizes[box], axis=-1) \
-            * abs(self._spec_step) * weight
+            * abs(self._spectral.step()) * weight
         inside = (p >= 0) & (p < width) & (q >= 0) & (q < height)
         voxel = channel * npixels + index[box]
         return scipy.sparse.coo_array(

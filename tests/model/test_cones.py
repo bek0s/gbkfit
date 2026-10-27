@@ -105,7 +105,8 @@ def test_the_velocity_of_each_voxel(
             dptraits=UNIFORM),
         emission=LINES)
     observable = dict(
-        type='pixel_spectra', size=[48, 48, 41], step=[0.5, 0.5, 10])
+        type='pixel_spectra', size=[48, 48], step=[0.5, 0.5],
+        spectral=dict(size=41, step=10, convention='relativistic'))
     _, extra = evaluate_cases(
         [case(driver, cone, observable)],
         GEOMETRY | HOLLOW_PROPERTIES | dict(vsys=20, dpt_a=10) | {

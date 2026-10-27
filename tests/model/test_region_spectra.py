@@ -16,6 +16,7 @@ from gbkfit.dataset import Data
 from gbkfit.dataset import DatasetRegionSpectra
 from gbkfit.region import RegionsApertures, RegionsBins
 from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils.gridutils import SpectralAxis
 
 
 GALAXY = dict(components=[dict(
@@ -36,7 +37,9 @@ FLAT = dict(type='flat')
 INSTRUMENT = dict(
     psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
 
-SCUBE = dict(type='pixel_spectra', size=[32, 41, 51], step=[1, 1, 10], **INSTRUMENT)
+SCUBE = dict(
+    type='pixel_spectra', size=[32, 41], step=[1, 1],
+    spectral=dict(size=51, step=10, convention='relativistic'), **INSTRUMENT)
 
 APERTURES = [
     dict(type='circle', x=2, y=-3, radius=2.5),
@@ -55,8 +58,10 @@ def evaluate(driver, observable):
 
 def aspec_of_apertures(apertures):
     return dict(
-        type='region_spectra', regions=dict(type='apertures', apertures=apertures),
-        size=[32, 41], step=[1, 1], spec_size=51, spec_step=10,
+        type='region_spectra',
+        regions=dict(type='apertures', apertures=apertures), size=[32, 41],
+        step=[1, 1],
+        spectral=dict(size=51, step=10, convention='relativistic'),
         **INSTRUMENT)
 
 
@@ -94,8 +99,9 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
     index[5, 5] = 2
     scube = evaluate(driver, SCUBE)
     observable = dict(
-        type='region_spectra', spec_size=51, spec_step=10, **INSTRUMENT,
-        regions=dict(type='bins', file='bins.fits'))
+        type='region_spectra',
+        spectral=dict(size=51, step=10, convention='relativistic'),
+        **INSTRUMENT, regions=dict(type='bins', file='bins.fits'))
     fitsutils.write_data('bins.fits', index, gridutils.Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
     aspec = evaluate(driver, observable)
@@ -112,7 +118,8 @@ def test_region_spectra_of_a_point_is_its_flux(driver, step):
         dict(type='point', emission=dict(type='lines'))])
     observable = dict(
         type='region_spectra', size=[int(16 / step)] * 2, step=[step, step],
-        spec_size=51, spec_step=10, regions=dict(type='apertures', apertures=[
+        spectral=dict(size=51, step=10, convention='relativistic'),
+        regions=dict(type='apertures', apertures=[
             dict(type='circle', x=0, y=0, radius=3)]))
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy, line_of_sight=FLAT,
@@ -135,7 +142,8 @@ def test_region_spectra_objective_residual(driver):
     observable = observable_of(observable)
     dataset = DatasetRegionSpectra(
         Data(model + 1, error=np.full_like(model, 2)),
-        observable.regions(), step=10)
+        observable.regions(),
+        spectral=SpectralAxis(step=10, convention='relativistic'))
     observation = ObservationSky(
         observable, Flat(), instrument=Instrument(), data=dataset)
     group = ObservationGroup(
@@ -163,11 +171,11 @@ def test_region_spectra_data_round_trip(tmp_path):
     regions = RegionsApertures([
         gbkfit.region.aperture_parser.load(info) for info in APERTURES])
     dataset = DatasetRegionSpectra(
-        Data(np.arange(51 * 3.0).reshape(51, 3)), regions, step=10,
-        rpix=4, rval=1500)
+        Data(np.arange(51 * 3.0).reshape(51, 3)), regions,
+        spectral=SpectralAxis(
+            step=10, rpix=4, rval=1500, convention='relativistic'))
     info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
-    for key in ('step', 'rpix', 'rval'):
-        info.pop(key)
+    info.pop('spectral')
     loaded = dataset_parser.load(info)
     assert loaded.regions() == regions
     assert loaded.spectral_grid().size == (51,)
@@ -183,12 +191,12 @@ def test_region_spectra_options_replace_the_spectral_axis_of_files(tmp_path):
     regions = RegionsApertures([
         gbkfit.region.aperture_parser.load(info) for info in APERTURES])
     dataset = DatasetRegionSpectra(
-        Data(np.ones((51, 3))), regions, step=10, rpix=4, rval=1500)
+        Data(np.ones((51, 3))), regions,
+        spectral=SpectralAxis(
+            step=10, rpix=4, rval=1500, convention='relativistic'))
     info = dataset_parser.dump(dataset, prefix=str(tmp_path / ''))
-    for key in ('step', 'rpix', 'rval'):
-        info.pop(key)
     coords = dataset_parser.load(
-        info | dict(step=5, rpix=6)).spectral_grid().coords
+        info | dict(spectral=dict(step=5, rpix=6))).spectral_grid().coords
     np.testing.assert_allclose(coords.step, [5])
     np.testing.assert_allclose(coords.rpix, [6])
     # (the velocity of the header at the channel rpix)
@@ -202,7 +210,8 @@ def test_region_spectra_observation_from_data(tmp_path):
     regions = RegionsApertures([
         gbkfit.region.aperture_parser.load(info) for info in APERTURES])
     dataset = DatasetRegionSpectra(
-        Data(np.ones((51, 3))), regions, step=10, rval=1500)
+        Data(np.ones((51, 3))), regions,
+        spectral=SpectralAxis(step=10, rval=1500, convention='relativistic'))
     data_info = dataset.dump(prefix=str(tmp_path / ''))
     data_info.pop('type')
     info = dict(
@@ -219,16 +228,17 @@ def test_region_spectra_observation_from_data(tmp_path):
         observation, prefix=str(tmp_path / 'dump_'))
     assert set(dumped['observable']) == {
         'type', 'size', 'step', 'rpix', 'rval', 'rota'}
-    with pytest.raises(Exception, match="give its options \\['spec_step'\\]"):
+    with pytest.raises(Exception, match="give its options \\['spectral'\\]"):
         observation_parser.load(info | dict(observable=dict(
-            type='region_spectra', size=[32, 41], spec_step=10)))
+            type='region_spectra', size=[32, 41], spectral=dict(step=10))))
 
 
 def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error():
     from gbkfit.observation import Flat, ObservationSky
     observable = observable_of(aspec_of_apertures(APERTURES))
     dataset = DatasetRegionSpectra(
-        Data(np.ones((51, 3))), observable.regions(), step=5)
+        Data(np.ones((51, 3))), observable.regions(),
+        spectral=SpectralAxis(step=5, convention='relativistic'))
     with pytest.raises(RuntimeError, match="spectral axis"):
         ObservationSky(observable, Flat(), data=dataset)
 
@@ -243,23 +253,34 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(kind):
     if kind == 'apertures':
         regions = RegionsApertures([aperture_parser.load(dict(type='field'))])
         observable = RegionSpectra(
-            regions, spec_size=5, spec_step=10, size=[8, 8], rota=30)
+            regions,
+            spectral=SpectralAxis(size=5, step=10, convention='relativistic'),
+            size=[8, 8], rota=30)
     else:
         regions = RegionsBins(np.zeros((4, 4)), rota=20)
-        observable = RegionSpectra(regions, spec_size=5, spec_step=10)
-    dataset = DatasetRegionSpectra(Data(np.ones((5, 1))), regions, step=10)
+        observable = RegionSpectra(
+            regions,
+            spectral=SpectralAxis(size=5, step=10, convention='relativistic'))
+    dataset = DatasetRegionSpectra(Data(np.ones((5, 1))), regions,
+    spectral=SpectralAxis(step=10, convention='relativistic'))
     ObservationSky(observable, Flat(), data=dataset)
 
 def test_region_spectra_spatial_grid_options():
     from gbkfit.observation import RegionSpectra
     bins = RegionsBins(np.zeros((4, 4)))
     with pytest.raises(RuntimeError, match="remove the options \\['step'\\]"):
-        RegionSpectra(bins, spec_size=5, step=[1, 1])
+        RegionSpectra(
+            bins, spectral=SpectralAxis(size=5, convention='relativistic'),
+            step=[1, 1])
     apertures = RegionsApertures([
         gbkfit.region.aperture_parser.load(dict(type='field'))])
     with pytest.raises(RuntimeError, match="size of the grid"):
-        RegionSpectra(apertures, spec_size=5)
+        RegionSpectra(
+            apertures,
+            spectral=SpectralAxis(size=5, convention='relativistic'))
     circle = RegionsApertures([gbkfit.region.aperture_parser.load(
         dict(type='circle', x=0, y=0, radius=5))])
     with pytest.raises(RuntimeError, match="not inside the grid"):
-        RegionSpectra(circle, spec_size=5, size=[8, 8])
+        RegionSpectra(
+            circle, spectral=SpectralAxis(size=5, convention='relativistic'),
+            size=[8, 8])

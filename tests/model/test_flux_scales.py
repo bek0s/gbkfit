@@ -19,6 +19,7 @@ from gbkfit.observation import (
     LikelihoodGaussian, LikelihoodUser, ObservationGroup, ObservationSky,
     PixelMoments, PixelSpectra, line_of_sight_parser, noise_parser)
 from gbkfit.params import ParamSpace, SolveGaussian
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -49,7 +50,8 @@ def group_plan(driver, data, error, likelihood=None):
     likelihood (Gaussian by default).
     """
     dataset = DatasetPixelSpectra(
-        Data(data, error=np.full_like(data, error)), step=STEP)
+        Data(data, error=np.full_like(data, error)), step=STEP[:2],
+        spectral=SpectralAxis(step=STEP[2], convention='relativistic'))
     return ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
@@ -115,9 +117,12 @@ def test_a_flux_scale_of_one_value_scales_the_flux(driver):
     # Moment 0 of a scaled observation is times its scale; the velocities
     # (moment 1) and the other observations are not
     observables = [
-        dict(type='pixel_moments', size=[24, 24], orders=[0, 1],
-             spec_convention='relativistic'),
-        dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20])]
+        dict(
+            type='pixel_moments', size=[24, 24], orders=[0, 1],
+            spectral=dict(convention='relativistic')),
+        dict(
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=21, step=20, convention='relativistic'))]
 
     def evaluate(flux_scale):
         plan = config_group_plan(config(driver, observables, flux_scale))
@@ -144,8 +149,8 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
         return ObservationGroup(
             [galaxy_parser.load(GALAXY)], [ObservationSky(
                 PixelMoments.from_data(
-                    dataset, spec_size=21, spec_step=20,
-                    spec_convention='relativistic'),
+                    dataset,
+                    spectral=SpectralAxis(size=21, step=20, convention='relativistic')),
                 line_of_sight_parser.load(dict(type='flat')), data=dataset,
                 flux_scale='one', name='obs',
                 likelihood=LikelihoodGaussian(missing_residual=3))]
@@ -263,7 +268,8 @@ def test_a_likelihood_of_no_weight_has_no_terms_of_solved_scales(driver):
 
 def test_flux_scales_need_light_and_a_name():
     data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
-    observable = PixelMoments.from_data(data, spec_convention='relativistic')
+    observable = PixelMoments.from_data(
+        data, spectral=SpectralAxis(convention='relativistic'))
     with pytest.raises(ConfigError, match=r"has the flux scales \[\]"):
         ObservationSky(
             observable, line_of_sight_parser.load(dict(type='flat')),
@@ -271,7 +277,8 @@ def test_flux_scales_need_light_and_a_name():
     with pytest.raises(ConfigError, match="needs a name"):
         ObservationSky(
             PixelSpectra.from_data(DatasetPixelSpectra(
-                Data(np.zeros((5, 4, 4))))),
+                Data(np.zeros((5, 4, 4))),
+                spectral=SpectralAxis(convention='relativistic'))),
             line_of_sight_parser.load(dict(type='flat')),
             flux_scale='per_spectrum')
 

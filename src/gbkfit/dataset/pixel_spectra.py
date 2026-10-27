@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.instrument import LSF, PSF
@@ -36,19 +35,14 @@ class DatasetPixelSpectra(Dataset):
     spectra : Data
         The cube, of shape (nz, ny, nx): x, y and the spectral axis.
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the grid (see gridutils.Coords); their
-        defaults are those of gridutils.make_grid.
+        The world coordinates of the axes on the sky (x and y; see
+        gridutils.Coords); their defaults are those of gridutils.make_grid.
     rota : float, optional
         The rotation of the grid on the sky (see gridutils.Coords).
-    rest : str or Quantity, optional
-        The rest of the spectral axis (see gridutils.make_rest).
-    medium : str, optional
-        The medium of the wavelengths of a rest wavelength (see
-        gridutils.make_medium).
-    convention : str, optional
-        The convention of the velocities of a rest: 'optical' (the default
-        of a rest wavelength), 'log' (of an axis uniform in ln w), or
-        'radio' (see gridutils.make_convention).
+    spectral : SpectralAxis, optional
+        The spectral axis (see gridutils.make_cube_grid): its world
+        coordinates, the convention of its velocities, its rest and its
+        medium; the data give its size.
     """
 
     # The axes of a spectral cube: x, y and the spectral axis
@@ -65,7 +59,7 @@ class DatasetPixelSpectra(Dataset):
     ) -> 'DatasetPixelSpectra':
         info = dict(info)
         files = _detail.pop_item_options(info, prefix, _CORRELATIONS)
-        return _detail.load_with_files(cls, info, cls.ndim, **files)
+        return _detail.load_with_files(cls, info, cls.ndim - 1, **files)
 
     @classmethod
     def from_files(
@@ -79,8 +73,7 @@ class DatasetPixelSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None,
+            spectral: gridutils.SpectralAxis | None = None,
             spatial_correlation: PSF | None = None,
             spectral_correlation: LSF | None = None
     ) -> 'DatasetPixelSpectra':
@@ -103,19 +96,19 @@ class DatasetPixelSpectra(Dataset):
             The options of their beam (see Beam); by default, that of the
             header.
         step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the grid (see gridutils.Coords); by
-            default, those of the header. Either rpix or rval can be given,
-            and the other comes from the header (see fitsutils.read_data).
+            The world coordinates of the axes on the sky (see
+            gridutils.Coords); by default, those of the header. Either rpix
+            or rval can be given, and the other comes from the header (see
+            fitsutils.read_data).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
-        rest : str or Quantity, optional
-            The rest of the spectral axis (see gridutils.make_rest); by
-            default, that of the header.
-        medium : str, optional
-            The medium of the wavelengths of a rest wavelength (see
-            gridutils.make_medium); by default, that of the header (see
-            fitsutils.read_data).
+        spectral : SpectralAxis, optional
+            The world coordinates of the spectral axis, the convention of
+            its velocities, its rest and its medium, given instead of
+            those of the header (as those of the axes on the sky; the
+            medium of the header, see fitsutils.read_data); not its size,
+            which the data give.
         spatial_correlation : PSF, optional
             The correlation of the noise on the sky (see Data).
         spectral_correlation : LSF, optional
@@ -126,10 +119,12 @@ class DatasetPixelSpectra(Dataset):
         DatasetPixelSpectra
             The dataset.
         """
+        references = _detail.file_references(2, rpix, rval, spectral)
         item, coords = Data.from_files(
-            data, mask, error, rpix, rval, rest, cls.spectral_axis, medium,
+            data, mask, error, references['rpix'], references['rval'],
+            references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spatial_correlation, spectral_correlation)
-        return cls(item, **_detail.grid_coords(coords, step, rota, True))
+        return cls(item, **_detail.cube_coords(coords, step, rota, spectral))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -146,13 +141,11 @@ class DatasetPixelSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None,
-            convention: str | None = None
+            spectral: gridutils.SpectralAxis | None = None
     ):
         super().__init__(dict(spectra=spectra))
-        self._grid = _detail.make_grid(
-            self, step, rpix, rval, rota, rest, medium, convention)
+        self._grid = _detail.cube_grid(
+            self, step, rpix, rval, rota, spectral)
 
     def grid(self) -> gridutils.Grid:
         """Return the grid of the pixels and channels."""

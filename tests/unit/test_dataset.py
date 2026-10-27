@@ -4,7 +4,7 @@ import pytest
 from astropy.io import fits
 
 from gbkfit.dataset import *
-from gbkfit.utils.gridutils import Coords
+from gbkfit.utils.gridutils import Coords, SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -138,8 +138,8 @@ def test_dataset_reference_pixel_survives_fits_round_trip(tmp_path):
 
 def test_dataset_round_trip_keeps_the_rotation_and_the_velocities(tmp_path):
     dataset = DatasetPixelSpectra(
-        Data(np.zeros((6, 8, 20))), step=(2, 2, 10), rpix=(3, 4, 2),
-        rval=(150, 2, 1500), rota=30)
+        Data(np.zeros((6, 8, 20))), step=(2, 2), rpix=(3, 4), rval=(150, 2),
+        spectral=SpectralAxis(step=10, rpix=2, rval=1500), rota=30)
     info = dataset.dump(prefix=str(tmp_path / ''))
     for key in ('step', 'rpix', 'rval', 'rota'):
         info.pop(key)
@@ -158,22 +158,28 @@ def test_dataset_options_replace_the_world_coordinates_of_files(tmp_path):
     # replaces the reference pixel, with the world position of the header
     # there as rval, and rval the reference value, at its pixel
     dataset = DatasetPixelSpectra(
-        Data(np.zeros((6, 8, 20))), step=(2, 2, 10), rpix=(3, 4, 2),
-        rval=(150, 2, 1500), rota=30)
+        Data(np.zeros((6, 8, 20))), step=(2, 2), rpix=(3, 4), rval=(150, 2),
+        spectral=SpectralAxis(step=10, rpix=2, rval=1500), rota=30)
     info = dataset.dump(prefix=str(tmp_path / ''))
-    for key in ('step', 'rpix', 'rval', 'rota'):
+    for key in ('step', 'rpix', 'rval', 'rota', 'spectral'):
         info.pop(key)
-    coords = dataset_parser.load(
-        info | dict(step=(1, 1, 5), rota=45)).grid().coords
+    coords = dataset_parser.load(info | dict(
+        step=(1, 1), rota=45, spectral=dict(step=5))).grid().coords
     np.testing.assert_allclose(coords.step, (1, 1, 5))
     assert coords.rota == 45
-    coords = dataset_parser.load(info | dict(rpix=(5, 6, 3))).grid().coords
+    coords = dataset_parser.load(info | dict(
+        rpix=(5, 6), spectral=dict(rpix=3))).grid().coords
     assert coords.rpix == (5, 6, 3)
     assert coords.rval[2] == pytest.approx(1510)
-    coords = dataset_parser.load(
-        info | dict(rval=(150, 2, 1520))).grid().coords
+    coords = dataset_parser.load(info | dict(
+        rval=(150, 2), spectral=dict(rval=1520))).grid().coords
     np.testing.assert_allclose(coords.rpix, (3, 4, 4), atol=1e-6)
     np.testing.assert_allclose(coords.rval, (150, 2, 1520))
+    # (the reference pixel of the sky and the value of the spectral axis)
+    coords = dataset_parser.load(info | dict(
+        rpix=(5, 6), spectral=dict(rval=1520))).grid().coords
+    np.testing.assert_allclose(coords.rpix, (5, 6, 4), atol=1e-6)
+    assert coords.rval[2] == 1520
 
 
 def test_data_can_be_read_from_extensions(tmp_path):
@@ -323,7 +329,8 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     # which must not be given it too
     from gbkfit.observation import observation_parser
     dataset = DatasetPixelSpectra(
-        Data(np.ones((6, 8, 20))), step=(1, 1, 10), rest='6562.8 Angstrom')
+        Data(np.ones((6, 8, 20))), step=(1, 1),
+        spectral=SpectralAxis(step=10, rest='6562.8 Angstrom'))
     data_info = dataset.dump(prefix=str(tmp_path / ''))
     data_info.pop('type')
     loaded = dataset_parser.load(dict(type='pixel_spectra') | dict(data_info))
@@ -332,9 +339,9 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_spectra')))
     assert observation.observable().rest() == dataset.grid().coords.rest
-    with pytest.raises(Exception, match="give its options \\['rest'\\]"):
+    with pytest.raises(Exception, match="give its options \\['spectral'\\]"):
         observation_parser.load(info | dict(observable=dict(
-            type='pixel_spectra', rest='6562.8 Angstrom')))
+            type='pixel_spectra', spectral=dict(rest='6562.8 Angstrom'))))
 
 
 def test_pixel_brightness_has_no_rest(tmp_path):
@@ -491,7 +498,8 @@ def test_noise_correlation_along_the_channels():
     from gbkfit.instrument import LSFGauss
     # A Gaussian of sigma 10 km/s on channels of 10 km/s
     data = Data(np.ones((5, 4, 3)), spectral_correlation=LSFGauss(10))
-    dataset = DatasetPixelSpectra(data, step=(1, 1, 10))
+    dataset = DatasetPixelSpectra(
+        data, step=(1, 1), spectral=SpectralAxis(step=10))
     correlation = dataset.noise_correlation('spectra')
     assert correlation.spatial is None
     np.testing.assert_allclose(

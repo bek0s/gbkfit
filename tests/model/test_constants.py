@@ -35,7 +35,8 @@ def spectral_cube(components, line_of_sight):
     return dict(
         driver=dict(type='host'),
         observable=dict(
-            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+            type='pixel_spectra', size=[32, 32], step=[1, 1],
+            spectral=dict(size=41, step=10, convention='relativistic')),
         line_of_sight=line_of_sight,
         galaxy=dict(components=components))
 

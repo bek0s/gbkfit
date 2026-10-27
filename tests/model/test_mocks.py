@@ -30,11 +30,13 @@ PROPERTIES = dict(
 # The recorded data, of noise of rms 0.01 (pixel_brightness and
 # slitless_spectra record an image)
 RECORDED = dict(
-    pixel_spectra=dict(size=[16, 17, 31], step=[1, 1, 20]),
+    pixel_spectra=dict(size=[16, 17], spectral=dict(
+        size=31, step=20, convention='relativistic')),
     pixel_brightness=dict(size=[16, 17]),
-    slit_spectra=dict(size=[16, 31], step=[1, 20]),
+    slit_spectra=dict(size=[16], spectral=dict(
+        size=31, step=20, convention='relativistic')),
     slitless_spectra=dict(
-        size=[16, 12], spec_size=21, spec_step=30, spec_rest='4 um',
+        size=[16, 12], spectral=dict(size=21, step=30, rest='4 um'),
         trace=dict(type='polynomial', wave='4 um',
                    dx=[0, 2.99792458e5 / 120])))
 
@@ -122,8 +124,9 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
     # of noisy spectra are biased, so their mean is not the moments of
     # the model)
     plan = plan_of(driver, dict(
-        type='pixel_moments', size=[16, 17], spec_size=31, spec_step=20,
-        flux_floor=1e-4, method=method, spec_convention='relativistic'))
+        type='pixel_moments', size=[16, 17],
+        spectral=dict(size=31, step=20, convention='relativistic'),
+        flux_floor=1e-4, method=method))
     model, extra, params = evaluate(plan)
     peak = extra.get('dcube_lo').data.max()
     mocks = plan.mock(

@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
@@ -45,34 +44,20 @@ class RegionSpectra(Observable):
     ----------
     regions : Regions
         The regions.
-    spec_size : int
-        The number of channels.
-    spec_step : float, optional
-        The width of the channels (km/s).
-    spec_rpix : float, optional
-        The channel of spec_rval; by default, the centre.
-    spec_rval : float, optional
-        The velocity of the channel spec_rpix (km/s).
-    spec_rest : str or Quantity, optional
-        The rest wavelength or frequency of the velocities of the spectral
-        axis, if known (see gridutils.make_rest).
-    spec_medium : str, optional
-        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
-        default) or 'air' (see gridutils.make_medium).
+    spectral : SpectralAxis
+        The spectral axis of the cube: its size, its world coordinates and
+        the convention of its velocities (see gridutils.make_cube_grid).
     size, step, rpix, rval, rota : optional
         The spatial grid of the cube (see gridutils.make_grid), for
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
-    spec_convention : str, optional
-        The convention of the velocities of the rest: 'optical' (the
-        default of a rest wavelength), 'log' (of an axis uniform in ln w),
-        or 'radio' (see gridutils.make_convention).
 
     Raises
     ------
     ConfigError
         If the spatial grid is given for regions on a grid, or not for
-        regions on the sky.
+        regions on the sky, or the spectral axis is not valid (see
+        gridutils.make_cube_grid).
     """
 
     dataset_class = DatasetRegionSpectra
@@ -91,8 +76,7 @@ class RegionSpectra(Observable):
         # The regions and the spectral axis, and the spatial grid of
         # regions on a grid
         return (
-            ('regions', 'spec_size', 'spec_step', 'spec_rpix', 'spec_rval',
-             'spec_rest', 'spec_medium', 'spec_convention')
+            ('regions', 'spectral')
             + _detail.spatial_options_from_regions(dataset.regions()))
 
     @classmethod
@@ -139,13 +123,10 @@ class RegionSpectra(Observable):
             are not valid.
         """
         cls._require_dataset_class(dataset)
-        spectral = dataset.spectral_grid()
-        coords = spectral.coords
         return cls(
-            dataset.regions(), spectral.size[0], coords.step[0],
-            coords.rpix[0], coords.rval[0], coords.rest, coords.medium,
-            size, step, rpix, rval, rota,
-            spec_convention=coords.convention)
+            dataset.regions(),
+            gridutils.SpectralAxis.of(dataset.spectral_grid()),
+            size, step, rpix, rval, rota)
 
     def dump(
             self,
@@ -160,42 +141,25 @@ class RegionSpectra(Observable):
                 regions=regions_parser.dump(
                     self._regions, prefix=prefix, dump_path=dump_path,
                     overwrite=overwrite),
-                spec_size=self.size()[2],
-                spec_step=self.step()[2],
-                spec_rpix=self.rpix()[2],
-                spec_rval=self.rval()[2],
-                spec_rest=_detail.dump_rest(self.rest()),
-                spec_medium=self.medium(),
-                spec_convention=self.convention())
+                spectral=self.spectral().dump())
         return info | _detail.dump_spatial_grid(self, self._regions)
 
     def __init__(
             self,
             regions: Regions,
-            spec_size: int,
-            spec_step: float = 1,
-            spec_rpix: float | None = None,
-            spec_rval: float = 0,
-            spec_rest: str | astropy.units.Quantity | None = None,
-            spec_medium: str | None = None,
+            spectral: gridutils.SpectralAxis,
             size: Sequence[int] | None = None,
             step: Sequence[float] | None = None,
             rpix: Sequence[float] | None = None,
             rval: Sequence[float] | None = None,
-            rota: float | None = None,
-            spec_convention: str | None = None
+            rota: float | None = None
     ):
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
-        if spec_rpix is None:
-            spec_rpix = spec_size / 2 - 0.5
         coords = spatial.coords
         super().__init__(
-            spatial.size + (spec_size,),
-            coords.step + (spec_step,),
-            coords.rpix + (spec_rpix,),
-            coords.rval + (spec_rval,),
-            coords.rota, spec_rest, spec_medium, spec_convention)
+            spatial.size, coords.step, coords.rpix, coords.rval, coords.rota,
+            spectral)
         self._regions = regions
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
@@ -213,11 +177,8 @@ class RegionSpectra(Observable):
         return ('spectra',)
 
     def dataset(self, items: Mapping[str, Data]) -> DatasetRegionSpectra:
-        coords = self.spectral_grid().coords
         return DatasetRegionSpectra(
-            items['spectra'], self.regions(), coords.step[0],
-            coords.rpix[0], coords.rval[0], coords.rest, coords.medium,
-            coords.convention)
+            items['spectra'], self.regions(), self.spectral())
 
     def data_unit(self, dataset: Dataset | None) -> DataUnit | None:
         return _detail.region_data_unit(dataset, 'spectra', False)

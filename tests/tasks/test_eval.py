@@ -33,6 +33,17 @@ def run_task(workdir, task, options, *flags):
         cwd=workdir, capture_output=True, text=True)
 
 
+def data_grid(observable):
+    """
+    Remove the grid of an observable, and return it as the options of data
+    without world coordinates, which then give it.
+    """
+    observable.pop('size')
+    spectral = observable.pop('spectral')
+    spectral.pop('size')
+    return dict(step=observable.pop('step'), spectral=spectral)
+
+
 def run_eval(mode, config, workdir, profile_iters=0):
     """
     Run the eval task on a configuration (or on a configuration file) in a
@@ -84,9 +95,8 @@ def test_objective_residuals(tmp_path):
     fits.writeto(tmp_path / 'data.fits', model + 1)
     observation = config['observations'][0]
     observation['data'] = dict(
-        data=str(tmp_path / 'data.fits'), error=2.0,
-        step=observation['observable'].pop('step'))
-    observation['observable'].pop('size')
+        data=str(tmp_path / 'data.fits'), error=2.0) \
+        | data_grid(observation['observable'])
     observation['likelihood'] = dict(type='gaussian', weights=0.5)
     # (a configuration of a fit evaluates too: its fitter is left)
     config['fitter'] = dict(type='scipy.least_squares')
@@ -117,9 +127,8 @@ def test_profiling_writes_the_timings(tmp_path, mode):
         fits.writeto(tmp_path / 'data.fits', model)
         observation = config['observations'][0]
         observation['data'] = dict(
-            data=str(tmp_path / 'data.fits'), error=1.0,
-            step=observation['observable'].pop('step'))
-        observation['observable'].pop('size')
+            data=str(tmp_path / 'data.fits'), error=1.0) \
+            | data_grid(observation['observable'])
     run = run_eval(mode, config, tmp_path / mode, profile_iters=3)
     timings = run.read(run.product('timings'))
     assert timings['model_eval']['count'] == 3
@@ -185,9 +194,8 @@ def test_a_configuration_loads_to_evaluate_it_in_python(tmp_path):
     fits.writeto(tmp_path / 'data.fits', expected + 1)
     observation = config['observations'][0]
     observation['data'] = dict(
-        data=str(tmp_path / 'data.fits'), error=2.0,
-        step=observation['observable'].pop('step'))
-    observation['observable'].pop('size')
+        data=str(tmp_path / 'data.fits'), error=2.0) \
+        | data_grid(observation['observable'])
     yaml.dump(config, tmp_path / 'data.yaml')
     setup = gbkfit.load(str(tmp_path / 'data.yaml'))
     outputs = setup.outputs(setup.evaluate(), data=True)
@@ -209,9 +217,8 @@ def test_a_setup_of_a_project_runs_in_its_runs(tmp_path):
     fits.writeto(study / 'data/cube.fits', model + 1)
     observation = config['observations'][0]
     observation['data'] = dict(
-        data='data/cube.fits', error=2.0,
-        step=observation['observable'].pop('step'))
-    observation['observable'].pop('size')
+        data='data/cube.fits', error=2.0) \
+        | data_grid(observation['observable'])
     for path, piece in (
             ('galaxies/disk.yaml', config['galaxies'][0]),
             ('observations/cube.yaml', observation),
@@ -258,7 +265,9 @@ def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
     # be read back with them
     from gbkfit.utils import fitsutils
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
-    config['observations'][0]['observable'].update(rval=[150, 2, 1500], rota=30)
+    observable = config['observations'][0]['observable']
+    observable.update(rval=[150, 2], rota=30)
+    observable['spectral'].update(rval=1500)
     run = run_eval('model', config, tmp_path / 'model')
     _, coords = fitsutils.read_data(run.filename(run.product('model')))
     np.testing.assert_allclose(coords.step, [1, 1, 10], rtol=1e-12)
@@ -277,18 +286,18 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     regions = dict(type='apertures', apertures=[
         dict(type='field'), dict(type='circle', x=0, y=0, radius=3)])
     observation['observable'] = dict(
-        type='region_spectra', regions=regions,
-        size=scube['size'][:2], step=scube['step'][:2],
-        spec_size=scube['size'][2], spec_step=scube['step'][2])
+        type='region_spectra', regions=regions, size=scube['size'],
+        step=scube['step'], spectral=scube['spectral'])
     run = run_eval('model', config, tmp_path / 'model')
     model = array(run, 'model')
     assert model.shape == (50, 2)
     header = run.read(run.product('model')).header
-    assert header['CTYPE2'] == 'VRAD'
+    # (of the relativistic velocities of the model)
+    assert header['CTYPE2'] == 'VELO'
     assert header['CDELT2'] == 10
     fits.writeto(tmp_path / 'data.fits', model + 1, header)
     observable = observation['observable']
-    for key in ('regions', 'spec_size', 'spec_step'):
+    for key in ('regions', 'spectral'):
         observable.pop(key)
     observation['data'] = dict(
         regions=regions, data=str(tmp_path / 'data.fits'), error=2.0)
@@ -304,8 +313,9 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
     mmaps = dict(
         type='sky',
         name='maps', line_of_sight=dict(type='flat'),
-        observable=dict(type='pixel_moments', size=[48, 48],
-                        spec_convention='relativistic'))
+        observable=dict(
+            type='pixel_moments', size=[48, 48],
+            spectral=dict(convention='relativistic')))
     config['observations'] = [scube | dict(name='cube'), mmaps]
     run = run_eval('model', config, tmp_path / 'model')
     assert array(run, 'model', observation='cube').shape == (50, 48, 48)

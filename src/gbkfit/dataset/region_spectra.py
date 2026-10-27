@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.region import Regions, regions_parser
@@ -37,21 +36,10 @@ class DatasetRegionSpectra(Dataset):
         along x and the velocity along y).
     regions : Regions
         The regions.
-    step : float, optional
-        The width of the channels (km/s).
-    rpix : float, optional
-        The reference channel; by default, the centre.
-    rval : float, optional
-        The velocity of the reference channel (km/s).
-    rest : str or Quantity, optional
-        The rest of the spectral axis (see gridutils.make_rest).
-    medium : str, optional
-        The medium of the wavelengths of a rest wavelength (see
-        gridutils.make_medium).
-    convention : str, optional
-        The convention of the velocities of a rest: 'optical' (the default
-        of a rest wavelength), 'log' (of an axis uniform in ln w), or
-        'radio' (see gridutils.make_convention).
+    spectral : SpectralAxis, optional
+        The spectral axis (see gridutils.make_cube_grid): its world
+        coordinates, the convention of its velocities, its rest and its
+        medium; the data give its size.
 
     Raises
     ------
@@ -60,6 +48,9 @@ class DatasetRegionSpectra(Dataset):
     """
 
     ndim = 2
+
+    # (the velocity along FITS y)
+    spectral_axis = 1
 
     @staticmethod
     def type() -> str:
@@ -84,11 +75,7 @@ class DatasetRegionSpectra(Dataset):
             error: FitsFile | float | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
-            step: float | None = None,
-            rpix: float | None = None,
-            rval: float | None = None,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None
+            spectral: gridutils.SpectralAxis | None = None
     ) -> 'DatasetRegionSpectra':
         """
         Read the dataset from FITS files (the regions along x, the velocity
@@ -111,40 +98,35 @@ class DatasetRegionSpectra(Dataset):
         beam : Mapping, optional
             The options of their beam (see Beam); by default, that of the
             header.
-        step, rpix, rval : float, optional
-            The world coordinates of the spectral axis (see the class); by
-            default, those of the header. Either rpix or rval can be given,
-            and the other comes from the header (see fitsutils.read_data).
-        rest : str or Quantity, optional
-            The rest of the spectral axis (see gridutils.make_rest); by
-            default, that of the header.
-        medium : str, optional
-            The medium of the wavelengths of a rest wavelength (see
-            gridutils.make_medium); by default, that of the header (see
-            fitsutils.read_data).
+        spectral : SpectralAxis, optional
+            The world coordinates of the spectral axis, the convention of
+            its velocities, its rest and its medium, given instead of
+            those of the header (either rpix or rval can be given, and the
+            other comes from the header; see fitsutils.read_data); not its
+            size, which the data give.
 
         Returns
         -------
         DatasetRegionSpectra
             The dataset.
         """
-        # (the velocity is along FITS y, the axis 1)
+        references = _detail.file_references(1, None, None, spectral)
         spectra, coords = Data.from_files(
-            data, mask, error, rpix, rval, rest, 1, medium, unit, beam)
+            data, mask, error, references['rpix'], references['rval'],
+            references['rest'], cls.spectral_axis, references['medium'],
+            unit, beam)
         return cls(
             spectra, regions,
-            step=coords.step[1] if step is None else step,
-            rpix=coords.rpix[1], rval=coords.rval[1], rest=coords.rest,
-            medium=coords.medium, convention=coords.convention)
+            _detail.cube_coords(coords, None, None, spectral)['spectral'])
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        spectral = self._spectral_grid.coords
+        coords = self._spectral_grid.coords
 
         def write(filename: str, array: np.ndarray) -> None:
-            fitsutils.write_spectra(filename, array, spectral, overwrite)
+            fitsutils.write_spectra(filename, array, coords, overwrite)
         item = dump_data(
             self['spectra'], _detail.item_filenames(prefix, 'spectra'), write,
             dump_path)
@@ -153,23 +135,17 @@ class DatasetRegionSpectra(Dataset):
             regions=regions_parser.dump(
                 self._regions, prefix=prefix, dump_path=dump_path,
                 overwrite=overwrite),
-            step=spectral.step[0],
-            rpix=spectral.rpix[0],
-            rval=spectral.rval[0],
-            rest=None if spectral.rest is None else str(spectral.rest),
             # (the convention of the velocities is in the header of the file)
-            medium=spectral.medium) | item
+            spectral={
+                key: value for key, value in gridutils.SpectralAxis.of(
+                    self._spectral_grid).dump().items()
+                if key not in ('size', 'convention')}) | item
 
     def __init__(
             self,
             spectra: Data,
             regions: Regions,
-            step: float = 1,
-            rpix: float | None = None,
-            rval: float = 0,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None,
-            convention: str | None = None
+            spectral: gridutils.SpectralAxis | None = None
     ):
         super().__init__(dict(spectra=spectra))
         nchannels, nregions = spectra.shape()
@@ -178,9 +154,14 @@ class DatasetRegionSpectra(Dataset):
                 f"the spectra are of {nregions} regions, but there are "
                 f"{regions.nregions()} regions")
         self._regions = regions
-        self._spectral_grid = gridutils.make_grid(
-            (nchannels,), step, rpix, rval, 0, spectral_axis=0, rest=rest,
-            medium=medium, convention=convention)
+        spectral = spectral or gridutils.SpectralAxis()
+        if spectral.size() not in (None, nchannels):
+            raise ConfigError(
+                f"the spectra have {nchannels} channels; the spectral axis "
+                f"has {spectral.size()}")
+        self._spectral_grid = gridutils.make_cube_grid(
+            (), None, None, None, None,
+            spectral.replaced(gridutils.SpectralAxis(size=nchannels)))
 
     def regions(self) -> Regions:
         """Return the regions."""

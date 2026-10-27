@@ -14,11 +14,13 @@ from gbkfit.observation import (
     LikelihoodGaussian, ObservationGroup, ObservationSky, PixelSpectra,
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
 SIZE = (12, 12, 31)
 STEP = (1, 1, 20)
+SPECTRAL = SpectralAxis(step=STEP[2], convention='relativistic')
 PARAMS = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=3, vpt_rt=2,
     vpt_vt=150, dpt_a=30)
@@ -33,7 +35,7 @@ GALAXY = dict(components=dict(
 
 def objective(driver, data, likelihood):
     """The objective of a disk seen in a cube, under a likelihood."""
-    dataset = DatasetPixelSpectra(data, step=STEP)
+    dataset = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL)
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),
@@ -92,7 +94,7 @@ def test_cubes_of_correlated_noise_keep_whole_spectra(driver):
     with pytest.raises(ConfigError, match="mask_whole_spectra"):
         objective(driver, data, LikelihoodGaussian())
     # The option masks the spectrum of the masked value
-    whole = DatasetPixelSpectra(data, step=STEP).mask_whole_spectra()
+    whole = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL).mask_whole_spectra()
     np.testing.assert_array_equal(
         whole['spectra'].mask()[:, 5, 5], 0)
     assert np.count_nonzero(whole['spectra'].mask() == 0) == SIZE[2]
@@ -102,7 +104,8 @@ def test_cubes_of_correlated_noise_keep_whole_spectra(driver):
 def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
     from gbkfit.params import SolveGaussian
     dataset = DatasetPixelSpectra(
-        noisy_cube(np.random.default_rng(9), None), step=STEP)
+        noisy_cube(np.random.default_rng(9), None), step=STEP[:2],
+        spectral=SPECTRAL)
     group = ObservationGroup(
         [galaxy_parser.load(GALAXY)], [ObservationSky(
             PixelSpectra.from_data(dataset),

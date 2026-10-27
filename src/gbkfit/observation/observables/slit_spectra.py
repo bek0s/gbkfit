@@ -1,7 +1,6 @@
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
-import astropy.units
 import numpy as np
 
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
@@ -45,23 +44,15 @@ class SlitSpectra(Observable):
     Parameters
     ----------
     size : Sequence of int
-        The number of positions along the slit and of channels.
+        The number of positions along the slit (one value).
+    spectral : SpectralAxis
+        The spectral axis: its size, its world coordinates and the
+        convention of its velocities (see gridutils.make_cube_grid).
     step, rpix, rval : Sequence of float, optional
-        The world coordinates of the positions along the slit and of the
-        spectral axis (see gridutils.Coords; km/s); rpix is the centre by
-        default.
+        The world coordinates of the positions along the slit (see
+        gridutils.Coords; one value each); rpix is the centre by default.
     rota : float, optional
         The angle of the slit on the sky.
-    rest : str or Quantity, optional
-        The rest wavelength or frequency of the velocities of the spectral
-        axis, if known (see gridutils.make_rest).
-    medium : str, optional
-        The medium of the wavelengths of a rest wavelength: 'vacuum' (the
-        default) or 'air' (see gridutils.make_medium).
-    convention : str, optional
-        The convention of the velocities of a rest: 'optical' (the default
-        of a rest wavelength), 'log' (of an axis uniform in ln w), or
-        'radio' (see gridutils.make_convention).
     slit_width : float, optional
         The width of the slit; by default, the step along it.
     sky_rval : Sequence of float, optional
@@ -75,7 +66,8 @@ class SlitSpectra(Observable):
     Raises
     ------
     ConfigError
-        If slit_width is not positive, or sky_rval is not two numbers.
+        If the spectral axis is not valid (see gridutils.make_cube_grid),
+        slit_width is not positive, or sky_rval is not two numbers.
     """
 
     dataset_class = DatasetSlitSpectra
@@ -95,7 +87,7 @@ class SlitSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetSlitSpectra | None = None
     ) -> 'SlitSpectra':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset, 1)
 
     @classmethod
     def from_data(
@@ -140,14 +132,7 @@ class SlitSpectra(Observable):
     ) -> dict[str, Any]:
         return _detail.without_options_from_data(self, dict(
             type=self.type(),
-            size=self.size(),
-            step=self.step(),
-            rpix=self.rpix(),
-            rval=self.rval(),
-            rota=self.rota(),
-            rest=_detail.dump_rest(self.rest()),
-            medium=self.medium(),
-            convention=self.convention(),
+            **_detail.dump_grid(self.grid()),
             slit_width=self._slit_width,
             sky_rval=self._sky_rval,
             smooth_weights=self._smooth_weights), data)
@@ -155,19 +140,16 @@ class SlitSpectra(Observable):
     def __init__(
             self,
             size: Sequence[int],
-            step: Sequence[float] = (1, 1),
+            spectral: gridutils.SpectralAxis,
+            step: Sequence[float] = (1,),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0, 0),
+            rval: Sequence[float] = (0,),
             rota: float = 0,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None,
-            convention: str | None = None,
             slit_width: float | None = None,
             sky_rval: Sequence[float] = (0, 0),
             smooth_weights: bool = False
     ):
-        super().__init__(
-            size, step, rpix, rval, rota, rest, medium, convention)
+        super().__init__(size, step, rpix, rval, rota, spectral)
         if slit_width is None:
             slit_width = self.step()[0]
         _detail.check_positive('slit_width', slit_width)

@@ -10,25 +10,30 @@ pixels_on).
 
 import numbers
 from collections.abc import Sequence
-from typing import NamedTuple, TypeVar
+from typing import Any, NamedTuple, TypeVar
 
 import astropy.constants
 import astropy.units
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
+    'CONVENTIONS',
     'Coords',
     'Grid',
     'GridData',
     'SpectraData',
+    'SpectralAxis',
     'VelocityConvention',
     'air_refractive_index',
+    'check_convention',
     'check_overlap',
     'doppler',
+    'make_cube_grid',
     'make_grid',
     'make_convention',
     'make_medium',
@@ -36,7 +41,8 @@ __all__ = [
     'frame_to_pixels',
     'pixels_on',
     'sky_positions',
-    'sky_to_pixel'
+    'sky_to_pixel',
+    'spectral_axis_parser'
 ]
 
 
@@ -76,10 +82,11 @@ class Coords(NamedTuple):
         rest: 'vacuum' or 'air' (see make_medium); None without a rest
         wavelength.
     convention : str or None
-        The convention of the velocities of a rest (see make_convention):
-        'optical' (VOPT) or 'log' of a rest wavelength, 'radio' (VRAD) of
-        a rest frequency; None: the default of the rest (optical, radio,
-        or relativistic, VELO, without a rest).
+        The convention of the velocities of the spectral axis (see
+        make_convention): 'optical' (VOPT), 'log' (WAVE-LOG), 'radio'
+        (VRAD) or 'relativistic' (VELO); None: the default of the rest
+        (optical of a rest wavelength, radio of a rest frequency, or
+        relativistic without a rest).
     """
     step: tuple[float, ...]
     rpix: tuple[float, ...]
@@ -259,6 +266,65 @@ def make_grid(
         spectral_axis)
 
 
+# The conventions of the velocities of spectral axes (see
+# VelocityConvention)
+CONVENTIONS = ('optical', 'log', 'radio', 'relativistic')
+
+
+def make_cube_grid(
+        size: Sequence[int],
+        step: float | Sequence[float] | None,
+        rpix: float | Sequence[float] | None,
+        rval: float | Sequence[float] | None,
+        rota: float | None,
+        spectral: 'SpectralAxis | None'
+) -> Grid:
+    """
+    Make a grid of axes on the sky (as make_grid) and a spectral axis
+    after them: of the spectral axis, step 1, rval 0 and rpix the centre
+    by default.
+
+    Raises
+    ------
+    ConfigError
+        If the spectral axis is not given or has no size, or the grid is not
+        valid (see make_grid).
+    """
+    if spectral is None or spectral.size() is None:
+        raise ConfigError(
+            "the spectral axis needs its number of channels: spectral: "
+            "{size: ...}")
+    coords = make_grid(tuple(size), step, rpix, rval, rota).coords
+    nchannels = spectral.size()
+    return make_grid(
+        tuple(size) + (nchannels,),
+        coords.step + (1.0 if spectral.step() is None else spectral.step(),),
+        coords.rpix + (
+            nchannels / 2 - 0.5 if spectral.rpix() is None
+            else spectral.rpix(),),
+        coords.rval + (0.0 if spectral.rval() is None else spectral.rval(),),
+        coords.rota, len(size), spectral.rest(), spectral.medium(),
+        spectral.convention())
+
+
+def check_convention(spectral: 'SpectralAxis') -> None:
+    """
+    Raise ConfigError unless the convention of the velocities of a
+    spectral axis is known: given, or that of its rest. None is right for
+    all data (e.g. radio for HI, optical for lines of ionised gas, log for
+    the stars of pPXF; at 5000 km/s, the rotation of the others differs by
+    1.6%).
+    """
+    if spectral.convention() is None and spectral.rest() is None:
+        raise ConfigError(
+            "the velocities of a spectral axis need their convention: give "
+            "its convention ('radio' for HI, 'optical' for lines of ionised "
+            "gas, 'log' for the stars of pPXF, or 'relativistic'), or its "
+            "rest: spectral: {convention: ...}, in the options of the data "
+            "if they have a spectral axis of another type than VRAD, VOPT, "
+            "VELO or WAVE-LOG")
+
+
 def make_rest(
         value: str | astropy.units.Quantity | None
 ) -> astropy.units.Quantity | None:
@@ -300,11 +366,13 @@ def make_convention(
 ) -> str | None:
     """
     Make the convention of the velocities of a spectral axis of the given
-    rest (see make_rest): of a rest wavelength w0, 'optical', c (w / w0 -
-    1), the default, or 'log', c ln(w / w0) (exactly linear on an axis
-    uniform in ln w, as FITS WAVE-LOG); of a rest frequency, 'radio', c (1
-    - f / f0); without a rest, 'relativistic' if given, or none (true
-    radial velocities either way; none for axes that are not spectral).
+    rest (see make_rest and VelocityConvention): of a rest wavelength w0,
+    'optical', c (w / w0 - 1), the default, or 'log', c ln(w / w0)
+    (exactly linear on an axis uniform in ln w, as FITS WAVE-LOG); of a
+    rest frequency, 'radio', c (1 - f / f0). Without a rest, any of
+    CONVENTIONS, or 'relativistic', the true radial velocities: each maps
+    velocities to 1 + z by itself; none if not given (relativistic too,
+    or an axis that is not spectral).
 
     Raises
     ------
@@ -312,7 +380,7 @@ def make_convention(
         If the convention is not one of those of the rest.
     """
     if rest is None:
-        allowed, default = (None, 'relativistic'), None
+        allowed, default = (None,) + CONVENTIONS, None
     elif rest.unit.is_equivalent(astropy.units.m):
         allowed, default = ('optical', 'log'), 'optical'
     else:
@@ -403,12 +471,15 @@ class VelocityConvention:
     of 1 + z = D (its wavelength over the rest wavelength, or the rest
     frequency over its frequency), by the convention:
 
-    - 'optical' (a rest wavelength): v = c (D - 1);
-    - 'log' (a rest wavelength; an axis uniform in ln w, as FITS
-      WAVE-LOG): v = c ln D;
-    - 'radio' (a rest frequency): v = c (1 - 1 / D);
-    - none (an axis without a rest, VELO): relativistic, v = c (D^2 - 1)
-      / (D^2 + 1).
+    - 'optical' (VOPT; of a rest wavelength, if any): v = c (D - 1);
+    - 'log' (of a rest wavelength, if any; an axis uniform in ln w, as
+      FITS WAVE-LOG and pPXF): v = c ln D;
+    - 'radio' (VRAD; of a rest frequency, if any): v = c (1 - 1 / D);
+    - 'relativistic' or none (VELO, without a rest): v = c (D^2 - 1) /
+      (D^2 + 1).
+
+    None needs the rest to map velocities to D; wavelengths and
+    frequencies do (e.g. of lines of other rests).
 
     The wavelengths of the axis and of its rest are in its medium, its
     frequencies in vacuum: the refractive index of air is taken at the
@@ -585,7 +656,7 @@ class VelocityConvention:
             raise ConfigError(
                 "velocities and wavelengths or frequencies are converted "
                 "with the rest of the spectral axis (RESTWAV or RESTFRQ in "
-                "the header of the data, or the option rest), which is not "
+                "the header of the data, or its option rest), which is not "
                 "given")
         return value
 
@@ -805,3 +876,126 @@ class SpectraData(NamedTuple):
     data: np.ndarray
     coords: Coords
     unit: str | None = None
+
+
+class SpectralAxis(parseutils.Serializable):
+    """
+    The spectral axis of an observable or of data: its channels, of
+    velocities (km/s) of a convention, and what light is at each velocity
+    (see VelocityConvention). The options not given are those of the
+    data, or the defaults of the observable.
+
+    Parameters
+    ----------
+    size : int, optional
+        The number of channels.
+    step : float, optional
+        The width of the channels (km/s).
+    rpix : float, optional
+        The channel of rval (from 0); by default, the centre.
+    rval : float, optional
+        The velocity of the channel rpix (km/s).
+    convention : str, optional
+        The convention of the velocities (see make_convention): 'optical',
+        'log' (as pPXF), 'radio' or 'relativistic'; that of the rest by
+        default.
+    rest : str or Quantity, optional
+        The rest wavelength or frequency of the velocities (see
+        make_rest): where the wavelengths or frequencies of the channels
+        are needed (e.g. of lines of other rests, or of the medium air).
+    medium : str, optional
+        The medium of the wavelengths of a rest wavelength (see
+        make_medium).
+
+    Raises
+    ------
+    ConfigError
+        If size is not a positive integer, step is not positive, or the
+        rest, the medium or the convention is not valid.
+    """
+
+    @classmethod
+    def of(cls, grid: Grid) -> 'SpectralAxis':
+        """Return the spectral axis of a grid (that of a spectral axis)."""
+        axis = grid.spectral_axis
+        coords = grid.coords
+        return cls(
+            grid.size[axis], coords.step[axis], coords.rpix[axis],
+            coords.rval[axis], coords.convention, coords.rest,
+            coords.medium)
+
+    def dump(self) -> dict[str, Any]:
+        options = dict(
+            size=self._size, step=self._step, rpix=self._rpix,
+            rval=self._rval, convention=self._convention,
+            rest=None if self._rest is None else str(self._rest),
+            medium=self._medium)
+        return {k: v for k, v in options.items() if v is not None}
+
+    def __init__(
+            self,
+            size: int | None = None,
+            step: float | None = None,
+            rpix: float | None = None,
+            rval: float | None = None,
+            convention: str | None = None,
+            rest: str | astropy.units.Quantity | None = None,
+            medium: str | None = None
+    ):
+        if size is not None and not (
+                isinstance(size, numbers.Integral)
+                and not isinstance(size, bool) and size > 0):
+            raise ConfigError(
+                f"the size of a spectral axis must be a positive integer; "
+                f"it is {size!r}")
+        if step is not None and not step > 0:
+            raise ConfigError(
+                f"the step of a spectral axis must be positive; it is {step}")
+        self._rest = make_rest(rest)
+        make_medium(medium, self._rest)
+        make_convention(convention, self._rest)
+        self._size = None if size is None else int(size)
+        self._step = None if step is None else float(step)
+        self._rpix = None if rpix is None else float(rpix)
+        self._rval = None if rval is None else float(rval)
+        self._convention = convention
+        self._medium = medium
+
+    def size(self) -> int | None:
+        """Return the number of channels, if given."""
+        return self._size
+
+    def step(self) -> float | None:
+        """Return the width of the channels (km/s), if given."""
+        return self._step
+
+    def rpix(self) -> float | None:
+        """Return the channel of rval, if given."""
+        return self._rpix
+
+    def rval(self) -> float | None:
+        """Return the velocity of the channel rpix (km/s), if given."""
+        return self._rval
+
+    def convention(self) -> str | None:
+        """Return the convention of the velocities, if given."""
+        return self._convention
+
+    def rest(self) -> astropy.units.Quantity | None:
+        """Return the rest of the velocities (m or Hz), if given."""
+        return self._rest
+
+    def medium(self) -> str | None:
+        """Return the medium of the wavelengths, if given."""
+        return self._medium
+
+    def given(self) -> tuple[str, ...]:
+        """Return the names of its options that are given."""
+        return tuple(self.dump())
+
+    def replaced(self, other: 'SpectralAxis') -> 'SpectralAxis':
+        """Return it with the options that another one gives instead."""
+        return SpectralAxis(**self.dump() | other.dump())
+
+
+spectral_axis_parser = parseutils.BasicParser(SpectralAxis)

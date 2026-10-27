@@ -125,9 +125,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         Return the options of the observable that a dataset gives.
 
-        Here, the grid (and the rest, the medium and the convention of its
-        spectral axis);
-        observables of other data override this.
+        Here, the grid (and its spectral axis, if any); observables of
+        other data override this.
 
         Parameters
         ----------
@@ -141,8 +140,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         grid = ('size', 'step', 'rpix', 'rval', 'rota')
         return grid + (
-            ('rest', 'medium', 'convention')
-            if cls.spectral_axis is not None else ())
+            ('spectral',) if cls.spectral_axis is not None else ())
 
     def __init__(
             self,
@@ -151,13 +149,22 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
             rpix: Sequence[float] | None,
             rval: Sequence[float],
             rota: float,
-            rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None,
-            convention: str | None = None
+            spectral: gridutils.SpectralAxis | None = None
     ):
-        self._grid = gridutils.make_grid(
-            tuple(size), step, rpix, rval, rota, self.spectral_axis, rest,
-            medium, convention)
+        """
+        The grid of the data: its axes on the sky (size, step, rpix, rval,
+        rota), and of an observable with a spectral axis (see
+        spectral_axis), the spectral axis after them (see
+        gridutils.make_cube_grid), whose velocities need their convention
+        (see gridutils.check_convention).
+        """
+        if self.spectral_axis is None:
+            self._grid = gridutils.make_grid(
+                tuple(size), step, rpix, rval, rota)
+        else:
+            self._grid = gridutils.make_cube_grid(
+                size, step, rpix, rval, rota, spectral)
+            gridutils.check_convention(spectral)
 
     def grid(self) -> gridutils.Grid:
         """Return the grid of the data."""
@@ -192,6 +199,12 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         rval = self.rval()
         return float(rval[0]), float(rval[1])
 
+    def spectral(self) -> gridutils.SpectralAxis | None:
+        """Return the spectral axis, if any."""
+        if self.spectral_axis is None:
+            return None
+        return gridutils.SpectralAxis.of(self._grid)
+
     def rest(self) -> astropy.units.Quantity | None:
         """Return the rest of the spectral axis, if any."""
         return self._grid.coords.rest
@@ -205,8 +218,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     def convention(self) -> str | None:
         """
-        Return the convention of the velocities of the spectral axis, if it
-        has a rest (see gridutils.make_convention).
+        Return the convention of the velocities of the spectral axis, if
+        given (see gridutils.make_convention).
         """
         return self._grid.coords.convention
 

@@ -9,6 +9,7 @@ from modelutils import config_group_plan
 
 from gbkfit.model import Extras
 from gbkfit.observation import WeightAzimuthPower, WeightAzimuthRange
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -57,7 +58,9 @@ def test_weights_follow_the_plane_of_the_disk(driver):
     import gbkfit.params
     plan = config_group_plan(config(
         driver,
-        dict(type='pixel_spectra', size=[24, 24, 21], step=[1, 1, 20]),
+        dict(
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=21, step=20, convention='relativistic')),
         dict(component='gas', traits=dict(type='azimuth_power', power=1))))
     params = gbkfit.params.ParamSpace(
         plan.group().pdescs(), PROPERTIES).evaluate()
@@ -94,7 +97,8 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
 
     def plan(data, mask):
         dataset = DatasetPixelSpectra(
-            Data(data, error=np.ones_like(data), mask=mask), step=step)
+            Data(data, error=np.ones_like(data), mask=mask), step=step[:2],
+            spectral=SpectralAxis(step=step[2], convention='relativistic'))
         return ObservationGroup(
             galaxy_parser.load(gas), [ObservationSky(
                 PixelSpectra.from_data(dataset),
@@ -111,10 +115,13 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
 
 
 @pytest.mark.parametrize('observable, component, message', [
-    (dict(type='pixel_moments', size=[24, 24], method='gaussian_fit',
-          spec_convention='relativistic'), None,
+    (dict(
+        type='pixel_moments', size=[24, 24], method='gaussian_fit',
+        spectral=dict(convention='relativistic')), None,
      "gaussian_fit does not support pixel_weights"),
-    (dict(type='pixel_spectra', size=[24, 24, 21]),
+    (dict(
+        type='pixel_spectra', size=[24, 24],
+        spectral=dict(size=21, convention='relativistic')),
      dict(type='point', name='gas', emission=dict(type='lines')),
      "pixel weights need the plane of a disk")])
 def test_weights_are_checked(driver, observable, component, message):

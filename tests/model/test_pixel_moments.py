@@ -7,6 +7,8 @@ import pathlib
 import numpy as np
 import pytest
 
+from gbkfit.utils.gridutils import SpectralAxis
+
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
 
@@ -80,8 +82,9 @@ def test_higher_moments_of_a_gaussian_line(driver):
     # the variance of a channel (step^2 / 12) to that of the line.
     from gbkfit.observation import PixelMoments
     observable = PixelMoments(
-        size=(32, 32), spec_size=81, spec_step=5, orders=(1, 2, 3, 4),
-        spec_convention='relativistic')
+        size=(32, 32),
+        spectral=SpectralAxis(size=81, step=5, convention='relativistic'),
+        orders=(1, 2, 3, 4))
     mmaps = evaluate_mmaps(driver, observable)
     # One mask for all moments: where the moments are defined.
     # Without spatial weights, all weights are 1.
@@ -105,16 +108,17 @@ def test_moment_maps_of_a_galaxy_at_a_high_velocity(driver):
     # the systemic velocity, the velocity at the centre is vsys.
     from gbkfit.observation import PixelMoments
     observable = PixelMoments(
-        size=(32, 32), spec_size=201, spec_step=2, spec_rval=1500,
-        spec_convention='relativistic')
+        size=(32, 32),
+        spectral=SpectralAxis(
+            size=201, step=2, rval=1500, convention='relativistic'))
     mmaps = evaluate_mmaps(driver, observable, vsys=1500)
     centre = mmaps['moment1']['d'][15:17, 15:17]
     np.testing.assert_allclose(centre, 1500, atol=15)
 
 
-@pytest.mark.parametrize('dispersion, spec_size', [
+@pytest.mark.parametrize('dispersion, size', [
     (None, 401), (20.0, 401), (150.0, 551)])
-def test_spectral_axis_from_the_data(dispersion, spec_size):
+def test_spectral_axis_from_the_data(dispersion, size):
     # The spectral axis covers the range of moment1 (1400 to 1600), and
     # three times the largest dispersion on each side: that of moment2,
     # but at least 100 km/s (also without moment2), so that the lines of
@@ -126,38 +130,41 @@ def test_spectral_axis_from_the_data(dispersion, spec_size):
     maps = {0: Data(np.ones((32, 32))), 1: Data(velocity)}
     if dispersion is not None:
         maps[2] = Data(np.full((32, 32), dispersion))
-    info = dict(type='pixel_moments', spec_step=2,
-                spec_convention='relativistic')
+    info = dict(
+        type='pixel_moments', spectral=dict(step=2, convention='relativistic'))
     observable = observable_parser.load(
         info, dataset=DatasetPixelMoments(maps))
-    assert observable.spec_rval() == 1500
-    assert observable.spec_step() == 2
-    assert observable.spec_size() == spec_size
+    spectral = observable.spectral()
+    assert (spectral.rval(), spectral.step(), spectral.size()) == (
+        1500, 2, size)
     # The configuration is left as it was
-    assert info == dict(type='pixel_moments', spec_step=2,
-                        spec_convention='relativistic')
+    assert info == dict(
+        type='pixel_moments', spectral=dict(step=2, convention='relativistic'))
 
 
-@pytest.mark.parametrize('given, spec_size, spec_rval', [
+@pytest.mark.parametrize('given, size, rval', [
     # The centre of the data's range (1100 to 1900) with a given size
-    (dict(spec_size=401), 401, 1500),
+    (dict(size=401), 401, 1500),
     # A size that covers the range around a given centre
-    (dict(spec_rval=1450), 451, 1450)])
-def test_spectral_axis_partly_from_the_data(given, spec_size, spec_rval):
+    (dict(rval=1450), 451, 1450)])
+def test_spectral_axis_partly_from_the_data(given, size, rval):
     from gbkfit.dataset import Data
     from gbkfit.dataset import DatasetPixelMoments
     from gbkfit.observation import observable_parser
     velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
     dataset = DatasetPixelMoments(
         {0: Data(np.ones((32, 32))), 1: Data(velocity)})
-    observable = observable_parser.load(
-        dict(type='pixel_moments', spec_step=2,
-             spec_convention='relativistic') | given, dataset=dataset)
-    assert observable.spec_size() == spec_size
-    assert observable.spec_rval() == spec_rval
+    observable = observable_parser.load(dict(
+        type='pixel_moments',
+        spectral=dict(step=2, convention='relativistic') | given),
+        dataset=dataset)
+    spectral = observable.spectral()
+    assert (spectral.size(), spectral.rval()) == (size, rval)
 
 def test_at_least_one_moment_order():
     # The moments kernel reads past an empty list of orders
     from gbkfit.observation import PixelMoments
     with pytest.raises(RuntimeError, match="at least one moment order"):
-        PixelMoments(size=(8, 8), orders=[], spec_convention='relativistic')
+        PixelMoments(
+            size=(8, 8), orders=[],
+            spectral=SpectralAxis(convention='relativistic'))

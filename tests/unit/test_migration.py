@@ -20,7 +20,9 @@ yaml = ruamel.yaml.YAML(typ='safe')
 
 OBSERVATION = dict(
     type='sky', name='kmos', line_of_sight=dict(type='flat'),
-    observable=dict(type='pixel_spectra', size=[4, 4, 5]))
+    observable=dict(
+        type='pixel_spectra', size=[4, 4],
+        spectral=dict(size=5, convention='relativistic')))
 
 
 @pytest.mark.parametrize('version, message', [
@@ -173,3 +175,26 @@ def test_kinematics_are_migrated_to_typed_ones():
             type='self_gravitating', density='gas', direction='ver')),
         dict(type='traits', vptraits=dict(type='uniform')),
         dict(type='jeans')]
+
+
+def test_spectral_axes_are_migrated_to_one_option():
+    moments = dict(
+        type='pixel_moments', size=[8, 8], spec_step=10,
+        spec_rest='5000 Angstrom', spec_convention='log')
+    cube = dict(type='pixel_spectra', size=[8, 8, 20], step=[1, 1, 10])
+    observations = [
+        dict(type='sky', observable=moments),
+        dict(type='sky', observable=cube),
+        dict(type='sky', observable=dict(type='pixel_spectra'), data=dict(
+            data='cube.fits', step=[1, 1, 10], rest='1420 MHz'))]
+    migration.migrate(dict(observations=observations), 2)
+    assert moments == dict(
+        type='pixel_moments', size=[8, 8], spectral=dict(
+            step=10, convention='log', rest='5000 Angstrom'))
+    # (an axis without a rest had relativistic velocities)
+    assert cube == dict(
+        type='pixel_spectra', size=[8, 8], step=[1, 1],
+        spectral=dict(size=20, step=10, convention='relativistic'))
+    assert observations[2]['data'] == dict(
+        data='cube.fits', step=[1, 1],
+        spectral=dict(step=10, rest='1420 MHz'))

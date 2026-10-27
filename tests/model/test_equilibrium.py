@@ -11,6 +11,7 @@ import pytest
 import scipy.integrate
 
 from gbkfit.model import Extras, galaxy_parser
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -58,7 +59,10 @@ def evaluate(driver, galaxy_, properties):
         ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
     group = ObservationGroup([galaxy_], [ObservationSky(
-        PixelSpectra(size=(32, 32, 51), step=(1, 1, 10)),
+        PixelSpectra(
+            size=(32, 32), step=(1, 1),
+            spectral=SpectralAxis(
+                size=51, step=10, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid')))])
     params = ParamSpace(group.pdescs(), properties)
     return group.plan(driver).model_h(

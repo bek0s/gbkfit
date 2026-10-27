@@ -22,7 +22,8 @@ def line_flux(driver, evaluate_cases, dispersion):
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]),
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=61, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
             type='disk', loose=False, tilted=False,
@@ -84,8 +85,8 @@ def lines_config(lines, catalogue=None):
         observations=[dict(
             type='sky',
             observable=dict(
-                type='pixel_spectra', size=[8, 8, 10],
-                rest='6564.61 Angstrom'),
+                type='pixel_spectra', size=[8, 8],
+                spectral=dict(size=10, rest='6564.61 Angstrom')),
             line_of_sight=dict(type='flat'))])
     if catalogue is not None:
         config['lines'] = catalogue
@@ -209,8 +210,9 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
         case = dict(
             driver=dict(type=driver.type()),
             observable=dict(
-                type='pixel_spectra', size=[8, 8, 201], step=[1, 1, 2],
-                rval=[0, 0, centre], rest='1420.405751768 MHz'),
+                type='pixel_spectra', size=[8, 8], step=[1, 1], rval=[0, 0],
+                spectral=dict(
+                    size=201, step=2, rval=centre, rest='1420.405751768 MHz')),
             line_of_sight=dict(type='flat'),
             galaxy=dict(components=[dict(
                 type='disk', loose=False, tilted=False,

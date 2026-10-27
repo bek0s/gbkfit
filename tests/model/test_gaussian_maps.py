@@ -11,6 +11,7 @@ import pytest
 from modelutils import group_plan
 
 from gbkfit.observation.observables._moments import MomentsPlan
+from gbkfit.utils.gridutils import SpectralAxis
 
 
 GALAXY = dict(components=[dict(
@@ -142,9 +143,10 @@ def test_the_flux_floor_is_relative_to_the_brightest_spectrum(
 def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
     # Without a psf, each spectrum of a thin disk is one line, whose fit
     # is its moments (up to the channel integration of the model)
-    mmaps = dict(type='pixel_moments', size=[32, 41], spec_size=161, spec_step=5,
-                 orders=[0, 1, 2], flux_floor=1e-4,
-                 spec_convention='relativistic')
+    mmaps = dict(
+        type='pixel_moments', size=[32, 41],
+        spectral=dict(size=161, step=5, convention='relativistic'),
+        orders=[0, 1, 2], flux_floor=1e-4)
     moments = evaluate(driver, mmaps)
     fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
     good = np.isfinite(moments['moment1']) & np.isfinite(fitted['moment1'])
@@ -161,10 +163,10 @@ def test_gaussian_fit_without_beam_smearing_is_the_moments(driver):
 def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
     # A psf mixes the lines of a rotating disk into skewed spectra, whose
     # Gaussian fits and moments differ (e.g. near the centre)
-    mmaps = dict(type='pixel_moments', size=[32, 41], spec_size=161, spec_step=5,
-                 orders=[0, 1, 2], flux_floor=1e-4,
-                 psf=dict(type='gauss', sigma=2),
-                 spec_convention='relativistic')
+    mmaps = dict(
+        type='pixel_moments', size=[32, 41],
+        spectral=dict(size=161, step=5, convention='relativistic'),
+        orders=[0, 1, 2], flux_floor=1e-4, psf=dict(type='gauss', sigma=2))
     moments = evaluate(driver, mmaps)
     fitted = evaluate(driver, mmaps | dict(method='gaussian_fit'))
     good = np.isfinite(moments['moment2']) & np.isfinite(fitted['moment2'])
@@ -177,13 +179,15 @@ def test_gaussian_fit_of_bins(driver):
     fitsutils.write_data(
         'bins.fits', np.arange(32 * 41).reshape(41, 32),
         gridutils.Coords((1, 1), (15.5, 20), (0, 0), 0))
-    options = dict(spec_size=161, spec_step=5, orders=[1, 2],
-                   flux_floor=1e-4, method='gaussian_fit')
-    mmaps = evaluate(driver, dict(type='pixel_moments', size=[32, 41],
-                                  spec_convention='relativistic') | options)
+    options = dict(
+        spectral=dict(size=161, step=5, convention='relativistic'),
+        orders=[1, 2], flux_floor=1e-4, method='gaussian_fit')
+    mmaps = evaluate(driver, dict(
+        type='pixel_moments', size=[32, 41],
+        spectral=dict(convention='relativistic')) | options)
     bmaps = evaluate(driver, dict(
         type='region_moments', regions=dict(type='bins', file='bins.fits'),
-        spec_convention='relativistic') | options)
+        spectral=dict(convention='relativistic')) | options)
     for key in ('moment1', 'moment2'):
         np.testing.assert_allclose(
             bmaps[key], mmaps[key].ravel(), rtol=1e-4, atol=1e-3)
@@ -196,12 +200,15 @@ def test_gaussian_fit_of_bins(driver):
 def test_method_options_are_checked(options, message):
     from gbkfit.observation import PixelMoments
     with pytest.raises(RuntimeError, match=message):
-        PixelMoments(size=(8, 8), **options, spec_convention='relativistic')
+        PixelMoments(
+            size=(8, 8), **options,
+            spectral=SpectralAxis(convention='relativistic'))
 
 
 def test_method_round_trip():
     from gbkfit.observation import observable_parser
-    info = dict(type='pixel_moments', size=[8, 8], method='gaussian_fit',
-                spec_convention='relativistic')
+    info = dict(
+        type='pixel_moments', size=[8, 8], method='gaussian_fit',
+        spectral=dict(convention='relativistic'))
     dumped = observable_parser.dump(observable_parser.load(dict(info)))
     assert dumped['method'] == 'gaussian_fit'

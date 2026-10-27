@@ -20,6 +20,7 @@ from gbkfit.model import (
     galaxy_parser)
 from gbkfit.model.mass import G, _numerics
 from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -397,7 +398,10 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
         galaxy = galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
         group = ObservationGroup([galaxy], [ObservationSky(
-            PixelSpectra(size=(24, 24, 41), step=(1, 1, 10)),
+            PixelSpectra(
+                size=(24, 24), step=(1, 1),
+                spectral=SpectralAxis(
+                    size=41, step=10, convention='relativistic')),
             line_of_sight_parser.load(dict(type='flat')))])
         params = ParamSpace(
             group.pdescs(), light | disk_properties | properties)
@@ -574,7 +578,8 @@ def stars_cube(driver, spheroid, line_of_sight='grid'):
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[32, 32, 181], step=[2, 2, 10],
+            type='pixel_spectra', size=[32, 32], step=[2, 2],
+            spectral=dict(size=181, step=10, convention='relativistic'),
             dtype='float64'),
         line_of_sight=los, lines=['stars'],
         galaxy=dict(components=[spheroid], mass=[dict(
@@ -802,10 +807,9 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
     case['observable'] = dict(
         type='region_moments',
         regions=dict(type='bins', file=str(tmp_path / 'bins.fits')),
-        orders=[0, 1, 2, 3, 4], method='gauss_hermite', spec_size=81,
-        spec_step=10, spec_rval=1000, spec_rest='5000 Angstrom',
-        spec_convention='log', psf=dict(type='gauss', sigma=3),
-        dtype='float64')
+        orders=[0, 1, 2, 3, 4], method='gauss_hermite',
+        spectral=dict(size=81, step=10, rval=1000, convention='log'),
+        psf=dict(type='gauss', sigma=3), dtype='float64')
     properties = GEOMETRY | dict(
         vsys=1000, stars_i0=[1], stars_sigma=[8], stars_q=[1],
         stars_vpt_vt=0, stars_dpt_a=80)

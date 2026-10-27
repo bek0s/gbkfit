@@ -202,7 +202,9 @@ MASSIVE = dict(
 CUBE = dict(
     type='sky',
     line_of_sight=dict(type='flat'),
-    observable=dict(type='pixel_spectra', size=[8, 8, 5]))
+    observable=dict(
+        type='pixel_spectra', size=[8, 8],
+        spectral=dict(size=5, convention='relativistic')))
 
 
 def test_galaxies_with_mass_use_the_drivers_of_the_configuration():

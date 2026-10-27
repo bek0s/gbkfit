@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, NamedTuple
 
 import ruamel.yaml
-from ruamel.yaml.comments import CommentedMap
+from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 import gbkfit.project
 from gbkfit.project import FORMAT_VERSION
@@ -317,6 +317,118 @@ class _TypedKinematics(Rule):
         return None if mode is None else dict(type=mode) | options
 
 
+class _SpectralAxes(Rule):
+    """
+    The spectral axis of an observable and its data is one option,
+    spectral (2026-10-28): the options spec_* of moments, spectra in
+    regions and slitless spectra; the last axis of the grid (size, step,
+    rpix, rval), and rest, medium and convention, of spectral cubes and
+    slit spectra, and of their data. Its convention no longer needs a
+    rest, and one is required without data: an axis without one gets the
+    convention it had, 'relativistic'.
+    """
+
+    # The observables of spec_* options, and those of a spectral axis that
+    # is the last axis of their grid, with the number of their axes on the
+    # sky
+    _SPEC = ('pixel_moments', 'region_moments', 'region_spectra',
+             'slitless_spectra')
+    _CUBES = dict(pixel_spectra=2, slit_spectra=1)
+    _OPTIONS = ('size', 'step', 'rpix', 'rval', 'convention', 'rest',
+                'medium')
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            observable = item.get('observable')
+            if not isinstance(observable, MutableMapping):
+                continue
+            kind = observable.get('type')
+            data = item.get('data')
+            if kind in self._SPEC and self._spec(observable):
+                changes.append(Change(
+                    path + ['observable'], "spec_* -> spectral"))
+            elif kind in self._CUBES and self._cube(
+                    observable, self._CUBES[kind], True):
+                changes.append(Change(
+                    path + ['observable'],
+                    "the spectral axis of the grid, rest, medium and "
+                    "convention -> spectral"))
+            if not isinstance(data, MutableMapping):
+                continue
+            if kind == 'region_spectra':
+                moved = self._cube(data, 0, False)
+            elif kind in self._CUBES:
+                moved = self._cube(data, self._CUBES[kind], False)
+            else:
+                moved = False
+            if moved:
+                changes.append(Change(
+                    path + ['data'], "the world coordinates of the spectral "
+                    "axis, rest and medium -> spectral"))
+        return changes
+
+    def _spec(self, observable: MutableMapping[str, Any]) -> bool:
+        """
+        Move the options spec_* of an observable into its option spectral;
+        return whether it had any.
+        """
+        spectral = {
+            key: observable.pop(f'spec_{key}') for key in self._OPTIONS
+            if f'spec_{key}' in observable}
+        if not spectral:
+            return False
+        self._with_convention(spectral)
+        observable['spectral'] = _flow(spectral)
+        return True
+
+    def _cube(
+            self, options: MutableMapping[str, Any], nspatial: int,
+            model: bool
+    ) -> bool:
+        """
+        Move the spectral axis of the grid of an observable (model) or of
+        its data, the axis after its nspatial axes on the sky, and its
+        rest, medium and convention, into its option spectral; return
+        whether it had any.
+        """
+        spectral = {}
+        for key in ('size', 'step', 'rpix', 'rval'):
+            if key not in options:
+                continue
+            value = options[key]
+            if isinstance(value, list) and len(value) == nspatial + 1:
+                spectral[key] = value[-1]
+                options[key] = _like(value, value[:-1])
+            elif not isinstance(value, list):
+                spectral[key] = value
+            if not nspatial or options[key] == []:
+                del options[key]
+        for key in ('convention', 'rest', 'medium'):
+            if key in options:
+                spectral[key] = options.pop(key)
+        if model and 'size' in spectral:
+            self._with_convention(spectral)
+        if not spectral:
+            return False
+        options['spectral'] = _flow(spectral)
+        return True
+
+    @staticmethod
+    def _with_convention(spectral: dict[str, Any]) -> None:
+        """
+        Give a spectral axis without a rest or a convention the
+        convention its velocities had: relativistic.
+        """
+        if spectral.get('rest') is None \
+                and spectral.get('convention') is None:
+            spectral['convention'] = 'relativistic'
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -324,6 +436,7 @@ RULES: tuple[Rule, ...] = (
     _OwnGeometries(),
     _ObservationRenames(),
     _TypedKinematics(),
+    _SpectralAxes(),
 )
 
 
@@ -567,6 +680,26 @@ def _insert_first(
         items = list(mapping.items())
         mapping.clear()
         mapping.update([(key, value)] + items)
+
+
+def _like(sequence: list[Any], items: list[Any]) -> list[Any]:
+    """
+    Return items as a list of the style of a sequence (of YAML: flow or
+    block).
+    """
+    if not isinstance(sequence, CommentedSeq):
+        return items
+    result = CommentedSeq(items)
+    if sequence.fa.flow_style():
+        result.fa.set_flow_style()
+    return result
+
+
+def _flow(mapping: dict[str, Any]) -> CommentedMap:
+    """Return a dictionary as one of the flow style of YAML."""
+    result = CommentedMap(mapping)
+    result.fa.set_flow_style()
+    return result
 
 
 def _folder(section: str) -> str:

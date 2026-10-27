@@ -178,7 +178,8 @@ def cubes_of(evaluate_cases, driver, components, properties, **observation):
     """
     observation = dict(
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10])
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=31, step=10, convention='relativistic'))
     ) | observation
     models = []
     for kind in ('grid', 'transfer'):
@@ -238,8 +239,9 @@ def test_transfer_dims_each_line_by_its_law(driver, evaluate_cases):
     grid, transfer = cubes_of(
         evaluate_cases, driver, [gas] + dusts, properties,
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 81], step=[1, 1, 25],
-            rval=[0, 0, 500], rest='6564.61 Angstrom'))
+            type='pixel_spectra', size=[24, 24], step=[1, 1], rval=[0, 0],
+            spectral=dict(
+                size=81, step=25, rval=500, rest='6564.61 Angstrom')))
     assert_same_model(transfer, grid)
 
 
@@ -264,7 +266,8 @@ def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
     grid, transfer = cubes_of(
         evaluate_cases, driver, [gas, DUST], PROPERTIES,
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]))
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=61, step=10, convention='relativistic')))
     velocity = (np.arange(61) - 30) * 10.0
     flux = grid.sum(axis=0)
     on = flux > 1e-3 * flux.max()
@@ -291,7 +294,8 @@ def transfer_cube(evaluate_cases, driver, components, properties):
     case = dict(
         driver=dict(type=driver.type()), line_of_sight=dict(type='transfer'),
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 61], step=[1, 1, 10]),
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=61, step=10, convention='relativistic')),
         galaxy=dict(components=components))
     names = {component['name'] for component in components}
     data, _ = evaluate_cases([case], {
@@ -390,7 +394,8 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
         driver=dict(type=driver.type()),
         line_of_sight=dict(type=line_of_sight),
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=31, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))
     with pytest.raises(ConfigError, match=message):
         group_plan([case])
@@ -420,7 +425,8 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
             line_of_sight=dict(type='transfer') | (
                 dict(slab=slab) if slab is not None else {}),
             observable=dict(
-                type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+                type='pixel_spectra', size=[24, 24], step=[1, 1],
+                spectral=dict(size=31, step=10, convention='relativistic')),
             galaxy=dict(components=components))
         data, extra = evaluate_cases([case], of_model([case], properties))
         models.append((data[0]['spectra']['d'], extra))
@@ -458,7 +464,8 @@ def galaxies_model(
     observation = dict(
         type='sky',
         observable=dict(
-            type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(size=31, step=10, convention='relativistic')),
         line_of_sight=dict(type='transfer'),
         galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
     if depth_order is None:
@@ -642,8 +649,9 @@ def transfer_case(driver, components, nchannels=31, step=10, **transfer):
         driver=dict(type=driver.type()),
         line_of_sight=dict(type='transfer') | transfer,
         observable=dict(
-            type='pixel_spectra', size=[24, 24, nchannels],
-            step=[1, 1, step]),
+            type='pixel_spectra', size=[24, 24], step=[1, 1],
+            spectral=dict(
+                size=nchannels, step=step, convention='relativistic')),
         galaxy=dict(components=components))
 
 

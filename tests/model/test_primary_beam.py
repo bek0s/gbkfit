@@ -130,8 +130,9 @@ def test_the_primary_beam_of_a_dish_scales_with_the_wavelength():
 def test_the_primary_beam_of_each_channel_attenuates_it(driver):
     # A beam of 40 arcsec at the rest frequency: at -70 to 70 km/s, its
     # fwhm changes by 5e-4, which changes it by 1e-3 at its fwhm
-    cube = dict(type='pixel_spectra', size=[16, 16, 8], step=[5, 5, 20],
-                rest='1420.405752 MHz')
+    cube = dict(
+        type='pixel_spectra', size=[16, 16], step=[5, 5],
+        spectral=dict(size=8, step=20, rest='1420.405752 MHz'))
     beam = dict(type='gauss', fwhm=40, x=2, y=-1, frequency=1420.405752e6)
     plain = evaluate(driver, cube, LINE_GALAXY, LINE_PROPERTIES, 'spectra')
     attenuated = evaluate(

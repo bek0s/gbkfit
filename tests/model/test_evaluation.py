@@ -37,7 +37,8 @@ def nodewise_relative_case(driver):
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[32, 32, 41], step=[1, 1, 10]),
+            type='pixel_spectra', size=[32, 32], step=[1, 1],
+            spectral=dict(size=41, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=line_disk(dict(type='nw_uniform', direction='tan')))
 
@@ -66,7 +67,9 @@ import numpy as np
 from modelutils import group_plan
 plan = group_plan([dict(
     driver=dict(type='host'),
-    observable=dict(type='pixel_spectra', size=[24, 24, 31], step=[1, 1, 10]),
+    observable=dict(
+        type='pixel_spectra', size=[24, 24], spectral=dict(
+            size=31, step=10, convention='relativistic')),
     line_of_sight=dict(type='grid'),
     galaxy=dict(components=[dict(
         type='disk', loose=False, tilted=False,
@@ -130,10 +133,11 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
         FLAT_OBSERVATIONS[kind]
 
     def observation(step):
-        steps = (step, step, 10)[:len(size)]
-        return ObservationSky(observable_parser.load(dict(
-            type=observable_type, size=list(size), step=list(steps))),
-            Flat())
+        info = dict(type=observable_type, size=list(size[:2]), step=[step] * 2)
+        if len(size) == 3:
+            info.update(spectral=dict(
+                size=size[2], step=10, convention='relativistic'))
+        return ObservationSky(observable_parser.load(info), Flat())
 
     def evaluate(group, i):
         params = gbkfit.params.ParamSpace(group.pdescs(), properties)
@@ -149,7 +153,9 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
 
 @pytest.mark.parametrize('observable, emission', [
     (dict(type='pixel_brightness', size=[8, 8]), 'lines'),
-    (dict(type='pixel_spectra', size=[8, 8, 8]), 'band')])
+    (dict(
+        type='pixel_spectra', size=[8, 8],
+        spectral=dict(size=8, convention='relativistic')), 'band')])
 def test_incompatible_observations_are_rejected_before_evaluation(
         observable, emission):
     # An image sees the components that emit in a band, and the others
@@ -179,7 +185,8 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     plan = group_plan([dict(
         driver=dict(type=driver.type()),
         observable=dict(
-            type='pixel_spectra', size=[16, 16, 21], step=[1, 1, 10]),
+            type='pixel_spectra', size=[16, 16], step=[1, 1],
+            spectral=dict(size=21, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=line_disk(
             dict(type='courteau', direction='tan'), rnodes=list(range(0, 8))))])
@@ -232,10 +239,14 @@ def two_observations(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
         Flat, ObservationGroup, ObservationSky, PixelSpectra)
+    from gbkfit.utils.gridutils import SpectralAxis
     return ObservationGroup(
         [galaxy_parser.load(line_disk(dict(type='arctan', direction='tan')))],
         [ObservationSky(
-            PixelSpectra(size=(16, 16, 11), step=(1, 1, 20)), Flat(),
+            PixelSpectra(
+                size=(16, 16), step=(1, 1),
+                spectral=SpectralAxis(
+                    size=11, step=20, convention='relativistic')), Flat(),
             name=name, offsets=dict(position=name == 'b'))
          for name in ('a', 'b')]).plan(driver)
 

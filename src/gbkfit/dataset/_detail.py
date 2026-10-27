@@ -159,13 +159,18 @@ def load_with_files(
     """
     Return the dataset of class cls that its from_files makes with the
     given files and the other options of its configuration, which are
-    checked against the parameters of from_files. With ndim, the options
-    of the world coordinates with one value per axis are made lists (see
+    checked against the parameters of from_files, and its spectral axis,
+    if it has one (see spectral_axis). With ndim, the options of the world
+    coordinates with one value per axis (on the sky, of a dataset with a
+    spectral axis) are made lists (see
     parseutils.sanitize_dimensional_options).
     """
     if ndim is not None:
         parseutils.sanitize_dimensional_options(
             info, dict(step=float, rpix=float, rval=float), ndim)
+    if cls.spectral_axis is not None:
+        parseutils.load_option_and_update_info(
+            gridutils.spectral_axis_parser, info, 'spectral')
     options = parseutils.parse_options_for_callable(
         info, cls.from_files, ignore_params=list(files))
     return cls.from_files(**files, **options)
@@ -320,24 +325,79 @@ def read_moments(
 def grid_coords(
         coords: gridutils.Coords,
         step: float | Sequence[float] | None,
-        rota: float | None,
-        spectral: bool = False
+        rota: float | None
 ) -> dict[str, Any]:
     """
     Return the world coordinates of the grid of a dataset from those of
     its files, with step and rota, if given, instead (rpix and rval are
-    given to the reading of the files). A spectral grid has the rest, the
-    medium and the convention of its files too.
+    given to the reading of the files).
     """
-    result = dict(
+    return dict(
         step=coords.step if step is None else step,
         rpix=coords.rpix,
         rval=coords.rval,
         rota=coords.rota if rota is None else rota)
-    if spectral:
-        result.update(rest=coords.rest, medium=coords.medium,
-                      convention=coords.convention)
-    return result
+
+
+def file_references(
+        nspatial: int,
+        rpix: float | Sequence[float] | None,
+        rval: float | Sequence[float] | None,
+        spectral: gridutils.SpectralAxis | None
+) -> dict[str, Any]:
+    """
+    Return the options of the reading of the files of a dataset of
+    nspatial axes on the sky and a spectral axis after them (see
+    Data.from_files): the reference pixels and values given, for each
+    axis (None where not given), and the rest and the medium of the
+    spectral axis.
+
+    Raises
+    ------
+    ConfigError
+        If the spectral axis has a size: its data give it.
+    """
+    spectral = spectral or gridutils.SpectralAxis()
+    if spectral.size() is not None:
+        raise ConfigError(
+            "the data give the number of channels of their spectral axis; "
+            "remove its size")
+
+    def per_axis(spatial, value):
+        values = [None] * nspatial if spatial is None \
+            else np.broadcast_to(np.asarray(spatial, float), nspatial)
+        values = [*values, value]
+        return None if all(v is None for v in values) else values
+    return dict(
+        rpix=per_axis(rpix, spectral.rpix()),
+        rval=per_axis(rval, spectral.rval()),
+        rest=spectral.rest(), medium=spectral.medium())
+
+
+def cube_coords(
+        coords: gridutils.Coords,
+        step: float | Sequence[float] | None,
+        rota: float | None,
+        spectral: gridutils.SpectralAxis | None
+) -> dict[str, Any]:
+    """
+    Return the world coordinates of the grid of a dataset of axes on the
+    sky and a spectral axis after them (see cube_grid), from those of its
+    files, with the steps, rota and the convention, if given, instead (see
+    file_references for the others).
+    """
+    spectral = spectral or gridutils.SpectralAxis()
+    nspatial = len(coords.step) - 1
+    return dict(
+        step=coords.step[:nspatial] if step is None else step,
+        rpix=coords.rpix[:nspatial],
+        rval=coords.rval[:nspatial],
+        rota=coords.rota if rota is None else rota,
+        spectral=gridutils.SpectralAxis(
+            step=spectral.step() or coords.step[nspatial],
+            rpix=coords.rpix[nspatial], rval=coords.rval[nspatial],
+            convention=spectral.convention() or coords.convention,
+            rest=coords.rest, medium=coords.medium))
 
 
 def make_grid(
@@ -345,19 +405,44 @@ def make_grid(
         step: float | Sequence[float] | None,
         rpix: float | Sequence[float] | None,
         rval: float | Sequence[float] | None,
-        rota: float | None,
-        rest: str | astropy.units.Quantity | None = None,
-        medium: str | None = None,
-        convention: str | None = None
+        rota: float | None
 ) -> gridutils.Grid:
     """
     Return the grid of the items of a dataset, with the given world
-    coordinates or their defaults (see gridutils.make_grid). The dataset
-    declares its spectral axis (spectral_axis).
+    coordinates or their defaults (see gridutils.make_grid).
     """
-    return gridutils.make_grid(
-        dataset.shape()[::-1], step, rpix, rval, rota,
-        dataset.spectral_axis, rest, medium, convention)
+    return gridutils.make_grid(dataset.shape()[::-1], step, rpix, rval, rota)
+
+
+def cube_grid(
+        dataset: 'Dataset',
+        step: float | Sequence[float] | None,
+        rpix: float | Sequence[float] | None,
+        rval: float | Sequence[float] | None,
+        rota: float | None,
+        spectral: gridutils.SpectralAxis | None
+) -> gridutils.Grid:
+    """
+    Return the grid of the items of a dataset of axes on the sky and a
+    spectral axis after them, its last, with the given world coordinates
+    or their defaults (see gridutils.make_cube_grid). The data give the
+    number of channels.
+
+    Raises
+    ------
+    ConfigError
+        If the spectral axis has another number of channels, or the grid is
+        not valid.
+    """
+    shape = dataset.shape()[::-1]
+    spectral = spectral or gridutils.SpectralAxis()
+    if spectral.size() not in (None, shape[-1]):
+        raise ConfigError(
+            f"the data have {shape[-1]} channels; the spectral axis has "
+            f"{spectral.size()}")
+    return gridutils.make_cube_grid(
+        shape[:-1], step, rpix, rval, rota,
+        spectral.replaced(gridutils.SpectralAxis(size=shape[-1])))
 
 
 def dump_grid_dataset(
@@ -368,22 +453,26 @@ def dump_grid_dataset(
 ) -> dict[str, Any]:
     """
     Return the configuration of a dataset whose data items are on a grid:
-    the world coordinates of the grid, and the items, written to FITS
-    files named after the prefix and their names (with their world
-    coordinates).
+    the world coordinates of the grid (and of its spectral axis, if any,
+    but its convention, which the headers of the files give), and the
+    items, written to FITS files named after the prefix and their names
+    (with their world coordinates).
     """
     grid = dataset.grid()
+    coords = grid.coords
+    axes = slice(None) if grid.spectral_axis is None \
+        else slice(grid.spectral_axis)
     info = dict(
         type=dataset.type(),
-        step=grid.coords.step,
-        rpix=grid.coords.rpix,
-        rval=grid.coords.rval,
-        rota=grid.coords.rota)
-    if grid.coords.rest is not None:
-        info.update(rest=str(grid.coords.rest))
-    if grid.coords.medium is not None:
-        info.update(medium=grid.coords.medium)
-    # (the convention of the velocities is in the headers of the files)
+        step=coords.step[axes],
+        rpix=coords.rpix[axes],
+        rval=coords.rval[axes],
+        rota=coords.rota)
+    if grid.spectral_axis is not None:
+        spectral = gridutils.SpectralAxis.of(grid).dump()
+        info.update(spectral={
+            key: value for key, value in spectral.items()
+            if key not in ('size', 'convention')})
 
     def write(filename: str, array: np.ndarray) -> None:
         fitsutils.write_data(

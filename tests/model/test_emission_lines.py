@@ -37,9 +37,15 @@ INSTRUMENT = dict(
 
 
 def scube(rest, **options):
+    """
+    A cube of the axis of the given rest (of its velocities by default), or
+    of relativistic velocities.
+    """
+    spectral = dict(size=301, step=10, rval=500) | (
+        dict(convention='relativistic') if rest is None else dict(rest=rest))
     return dict(
-        type='pixel_spectra', size=[32, 41, 301], step=[1, 1, 10],
-        rval=[0, 0, 500], rest=rest, **INSTRUMENT) | options
+        type='pixel_spectra', size=[32, 41], step=[1, 1], rval=[0, 0],
+        spectral=spectral, **INSTRUMENT) | options
 
 
 def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
@@ -220,8 +226,8 @@ def test_observations_see_their_lines(driver):
     # its flux ratio; together they are the model of both
     galaxy = galaxy_of(with_lines(COMPONENT, LINES))
     observable = dict(
-        type='pixel_spectra', size=[32, 41, 301], step=[1, 1, 10],
-        rval=[0, 0, 500], rest='6562.8 Angstrom')
+        type='pixel_spectra', size=[32, 41], step=[1, 1], rval=[0, 0],
+        spectral=dict(size=301, step=10, rval=500, rest='6562.8 Angstrom'))
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
     both = evaluate_observation(
         driver, galaxy, observable, properties)['spectra']
@@ -241,8 +247,9 @@ def test_moment_maps_of_one_line(driver):
     # the first line are those of a galaxy of that line alone
     galaxy = galaxy_of(with_lines(COMPONENT, LINES))
     observable = dict(
-        type='pixel_moments', size=[32, 41], spec_size=301, spec_step=10,
-        spec_rval=500, spec_rest='6562.8 Angstrom', flux_floor=1e-4)
+        type='pixel_moments', size=[32, 41],
+        spectral=dict(size=301, step=10, rval=500, rest='6562.8 Angstrom'),
+        flux_floor=1e-4)
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
     ha = evaluate_observation(
         driver, galaxy, observable, properties, lines=['ha'])

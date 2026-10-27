@@ -25,7 +25,9 @@ DISK = dict(components=[dict(
     emission=dict(type='lines'))])
 DISK_PROPERTIES = GEOMETRY | dict(
     pt_a=1, pt_s=H, vpt_rt=RT, vpt_vt=VT, dpt_a=DISP)
-CUBE = dict(type='pixel_spectra', size=[40, 40, 40], step=[1, 1, 15])
+CUBE = dict(
+    type='pixel_spectra', size=[40, 40], step=[1, 1],
+    spectral=dict(size=40, step=15, convention='relativistic'))
 
 
 def disk_particles(path, n=200_000, seed=1):
