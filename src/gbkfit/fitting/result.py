@@ -326,6 +326,21 @@ class FitSolution:
         parameters; see Objective.log_likelihood).
     log_prior : float or None
         The log of the prior density, if the fit has priors.
+    aic : float
+        The Akaike information criterion, -2 ln L + 2 k, of a likelihood L
+        and a number k of fitted quantities: the lower, the better a
+        model, of several fitted to the same data. k counts the free
+        elements. Values solved 'integrated' (see Solve.likelihood) are
+        integrated out of L under their prior (the log-likelihood), and
+        not counted in k: the marginal AIC. Values solved 'profiled' count
+        in k by their effective number (see nfitted), and L leaves out the
+        residuals of their prior: the conditional AIC (see aicp).
+    bic : float
+        The Bayesian information criterion, -2 ln L + k ln n, of the L and
+        k of aic and the n residuals. Like the likelihood, it takes the
+        values as independent (of correlated values, e.g. the pixels
+        within a beam, n is more than the independent ones, and k ln n
+        penalises too much).
     aicp : float
         The AICp (Lipka & Thomas 2021): the chi-square of the data (see
         Objective.aicp) plus twice the number of fitted quantities (see
@@ -354,30 +369,11 @@ class FitSolution:
     reduced_chi2: float
     log_likelihood: float
     log_prior: float | None
+    aic: float
+    bic: float
     aicp: float
     covariance: Covariance | None
     laplace: Posterior | None
-
-    @property
-    def aic(self) -> float:
-        """
-        The Akaike information criterion, 2 k - 2 ln L, of the k fitted
-        quantities (see nfitted) and the log-likelihood L: the lower, the
-        better a model, of several fitted to the same data.
-        """
-        return 2 * self.nfitted - 2 * self.log_likelihood
-
-    @property
-    def bic(self) -> float:
-        """
-        The Bayesian information criterion, k ln n - 2 ln L, of the k fitted
-        quantities (see nfitted), the n residuals and the log-likelihood L.
-        Like the likelihood, it takes the values as independent (of
-        correlated values, e.g. the pixels within a beam, n is more than
-        the independent ones, and k ln n penalises too much).
-        """
-        return self.nfitted * float(np.log(self.nresiduals)) \
-            - 2 * self.log_likelihood
 
 
 @dataclasses.dataclass(frozen=True)

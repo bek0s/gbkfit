@@ -469,6 +469,15 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         # covariance)
         reduced_chi2 = (evaluation.data_chi2 - evaluation.noise_chi2) / dof \
             if dof > 0 else np.nan
+        # The information criteria: of values solved 'integrated', the
+        # marginal (the log-likelihood holds their Occam factor, so they do
+        # not count again); of values solved 'profiled', the conditional
+        # (they count by their m_eff, and the residuals of their prior,
+        # a penalty, are not of the likelihood; Vaida & Blanchard 2005,
+        # Hastie & Tibshirani 1990, sec. 6.8)
+        deviance = -2 * merits.log_likelihood \
+            - evaluation.profiled_prior_chi2
+        ncounted = problem.ndim() + evaluation.profiled_nnuisance
         log_prior = None if problem.priors() is None \
             else problem.log_prior(x)
         cov = laplace = None
@@ -507,6 +516,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             reduced_chi2=reduced_chi2,
             log_likelihood=merits.log_likelihood,
             log_prior=log_prior,
+            aic=deviance + 2 * ncounted,
+            bic=deviance + ncounted * float(np.log(nresiduals)),
             aicp=merits.aicp + 2 * problem.ndim(),
             covariance=cov,
             laplace=laplace), nevals, problems

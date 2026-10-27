@@ -75,6 +75,11 @@ class Evaluation:
     nnuisance : float
         The effective number of the solved values (the sum of their m_eff;
         see Solve): how much the data decide them.
+    profiled_prior_chi2 : float
+        The part of prior_chi2 of the values solved 'profiled' (see
+        Solve.likelihood).
+    profiled_nnuisance : float
+        The part of nnuisance of the values solved 'profiled'.
     solved : dict
         The values of the solved elements, by element name (see
         ParamSpace.evaluate).
@@ -84,6 +89,8 @@ class Evaluation:
     noise_chi2: float
     prior_chi2: float
     nnuisance: float
+    profiled_prior_chi2: float
+    profiled_nnuisance: float
     solved: dict[str, float]
 
 
@@ -211,6 +218,14 @@ class Objective:
         self._scaled = sorted({solved.observation for solved in self._solved})
         self._groups = _groups(
             group, self._comparisons, amplitudes, self._scaled)
+        # What the log-likelihood takes of the values of each solution (in
+        # the order of the solutions; one for all of its values, see
+        # check_together)
+        self._likelihoods = tuple(
+            [solved.solve.likelihood() for solved in self._solved]
+            + [group_.runs[0][0].likelihood() for group_ in self._groups]
+            + [self._solves[orbit.elements()[0]].likelihood()
+               for orbit in self._orbits])
         self._reset_memory()
 
     def _reset_memory(self) -> None:
@@ -468,11 +483,19 @@ class Objective:
         log_likelihood = -0.5 * (chi2 + constant) + float(sum(
             solution.log_term for solution in self._solutions))
         nnuisance = self._nnuisance()
+        profiled = [
+            solution for solution, likelihood in zip(
+                self._solutions, self._likelihoods)
+            if likelihood == 'profiled']
         return Evaluation(
             Merits(chi2, log_likelihood,
                    data_chi2 + constant + 2 * nnuisance),
             data_chi2=data_chi2, noise_chi2=self._noise_chi2(),
             prior_chi2=prior_chi2, nnuisance=nnuisance,
+            profiled_prior_chi2=float(sum(
+                np.sum(solution.residuals ** 2) for solution in profiled)),
+            profiled_nnuisance=float(sum(
+                solution.m_eff for solution in profiled)),
             solved=self._solved_values())
 
     def residuals(

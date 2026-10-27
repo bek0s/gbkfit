@@ -1377,7 +1377,7 @@ def test_summaries_show_the_free_elements_decoded():
         values={'v': np.array([100.0, 105.0])},
         elements={'v[0]': 100.0, 'v[1]': 105.0}, derived={}, chi2=10.0,
         nresiduals=12, nfitted=2, dof=10, reduced_chi2=1.0,
-        log_likelihood=-5.0, log_prior=None, aicp=14.0,
+        log_likelihood=-5.0, log_prior=None, aic=14.0, bic=15.0, aicp=14.0,
         covariance=covariance, laplace=None)
     result = FitResult(
         fitter=dict(type='grid'), params=None, versions={},
@@ -1388,15 +1388,28 @@ def test_summaries_show_the_free_elements_decoded():
     assert line.split()[1:] == ['105', '1.25']
 
 
-def test_the_information_criteria_of_a_solution():
-    # Of 3 fitted quantities, 100 residuals and ln L = -50: AIC = 2 x 3 +
-    # 100, BIC = 3 ln 100 + 100
-    from gbkfit.fitting.result import FitSolution
-    solution = FitSolution(
-        free={}, values={}, elements={}, derived={}, chi2=100.0,
-        nresiduals=100, nfitted=3, dof=97, reduced_chi2=100 / 97,
-        log_likelihood=-50.0, log_prior=None, aicp=106.0,
-        covariance=None, laplace=None)
-    assert solution.nfitted == 3
-    assert solution.aic == pytest.approx(106)
-    assert solution.bic == pytest.approx(3 * np.log(100) + 100)
+def test_the_information_criteria_take_solved_values_by_their_likelihood():
+    # A flux scale solved under a prior. Integrated: the log-likelihood
+    # holds it (its Occam factor) and it does not count (the marginal AIC
+    # and BIC). Profiled: it counts by its effective number, and the
+    # residual of its prior is left out (the conditional AIC: the AICp)
+    from gbkfit.fitting.fitters.grid import FitterGrid
+    best = {}
+    for likelihood in ('integrated', 'profiled'):
+        plan = mock_objective(
+            DriverHost(), name='obs', flux_scale='one').group_plan()
+        params = ParamSpace(plan.group().pdescs(), TRUE | dict(
+            obs_flux_scale=dict(solve=dict(
+                type='gaussian', mean=1, sigma=0.1, minimum=0,
+                likelihood=likelihood)),
+            posa=dict(min=36, max=44, n=3)))
+        best[likelihood] = FitterGrid().fit(
+            Objective(plan, params.solves()), params).best()
+    integrated, profiled = best['integrated'], best['profiled']
+    ln_n = np.log(integrated.nresiduals)
+    assert integrated.aic == pytest.approx(-2 * integrated.log_likelihood + 2)
+    assert integrated.bic == pytest.approx(
+        -2 * integrated.log_likelihood + ln_n)
+    assert profiled.aic == pytest.approx(profiled.aicp)
+    assert profiled.bic == pytest.approx(
+        profiled.aicp + profiled.nfitted * (ln_n - 2))
