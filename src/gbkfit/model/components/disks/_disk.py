@@ -1,7 +1,8 @@
 
 import abc
+import typing
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import numpy.typing as npt
@@ -19,6 +20,9 @@ from ..geometries import GEOMETRY_PARAMS
 from ..parts import Equilibrium
 from ..traits import PressureSupport, Trait
 
+if TYPE_CHECKING:
+    from ._stage import DiskState
+
 
 # The kinds of traits of a disk: density (r), velocity (v) and dispersion
 # (d) polar (p) and height (h) traits, vertical distortion (z) and
@@ -26,11 +30,6 @@ from ..traits import PressureSupport, Trait
 # its line opacity (o)
 TRAIT_KINDS = (
     'rpt', 'rht', 'vpt', 'vht', 'dpt', 'dht', 'zpt', 'spt', 'opt')
-
-# The values that the galaxy of a disk in vertical equilibrium gives its
-# plans with its parameters: the dispersion of the equilibrium at its
-# subnodes (km/s; see NodalDisk.equilibrium)
-EQUILIBRIUM_DISPERSION = 'equilibrium_dispersion'
 
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
@@ -139,7 +138,7 @@ class NodalDisk(abc.ABC):
         """
         Return its vertical equilibrium, if any (see Kinematics): its
         galaxy gives its plans the dispersion of the equilibrium at its
-        subnodes with its parameters, as EQUILIBRIUM_DISPERSION.
+        subnodes (see DiskState).
         """
         return self._equilibrium
 
@@ -158,6 +157,28 @@ class NodalDisk(abc.ABC):
         """
         return self._traits.values(kind, params)
 
+    def trait_inputs(self, state: 'DiskState | None') -> ParamValues:
+        """
+        Return the values of the parameters of its traits that its galaxy
+        gives (see traits.Trait.from_galaxy), by name: those of the state
+        (see DiskState.inputs); and of those that it does not have (e.g.
+        in the profiles that its galaxy takes before it gives them, which
+        do not depend on them), NaN, but the tables of its density waves,
+        0 (its profiles take their azimuthal means, which are 0 whatever
+        their tables).
+        """
+        missing = {}
+        for kind in self._traits.kinds():
+            params = self._traits.params(kind)
+            missing |= {
+                name: np.full(params.pdescs[name].size(), np.nan)
+                for name in (*params.circular_velocity,
+                             *params.rotation_factor, *params.image)}
+            missing |= {
+                name: np.zeros(params.pdescs[name].size())
+                for name in params.wave}
+        return missing if state is None else missing | state.inputs()
+
     def frame_params(self) -> FrameParams:
         """Return its parameters that place it in a frame."""
         vsys = 'vsys' if 'vsys' in self._geometry_pdescs else None
@@ -170,8 +191,8 @@ class NodalDisk(abc.ABC):
         """
         Return the parameters that are not in pdescs, but whose values are
         the circular velocity of the mass of their galaxy at the
-        given radii (arcsec), by name. The disk plans need them with the
-        others.
+        given radii (arcsec), by name, which its galaxy gives (see
+        DiskState).
         """
         return self._traits.circular_velocity_params()
 
@@ -252,7 +273,7 @@ class NodalDisk(abc.ABC):
         Return the parameters that are not in pdescs, but whose values are
         the factors of the rotation in the gravity of their galaxy at a
         height, at the subnodes: their heights (arcsec), by name (see
-        traits.VHTraitMass). The disk plans need them with the others.
+        traits.VHTraitMass), which its galaxy gives (see DiskState).
         """
         return self._traits.rotation_factor_params()
 
@@ -261,7 +282,7 @@ class NodalDisk(abc.ABC):
         Return the names of the parameters that are not in pdescs, but
         whose values are the tables of a density wave in its rotation, at
         its subnodes, which its galaxy computes (see
-        traits.VPTraitSpiral). The disk plans need them with the others.
+        traits.VPTraitSpiral; see DiskState).
         """
         return self._traits.wave_params()
 
@@ -269,8 +290,7 @@ class NodalDisk(abc.ABC):
         """
         Return the names of the parameters that are not in pdescs, but
         whose values are the face-on light of an image, which its galaxy
-        makes (see traits.RPTraitImage). The disk plans need them with the
-        others.
+        makes (see traits.RPTraitImage; see DiskState).
         """
         return self._traits.image_params()
 
@@ -372,9 +392,11 @@ class DiskPlan(NativePlan):
             image_scale: float = 1.0,
             state: ComponentState | None = None
     ) -> None:
+        state = typing.cast('DiskState | None', state)
         if self._disk.equilibrium() is not None:
-            self._buffer.host('deq')[:] = params[EQUILIBRIUM_DISPERSION]
-        params = self._write_params(params, lines)
+            self._buffer.host('deq')[:] = state.equilibrium
+        params = self._write_params(
+            dict(params) | self._disk.trait_inputs(state), lines)
         evaluate_native(
             lambda kwargs: self._impl_evaluate(params, kwargs, out_extra),
             self._driver, self._dtype, grid, outputs, out_extra,
@@ -534,7 +556,9 @@ class DiskPlan(NativePlan):
             return driver.mem_copy_h2d(
                 np.ascontiguousarray(values.ravel(), dtype))
 
-        self._write_params(params)
+        # (the values that the galaxy gives, if not in params: no profile
+        # of the traits depends on them, see NodalDisk.trait_inputs)
+        self._write_params(self._disk.trait_inputs(None) | dict(params))
         out = driver.mem_alloc_d((ntraits, points['r'].size), dtype)
         function(
             self._native_disk, kind, out=out,

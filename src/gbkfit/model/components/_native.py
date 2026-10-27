@@ -424,12 +424,13 @@ class NativeComponentPlan(ComponentPlan):
             grid: NativeGrid,
             odata: DeviceArray,
             scale: float,
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         # The density of the component is its optical depth
         self._plan.evaluate(
             params, grid, dict(rdata=odata), out_extra, 'odata',
-            rdata_scale=scale)
+            rdata_scale=scale, state=state)
 
     def _image_scale(self, params: ParamValues) -> float:
         """

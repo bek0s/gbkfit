@@ -299,7 +299,6 @@ class TransferPlan:
     def evaluate(
             self,
             params: Sequence[ParamValues],
-            given: Sequence[dict[int, ParamValues]],
             states: Sequence[dict[int, ComponentState]],
             outputs: dict[str, DeviceArray | None],
             out_extra: Sequence[Extras] | None,
@@ -311,9 +310,9 @@ class TransferPlan:
         """
         Add the light of the emitters that reaches the viewer to the
         output array, the 'image' or the 'scube' in outputs, with the
-        parameters of each galaxy (params), those that it gives its
-        components (given, see GalaxyStage.given) and their states
-        (states, see GalaxyStage.states), at the given
+        parameters of each galaxy (params) and what it gives its
+        components, their states (states, see GalaxyStage.states), at the
+        given
         positions along the line of sight (arcsec, away from the viewer,
         from any origin; all at one if None), dimmed by the opacity in
         front of the galaxies and their own, and add their own to that in
@@ -341,9 +340,8 @@ class TransferPlan:
         driver = self._driver
         grids = self._grids(positions)
         values = [
-            plans.params(galaxy_params, galaxy_given)
-            for plans, galaxy_params, galaxy_given
-            in zip(self._plans, params, given)]
+            plans.params(galaxy_params)
+            for plans, galaxy_params in zip(self._plans, params)]
         extras = None
         if out_extra is not None:
             extras = [{} for _ in self._plans]
@@ -392,7 +390,7 @@ class TransferPlan:
                 driver.mem_fill(odata, 0)
                 for m, plans in enumerate(self._plans):
                     plans.evaluate_opacity(
-                        values[m], slab_grids[m], odata,
+                        values[m], states[m], slab_grids[m], odata,
                         None if extra is None else extra[m])
             for key in self._keys:
                 m = key[0]

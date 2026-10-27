@@ -10,6 +10,7 @@ dispersion, for the functions of its galaxy (see GalaxyFunctions).
 
 import dataclasses
 from collections.abc import Callable, Sequence
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -19,6 +20,9 @@ from .._nodal import subring_radii
 from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._disk import NodalDisk, DiskPlan
+
+if TYPE_CHECKING:
+    from ._stage import DiskState
 
 
 __all__ = [
@@ -238,23 +242,17 @@ def _dispersions(
     return result
 
 
-def _with_given(disk: NodalDisk, params: ParamValues) -> ParamValues:
+def _with_inputs(
+        disk: NodalDisk,
+        params: ParamValues,
+        state: 'DiskState | None' = None
+) -> ParamValues:
     """
     Return the values of the parameters of a disk with those that its
-    model gives it (see NodalDisk.circular_velocity_params) as NaN, if left
-    out: its profiles do not depend on them; but the tables of its
-    density waves as 0 (see NodalDisk.wave_params): its profiles take their
-    azimuthal means, which are 0 whatever their tables.
+    galaxy gives its traits, of the state, if given (see
+    NodalDisk.trait_inputs).
     """
-    nsubrnodes = len(disk.subrnodes())
-    given = {
-        name: np.full(len(radii), np.nan)
-        for name, radii in disk.circular_velocity_params().items()}
-    given |= {
-        name: np.full(nsubrnodes, np.nan)
-        for name in disk.rotation_factor_params()}
-    given |= {name: np.zeros(nsubrnodes) for name in disk.wave_params()}
-    return given | dict(params)
+    return disk.trait_inputs(state) | dict(params)
 
 
 def _selected(
@@ -359,7 +357,7 @@ class _VerticalProfile:
             If a height pdf does not integrate to 1 (within 1e-6) where
             its trait has density (see rms_heights).
         """
-        params = _with_given(disk, params)
+        params = _with_inputs(disk, params)
         r = np.asarray(radii, dtype=float)
         edges = np.unique(np.concatenate(
             [_HEIGHT_EDGES * trait.zmax() for trait in disk.traits('rht')]))
@@ -477,7 +475,7 @@ def jeans_dispersions(
     r = np.asarray(radii, dtype=float)[:, None]
     midplane = np.sum(
         profile.surfaces * _at_midplane(
-            disk, plan, _with_given(disk, params), 'rht', r)[..., 0], axis=0)
+            disk, plan, _with_inputs(disk, params), 'rht', r)[..., 0], axis=0)
     weight = (profile.density() * -vertical_force(r, profile.z[None, :])) \
         @ profile.weights
     return np.sqrt(np.divide(
@@ -488,7 +486,8 @@ def rotation(
         disk: NodalDisk,
         plan: DiskPlan,
         params: ParamValues,
-        radii: np.ndarray
+        radii: np.ndarray,
+        state: 'DiskState | None' = None
 ) -> np.ndarray:
     """
     Return the rotation of a disk at its midplane, at radii (arcsec, on
@@ -506,8 +505,11 @@ def rotation(
         The values of the parameters of the disk (see NodalDiskDensity).
     radii : np.ndarray
         The radii (arcsec).
+    state : DiskState, optional
+        What its galaxy gives it (e.g. the rotation of its velocity trait
+        'mass'), if anything.
     """
-    params = _with_given(disk, params)
+    params = _with_inputs(disk, params, state)
     r = np.asarray(radii, dtype=float)[:, None]
     tangential = [
         trait.direction() == 'tan' for trait in disk.traits('vpt')]
@@ -531,7 +533,8 @@ def rotation(
 def density_waves(
         disk: NodalDisk,
         plan: DiskPlan,
-        params: ParamValues
+        params: ParamValues,
+        state: 'DiskState'
 ) -> ParamValues:
     """
     Return the tables of the density waves of a disk at its subnodes, by
@@ -548,10 +551,12 @@ def density_waves(
     plan : DiskPlan
         A plan of the disk, which evaluates its traits.
     params : ParamValues
-        The values of the parameters of the disk (see NodalDiskDensity), with
-        those that its galaxy gives its velocity traits 'mass', if any.
+        The values of the parameters of the disk (see NodalDiskDensity).
+    state : DiskState
+        What its galaxy gives it so far: the rotation of its velocity
+        traits 'mass', if any.
     """
-    params = _with_given(disk, params)
+    params = _with_inputs(disk, params, state)
     r = np.asarray(disk.subrnodes(), dtype=float)
     v = rotation(disk, plan, params, r)
     dv = np.gradient(v, r, edge_order=2)
@@ -640,7 +645,7 @@ def dispersion(
     if direction not in (None, 'rad', 'tan', 'ver'):
         raise ValueError(
             f"direction must be 'rad', 'tan' or 'ver'; it is {direction!r}")
-    params = _with_given(disk, params)
+    params = _with_inputs(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
     balanced = np.zeros(r.shape) if equilibrium is None \
         else np.interp(r, disk.subrnodes(), equilibrium)
@@ -732,7 +737,7 @@ def pressure_support(
         at the radii and the heights (of shape (len(radii),
         len(heights))).
     """
-    params = _with_given(disk, params)
+    params = _with_inputs(disk, params)
     r = np.asarray(radii, dtype=float)[:, None]
     z = np.zeros(1) if heights is None else np.asarray(heights, dtype=float)
     sheet = mode == 'self_gravitating'
@@ -852,7 +857,7 @@ class NodalDiskDensity:
     ):
         self._disk = disk
         self._plan = plan
-        self._params = _with_given(disk, params)
+        self._params = _with_inputs(disk, params)
         self._kpc_per_arcsec = kpc_per_arcsec
         self._mass_per_unit = mass_per_unit
 

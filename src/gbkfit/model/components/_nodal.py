@@ -23,8 +23,9 @@ from gbkfit.utils.parseutils import ConfigError
 from ._detail import parse_nodes
 from ._native import ParamBuffer
 from .traits import (
-    DPT_DIRECTION_DEFAULT, DPTrait, HTrait, PressureSupport, Trait, VPTrait,
-    trait_desc)
+    DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, ImageInput,
+    PressureSupport, RotationFactorsInput, RotationInput, Trait, VPTrait,
+    WaveInput, trait_desc)
 
 
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
@@ -102,17 +103,16 @@ class TraitParams:
     sampling, see traits.SAMPLINGS) or None, and its name in its trait.
     The keys of all dicts are in the same order: the order of the traits,
     and for each trait, the smooth parameters before the node-wise ones.
-    circular_velocity has the names of those whose values are the
-    circular velocity of the mass of the galaxy (see
-    traits.Trait.circular_velocity_params), pressure_support those of
-    them corrected for the pressure of the disk, with how (see
-    traits.Trait.pressure_support), rotation_factor those whose
+    The others have those whose values the galaxy gives (see
+    traits.Trait.from_galaxy): circular_velocity the names of those whose
+    values are the circular velocity of the mass of the galaxy (see
+    traits.RotationInput), pressure_support those of them corrected for
+    the pressure of the disk, with how, rotation_factor those whose
     values are the factors of the rotation in the gravity at a height,
-    with their heights (see traits.Trait.rotation_factor_params), wave
-    those whose values are the tables of a density wave in the rotation
-    of the disk (see traits.Trait.wave_params), and image those whose
-    values are the face-on light of an image (see
-    traits.Trait.image_params).
+    with their heights (see traits.RotationFactorsInput), wave those whose
+    values are the tables of a density wave in the rotation of the disk
+    (see traits.WaveInput), and image those whose values are the face-on
+    light of an image (see traits.ImageInput).
     """
     pdescs: dict[str, ParamDesc]
     sampling: dict[str, str | None]
@@ -149,31 +149,31 @@ def _trait_params(
         else parseutils.item_prefixes(
             [trait.name() for trait in traits_], 'traits', prefix, True)
     params, mappings = iterutils.merge_with_prefixes(params_list, prefixes)
+    inputs = [
+        (trait.from_galaxy(), mapping)
+        for trait, mapping in zip(traits_, mappings)]
+    rotations = [
+        (given, mapping) for given, mapping in inputs
+        if isinstance(given, RotationInput)]
+
+    def names(kind: type[GalaxyInput]) -> tuple[str, ...]:
+        return tuple(
+            mapping[name] for given, mapping in inputs
+            if isinstance(given, kind) for name in given.params)
     return TraitParams(
         pdescs={name: tuple_[0] for name, tuple_ in params.items()},
         sampling={name: tuple_[1] for name, tuple_ in params.items()},
         pnames=mappings,
-        circular_velocity=tuple(
-            mapping[name]
-            for trait, mapping in zip(traits_, mappings)
-            for name in trait.circular_velocity_params()),
+        circular_velocity=names(RotationInput),
         pressure_support={
-            mapping[name]: trait.pressure_support()
-            for trait, mapping in zip(traits_, mappings)
-            if trait.pressure_support() is not None
-            for name in trait.circular_velocity_params()},
+            mapping[name]: given.support for given, mapping in rotations
+            if given.support is not None for name in given.params},
         rotation_factor={
-            mapping[name]: height
-            for trait, mapping in zip(traits_, mappings)
-            for name, height in trait.rotation_factor_params().items()},
-        wave=tuple(
-            mapping[name]
-            for trait, mapping in zip(traits_, mappings)
-            for name in trait.wave_params()),
-        image=tuple(
-            mapping[name]
-            for trait, mapping in zip(traits_, mappings)
-            for name in trait.image_params()))
+            mapping[name]: height for given, mapping in inputs
+            if isinstance(given, RotationFactorsInput)
+            for name, height in zip(given.params, given.heights)},
+        wave=names(WaveInput),
+        image=names(ImageInput))
 
 
 def _trait_constants(

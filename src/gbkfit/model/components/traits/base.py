@@ -4,6 +4,7 @@ the density polar traits), and what several kinds share.
 """
 
 import abc
+import dataclasses
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -23,21 +24,73 @@ if TYPE_CHECKING:
 __all__ = [
     'DHTrait',
     'DPTrait',
+    'GalaxyInput',
     'HTrait',
+    'ImageInput',
     'PTrait',
     'RHTrait',
     'RPTrait',
+    'RotationFactorsInput',
+    'RotationInput',
     'SPTrait',
     'Trait',
     'VHTrait',
     'VPTrait',
     'VPTraitPlanar',
+    'WaveInput',
     'ZPTrait',
     'trait_desc'
 ]
 
 
 _Option = TypeVar('_Option', bound=TraitOption)
+
+
+@dataclasses.dataclass(frozen=True)
+class GalaxyInput:
+    """
+    What a trait takes from its galaxy at each evaluation (see
+    Trait.from_galaxy): the values of its parameters params (by their
+    names in the trait), which its galaxy computes rather than its
+    configuration gives (they are not parameters of its component).
+    """
+    params: tuple[str, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class RotationInput(GalaxyInput):
+    """
+    The circular velocity of the mass of the galaxy at the radii where
+    the parameters are sampled, corrected for the pressure of their disk
+    as support says, if it says (see VPTraitMass).
+    """
+    support: 'PressureSupport | None'
+
+
+@dataclasses.dataclass(frozen=True)
+class RotationFactorsInput(GalaxyInput):
+    """
+    The factors of the rotation in the gravity of the galaxy at heights,
+    v(R, z) / v(R, 0), at the subnodes: of each parameter, its height
+    (arcsec; see VHTraitMass).
+    """
+    heights: tuple[float, ...]
+
+
+@dataclasses.dataclass(frozen=True)
+class WaveInput(GalaxyInput):
+    """
+    The tables of a density wave in the rotation of the disk, at the
+    subnodes (see VPTraitSpiral).
+    """
+
+
+@dataclasses.dataclass(frozen=True)
+class ImageInput(GalaxyInput):
+    """
+    The face-on light of an image in the plane of the disk, which the
+    galaxy makes (see RPTraitImage).
+    """
 
 
 class Trait(parseutils.TypedSerializable, abc.ABC):
@@ -121,49 +174,12 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         sampling = self._option(Sampling)
         return SAMPLING_DEFAULT if sampling is None else sampling.name
 
-    def circular_velocity_params(self) -> tuple[str, ...]:
+    def from_galaxy(self) -> GalaxyInput | None:
         """
-        Return the names of the node-wise parameters whose values are not
-        given, but are the circular velocity of the mass of their galaxy
-        at the radii where they are sampled (see VPTraitMass); none
-        here.
-        """
-        return ()
-
-    def pressure_support(self) -> 'PressureSupport | None':
-        """
-        Return how the values of its circular velocity parameters are
-        corrected for the pressure of their disk, if they are (see
-        VPTraitMass); not here.
+        Return what it takes from its galaxy at each evaluation, if
+        anything (see GalaxyInput); nothing here.
         """
         return None
-
-    def rotation_factor_params(self) -> dict[str, float]:
-        """
-        Return the node-wise parameters whose values are not given, but
-        are the factors of the rotation in the gravity of their galaxy at
-        a height, v(R, z) / v(R, 0), at the radii where they are sampled
-        (see VHTraitMass): their heights (arcsec), by name; none here.
-        """
-        return {}
-
-    def wave_params(self) -> tuple[str, ...]:
-        """
-        Return the names of the node-wise parameters whose values are not
-        given, but are the tables of a density wave in the rotation of
-        their disk, at the radii where they are sampled (see
-        VPTraitSpiral); none here.
-        """
-        return ()
-
-    def image_params(self) -> tuple[str, ...]:
-        """
-        Return the names of the parameters whose values are not given, but
-        are the face-on light of an image in the plane of their disk,
-        which its galaxy makes at each evaluation (see RPTraitImage); none
-        here.
-        """
-        return ()
 
 
 class PTrait(Trait, abc.ABC):

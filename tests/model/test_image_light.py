@@ -66,7 +66,7 @@ def test_images_are_read_by_the_kernels_of_maps(tmp_path):
     assert image.consts() == map_.consts()
     assert list(image.params_sm()) == ['m', 'a', 'dx', 'dy']
     assert image.params_sm()['m'].size() == 6
-    assert image.image_params() == ('m',)
+    assert image.from_galaxy().params == ('m',)
 
 
 @pytest.mark.parametrize('incl', [60, 30, 120])

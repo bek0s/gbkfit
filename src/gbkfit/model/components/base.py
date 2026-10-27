@@ -385,9 +385,10 @@ class Component(parseutils.TypedSerializable, abc.ABC):
 class ComponentState:
     """
     What the stage of a galaxy computes for one of its components in an
-    evaluation besides the values of parameters, which the plan of the
-    component reads (see ComponentStage.state): the base of such states
-    (e.g. the tables of the Jeans equations of a spheroid).
+    evaluation, which the plans of the component read (see
+    ComponentStage.state): the base of such states (e.g. what a disk takes
+    from its galaxy, or the tables of the Jeans equations of a
+    spheroid).
     """
 
 
@@ -419,29 +420,18 @@ class ComponentStage(abc.ABC):
         """
         return None
 
-    @abc.abstractmethod
-    def given(
+    def state(
             self,
             values: ParamValues,
             mass: 'GalaxyMass | None',
             out_extra: 'Extras | None'
-    ) -> ParamValues:
-        """
-        Return what its galaxy gives it at the values of its parameters
-        (see values), in the mass of the galaxy (None without mass): the
-        values of the parameters that it takes from the galaxy, by their
-        names. Its extra outputs, if wanted, go to out_extra (with the id
-        of the component).
-        """
-        pass
-
-    def state(
-            self, values: ParamValues, mass: 'GalaxyMass | None'
     ) -> ComponentState | None:
         """
-        Return its state at the values of its parameters (see values) in
-        the mass of its galaxy (None without mass), which its plans read
-        (see ComponentPlan.evaluate_emission); none here.
+        Return what its galaxy gives it at the values of its parameters
+        (see values), in the mass of the galaxy (None without mass): its
+        state, which its plans read (see ComponentPlan.evaluate_emission);
+        none here. Its extra outputs, if wanted, go to out_extra (with the
+        id of the component).
         """
         return None
 
@@ -555,13 +545,15 @@ class ComponentPlan(abc.ABC):
             grid: NativeGrid,
             odata: DeviceArray,
             scale: float,
-            out_extra: dict[str, Any] | None
+            out_extra: dict[str, Any] | None,
+            state: ComponentState | None
     ) -> None:
         """
         Add the optical depth of the component times scale to that of
-        each voxel of a cube of opacity (odata); its extra output 'odata'
-        has its optical depth (at V). Only components with opacity have
-        it.
+        each voxel of a cube of opacity (odata), with what its galaxy
+        gives it, its state, if any (see ComponentStage.state); its extra
+        output 'odata' has its optical depth (at V). Only components with
+        opacity have it.
         """
         raise NotImplementedError(
             f"{type(self).__name__} has no opacity to evaluate")

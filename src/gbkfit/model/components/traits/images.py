@@ -15,7 +15,7 @@ from gbkfit.instrument import PSF, psf_parser
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import RPTrait
+from .base import ImageInput, RPTrait
 
 
 __all__ = [
@@ -332,8 +332,8 @@ class RPTraitImage(RPTrait):
                     desc="the offset of the image to the north (arcsec)"))
         return params
 
-    def image_params(self) -> tuple[str, ...]:
-        return 'm',
+    def from_galaxy(self) -> ImageInput:
+        return ImageInput(('m',))
 
     def has_analytical_integral(self) -> bool:
         return True

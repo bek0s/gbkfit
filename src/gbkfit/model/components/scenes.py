@@ -223,16 +223,14 @@ class ScenePlan(abc.ABC):
         extras = None if out_extra is None else [
             out_extra.scoped(galaxy=label) for label in scene._labels]
         self._evaluate(
-            params, values, [galaxy.given for galaxy in galaxies],
-            [galaxy.states for galaxy in galaxies], {self._key: data},
-            extras, out_extra)
+            params, values, [galaxy.states for galaxy in galaxies],
+            {self._key: data}, extras, out_extra)
 
     @abc.abstractmethod
     def _evaluate(
             self,
             group_params: ParamValues,
             params: list[ParamValues],
-            given: Sequence[dict[int, ParamValues]],
             states: Sequence[dict[int, ComponentState]],
             outputs: dict[str, DeviceArray],
             extras: list[Extras] | None,
@@ -242,8 +240,8 @@ class ScenePlan(abc.ABC):
         Add the light of the galaxies to the output array (see evaluate),
         with the parameters of the observation group (group_params: e.g.
         the separations of the galaxies of a group, see DepthUnit), those
-        of each galaxy (by its own names), what it gives its components
-        (given) and their states (states, see GalaxyState); with extras,
+        of each galaxy (by its own names), and what it gives its
+        components, their states (states, see GalaxyState); with extras,
         the extra outputs of each galaxy go to its item, and those of each
         group of galaxies to group_extras, with its name as the id
         'group'.
@@ -285,7 +283,6 @@ class AdditiveScenePlan(ScenePlan):
             self,
             group_params: ParamValues,
             params: list[ParamValues],
-            given: Sequence[dict[int, ParamValues]],
             states: Sequence[dict[int, ComponentState]],
             outputs: dict[str, DeviceArray],
             extras: list[Extras] | None,
@@ -293,7 +290,7 @@ class AdditiveScenePlan(ScenePlan):
     ) -> None:
         resolutions = [
             plan.evaluate(
-                params[g], given[g], states[g], outputs,
+                params[g], states[g], outputs,
                 extras[g] if extras is not None else None)
             for g, plan in enumerate(self._plans)]
         if extras is not None and self._depth is not None:
@@ -365,7 +362,6 @@ class TransferScenePlan(ScenePlan):
             self,
             group_params: ParamValues,
             params: list[ParamValues],
-            given: Sequence[dict[int, ParamValues]],
             states: Sequence[dict[int, ComponentState]],
             outputs: dict[str, DeviceArray],
             extras: list[Extras] | None,
@@ -393,7 +389,6 @@ class TransferScenePlan(ScenePlan):
                 for name in unit.separations]
             resolution = plan.evaluate(
                 [params[g] for g in unit.galaxies],
-                [given[g] for g in unit.galaxies],
                 [states[g] for g in unit.galaxies], outputs, unit_extras,
                 march_extra, self._opacity_front if dust else None,
                 self._tau if line_opacity else None, positions)

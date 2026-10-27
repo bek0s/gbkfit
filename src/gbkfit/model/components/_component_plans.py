@@ -17,7 +17,7 @@ from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._units import DataUnit
-from .base import DepthAxis, NativeGrid, OpacityCubes
+from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
 from .disks._disk import NodalDisk, DiskPlan
 from .extinction import ExtinctionLaw
 from .lines import Band
@@ -220,24 +220,21 @@ class ComponentPlans:
                 redshift)
             for i in absorbers if i not in self.plans}
 
-    def params(
-            self, params: ParamValues, given: dict[int, ParamValues]
-    ) -> dict[int, ParamValues]:
+    def params(self, params: ParamValues) -> dict[int, ParamValues]:
         """
         Return the values of the parameters of each component it evaluates
-        (by its own names), by index, from those of the galaxy, with those
-        that the galaxy gives them (given, see GalaxyStage.given).
+        (by its own names), by index, from those of the galaxy.
         """
         components = self._component_set.components()
         mappings = self._component_set.mappings()
         return {
             i: {p: params[mappings[i][p]] for p in components[i].pdescs()}
-            | given.get(i, {})
             for i in sorted(self.plans)}
 
     def evaluate_opacity(
             self,
             params: dict[int, ParamValues],
+            states: dict[int, ComponentState],
             grid: NativeGrid,
             odata: DeviceArray,
             extras: dict[int, dict[str, Any]] | None
@@ -245,14 +242,15 @@ class ComponentPlans:
         """
         Add the optical depth of each voxel of the grid of the absorbers
         to the cubes of opacity odata (of shape (ncubes, nz, ny, nx)), each
-        with the parameters of its index in params. With extras, the extra
-        outputs of each absorber go to extras[index].
+        with the parameters of its index in params and what its galaxy
+        gives it, its state, if any (see GalaxyState). With extras, the
+        extra outputs of each absorber go to extras[index].
         """
         for i in self.absorbers:
             cube, scale = self._deposits[i]
             extra = {} if extras is not None else None
             self.plans[i].evaluate_opacity(
-                params[i], grid, odata[cube], scale, extra)
+                params[i], grid, odata[cube], scale, extra, states.get(i))
             if extras is not None:
                 extras.setdefault(i, {}).update(extra)
 

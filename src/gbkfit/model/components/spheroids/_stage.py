@@ -46,16 +46,11 @@ class SpheroidStage(ComponentStage):
                 values, spheroid.shape(), kpc_per_arcsec),
             self._mass_per_unit)
 
-    def given(
+    def state(
             self,
             values: ParamValues,
             mass: GalaxyMass | None,
             out_extra: Extras | None
-    ) -> ParamValues:
-        return {}
-
-    def state(
-            self, values: ParamValues, mass: GalaxyMass | None
     ) -> ComponentState | None:
         spheroid = self._spheroid
         motion = spheroid.motion()

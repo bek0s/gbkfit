@@ -99,7 +99,7 @@ class ImageMaps:
         """
         Return the face-on light of its image traits, from the values of
         the parameters of the disk (by its own names), by the names of
-        their parameters in it (see traits.Trait.image_params).
+        their parameters in it (see traits.ImageInput).
         """
         values = {}
         for image in self._traits:
@@ -107,7 +107,7 @@ class ImageMaps:
                 self._disk, params, image.radii)
             x, y, _ = disk_to_sky(image.x, image.y, 0, xpos, ypos, posa, incl)
             own = {name: params[full] for name, full in image.names.items()
-                   if name not in image.trait.image_params()}
+                   if name not in image.trait.from_galaxy().params}
             values[image.names['m']] = image.trait.face_on(
                 own, x, y, incl, self._sky_origin)
         return values

@@ -95,12 +95,12 @@ def test_mond_circular_velocity(interpolation):
         np.testing.assert_allclose(
             bound[name](R), np.sqrt(vnewton2), rtol=1e-6)
     extra = Extras()
-    given = mond.plan_stage().evaluate(PARAMS, extra).given
+    states = mond.plan_stage().evaluate(PARAMS, extra).states
     table = extra.get('vpt_vt_rotation', component='gas')
     np.testing.assert_allclose(
         table['vcirc'].value, bound['vcirc'](table['radius_kpc'].value),
         rtol=1e-12)
-    np.testing.assert_allclose(given[0]['vpt_vt'], table['vcirc'].value)
+    np.testing.assert_allclose(states[0].rotation['vpt_vt'], table['vcirc'].value)
     equilibrium = extra.get('equilibrium', component='gas')
     kpc_per_arcsec = mond.distance().kpc_per_arcsec(PARAMS, 0)
     np.testing.assert_allclose(

@@ -274,7 +274,7 @@ class GravityMOND(Gravity):
     velocities of MOND do not add up); and there is no external field
     effect. The Newtonian circular velocities of the components remain
     in the rotation tables and the functions of the galaxy (see
-    DiskStage.given and GalaxyFunctions).
+    DiskStage.state and GalaxyFunctions).
 
     Parameters
     ----------
@@ -426,7 +426,7 @@ class GravityHuSawicki(Gravity):
     of self-gravitating sheets, or the shares of the components (the
     fifth force is not a sum over them). The Newtonian circular
     velocities of the components remain in the rotation tables and the
-    functions of the galaxy (see DiskStage.given and
+    functions of the galaxy (see DiskStage.state and
     GalaxyFunctions).
 
     Parameters
@@ -628,7 +628,7 @@ class GravityPalatini(Gravity):
     structure of self-gravitating sheets, or the shares of the
     components (those of the dark fraction are Newtonian). The Newtonian
     circular velocities of the components remain in the rotation tables
-    and the functions of the galaxy (see DiskStage.given and
+    and the functions of the galaxy (see DiskStage.state and
     GalaxyFunctions).
     """
 

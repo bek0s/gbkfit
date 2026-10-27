@@ -10,7 +10,7 @@ import scipy.ndimage
 import scipy.special
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from .base import DHTrait, RHTrait, VHTrait
+from .base import DHTrait, RHTrait, RotationFactorsInput, VHTrait
 from .options import Nodes, SAMPLING_DEFAULT, Sampling, Zmax
 
 
@@ -475,11 +475,13 @@ class VHTraitMass(VHTrait):
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return {
             name: ParamVectorDesc(nnodes)
-            for name in self.rotation_factor_params()}
+            for name in self.from_galaxy().params}
 
-    def rotation_factor_params(self) -> dict[str, float]:
+    def from_galaxy(self) -> RotationFactorsInput:
         heights = np.linspace(0, self.zmax(), VHT_MASS_NHEIGHTS)
-        return {f'f{k}': float(z) for k, z in enumerate(heights)}
+        return RotationFactorsInput(
+            tuple(f'f{k}' for k in range(len(heights))),
+            tuple(heights.tolist()))
 
 
 class VHTraitP1(VHTrait, abc.ABC):

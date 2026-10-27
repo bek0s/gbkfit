@@ -72,7 +72,7 @@ def _check_rotation_at_heights(vptrait: traits.VPTrait) -> None:
             f"the velocity height trait 'mass' is the rotation in the "
             f"gravity at each height: it pairs with the velocity trait "
             f"'mass' only, not {vptrait.type()!r}")
-    support = vptrait.pressure_support()
+    support = vptrait.from_galaxy().support
     if support is not None and support.mode == 'self_gravitating' \
             and support.density is None:
         raise ConfigError(

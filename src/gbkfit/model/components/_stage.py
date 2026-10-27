@@ -61,13 +61,11 @@ class GalaxyMass:
 class GalaxyState:
     """
     A galaxy in one evaluation, for all its observations (see
-    GalaxyStage.evaluate): its mass (None without mass), what it gives
-    each component that takes anything from it, by the index of the
-    component (see ComponentStage.given), and the state of each
-    component that has one (see ComponentStage.state).
+    GalaxyStage.evaluate): its mass (None without mass), and what it gives
+    each component that takes anything from it: its state, by the index
+    of the component (see ComponentStage.state).
     """
     mass: GalaxyMass | None
-    given: dict[int, ParamValues]
     states: dict[int, 'ComponentState']
 
 
@@ -82,8 +80,8 @@ class GalaxyStage:
     2. the mass of the galaxy (see mass): its context, with the densities
        of the components it follows, and its field in the gravity of the
        galaxy;
-    3. what each component takes from the galaxy (see
-       ComponentStage.given): e.g. the rotation of a disk in the gravity
+    3. what each component takes from the galaxy, its state (see
+       ComponentStage.state): e.g. the rotation of a disk in the gravity
        of the mass, or the dispersion of its vertical equilibrium.
 
     It takes the rings of the disks that the mass moves, holds up and
@@ -158,7 +156,7 @@ class GalaxyStage:
         out_extra : Extras, optional
             Where the extra outputs go, if wanted (those of the components,
             with their name, or their position, as the id 'component', see
-            given). With them and mass, a warning says where the rings of
+            states). With them and mass, a warning says where the rings of
             the disks it moves, holds up and follows depart from the
             centre or the plane of the first ring of the first: by more
             than 15% of their radius, or 20 degrees (which makes their
@@ -173,9 +171,7 @@ class GalaxyStage:
         mass = self.mass(params, values)
         if out_extra is not None and mass is not None:
             self._warn_geometry(values)
-        return GalaxyState(
-            mass, self.given(values, mass, out_extra),
-            self.states(values, mass))
+        return GalaxyState(mass, self.states(values, mass, out_extra))
 
     def values(self, params: ParamValues) -> dict[int, ParamValues]:
         """
@@ -226,38 +222,40 @@ class GalaxyStage:
             mass_model, params, context, kpc_per_arcsec,
             component_set.gravity().field(mass_model, params, context))
 
-    def given(
+    def state(
             self,
+            index: int,
             values: dict[int, ParamValues],
-            mass: GalaxyMass | None,
-            out_extra: Extras | None = None
-    ) -> dict[int, ParamValues]:
+            mass: GalaxyMass | None
+    ) -> 'ComponentState | None':
         """
-        Return what the galaxy gives each component that takes part, by its
-        index (see ComponentStage.given), at the values of their
-        parameters (see values) and in the mass of the galaxy (see mass;
-        None without mass). The extra outputs of each component, if
-        wanted, have its name, or its position, as the id 'component'.
+        Return what the galaxy gives the component of the given index, its
+        state (see states; none if it takes nothing), without extra
+        outputs.
         """
-        return {
-            i: stage.given(
-                values[i], mass, None if out_extra is None
-                else out_extra.scoped(component=self._labels[i]))
-            for i, stage in self._stages.items()}
+        stage = self._stages.get(index)
+        if stage is None:
+            return None
+        return stage.state(values[index], mass, None)
 
     def states(
             self,
             values: dict[int, ParamValues],
-            mass: GalaxyMass | None
+            mass: GalaxyMass | None,
+            out_extra: Extras | None = None
     ) -> dict[int, 'ComponentState']:
         """
-        Return the state of each component that has one, by its index (see
-        ComponentStage.state), at the values of their parameters (see
-        values) and in the mass of the galaxy (see mass; None without
-        mass).
+        Return what the galaxy gives each component that takes anything
+        from it, its state, by its index (see ComponentStage.state), at
+        the values of their parameters (see values) and in the mass of the
+        galaxy (see mass; None without mass). The extra outputs of each
+        component, if wanted, have its name, or its position, as the id
+        'component'.
         """
         states = {
-            i: stage.state(values[i], mass)
+            i: stage.state(
+                values[i], mass, None if out_extra is None
+                else out_extra.scoped(component=self._labels[i]))
             for i, stage in self._stages.items()}
         return {i: state for i, state in states.items() if state is not None}
 

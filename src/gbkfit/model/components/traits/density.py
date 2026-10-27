@@ -10,7 +10,8 @@ import scipy.ndimage
 import scipy.special
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from .base import RPTrait, params_nw_distortion, splits_nw_distortion
+from .base import (
+    RPTrait, WaveInput, params_nw_distortion, splits_nw_distortion)
 from .options import Blobs, Harmonic, SAMPLING_DEFAULT, Sampling, Spiral
 
 
@@ -956,10 +957,11 @@ class RPTraitSpiral(RPTrait):
         return self._option(Spiral).params_sm(pattern_speed=False)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return self._option(Spiral).params_rnw(self.wave_params(), nnodes)
+        return self._option(Spiral).params_rnw(
+            self.from_galaxy().params, nnodes)
 
-    def wave_params(self) -> tuple[str, ...]:
-        return 'a', 'f'
+    def from_galaxy(self) -> WaveInput:
+        return WaveInput(('a', 'f'))
 
     def wave(
             self,

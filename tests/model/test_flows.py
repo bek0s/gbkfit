@@ -167,7 +167,7 @@ def test_a_spiral_wave_in_the_rotation_of_its_disk(driver):
     values = DISK_VALUES | dict(
         vpt_vt=100, vpt1_p=40, vpt1_c=50, vpt1_e=0.1, vpt1_o=2)
     galaxy = galaxy_parser.load(dict(components=[disk_config(vptraits)]))
-    given = galaxy.plan_stage().evaluate(values).given[0]
+    state = galaxy.plan_stage().evaluate(values).states[0]
     subrnodes = disk(vptraits).subrnodes()
     tables = davies(subrnodes, 100, 3, 50, 0.1, 2, -1)
     ar, at, f = (np.interp(R, subrnodes, tables[name])
@@ -179,7 +179,7 @@ def test_a_spiral_wave_in_the_rotation_of_its_disk(driver):
     plan = disk(vptraits).plan(driver, 0, np.float64)
     np.testing.assert_allclose(
         plan.evaluate_polar_traits(
-            values | given, 'vpt', R, THETA, INCL)[1],
+            values | state.inputs(), 'vpt', R, THETA, INCL)[1],
         expected, rtol=1e-9, atol=1e-9)
 
 
@@ -197,7 +197,7 @@ def test_the_density_of_a_spiral_wave(driver):
     # gives, interpolated linearly
     galaxy = galaxy_parser.load(dict(
         components=[disk_config(WAVE_VPTRAITS, WAVE_PTRAITS)]))
-    given = galaxy.plan_stage().evaluate(WAVE_VALUES).given[0]
+    state = galaxy.plan_stage().evaluate(WAVE_VALUES).states[0]
     wave_disk = disk(WAVE_VPTRAITS, WAVE_PTRAITS)
     subrnodes = np.asarray(wave_disk.subrnodes())
     density = np.where(subrnodes > 0, 0.3 * np.exp(-subrnodes / 3), 0)
@@ -205,7 +205,8 @@ def test_the_density_of_a_spiral_wave(driver):
     phi = 3 * np.deg2rad(THETA - 40) - np.interp(R, subrnodes, f)
     plan = wave_disk.plan(driver, 0, np.float64)
     np.testing.assert_allclose(
-        plan.evaluate_polar_traits(WAVE_VALUES | given, 'rpt', R, THETA)[1],
+        plan.evaluate_polar_traits(
+            WAVE_VALUES | state.inputs(), 'rpt', R, THETA)[1],
         np.interp(R, subrnodes, density) * np.cos(phi), rtol=1e-9,
         atol=1e-12)
 
@@ -263,14 +264,15 @@ def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
         xpos=0, ypos=0, posa=0, incl=INCL, pt_a=1, pt_s=3, pt1_p=40,
         pt1_e=0.3, pt1_k=k)
     galaxy = galaxy_parser.load(dict(components=[component]))
-    given = galaxy.plan_stage().evaluate(values).given[0]
+    state = galaxy.plan_stage().evaluate(values).states[0]
     f = np.concatenate(
         ([0], np.cumsum(np.diff(subrnodes) * (k[1:] + k[:-1]) / 2)))
     density = np.where(subrnodes > 0, 0.3 * np.exp(-subrnodes / 3), 0)
     phi = 2 * np.deg2rad(THETA - 40) - np.interp(R, subrnodes, f)
     plan = image_disk.plan(driver, 0, np.float64)
     np.testing.assert_allclose(
-        plan.evaluate_polar_traits(values | given, 'rpt', R, THETA)[1],
+        plan.evaluate_polar_traits(
+            values | state.inputs(), 'rpt', R, THETA)[1],
         np.interp(R, subrnodes, density) * np.cos(phi), rtol=1e-9,
         atol=1e-12)
 

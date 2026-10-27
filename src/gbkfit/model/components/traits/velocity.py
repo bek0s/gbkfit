@@ -13,7 +13,7 @@ import numpy as np
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
-from .base import VPTrait, VPTraitPlanar
+from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
 from .options import Direction, Harmonic, SAMPLING_DEFAULT, Sampling, Spiral
 
 
@@ -845,10 +845,11 @@ class VPTraitSpiral(VPTraitPlanar):
         return self._option(Spiral).params_sm(pattern_speed=True)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return self._option(Spiral).params_rnw(self.wave_params(), nnodes)
+        return self._option(Spiral).params_rnw(
+            self.from_galaxy().params, nnodes)
 
-    def wave_params(self) -> tuple[str, ...]:
-        return 'ar', 'at', 'f'
+    def from_galaxy(self) -> WaveInput:
+        return WaveInput(('ar', 'at', 'f'))
 
     def wave(
             self,
@@ -999,8 +1000,5 @@ class VPTraitMass(VPTrait):
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(vt=ParamVectorDesc(nnodes))
 
-    def circular_velocity_params(self) -> tuple[str, ...]:
-        return ('vt',)
-
-    def pressure_support(self) -> PressureSupport | None:
-        return self._pressure_support
+    def from_galaxy(self) -> RotationInput:
+        return RotationInput(('vt',), self._pressure_support)

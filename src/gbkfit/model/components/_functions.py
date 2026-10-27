@@ -6,7 +6,8 @@ dispersion of its disks, at any radius.
 """
 
 import functools
-from collections.abc import Callable, Mapping
+import typing
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 import astropy.units as u
@@ -15,12 +16,13 @@ import numpy.typing as npt
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
-from .disks._disk import EQUILIBRIUM_DISPERSION
+from .base import ComponentState
 from .disks._profiles import dispersion, rotation
 from ._stage import GalaxyMass, GalaxyStage, GalaxyState
 
 if TYPE_CHECKING:
     from ._component_set import ComponentSet
+    from .disks._stage import DiskState
 
 
 __all__ = [
@@ -57,7 +59,7 @@ class GalaxyFunctions:
     - vcirc(R): the circular velocity of its mass (km/s) at the radii R
       (kpc, in the plane of its disks), in its gravity (see Gravity),
       signed as in the rotation tables of its disks: negative where its
-      square is (see DiskStage.given)
+      square is (see DiskStage.state)
     - vnewton(R): that of its mass in Newtonian gravity (vcirc(R), with
       Newtonian gravity), signed
     - vcirc_{name}(R): that of its mass component of the name in
@@ -226,8 +228,8 @@ class GalaxyFunctions:
             The galaxy at the values, if evaluated (e.g. by its observation
             group): the functions take its mass and what it gives the
             components. By default, its own stage evaluates the mass here,
-            and what the galaxy gives the components once, when a function
-            of a disk that takes it first needs it (see GalaxyStage).
+            and what the galaxy gives a disk once, when a function of the
+            disk first needs it (see GalaxyStage.state).
 
         Returns
         -------
@@ -237,13 +239,13 @@ class GalaxyFunctions:
         if state is None:
             values = self._stage.values(params)
             mass = self._stage.mass(params, values)
-            given = functools.cache(
-                functools.partial(self._stage.given, values, mass))
+            state_of = functools.cache(functools.partial(
+                self._stage.state, values=values, mass=mass))
         else:
             mass = state.mass
 
-            def given() -> Mapping[int, ParamValues]:
-                return state.given
+            def state_of(index: int) -> ComponentState | None:
+                return state.states.get(index)
         functions: dict[str, Any] = {}
         if mass is not None:
             functions['vcirc'] = functools.partial(
@@ -274,35 +276,36 @@ class GalaxyFunctions:
             functions['kpc_per_arcsec'] = mass.kpc_per_arcsec
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
-                self._rotation, i, params, given)
+                self._rotation, i, params, state_of)
             functions[f'dispersion{suffix}'] = functools.partial(
-                self._dispersion, i, params, given)
+                self._dispersion, i, params, state_of)
         return functions
 
     def _rotation(
             self,
             index: int,
             params: ParamValues,
-            given: Callable[[], Mapping[int, ParamValues]],
+            state_of: Callable[[int], ComponentState | None],
             R: npt.ArrayLike
     ) -> np.ndarray:
         """
         Return the rotation (km/s) of the disk of the component of the
         given index at the radii R (arcsec), at the values of the
-        parameters of the galaxy and with what its gravity gives it.
+        parameters of the galaxy and with what its galaxy gives it (its
+        state, by the index of its component).
         """
         disk = self._component_set.components()[index].density_disk()
         radii = self._radii(index, R, 'rotation')
-        values = self._disk_params(index, params, given)
         return rotation(
-            disk, self._disk_plans[index], values,
-            radii.ravel()).reshape(radii.shape)
+            disk, self._disk_plans[index], self._disk_params(index, params),
+            radii.ravel(), typing.cast('DiskState | None', state_of(index))
+        ).reshape(radii.shape)
 
     def _dispersion(
             self,
             index: int,
             params: ParamValues,
-            given: Callable[[], Mapping[int, ParamValues]],
+            state_of: Callable[[int], ComponentState | None],
             R: npt.ArrayLike,
             direction: str | None = None
     ) -> np.ndarray:
@@ -310,35 +313,24 @@ class GalaxyFunctions:
         Return the dispersion (km/s) of the disk of the component of the
         given index at the radii R (arcsec), along the direction if given,
         at the values of the parameters of the galaxy and with what its
-        gravity gives it.
+        galaxy gives it (its state, by the index of its component).
         """
         disk = self._component_set.components()[index].density_disk()
         radii = self._radii(index, R, 'dispersion')
-        values = self._disk_params(index, params, given)
+        state = typing.cast('DiskState | None', state_of(index))
         return dispersion(
-            disk, self._disk_plans[index], values, radii.ravel(),
-            values.get(EQUILIBRIUM_DISPERSION), direction
-        ).reshape(radii.shape)
+            disk, self._disk_plans[index], self._disk_params(index, params),
+            radii.ravel(), None if state is None else state.equilibrium,
+            direction).reshape(radii.shape)
 
-    def _disk_params(
-            self,
-            index: int,
-            params: ParamValues,
-            given: Callable[[], Mapping[int, ParamValues]]
-    ) -> ParamValues:
+    def _disk_params(self, index: int, params: ParamValues) -> ParamValues:
         """
         Return the values of the parameters of the component of the given
-        index (by its own names), with those that its galaxy gives it (if
-        any; see GalaxyStage.given).
+        index (by its own names).
         """
         component = self._component_set.components()[index]
         mapping = self._component_set.mappings()[index]
-        values = {p: params[mapping[p]] for p in component.pdescs()}
-        disk = component.density_disk()
-        if disk.circular_velocity_params() or disk.image_params() \
-                or disk.equilibrium() is not None:
-            values |= given()[index]
-        return values
+        return {p: params[mapping[p]] for p in component.pdescs()}
 
     def _radii(self, index: int, R: npt.ArrayLike, what: str) -> np.ndarray:
         """

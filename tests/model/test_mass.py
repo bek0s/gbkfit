@@ -1738,7 +1738,7 @@ def test_disk_follows_a_component_without_light():
         vertical=dict(type='thin'))])
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, opacity)
     np.testing.assert_allclose(
-        galaxy.plan_stage().evaluate(params).given[0]['vpt_vt'],
+        galaxy.plan_stage().evaluate(params).states[0].rotation['vpt_vt'],
         np.sqrt(nodewise.vcirc2(
             subrnodes * KPC_PER_ARCSEC,
             dict(mass_gas_log_sigma=np.log10(sigma)), CONTEXT)),
@@ -1966,7 +1966,8 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
                   for key, value in DISK_PROPERTIES.items()} | dict(
             gas_ht_s=0.5, distance=10, mass_hi_upsilon=1e8,
             mass_halo_log_rho=7, mass_halo_rs=3)
-        return galaxy.plan_stage().evaluate(params).given[0]['vpt_vt']
+        state = galaxy.plan_stage().evaluate(params).states[0]
+        return state.rotation['vpt_vt']
     np.testing.assert_allclose(
         rotation(dict(pressure_density='hi')), rotation({}), rtol=1e-10)
 
@@ -1987,7 +1988,7 @@ def rotation_at_heights(vptraits, mass, params):
     """
     The galaxy of a thick disk (DISK, of sech2 height traits to zmax 8)
     of the velocity traits vptraits and 'mass' at each height, and of the
-    given mass, and the values that its gravity gives the disk at the
+    given mass, and what its gravity gives the disk (its state) at the
     values params of its parameters.
     """
     disk = with_traits(
@@ -1996,7 +1997,7 @@ def rotation_at_heights(vptraits, mass, params):
     galaxy = galaxy_parser.load(dict(
         components=[disk | dict(type='disk')], mass=copy.deepcopy(mass),
         distance=copy.deepcopy(DISTANCE)))
-    return galaxy, galaxy.plan_stage().evaluate(params).given[0]
+    return galaxy, galaxy.plan_stage().evaluate(params).states[0]
 
 
 def test_the_table_of_rotation_at_heights_stays_within_the_density():
@@ -2025,7 +2026,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
     params = DISK_PROPERTIES | dict(
         ht_s=1, dpt_a=100, distance=10, mass_bh_log_m=10)
-    galaxy, given = rotation_at_heights(
+    galaxy, state = rotation_at_heights(
         dict(type='mass', pressure_support='jeans'),
         [dict(type='point', name='bh')], params)
     component = galaxy.components()[0]
@@ -2039,8 +2040,10 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
         + support[1:]
     v = np.sqrt(np.maximum(v2, 0))
     assert np.any(v2[:, 0] < 0) and np.any((v2[:, 0] > 0) & (v2[:, -1] < 0))
-    np.testing.assert_allclose(given['vpt_vt'][1:], v[:, 0], rtol=1e-8)
-    factors = np.array([given[f'vht_f{k}'] for k in range(33)]).T
+    np.testing.assert_allclose(
+        state.rotation['vpt_vt'][1:], v[:, 0], rtol=1e-8)
+    factors = np.array(
+        [state.rotation_factors[f'vht_f{k}'] for k in range(33)]).T
     np.testing.assert_allclose(
         factors[1:], np.divide(
             v, v[:, :1], out=np.ones_like(v), where=v[:, :1] > 0),
@@ -2049,7 +2052,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     plan = component.plan(
         driver, IMAGE_SPECTRAL_AXIS, np.dtype(np.float64), None, None, True,
         None, None, 0.0).disk_plan()
-    values = {p: params[p] for p in component.pdescs()} | given
+    values = {p: params[p] for p in component.pdescs()} | state.inputs()
     heights = [0.125, 4.125, 7.875, 9]
     np.testing.assert_allclose(
         plan.evaluate_height_traits(values, 'vht', r[10], heights)[0],
@@ -2073,7 +2076,7 @@ def test_self_gravitating_rotation_at_each_height():
         dict(type='disk', name='gas', surface=dict(type='exponential'),
              vertical=dict(type='thin')),
         dict(type='point', name='bh')]
-    galaxy, given = rotation_at_heights(dict(
+    galaxy, state = rotation_at_heights(dict(
         type='mass', pressure_support='self_gravitating',
         pressure_density='gas'), mass, params)
     disk = galaxy.components()[0].density_disk()
@@ -2085,7 +2088,8 @@ def test_self_gravitating_rotation_at_each_height():
     force_R = model.forces(R, z, dict(
         mass_gas_log_m=9.5, mass_gas_rd=1, mass_bh_log_m=10.5), CONTEXT)[0]
     v2 = -R * force_R + 15 ** 2 * R * (-2 + 2 * u * np.tanh(u))
-    factors = np.array([given[f'vht_f{k}'] for k in range(33)]).T[1:]
+    factors = np.array(
+        [state.rotation_factors[f'vht_f{k}'] for k in range(33)]).T[1:]
     assert np.all(v2 > 0) and np.max(u) > 1
     np.testing.assert_allclose(
         factors, np.sqrt(v2 / v2[:, :1]), rtol=2e-3)
@@ -2119,7 +2123,7 @@ def test_rotation_at_each_height_option():
     from gbkfit.model.components import traits
     trait = traits.vht_parser.load(dict(type='mass', zmax=3))
     assert traits.vht_parser.dump(trait) == dict(type='mass', zmax=3.0)
-    assert list(trait.rotation_factor_params().values())[-1] == 3.0
+    assert trait.from_galaxy().heights[-1] == 3.0
     with pytest.raises(ConfigError, match="zmax must be a positive length"):
         traits.VHTraitMass(0)
 
@@ -2202,7 +2206,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
         DISTANCE)
     params = DISK_PROPERTIES | MASS_PROPERTIES
     extra = Extras()
-    given = galaxy.plan_stage().evaluate(params, extra).given
+    states = galaxy.plan_stage().evaluate(params, extra).states
     table = extra.get('vpt_vt_rotation', component='component0')
     assert table.colnames == [
         'radius', 'radius_kpc', 'vcirc_stars', 'vcirc_gas', 'vcirc_halo',
@@ -2216,7 +2220,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
     np.testing.assert_allclose(
         np.sign(table['vcirc']) * table['vcirc'] ** 2, vcirc2, rtol=1e-12)
     np.testing.assert_array_equal(table['vnewton'], table['vcirc'])
-    np.testing.assert_allclose(table['vrot'], given[0]['vpt_vt'])
+    np.testing.assert_allclose(table['vrot'], states[0].rotation['vpt_vt'])
     np.testing.assert_allclose(
         table['vrot'] ** 2, vcirc2 + table['pressure'], rtol=1e-9)
 

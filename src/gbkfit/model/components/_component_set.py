@@ -462,16 +462,15 @@ class ComponentSetPlan:
     def evaluate(
             self,
             params: ParamValues,
-            given: dict[int, ParamValues],
             states: dict[int, ComponentState],
             outputs: dict[str, DeviceArray | None],
             out_extra: Extras | None
     ) -> LineResolution | None:
         """
         Add the light of the emitters to the output array, the 'image' or
-        the 'scube' in outputs, with the parameters of the galaxy, those
-        that it gives its components (see GalaxyStage.given) and their
-        states (see GalaxyStage.states). The extra
+        the 'scube' in outputs, with the parameters of the galaxy and what
+        it gives its components, their states (see GalaxyStage.states).
+        The extra
         outputs of each component have its name, or its position, as the
         id 'component' (e.g. 'disk' or 'component0'), and their totals
         none (see ComponentPlans.add_extras). With extra outputs, a
@@ -495,7 +494,7 @@ class ComponentSetPlan:
             if self._depth is not None:
                 obdata = driver.mem_alloc_d(shape, dtype)
                 driver.mem_fill(obdata, 0)
-        values = plans.params(params, given)
+        values = plans.params(params)
         if out_extra is not None:
             plans.warn_truncation(values)
 
@@ -504,7 +503,7 @@ class ComponentSetPlan:
         # voxel, which the emitters read
         if odata is not None:
             driver.mem_fill(odata, 0)
-            plans.evaluate_opacity(values, grid, odata, extras)
+            plans.evaluate_opacity(values, states, grid, odata, extras)
             for cube in odata:
                 self._gmodel.opacity_accumulate(
                     spat_size=grid['spat_size'], opacity=cube)

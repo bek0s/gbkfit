@@ -406,7 +406,7 @@ class Spiral(TraitOption):
     rotation), with the wavenumber of the dispersion relation or for the
     velocities; and k (1/arcsec, node-wise at the subnodes), with a given
     wavenumber. The tables of the wave are not parameters (see
-    Trait.wave_params).
+    WaveInput).
 
     Raises
     ------
@@ -472,8 +472,8 @@ class Spiral(TraitOption):
             self, tables: Sequence[str], nnodes: int
     ) -> dict[str, ParamDesc]:
         """
-        Return its node-wise parameters: its tables (see
-        Trait.wave_params), first (the kernels read them there), and k
+        Return its node-wise parameters: its tables (see WaveInput),
+        first (the kernels read them there), and k
         with a given wavenumber.
         """
         names = list(tables) + (['k'] if self.wavenumber == 'given' else [])

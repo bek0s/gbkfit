@@ -1,10 +1,13 @@
 """
 The part of a disk in the stage of its galaxy (DiskStage): the face-on
 light of its image traits, its density for the mass that follows it, and
-what its galaxy gives it: the dispersion of its vertical equilibrium, its
-rotation in the gravity of the mass (with its pressure support), the
-factors of that rotation at heights, and the tables of its density waves.
+what its galaxy gives it (DiskState): the dispersion of its vertical
+equilibrium, its rotation in the gravity of the mass (with its pressure
+support), the factors of that rotation at heights, and the tables of its
+density waves.
 """
+
+import dataclasses
 
 import astropy.units as u
 import numpy as np
@@ -18,10 +21,10 @@ from ...mass.units import G
 from .._images import ImageMaps
 from .._units import mass_per_unit
 from .._stage import GalaxyMass
-from ..base import ComponentStage
+from ..base import ComponentStage, ComponentState
 from ..roles import Emission
 from ..traits import PressureSupport
-from ._disk import EQUILIBRIUM_DISPERSION, NodalDisk, DiskPlan
+from ._disk import NodalDisk, DiskPlan
 from ._profiles import (
     NodalDiskDensity, density_waves, jeans_dispersions, pressure_support,
     rms_heights, rotation)
@@ -29,11 +32,12 @@ from ._profiles import (
 
 __all__ = [
     'DiskStage',
+    'DiskState',
     'plan_disk_stage'
 ]
 
 
-# The descriptions of the extra outputs (see DiskStage.given)
+# The descriptions of the extra outputs (see DiskStage.state)
 _ROTATION_DESCRIPTION = (
     "The rotation that the gravity of the galaxy gives a parameter of the "
     "component, at its radii in the plane of the disk (radius, arcsec; "
@@ -48,6 +52,37 @@ _EQUILIBRIUM_DESCRIPTION = (
     "equilibrium takes there (the circular velocity, vcirc, km/s, or the "
     "surface density, surface_density, Msun/kpc^2), and the velocity "
     "dispersion that holds it up (sigma, km/s).")
+
+@dataclasses.dataclass(frozen=True)
+class DiskState(ComponentState):
+    """
+    What the galaxy of a disk gives it in one evaluation (see
+    DiskStage.state), which its plans read: the values of the parameters
+    of its traits that the galaxy computes (see traits.Trait.from_galaxy),
+    by name, of each kind: its rotation in the gravity of the mass at the
+    radii of each parameter (km/s; see traits.RotationInput), the factors
+    of that rotation at heights, at its subnodes (see
+    traits.RotationFactorsInput), the tables of its density waves at its
+    subnodes (see traits.WaveInput), and the face-on light of its image
+    traits (see traits.ImageInput); and the dispersion of its vertical
+    equilibrium at its subnodes (km/s), if it has one.
+    """
+    rotation: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
+    rotation_factors: dict[str, np.ndarray] = dataclasses.field(
+        default_factory=dict)
+    waves: dict[str, np.ndarray] = dataclasses.field(default_factory=dict)
+    image_light: dict[str, np.ndarray] = dataclasses.field(
+        default_factory=dict)
+    equilibrium: np.ndarray | None = None
+
+    def inputs(self) -> ParamValues:
+        """
+        Return the values of the parameters of the traits that the galaxy
+        computes, of all kinds (see the class), by name.
+        """
+        return self.rotation | self.rotation_factors | self.waves \
+            | self.image_light
+
 
 def plan_disk_stage(
         disk: NodalDisk,
@@ -78,7 +113,7 @@ class DiskStage(ComponentStage):
     The part of a disk in the stage of its galaxy (see GalaxyStage): the
     face-on light of its image traits (see ImageMaps), its density, which
     the mass of the galaxy can follow (see NodalDiskDensity), and what the
-    galaxy gives it (see given): the circular velocity of the mass at the
+    galaxy gives it (see state): the circular velocity of the mass at the
     radii of the parameters of its velocity trait 'mass' (see
     NodalDisk.circular_velocity_params), with its pressure support where its
     traits ask for it (see NodalDisk.pressure_supported_params), and at each
@@ -89,7 +124,8 @@ class DiskStage(ComponentStage):
     rotation), in the vertical force of the mass ('jeans'), or in the
     surface density of a mass component ('self_gravitating'); and the
     tables of its density waves (the traits 'spiral', see
-    NodalDisk.wave_params), in its rotation, at its subnodes.
+    NodalDisk.wave_params), in its rotation, at its subnodes: its state
+    (see DiskState).
 
     Its profiles are sampled on the given driver and in float64, whatever
     the drivers and dtypes of the observations (pressure support and
@@ -157,19 +193,18 @@ class DiskStage(ComponentStage):
             self._disk, self._plan, values, kpc_per_arcsec,
             self._mass_per_unit)
 
-    def given(
+    def state(
             self,
             values: ParamValues,
             mass: GalaxyMass | None,
             out_extra: Extras | None
-    ) -> ParamValues:
+    ) -> DiskState:
         """
-        Return what its galaxy gives it, by the names of the parameters
-        (see the class; EQUILIBRIUM_DISPERSION for the dispersion of its
-        equilibrium): the circular velocity at the radii of its
-        parameters (km/s), 0 where its square is negative and NaN where it
-        is infinite (see _rotation); the factors of its rotation at the
-        heights of its velocity height trait 'mass', at its subnodes (see
+        Return what its galaxy gives it (see the class and DiskState): the
+        circular velocity at the radii of its parameters (km/s), 0 where
+        its square is negative and NaN where it is infinite (see
+        _rotation); the factors of its rotation at the heights of its
+        velocity height trait 'mass', at its subnodes (see
         _rotation_factors); the dispersion of its equilibrium at its
         subnodes (km/s); the tables of its density waves; and the face-on
         light of its image traits. With extra outputs: for each parameter
@@ -193,23 +228,26 @@ class DiskStage(ComponentStage):
         disk = self._disk
         if out_extra is not None and self._images is not None:
             self._images.warn_inclination(values)
-        given: ParamValues = {}
         equilibrium = None
         if disk.equilibrium() is not None:
             equilibrium = self._equilibrium(values, mass, out_extra)
-            given[EQUILIBRIUM_DISPERSION] = equilibrium
+        rotation, factors = {}, {}
         if mass is not None and disk.circular_velocity_params():
-            for name, radii in disk.circular_velocity_params().items():
-                given[name] = self._given_rotation(
+            rotation = {
+                name: self._mass_rotation(
                     name, radii, values, mass, equilibrium, out_extra)
+                for name, radii in disk.circular_velocity_params().items()}
             if heights := disk.rotation_factor_params():
-                given |= self._rotation_factors(
+                factors = self._rotation_factors(
                     heights, values, mass, equilibrium)
+        state = DiskState(
+            rotation=rotation, rotation_factors=factors,
+            image_light={name: values[name] for name in disk.image_params()},
+            equilibrium=equilibrium)
         if disk.wave_params():
-            given |= density_waves(disk, self._plan, values | given)
-        if self._images is not None:
-            given |= {name: values[name] for name in disk.image_params()}
-        return given
+            state = dataclasses.replace(
+                state, waves=density_waves(disk, self._plan, values, state))
+        return state
 
     def rings(self, values: ParamValues) -> list[tuple[float, ...]]:
         """
@@ -229,7 +267,7 @@ class DiskStage(ComponentStage):
             for name in (frame.x, frame.y, frame.posa, frame.incl)))
         return list(zip(*geometry))
 
-    def _given_rotation(
+    def _mass_rotation(
             self,
             name: str,
             radii: tuple[float, ...],
@@ -243,7 +281,7 @@ class DiskStage(ComponentStage):
         the given name, at its radii (arcsec): of the circular velocity of
         the mass, and its pressure support, if any (with the dispersion of
         its equilibrium, if any). With extra outputs, its table (see
-        given).
+        state).
         """
         disk = self._disk
         kpc_per_arcsec = mass.kpc_per_arcsec
@@ -316,7 +354,7 @@ class DiskStage(ComponentStage):
         parameters and the mass of the galaxy (None without mass); for a
         central equilibrium, from the squared circular velocity of the mass
         at the subnodes, and without mass, from that of its rotation. With
-        extra outputs, its table (see given).
+        extra outputs, its table (see state).
         """
         disk = self._disk
         equilibrium = disk.equilibrium()
@@ -456,7 +494,7 @@ def _equilibrium_table(
     """
     Return the table of the vertical equilibrium of a disk at its subnodes
     (radii, arcsec): its rms heights (arcsec), the columns of what it
-    takes, by name, and its dispersion (km/s; see DiskStage.given).
+    takes, by name, and its dispersion (km/s; see DiskStage.state).
     """
     table = Table()
     table['radius'] = radii * u.arcsec
@@ -481,7 +519,7 @@ def _rotation_table(
     component of the mass (parts, by name) and that of all, the square of
     the circular velocity of the mass in the gravity of the galaxy
     (vcirc2), its pressure support (if any) and its rotation (see
-    DiskStage.given).
+    DiskStage.state).
     """
     kms = u.km / u.s
     table = Table()
