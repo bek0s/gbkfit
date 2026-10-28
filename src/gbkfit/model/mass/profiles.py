@@ -129,9 +129,9 @@ class ProfileSersic(SpheroidProfile):
             log_m=ParamScalarDesc(
                 desc="log10 of the mass", unit='dex(solMass)'),
             re=ParamScalarDesc(
-                desc="the effective radius", minimum=0, unit='kpc'),
+                desc="the effective radius", min=0, unit='kpc'),
             n=ParamScalarDesc(
-                desc="the Sersic index", minimum=0.3, maximum=12,
+                desc="the Sersic index", min=0.3, max=12,
                 unit=''))
 
     def density(
@@ -206,7 +206,7 @@ class ProfileGaussian(SpheroidProfile):
             log_m=ParamScalarDesc(
                 desc="log10 of the mass", unit='dex(solMass)'),
             sigma=ParamScalarDesc(
-                desc="the dispersion", minimum=0, unit='kpc'))
+                desc="the dispersion", min=0, unit='kpc'))
 
     def density(
             self,

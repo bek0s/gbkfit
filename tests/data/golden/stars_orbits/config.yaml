@@ -64,5 +64,5 @@ params:
         type: gaussian
         mean: 1
         sigma_aicp: [0.1, 100]
-        minimum: 0
+        min: 0
         likelihood: profiled

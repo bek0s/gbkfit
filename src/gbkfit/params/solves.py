@@ -12,16 +12,18 @@ import abc
 import math
 import typing
 from collections.abc import Callable, Sequence
-from typing import NamedTuple
+from typing import Annotated, Literal, NamedTuple
 
 import numpy as np
 import scipy.linalg
 import scipy.optimize
 import scipy.special
+from annotated_types import Gt
+from pydantic import FiniteFloat
 
 from gbkfit.params._errors import ModelEvaluationError
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -195,7 +197,7 @@ class SolveGaussian(Solve):
     sigma : float, optional
         The standard deviation of the prior, finite and positive; or else
         sigma_aicp.
-    minimum : float, optional
+    min : float, optional
         The smallest value (e.g. 0 for a scale of the flux); none by
         default.
     likelihood : str, optional
@@ -208,10 +210,9 @@ class SolveGaussian(Solve):
     Raises
     ------
     ConfigError
-        If the mean or the minimum is not finite, not one of sigma and
-        sigma_aicp is given, sigma is not finite and positive, sigma_aicp
-        not two of them increasing, likelihood is not one of LIKELIHOODS,
-        or it is 'integrated' with sigma_aicp.
+        If not one of sigma and sigma_aicp is given, sigma_aicp is not two
+        finite positive numbers, increasing, or the likelihood is
+        'integrated' with sigma_aicp.
     """
 
     @staticmethod
@@ -226,28 +227,24 @@ class SolveGaussian(Solve):
         else:
             info.update(sigma_aicp=list(self._sigma_aicp))
         if self._minimum is not None:
-            info.update(minimum=self._minimum)
+            info.update(min=self._minimum)
         if self._likelihood != LIKELIHOODS[0]:
             info.update(likelihood=self._likelihood)
         return info
 
     def __init__(
             self,
-            mean: float,
-            sigma: float | None = None,
-            minimum: float | None = None,
-            likelihood: str = LIKELIHOODS[0],
+            mean: FiniteFloat,
+            sigma: Annotated[FiniteFloat, Gt(0)] | None = None,
+            min: FiniteFloat | None = None,
+            likelihood: Literal[LIKELIHOODS] = LIKELIHOODS[0],
             sigma_aicp: Sequence[float] | None = None
     ):
-        if not math.isfinite(mean):
-            raise ConfigError(f"the mean must be finite; it is {mean}")
+        check_options(SolveGaussian.__init__, locals())
         if (sigma is None) == (sigma_aicp is None):
             raise ConfigError(
                 "a Gaussian solve has sigma, or sigma_aicp (a range of sigma "
                 "chosen by AICp), not both")
-        if sigma is not None and not (math.isfinite(sigma) and sigma > 0):
-            raise ConfigError(
-                f"sigma must be finite and positive; it is {sigma}")
         if sigma_aicp is not None:
             if not (len(sigma_aicp) == 2
                     and all(math.isfinite(s) and s > 0 for s in sigma_aicp)
@@ -259,17 +256,11 @@ class SolveGaussian(Solve):
                 raise ConfigError(
                     "values of a prior of sigma chosen by AICp take the "
                     "likelihood 'profiled'")
-        if minimum is not None and not math.isfinite(minimum):
-            raise ConfigError(f"the minimum must be finite; it is {minimum}")
-        if likelihood not in LIKELIHOODS:
-            raise ConfigError(
-                f"likelihood must be one of {list(LIKELIHOODS)}; it is "
-                f"{likelihood!r}")
         self._mean = float(mean)
         self._sigma = None if sigma is None else float(sigma)
         self._sigma_aicp = None if sigma_aicp is None \
             else tuple(float(s) for s in sigma_aicp)
-        self._minimum = None if minimum is None else float(minimum)
+        self._minimum = None if min is None else float(min)
         self._likelihood = likelihood
 
     def likelihood(self) -> str:

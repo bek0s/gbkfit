@@ -203,9 +203,9 @@ class LightSersic(LightProfile):
                 desc="the surface brightness at the effective radius, "
                      "face-on"),
             re=ParamScalarDesc(
-                desc="the effective radius", minimum=0, unit='arcsec'),
+                desc="the effective radius", min=0, unit='arcsec'),
             n=ParamScalarDesc(
-                desc="the Sersic index", minimum=0.3, maximum=12,
+                desc="the Sersic index", min=0.3, max=12,
                 unit=''))
 
     def amplitudes(self) -> tuple[str, ...]:
@@ -339,11 +339,11 @@ class LightMGE(LightProfile):
                 n, desc="the peak surface brightness of each Gaussian, "
                         "face-on"),
             sigma=ParamVectorDesc(
-                n, desc="the dispersion of each Gaussian", minimum=0,
+                n, desc="the dispersion of each Gaussian", min=0,
                 unit='arcsec'),
             q=ParamVectorDesc(
                 n, desc="the intrinsic axis ratio of each Gaussian "
-                        "(height over width)", minimum=0, unit=''))
+                        "(height over width)", min=0, unit=''))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('i0',)

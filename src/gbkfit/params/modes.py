@@ -12,7 +12,7 @@ import abc
 import numpy as np
 
 from gbkfit.utils import numutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -21,12 +21,6 @@ __all__ = [
     'ParamModeOffsets',
     'param_mode_parser'
 ]
-
-
-def _check_origin(origin: int) -> None:
-    """Raise ConfigError unless the origin is an integer."""
-    if isinstance(origin, bool) or not isinstance(origin, int):
-        raise ConfigError(f"origin must be an integer; it is {origin!r}")
 
 
 def _check_origin_in(origin: int, size: int) -> None:
@@ -122,7 +116,7 @@ class ParamModeOffsets(ParamMode):
         return dict(type=self.type(), origin=self._origin)
 
     def __init__(self, origin: int = 0):
-        _check_origin(origin)
+        check_options(ParamModeOffsets.__init__, locals())
         self._origin = origin
 
     def origin(self) -> int:
@@ -172,7 +166,7 @@ class ParamModeIncrements(ParamMode):
         return dict(type=self.type(), origin=self._origin)
 
     def __init__(self, origin: int = 0):
-        _check_origin(origin)
+        check_options(ParamModeIncrements.__init__, locals())
         self._origin = origin
 
     def origin(self) -> int:

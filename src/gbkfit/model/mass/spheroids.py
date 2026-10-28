@@ -261,10 +261,10 @@ class MassSpheroid(MassComponent):
             pdescs |= dict(
                 fdm=ParamScalarDesc(
                     desc="the dark matter fraction (of v^2) at r_fdm",
-                    minimum=0, maximum=1, unit=''),
+                    min=0, max=1, unit=''),
                 r_fdm=ParamScalarDesc(
                     desc="the radius of the dark matter fraction",
-                    minimum=0, unit='kpc'))
+                    min=0, unit='kpc'))
         return pdescs
 
     def vcirc2(
@@ -490,7 +490,7 @@ class MassLightSpheroid(MassComponent):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
             desc="the mass per unit of the light of the spheroid (see "
-                 "MassLightSpheroid)", minimum=0))
+                 "MassLightSpheroid)", min=0))
 
     def mass_ratios(self) -> dict[str, str]:
         return dict(upsilon=self._component)

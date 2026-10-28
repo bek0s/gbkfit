@@ -633,6 +633,44 @@ class _NoiseScaleMin(Rule):
         return changes
 
 
+class _RangeNames(Rule):
+    """
+    The ranges of parameters and of solves are min and max (2026-10-28),
+    as those of priors: the options minimum and maximum of the
+    descriptions of parameters (section pdescs), and minimum of the solves
+    of parameters (section params).
+    """
+
+    _NEW = dict(minimum='min', maximum='max')
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, pdescs in _items(config, 'pdescs'):
+            for name, pdesc in pdescs.items():
+                changes += self._renamed(pdesc, path + [name])
+        for path, params in _items(config, 'params'):
+            for name, value in params.items():
+                if isinstance(value, MutableMapping):
+                    changes += self._renamed(
+                        value.get('solve'), path + [name, 'solve'])
+        return changes
+
+    def _renamed(self, info: Any, path: list[str | int]) -> list[Change]:
+        """Rename minimum and maximum in a dictionary, in place."""
+        if not isinstance(info, MutableMapping):
+            return []
+        changes = []
+        for old, new in self._NEW.items():
+            if old in info:
+                info[new] = info.pop(old)
+                changes.append(Change(path, f"{old} -> {new}"))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -646,6 +684,7 @@ RULES: tuple[Rule, ...] = (
     _QuantityRadii(),
     _ImageTraitFiles(),
     _NoiseScaleMin(),
+    _RangeNames(),
 )
 
 

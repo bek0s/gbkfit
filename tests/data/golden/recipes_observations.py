@@ -325,7 +325,7 @@ CASES: list[dict[str, Any]] = [
             instrument=dict(psf=_PSF), name='grism', flux_scale='per_row')],
         truth=_DISK_TRUTH | dict(grism_flux_scale=1),
         trial=_DISK_TRIAL | dict(grism_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, minimum=0))),
+            type='gaussian', mean=1, sigma=0.5, min=0))),
         noises=[_gauss(0.02)]),
     dict(
         name='msa_shutters',
@@ -423,7 +423,7 @@ CASES: list[dict[str, Any]] = [
             mass_lum_upsilon=dict(value=1.2e8, min=1e7, max=1e9),
             mass_bh_log_m=dict(value=8.3, min=6, max=10),
             stars_weights=dict(solve=dict(
-                type='gaussian', mean=1, sigma_aicp=[0.1, 100], minimum=0,
+                type='gaussian', mean=1, sigma_aicp=[0.1, 100], min=0,
                 likelihood='profiled'))),
         noises=[_gauss(0.03)],
         likelihoods=[dict(type='gaussian', missing_residual=3)],

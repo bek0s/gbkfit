@@ -427,7 +427,7 @@ class ZPTrait(PTrait, abc.ABC):
         """Return the description of its node-wise amplitude, a."""
         return ParamVectorDesc(
             nnodes, desc="the amplitude of the displacement",
-            minimum=-self.zmax(), maximum=self.zmax(), unit='arcsec')
+            min=-self.zmax(), max=self.zmax(), unit='arcsec')
 
 
 class SPTrait(PTrait, abc.ABC):

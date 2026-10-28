@@ -281,7 +281,7 @@ _DISK_CONE_LINES = dict(
         wall=_free(35, 5, 60), vpt_vo=_free(220, 0, 500),
         nii_ratio=_free(0.7, 0, 2)))
     | dict(cube_flux_scale=dict(solve=dict(
-        type='gaussian', mean=1, sigma=0.5, minimum=0))),
+        type='gaussian', mean=1, sigma=0.5, min=0))),
     noises=[dict(type='gauss', rms=1.5e-4)])
 
 

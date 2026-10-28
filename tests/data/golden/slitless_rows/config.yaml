@@ -65,4 +65,4 @@ params:
     vpt_vt: {value: 140, min: 50, max: 300}
     dpt_a: {value: 30, min: 5, max: 80}
     grism_flux_scale:
-      solve: {type: gaussian, mean: 1, sigma: 0.5, minimum: 0}
+      solve: {type: gaussian, mean: 1, sigma: 0.5, min: 0}

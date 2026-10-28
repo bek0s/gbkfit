@@ -340,12 +340,12 @@ class LikelihoodGaussian(Likelihood):
             if scale is not None:
                 pdescs[scale] = ParamScalarDesc(
                     desc=f"the scale of the errors of {key}",
-                    minimum=noise.scale_min)
+                    min=noise.scale_min)
             if jitter is not None:
                 pdescs[jitter] = ParamScalarDesc(
                     desc=f"the jitter of {key}, which adds to its errors in "
                          "quadrature",
-                    minimum=0)
+                    min=0)
         return pdescs
 
     def param_units(

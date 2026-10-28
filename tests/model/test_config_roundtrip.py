@@ -94,7 +94,7 @@ def test_type_roundtrip(parser, cls):
 
 def test_pdescs_roundtrip():
     info = dict(
-        a=dict(type='scalar', minimum=0, maximum=1, desc='a scalar'),
+        a=dict(type='scalar', min=0, max=1, desc='a scalar'),
         v=dict(type='vector', size=3))
     pdescs = gbkfit.params.load_pdescs_dict(copy.deepcopy(info))
     dumped = gbkfit.params.dump_pdescs_dict(pdescs)

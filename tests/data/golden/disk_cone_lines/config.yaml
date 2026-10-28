@@ -87,4 +87,4 @@ params:
     cone_dpt_a: 60
     cone_nii_ratio: {value: 0.7, min: 0, max: 2}
     cube_flux_scale:
-      solve: {type: gaussian, mean: 1, sigma: 0.5, minimum: 0}
+      solve: {type: gaussian, mean: 1, sigma: 0.5, min: 0}

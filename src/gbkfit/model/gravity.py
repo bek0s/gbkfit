@@ -305,7 +305,7 @@ class GravityMOND(Gravity):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(gravity_a0=ParamScalarDesc(
-            desc="the acceleration a0 of MOND", minimum=0,
+            desc="the acceleration a0 of MOND", min=0,
             unit='1e-10 m / s2'))
 
     def field(

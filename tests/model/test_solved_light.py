@@ -40,7 +40,7 @@ ERROR = 0.05
 # Each amplitude solved above 0 (profiled: their integral has no exact
 # formula), of a broad prior
 SOLVE = dict(solve=dict(
-    type='gaussian', mean=0, sigma=100, minimum=0, likelihood='profiled'))
+    type='gaussian', mean=0, sigma=100, min=0, likelihood='profiled'))
 
 
 def observation(size, data=None, observable=None):
@@ -168,7 +168,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
     params = ParamSpace(group.pdescs(), dict(
         xpos=0, ypos=0, posa=0, incl=0, core_sigma=[1, 2], core_q=[1, 1],
         core_i0=SOLVE, obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, minimum=0))))
+            type='gaussian', mean=1, sigma=0.5, min=0))))
     with pytest.raises(ConfigError, match="not linear in both"):
         Objective(group.plan(driver), params.solves())
 

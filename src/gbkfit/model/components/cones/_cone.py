@@ -45,7 +45,7 @@ GEOMETRY_PDESCS = {
 } | dict(
     wall=ParamScalarDesc(
         desc="the angle of the mid-surface of the walls from the axis",
-        minimum=0, maximum=90, unit='deg'))
+        min=0, max=90, unit='deg'))
 
 
 class NodalCone(abc.ABC):

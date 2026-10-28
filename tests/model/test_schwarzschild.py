@@ -49,7 +49,7 @@ PROPERTIES = dict(
     mass_light_alpha=1.0, mass_light_beta=4.0, mass_light_gamma=1.0,
     mass_bh_log_m=np.log10(5e8))
 SOLVE = dict(solve=dict(
-    type='gaussian', mean=1, sigma=1, minimum=0, likelihood='profiled'))
+    type='gaussian', mean=1, sigma=1, min=0, likelihood='profiled'))
 
 
 def bins(rota=0.0):
@@ -426,7 +426,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     group = ObservationGroup([galaxy()], [obs])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=dict(
-            type='gaussian', mean=1, sigma=1e-6, minimum=0,
+            type='gaussian', mean=1, sigma=1e-6, min=0,
             likelihood='profiled'))))
     objective = Objective(group.plan(driver), params.solves())
     evaluation = objective.evaluate(params.evaluate())
@@ -632,7 +632,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
     group = ObservationGroup([stars(dict(
         type='schwarzschild', norbits=1500, turns=30))], [obs])
     solve = dict(solve=dict(
-        type='gaussian', mean=1, sigma=10, minimum=0, likelihood='profiled'))
+        type='gaussian', mean=1, sigma=10, min=0, likelihood='profiled'))
     objective = None
     chi2 = {}
     for factor in (0.8, 1.0, 1.25):

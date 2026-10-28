@@ -252,7 +252,7 @@ class LensDeflectionMap(LensMass):
         if not self._scaled:
             return {}
         return dict(scale=ParamScalarDesc(
-            "the scale of the deflection (e.g. D_LS / D_S)", minimum=0,
+            "the scale of the deflection (e.g. D_LS / D_S)", min=0,
             unit=''))
 
     def deflection(
@@ -303,7 +303,7 @@ class LensSIE(LensMass):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(theta_e=ParamScalarDesc(
-            "the Einstein radius", minimum=0, unit='arcsec')
+            "the Einstein radius", min=0, unit='arcsec')
         ) | _ellipse_pdescs()
 
     def deflection(
@@ -351,10 +351,10 @@ class LensEPL(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             theta_e=ParamScalarDesc(
-                "the Einstein radius", minimum=0, unit='arcsec'),
+                "the Einstein radius", min=0, unit='arcsec'),
             slope=ParamScalarDesc(
                 "the slope of the density (2 = isothermal)",
-                minimum=1, maximum=3, unit='')) | _ellipse_pdescs()
+                min=1, max=3, unit='')) | _ellipse_pdescs()
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
@@ -400,10 +400,10 @@ class LensNFW(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             kappa_s=ParamScalarDesc(
-                "the convergence scale (rho_s r_s / Sigma_cr)", minimum=0,
+                "the convergence scale (rho_s r_s / Sigma_cr)", min=0,
                 unit=''),
             r_s=ParamScalarDesc(
-                "the scale radius", minimum=0, unit='arcsec')
+                "the scale radius", min=0, unit='arcsec')
         ) | _ellipse_pdescs()
 
     def deflection(
@@ -476,7 +476,7 @@ class LensMultipole(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             theta_e=ParamScalarDesc(
-                "the Einstein radius of its lens", minimum=0,
+                "the Einstein radius of its lens", min=0,
                 unit='arcsec'),
             a=ParamScalarDesc("the strength", unit=''),
             pa=ParamScalarDesc("the position angle", unit='deg'),
@@ -530,7 +530,7 @@ class LensShear(LensMass):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
-            gamma=ParamScalarDesc("the strength", minimum=0, unit=''),
+            gamma=ParamScalarDesc("the strength", min=0, unit=''),
             pa=ParamScalarDesc("the position angle", unit='deg'))
 
     def deflection(
@@ -560,7 +560,7 @@ def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
     return dict(
         # (q > 0 keeps the deflection finite)
         q=ParamScalarDesc(
-            "the axis ratio", minimum=1e-3, maximum=1, unit=''),
+            "the axis ratio", min=1e-3, max=1, unit=''),
         pa=ParamScalarDesc("the position angle", unit='deg'),
     ) | _centre_pdescs()
 

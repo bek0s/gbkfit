@@ -85,7 +85,7 @@ def test_amplitudes_are_migrated_to_a_solved_flux_scale():
     assert config['observations'][0]['flux_scale'] == 'per_spectrum'
     assert config['observations'][0]['likelihood'] == dict(type='gaussian')
     assert config['params']['kmos_flux_scale'] == dict(solve=dict(
-        type='gaussian', mean=1, sigma=0.5, minimum=0))
+        type='gaussian', mean=1, sigma=0.5, min=0))
 
 
 def test_a_project_is_migrated_across_its_pieces(tmp_path):
@@ -253,3 +253,14 @@ def test_scale_minimum_of_fitted_noise_is_migrated_to_scale_min():
         type='pixel_moments', likelihood=dict(
             type='gaussian', noise=noise))]), 2)
     assert noise == dict(moment1=dict(scale=True, scale_min=0.5, jitter=True))
+
+
+def test_ranges_of_pdescs_and_solves_are_migrated_to_min_and_max():
+    config = dict(
+        pdescs=dict(a=dict(type='scalar', minimum=0, maximum=1)),
+        params=dict(a=dict(solve=dict(
+            type='gaussian', mean=1, sigma=0.5, minimum=0))))
+    migration.migrate(config, 2)
+    assert config['pdescs']['a'] == dict(type='scalar', min=0, max=1)
+    assert config['params']['a']['solve'] == dict(
+        type='gaussian', mean=1, sigma=0.5, min=0)

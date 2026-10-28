@@ -24,30 +24,30 @@ def describe(pdesc):
 
 
 def test_param_desc_scalar():
-    pdesc = ParamScalarDesc(desc='description', minimum=-10)
+    pdesc = ParamScalarDesc(desc='description', min=-10)
     assert describe(pdesc) == (
         ParamScalarDesc, True, 1, 'description', -10, np.inf)
     # The dump leaves out the infinite bounds, and loads to the same desc
-    info = dict(type='scalar', desc='description', minimum=-10)
+    info = dict(type='scalar', desc='description', min=-10)
     assert pdesc.dump() == info
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
 def test_param_desc_vector():
-    pdesc = ParamVectorDesc(5, desc='description', maximum=10)
+    pdesc = ParamVectorDesc(5, desc='description', max=10)
     assert describe(pdesc) == (
         ParamVectorDesc, False, 5, 'description', -np.inf, 10)
-    info = dict(type='vector', size=5, desc='description', maximum=10)
+    info = dict(type='vector', size=5, desc='description', max=10)
     assert pdesc.dump() == info
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
 @pytest.mark.parametrize('make, message', [
-    (lambda: ParamVectorDesc(0), "positive integer"),
-    (lambda: ParamVectorDesc(-1), "positive integer"),
-    (lambda: ParamVectorDesc(1.5), "positive integer"),
-    (lambda: ParamVectorDesc(True), "positive integer"),
-    (lambda: ParamScalarDesc(minimum=1, maximum=0), "above its maximum")])
+    (lambda: ParamVectorDesc(0), "'size' must be at least 1"),
+    (lambda: ParamVectorDesc(-1), "'size' must be at least 1"),
+    (lambda: ParamVectorDesc(1.5), "'size' must be of type int"),
+    (lambda: ParamVectorDesc(True), "'size' must be of type int"),
+    (lambda: ParamScalarDesc(min=1, max=0), "above its max")])
 def test_invalid_param_descs(make, message):
     with pytest.raises(ConfigError, match=message):
         make()

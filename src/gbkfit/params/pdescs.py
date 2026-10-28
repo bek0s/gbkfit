@@ -13,15 +13,15 @@ ParamTable), whose rows are e.g. the blobs of a mixture trait.
 import abc
 import copy
 import dataclasses
-import numbers
 from collections.abc import Mapping
-from typing import Any, Self, TypeAlias
+from typing import Annotated, Any, Self, TypeAlias
 
 import astropy.units
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -104,7 +104,7 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         one: a label of its values, which stay plain numbers in that unit
         (in configurations, expressions and evaluations), for people and
         outputs.
-    minimum, maximum : float, optional
+    min, max : float, optional
         Its valid range: the values for which the models that have it are
         defined (e.g. 0 for a dispersion), not the values that are likely.
         Every element of a vector has the same range.
@@ -112,8 +112,7 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
     Raises
     ------
     ConfigError
-        If the size is not a positive integer, the unit is not a unit, or
-        the minimum is above the maximum.
+        If the unit is not a unit, or min is above max.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -125,30 +124,25 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         if self._unit is not None:
             info.update(unit=self._unit.to_string())
         if np.isfinite(self._minimum):
-            info.update(minimum=self._minimum)
+            info.update(min=self._minimum)
         if np.isfinite(self._maximum):
-            info.update(maximum=self._maximum)
+            info.update(max=self._maximum)
         return info
 
     def __init__(
             self,
             size: int,
             desc: str | None,
-            minimum: float | None,
-            maximum: float | None,
+            min: float | None,
+            max: float | None,
             unit: str | ParamUnit | None = None
     ):
-        if (isinstance(size, bool) or not isinstance(size, numbers.Integral)
-                or size < 1):
-            raise ConfigError(
-                f"the size of a parameter must be a positive integer; it "
-                f"is {size!r}")
-        minimum = -np.inf if minimum is None else float(minimum)
-        maximum = +np.inf if maximum is None else float(maximum)
+        minimum = -np.inf if min is None else float(min)
+        maximum = +np.inf if max is None else float(max)
         if not minimum <= maximum:
             raise ConfigError(
-                f"the minimum of a parameter ({minimum}) cannot be above "
-                f"its maximum ({maximum})")
+                f"the min of a parameter ({minimum}) cannot be above its max "
+                f"({maximum})")
         self._size = int(size)
         self._desc = desc
         self._unit = make_param_unit(unit)
@@ -219,7 +213,7 @@ class ParamScalarDesc(ParamDesc):
     ----------
     desc : str, optional
         What it is (see ParamDesc).
-    minimum, maximum : float, optional
+    min, max : float, optional
         Its valid range (see ParamDesc).
     unit : str or UnitBase, optional
         The unit of its values (see ParamDesc).
@@ -227,7 +221,7 @@ class ParamScalarDesc(ParamDesc):
     Raises
     ------
     ConfigError
-        If the unit is not a unit, or the minimum is above the maximum.
+        If the unit is not a unit, or min is above max.
     """
 
     @staticmethod
@@ -237,11 +231,12 @@ class ParamScalarDesc(ParamDesc):
     def __init__(
             self,
             desc: str | None = None,
-            minimum: float | None = None,
-            maximum: float | None = None,
+            min: float | None = None,
+            max: float | None = None,
             unit: str | ParamUnit | None = None
     ):
-        super().__init__(1, desc, minimum, maximum, unit)
+        check_options(ParamScalarDesc.__init__, locals())
+        super().__init__(1, desc, min, max, unit)
 
     def is_scalar(self) -> bool:
         return True
@@ -258,19 +253,15 @@ class ParamVectorDesc(ParamDesc):
         The number of its elements.
     desc : str, optional
         What it is (see ParamDesc).
-    minimum, maximum : float, optional
+    min, max : float, optional
         The valid range of each element (see ParamDesc).
     unit : str or UnitBase, optional
         The unit of the values of its elements (see ParamDesc).
-    column : ParamColumn, optional
-        The column of a table it is, if any (see ParamTable): set by the
-        models that declare tables, not part of configurations.
 
     Raises
     ------
     ConfigError
-        If the size is not a positive integer, or the minimum is above
-        the maximum.
+        If the unit is not a unit, or min is above max.
     """
 
     @staticmethod
@@ -279,15 +270,15 @@ class ParamVectorDesc(ParamDesc):
 
     def __init__(
             self,
-            size: int,
+            size: Annotated[int, Ge(1)],
             desc: str | None = None,
-            minimum: float | None = None,
-            maximum: float | None = None,
-            unit: str | ParamUnit | None = None,
-            column: ParamColumn | None = None
+            min: float | None = None,
+            max: float | None = None,
+            unit: str | ParamUnit | None = None
     ):
-        super().__init__(size, desc, minimum, maximum, unit)
-        self._column = column
+        check_options(ParamVectorDesc.__init__, locals())
+        super().__init__(size, desc, min, max, unit)
+        self._column: ParamColumn | None = None
 
     def is_scalar(self) -> bool:
         return False
@@ -295,6 +286,15 @@ class ParamVectorDesc(ParamDesc):
     def column(self) -> ParamColumn | None:
         """Return the column of a table it is, if any."""
         return self._column
+
+    def with_column(self, column: ParamColumn) -> Self:
+        """
+        Return a copy of it that is a column of a table (see ParamTable):
+        for the models that declare tables (not part of configurations).
+        """
+        pdesc = copy.copy(self)
+        pdesc._column = column
+        return pdesc
 
 
 pdesc_parser = parseutils.TypedParser(ParamDesc, [

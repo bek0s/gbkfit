@@ -273,9 +273,8 @@ class Blobs(TraitOption):
         names = ('r', 't', 'a', 's', 'b', 'q', 'p') if shape \
             else ('r', 't', 'a', 's', 'q', 'p')
         return {
-            name: ParamVectorDesc(
-                self.nblobs, unit=units[name],
-                column=ParamColumn(self.table, name))
+            name: ParamVectorDesc(self.nblobs, unit=units[name]).with_column(
+                ParamColumn(self.table, name))
             for name in names}
 
     def azimuthal_edges(

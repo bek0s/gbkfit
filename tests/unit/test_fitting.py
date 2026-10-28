@@ -278,7 +278,7 @@ def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
         obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma_aicp=[0.1, 10], minimum=0,
+            type='gaussian', mean=1, sigma_aicp=[0.1, 10], min=0,
             likelihood='profiled'))))
     objective = Objective(plan, params.solves())
     with pytest.raises(ConfigError, match="minimises the aicp"):
@@ -298,7 +298,7 @@ def test_the_reduced_chi2_is_of_the_data_alone():
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
         pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1.5, sigma=0.05, minimum=0))))
+            type='gaussian', mean=1.5, sigma=0.05, min=0))))
     objective = Objective(plan, params.solves())
     best = FitterScipyLeastSquares().fit(objective, params).best()
     residuals = objective.residuals(params.evaluate(list(best.free.values())))
@@ -733,7 +733,7 @@ def test_optimizers_of_the_aicp_minimise_it():
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace(plan.group().pdescs(), TRUE | dict(
         obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.1, minimum=0)),
+            type='gaussian', mean=1, sigma=0.1, min=0)),
         posa=dict(min=36, max=44, n=5)))
     objective = Objective(plan, params.solves())
     result = FitterGrid(merit='aicp').fit(objective, params)
@@ -940,7 +940,7 @@ def test_a_bootstrap_refits_fits_of_solved_values():
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
         obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.1, minimum=0))))
+            type='gaussian', mean=1, sigma=0.1, min=0))))
     objective = Objective(plan, params.solves())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
@@ -1075,7 +1075,7 @@ def test_a_fit_beyond_the_valid_range_of_a_parameter_fails():
     from gbkfit.fitting import fitter_parser
     from gbkfit.params import ParamScalarDesc
     objective = mock_objective(DriverHost())
-    pdescs = objective.pdescs() | dict(pt_s=ParamScalarDesc(minimum=2))
+    pdescs = objective.pdescs() | dict(pt_s=ParamScalarDesc(min=2))
     params = ParamSpace(pdescs, bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     with pytest.raises(ConfigError, match=r"'pt_s' \[1, 10\] \(valid: "):
@@ -1246,7 +1246,7 @@ def test_a_nested_evidence_of_profiled_solves_says_it_is_not_one(caplog):
     params = ParamSpace(plan.group().pdescs(), TRUE | dict(
         incl=dict(prior=dict(type='uniform', min=50, max=60)),
         obs_flux_scale=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, minimum=0,
+            type='gaussian', mean=1, sigma=0.5, min=0,
             likelihood='profiled'))))
     objective = Objective(plan, params.solves())
     result = FitterDynestyStatic(nlive=20, dlogz=10).fit(objective, params)
@@ -1404,7 +1404,7 @@ def test_the_information_criteria_take_solved_values_by_their_likelihood():
             DriverHost(), name='obs', flux_scale='one').group_plan()
         params = ParamSpace(plan.group().pdescs(), TRUE | dict(
             obs_flux_scale=dict(solve=dict(
-                type='gaussian', mean=1, sigma=0.1, minimum=0,
+                type='gaussian', mean=1, sigma=0.1, min=0,
                 likelihood=likelihood)),
             posa=dict(min=36, max=44, n=3)))
         best[likelihood] = FitterGrid().fit(

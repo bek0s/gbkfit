@@ -39,7 +39,7 @@ GALAXY = dict(components=dict(
 
 # The standard deviation of the prior of the scales, and their solve
 SIGMA = 0.5
-SOLVE = dict(type='gaussian', mean=1, sigma=SIGMA, minimum=0)
+SOLVE = dict(type='gaussian', mean=1, sigma=SIGMA, min=0)
 
 GOLDEN = pathlib.Path(__file__).parents[1] / 'data' / 'golden'
 

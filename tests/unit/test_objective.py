@@ -643,7 +643,7 @@ def test_a_sigma_chosen_by_aicp_has_the_least_aicp():
         residuals = rows @ solution.values - target
         return residuals @ residuals + 2 * solution.m_eff
     chosen = solve_together_rows(
-        [SolveGaussian(1.0, minimum=0.0, likelihood='profiled',
+        [SolveGaussian(1.0, min=0.0, likelihood='profiled',
                        sigma_aicp=[0.01, 100])], [300], rows, target)
     grid = [aicp(solve_together_rows(
         [SolveGaussian(1.0, sigma, 0.0, 'profiled')], [300], rows, target))
@@ -669,7 +669,7 @@ def test_invalid_sigmas_chosen_by_aicp_are_refused(options, message):
 def test_the_value_of_a_solve_without_data_is_its_mean(
         mean, minimum, default, sigma):
     # (at least its minimum, whatever its sigma)
-    solve = SolveGaussian(mean, minimum=minimum, likelihood='profiled', **sigma)
+    solve = SolveGaussian(mean, min=minimum, likelihood='profiled', **sigma)
     assert solve.default() == default
     assert solve.solve(np.zeros(1), np.zeros(1)).values[0] == default
 

@@ -124,7 +124,7 @@ class VerticalLaw(DiskVertical, abc.ABC):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(hz=ParamScalarDesc(
-            desc="the scale height", minimum=0, unit='kpc'))
+            desc="the scale height", min=0, unit='kpc'))
 
     def thin(self, context: MassContext) -> bool:
         return False

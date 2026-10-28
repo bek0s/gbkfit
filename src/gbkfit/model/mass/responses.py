@@ -315,9 +315,9 @@ class ResponseSIDM(HaloResponse):
         return pdescs | dict(
             sigma_m=ParamScalarDesc(
                 desc="the cross-section of SIDM per unit mass",
-                minimum=0, unit='cm2 / g'),
+                min=0, unit='cm2 / g'),
             t_age=ParamScalarDesc(
-                desc="the age of the halo", minimum=0, unit='Gyr'))
+                desc="the age of the halo", min=0, unit='Gyr'))
 
     def check_profile(self, profile: SpheroidProfile) -> None:
         if self._contraction is not None:
