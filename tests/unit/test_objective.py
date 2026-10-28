@@ -15,8 +15,8 @@ from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
-    PixelBrightness, PixelMoments, observable_parser)
+    FittedNoise, Flat, LikelihoodGaussian, ObservationGroup, ObservationSky,
+    PixelBrightness, PixelMoments, UpperLimit, observable_parser)
 from gbkfit.params import (
     ParamSpace, SolveGaussian, solve_together, solve_together_rows)
 from gbkfit.utils.gridutils import SpectralAxis
@@ -83,7 +83,7 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
     lls = pointwise_log_likelihoods(objective, space, [[1.0], [0.5]])
     assert lls.shape == (2, len(pointwise))
     np.testing.assert_allclose(lls[0], pointwise, rtol=1e-6)
-    noise = dict(brightness=dict(scale=True, scale_minimum=0.1))
+    noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1))
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(noise=noise), 'obs',
         obs_noise_scale_brightness=1.0)
@@ -197,7 +197,7 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
         np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(
-            upper_limits=dict(brightness=dict(limit=0.01, error=0.2))))
+            upper_limits=dict(brightness=UpperLimit(limit=0.01, error=0.2))))
     model = objective.group_plan().model_h(params)[0]['brightness']['d']
     residuals = objective.residuals(params).reshape(24, 32)
     z = (0.01 - model[:, :8].astype(float)) / 0.2
@@ -218,7 +218,7 @@ def test_upper_limits_count_within_their_footprint(driver, tmp_path):
     file = str(tmp_path / 'field.fits')
     fitsutils.write_data(
         file, footprint, gridutils.Coords((1, 1), (15.5, 11.5), (0, 0), 0))
-    limits = dict(brightness=dict(limit=0.01, error=0.2, footprint=file))
+    limits = dict(brightness=UpperLimit(limit=0.01, error=0.2, footprint=file))
     data = Data(
         np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
     objective, params = make_objective(
@@ -240,7 +240,7 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
     rng = np.random.default_rng(4)
     error = rng.uniform(0.2, 0.6, (24, 32))
     data = Data(rng.normal(0.1, 1, (24, 32)), error=error)
-    noise = dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True))
+    noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True))
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(noise=noise), 'obs',
         obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
@@ -264,15 +264,15 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
 
 
 @pytest.mark.parametrize('noise, name, error, message', [
-    (dict(brightness=dict(scale=True, scale_minimum=0.1)), None, None,
+    (dict(brightness=FittedNoise(scale=True, scale_min=0.1)), None, None,
      "needs a name"),
-    (dict(moment1=dict(jitter=True)), 'obs', None, "does not have"),
-    (dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True)),
+    (dict(moment1=FittedNoise(jitter=True)), 'obs', None, "does not have"),
+    (dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True)),
      'obs', 0.5, "cannot both be fitted"),
-    (dict(brightness=dict(scale=True)), 'obs', None, "scale_minimum"),
-    (dict(brightness=dict(jitter=True, scale_minimum=0.1)), 'obs', None,
-     "scale_minimum"),
-    (dict(brightness=dict(scale=False)), 'obs', None, "fit its scale"),
+    (dict(brightness=FittedNoise(scale=True)), 'obs', None, "scale_min"),
+    (dict(brightness=FittedNoise(jitter=True, scale_min=0.1)), 'obs', None,
+     "scale_min"),
+    (dict(brightness=FittedNoise(scale=False)), 'obs', None, "fit its scale"),
 ])
 def test_fitted_noise_options_are_checked(noise, name, error, message):
     errors = None if error is None else np.full((24, 32), error)
@@ -283,7 +283,7 @@ def test_fitted_noise_options_are_checked(noise, name, error, message):
 
 
 def test_a_fitted_noise_has_parameters_of_the_observation():
-    noise = dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True))
+    noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True))
     likelihood = LikelihoodGaussian(noise=noise)
     data = Data(np.ones((24, 32)), error=np.linspace(0.1, 1, 768).reshape(
         24, 32))
@@ -293,8 +293,9 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
     pdescs = objective.pdescs()
     assert pdescs['obs_noise_scale_brightness'].minimum() == 0.1
     assert pdescs['obs_noise_jitter_brightness'].minimum() == 0
-    assert likelihood.dump()['noise'] == noise
-    assert LikelihoodGaussian(**{
+    assert likelihood.dump()['noise'] == dict(
+        brightness=dict(scale=True, scale_min=0.1, jitter=True))
+    assert LikelihoodGaussian.load({
         k: v for k, v in likelihood.dump().items() if k != 'type'}).dump() \
         == likelihood.dump()
 
@@ -370,7 +371,7 @@ def test_values_the_model_lacks_take_no_noise(driver):
     def group(observable, dataset=None):
         likelihood = None if dataset is None else LikelihoodGaussian(
             missing_residual=3, noise=dict(
-                moment1=dict(scale=True, scale_minimum=0.1)))
+                moment1=FittedNoise(scale=True, scale_min=0.1)))
         observation = ObservationSky(
             observable, Flat(), data=dataset, likelihood=likelihood,
             name='obs')
@@ -417,7 +418,7 @@ def test_correlated_noise_has_the_chi2_of_its_covariance(driver):
     # which a swap of x and y would turn)
     from gbkfit.instrument import PSFGauss
     data = correlated_data(np.random.default_rng(5), PSFGauss(2, 0.5, 20))
-    noise = dict(brightness=dict(scale=True, scale_minimum=0.1, jitter=True))
+    noise = dict(brightness=FittedNoise(scale=True, scale_min=0.1, jitter=True))
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(
             weights=2.0, noise=noise, white_floor=0.05), 'obs',
@@ -464,7 +465,7 @@ def test_correlated_noise_goes_without_upper_limits_and_a_floor_of_0():
     data = correlated_data(np.random.default_rng(6), PSFGauss(4))
     with pytest.raises(ConfigError, match="does not go with upper limits"):
         make_objective(DriverHost(), data, LikelihoodGaussian(
-            upper_limits=dict(brightness=dict(limit=0.01, error=0.2))))
+            upper_limits=dict(brightness=UpperLimit(limit=0.01, error=0.2))))
     # (a Gaussian beam of sigma 4 pixels alone is singular on them: its
     # power at the shortest wavelength, of 2 pixels, is exp(-8 pi^2))
     objective, params = make_objective(
@@ -754,10 +755,12 @@ def test_user_likelihoods_of_gaussian_noise_are_the_gaussian(
     file = tmp_path / 'likelihoods.py'
     file.write_text(USER_LIKELIHOODS)
     gaussian, params = make_objective(driver, user_data())
-    residuals, _ = make_objective(driver, user_data(), LikelihoodUser(
-        str(file), 'gaussian_residuals', 'residuals'))
-    log_likelihood, _ = make_objective(driver, user_data(), LikelihoodUser(
-        str(file), 'gaussian_log_likelihood', 'log_likelihood'))
+    residuals, _ = make_objective(
+        driver, user_data(), LikelihoodUser.from_file(
+            str(file), 'gaussian_residuals', 'residuals'))
+    log_likelihood, _ = make_objective(
+        driver, user_data(), LikelihoodUser.from_file(
+            str(file), 'gaussian_log_likelihood', 'log_likelihood'))
     chi2 = gaussian.chi2(params)
     np.testing.assert_allclose(
         residuals.residuals(params), gaussian.residuals(params), rtol=1e-5,
@@ -780,7 +783,8 @@ def test_user_likelihoods_take_parameters_of_their_observation(
     from gbkfit.observation import LikelihoodUser
     file = tmp_path / 'likelihoods.py'
     file.write_text(USER_LIKELIHOODS)
-    cauchy = LikelihoodUser(str(file), 'cauchy_residuals', 'residuals', ['s'])
+    cauchy = LikelihoodUser.from_file(
+        str(file), 'cauchy_residuals', 'residuals', ['s'])
     objective, params = make_objective(
         driver, user_data(), cauchy, name='hst', hst_s=0.7)
     assert 'hst_s' in objective.pdescs()
@@ -795,12 +799,12 @@ def test_user_likelihoods_take_parameters_of_their_observation(
 
 def test_the_log_likelihood_of_a_fitted_scale_is_free_of_its_minimum(driver):
     # (the noise residual holds sum ln f_min^2, a constant of the option
-    # scale_minimum alone: the log-likelihood and the AICp leave it out)
+    # scale_min alone: the log-likelihood and the AICp leave it out)
     rng = np.random.default_rng(1)
     data = Data(rng.normal(0.1, 1, (24, 32)), error=np.full((24, 32), 0.5))
     merits = []
     for minimum in (0.1, 0.001):
-        noise = dict(brightness=dict(scale=True, scale_minimum=minimum))
+        noise = dict(brightness=FittedNoise(scale=True, scale_min=minimum))
         objective, params = make_objective(
             driver, data, LikelihoodGaussian(noise=noise), 'obs',
             obs_noise_scale_brightness=1.5)

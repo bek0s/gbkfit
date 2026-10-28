@@ -605,6 +605,34 @@ class _ImageTraitFiles(Rule):
         return changes
 
 
+class _NoiseScaleMin(Rule):
+    """
+    The smallest scale of a fitted noise is scale_min (2026-10-28), as
+    the ranges of other options (min and max).
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            likelihood = item.get('likelihood')
+            noise = likelihood.get('noise') \
+                if isinstance(likelihood, MutableMapping) else None
+            if not isinstance(noise, MutableMapping):
+                continue
+            for key, value in noise.items():
+                if isinstance(value, MutableMapping) \
+                        and 'scale_minimum' in value:
+                    value['scale_min'] = value.pop('scale_minimum')
+                    changes.append(Change(
+                        path + ['likelihood', 'noise', key],
+                        "scale_minimum -> scale_min"))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -617,6 +645,7 @@ RULES: tuple[Rule, ...] = (
     _SpectralTables(),
     _QuantityRadii(),
     _ImageTraitFiles(),
+    _NoiseScaleMin(),
 )
 
 

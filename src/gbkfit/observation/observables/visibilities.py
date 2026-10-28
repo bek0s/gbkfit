@@ -1,9 +1,10 @@
 import logging
 from collections.abc import Callable, Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import astropy.units
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
@@ -11,8 +12,10 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
+from ._detail import Rota, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import HostModelData, ModelData, Observable
 
@@ -30,6 +33,11 @@ __all__ = [
 
 
 _log = logging.getLogger(__name__)
+
+# The lengths on the sky of x and y, or one for both, and the transforms
+# of the models (see uv_transforms)
+_Lengths: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
+_Transform: TypeAlias = Literal[tuple(uv_transforms)]
 
 
 # The speed of light (km/s and m/s), and arcsec per radian
@@ -154,13 +162,13 @@ class Visibilities(Observable):
     def from_data(
             cls,
             dataset: DatasetVisibilities,
-            fov: float | Sequence[float],
-            step: float | Sequence[float] | None = None,
+            fov: _Lengths,
+            step: _Lengths | None = None,
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] | None = None,
-            rota: float = 0,
-            transform: str = 'exact',
-            eps: float | None = None
+            rval: Rval | None = None,
+            rota: Rota = 0,
+            transform: _Transform = 'exact',
+            eps: Annotated[float, Gt(0)] | None = None
     ) -> 'Visibilities':
         """
         Make the observable of visibilities, of their coverage.
@@ -183,6 +191,7 @@ class Visibilities(Observable):
             If the dataset is not of visibilities, or the options are not
             valid.
         """
+        check_options(Visibilities.from_data, locals())
         cls._require_dataset_class(dataset)
         return cls(
             dataset.coverage(), fov, step, rpix, rval, rota, transform, eps)
@@ -210,20 +219,15 @@ class Visibilities(Observable):
     def __init__(
             self,
             coverage: UVCoverage,
-            fov: float | Sequence[float],
-            step: float | Sequence[float] | None = None,
+            fov: _Lengths,
+            step: _Lengths | None = None,
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] | None = None,
-            rota: float = 0,
-            transform: str = 'exact',
-            eps: float | None = None
+            rval: Rval | None = None,
+            rota: Rota = 0,
+            transform: _Transform = 'exact',
+            eps: Annotated[float, Gt(0)] | None = None
     ):
-        if transform not in uv_transforms:
-            raise ConfigError(
-                f"transform must be one of {list(uv_transforms)}; it is "
-                f"{transform!r}")
-        if eps is not None:
-            _detail.check_positive('eps', eps)
+        check_options(Visibilities.__init__, locals())
         fov = (fov,) * 2 if np.ndim(fov) == 0 else tuple(fov)
         if len(fov) != 2 or not all(value > 0 for value in fov):
             raise ConfigError(

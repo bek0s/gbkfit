@@ -501,7 +501,7 @@ CASES: list[dict[str, Any]] = [
             type='gaussian', missing_residual=3,
             upper_limits=dict(moment0=dict(limit=0.12, error=0.04)),
             noise=dict(moment1=dict(
-                scale=True, scale_minimum=0.5, jitter=True)))],
+                scale=True, scale_min=0.5, jitter=True)))],
         prepare=_write_detection_noise),
     dict(
         name='correlated_noise',

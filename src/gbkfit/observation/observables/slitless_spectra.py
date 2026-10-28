@@ -1,19 +1,23 @@
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 import astropy.constants
 import astropy.units
 import numpy as np
 import numpy.typing as npt
 import scipy.sparse
+from annotated_types import Ge
+from pydantic import FiniteFloat
 
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail, _moments
+from ._detail import Rota, Rval, Step
 from ._region_sums import RegionSumsPlan
 from .apertures import Aperture, aperture_parser
 from .base import FluxScale, HostModelData, ModelData, Observable
@@ -245,7 +249,7 @@ class Exposure(parseutils.Serializable):
     Raises
     ------
     ConfigError
-        If an offset is not two numbers, or the weight is not finite.
+        If an offset is not two numbers.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -255,18 +259,16 @@ class Exposure(parseutils.Serializable):
 
     def __init__(
             self,
-            sky_offset: Sequence[float] = (0, 0),
-            image_offset: Sequence[float] = (0, 0),
-            weight: float = 1
+            sky_offset: Annotated[Sequence[float], Unit('arcsec')] = (0, 0),
+            image_offset: Annotated[Sequence[float], Unit('arcsec')] = (0, 0),
+            weight: FiniteFloat = 1
     ):
+        check_options(Exposure.__init__, locals())
         for name, offset in (
                 ('sky_offset', sky_offset), ('image_offset', image_offset)):
             if len(offset) != 2:
                 raise ConfigError(
                     f"{name} must be two offsets (x, y); it is {offset}")
-        if not np.isfinite(weight):
-            raise ConfigError(
-                f"the weight of an exposure must be finite; it is {weight}")
         self._sky_offset = tuple(float(value) for value in sky_offset)
         self._image_offset = tuple(float(value) for value in image_offset)
         self._weight = float(weight)
@@ -410,7 +412,7 @@ class SlitlessSpectra(Observable):
             trace: Trace,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
-            sky_sampling: int = 1,
+            sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
     ) -> 'SlitlessSpectra':
         """
@@ -436,7 +438,7 @@ class SlitlessSpectra(Observable):
             If the dataset is not of slitless spectra, or the options are
             not valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(SlitlessSpectra.from_data, locals())
         return cls(
             **_detail.grid_options(dataset.grid()), spectral=spectral,
             trace=trace, aperture=aperture,
@@ -471,15 +473,16 @@ class SlitlessSpectra(Observable):
             size: Sequence[int],
             spectral: gridutils.SpectralAxis,
             trace: Trace,
-            step: Sequence[float] = (1, 1),
+            step: Step = (1, 1),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0, 0),
-            rota: float = 0,
+            rval: Rval = (0, 0),
+            rota: Rota = 0,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
-            sky_sampling: int = 1,
+            sky_sampling: Annotated[int, Ge(1)] = 1,
             resampled: bool = False
     ):
+        check_options(SlitlessSpectra.__init__, locals())
         super().__init__(size, step, rpix, rval, rota)
         rest = spectral.rest()
         if spectral.step() is None or rest is None \
@@ -494,11 +497,6 @@ class SlitlessSpectra(Observable):
             else iterutils.tuplify(exposures)
         if not exposures:
             raise ConfigError("slitless spectra need at least one exposure")
-        if isinstance(sky_sampling, bool) \
-                or not isinstance(sky_sampling, int) or sky_sampling < 1:
-            raise ConfigError(
-                f"sky_sampling must be an integer of at least 1; it is "
-                f"{sky_sampling!r}")
         self._trace = trace
         self._aperture = aperture
         self._exposures = exposures

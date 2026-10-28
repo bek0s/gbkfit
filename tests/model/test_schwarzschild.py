@@ -17,8 +17,8 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LikelihoodGaussian, ObservationGroup, ObservationSky, PixelSpectra,
-    RegionMoments, line_of_sight_parser)
+    FittedNoise, LikelihoodGaussian, ObservationGroup, ObservationSky,
+    PixelSpectra, RegionMoments, line_of_sight_parser)
 from gbkfit.observation._orbits import _bins_light
 from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
@@ -211,14 +211,14 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
         lines=['stars'], data=seen.data(), dtype='float64', name='bins',
         likelihood=LikelihoodGaussian(
             missing_residual=3,
-            noise=dict(moment1=dict(scale=True, scale_minimum=0.5))))
+            noise=dict(moment1=FittedNoise(scale=True, scale_min=0.5))))
     dataset = DatasetPixelBrightness(
         Data(np.ones((16, 16)), error=np.ones((16, 16))), step=(2, 2))
     image = ObservationSky(
         PixelBrightness.from_data(dataset),
         line_of_sight_parser.load(dict(type='flat')), data=dataset,
         name='image', likelihood=LikelihoodGaussian(
-            noise=dict(brightness=dict(scale=True, scale_minimum=0.5))))
+            noise=dict(brightness=FittedNoise(scale=True, scale_min=0.5))))
     group = ObservationGroup([galaxy()], [stars, image])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE, bins_noise_scale_moment1=1.0,

@@ -20,9 +20,10 @@ import gbkfit.model.components.roles
 import gbkfit.model.components.spheroids
 import gbkfit.model.components.traits
 import gbkfit.model.mass
+import gbkfit.observation
 import gbkfit.params
 import gbkfit.region
-from gbkfit.observation.observables import traces
+from gbkfit.observation.observables import apertures, traces
 from gbkfit.utils import funcutils, typeutils
 
 
@@ -59,10 +60,17 @@ PARSERS = [
     gbkfit.model.mass.mass_component_parser,
     gbkfit.model.mass.spheroid_profile_parser,
     gbkfit.model.mass.spheroid_shape_parser,
+    gbkfit.observation.lens_mass_parser,
+    gbkfit.observation.likelihood_parser,
+    gbkfit.observation.line_of_sight_parser,
+    gbkfit.observation.noise_parser,
+    gbkfit.observation.observable_parser,
+    gbkfit.observation.weight_trait_parser,
     gbkfit.params.joint_prior_parser,
     gbkfit.params.prior_parser,
     gbkfit.region.aperture_parser,
     gbkfit.region.regions_parser,
+    apertures.aperture_parser,
     traces.trace_parser]
 CLASSES = [
     gbkfit.fitting.BootstrapOptions,
@@ -76,7 +84,12 @@ CLASSES = [
     gbkfit.model.Geometry,
     gbkfit.model.Line,
     gbkfit.model.mass.DarkFraction,
-    gbkfit.model.mass.MassModel]
+    gbkfit.model.mass.MassModel,
+    gbkfit.observation.Depth,
+    gbkfit.observation.Exposure,
+    gbkfit.observation.Foreground,
+    gbkfit.observation.Lens,
+    gbkfit.observation.Weights]
 
 
 def constructors():
@@ -85,7 +98,10 @@ def constructors():
         cls for parser in PARSERS
         for cls in parser.registered_classes().values())]
     for cls in classes:
-        for name in cls.config_constructors:
+        # (an observable with data is made by its from_data)
+        names = (*cls.config_constructors, *(
+            ('from_data',) if hasattr(cls, 'from_data') else ()))
+        for name in names:
             func = cls.__init__ if name == '__init__' else getattr(cls, name)
             # (a class without options of its own has that of object)
             if func is not object.__init__:

@@ -8,11 +8,11 @@ first voxel.
 """
 
 import abc
-import numbers
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self, TypeAlias
 
 import numpy as np
+from annotated_types import Ge, Gt, Le
 
 from gbkfit.driver import Driver
 from gbkfit.model import (
@@ -20,7 +20,8 @@ from gbkfit.model import (
     LineOpacity, Scene, ScenePlan, TransferScenePlan)
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 
 __all__ = [
@@ -31,6 +32,10 @@ __all__ = [
     'Transfer',
     'line_of_sight_parser'
 ]
+
+
+# A length on the sky
+_Length: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 
 
 class Depth(parseutils.Serializable):
@@ -58,24 +63,17 @@ class Depth(parseutils.Serializable):
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
 
-    Raises
-    ------
-    ConfigError
-        If the extent or the step is not valid.
     """
 
     def dump(self) -> dict[str, Any]:
         return dict(extent=self._extent, step=self._step)
 
-    def __init__(self, extent: str | float = 'galaxy',
-                 step: float | None = None):
-        if extent not in ('galaxy', 'legacy') and not (
-                isinstance(extent, numbers.Real) and extent > 0):
-            raise ConfigError(
-                f"extent must be 'galaxy', 'legacy' or a positive length; it "
-                f"is {extent!r}")
-        if step is not None and not step > 0:
-            raise ConfigError(f"step must be positive; it is {step}")
+    def __init__(
+            self,
+            extent: Literal['galaxy', 'legacy'] | _Length = 'galaxy',
+            step: _Length | None = None
+    ):
+        check_options(Depth.__init__, locals())
         self._extent = extent
         self._step = step
 
@@ -268,13 +266,13 @@ class Grid(LineOfSight):
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
         parseutils.load_option_and_update_info(depth_parser, info, 'depth')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), depth=self._depth.dump())
 
     def __init__(self, depth: Depth | None = None):
+        check_options(Grid.__init__, locals())
         self._depth = depth if depth is not None else Depth()
 
     def depth(self) -> Depth:
@@ -329,11 +327,6 @@ class Transfer(LineOfSight):
         sub-channels resolve the lines, at their number times the time of
         the march (light without line opacity needs none).
 
-    Raises
-    ------
-    ConfigError
-        If slab is not a positive integer, or subchannels is not an
-        integer from 1 to 64.
     """
 
     @staticmethod
@@ -343,8 +336,7 @@ class Transfer(LineOfSight):
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
         parseutils.load_option_and_update_info(depth_parser, info, 'depth')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         return dict(
@@ -354,20 +346,10 @@ class Transfer(LineOfSight):
     def __init__(
             self,
             depth: Depth | None = None,
-            slab: int | None = None,
-            subchannels: int = 1
+            slab: Annotated[int, Gt(0)] | None = None,
+            subchannels: Annotated[int, Ge(1), Le(MAX_SUBCHANNELS)] = 1
     ):
-        if slab is not None and not (
-                isinstance(slab, numbers.Integral)
-                and not isinstance(slab, bool) and slab > 0):
-            raise ConfigError(
-                f"slab must be a positive integer; it is {slab!r}")
-        if not (isinstance(subchannels, numbers.Integral)
-                and not isinstance(subchannels, bool)
-                and 1 <= subchannels <= MAX_SUBCHANNELS):
-            raise ConfigError(
-                f"subchannels must be an integer from 1 to {MAX_SUBCHANNELS}; "
-                f"it is {subchannels!r}")
+        check_options(Transfer.__init__, locals())
         self._depth = depth if depth is not None else Depth()
         self._slab = slab
         self._subchannels = subchannels

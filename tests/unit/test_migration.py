@@ -245,3 +245,11 @@ def test_files_of_image_traits_are_migrated_to_fits_files():
     assert image == dict(
         type='image', file=dict(file='hst.fits', hdu='SCI'), size=[3, 2],
         step=1)
+
+
+def test_scale_minimum_of_fitted_noise_is_migrated_to_scale_min():
+    noise = dict(moment1=dict(scale=True, scale_minimum=0.5, jitter=True))
+    migration.migrate(dict(observations=[dict(
+        type='pixel_moments', likelihood=dict(
+            type='gaussian', noise=noise))]), 2)
+    assert noise == dict(moment1=dict(scale=True, scale_min=0.5, jitter=True))

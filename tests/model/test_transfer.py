@@ -710,8 +710,10 @@ def test_subchannels_option():
     from gbkfit.observation import Transfer
     from gbkfit.utils.parseutils import ConfigError
     assert Transfer(subchannels=4).dump()['subchannels'] == 4
-    for subchannels in (0, 65, 2.5):
-        with pytest.raises(ConfigError, match="from 1 to 64"):
+    for subchannels, message in (
+            (0, "at least 1 and at most 64"), (65, "at least 1 and at most 64"),
+            (2.5, "of type int")):
+        with pytest.raises(ConfigError, match=message):
             Transfer(subchannels=subchannels)
 
 

@@ -20,7 +20,7 @@ from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
+    FittedNoise, Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
     ObservationSky, PixelBrightness)
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
@@ -238,7 +238,7 @@ def test_least_squares_fit_the_scale_of_the_errors(driver):
     # (2 / 0.1)^2)
     from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
     likelihood = LikelihoodGaussian(
-        noise=dict(brightness=dict(scale=True, scale_minimum=0.1)))
+        noise=dict(brightness=FittedNoise(scale=True, scale_min=0.1)))
     objective = mock_objective(
         driver, error_scale=0.5, likelihood=likelihood, name='mock')
     params = ParamSpace(objective.pdescs(), bounded_properties() | dict(
@@ -577,7 +577,7 @@ def test_evaluations_that_are_not_numbers_are_outside(tmp_path, caplog):
         "    if params['cut'] > 0:\n"
         "        return np.nan\n"
         "    return -0.5 * np.sum(((model - data) / error) ** 2)\n")
-    likelihood = LikelihoodUser(
+    likelihood = LikelihoodUser.from_file(
         str(tmp_path / 'like.py'), 'log_like', 'log_likelihood', ['cut'])
     objective = mock_objective(
         DriverHost(), likelihood=likelihood, name='mock')
@@ -787,7 +787,7 @@ def test_unconstrained_elements_have_infinite_errors(tmp_path):
     (tmp_path / 'like.py').write_text(
         "def residuals(item, data, model, error, mask, params):\n"
         "    return (model - data) / error\n")
-    likelihood = LikelihoodUser(
+    likelihood = LikelihoodUser.from_file(
         str(tmp_path / 'like.py'), 'residuals', 'residuals', ['unused'])
     objective = mock_objective(
         DriverHost(), likelihood=likelihood, name='mock')

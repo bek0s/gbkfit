@@ -8,14 +8,16 @@ and normalised by the comparison of the data (see Weights).
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, TypeAlias
 
 import numpy as np
+from annotated_types import Ge, Gt, Le
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -33,13 +35,7 @@ __all__ = [
 
 # The axes of a disk, and the azimuth of each (radians, in its plane)
 _AXES = dict(major=0.0, minor=np.pi / 2)
-
-
-def _check_axis(axis: str) -> None:
-    """Raise ConfigError unless axis is one of the axes of a disk."""
-    if axis not in _AXES:
-        raise ConfigError(
-            f"axis must be one of {list(_AXES)}; it is {axis!r}")
+_Axis: TypeAlias = Literal[tuple(_AXES)]
 
 
 class WeightTrait(parseutils.TypedSerializable, abc.ABC):
@@ -66,10 +62,6 @@ class WeightAzimuthPower(WeightTrait):
         The axis near which the weight is less: 'minor' (the default) or
         'major'.
 
-    Raises
-    ------
-    ConfigError
-        If the power is not positive, or the axis is not one of those.
     """
 
     @staticmethod
@@ -79,10 +71,8 @@ class WeightAzimuthPower(WeightTrait):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), power=self._power, axis=self._axis)
 
-    def __init__(self, power: float, axis: str = 'minor'):
-        if not power > 0:
-            raise ConfigError(f"power must be positive; it is {power}")
-        _check_axis(axis)
+    def __init__(self, power: Annotated[float, Gt(0)], axis: _Axis = 'minor'):
+        check_options(WeightAzimuthPower.__init__, locals())
         self._power = power
         self._axis = axis
 
@@ -106,11 +96,6 @@ class WeightAzimuthRange(WeightTrait):
     weight : float, optional
         The weight within the angle; 0 by default.
 
-    Raises
-    ------
-    ConfigError
-        If the angle is not between 0 and 90, the weight is negative, or
-        the axis is not one of those.
     """
 
     @staticmethod
@@ -123,14 +108,12 @@ class WeightAzimuthRange(WeightTrait):
             weight=self._weight)
 
     def __init__(
-            self, half_width: float, axis: str = 'minor', weight: float = 0):
-        if not 0 < half_width <= 90:
-            raise ConfigError(
-                f"half_width must be above 0 and at most 90; it is "
-                f"{half_width}")
-        if not weight >= 0:
-            raise ConfigError(f"weight must not be negative; it is {weight}")
-        _check_axis(axis)
+            self,
+            half_width: Annotated[float, Gt(0), Le(90), Unit('deg')],
+            axis: _Axis = 'minor',
+            weight: Annotated[float, Ge(0)] = 0
+    ):
+        check_options(WeightAzimuthRange.__init__, locals())
         self._half_width = half_width
         self._axis = axis
         self._weight = weight
@@ -178,8 +161,7 @@ class Weights(parseutils.Serializable):
     def load(cls, info: dict[str, Any]) -> Self:
         parseutils.load_option_and_update_info(
             weight_trait_parser, info, 'traits', required=True)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         return dict(
@@ -191,6 +173,7 @@ class Weights(parseutils.Serializable):
             component: str,
             traits: WeightTrait | Sequence[WeightTrait]
     ):
+        check_options(Weights.__init__, locals())
         traits = iterutils.tuplify(traits)
         if not traits:
             raise ConfigError(

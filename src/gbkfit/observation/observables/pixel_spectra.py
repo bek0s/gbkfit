@@ -8,7 +8,9 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import check_options
 from . import _dcube, _detail
+from ._detail import MedianSize, Rota, Rval, Step
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
@@ -84,7 +86,7 @@ class PixelSpectra(Observable):
             cls,
             dataset: DatasetPixelSpectra,
             smooth_weights: bool = False,
-            median_size: int | None = None
+            median_size: MedianSize | None = None
     ) -> 'PixelSpectra':
         """
         Make the observable of a spectral cube, on its grid.
@@ -107,7 +109,7 @@ class PixelSpectra(Observable):
             If the dataset is not of spectra on pixels, or the options are
             not valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(PixelSpectra.from_data, locals())
         return cls(
             **_detail.grid_options(dataset.grid()),
             smooth_weights=smooth_weights, median_size=median_size)
@@ -129,13 +131,14 @@ class PixelSpectra(Observable):
             self,
             size: Sequence[int],
             spectral: gridutils.SpectralAxis,
-            step: Sequence[float] = (1, 1),
+            step: Step = (1, 1),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0, 0),
-            rota: float = 0,
+            rval: Rval = (0, 0),
+            rota: Rota = 0,
             smooth_weights: bool = False,
-            median_size: int | None = None
+            median_size: MedianSize | None = None
     ):
+        check_options(PixelSpectra.__init__, locals())
         super().__init__(size, step, rpix, rval, rota, spectral)
         _detail.check_median_size(median_size)
         self._smooth_weights = smooth_weights

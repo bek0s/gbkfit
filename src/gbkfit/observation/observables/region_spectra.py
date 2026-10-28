@@ -9,8 +9,9 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
+from ._detail import Rota, Rval, Step
 from ._region_sums import RegionSumsPlan, flux_weights
 from .base import FluxScale, ModelData, Observable
 
@@ -94,10 +95,10 @@ class RegionSpectra(Observable):
             cls,
             dataset: DatasetRegionSpectra,
             size: Sequence[int] | None = None,
-            step: Sequence[float] | None = None,
+            step: Step | None = None,
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] | None = None,
-            rota: float | None = None
+            rval: Rval | None = None,
+            rota: Rota | None = None
     ) -> 'RegionSpectra':
         """
         Make the observable of the spectra of regions, of their regions
@@ -122,7 +123,7 @@ class RegionSpectra(Observable):
             If the dataset is not of spectra in regions, or the options
             are not valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(RegionSpectra.from_data, locals())
         return cls(
             dataset.regions(),
             gridutils.SpectralAxis.of(dataset.spectral_grid()),
@@ -149,11 +150,12 @@ class RegionSpectra(Observable):
             regions: Regions,
             spectral: gridutils.SpectralAxis,
             size: Sequence[int] | None = None,
-            step: Sequence[float] | None = None,
+            step: Step | None = None,
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] | None = None,
-            rota: float | None = None
+            rval: Rval | None = None,
+            rota: Rota | None = None
     ):
+        check_options(RegionSpectra.__init__, locals())
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
         coords = spatial.coords

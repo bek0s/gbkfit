@@ -290,6 +290,13 @@ def problem(value: Any, type_: Any) -> str | None:
     if not matches_type(value, type_) and not (
             type(value) is np.ndarray
             and matches_type(value.tolist(), type_)):
+        # (a union of choices or ranges, by each of its members)
+        members = union_members(type_)
+        if len(members) > 1 and any(
+                typing.get_origin(x) is Literal or _split_bounds(x)[1]
+                for x in members):
+            alternatives = ' or '.join(_describe_member(x) for x in members)
+            return f"must be {alternatives}; it is {value!r}"
         if typing.get_origin(type_) is Literal:
             choices = ', '.join(repr(x) for x in typing.get_args(type_))
             return f"must be one of {choices}; it is {value!r}"
@@ -299,6 +306,19 @@ def problem(value: Any, type_: Any) -> str | None:
         within = ' and '.join(words for words, _ in bounds)
         return f"must be {within}; it is {value!r}"
     return None
+
+
+def _describe_member(type_: Any) -> str:
+    """
+    Return the wording of a member of a union annotation, for messages:
+    its choices (of a Literal), or its type and range (e.g. "of type float
+    greater than 0").
+    """
+    if typing.get_origin(type_) is Literal:
+        return ', '.join(repr(x) for x in typing.get_args(type_))
+    inner, bounds = _split_bounds(type_)
+    within = ' and '.join(_bound(x)[0] for x in bounds)
+    return f"of type {describe_type(inner)}" + (f" {within}" if within else "")
 
 
 def _bound(bound: Any) -> tuple[str, Callable[[Any], bool]]:

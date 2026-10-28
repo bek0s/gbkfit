@@ -13,8 +13,10 @@ from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail, _moments, _orbit_outputs
+from ._detail import Rota, Rval, Step
+from ._moments import FluxFloor, Method
 from ._region_sums import RegionSumsPlan, flux_weights
 from .base import HostModelData, ModelData, Observable, ObservablePlan
 
@@ -122,12 +124,12 @@ class RegionMoments(Observable):
             dataset: DatasetRegionMoments,
             spectral: gridutils.SpectralAxis,
             size: Sequence[int] | None = None,
-            step: Sequence[float] | None = None,
+            step: Step | None = None,
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] | None = None,
-            rota: float | None = None,
-            flux_floor: float = 1e-6,
-            method: str = 'moments'
+            rval: Rval | None = None,
+            rota: Rota | None = None,
+            flux_floor: FluxFloor = 1e-6,
+            method: Method = 'moments'
     ) -> 'RegionMoments':
         """
         Make the observable of the moments of regions, of their regions
@@ -156,7 +158,7 @@ class RegionMoments(Observable):
             If the dataset is not of moments in regions, or the options
             are not valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(RegionMoments.from_data, locals())
         return cls(
             dataset.regions(), _moments.spectral_axis(spectral, dataset),
             size, step, rpix, rval, rota, flux_floor=flux_floor,
@@ -186,21 +188,21 @@ class RegionMoments(Observable):
             regions: Regions,
             spectral: gridutils.SpectralAxis,
             size: Sequence[int] | None = None,
-            step: Sequence[float] | None = None,
+            step: Step | None = None,
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] | None = None,
-            rota: float | None = None,
-            flux_floor: float = 1e-6,
+            rval: Rval | None = None,
+            rota: Rota | None = None,
+            flux_floor: FluxFloor = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
-            method: str = 'moments'
+            method: Method = 'moments'
     ):
+        check_options(RegionMoments.__init__, locals())
         spatial = _detail.spatial_grid_of_regions(
             regions, size, step, rpix, rval, rota)
         coords = spatial.coords
         super().__init__(
             spatial.size, coords.step, coords.rpix, coords.rval, coords.rota)
-        self._orders = _moments.check_moment_options(
-            orders, flux_floor, method)
+        self._orders = _moments.check_moment_orders(orders, method)
         self._spectral = _moments.spectral_axis(spectral)
         self._regions = regions
         self._flux_floor = flux_floor

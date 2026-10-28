@@ -1,20 +1,22 @@
 import abc
 import copy
 import dataclasses
-import math
 from collections.abc import Callable, Mapping, Sequence
 from numbers import Real
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, NamedTuple, Self, TypeAlias
 
 import astropy.units
 import numpy as np
+from annotated_types import Ge, Gt, Lt
+from pydantic import FiniteFloat
 
 from gbkfit.dataset import Dataset, NoiseCorrelation
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import fitsutils, funcutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FilePath, FitsFile, split_fits_file
 
 
 __all__ = [
@@ -23,6 +25,7 @@ __all__ = [
     'Likelihood',
     'LikelihoodGaussian',
     'LikelihoodUser',
+    'UpperLimit',
     'Whitening',
     'correlated_pixels',
     'likelihood_parser',
@@ -36,16 +39,46 @@ __all__ = [
 MAX_CORRELATED_PIXELS = 20000
 
 
-@dataclasses.dataclass(frozen=True)
-class FittedNoise:
+class FittedNoise(NamedTuple):
     """
-    How the noise of a data item is fitted (see LikelihoodGaussian):
-    whether its errors are times a scale, of at least scale_minimum, and
-    whether a jitter adds to them in quadrature.
+    How the noise of a data item is fitted (see LikelihoodGaussian); in a
+    configuration, a dict of its fields.
+
+    Parameters
+    ----------
+    scale : bool, optional
+        Whether its errors are times a fitted scale.
+    scale_min : float, optional
+        The smallest scale (e.g. 0.01); required with the scale, and only
+        with it.
+    jitter : bool, optional
+        Whether a fitted jitter adds to its errors in quadrature.
     """
-    scale: bool
-    scale_minimum: float | None
-    jitter: bool
+
+    scale: bool = False
+    scale_min: Annotated[FiniteFloat, Gt(0)] | None = None
+    jitter: bool = False
+
+
+class UpperLimit(NamedTuple):
+    """
+    The upper limit of the masked values of a data item (see
+    LikelihoodGaussian); in a configuration, a dict of its fields.
+
+    Parameters
+    ----------
+    limit : float
+        The limit, in the units of the data.
+    error : float
+        The noise of the non-detections, in the units of the data.
+    footprint : str or tuple, optional
+        The FITS file of where the instrument looked (1 inside, 0
+        outside): a filename, or a filename and the HDU.
+    """
+
+    limit: FiniteFloat
+    error: Annotated[FiniteFloat, Gt(0)]
+    footprint: FitsFile | None = None
 
 
 class Likelihood(parseutils.TypedSerializable, abc.ABC):
@@ -238,19 +271,12 @@ class LikelihoodGaussian(Likelihood):
         others).
     missing_residual : float, optional
         The residual of a value the model does not have (see above).
-    upper_limits : Mapping, optional
+    upper_limits : Mapping of str to UpperLimit, optional
         The upper limit of the masked values of data items, by name (none
-        for the others): a mapping of its 'limit' and its 'error' (the
-        noise of the non-detections), and optionally its 'footprint' (a
-        FITS file, relative to the configuration: a filename, or a
-        mapping of it, 'file', and its 'hdu'); see above. None by default.
-    noise : Mapping, optional
-        The fitted noise of data items, by name (none for the others): a
-        mapping of 'scale' (whether the errors are times a fitted scale),
-        'scale_minimum' (the smallest scale, finite and positive; required
-        with the scale, and only with it) and 'jitter' (whether a fitted
-        jitter adds to them), at least one of the two fitted; see above.
-        None by default.
+        for the others); see above.
+    noise : Mapping of str to FittedNoise, optional
+        The fitted noise of data items, by name (none for the others): of
+        each, its scale, its jitter, or both; see above.
     white_floor : float, optional
         The share of the variance of correlated noise taken as white, in
         [0, 1) (see above); 0.01 by default.
@@ -258,10 +284,9 @@ class LikelihoodGaussian(Likelihood):
     Raises
     ------
     ConfigError
-        If missing_residual is negative or not finite, an upper limit is
-        not a finite limit and a finite, positive error (and a footprint
-        that can be read, of values 0 and 1), the noise of an item is not
-        as above, or the white floor is not in [0, 1).
+        If a footprint cannot be read or has values other than 0 and 1,
+        or the noise of an item fits neither its scale nor its jitter, or
+        has scale_min without the scale or the scale without it.
     """
 
     @staticmethod
@@ -269,13 +294,11 @@ class LikelihoodGaussian(Likelihood):
         return 'gaussian'
 
     def dump(self) -> dict[str, Any]:
-        limits = {} if self._upper_limits is None else dict(
-            upper_limits=self._upper_limits)
+        limits = {} if self._upper_limits is None else dict(upper_limits={
+            key: _record_config(limit)
+            for key, limit in self._upper_limits.items()})
         noise = {} if not self._noise else dict(noise={
-            key: {name: value
-                  for name, value in dataclasses.asdict(item).items()
-                  if value is not None}
-            for key, item in self._noise.items()})
+            key: _record_config(item) for key, item in self._noise.items()})
         return dict(
             type=self.type(), weights=self._weights,
             missing_residual=self._missing_residual) \
@@ -285,33 +308,25 @@ class LikelihoodGaussian(Likelihood):
     def __init__(
             self,
             weights: float | Mapping[str, float] = 1.0,
-            missing_residual: float | None = None,
-            upper_limits: Mapping[str, Mapping[str, float]] | None = None,
-            noise: Mapping[str, Mapping[str, Any]] | None = None,
-            white_floor: float = 0.01
+            missing_residual: Annotated[FiniteFloat, Ge(0)] | None = None,
+            upper_limits: Mapping[str, UpperLimit] | None = None,
+            noise: Mapping[str, FittedNoise] | None = None,
+            white_floor: Annotated[float, Ge(0), Lt(1)] = 0.01
     ):
-        if missing_residual is not None and not (
-                math.isfinite(missing_residual) and missing_residual >= 0):
-            raise ConfigError(
-                f"option 'missing_residual' must be finite and not "
-                f"negative; it is {missing_residual}")
+        check_options(LikelihoodGaussian.__init__, locals())
         self._weights = weights if isinstance(weights, Real) \
             else dict(weights)
         self._missing_residual = None if missing_residual is None \
             else float(missing_residual)
-        self._upper_limits = None if upper_limits is None else {
-            key: _check_upper_limit(key, limit)
-            for key, limit in upper_limits.items()}
+        self._upper_limits = None if upper_limits is None \
+            else dict(upper_limits)
         self._footprints = {
-            key: _read_footprint(key, limit['footprint'])
+            key: _read_footprint(key, limit.footprint)
             for key, limit in (self._upper_limits or {}).items()
-            if 'footprint' in limit}
-        self._noise = {
-            key: _check_noise(key, info)
-            for key, info in (noise or {}).items()}
-        if not 0 <= white_floor < 1:
-            raise ConfigError(
-                f"option 'white_floor' must be in [0, 1); it is {white_floor}")
+            if limit.footprint is not None}
+        for key, item in (noise or {}).items():
+            _check_noise(key, item)
+        self._noise = dict(noise or {})
         self._white_floor = float(white_floor)
 
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -325,7 +340,7 @@ class LikelihoodGaussian(Likelihood):
             if scale is not None:
                 pdescs[scale] = ParamScalarDesc(
                     desc=f"the scale of the errors of {key}",
-                    minimum=noise.scale_minimum)
+                    minimum=noise.scale_min)
             if jitter is not None:
                 pdescs[jitter] = ParamScalarDesc(
                     desc=f"the jitter of {key}, which adds to its errors in "
@@ -440,7 +455,7 @@ class LikelihoodGaussian(Likelihood):
         if self._upper_limits is None or key not in self._upper_limits:
             return None
         limit = self._upper_limits[key]
-        return limit['limit'], limit['error']
+        return limit.limit, limit.error
 
     def footprint(self, key: str) -> np.ndarray | None:
         """
@@ -595,77 +610,49 @@ def _check_errors_differ(key: str, data: Dataset) -> None:
             f"(scale error)^2 + jitter^2 counts; fit one of them")
 
 
-def _check_noise(key: str, info: Mapping[str, Any]) -> FittedNoise:
+def _check_noise(key: str, noise: FittedNoise) -> None:
     """
-    Return the fitted noise of a data item from its options (see
-    LikelihoodGaussian), or raise ConfigError if they are not valid.
+    Raise ConfigError unless the fitted noise of a data item fits its
+    scale, its jitter or both, and has scale_min with the scale, and only
+    with it.
     """
-    if not isinstance(info, Mapping) \
-            or not set(info) <= {'scale', 'scale_minimum', 'jitter'}:
-        raise ConfigError(
-            f"noise of '{key}': give 'scale' and its 'scale_minimum', and "
-            f"'jitter'; it is {info!r}")
-    scale, jitter = info.get('scale', False), info.get('jitter', False)
-    if not isinstance(scale, bool) or not isinstance(jitter, bool):
-        raise ConfigError(
-            f"noise of '{key}': 'scale' and 'jitter' are true or false; "
-            f"they are {scale!r} and {jitter!r}")
-    if not (scale or jitter):
+    if not (noise.scale or noise.jitter):
         raise ConfigError(
             f"noise of '{key}': fit its scale, its jitter, or both")
-    minimum = info.get('scale_minimum')
-    if scale != (minimum is not None):
+    if noise.scale != (noise.scale_min is not None):
         raise ConfigError(
-            f"noise of '{key}': 'scale_minimum' (the smallest scale of its "
+            f"noise of '{key}': 'scale_min' (the smallest scale of its "
             f"errors, e.g. 0.01) goes with 'scale', and only with it")
-    if minimum is not None:
-        minimum = float(minimum)
-        if not (math.isfinite(minimum) and minimum > 0):
-            raise ConfigError(
-                f"noise of '{key}': 'scale_minimum' must be finite and "
-                f"positive; it is {minimum}")
-    return FittedNoise(scale=scale, scale_minimum=minimum, jitter=jitter)
 
 
-def _check_upper_limit(
-        key: str,
-        limit: Mapping[str, float]
-) -> dict[str, float]:
+def _record_config(record: NamedTuple) -> dict[str, Any]:
     """
-    Return an upper limit (a mapping of its limit and error, and its
-    footprint if given), or raise ConfigError unless both are finite and
-    the error is positive.
+    Return the configuration of a record: its fields that are not None, a
+    FITS file of an HDU as {file, hdu}.
     """
-    if not isinstance(limit, Mapping) or not (
-            {'limit', 'error'} <= set(limit)
-            <= {'limit', 'error', 'footprint'}):
-        raise ConfigError(
-            f"upper limit of '{key}': give its 'limit' and its 'error' (the "
-            f"noise of the non-detections), and optionally its "
-            f"'footprint'; it is {limit!r}")
-    value, error = float(limit['limit']), float(limit['error'])
-    if not (math.isfinite(value) and math.isfinite(error) and error > 0):
-        raise ConfigError(
-            f"upper limit of '{key}': its limit must be finite and its "
-            f"error finite and positive; they are {value} and {error}")
-    footprint = {} if 'footprint' not in limit \
-        else dict(footprint=limit['footprint'])
-    return dict(limit=value, error=error) | footprint
+    return {
+        name: dict(file=value[0], hdu=value[1])
+        if isinstance(value, tuple) else value
+        for name, value in record._asdict().items() if value is not None}
 
 
-def _read_footprint(key: str, file: str | Mapping[str, Any]) -> np.ndarray:
+def _read_footprint(key: str, file: FitsFile) -> np.ndarray:
     """
     Return the footprint of the upper limit of a data item, read from its
     FITS file (see LikelihoodGaussian), or raise ConfigError unless its
     values are 0 and 1.
     """
     with parseutils.config_path('upper_limits', key, 'footprint'):
-        footprint = fitsutils.read_data(*parseutils.parse_file(file))[0]
+        footprint = fitsutils.read_data(*split_fits_file(file))[0]
     if not np.all(np.isin(footprint, (0, 1))):
         raise ConfigError(
             f"upper limit of '{key}': its footprint must be 1 where the "
             f"data were observed and 0 elsewhere")
     return footprint.astype(float)
+
+
+# What the function of a LikelihoodUser returns
+_Form: TypeAlias = Literal['residuals', 'log_likelihood']
 
 
 class LikelihoodUser(Likelihood):
@@ -694,13 +681,14 @@ class LikelihoodUser(Likelihood):
     solves no flux scales (see ObservationSky): its function does what it
     needs, and takes the values that the model lacks.
 
+    Configurations give the function by a Python file and its name (see
+    from_file); one made from a function in Python has no configuration
+    (see dump).
+
     Parameters
     ----------
-    file : str
-        The Python file that defines the function (relative to the
-        configuration).
-    func : str
-        The name of the function.
+    func : Callable
+        The function.
     form : {'residuals', 'log_likelihood'}
         What the function returns.
     params : Sequence of str, optional
@@ -710,45 +698,87 @@ class LikelihoodUser(Likelihood):
     Raises
     ------
     ConfigError
-        If the function cannot be loaded, the form is not valid, or the
-        names of the parameters are not valid or repeat.
+        If the names of the parameters are not valid or repeat.
     """
+
+    config_constructors = ('from_file',)
 
     @staticmethod
     def type() -> str:
         return 'user'
 
     def dump(self) -> dict[str, Any]:
+        if self._source is None:
+            raise TypeError(
+                "the likelihood was made from a Python function, which has "
+                "no configuration; make it from a file (see "
+                "LikelihoodUser.from_file)")
+        file, func = self._source
         return dict(
-            type=self.type(), file=self._file, func=self._func_name,
-            form=self._form, params=list(self._params))
+            type=self.type(), file=file, func=func, form=self._form,
+            params=list(self._params))
+
+    @classmethod
+    def from_file(
+            cls,
+            file: FilePath,
+            func: str,
+            form: _Form,
+            params: Sequence[str] = ()
+    ) -> 'LikelihoodUser':
+        """
+        Make a likelihood of a function of a Python file.
+
+        Parameters
+        ----------
+        file : str
+            The Python file that defines the function.
+        func : str
+            The name of the function.
+        form : {'residuals', 'log_likelihood'}
+            What the function returns.
+        params : Sequence of str, optional
+            The names of the parameters of the likelihood.
+
+        Returns
+        -------
+        LikelihoodUser
+            The likelihood.
+
+        Raises
+        ------
+        ConfigError
+            If the file does not define the function, or the names of the
+            parameters are not valid or repeat.
+        """
+        check_options(LikelihoodUser.from_file, locals())
+        try:
+            function = funcutils.load_function_from_file(file, func)
+        except RuntimeError as e:
+            raise ConfigError(str(e)) from e
+        likelihood = cls(function, form, params)
+        likelihood._source = (file, func)
+        return likelihood
 
     def __init__(
             self,
-            file: str,
-            func: str,
-            form: Literal['residuals', 'log_likelihood'],
+            func: Callable[..., Any],
+            form: _Form,
             params: Sequence[str] = ()
     ):
-        if form not in ('residuals', 'log_likelihood'):
-            raise ConfigError(
-                f"form must be 'residuals' or 'log_likelihood'; it is "
-                f"{form!r}")
+        check_options(LikelihoodUser.__init__, locals())
         for param in params:
             parseutils.check_name(param)
         names = list(params)
         if repeated := sorted({p for p in names if names.count(p) > 1}):
             raise ConfigError(f"the parameters repeat: {repeated}")
-        try:
-            self._func: Callable[..., Any] = \
-                funcutils.load_function_from_file(
-                    parseutils.resolve_path(file), func)
-        except RuntimeError as e:
-            raise ConfigError(str(e)) from e
-        self._file = file
-        self._func_name = func
+        self._func = func
+        self._func_name = getattr(func, '__name__', repr(func))
         self._form = form
         self._params = tuple(params)
+        # (the file and the name of the function of one made from a file:
+        # its configuration; see from_file and dump)
+        self._source: tuple[str, str] | None = None
 
     def form(self) -> str:
         """Return what its function returns: its form."""

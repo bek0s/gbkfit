@@ -4,10 +4,11 @@ Helpers shared by the observables.
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
 import astropy.units
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
@@ -17,6 +18,7 @@ from gbkfit.params import ParamValues
 from gbkfit.region import Regions
 from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import Unit
 from ..weights import plan_weights
 from ._dcube import DCube, cube_extra
 from .base import HostModelData, ModelData, Observable, ObservablePlan
@@ -32,6 +34,14 @@ if TYPE_CHECKING:
 # The options of the spatial grid of the cube of an observable of data
 # in regions (see spatial_grid_of_regions)
 SPATIAL_OPTIONS = ('size', 'step', 'rpix', 'rval', 'rota')
+
+# The types of the options of the grid of an observable on the sky (see
+# gridutils.Coords; size and rpix are in pixels), and of the size of a
+# median filter (see check_median_size)
+Step: TypeAlias = Annotated[Sequence[float], Unit('arcsec')]
+Rval: TypeAlias = Annotated[Sequence[float], Unit('deg')]
+Rota: TypeAlias = Annotated[float, Unit('deg')]
+MedianSize: TypeAlias = Annotated[int, Ge(3)]
 
 
 def load_observable(
@@ -133,21 +143,13 @@ def without_options_from_data(
 def check_median_size(median_size: int | None) -> None:
     """
     Raise ConfigError unless the size of a median filter (see
-    DCube.median_size) is an odd number of pixels, at least 3 (a window
-    centred on each pixel), or None.
+    DCube.median_size) is an odd number of pixels (a window centred on
+    each pixel), or None.
     """
-    if median_size is not None and not (
-            isinstance(median_size, int) and median_size >= 3
-            and median_size % 2 == 1):
+    if median_size is not None and median_size % 2 != 1:
         raise ConfigError(
-            f"median_size must be an odd number of pixels, at least 3; it "
-            f"is {median_size!r}")
-
-
-def check_positive(name: str, value: float) -> None:
-    """Raise ConfigError unless the value of an option is positive."""
-    if not value > 0:
-        raise ConfigError(f"{name} must be positive; it is {value}")
+            f"median_size must be an odd number of pixels; it is "
+            f"{median_size}")
 
 
 def warn_unsmoothed_weights(

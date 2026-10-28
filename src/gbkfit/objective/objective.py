@@ -430,7 +430,7 @@ class Objective:
             np.sum(residuals ** 2) for residuals in self._solve_residuals()))
         chi2 = data_chi2 + prior_chi2
         # (the noise residuals of fitted scales hold a constant of their
-        # scale_minimum, which the log-likelihood and the AICp leave out)
+        # scale_min, which the log-likelihood and the AICp leave out)
         constant = float(sum(c.noise_constant() for c in self._comparisons))
         log_likelihood = -0.5 * (chi2 + constant) + float(sum(
             solution.log_term for solution in self._solutions.values()))

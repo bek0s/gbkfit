@@ -3,10 +3,11 @@ Helpers shared by the observables of moments.
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
 import astropy.units
 import numpy as np
+from annotated_types import Ge, Lt
 
 import gbkfit.math
 from gbkfit.dataset import Dataset
@@ -14,7 +15,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
-from . import _dcube, _detail
+from . import _dcube
 from .base import ModelData
 
 if TYPE_CHECKING:
@@ -32,6 +33,11 @@ SPEC_RANGE = 1000
 # dispersion), or a Gauss-Hermite series fitted to them (its flux, centre,
 # dispersion, h3 and h4)
 METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
+Method: TypeAlias = Literal[METHODS]
+
+# The flux floor of the moments: a fraction of the flux of the brightest
+# spectrum (see PixelMoments)
+FluxFloor: TypeAlias = Annotated[float, Ge(0), Lt(1)]
 
 # The highest order of the maps of each method
 _MAX_ORDERS = dict(moments=7, gaussian_fit=2, gauss_hermite=4)
@@ -88,20 +94,15 @@ def spectral_axis(
         rval=0.0 if rval is None else rval))
 
 
-def check_moment_options(
+def check_moment_orders(
         orders: Sequence[int],
-        flux_floor: float,
         method: str
 ) -> tuple[int, ...]:
     """
     Return the moment orders, sorted and unique. Raise ConfigError unless
     they are valid for the method (see METHODS; a Gaussian has moments 0
-    to 2, a Gauss-Hermite series 0 to 4), and the flux floor is from 0 to
-    below 1.
+    to 2, a Gauss-Hermite series 0 to 4).
     """
-    if method not in METHODS:
-        raise ConfigError(
-            f"method must be one of {list(METHODS)}; it is {method!r}")
     max_order = _MAX_ORDERS[method]
     orders = tuple(sorted(set(orders)))
     if not orders:
@@ -110,10 +111,6 @@ def check_moment_options(
         raise ConfigError(
             f"the moment orders of the method {method} must be between 0 "
             f"and {max_order}")
-    if not 0 <= flux_floor < 1:
-        raise ConfigError(
-            f"flux_floor is a fraction of the flux of the brightest "
-            f"spectrum, from 0 to below 1; it is {flux_floor}")
     return orders
 
 

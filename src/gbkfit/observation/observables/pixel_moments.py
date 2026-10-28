@@ -8,8 +8,10 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail, _moments
+from ._detail import MedianSize, Rota, Rval, Step
+from ._moments import FluxFloor, Method
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
@@ -116,9 +118,9 @@ class PixelMoments(Observable):
             cls,
             dataset: DatasetPixelMoments,
             spectral: gridutils.SpectralAxis,
-            flux_floor: float = 1e-6,
-            method: str = 'moments',
-            median_size: int | None = None
+            flux_floor: FluxFloor = 1e-6,
+            method: Method = 'moments',
+            median_size: MedianSize | None = None
     ) -> 'PixelMoments':
         """
         Make the observable of moment maps, on their grid and of their
@@ -147,7 +149,7 @@ class PixelMoments(Observable):
             If the dataset is not of moment maps, or the options are not
             valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(PixelMoments.from_data, locals())
         return cls(
             **_detail.grid_options(dataset.grid()),
             spectral=_moments.spectral_axis(spectral, dataset),
@@ -178,20 +180,20 @@ class PixelMoments(Observable):
             self,
             size: Sequence[int],
             spectral: gridutils.SpectralAxis,
-            step: Sequence[float] = (1, 1),
+            step: Step = (1, 1),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0, 0),
-            rota: float = 0,
-            flux_floor: float = 1e-6,
+            rval: Rval = (0, 0),
+            rota: Rota = 0,
+            flux_floor: FluxFloor = 1e-6,
             orders: Sequence[int] = (0, 1, 2),
-            method: str = 'moments',
-            median_size: int | None = None
+            method: Method = 'moments',
+            median_size: MedianSize | None = None
     ):
+        check_options(PixelMoments.__init__, locals())
         super().__init__(size, step, rpix, rval, rota)
         _detail.check_median_size(median_size)
         self._median_size = median_size
-        self._orders = _moments.check_moment_options(
-            orders, flux_floor, method)
+        self._orders = _moments.check_moment_orders(orders, method)
         self._spectral = _moments.spectral_axis(spectral)
         self._flux_floor = flux_floor
         self._method = method

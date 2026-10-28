@@ -16,8 +16,9 @@ from gbkfit.fitting import FitProblem
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    LikelihoodGaussian, LikelihoodUser, ObservationGroup, ObservationSky,
-    PixelMoments, PixelSpectra, line_of_sight_parser, noise_parser)
+    FittedNoise, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
+    ObservationSky, PixelMoments, PixelSpectra, line_of_sight_parser,
+    noise_parser)
 from gbkfit.params import ParamSpace, SolveGaussian
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
@@ -227,7 +228,7 @@ def test_solved_scales_weigh_the_values_by_their_fitted_noise(driver):
         + rng.normal(0, jitter, spectra.shape)
     obj, params = objective(
         driver, data, error,
-        likelihood=LikelihoodGaussian(noise=dict(spectra=dict(jitter=True))),
+        likelihood=LikelihoodGaussian(noise=dict(spectra=FittedNoise(jitter=True))),
         obs_noise_jitter_spectra=jitter)
     np.testing.assert_allclose(
         solved(obj, params),
@@ -292,7 +293,7 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
     (tmp_path / 'like.py').write_text(
         "def like(key, data, model, error, mask, params):\n"
         "    return model - data\n")
-    user = LikelihoodUser(
+    user = LikelihoodUser.from_file(
         str(tmp_path / 'like.py'), 'like', 'residuals')
     with pytest.raises(ConfigError, match="not known to be linear"):
         objective(driver, spectra, 1.0, likelihood=user)

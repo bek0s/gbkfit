@@ -8,8 +8,9 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission, DataUnit, LightUnit
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
+from ._detail import MedianSize, Rota, Rval, Step
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
@@ -82,7 +83,7 @@ class PixelBrightness(Observable):
     def from_data(
             cls,
             dataset: DatasetPixelBrightness,
-            median_size: int | None = None
+            median_size: MedianSize | None = None
     ) -> 'PixelBrightness':
         """
         Make the observable of an image, on its grid.
@@ -105,7 +106,7 @@ class PixelBrightness(Observable):
             If the dataset is not of brightness, or the options are not
             valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(PixelBrightness.from_data, locals())
         return cls(
             **_detail.grid_options(dataset.grid()), median_size=median_size)
 
@@ -128,12 +129,13 @@ class PixelBrightness(Observable):
     def __init__(
             self,
             size: Sequence[int],
-            step: Sequence[float] = (1, 1),
+            step: Step = (1, 1),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0, 0),
-            rota: float = 0,
-            median_size: int | None = None
+            rval: Rval = (0, 0),
+            rota: Rota = 0,
+            median_size: MedianSize | None = None
     ):
+        check_options(PixelBrightness.__init__, locals())
         super().__init__(size, step, rpix, rval, rota)
         _detail.check_median_size(median_size)
         self._median_size = median_size

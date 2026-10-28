@@ -10,12 +10,14 @@ dispersion, in arcsec from its reference pixel (see gridutils.Coords).
 
 import abc
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
+from annotated_types import Ge, Gt
 
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 
 __all__ = [
@@ -107,8 +109,8 @@ class ApertureShutters(Aperture):
     Raises
     ------
     ConfigError
-        If the size is not positive, the count is less than 1, or the
-        pitch is missing or smaller than the length of a shutter.
+        If the size is not two positive widths, or several shutters have
+        no pitch or one smaller than the length of a shutter.
     """
 
     @staticmethod
@@ -124,20 +126,17 @@ class ApertureShutters(Aperture):
 
     def __init__(
             self,
-            size: Sequence[float],
-            pitch: float | None = None,
-            count: int = 1,
-            centre: Sequence[float] = (0, 0)
+            size: Annotated[Sequence[float], Unit('arcsec')],
+            pitch: Annotated[float, Gt(0), Unit('arcsec')] | None = None,
+            count: Annotated[int, Ge(1)] = 1,
+            centre: Annotated[Sequence[float], Unit('arcsec')] = (0, 0)
     ):
+        check_options(ApertureShutters.__init__, locals())
         size = tuple(float(value) for value in size)
         if len(size) != 2 or not min(size) > 0:
             raise ConfigError(
                 f"the size of the shutters must be two positive widths; it "
                 f"is {size}")
-        if count < 1:
-            raise ConfigError(
-                f"the count of the shutters must be at least 1; it is "
-                f"{count}")
         if count > 1 and (pitch is None or pitch < size[1]):
             raise ConfigError(
                 f"several shutters need a pitch of at least their length "

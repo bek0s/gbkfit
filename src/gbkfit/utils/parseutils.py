@@ -19,6 +19,7 @@ import inspect
 import logging
 import os
 import re
+import typing
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Any, Literal, NamedTuple, Self
 
@@ -533,8 +534,9 @@ def parse_options_for_callable(
     from_config): a FilePath is relative to the directory of the
     configuration (see resolve_path), a FitsFile is a filename or a dict
     with the filename (file) and the HDU (hdu), a record (a NamedTuple,
-    e.g. a Column) is a dict of its fields, and a Quantity is a dict with
-    its value and unit (e.g. {value: [1, 2], unit: kpc}).
+    e.g. a Column) is a dict of its fields, a Quantity is a dict with its
+    value and unit (e.g. {value: [1, 2], unit: kpc}), and the values of a
+    Mapping are in the forms of their type.
 
     Parameters
     ----------
@@ -564,7 +566,9 @@ def parse_options_for_callable(
     if unknown := ignore_params - set(required) - set(optional):
         raise RuntimeError(
             f"{func.__qualname__} has no parameters {_quoted(unknown)}")
-    others = next((
+    # (object.__init__, of a class without options, refuses the **kwargs
+    # of its signature)
+    others = None if func is object.__init__ else next((
         p.name for p in inspect.signature(func).parameters.values()
         if p.kind is inspect.Parameter.VAR_KEYWORD), None)
     known = set(required) | set(optional) | ignore_params
@@ -617,6 +621,14 @@ def from_config(value: Any, type_: Any) -> Any:
             return (file, hdu) if isinstance(value, Mapping) else file
         if _is_record(member) and isinstance(value, Mapping):
             return member(**parse_options_for_callable(dict(value), member))
+        if typing.get_origin(member) is Mapping \
+                and isinstance(value, Mapping):
+            item_type = typing.get_args(member)[1]
+            items = {}
+            for key, item in value.items():
+                with config_path(key):
+                    items[key] = from_config(item, item_type)
+            return items
         if member is astropy.units.Quantity and isinstance(value, Mapping):
             return _quantity(value)
     return value

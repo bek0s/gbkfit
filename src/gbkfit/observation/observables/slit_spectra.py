@@ -1,15 +1,18 @@
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
+from ._detail import Rota, Rval, Step
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
@@ -23,6 +26,10 @@ if TYPE_CHECKING:
 __all__ = [
     'SlitSpectra'
 ]
+
+
+# The width of a slit
+_Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 
 
 def _slit_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
@@ -93,8 +100,8 @@ class SlitSpectra(Observable):
     def from_data(
             cls,
             dataset: DatasetSlitSpectra,
-            slit_width: float | None = None,
-            sky_rval: Sequence[float] = (0, 0),
+            slit_width: _Width | None = None,
+            sky_rval: Rval = (0, 0),
             smooth_weights: bool = False
     ) -> 'SlitSpectra':
         """
@@ -118,7 +125,7 @@ class SlitSpectra(Observable):
             If the dataset is not of slit spectra, or the options are not
             valid.
         """
-        cls._require_dataset_class(dataset)
+        check_options(SlitSpectra.from_data, locals())
         return cls(
             **_detail.grid_options(dataset.grid()), slit_width=slit_width,
             sky_rval=sky_rval, smooth_weights=smooth_weights)
@@ -141,18 +148,18 @@ class SlitSpectra(Observable):
             self,
             size: Sequence[int],
             spectral: gridutils.SpectralAxis,
-            step: Sequence[float] = (1,),
+            step: Step = (1,),
             rpix: Sequence[float] | None = None,
-            rval: Sequence[float] = (0,),
-            rota: float = 0,
-            slit_width: float | None = None,
-            sky_rval: Sequence[float] = (0, 0),
+            rval: Rval = (0,),
+            rota: Rota = 0,
+            slit_width: _Width | None = None,
+            sky_rval: Rval = (0, 0),
             smooth_weights: bool = False
     ):
+        check_options(SlitSpectra.__init__, locals())
         super().__init__(size, step, rpix, rval, rota, spectral)
         if slit_width is None:
             slit_width = self.step()[0]
-        _detail.check_positive('slit_width', slit_width)
         sky_rval = tuple(sky_rval)
         if len(sky_rval) != 2:
             raise ConfigError(

@@ -21,8 +21,7 @@ __all__ = [
     'Data',
     'DataColumns',
     'DataFiles',
-    'dump_data',
-    'fits_file'
+    'dump_data'
 ]
 
 
@@ -127,32 +126,6 @@ def _read_companion(
     filename, hdu = (file, 0) if isinstance(file, str) else file
     data_file = (data, 0) if isinstance(data, str) else data
     return fitsutils.read_companion(filename, hdu, data_file, rest)
-
-
-def fits_file(x: str | Mapping[str, Any], prefix: str = '') -> FitsFile:
-    """
-    Return the FITS file of a file option.
-
-    Parameters
-    ----------
-    x : str or Mapping
-        A filename, or a dict with the filename ('file') and, optionally,
-        the HDU ('hdu', e.g. 'SCI').
-    prefix : str, optional
-        Prepended to the filename.
-
-    Returns
-    -------
-    tuple of str and (int or str)
-        The filename and the HDU.
-
-    Raises
-    ------
-    ConfigError
-        If the option is invalid.
-    """
-    file, hdu = parseutils.parse_file(x)
-    return prefix + file, hdu
 
 
 def _as_float(x: np.ndarray, dtype: np.dtype | None = None) -> np.ndarray:

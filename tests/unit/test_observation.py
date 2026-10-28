@@ -10,7 +10,7 @@ from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
     Flat, LikelihoodGaussian, ObservationSky, PixelBrightness, PixelMoments,
-    observation_parser)
+    UpperLimit, observation_parser)
 from gbkfit.utils import parseutils
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
@@ -61,7 +61,7 @@ def test_a_model_that_can_lack_values_needs_their_residual():
 
 
 def test_observable_options_are_checked():
-    with pytest.raises(ConfigError, match="flux_floor is a fraction"):
+    with pytest.raises(ConfigError, match="'flux_floor' must be at least 0 and less than 1"):
         PixelMoments(
             size=(8, 8), flux_floor=1,
             spectral=SpectralAxis(convention='relativistic'))
@@ -115,7 +115,7 @@ def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
 
 @pytest.mark.parametrize('options, message', [
     (dict(weights=dict(moment2=2)), r"does not have: \['moment2'\]"),
-    (dict(upper_limits=dict(momnet0=dict(limit=1, error=0.1))),
+    (dict(upper_limits=dict(momnet0=UpperLimit(limit=1, error=0.1))),
      r"does not have: \['momnet0'\]")])
 def test_likelihoods_name_items_of_their_observation(options, message):
     # A typo in the name of an item of the options of a likelihood would
@@ -142,7 +142,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
     observation = ObservationSky(
         PixelSpectra.from_data(data), Flat(), data=data,
         likelihood=LikelihoodGaussian(
-            upper_limits=dict(spectra=dict(limit=0.1, error=0.05))))
+            upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))))
     comparison_ = comparison(observation, DriverHost())
     for form in (comparison_.linear_form, comparison_.pointwise_form):
         assert "has an upper limit" in form(['spectra'])

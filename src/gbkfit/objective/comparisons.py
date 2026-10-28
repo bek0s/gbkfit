@@ -343,7 +343,7 @@ class _Noise(NamedTuple):
     """
     scale: str | None
     jitter: str | None
-    scale_minimum: float
+    scale_min: float
 
 
 class _Whitener:
@@ -483,7 +483,7 @@ class ComparisonGaussian(Comparison):
         # item: float32 would round it off)
         self._noise = {
             key: _Noise(*likelihood.noise_params(key),
-                        noise.scale_minimum if noise.scale else 1.0)
+                        noise.scale_min if noise.scale else 1.0)
             for key, noise in likelihood.fitted_noise().items()}
         self._noise_residuals = np.zeros(len(self._noise))
         self._white_floor = likelihood.white_floor()
@@ -799,11 +799,11 @@ class ComparisonGaussian(Comparison):
         # (f_min e)^2), for least squares never negative: its part sum c^2
         # ln(f_min^2), with sum c^2 over the values compared (the pixel
         # weights normalised to their number; fewer independent values of
-        # correlated noise), is a constant of scale_minimum alone, which
+        # correlated noise), is a constant of scale_min alone, which
         # -2 ln L and the AICp must not hold)
         return float(sum(
             self._weights[key] ** 2 * self._nunmasked[key] * share
-            * 2 * np.log(noise.scale_minimum)
+            * 2 * np.log(noise.scale_min)
             for (key, noise), share in zip(
                 self._noise.items(), self._noise_shares)))
 
@@ -851,7 +851,7 @@ class ComparisonGaussian(Comparison):
                 model[key]['w'],
                 weight,
                 *self._noise_values(key, params),
-                noise.scale_minimum,
+                noise.scale_min,
                 self._d_noise_sums[j:j + 1])
         driver.mem_copy_d2h(self._d_noise_sums, self._h_noise_sums)
         # (each term is at least 0, but rounding can leave a sum of terms

@@ -34,7 +34,7 @@ observations:
     upper_limits:
       moment0: {limit: 0.12, error: 0.04}
     noise:
-      moment1: {scale: true, scale_minimum: 0.5, jitter: true}
+      moment1: {scale: true, scale_min: 0.5, jitter: true}
     white_floor: 0.01
   line_of_sight: {type: flat}
   foreground: {lens: null}

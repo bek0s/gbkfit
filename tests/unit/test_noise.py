@@ -53,7 +53,7 @@ def test_student_t_noise_has_the_dispersion_and_heavier_tails():
     assert kurtosis > 6
     info = dict(type='student_t', dof=5, rms=2)
     assert noise_parser.dump(noise_parser.load(dict(info))) == info
-    with pytest.raises(ConfigError, match="dof must be above 2"):
+    with pytest.raises(ConfigError, match="must be greater than 2"):
         NoiseStudentT(2, rms=1)
 
 

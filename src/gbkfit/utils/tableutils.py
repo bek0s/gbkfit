@@ -19,22 +19,19 @@ __all__ = [
 ]
 
 
-def read_table(
-        file: Any, format_: str | None = None, prefix: str = ''
-) -> Table:
+def read_table(file: Any, format_: str | None = None) -> Table:
     """
     Read a table of a file option (see parseutils.parse_file): any that
     astropy reads (see Table.read: e.g. ECSV, FITS, CSV or text; the
     columns of a text file without a header are named col1, col2, ...),
-    in the given format, or one astropy tells; the prefix is prepended
-    to its filename (as to the files of datasets, see fits_file).
+    in the given format, or one astropy tells.
 
     Raises
     ------
     ConfigError
         If the file cannot be read.
     """
-    filename = prefix + parseutils.parse_file(file)[0]
+    filename = parseutils.parse_file(file)[0]
     try:
         return Table.read(filename, format=format_)
     except (OSError, ValueError) as e:

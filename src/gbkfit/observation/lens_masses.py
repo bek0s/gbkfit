@@ -16,16 +16,17 @@ import abc
 import math
 import os.path
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Annotated, Any, TypeAlias
 
 import numpy as np
+import numpy.typing as npt
 import scipy.ndimage
+from annotated_types import Ge
 
-from gbkfit.dataset import fits_file
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
 
 
 __all__ = [
@@ -38,6 +39,10 @@ __all__ = [
     'LensShear',
     'lens_mass_parser'
 ]
+
+
+# The rotation of a grid on the sky
+_Angle: TypeAlias = Annotated[float, Unit('deg')]
 
 
 class LensMass(parseutils.TypedSerializable, abc.ABC):
@@ -60,18 +65,11 @@ class LensMass(parseutils.TypedSerializable, abc.ABC):
         If the name is not valid (see parseutils.check_name).
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any], prefix: str = '') -> 'LensMass':
-        """
-        Load a mass from its configuration; the prefix of the filenames of
-        its files, if any, is prepended to them.
-        """
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
-
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return {} if self._name is None else dict(name=self._name)
 
     def __init__(self, name: str | None = None):
+        check_options(LensMass.__init__, locals())
         parseutils.check_name(name)
         self._name = name
 
@@ -144,23 +142,11 @@ class LensDeflectionMap(LensMass):
         If the maps are not two finite images of one shape.
     """
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'deflection_map'
-
-    @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'LensDeflectionMap':
-        info = dict(info)
-        files = {}
-        for key in ('alpha_x', 'alpha_y'):
-            files[key] = parseutils.load_option(
-                fits_file, info, key, required=True, prefix=prefix)
-            del info[key]
-        options = parseutils.parse_options_for_callable(
-            info, cls.from_files, ignore_params=list(files))
-        return cls.from_files(**files, **options)
 
     @classmethod
     def from_files(
@@ -170,7 +156,7 @@ class LensDeflectionMap(LensMass):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            rota: _Angle | None = None,
             scaled: bool = False,
             name: str | None = None
     ) -> 'LensDeflectionMap':
@@ -207,10 +193,10 @@ class LensDeflectionMap(LensMass):
         ConfigError
             If the maps have different world coordinates.
         """
-        maps = []
-        for file in (alpha_x, alpha_y):
-            filename, hdu = (file, 0) if isinstance(file, str) else file
-            maps.append(fitsutils.read_data(filename, hdu, rpix, rval))
+        check_options(LensDeflectionMap.from_files, locals())
+        maps = [
+            fitsutils.read_data(*split_fits_file(file), rpix, rval)
+            for file in (alpha_x, alpha_y)]
         (data_x, coords), (data_y, coords_y) = maps
         if coords_y != coords:
             raise ConfigError(
@@ -237,15 +223,16 @@ class LensDeflectionMap(LensMass):
 
     def __init__(
             self,
-            alpha_x: np.ndarray,
-            alpha_y: np.ndarray,
+            alpha_x: Annotated[npt.ArrayLike, Unit('arcsec')],
+            alpha_y: Annotated[npt.ArrayLike, Unit('arcsec')],
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None,
+            rota: _Angle | None = None,
             scaled: bool = False,
             name: str | None = None
     ):
+        check_options(LensDeflectionMap.__init__, locals())
         super().__init__(name)
         alpha_x = np.asarray(alpha_x, dtype=float)
         alpha_y = np.asarray(alpha_y, dtype=float)
@@ -474,13 +461,9 @@ class LensMultipole(LensMass):
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return super().dump() | dict(order=self._order)
 
-    def __init__(self, order: int, name: str | None = None):
+    def __init__(self, order: Annotated[int, Ge(1)], name: str | None = None):
+        check_options(LensMultipole.__init__, locals())
         super().__init__(name)
-        if isinstance(order, bool) or not isinstance(order, int) \
-                or order < 1:
-            raise ConfigError(
-                f"the order of a multipole must be an integer of at least "
-                f"1; it is {order!r}")
         self._order = order
 
     def order(self) -> int:

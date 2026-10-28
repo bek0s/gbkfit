@@ -1,13 +1,14 @@
 import copy
 from collections.abc import Mapping, Sequence
-from typing import Any, Self
+from typing import Annotated, Any, Self
 
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 from .lens_masses import LensMass, lens_mass_parser
 
@@ -55,14 +56,10 @@ class Lens(parseutils.Serializable):
     """
 
     @classmethod
-    def load(cls, info: dict[str, Any], prefix: str = '') -> 'Lens':
-        masses = info.get('masses')
+    def load(cls, info: dict[str, Any]) -> 'Lens':
         parseutils.load_option_and_update_info(
-            lens_mass_parser, info, 'masses', required=True,
-            prefix=[prefix] * len(masses)
-            if iterutils.is_sequence(masses) else prefix)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+            lens_mass_parser, info, 'masses', required=True)
+        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -80,9 +77,10 @@ class Lens(parseutils.Serializable):
     def __init__(
             self,
             source_size: Sequence[int],
-            source_step: Sequence[float],
+            source_step: Annotated[Sequence[float], Unit('arcsec')],
             masses: LensMass | Sequence[LensMass]
     ):
+        check_options(Lens.__init__, locals())
         masses = iterutils.tuplify(masses)
         if not masses:
             raise ConfigError("a lens needs at least one mass")
@@ -285,11 +283,9 @@ class Foreground(parseutils.Serializable):
     """
 
     @classmethod
-    def load(cls, info: dict[str, Any], prefix: str = '') -> 'Foreground':
-        parseutils.load_option_and_update_info(
-            lens_parser, info, 'lens', prefix=prefix)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+    def load(cls, info: dict[str, Any]) -> 'Foreground':
+        parseutils.load_option_and_update_info(lens_parser, info, 'lens')
+        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -300,6 +296,7 @@ class Foreground(parseutils.Serializable):
             overwrite=overwrite))
 
     def __init__(self, lens: Lens | None = None):
+        check_options(Foreground.__init__, locals())
         self._lens = lens
         self._prefix = ''
 

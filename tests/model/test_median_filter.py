@@ -114,6 +114,8 @@ def test_the_median_size_is_an_odd_number_of_at_least_3():
         median_size=3)
     assert observable_parser.load(observable.dump()).dump() \
         == observable.dump()
-    for size in (1, 4, 2.0):
-        with pytest.raises(ConfigError, match="odd number of pixels"):
+    for size, message in (
+            (1, "at least 3"), (4, "odd number of pixels"),
+            (2.0, "of type int")):
+        with pytest.raises(ConfigError, match=message):
             PixelBrightness(size=(8, 8), median_size=size)

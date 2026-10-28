@@ -5,17 +5,20 @@ where the instrument records them (see GroupPlan.mock).
 
 import abc
 import os
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 import astropy.io.fits
 import astropy.units as u
 import numpy as np
+import numpy.typing as npt
 import scipy.fft
+from annotated_types import Gt
 
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.math.correlation import periodic_correlation
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FitsFile, split_fits_file
 
 
 __all__ = [
@@ -151,8 +154,7 @@ class NoiseGauss(Noise):
     transform. A PSF that varies along the spectral axis is the spatial
     correlation of each channel.
 
-    Its configuration has the error map as a FITS file (a filename, or a
-    dict with the filename and the HDU).
+    Configurations give the error map by its FITS file (see from_file).
 
     Parameters
     ----------
@@ -172,11 +174,11 @@ class NoiseGauss(Noise):
     Raises
     ------
     ConfigError
-        If not exactly one of rms and error is given, rms is not
-        positive, the error map has negative values, the spatial
-        correlation is a str other than 'instrument', or the spectral one
-        varies.
+        If not exactly one of rms and error is given, the error map has
+        negative values, or the spectral correlation varies.
     """
+
+    config_constructors = ('__init__', 'from_file')
 
     @staticmethod
     def type() -> str:
@@ -184,7 +186,7 @@ class NoiseGauss(Noise):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
-        info = _load_error(info)
+        info = dict(info)
         if isinstance(info.get('spatial_correlation'), dict):
             parseutils.load_option_and_update_info(
                 psf_parser, info, 'spatial_correlation')
@@ -208,19 +210,43 @@ class NoiseGauss(Noise):
                 self._spectral_correlation, **kwargs))
         return info
 
+    @classmethod
+    def from_file(
+            cls,
+            error: FitsFile,
+            spatial_correlation: PSF | Literal[INSTRUMENT] | None = None,
+            spectral_correlation: LSF | None = None
+    ) -> 'NoiseGauss':
+        """
+        Make a noise of an error map read from a FITS file.
+
+        Parameters
+        ----------
+        error : str or tuple
+            The file of the error map: a filename, or a filename and the
+            HDU.
+        spatial_correlation, spectral_correlation : optional
+            As those of NoiseGauss.
+
+        Returns
+        -------
+        NoiseGauss
+            The noise.
+        """
+        check_options(NoiseGauss.from_file, locals())
+        return cls(
+            error=_read_error(error), spatial_correlation=spatial_correlation,
+            spectral_correlation=spectral_correlation)
+
     def __init__(
             self,
-            rms: float | None = None,
-            error: np.ndarray | None = None,
-            spatial_correlation: PSF | str | None = None,
+            rms: Annotated[float, Gt(0)] | None = None,
+            error: npt.ArrayLike | None = None,
+            spatial_correlation: PSF | Literal[INSTRUMENT] | None = None,
             spectral_correlation: LSF | None = None
     ):
+        check_options(NoiseGauss.__init__, locals())
         error = _check_dispersion(rms, error)
-        if isinstance(spatial_correlation, str) \
-                and spatial_correlation != INSTRUMENT:
-            raise ConfigError(
-                f"spatial_correlation is a PSF or '{INSTRUMENT}'; it is "
-                f"{spatial_correlation!r}")
         if spectral_correlation is not None and spectral_correlation.varies():
             raise ConfigError("the spectral correlation must not vary")
         self._rms = rms
@@ -334,7 +360,7 @@ class NoiseStudentT(Noise):
     Its values are t draws times sigma sqrt((dof - 2) / dof), whose
     dispersion is sigma.
 
-    Its configuration has the error map as a FITS file (see NoiseGauss).
+    Configurations give the error map by its FITS file (see from_file).
 
     Parameters
     ----------
@@ -348,17 +374,15 @@ class NoiseStudentT(Noise):
     Raises
     ------
     ConfigError
-        If dof is not above 2, not exactly one of rms and error is given,
-        rms is not positive, or the error map has negative values.
+        If not exactly one of rms and error is given, or the error map has
+        negative values.
     """
+
+    config_constructors = ('__init__', 'from_file')
 
     @staticmethod
     def type() -> str:
         return 'student_t'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        return super().load(_load_error(info))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -367,15 +391,38 @@ class NoiseStudentT(Noise):
         return dict(type=self.type(), dof=self._dof) | _dump_dispersion(
             self._rms, self._error, prefix, dump_path, overwrite)
 
+    @classmethod
+    def from_file(
+            cls,
+            dof: Annotated[float, Gt(2)],
+            error: FitsFile
+    ) -> 'NoiseStudentT':
+        """
+        Make a noise of an error map read from a FITS file.
+
+        Parameters
+        ----------
+        dof : float
+            The degrees of freedom.
+        error : str or tuple
+            The file of the error map: a filename, or a filename and the
+            HDU.
+
+        Returns
+        -------
+        NoiseStudentT
+            The noise.
+        """
+        check_options(NoiseStudentT.from_file, locals())
+        return cls(dof, error=_read_error(error))
+
     def __init__(
             self,
-            dof: float,
-            rms: float | None = None,
-            error: np.ndarray | None = None
+            dof: Annotated[float, Gt(2)],
+            rms: Annotated[float, Gt(0)] | None = None,
+            error: npt.ArrayLike | None = None
     ):
-        if not dof > 2:
-            raise ConfigError(
-                f"dof must be above 2 (a finite dispersion); it is {dof}")
+        check_options(NoiseStudentT.__init__, locals())
         self._dof = dof
         self._rms = rms
         self._error = _check_dispersion(rms, error)
@@ -413,10 +460,6 @@ class NoisePoisson(Noise):
         The counts per unit of the data (e.g. of the photons per unit of
         flux).
 
-    Raises
-    ------
-    ConfigError
-        If the gain is not positive.
     """
 
     @staticmethod
@@ -429,9 +472,8 @@ class NoisePoisson(Noise):
     ) -> dict[str, Any]:
         return dict(type=self.type(), gain=self._gain)
 
-    def __init__(self, gain: float = 1.0):
-        if not gain > 0:
-            raise ConfigError(f"gain must be positive; it is {gain}")
+    def __init__(self, gain: Annotated[float, Gt(0)] = 1.0):
+        check_options(NoisePoisson.__init__, locals())
         self._gain = gain
 
     def gain(self) -> float:
@@ -452,14 +494,9 @@ class NoisePoisson(Noise):
         return counts / self._gain - signal
 
 
-def _load_error(info: dict[str, Any]) -> dict[str, Any]:
-    """Return the options of a noise with its error map read (if any)."""
-    info = dict(info)
-    file = parseutils.load_option(parseutils.parse_file, info, 'error')
-    if file is not None:
-        with parseutils.config_path('error'):
-            info['error'] = fitsutils.read_data(*file)[0]
-    return info
+def _read_error(file: FitsFile) -> np.ndarray:
+    """Return the error map of a noise, read from its FITS file."""
+    return fitsutils.read_data(*split_fits_file(file))[0]
 
 
 def _dump_dispersion(
@@ -489,13 +526,10 @@ def _check_dispersion(
     Raises
     ------
     ConfigError
-        If not exactly one is given, rms is not positive, or the error map
-        has negative values.
+        If not exactly one is given, or the error map has negative values.
     """
     if (rms is None) == (error is None):
         raise ConfigError("give one of rms and error")
-    if rms is not None and not rms > 0:
-        raise ConfigError(f"rms must be positive; it is {rms}")
     if error is not None:
         error = np.asarray(error, dtype=float)
         if np.any(error < 0):
