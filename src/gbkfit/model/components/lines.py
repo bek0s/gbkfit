@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -82,6 +82,7 @@ class Line(parseutils.Serializable):
         return dict(name=self._name, rest=str(self._rest))
 
     def __init__(self, name: str, rest: str | astropy.units.Quantity):
+        check_options(Line.__init__, locals())
         parseutils.check_name(name)
         self._name = name
         self._rest = gridutils.make_rest(rest)
@@ -120,6 +121,7 @@ class Band(parseutils.Serializable):
         return dict(name=self._name, wavelength=str(self._wavelength))
 
     def __init__(self, name: str, wavelength: str | astropy.units.Quantity):
+        check_options(Band.__init__, locals())
         parseutils.check_name(name)
         error = ConfigError(
             f"the wavelength of a band must be a positive length with units "

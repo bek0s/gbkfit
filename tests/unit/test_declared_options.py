@@ -32,7 +32,9 @@ CLASSES = [
     gbkfit.fitting.UncertaintyOptions,
     gbkfit.instrument.Instrument,
     gbkfit.instrument.SpectralTable,
-    gbkfit.model.Geometry]
+    gbkfit.model.Band,
+    gbkfit.model.Geometry,
+    gbkfit.model.Line]
 
 
 def constructors():
