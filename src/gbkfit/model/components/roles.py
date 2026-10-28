@@ -10,7 +10,7 @@ from typing import Any, Self
 import astropy.units
 
 from gbkfit.utils import iterutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
@@ -196,6 +196,7 @@ class LineEmission(Emission):
             lines: Sequence[Line] | None = None,
             unit: str | astropy.units.UnitBase | None = None
     ):
+        check_options(LineEmission.__init__, locals())
         self._lines = Lines(lines)
         if STARS in self._lines.names():
             raise ConfigError(
@@ -309,6 +310,7 @@ class BandEmission(Emission):
             bands: Sequence[Band] | None = None,
             unit: str | astropy.units.UnitBase | None = None
     ):
+        check_options(BandEmission.__init__, locals())
         self._bands = Bands(bands)
         self._unit = _parse_unit(unit)
         if self._unit is not None:
@@ -418,6 +420,7 @@ class DustOpacity(Opacity):
             else dict(law=extinction_law_parser.dump(self._law)))
 
     def __init__(self, law: ExtinctionLaw | None = None):
+        check_options(DustOpacity.__init__, locals())
         self._law = law
 
     def law(self) -> ExtinctionLaw | None:

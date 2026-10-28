@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Self
 
 from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from ..roles import Opacity, opacity_parser
 from ..traits import RPTrait, rpt_parser
 
@@ -102,6 +102,7 @@ class LineOpacity(Opacity):
                 RPTrait | Sequence[RPTrait]
                 | Mapping[str, RPTrait | Sequence[RPTrait]])
     ):
+        check_options(LineOpacity.__init__, locals())
         if isinstance(coefficients, Mapping):
             coefficients = {
                 name: iterutils.tuplify(traits)

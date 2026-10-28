@@ -533,6 +533,70 @@ class _SpectralTables(Rule):
         return changed
 
 
+class _QuantityRadii(Rule):
+    """
+    The radii of inline mass tables are a Quantity (2026-10-28): radii
+    {value, unit}, not radii and radius_unit.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, galaxy in _items(config, 'galaxies'):
+            mass = galaxy.get('mass')
+            if isinstance(mass, MutableMapping):
+                mass = mass.get('components')
+            items = mass if isinstance(mass, list) else [mass]
+            for i, item in enumerate(items):
+                if isinstance(item, MutableMapping) \
+                        and item.get('type') == 'table' \
+                        and 'radius_unit' in item and 'radii' in item:
+                    item['radii'] = _flow(dict(
+                        value=item['radii'], unit=item.pop('radius_unit')))
+                    changes.append(Change(
+                        path + ['mass', i],
+                        "radii and radius_unit -> radii {value, unit}"))
+        return changes
+
+
+class _ImageTraitFiles(Rule):
+    """
+    The file of an image trait is a FITS file (2026-10-28): file {file,
+    hdu}, not file and hdu, as those of the image PSFs and LSFs.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, galaxy in _items(config, 'galaxies'):
+            changes += self._walk(galaxy, path)
+        return changes
+
+    def _walk(self, value: Any, path: list[str | int]) -> list[Change]:
+        """Rewrite the image traits in a value and its items, in place."""
+        changes = []
+        if isinstance(value, MutableMapping):
+            if value.get('type') == 'image' and 'size' in value \
+                    and 'hdu' in value:
+                hdu = value.pop('hdu')
+                if hdu != 0:
+                    value['file'] = _flow(dict(file=value['file'], hdu=hdu))
+                changes.append(
+                    Change(path, "file and hdu -> file {file, hdu}"))
+            for key, item in value.items():
+                changes += self._walk(item, path + [key])
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                changes += self._walk(item, path + [i])
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -543,6 +607,8 @@ RULES: tuple[Rule, ...] = (
     _SpectralAxes(),
     _VisibilityFields(),
     _SpectralTables(),
+    _QuantityRadii(),
+    _ImageTraitFiles(),
 )
 
 

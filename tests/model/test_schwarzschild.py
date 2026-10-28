@@ -117,9 +117,9 @@ def test_a_schwarzschild_spheroid_round_trips():
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(norbits=0), "norbits must be a positive integer"),
-    (dict(turns=-1), "turns must be a positive number"),
-    (dict(seed=-1), "seed must be a non-negative integer"),
+    (dict(norbits=0), "'norbits' must be greater than 0"),
+    (dict(turns=-1), "'turns' must be finite and greater than 0"),
+    (dict(seed=-1), "'seed' must be at least 0"),
 ])
 def test_invalid_schwarzschild_kinematics_are_refused(options, message):
     spheroid = SPHEROID | dict(kinematics=dict(

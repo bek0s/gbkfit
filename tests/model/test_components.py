@@ -238,7 +238,7 @@ def test_errors_have_paths():
         ARCTAN, dict(type='nw_uniform', direction='rad', sampling='subringz')])
     assert load_error(component).startswith(
         "components[0].kinematics.vptraits[1] [nw_uniform]: "
-        "sampling must be")
+        "option 'sampling' must be")
 
 
 def test_at_most_max_traits_of_a_kind():
@@ -251,9 +251,9 @@ def test_at_most_max_traits_of_a_kind():
 
 
 @pytest.mark.parametrize('trait, message', [
-    (dict(type='nw_harmonic', order=-1), "order must be an integer"),
+    (dict(type='nw_harmonic', order=-1), "'order' must be at least 0"),
     (dict(type='nw_harmonic', order=1.5), "'order' must be of type int"),
-    (dict(type='mixture_gauss', nblobs=0), "nblobs must be at least 1")])
+    (dict(type='mixture_gauss', nblobs=0), "'nblobs' must be at least 1")])
 def test_orders_and_blobs_are_checked(trait, message):
     # The kernels read the phases of the orders above 0, and the
     # parameters of each blob
@@ -264,4 +264,4 @@ def test_orders_and_blobs_are_checked(trait, message):
 def test_zmax_must_be_a_positive_length(zmax):
     message = part_error(
         'band_smdisk_thick', 'density', htraits=dict(type='sech2', zmax=zmax))
-    assert "zmax must be a positive length" in message
+    assert "'zmax' must be finite and greater than 0" in message

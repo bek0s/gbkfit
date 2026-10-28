@@ -5,7 +5,7 @@ map (RPTraitMap), and the light of an observed image (RPTraitImage).
 
 import numbers
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import scipy.ndimage
@@ -14,7 +14,8 @@ import scipy.special
 from gbkfit.instrument import PSF, psf_parser
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
 from .base import ImageInput, RPTrait
 
 
@@ -135,6 +136,7 @@ class RPTraitMap(RPTrait):
             step: float,
             name: str | None = None
     ):
+        check_options(RPTraitMap.__init__, locals())
         super().__init__(name=name)
         self._size, self._step = _check_map_grid(size, step)
 
@@ -218,16 +220,19 @@ class RPTraitImage(RPTrait):
     galaxy makes (not parameters of configurations), first (the kernels
     of the map read them); a; and dx and dy, if offsets.
 
+    Configurations give the image by its FITS file (see from_file); one
+    made from an image in Python has no configuration (see dump).
+
     Parameters
     ----------
-    file : str
-        The FITS file of the image (relative to the configuration).
+    data : ndarray
+        The image.
+    coords : Coords
+        Its world coordinates (see gridutils.Coords).
     size : Sequence of int
         The number of cells along x and along y, [nx, ny].
     step : float
         The side of the cells (arcsec).
-    hdu : int or str, optional
-        The HDU of the image; the first by default.
     psf : PSF, optional
         The PSF of the image.
     offsets : bool, optional
@@ -240,6 +245,8 @@ class RPTraitImage(RPTrait):
     ConfigError
         If an option is not valid, or the file is not of an image.
     """
+
+    config_constructors = ('from_file',)
 
     @staticmethod
     def type() -> str:
@@ -258,30 +265,71 @@ class RPTraitImage(RPTrait):
         return super().load(info)
 
     def dump(self) -> dict[str, Any]:
+        if self._file is None:
+            raise TypeError(
+                "the image trait was made from an image in Python, which has "
+                "no configuration; make it from a file (see "
+                "RPTraitImage.from_file)")
+        filename, hdu = split_fits_file(self._file)
         info = super().dump() | dict(
-            file=self._file, hdu=self._hdu, size=list(self._size),
-            step=self._step, offsets=self._offsets)
+            file=filename if hdu == 0 else dict(file=filename, hdu=hdu),
+            size=list(self._size), step=self._step, offsets=self._offsets)
         if self._psf is not None:
             info['psf'] = psf_parser.dump(self._psf)
         return info
 
+    @classmethod
+    def from_file(
+            cls,
+            file: FitsFile,
+            size: Sequence[int],
+            step: Annotated[float, Unit('arcsec')],
+            psf: PSF | None = None,
+            offsets: bool = False,
+            name: str | None = None
+    ) -> 'RPTraitImage':
+        """
+        Make an image trait of the image of a FITS file.
+
+        Parameters
+        ----------
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the image.
+        size, step, psf, offsets, name
+            As those of RPTraitImage.
+
+        Returns
+        -------
+        RPTraitImage
+            The trait.
+
+        Raises
+        ------
+        ConfigError
+            If an option is not valid, or the file is not of an image.
+        """
+        check_options(RPTraitImage.from_file, locals())
+        data, coords = fitsutils.read_data(*split_fits_file(file))
+        trait = cls(data, coords, size, step, psf, offsets, name)
+        trait._file = file
+        return trait
+
     def __init__(
             self,
-            file: str,
+            data: np.ndarray,
+            coords: gridutils.Coords,
             size: Sequence[int],
-            step: float,
-            hdu: int | str = 0,
+            step: Annotated[float, Unit('arcsec')],
             psf: PSF | None = None,
             offsets: bool = False,
             name: str | None = None
     ):
+        check_options(RPTraitImage.__init__, locals())
         super().__init__(name=name)
         self._size, self._step = _check_map_grid(size, step)
-        filename, _ = parseutils.parse_file(dict(file=file, hdu=hdu))
-        data, coords = fitsutils.read_data(filename, hdu)
         if data.ndim != 2:
             raise ConfigError(
-                f"the file {file} must hold an image; its data have "
+                f"the data of an image trait must be an image; they have "
                 f"{data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0).astype(float)
         self._grid = gridutils.make_grid(
@@ -294,8 +342,9 @@ class RPTraitImage(RPTrait):
                 f"larger than the pixels of its image ({pixel:g} arcsec): "
                 f"they take the image at their centres, and miss its "
                 f"light between them")
-        self._file = file
-        self._hdu = hdu
+        # (the file of one made from a file: its configuration; see
+        # from_file and dump)
+        self._file: FitsFile | None = None
         self._psf = psf
         self._offsets = bool(offsets)
 
@@ -430,7 +479,7 @@ class RPTraitImage(RPTrait):
         centre_x, centre_y = gridutils.frame_to_pixels(
             np.zeros(1), np.zeros(1), origin, self._grid)
         parseutils.warn(
-            f"the image {self._file!r} of the image trait of {label} "
+            f"the image of the image trait of {label} "
             f"covers none of its map about the origin of the frame of the "
             f"model (RA {origin[0]:.6f}, Dec {origin[1]:.6f}), which is at "
             f"its pixel ({centre_x[0]:.1f}, {centre_y[0]:.1f}) by their RA "
@@ -455,10 +504,10 @@ class RPTraitImage(RPTrait):
         widening = np.hypot(1, own / other) - 1
         if widening > _IMAGE_BLUR_WIDENING_WARNING:
             parseutils.warn(
-                f"the image {self._file} is blurred by its PSF ({own:.3g} "
-                f"arcsec rms) by {own / other:.0%} of the PSF of the "
-                f"instrument ({other:.3g} arcsec rms): the model blurs its "
-                f"light by both, {widening:.0%} more than the data")
+                f"the image of the image trait is blurred by its PSF "
+                f"({own:.3g} arcsec rms) by {own / other:.0%} of the PSF of "
+                f"the instrument ({other:.3g} arcsec rms): the model blurs "
+                f"its light by both, {widening:.0%} more than the data")
 
 
 def _rms_radius(psf: PSF, step: tuple[float, float]) -> float:

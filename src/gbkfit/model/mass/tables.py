@@ -4,17 +4,20 @@ curves of the gas, the disk and the bulge of a galaxy, from its
 photometry).
 """
 
-from typing import Any, Self
+from collections.abc import Sequence
+from typing import Annotated, Any, Self
 
 import astropy.units as u
 import numpy as np
 import numpy.typing as npt
 import scipy.interpolate
+from annotated_types import Gt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils, tableutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import tableutils, unitutils
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Column, FilePath, Unit
 from .base import MassComponent, MassContext
 
 
@@ -57,11 +60,7 @@ class MassTable(MassComponent):
     disk; for them, give the mass of the photometry instead, e.g. disk
     surfaces 'nodewise').
 
-    In its configuration, the table is the file of one (see
-    tableutils.read_table), its format, the columns of its radii (radius:
-    {column, unit}) and of its velocities (velocity: {column, unit}; km/s
-    by default), and the distance D0 (Mpc), if any; or the radii (a list),
-    their unit (radius_unit), the velocities (km/s) and the distance.
+    Configurations give its table, or the file of one (see from_file).
 
     Parameters
     ----------
@@ -70,68 +69,83 @@ class MassTable(MassComponent):
     radii : Quantity
         The radii of the table: angles or lengths, finite and at least 0,
         increasing.
-    velocities : Quantity
-        The circular velocity at each radius.
-    distance : Quantity, optional
-        The distance the table was made at (D0).
+    velocities : Sequence of float
+        The circular velocity at each radius (km/s).
+    distance : float, optional
+        The distance the table was made at, D0 (Mpc).
 
     Raises
     ------
     ConfigError
         If the radii are not angles or lengths, finite, at least 0 and
-        increasing, the velocities are not velocities, finite and one per
-        radius, or the distance is not a positive length.
+        increasing, or the velocities are not finite and one per radius.
     """
+
+    config_constructors = ('__init__', 'from_file')
 
     @staticmethod
     def type() -> str:
         return 'table'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        info = dict(info)
-        if 'file' in info:
-            table = tableutils.read_table(
-                info.pop('file'), info.pop('format', None))
-            columns = {}
-            for key, default in (('radius', None), ('velocity', 'km/s')):
-                with parseutils.config_path(key):
-                    column = parseutils.parse_options(
-                        info.pop(key, None), required={'column'},
-                        optional={'unit'})
-                    columns[key] = tableutils.read_column(
-                        table, column['column'], column.get('unit', default))
-            info['radii'], info['velocities'] = \
-                columns['radius'], columns['velocity']
-        elif 'radii' in info:
-            unit = info.pop('radius_unit', None)
-            if unit is None:
-                raise ConfigError(
-                    "the radii need their unit (radius_unit, e.g. kpc)")
-            info['radii'] = np.asarray(info['radii'], dtype=float) \
-                * unitutils.parse_unit(unit)
-            info['velocities'] = np.asarray(
-                info.get('velocities'), dtype=float) * u.km / u.s
-        if info.get('distance') is not None:
-            info['distance'] = info['distance'] * u.Mpc
-        return super().load(info)
+    def from_file(
+            cls,
+            name: str,
+            file: FilePath,
+            radius: Column,
+            velocity: Column,
+            format: str | None = None,
+            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
+    ) -> Self:
+        """
+        Read a mass table from a table file (see tableutils.read_table).
+
+        Parameters
+        ----------
+        name : str
+            Its name (see MassComponent).
+        file : str
+            The file.
+        radius, velocity : Column
+            The columns of the radii and of the velocities (by default
+            in km/s, if the file gives no unit).
+        format : str, optional
+            The format of the file (see astropy's Table.read); by
+            default, the one astropy tells.
+        distance : float, optional
+            The distance the table was made at, D0 (Mpc).
+
+        Returns
+        -------
+        MassTable
+            The mass component.
+        """
+        check_options(MassTable.from_file, locals())
+        table = tableutils.read_table(file, format)
+        radii = tableutils.read_column(table, radius.column, radius.unit)
+        velocities = tableutils.read_column(
+            table, velocity.column, velocity.unit or 'km/s')
+        return cls(
+            name, radii, velocities.to_value(u.km / u.s).tolist(), distance)
 
     def dump(self) -> dict[str, Any]:
         info = super().dump() | dict(
-            radii=self._radii.value.tolist(),
-            radius_unit=unitutils.format_unit(self._radii.unit),
+            radii=dict(
+                value=self._radii.value.tolist(),
+                unit=unitutils.format_unit(self._radii.unit)),
             velocities=self._velocities.to_value(u.km / u.s).tolist())
         if self._distance is not None:
-            info['distance'] = float(self._distance.to_value(u.Mpc))
+            info['distance'] = self._distance
         return info
 
     def __init__(
             self,
             name: str,
             radii: u.Quantity,
-            velocities: u.Quantity,
-            distance: u.Quantity | None = None
+            velocities: Annotated[Sequence[float] | np.ndarray, Unit('km/s')],
+            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
     ):
+        check_options(MassTable.__init__, locals())
         super().__init__(name)
         if not isinstance(radii, u.Quantity) or radii.ndim != 1 \
                 or not (radii.unit.is_equivalent(u.arcsec)
@@ -144,23 +158,15 @@ class MassTable(MassComponent):
             raise ConfigError(
                 f"the radii must be finite, at least 0 and increasing; they "
                 f"are {radii}")
-        if not isinstance(velocities, u.Quantity) \
-                or not velocities.unit.is_equivalent(u.km / u.s) \
-                or velocities.shape != radii.shape \
+        velocities = np.asarray(velocities, dtype=float)
+        if velocities.shape != radii.shape \
                 or not np.all(np.isfinite(velocities)):
             raise ConfigError(
-                f"the velocities must be finite velocities, one per radius; "
-                f"they are {velocities!r}")
-        if distance is not None and (
-                not isinstance(distance, u.Quantity) or distance.size != 1
-                or not distance.unit.is_equivalent(u.Mpc)
-                or not distance > 0):
-            raise ConfigError(
-                f"the distance must be a positive length; it is "
-                f"{distance!r}")
+                f"the velocities must be finite, one per radius; they are "
+                f"{velocities}")
         self._radii = radii.astype(float)
-        self._velocities = velocities.astype(float)
-        self._distance = distance
+        self._velocities = velocities * (u.km / u.s)
+        self._distance = None if distance is None else float(distance)
         # The spline of V |V| ((km/s)^2) in the radii of the table, from 0
         x = self._radii.value
         v = self._velocities.to_value(u.km / u.s)
@@ -176,8 +182,8 @@ class MassTable(MassComponent):
         """Return the circular velocities of the table."""
         return self._velocities
 
-    def distance(self) -> u.Quantity | None:
-        """Return the distance the table was made at, if given."""
+    def distance(self) -> float | None:
+        """Return the distance the table was made at (Mpc), if given."""
         return self._distance
 
     def pdescs(self) -> dict[str, ParamDesc]:
@@ -245,11 +251,12 @@ class MassTable(MassComponent):
         scale = 1.0
         if self._distance is not None:
             # (D/D0, of the lengths of an arcsec at D and D0)
-            scale = kpc_per_arcsec / (self._distance * u.arcsec).to_value(
-                u.kpc, u.dimensionless_angles())
+            scale = kpc_per_arcsec / (
+                self._distance * u.Mpc * u.arcsec).to_value(
+                    u.kpc, u.dimensionless_angles())
         if angles:
             return arcsec / self._radii.unit.to(u.arcsec), scale
         # (the lengths of the table, at D0, of those angles)
-        lengths = (arcsec * u.arcsec * self._distance).to(
+        lengths = (arcsec * u.arcsec * self._distance * u.Mpc).to(
             self._radii.unit, u.dimensionless_angles())
         return lengths.value, scale

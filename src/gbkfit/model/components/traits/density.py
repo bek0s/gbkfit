@@ -4,15 +4,19 @@ of a component (see RPTrait), but the maps (see images).
 """
 
 from collections.abc import Callable, Sequence
+from typing import Annotated, Literal
 
 import numpy as np
 import scipy.ndimage
 import scipy.special
+from annotated_types import Ge
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.utils.parseutils import check_options
 from .base import (
     RPTrait, WaveInput, params_nw_distortion, splits_nw_distortion)
-from .options import Blobs, Harmonic, SAMPLING_DEFAULT, Sampling, Spiral
+from .options import (
+    Blobs, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Spiral)
 
 
 __all__ = [
@@ -557,7 +561,8 @@ class RPTraitMixtureExponential(RPTrait):
     def uid() -> int:
         return RPT_UID_MIXTURE_EXP
 
-    def __init__(self, nblobs: int, name: str | None = None):
+    def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
+        check_options(RPTraitMixtureExponential.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
 
     def axisymmetric(self) -> bool:
@@ -605,7 +610,8 @@ class RPTraitMixtureGauss(RPTrait):
     def uid() -> int:
         return RPT_UID_MIXTURE_GAUSS
 
-    def __init__(self, nblobs: int, name: str | None = None):
+    def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
+        check_options(RPTraitMixtureGauss.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
 
     def axisymmetric(self) -> bool:
@@ -654,7 +660,8 @@ class RPTraitMixtureGGauss(RPTrait):
     def uid() -> int:
         return RPT_UID_MIXTURE_GGAUSS
 
-    def __init__(self, nblobs: int, name: str | None = None):
+    def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
+        check_options(RPTraitMixtureGGauss.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
 
     def axisymmetric(self) -> bool:
@@ -703,7 +710,8 @@ class RPTraitMixtureMoffat(RPTrait):
     def uid() -> int:
         return RPT_UID_MIXTURE_MOFFAT
 
-    def __init__(self, nblobs: int, name: str | None = None):
+    def __init__(self, nblobs: Annotated[int, Ge(1)], name: str | None = None):
+        check_options(RPTraitMixtureMoffat.__init__, locals())
         super().__init__(Blobs(nblobs), name=name)
 
     def axisymmetric(self) -> bool:
@@ -751,9 +759,10 @@ class RPTraitNWUniform(RPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(RPTraitNWUniform.__init__, locals())
         super().__init__(Sampling(sampling), name=name)
 
     def axisymmetric(self) -> bool:
@@ -806,10 +815,11 @@ class RPTraitNWHarmonic(RPTrait):
 
     def __init__(
             self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT,
+            order: Annotated[int, Ge(0)],
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(RPTraitNWHarmonic.__init__, locals())
         super().__init__(Harmonic(order), Sampling(sampling), name=name)
 
     def axisymmetric(self) -> bool:
@@ -862,9 +872,10 @@ class RPTraitNWDistortion(RPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(RPTraitNWDistortion.__init__, locals())
         super().__init__(Sampling(sampling), name=name)
 
     def axisymmetric(self) -> bool:
@@ -934,11 +945,12 @@ class RPTraitSpiral(RPTrait):
 
     def __init__(
             self,
-            order: int,
-            winding: str | None = None,
-            wavenumber: str = 'dispersion',
+            order: Annotated[int, Ge(1)],
+            winding: Literal['trailing', 'leading'] | None = None,
+            wavenumber: Literal['dispersion', 'given'] = 'dispersion',
             name: str | None = None
     ):
+        check_options(RPTraitSpiral.__init__, locals())
         super().__init__(Spiral(order, winding, wavenumber), name=name)
 
     def sampling(self) -> str:

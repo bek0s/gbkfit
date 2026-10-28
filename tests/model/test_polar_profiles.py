@@ -130,7 +130,7 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
 @pytest.mark.parametrize('options, message', [
     (dict(size=[3], step=1.0), "size must be"),
     (dict(size=[3, 0], step=1.0), "size must be"),
-    (dict(size=[3, 2.5], step=1.0), "size must be"),
+    (dict(size=[3, 2.5], step=1.0), "'size' must be of type"),
     (dict(size=[3, 2], step=0), "step must be")])
 def test_map_options_are_checked(options, message):
     from gbkfit.model.components import traits

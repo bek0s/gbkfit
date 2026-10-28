@@ -30,7 +30,6 @@ from .units import G
 __all__ = [
     'Overdensity',
     'PARAMETERISATIONS',
-    'check_parameterisation',
     'parameterisation_pdescs',
     'halo_scale_radius',
     'halo_scales'
@@ -39,14 +38,6 @@ __all__ = [
 
 PARAMETERISATIONS = (
     'mass_concentration', 'velocity_concentration', 'density_radius')
-
-
-def check_parameterisation(parameterisation: str) -> None:
-    """Raise ConfigError unless it is one of PARAMETERISATIONS."""
-    if parameterisation not in PARAMETERISATIONS:
-        raise ConfigError(
-            f"parameters must be one of {list(PARAMETERISATIONS)}; it is "
-            f"{parameterisation!r}")
 
 
 class Overdensity:

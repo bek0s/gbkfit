@@ -203,7 +203,7 @@ KINEMATICS = dict(
      "a cone needs density height traits"),
     (dict(opacity=dict(type='line', coefficients=UNIFORM)),
      "the opacity of a cone is dust"),
-    (dict(sides='up'), "sides must be one of")])
+    (dict(sides='up'), "'sides' must be one of")])
 def test_what_a_cone_does_not_take(options, message):
     # What disks take, but cones do not
     cone = HOLLOW | dict(kinematics=KINEMATICS, emission=LINES) | options

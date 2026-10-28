@@ -12,7 +12,7 @@ import numpy as np
 
 from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .options import (
     Blobs, Direction, DispersionDirection, Nodes, SAMPLING_DEFAULT, Sampling,
     TraitOption, VPT_DIRECTIONS, VPT_DIRECTION_PLANE, Zmax, splits_around)
@@ -134,6 +134,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
         return info
 
     def __init__(self, *options: TraitOption, name: str | None = None):
+        check_options(Trait.__init__, locals())
         parseutils.check_name(name)
         self._options = options
         self._name = name
@@ -222,6 +223,7 @@ class HTrait(Trait, abc.ABC):
     """
 
     def __init__(self, *options: TraitOption, name: str | None = None):
+        check_options(HTrait.__init__, locals())
         super().__init__(*options, name=name)
         if not self.rnodes() and self.sampling() != SAMPLING_DEFAULT:
             raise ConfigError(

@@ -11,7 +11,7 @@ import numpy.typing as npt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
 from .surfaces import DiskSurface, disk_surface_parser
 from .vertical import DiskVertical, disk_vertical_parser
@@ -106,6 +106,7 @@ class MassDisk(MassComponent):
 
     def __init__(
             self, name: str, surface: DiskSurface, vertical: DiskVertical):
+        check_options(MassDisk.__init__, locals())
         super().__init__(name)
         followed = {
             surface.followed_component(), vertical.followed_component()}

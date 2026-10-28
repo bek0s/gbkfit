@@ -5,9 +5,15 @@ a disk along z (see ZPTrait).
 
 
 
+from typing import Annotated, Literal
+from annotated_types import Ge, Gt
+from pydantic import FiniteFloat
+
 from gbkfit.params.pdescs import ParamDesc
+from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.typeutils import Unit
 from .base import ZPTrait
-from .options import Harmonic, SAMPLING_DEFAULT, Sampling, Zmax
+from .options import Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
 
 
 __all__ = [
@@ -53,10 +59,11 @@ class ZPTraitNWUniform(ZPTrait):
 
     def __init__(
             self,
-            zmax: float,
-            sampling: str = SAMPLING_DEFAULT,
+            zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(ZPTraitNWUniform.__init__, locals())
         super().__init__(Zmax(zmax), Sampling(sampling), name=name)
 
     def consts(self) -> tuple[float, ...]:
@@ -103,11 +110,12 @@ class ZPTraitNWHarmonic(ZPTrait):
 
     def __init__(
             self,
-            order: int,
-            zmax: float,
-            sampling: str = SAMPLING_DEFAULT,
+            order: Annotated[int, Ge(0)],
+            zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(ZPTraitNWHarmonic.__init__, locals())
         super().__init__(
             Harmonic(order), Zmax(zmax), Sampling(sampling), name=name)
 

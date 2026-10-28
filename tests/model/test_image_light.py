@@ -59,7 +59,7 @@ def test_images_are_read_by_the_kernels_of_maps(tmp_path):
     # constants of the map
     from gbkfit.model.components import traits
     write_truth(tmp_path / 'truth.fits')
-    image = traits.RPTraitImage(
+    image = traits.RPTraitImage.from_file(
         str(tmp_path / 'truth.fits'), size=[3, 2], step=0.1, offsets=True)
     map_ = traits.RPTraitMap(size=[3, 2], step=0.1)
     assert image.uid() == map_.uid()

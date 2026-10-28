@@ -4,14 +4,17 @@ direction of a disk (see DPTrait).
 """
 
 from collections.abc import Sequence
+from typing import Annotated, Literal
 
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.utils.parseutils import check_options
 from .base import DPTrait, params_nw_distortion, splits_nw_distortion
 from .options import (
-    Blobs, DPT_DIRECTION_DEFAULT, DispersionDirection, Harmonic,
-    SAMPLING_DEFAULT, Sampling)
+    Blobs, DPT_DIRECTIONS, DPT_DIRECTION_DEFAULT, DispersionDirection,
+    Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling)
 
 
 __all__ = [
@@ -78,9 +81,10 @@ class DPTraitUniform(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitUniform.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -119,9 +123,10 @@ class DPTraitExponential(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitExponential.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -163,9 +168,10 @@ class DPTraitGauss(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitGauss.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -208,9 +214,10 @@ class DPTraitGGauss(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitGGauss.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -253,9 +260,10 @@ class DPTraitLorentz(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitLorentz.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -297,9 +305,10 @@ class DPTraitMoffat(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitMoffat.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -341,9 +350,10 @@ class DPTraitSech2(DPTrait):
 
     def __init__(
             self,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitSech2.__init__, locals())
         super().__init__(DispersionDirection(direction), name=name)
 
     def axisymmetric(self) -> bool:
@@ -390,10 +400,11 @@ class DPTraitMixtureExponential(DPTrait):
 
     def __init__(
             self,
-            nblobs: int,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            nblobs: Annotated[int, Ge(1)],
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitMixtureExponential.__init__, locals())
         super().__init__(
             Blobs(nblobs), DispersionDirection(direction), name=name)
 
@@ -439,10 +450,11 @@ class DPTraitMixtureGauss(DPTrait):
 
     def __init__(
             self,
-            nblobs: int,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            nblobs: Annotated[int, Ge(1)],
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitMixtureGauss.__init__, locals())
         super().__init__(
             Blobs(nblobs), DispersionDirection(direction), name=name)
 
@@ -489,10 +501,11 @@ class DPTraitMixtureGGauss(DPTrait):
 
     def __init__(
             self,
-            nblobs: int,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            nblobs: Annotated[int, Ge(1)],
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitMixtureGGauss.__init__, locals())
         super().__init__(
             Blobs(nblobs), DispersionDirection(direction), name=name)
 
@@ -538,10 +551,11 @@ class DPTraitMixtureMoffat(DPTrait):
 
     def __init__(
             self,
-            nblobs: int,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            nblobs: Annotated[int, Ge(1)],
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitMixtureMoffat.__init__, locals())
         super().__init__(
             Blobs(nblobs), DispersionDirection(direction), name=name)
 
@@ -585,10 +599,11 @@ class DPTraitNWUniform(DPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitNWUniform.__init__, locals())
         super().__init__(
             Sampling(sampling), DispersionDirection(direction), name=name)
 
@@ -637,11 +652,12 @@ class DPTraitNWHarmonic(DPTrait):
 
     def __init__(
             self,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            order: Annotated[int, Ge(0)],
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitNWHarmonic.__init__, locals())
         super().__init__(
             Harmonic(order), Sampling(sampling),
             DispersionDirection(direction), name=name)
@@ -690,10 +706,11 @@ class DPTraitNWDistortion(DPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT,
-            direction: str = DPT_DIRECTION_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
+        check_options(DPTraitNWDistortion.__init__, locals())
         super().__init__(
             Sampling(sampling), DispersionDirection(direction), name=name)
 

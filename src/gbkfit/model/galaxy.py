@@ -10,7 +10,7 @@ import numpy as np
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._functions import GalaxyFunctions
@@ -194,6 +194,7 @@ class Galaxy(parseutils.Serializable):
             gravity: Gravity | None = None,
             geometry: Geometry | None = None
     ):
+        check_options(Galaxy.__init__, locals())
         parseutils.check_name(name)
         if redshift is not None and not redshift > -1:
             raise ConfigError(

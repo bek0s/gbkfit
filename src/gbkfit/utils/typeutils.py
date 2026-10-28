@@ -16,7 +16,7 @@ import types
 import typing
 import warnings
 from collections.abc import Callable
-from typing import Annotated, Any, Literal, TypeAlias
+from typing import Annotated, Any, Literal, NamedTuple, TypeAlias
 
 import annotated_types
 import numpy as np
@@ -25,6 +25,7 @@ import pydantic.warnings
 
 
 __all__ = [
+    'Column',
     'FilePath',
     'FitsFile',
     'Unit',
@@ -75,6 +76,24 @@ FilePath: TypeAlias = Annotated[str, _ConfigForm('path')]
 # filename (file) and the HDU (hdu)
 FitsFile: TypeAlias = Annotated[
     str | tuple[str, int | str], _ConfigForm('fits_file')]
+
+
+class Column(NamedTuple):
+    """
+    A column of a table file; in a configuration, a dict with its name
+    (column) and its unit (unit).
+
+    Parameters
+    ----------
+    column : str
+        Its name.
+    unit : str, optional
+        The unit of its values, if the file does not give it (e.g. a CSV
+        file) or to read them in another; by default, that of the file.
+    """
+
+    column: str
+    unit: str | None = None
 
 
 def split_fits_file(file: FitsFile) -> tuple[str, int | str]:

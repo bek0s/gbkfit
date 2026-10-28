@@ -1111,7 +1111,7 @@ def test_zhao_is_nfw_for_its_shape():
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(parameters='mass'), "parameters must be one of"),
+    (dict(parameters='mass'), "'parameters' must be one of"),
     (dict(overdensity='200x'), "overdensity must be"),
     (dict(parameters='density_radius', overdensity='200c'),
      "take no overdensity")])
@@ -1226,11 +1226,11 @@ def test_user_component_gives_its_enclosed_mass_by_a_function(tmp_path):
         "def mass(r, params):\n"
         "    return np.full_like(r, params['gm'] / 4.30091727e-6)\n")
     path = str(tmp_path / 'point.py')
-    component = MassUser('mine', path, 'vcirc2', ['gm'], mass='mass')
+    component = MassUser.from_file('mine', path, 'vcirc2', ['gm'], mass='mass')
     assert component.gives_enclosed_mass()
     np.testing.assert_allclose(component.enclosed_mass(
         np.array([1.0, 3.0]), dict(gm=G * 1e10), CONTEXT), 1e10)
-    without = MassUser('mine', path, 'vcirc2', ['gm'])
+    without = MassUser.from_file('mine', path, 'vcirc2', ['gm'])
     assert not without.gives_enclosed_mass()
     with pytest.raises(NotImplementedError, match="no function"):
         without.enclosed_mass(np.array([1.0]), dict(gm=1), CONTEXT)
@@ -1240,7 +1240,7 @@ def test_user_component_is_its_function(tmp_path):
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n"
         "    return params['v'] ** 2 * R / (R + params['r'])\n")
-    component = MassUser(
+    component = MassUser.from_file(
         'mine', str(tmp_path / 'curve.py'), 'vcirc2', ['v', 'r'])
     assert list(component.pdescs()) == ['v', 'r']
     radius = np.array([0, 1, 10])
@@ -1248,7 +1248,7 @@ def test_user_component_is_its_function(tmp_path):
         component.vcirc2(radius, dict(v=100, r=1), CONTEXT),
         1e4 * radius / (radius + 1))
     with pytest.raises(ConfigError, match="does not define a function"):
-        MassUser('mine', str(tmp_path / 'curve.py'), 'other')
+        MassUser.from_file('mine', str(tmp_path / 'curve.py'), 'other')
 
 
 def test_user_component_gives_its_forces_by_a_function(tmp_path):
@@ -1261,14 +1261,15 @@ def test_user_component_gives_its_forces_by_a_function(tmp_path):
         "    scale = -params['gm'] / np.hypot(R, z) ** 3\n"
         "    return scale * R, scale * z\n")
     path = str(tmp_path / 'point.py')
-    component = MassUser('mine', path, 'vcirc2', ['gm'], forces='forces')
+    component = MassUser.from_file(
+        'mine', path, 'vcirc2', ['gm'], forces='forces')
     params = dict(gm=G * 1e10)
     R, z = np.array([1.0, 3.0]), np.array([0.5, -2.0])
     expected = MassPoint('bh').forces(R, z, dict(log_m=10), CONTEXT)
     np.testing.assert_allclose(
         component.forces(R, z, params, CONTEXT), expected, rtol=1e-10)
     assert component.gives_forces()
-    in_plane = MassUser('mine', path, 'vcirc2', ['gm'])
+    in_plane = MassUser.from_file('mine', path, 'vcirc2', ['gm'])
     assert not in_plane.gives_forces()
     with pytest.raises(NotImplementedError, match="in its plane"):
         in_plane.forces(R, z, params, CONTEXT)
@@ -2133,7 +2134,7 @@ def test_rotation_at_each_height_option():
     trait = traits.vht_parser.load(dict(type='mass', zmax=3))
     assert traits.vht_parser.dump(trait) == dict(type='mass', zmax=3.0)
     assert trait.from_galaxy().heights[-1] == 3.0
-    with pytest.raises(ConfigError, match="zmax must be a positive length"):
+    with pytest.raises(ConfigError, match="'zmax' must be finite and greater than 0"):
         traits.VHTraitMass(0)
 
 

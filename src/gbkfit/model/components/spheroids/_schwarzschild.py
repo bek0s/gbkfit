@@ -10,15 +10,17 @@ the share of each in the light, and the light the orbits must hold.
 import dataclasses
 import math
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.integrate
+from annotated_types import Ge, Gt
+from pydantic import FiniteFloat
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc, ParamValues, ParamVectorDesc
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
 from .._native import ParamBuffer
 from .._needs import Need, NeedsMass, NeedsPotential
 from .._stage import GalaxyMass
@@ -116,20 +118,13 @@ class SchwarzschildKinematics(SpheroidKinematics):
         return super().dump() | dict(
             norbits=self._norbits, turns=self._turns, seed=self._seed)
 
-    def __init__(self, norbits: int = 3000, turns: float = 100,
-                 seed: int = 0):
-        def integer(value: Any) -> bool:
-            return isinstance(value, int) and not isinstance(value, bool)
-        if not (integer(norbits) and norbits > 0):
-            raise ConfigError(
-                f"norbits must be a positive integer; it is {norbits!r}")
-        if isinstance(turns, bool) or not isinstance(turns, (int, float)) \
-                or not (math.isfinite(turns) and turns > 0):
-            raise ConfigError(
-                f"turns must be a positive number; it is {turns!r}")
-        if not (integer(seed) and seed >= 0):
-            raise ConfigError(
-                f"seed must be a non-negative integer; it is {seed!r}")
+    def __init__(
+            self,
+            norbits: Annotated[int, Gt(0)] = 3000,
+            turns: Annotated[FiniteFloat, Gt(0)] = 100,
+            seed: Annotated[int, Ge(0)] = 0
+    ):
+        check_options(SchwarzschildKinematics.__init__, locals())
         self._norbits = norbits
         self._turns = float(turns)
         self._seed = seed

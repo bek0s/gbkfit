@@ -18,7 +18,7 @@ import scipy.optimize
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassComponent, MassContext, SpheroidDensity
 from .halos import (
     ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
@@ -75,6 +75,7 @@ class DarkFraction(parseutils.Serializable):
         return dict(solve=self._solve, bounds=list(self._bounds))
 
     def __init__(self, solve: str, bounds: Sequence[float]):
+        check_options(DarkFraction.__init__, locals())
         parseutils.check_name(solve)
         if not (isinstance(bounds, Sequence) and len(bounds) == 2 and all(
                 isinstance(b, (int, float)) and not isinstance(b, bool)
@@ -185,6 +186,7 @@ class MassSpheroid(MassComponent):
             response: HaloResponse | None = None,
             dark_fraction: DarkFraction | None = None
     ):
+        check_options(MassSpheroid.__init__, locals())
         super().__init__(name)
         shape = ShapeSphere() if shape is None else shape
         for baryon in baryons:
@@ -469,6 +471,7 @@ class MassLightSpheroid(MassComponent):
         return super().dump() | dict(component=self._component)
 
     def __init__(self, name: str, component: str):
+        check_options(MassLightSpheroid.__init__, locals())
         super().__init__(name)
         parseutils.check_name(component)
         self._component = component

@@ -4,14 +4,19 @@ velocity dispersion (dht).
 """
 
 import abc
+from typing import Annotated, Literal
 
 import numpy as np
 import scipy.ndimage
 import scipy.special
+from annotated_types import Gt
+from pydantic import FiniteFloat
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.typeutils import Unit
 from .base import DHTrait, RHTrait, RotationFactorsInput, VHTrait
-from .options import Nodes, SAMPLING_DEFAULT, Sampling, Zmax
+from .options import Nodes, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
 
 
 __all__ = [
@@ -70,11 +75,12 @@ class RHTraitP1(RHTrait, abc.ABC):
 
     def __init__(
             self,
-            zmax: float,
+            zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(RHTraitP1.__init__, locals())
         super().__init__(
             Zmax(zmax), Nodes(rnodes), Sampling(sampling), name=name)
 
@@ -94,11 +100,12 @@ class RHTraitP2(RHTrait, abc.ABC):
 
     def __init__(
             self,
-            zmax: float,
+            zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(RHTraitP2.__init__, locals())
         super().__init__(
             Zmax(zmax), Nodes(rnodes), Sampling(sampling), name=name)
 
@@ -408,6 +415,7 @@ class VHTraitOne(VHTrait):
         return VHT_UID_ONE
 
     def __init__(self, name: str | None = None):
+        check_options(VHTraitOne.__init__, locals())
         super().__init__(name=name)
 
 
@@ -457,7 +465,12 @@ class VHTraitMass(VHTrait):
     def uid() -> int:
         return VHT_UID_MASS
 
-    def __init__(self, zmax: float, name: str | None = None):
+    def __init__(
+            self,
+            zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
+            name: str | None = None
+    ):
+        check_options(VHTraitMass.__init__, locals())
         super().__init__(Zmax(zmax), name=name)
 
     def zmax(self) -> float:
@@ -495,9 +508,10 @@ class VHTraitP1(VHTrait, abc.ABC):
     def __init__(
             self,
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(VHTraitP1.__init__, locals())
         super().__init__(Nodes(rnodes), Sampling(sampling), name=name)
 
     @staticmethod
@@ -641,6 +655,7 @@ class DHTraitOne(DHTrait):
         return DHT_UID_ONE
 
     def __init__(self, name: str | None = None):
+        check_options(DHTraitOne.__init__, locals())
         super().__init__(name=name)
 
 
@@ -653,9 +668,10 @@ class DHTraitP1(DHTrait, abc.ABC):
     def __init__(
             self,
             rnodes: bool = False,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(DHTraitP1.__init__, locals())
         super().__init__(Nodes(rnodes), Sampling(sampling), name=name)
 
     @staticmethod

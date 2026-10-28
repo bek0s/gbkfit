@@ -15,7 +15,7 @@ from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
 from .._native import ParamBuffer
 from .._needs import Need, NeedsForces, NeedsMass
@@ -306,6 +306,7 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
             rstep: float | None = None,
             interp: str = 'linear'
     ):
+        check_options(SpheroidTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
         SPHEROID_TRAITS.check(self.traits())
         given = (rnmin, rnmax, rnsep, rnlen, rnodes) != (None,) * 5

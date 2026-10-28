@@ -18,7 +18,7 @@ from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc,
     pdescs_with_units)
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from ...mass._numerics import (
     sersic_b, sersic_density_table, sersic_tables)
 from ...mass import SpheroidDensity
@@ -321,6 +321,7 @@ class LightMGE(LightProfile):
         return super().dump() | dict(ngauss=self._ngauss)
 
     def __init__(self, ngauss: int):
+        check_options(LightMGE.__init__, locals())
         if isinstance(ngauss, bool) or not isinstance(ngauss, int) \
                 or ngauss < 1:
             raise ConfigError(
@@ -555,6 +556,7 @@ class Spheroid(Component):
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
+        check_options(Spheroid.__init__, locals())
         if isinstance(geometry, Geometry) and (
                 geometry.loose() or geometry.tilted()):
             raise ConfigError(

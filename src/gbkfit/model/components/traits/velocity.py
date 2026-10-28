@@ -6,15 +6,18 @@ for pressure (PressureSupport).
 
 import dataclasses
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
-from .options import Direction, Harmonic, SAMPLING_DEFAULT, Sampling, Spiral
+from .options import (
+    Direction, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Spiral,
+    VPT_DIRECTIONS)
 
 
 __all__ = [
@@ -118,7 +121,12 @@ class VPTraitUniform(VPTrait):
     def uid() -> int:
         return VPT_UID_UNIFORM
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitUniform.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -152,7 +160,12 @@ class VPTraitArctan(VPTrait):
     def uid() -> int:
         return VPT_UID_ARCTAN
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitArctan.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -188,7 +201,12 @@ class VPTraitBoissier(VPTrait):
     def uid() -> int:
         return VPT_UID_BOISSIER
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitBoissier.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -225,7 +243,12 @@ class VPTraitEpinat(VPTrait):
     def uid() -> int:
         return VPT_UID_EPINAT
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitEpinat.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -263,7 +286,12 @@ class VPTraitLRamp(VPTrait):
     def uid() -> int:
         return VPT_UID_LRAMP
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitLRamp.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -299,7 +327,12 @@ class VPTraitTanh(VPTrait):
     def uid() -> int:
         return VPT_UID_TANH
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitTanh.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -336,7 +369,12 @@ class VPTraitPolyex(VPTrait):
     def uid() -> int:
         return VPT_UID_POLYEX
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitPolyex.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -375,7 +413,12 @@ class VPTraitRix(VPTrait):
     def uid() -> int:
         return VPT_UID_RIX
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitRix.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -414,7 +457,12 @@ class VPTraitCourteau(VPTrait):
     def uid() -> int:
         return VPT_UID_COURTEAU
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitCourteau.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -453,7 +501,12 @@ class VPTraitBrandt(VPTrait):
     def uid() -> int:
         return VPT_UID_BRANDT
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitBrandt.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -491,7 +544,12 @@ class VPTraitIso(VPTrait):
     def uid() -> int:
         return VPT_UID_ISO
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitIso.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -528,7 +586,12 @@ class VPTraitNFW(VPTrait):
     def uid() -> int:
         return VPT_UID_NFW
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitNFW.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -569,10 +632,11 @@ class VPTraitNWUniform(VPTrait):
 
     def __init__(
             self,
-            direction: str,
-            sampling: str = SAMPLING_DEFAULT,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(VPTraitNWUniform.__init__, locals())
         super().__init__(Direction(direction), Sampling(sampling), name=name)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
@@ -616,11 +680,12 @@ class VPTraitNWHarmonic(VPTrait):
 
     def __init__(
             self,
-            direction: str,
-            order: int,
-            sampling: str = SAMPLING_DEFAULT,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            order: Annotated[int, Ge(0)],
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(VPTraitNWHarmonic.__init__, locals())
         super().__init__(
             Direction(direction), Harmonic(order), Sampling(sampling),
             name=name)
@@ -669,7 +734,12 @@ class VPTraitWedge(VPTrait):
     def uid() -> int:
         return VPT_UID_WEDGE
 
-    def __init__(self, direction: str, name: str | None = None):
+    def __init__(
+            self,
+            direction: Literal[tuple(VPT_DIRECTIONS)],
+            name: str | None = None
+    ):
+        check_options(VPTraitWedge.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -774,9 +844,10 @@ class VPTraitNWBar(VPTraitPlanar):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(VPTraitNWBar.__init__, locals())
         super().__init__(Sampling(sampling), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
@@ -837,11 +908,12 @@ class VPTraitSpiral(VPTraitPlanar):
 
     def __init__(
             self,
-            order: int,
-            winding: str | None = None,
-            wavenumber: str = 'dispersion',
+            order: Annotated[int, Ge(1)],
+            winding: Literal['trailing', 'leading'] | None = None,
+            wavenumber: Literal['dispersion', 'given'] = 'dispersion',
             name: str | None = None
     ):
+        check_options(VPTraitSpiral.__init__, locals())
         super().__init__(Spiral(order, winding, wavenumber), name=name)
 
     def sampling(self) -> str:
@@ -980,6 +1052,7 @@ class VPTraitMass(VPTrait):
             pressure_density: str | Sequence[str] | None = None,
             name: str | None = None
     ):
+        check_options(VPTraitMass.__init__, locals())
         super().__init__(name=name)
         if pressure_support not in (None, 'jeans', 'self_gravitating'):
             raise ConfigError(

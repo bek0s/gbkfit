@@ -13,6 +13,7 @@ import numpy.typing as npt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import check_options
 from .units import G
 
 if TYPE_CHECKING:
@@ -222,6 +223,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
         return dict(type=self.type(), name=self._name)
 
     def __init__(self, name: str):
+        check_options(MassComponent.__init__, locals())
         parseutils.check_name(name)
         self._name = name
 

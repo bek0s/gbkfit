@@ -226,3 +226,22 @@ def test_spectral_tables_are_migrated_to_the_options_of_their_class():
     assert lsf['sigma'] == dict(file='lsf.ecsv', column='sigma')
     assert images == dict(type='images', file='psf.fits', points=dict(
         value=[5000, 7000], unit='Angstrom'))
+
+
+def test_radii_of_mass_tables_are_migrated_to_a_quantity():
+    table = dict(
+        type='table', name='gas', radii=[1, 2], radius_unit='kpc',
+        velocities=[50, 80])
+    migration.migrate(dict(galaxies=[dict(mass=[table])]), 2)
+    assert table == dict(
+        type='table', name='gas', radii=dict(value=[1, 2], unit='kpc'),
+        velocities=[50, 80])
+
+
+def test_files_of_image_traits_are_migrated_to_fits_files():
+    image = dict(type='image', file='hst.fits', hdu='SCI', size=[3, 2], step=1)
+    migration.migrate(dict(galaxies=[dict(components=[dict(
+        density=dict(ptraits=[image]))])]), 2)
+    assert image == dict(
+        type='image', file=dict(file='hst.fits', hdu='SCI'), size=[3, 2],
+        step=1)

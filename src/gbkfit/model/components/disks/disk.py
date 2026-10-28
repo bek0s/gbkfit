@@ -4,17 +4,19 @@ clouds (see Clouds).
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from ...mass import DiskDensity
 from .. import traits
 from .._needs import Need
+from .._nodal import INTERPOLATIONS
 from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
@@ -133,17 +135,18 @@ class Disk(Component):
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool | None = None,
             tilted: bool | None = None,
-            rnmin: float | None = None,
-            rnmax: float | None = None,
-            rnsep: float | None = None,
+            rnmin: Annotated[float, Unit('arcsec')] | None = None,
+            rnmax: Annotated[float, Unit('arcsec')] | None = None,
+            rnsep: Annotated[float, Unit('arcsec')] | None = None,
             rnlen: int | None = None,
-            rnodes: Sequence[float] | None = None,
-            rstep: float | None = None,
-            interp: str = 'linear',
+            rnodes: Annotated[Sequence[float], Unit('arcsec')] | None = None,
+            rstep: Annotated[float, Unit('arcsec')] | None = None,
+            interp: Literal[INTERPOLATIONS] = 'linear',
             clouds: Clouds | None = None,
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
+        check_options(Disk.__init__, locals())
         super().__init__(name, geometry, emission, opacity)
         if clouds is not None and not density.thick():
             raise ConfigError(

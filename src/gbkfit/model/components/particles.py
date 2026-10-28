@@ -4,6 +4,7 @@ of them (see Particles).
 """
 
 import os.path
+from collections.abc import Mapping
 from typing import Any, Literal
 
 import astropy.table
@@ -13,7 +14,8 @@ import scipy.special
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FilePath
 from ._detail import (
     Fluxes, disk_to_sky, dump_geometry, dump_name, geometry_desc)
 from ._units import DataUnit
@@ -52,9 +54,7 @@ def read_particles(file: str) -> dict[str, np.ndarray]:
     Raises
     ------
     ConfigError
-        If the file cannot be read, a column is missing, the columns are
-        not of one length or have no particles, a value is not finite, or
-        a dispersion is negative.
+        If the file cannot be read.
     """
     try:
         if os.path.splitext(file)[1].lower() == '.npz':
@@ -65,23 +65,30 @@ def read_particles(file: str) -> dict[str, np.ndarray]:
             table = {key: np.asarray(read[key]) for key in read.colnames}
     except (OSError, ValueError) as e:
         raise ConfigError(f"cannot read the particles of {file}: {e}") from e
+    return table
+
+
+def _columns(table: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+    """
+    Return the columns of a table of particles (see Particles), as
+    floats, or raise ConfigError if a column is missing, the columns are
+    not of one length or have no particles, a value is not finite, or a
+    dispersion is negative.
+    """
     if missing := [key for key in _COLUMNS if key not in table]:
         raise ConfigError(
-            f"the particles of {file} have no columns {missing} (see the "
-            f"component particles)")
+            f"the particles have no columns {missing} (see the component "
+            f"particles)")
     names = _COLUMNS + ((_SIGMA,) if _SIGMA in table else ())
     columns = {key: np.asarray(table[key], dtype=float) for key in names}
     if len({len(column) for column in columns.values()}) > 1:
-        raise ConfigError(f"the columns of the particles of {file} differ "
-                          f"in length")
+        raise ConfigError("the columns of the particles differ in length")
     if not len(columns['x']):
-        raise ConfigError(f"the table of {file} has no particles")
+        raise ConfigError("the table of the particles has no particles")
     if not all(np.all(np.isfinite(column)) for column in columns.values()):
-        raise ConfigError(f"the particles of {file} have values that are "
-                          f"not finite")
+        raise ConfigError("the particles have values that are not finite")
     if np.any(columns.get(_SIGMA, 0) < 0):
-        raise ConfigError(f"the particles of {file} have negative "
-                          f"dispersions")
+        raise ConfigError("the particles have negative dispersions")
     return columns
 
 
@@ -355,11 +362,13 @@ class Particles(Component):
     components that ask for it, as it passes the circular velocity to
     those it moves; not built.)
 
+    Configurations give the table by its file (see from_file); one made
+    from a table in Python has no configuration (see dump).
+
     Parameters
     ----------
-    file : str
-        The table of the particles: a FITS table, an ECSV file or a
-        numpy file (npz) of its columns.
+    particles : Mapping of str to ndarray
+        The table of the particles: its columns, by name.
     emission : Emission
         The light it emits.
     geometry : Geometry, 'galaxy' or 'own', optional
@@ -372,9 +381,11 @@ class Particles(Component):
     Raises
     ------
     ConfigError
-        If the table is invalid (see read_particles), the geometry is
-        loose or tilted, or the lines are not valid.
+        If the table is invalid, the geometry is loose or tilted, or the
+        lines are not valid.
     """
+
+    config_constructors = ('from_file',)
 
     @staticmethod
     def type() -> str:
@@ -389,12 +400,48 @@ class Particles(Component):
         parseutils.load_option_and_update_info(
             emission_parser, info, 'emission', required=True,
             catalogue=catalogue)
-        if 'file' in info:
-            info['file'] = parseutils.resolve_path(info['file'])
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return super().load(info)
+
+    @classmethod
+    def from_file(
+            cls,
+            file: FilePath,
+            emission: Emission,
+            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
+            name: str | None = None
+    ) -> 'Particles':
+        """
+        Make particles of a table file.
+
+        Parameters
+        ----------
+        file : str
+            The table of the particles: a FITS table, an ECSV file or a
+            numpy file (npz) of its columns.
+        emission, geometry, name
+            As those of Particles.
+
+        Returns
+        -------
+        Particles
+            The component.
+
+        Raises
+        ------
+        ConfigError
+            If the file cannot be read, or the particles are not valid.
+        """
+        check_options(Particles.from_file, locals())
+        particles = cls(read_particles(file), emission, geometry, name)
+        particles._file = file
+        return particles
 
     def dump(self) -> dict[str, Any]:
+        if self._file is None:
+            raise TypeError(
+                "the particles were made from a table in Python, which has "
+                "no configuration; make them from a file (see "
+                "Particles.from_file)")
         return (
             dict(type=self.type())
             | dump_name(self)
@@ -404,11 +451,12 @@ class Particles(Component):
 
     def __init__(
             self,
-            file: str,
+            particles: Mapping[str, np.ndarray],
             emission: Emission,
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
+        check_options(Particles.__init__, locals())
         if isinstance(geometry, Geometry) and (
                 geometry.loose() or geometry.tilted()):
             raise ConfigError(
@@ -416,8 +464,10 @@ class Particles(Component):
                 f"{geometry_desc(geometry)} is loose or tilted; give them "
                 f"geometry 'own'")
         super().__init__(name, geometry, emission, None)
-        self._file = file
-        self._particles = read_particles(file)
+        # (the file of those made from a file: their configuration; see
+        # from_file and dump)
+        self._file: str | None = None
+        self._particles = _columns(particles)
         self._lines = None
         self._bands = None
         names = ('xpos', 'ypos', 'posa', 'incl')
@@ -437,8 +487,8 @@ class Particles(Component):
                 f"parameters: {repeated}; rename the lines or bands")
         self._pdescs = pdescs | light.pdescs()
 
-    def file(self) -> str:
-        """Return the file of its table."""
+    def file(self) -> str | None:
+        """Return the file of its table, if made from a file."""
         return self._file
 
     def thick(self, seen_by: 'type[Emission]') -> bool:

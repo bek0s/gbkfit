@@ -69,14 +69,14 @@ def test_velocity_traits_name_their_speed_after_their_direction():
     assert list(traits.VPTraitArctan('rad').params_sm()) == ['rt', 'vr']
     assert list(traits.VPTraitNWUniform('ver').params_rnw(3)) == ['vv']
     assert list(traits.VPTraitUniform('out').params_sm()) == ['vo']
-    with pytest.raises(ConfigError, match="direction must be one of"):
+    with pytest.raises(ConfigError, match="'direction' must be one of"):
         traits.VPTraitArctan('up')
 
 
 def test_harmonic_orders_are_integers():
     # (a configuration is checked against the annotation; the Python API
     # by the trait)
-    with pytest.raises(ConfigError, match="order must be an integer"):
+    with pytest.raises(ConfigError, match="'order' must be of type int"):
         traits.RPTraitNWHarmonic(order=1.5)
 
 

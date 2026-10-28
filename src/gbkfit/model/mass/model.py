@@ -12,7 +12,7 @@ import numpy.typing as npt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassComponent, MassContext
 from .disks import MassDisk
 from .points import MassPoint
@@ -75,6 +75,7 @@ class MassModel(parseutils.Serializable):
             list(self._components)))
 
     def __init__(self, components: MassComponent | Sequence[MassComponent]):
+        check_options(MassModel.__init__, locals())
         components = iterutils.tuplify(components)
         if not components:
             raise ConfigError("a mass model needs at least one component")

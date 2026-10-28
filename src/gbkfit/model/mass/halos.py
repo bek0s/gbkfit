@@ -5,7 +5,7 @@ given shape f, and its mass shape m(x) = int_0^x f(t) t^2 dt.
 """
 
 import abc
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -13,10 +13,10 @@ import scipy.special
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassContext
 from .halo_params import (
-    Overdensity, check_parameterisation, halo_scale_radius, halo_scales,
+    PARAMETERISATIONS, Overdensity, halo_scale_radius, halo_scales,
     parameterisation_pdescs)
 from .profiles import SpheroidProfile
 from .units import G
@@ -70,10 +70,10 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
 
     def __init__(
             self,
-            parameters: str = 'mass_concentration',
+            parameters: Literal[PARAMETERISATIONS] = 'mass_concentration',
             overdensity: str | None = None
     ):
-        check_parameterisation(parameters)
+        check_options(ProfileHalo.__init__, locals())
         if parameters == 'density_radius':
             if overdensity is not None:
                 raise ConfigError(

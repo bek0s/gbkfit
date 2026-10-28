@@ -6,10 +6,10 @@ and the vertical equilibrium of disks.
 
 import abc
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from . import traits
 from ._nodal import MAX_TRAITS
 
@@ -163,6 +163,7 @@ class Density(parseutils.Serializable):
             ptraits: traits.RPTrait | Sequence[traits.RPTrait],
             htraits: traits.RHTrait | Sequence[traits.RHTrait] | None = None
     ):
+        check_options(Density.__init__, locals())
         self._ptraits = _polar_traits('ptraits', ptraits)
         self._htraits = _height_traits(
             'htraits', htraits, len(self._ptraits), 'ptraits')
@@ -325,12 +326,12 @@ class Equilibrium(parseutils.TypedSerializable, abc.ABC):
             info['direction'] = self._direction
         return info
 
-    def __init__(self, direction: str = EQUILIBRIUM_DIRECTION_DEFAULT):
-        if direction not in EQUILIBRIUM_DIRECTIONS:
-            raise ConfigError(
-                f"the direction of the dispersion of an equilibrium must be "
-                f"one of {list(EQUILIBRIUM_DIRECTIONS)}; it is "
-                f"{direction!r}")
+    def __init__(
+            self,
+            direction: Literal[
+                EQUILIBRIUM_DIRECTIONS] = EQUILIBRIUM_DIRECTION_DEFAULT
+    ):
+        check_options(Equilibrium.__init__, locals())
         self._direction = direction
 
     def direction(self) -> str:
@@ -392,8 +393,10 @@ class SelfGravitatingEquilibrium(Equilibrium):
     def __init__(
             self,
             density: str,
-            direction: str = EQUILIBRIUM_DIRECTION_DEFAULT
+            direction: Literal[
+                EQUILIBRIUM_DIRECTIONS] = EQUILIBRIUM_DIRECTION_DEFAULT
     ):
+        check_options(SelfGravitatingEquilibrium.__init__, locals())
         super().__init__(direction)
         parseutils.check_name(density)
         self._density = density
@@ -479,6 +482,7 @@ class DiskTraitsKinematics(parseutils.TypedSerializable):
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
             equilibrium: Equilibrium | None = None
     ):
+        check_options(DiskTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
         self._equilibrium = equilibrium
 
@@ -541,6 +545,7 @@ class ConeTraitsKinematics(parseutils.TypedSerializable):
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None
     ):
+        check_options(ConeTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
 
     def vptraits(self) -> tuple[traits.VPTrait, ...]:

@@ -530,8 +530,9 @@ def parse_options_for_callable(
     Options of some types are given in a form of their own (see
     from_config): a FilePath is relative to the directory of the
     configuration (see resolve_path), a FitsFile is a filename or a dict
-    with the filename (file) and the HDU (hdu), and a Quantity is a dict
-    with its value and unit (e.g. {value: [1, 2], unit: kpc}).
+    with the filename (file) and the HDU (hdu), a Column is a dict with
+    its name (column) and unit (unit), and a Quantity is a dict with its
+    value and unit (e.g. {value: [1, 2], unit: kpc}).
 
     Parameters
     ----------
@@ -607,6 +608,9 @@ def from_config(value: Any, type_: Any) -> Any:
         if member == typeutils.FitsFile and isinstance(value, str | Mapping):
             file, hdu = parse_file(value)
             return (file, hdu) if isinstance(value, Mapping) else file
+        if member is typeutils.Column and isinstance(value, Mapping):
+            return typeutils.Column(**parse_options(
+                dict(value), required={'column'}, optional={'unit'}))
         if member is astropy.units.Quantity and isinstance(value, Mapping):
             return _quantity(value)
     return value
@@ -646,16 +650,18 @@ def check_options(func: Callable, values: Mapping[str, Any]) -> None:
     func : Callable
         The constructor.
     values : Mapping
-        The arguments, by name (others are ignored, e.g. self).
+        The arguments, by name (others are ignored, e.g. self, and so are
+        those of ``*args`` and ``**kwargs``).
 
     Raises
     ------
     ConfigError
         If an argument does not match its annotation.
     """
-    for name, type_ in typeutils.option_types(func).items():
-        if name in values \
-                and (problem := typeutils.problem(values[name], type_)):
+    types = typeutils.option_types(func)
+    for name in funcutils.parameter_names(func).all:
+        if name in types and name in values \
+                and (problem := typeutils.problem(values[name], types[name])):
             raise ConfigError(f"option '{name}' {problem}")
 
 

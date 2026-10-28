@@ -6,7 +6,7 @@ enclosed masses; the halos are in halos.
 
 import abc
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
@@ -15,7 +15,8 @@ import scipy.special
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from . import _numerics
 from .base import MassContext
 from .units import G
@@ -293,7 +294,8 @@ class ProfileNodewise(SpheroidProfile):
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(nodes=self._nodes.tolist())
 
-    def __init__(self, nodes: Sequence[float]):
+    def __init__(self, nodes: Annotated[Sequence[float], Unit('kpc')]):
+        check_options(ProfileNodewise.__init__, locals())
         nodes = np.asarray(nodes, dtype=float)
         if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
                 or nodes[0] != 0 or np.any(np.diff(nodes) <= 0)):

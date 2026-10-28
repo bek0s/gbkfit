@@ -150,9 +150,6 @@ def make_cone(
         traits (see CONE_TRAITS), or the parts and roles do not go
         together (e.g. lines without kinematics).
     """
-    if sides not in _cone.SIDES:
-        raise ConfigError(
-            f"sides must be one of {list(_cone.SIDES)}; it is {sides!r}")
     if not density.thick():
         raise ConfigError(
             "a cone needs density height traits: its profile across its "

@@ -12,7 +12,7 @@ from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ModelEvaluationError, ParamValues
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
 from ..base import FieldsLayout
 from . import _disk
@@ -65,6 +65,7 @@ class Clouds(parseutils.Serializable):
         return dict(cflux=self._cflux, seed=self._seed)
 
     def __init__(self, cflux: float, seed: int = 0):
+        check_options(Clouds.__init__, locals())
         if not cflux > 0:
             raise ConfigError(f"cflux must be greater than 0; it is {cflux}")
         if seed < 0:

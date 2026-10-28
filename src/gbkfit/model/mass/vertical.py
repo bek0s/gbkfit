@@ -8,17 +8,18 @@ which may change with radius.
 
 import abc
 from collections.abc import Collection
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.integrate
 import scipy.special
+from annotated_types import Gt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
 from .base import DiskDensity, MassContext
 
 
@@ -369,10 +370,11 @@ class VerticalComponent(DiskVertical):
         return super().dump() | dict(
             component=self._component, rstep=self._rstep)
 
-    def __init__(self, component: str, rstep: float | None = None):
+    def __init__(
+            self, component: str, rstep: Annotated[float, Gt(0)] | None = None
+    ):
+        check_options(VerticalComponent.__init__, locals())
         parseutils.check_name(component)
-        if rstep is not None and not rstep > 0:
-            raise ConfigError(f"rstep must be positive; it is {rstep}")
         self._component = component
         self._rstep = rstep
 

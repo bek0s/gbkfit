@@ -13,6 +13,12 @@ import pytest
 import gbkfit.fitting
 import gbkfit.instrument
 import gbkfit.model
+import gbkfit.model.components.disks
+import gbkfit.model.components.parts
+import gbkfit.model.components.roles
+import gbkfit.model.components.spheroids
+import gbkfit.model.components.traits
+import gbkfit.model.mass
 import gbkfit.params
 from gbkfit.utils import funcutils, typeutils
 
@@ -24,9 +30,31 @@ PARSERS = [
     gbkfit.instrument.lsf_parser,
     gbkfit.instrument.primary_beam_parser,
     gbkfit.instrument.psf_parser,
+    gbkfit.model.components.traits.dht_parser,
+    gbkfit.model.components.traits.dpt_parser,
+    gbkfit.model.components.traits.rht_parser,
+    gbkfit.model.components.traits.rpt_parser,
+    gbkfit.model.components.traits.spt_parser,
+    gbkfit.model.components.traits.vht_parser,
+    gbkfit.model.components.traits.vpt_parser,
+    gbkfit.model.components.traits.zpt_parser,
+    gbkfit.model.components.roles.emission_parser,
+    gbkfit.model.components.roles.opacity_parser,
+    gbkfit.model.components.parts.cone_kinematics_parser,
+    gbkfit.model.components.spheroids.light_profile_parser,
+    gbkfit.model.components.spheroids.spheroid_kinematics_parser,
+    gbkfit.model.components.parts.disk_kinematics_parser,
+    gbkfit.model.components.parts.equilibrium_parser,
+    gbkfit.model.component_parser,
     gbkfit.model.distance_parser,
     gbkfit.model.extinction_law_parser,
     gbkfit.model.gravity_parser,
+    gbkfit.model.mass.halo_response_parser,
+    gbkfit.model.mass.disk_surface_parser,
+    gbkfit.model.mass.disk_vertical_parser,
+    gbkfit.model.mass.mass_component_parser,
+    gbkfit.model.mass.spheroid_profile_parser,
+    gbkfit.model.mass.spheroid_shape_parser,
     gbkfit.params.joint_prior_parser,
     gbkfit.params.prior_parser]
 CLASSES = [
@@ -35,8 +63,13 @@ CLASSES = [
     gbkfit.instrument.Instrument,
     gbkfit.instrument.SpectralTable,
     gbkfit.model.Band,
+    gbkfit.model.Galaxy,
+    gbkfit.model.components.disks.Clouds,
+    gbkfit.model.components.parts.Density,
     gbkfit.model.Geometry,
-    gbkfit.model.Line]
+    gbkfit.model.Line,
+    gbkfit.model.mass.DarkFraction,
+    gbkfit.model.mass.MassModel]
 
 
 def constructors():

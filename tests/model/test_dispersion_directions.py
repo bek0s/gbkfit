@@ -102,10 +102,10 @@ def kinematics(**options):
     (dict(dptraits=DIRECTIONS[:2]),
      "no dispersion trait for the direction 'ver'; give one, or an 'iso'"),
     (dict(dptraits=dict(type='uniform', direction='out')),
-     "direction must be one of"),
+     "'direction' must be one of"),
     (dict(dptraits=dict(type='uniform'),
           equilibrium=dict(type='central', direction='rad')),
-     r"equilibrium must be one of \['iso', 'ver'\]"),
+     "'direction' must be one of 'iso', 'ver'"),
 ])
 def test_dispersion_directions_are_checked(options, message):
     with pytest.raises(ConfigError, match=message):

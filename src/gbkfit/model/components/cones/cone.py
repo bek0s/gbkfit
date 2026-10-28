@@ -3,16 +3,18 @@ The cone component: shells around an apex, with traits.
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal, Self
+from typing import Annotated, Any, Literal, Self
 
 import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from .. import traits
 from .._native import make_bands, make_lines
+from .._nodal import INTERPOLATIONS
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band, LineCatalogue
@@ -106,17 +108,18 @@ class Cone(Component):
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            sides: str = 'both',
-            rnmin: float | None = None,
-            rnmax: float | None = None,
-            rnsep: float | None = None,
+            sides: Literal[_cone.SIDES] = 'both',
+            rnmin: Annotated[float, Unit('arcsec')] | None = None,
+            rnmax: Annotated[float, Unit('arcsec')] | None = None,
+            rnsep: Annotated[float, Unit('arcsec')] | None = None,
             rnlen: int | None = None,
-            rnodes: Sequence[float] | None = None,
-            rstep: float | None = None,
-            interp: str = 'linear',
+            rnodes: Annotated[Sequence[float], Unit('arcsec')] | None = None,
+            rstep: Annotated[float, Unit('arcsec')] | None = None,
+            interp: Literal[INTERPOLATIONS] = 'linear',
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
+        check_options(Cone.__init__, locals())
         if isinstance(geometry, Geometry) and (
                 geometry.loose() or geometry.tilted()):
             raise ConfigError(

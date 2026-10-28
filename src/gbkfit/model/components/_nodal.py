@@ -33,6 +33,9 @@ from .traits import (
 # in constants.hpp)
 MAX_TRAITS = 16
 
+# The interpolations of the values of node-wise parameters between nodes
+INTERPOLATIONS = ('linear', 'akima', 'pchip')
+
 
 @dataclass(frozen=True)
 class TraitTable:
@@ -487,8 +490,4 @@ def parse_component_rnode_args(
         linear=interpolation.InterpolatorLinear,
         akima=interpolation.InterpolatorAkima,
         pchip=interpolation.InterpolatorPCHIP)
-    if interp not in interpolations:
-        raise ConfigError(
-            "interp must be one of the following: "
-            f"{list(interpolations.keys())}")
     return dict(rnodes=nodes, rstep=step, interp=interpolations[interp])

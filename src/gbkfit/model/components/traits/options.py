@@ -7,7 +7,6 @@ direction: tan, order: 1, sampling: subrings).
 
 import abc
 import dataclasses
-import numbers
 from collections.abc import Sequence
 from typing import Any
 
@@ -162,12 +161,7 @@ class Zmax(TraitOption):
     value: float
 
     def __post_init__(self) -> None:
-        zmax = self.value
-        if isinstance(zmax, bool) or not (
-                isinstance(zmax, numbers.Real) and 0 < zmax < np.inf):
-            raise ConfigError(
-                f"zmax must be a positive length; it is {zmax!r}")
-        object.__setattr__(self, 'value', float(zmax))
+        object.__setattr__(self, 'value', float(self.value))
 
     def dump(self) -> dict[str, Any]:
         return dict(zmax=self.value)
@@ -186,12 +180,6 @@ class Direction(TraitOption):
     """
     name: str
 
-    def __post_init__(self) -> None:
-        if self.name not in VPT_DIRECTIONS:
-            raise ConfigError(
-                f"direction must be one of {list(VPT_DIRECTIONS)}; "
-                f"it is {self.name!r}")
-
     def dump(self) -> dict[str, Any]:
         return dict(direction=self.name)
 
@@ -208,12 +196,6 @@ class DispersionDirection(TraitOption):
         If the direction is not one of DPT_DIRECTIONS.
     """
     name: str = DPT_DIRECTION_DEFAULT
-
-    def __post_init__(self) -> None:
-        if self.name not in DPT_DIRECTIONS:
-            raise ConfigError(
-                f"direction must be one of {list(DPT_DIRECTIONS)}; "
-                f"it is {self.name!r}")
 
     def uid(self) -> int:
         """Return the identifier of the direction in the native kernels."""
@@ -236,12 +218,6 @@ class Sampling(TraitOption):
         If the sampling is not one of SAMPLINGS.
     """
     name: str = SAMPLING_DEFAULT
-
-    def __post_init__(self) -> None:
-        if self.name not in SAMPLINGS:
-            raise ConfigError(
-                f"sampling must be one of {list(SAMPLINGS)}; "
-                f"it is '{self.name}'")
 
     def dump(self) -> dict[str, Any]:
         return {} if self.name == SAMPLING_DEFAULT \
@@ -278,9 +254,6 @@ class Blobs(TraitOption):
         init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
-        if not self.nblobs >= 1:
-            raise ConfigError(
-                f"nblobs must be at least 1; it is {self.nblobs}")
         object.__setattr__(self, 'table', ParamTable('blob', dict(a=0)))
 
     def dump(self) -> dict[str, Any]:
@@ -335,13 +308,6 @@ class Harmonic(TraitOption):
         If the order is not an integer of at least 0.
     """
     order: int
-
-    def __post_init__(self) -> None:
-        order = self.order
-        if isinstance(order, bool) or not isinstance(order, numbers.Integral) \
-                or order < 0:
-            raise ConfigError(
-                f"order must be an integer of at least 0; it is {order!r}")
 
     def dump(self) -> dict[str, Any]:
         return dict(order=self.order)
@@ -424,20 +390,6 @@ class Spiral(TraitOption):
     wavenumber: str = 'dispersion'
 
     def __post_init__(self) -> None:
-        order = self.order
-        if isinstance(order, bool) or not isinstance(order, numbers.Integral) \
-                or order < 1:
-            raise ConfigError(
-                f"order is the number of arms, an integer of at least 1; it "
-                f"is {order!r}")
-        if self.wavenumber not in ('dispersion', 'given'):
-            raise ConfigError(
-                f"wavenumber must be 'dispersion' or 'given'; it is "
-                f"{self.wavenumber!r}")
-        if self.winding not in (None, 'trailing', 'leading'):
-            raise ConfigError(
-                f"winding must be 'trailing' or 'leading'; it is "
-                f"{self.winding!r}")
         if self.wavenumber == 'given' and self.winding is not None:
             raise ConfigError(
                 "a given wavenumber winds the arms by its sign: winding is "

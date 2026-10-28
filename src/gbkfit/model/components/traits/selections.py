@@ -4,12 +4,14 @@ The selection polar traits (spt): the parts of a component that it keeps
 """
 
 from collections.abc import Sequence
+from typing import Literal
 
 import numpy as np
 
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
+from gbkfit.utils.parseutils import check_options
 from .base import SPTrait
-from .options import SAMPLING_DEFAULT, Sampling
+from .options import SAMPLINGS, SAMPLING_DEFAULT, Sampling
 
 
 __all__ = [
@@ -123,9 +125,10 @@ class SPTraitNWAzimuthalRange(SPTrait):
 
     def __init__(
             self,
-            sampling: str = SAMPLING_DEFAULT,
+            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
+        check_options(SPTraitNWAzimuthalRange.__init__, locals())
         super().__init__(Sampling(sampling), name=name)
 
     def axisymmetric(self) -> bool:

@@ -12,17 +12,19 @@ the pull of their rings there (see _disk_forces).
 import abc
 import functools
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.interpolate
 import scipy.special
+from annotated_types import Gt
 
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from . import _disk_forces, _disk_gravity, _numerics
 from .base import ComponentDensity, MassContext
 from .units import G
@@ -558,7 +560,8 @@ class SurfaceNodewise(DiskSurface):
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(nodes=self._nodes.tolist())
 
-    def __init__(self, nodes: Sequence[float]):
+    def __init__(self, nodes: Annotated[Sequence[float], Unit('kpc')]):
+        check_options(SurfaceNodewise.__init__, locals())
         nodes = np.asarray(nodes, dtype=float)
         if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
                 or nodes[0] < 0 or np.any(np.diff(nodes) <= 0)):
@@ -690,10 +693,11 @@ class SurfaceComponent(DiskSurface):
         return super().dump() | dict(
             component=self._component, rstep=self._rstep)
 
-    def __init__(self, component: str, rstep: float | None = None):
+    def __init__(
+            self, component: str, rstep: Annotated[float, Gt(0)] | None = None
+    ):
+        check_options(SurfaceComponent.__init__, locals())
         parseutils.check_name(component)
-        if rstep is not None and not rstep > 0:
-            raise ConfigError(f"rstep must be positive; it is {rstep}")
         self._component = component
         self._rstep = rstep
 

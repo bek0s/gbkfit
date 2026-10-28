@@ -17,7 +17,7 @@ import scipy.interpolate
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassContext
 from .halos import ProfileHalo
 from .profiles import SpheroidProfile
@@ -298,6 +298,7 @@ class ResponseSIDM(HaloResponse):
         return info
 
     def __init__(self, contraction: HaloResponse | None = None):
+        check_options(ResponseSIDM.__init__, locals())
         if isinstance(contraction, ResponseSIDM):
             raise ConfigError(
                 "the contraction of the halo before its SIDM core is not "

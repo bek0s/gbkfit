@@ -8,7 +8,7 @@ import scipy.special
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from ._detail import (
     Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors
@@ -374,6 +374,7 @@ class Point(Component):
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
+        check_options(Point.__init__, locals())
         _check_geometry(geometry)
         super().__init__(name, geometry, emission, None)
         self._depth = depth

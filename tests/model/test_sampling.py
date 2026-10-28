@@ -182,7 +182,7 @@ def test_sampling_is_dumped():
 @pytest.mark.parametrize('part, traits, message', [
     ('kinematics',
      dict(vptraits=dict(type='nw_uniform', direction='tan', sampling='nodes')),
-     r"sampling must be one of \['rnodes', 'subrings'\]; it is 'nodes'"),
+     r"'sampling' must be one of 'rnodes', 'subrings'; it is 'nodes'"),
     ('density',
      dict(htraits=dict(type='sech2', zmax=8, sampling='subrings')),
      "sampling is 'subrings', but rnodes is False: the trait has no "
