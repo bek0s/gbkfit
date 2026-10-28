@@ -265,7 +265,8 @@ def test_observations_have_their_own_dtype(tmp_path):
         type='sky',
         line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness'),
-        data=dict(data=str(tmp_path / 'image.fits'))))
+        data=dict(
+            type='pixel_brightness', data=str(tmp_path / 'image.fits'))))
     assert observation.dtype() == np.float32
     assert observation.data().dtype() == np.float64
     assert observation.observable().size() == (20, 8)
@@ -299,7 +300,7 @@ def test_observable_grid_comes_from_the_data(tmp_path):
     info = dict(
         type='sky',
         line_of_sight=dict(type='flat'),
-        data=dict(data=str(tmp_path / 'image.fits')))
+        data=dict(type='pixel_brightness', data=str(tmp_path / 'image.fits')))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_brightness')))
     assert observation.observable().size() == (20, 8)
@@ -335,7 +336,9 @@ def test_pixel_spectra_rest_comes_from_the_data(tmp_path):
     data_info.pop('type')
     loaded = dataset_parser.load(dict(type='pixel_spectra') | dict(data_info))
     assert loaded.grid().coords.rest == dataset.grid().coords.rest
-    info = dict(type='sky', line_of_sight=dict(type='flat'), data=data_info)
+    info = dict(
+        type='sky', line_of_sight=dict(type='flat'),
+        data=dict(type='pixel_spectra') | dict(data_info))
     observation = observation_parser.load(
         info | dict(observable=dict(type='pixel_spectra')))
     assert observation.observable().rest() == dataset.grid().coords.rest

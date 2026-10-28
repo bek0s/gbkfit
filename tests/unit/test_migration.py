@@ -13,6 +13,7 @@ import pytest
 import ruamel.yaml
 
 from gbkfit import migration, project, setup
+from gbkfit.observation import observable_parser
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -55,8 +56,9 @@ def test_a_file_is_migrated_in_place_with_its_comments(tmp_path):
         "- name: kmos\n"
         "  calibration: true  # the flux of the model is off\n"
         "params:\n"
-        "  vsys: 0\n"
-        "  kmos_calibration: {value: 1, min: 0.5, max: 2}  # free\n")
+        "  properties:\n"
+        "    vsys: 0\n"
+        "    kmos_calibration: {value: 1, min: 0.5, max: 2}  # free\n")
     result = subprocess.run(
         [sys.executable, '-m', 'gbkfit.tasks', 'migrate',
          json.dumps(dict(path=str(filename), from_version=1))],
@@ -69,8 +71,9 @@ def test_a_file_is_migrated_in_place_with_its_comments(tmp_path):
         "- name: kmos\n"
         "  flux_scale: one    # the flux of the model is off\n"
         "params:\n"
-        "  vsys: 0\n"
-        "  kmos_flux_scale: {value: 1, min: 0.5, max: 2}   # free\n")
+        "  properties:\n"
+        "    vsys: 0\n"
+        "    kmos_flux_scale: {value: 1, min: 0.5, max: 2}   # free\n")
     # (a configuration of the current version is left as it is)
     assert migration.migrate_file(str(filename)) == []
 
@@ -80,12 +83,12 @@ def test_amplitudes_are_migrated_to_a_solved_flux_scale():
         observations=[OBSERVATION | dict(likelihood=dict(
             type='gaussian', amplitudes='per_spectrum',
             amplitude_sigma=0.5))],
-        params=dict(vsys=0))
+        params=dict(properties=dict(vsys=0)))
     migration.migrate(config, 1)
     assert config['observations'][0]['flux_scale'] == 'per_spectrum'
     assert config['observations'][0]['likelihood'] == dict(type='gaussian')
-    assert config['params']['kmos_flux_scale'] == dict(solve=dict(
-        type='gaussian', mean=1, sigma=0.5, min=0))
+    assert config['params']['properties']['kmos_flux_scale'] == dict(
+        solve=dict(type='gaussian', mean=1, sigma=0.5, min=0))
 
 
 def test_a_project_is_migrated_across_its_pieces(tmp_path):
@@ -97,16 +100,18 @@ def test_a_project_is_migrated_across_its_pieces(tmp_path):
         OBSERVATION | dict(calibration=True),
         tmp_path / 'study' / 'observations' / 'kmos.yaml')
     yaml.dump(
-        dict(kmos_calibration=1),
+        dict(properties=dict(kmos_calibration=1)),
         tmp_path / 'study' / 'params' / 'flux.yaml')
     changes = migration.migrate_project(study.path)
     assert changes == {
         'observations/kmos.yaml': [
             migration.Change([], "calibration -> flux_scale: one")],
         'params/flux.yaml': [
-            migration.Change([], "kmos_calibration -> kmos_flux_scale")]}
+            migration.Change(
+                ['properties'], "kmos_calibration -> kmos_flux_scale")]}
     assert study.piece('observations', 'kmos')['flux_scale'] == 'one'
-    assert study.piece('params', 'flux') == dict(kmos_flux_scale=1)
+    assert study.piece('params', 'flux') == dict(
+        properties=dict(kmos_flux_scale=1))
     assert yaml.load(tmp_path / 'study' / project.MARKER)['version'] == \
         project.FORMAT_VERSION
 
@@ -196,7 +201,7 @@ def test_spectral_axes_are_migrated_to_one_option():
         type='pixel_spectra', size=[8, 8], step=[1, 1],
         spectral=dict(size=20, step=10, convention='relativistic'))
     assert observations[2]['data'] == dict(
-        data='cube.fits', step=[1, 1],
+        type='pixel_spectra', data='cube.fits', step=[1, 1],
         spectral=dict(step=10, rest='1420 MHz'))
 
 
@@ -258,9 +263,31 @@ def test_scale_minimum_of_fitted_noise_is_migrated_to_scale_min():
 def test_ranges_of_pdescs_and_solves_are_migrated_to_min_and_max():
     config = dict(
         pdescs=dict(a=dict(type='scalar', minimum=0, maximum=1)),
-        params=dict(a=dict(solve=dict(
-            type='gaussian', mean=1, sigma=0.5, minimum=0))))
+        params=dict(properties=dict(a=dict(solve=dict(
+            type='gaussian', mean=1, sigma=0.5, minimum=0)))))
     migration.migrate(config, 2)
     assert config['pdescs']['a'] == dict(type='scalar', min=0, max=1)
-    assert config['params']['a']['solve'] == dict(
+    assert config['params']['properties']['a']['solve'] == dict(
         type='gaussian', mean=1, sigma=0.5, min=0)
+
+
+def test_coverages_of_visibilities_are_migrated_to_files():
+    observable = dict(type='visibilities', coverage='cov.npz', fov=12)
+    migration.migrate(dict(observations=[dict(
+        type='sky', observable=observable)]), 2)
+    assert observable == dict(
+        type='visibilities', coverage=dict(file='cov.npz'), fov=12)
+
+
+def test_data_of_observations_are_migrated_to_their_type():
+    data = dict(regions=dict(type='bins', file='bins.fits'))
+    migration.migrate(dict(observations=[dict(
+        type='sky', observable=dict(type='region_moments'), data=data)]), 2)
+    assert data == dict(
+        type='region_moments', regions=dict(type='bins', file='bins.fits'))
+
+
+def test_datasets_have_the_types_of_their_observables():
+    # (on which the migration of the data of observations relies)
+    for type_, cls in observable_parser.registered_classes().items():
+        assert cls.dataset_class.type() == type_

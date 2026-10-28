@@ -25,6 +25,7 @@ galaxies:
 observations:
 - type: sky
   data:
+    type: pixel_moments
     step: [0.6, 0.6]
     rpix: [9.5, 9.5]
     rval: [0, 0]

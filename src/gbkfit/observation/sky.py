@@ -1,12 +1,11 @@
 import logging
 from collections.abc import Mapping, Sequence
-from typing import Any, Self
+from typing import Any, Literal, Self, TypeAlias
 
 import astropy.units
 import numpy as np
-import numpy.typing as npt
 
-from gbkfit.dataset import Data, Dataset
+from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import (
@@ -16,7 +15,7 @@ from gbkfit.model.components.roles import load_band
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from ._scene import SeenGalaxies, check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, likelihood_parser
@@ -37,21 +36,8 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
-def _check_dtype(dtype: npt.DTypeLike, name: str = 'dtype') -> np.dtype:
-    """
-    Return a floating type of a model (the option name), or raise
-    ConfigError if the native modules have no kernels for it.
-    """
-    supported = Driver.dtypes()
-    try:
-        result = np.dtype(dtype)
-    except TypeError:
-        result = None
-    if result not in supported:
-        raise ConfigError(
-            f"{name} must be one of {[dt.name for dt in supported]}; it is "
-            f"{dtype!r}")
-    return result
+# The floating types of models: those the native modules have kernels for
+_DType: TypeAlias = Literal[tuple(dt.name for dt in Driver.dtypes())]
 
 
 class ObservationSky(Observation):
@@ -129,8 +115,10 @@ class ObservationSky(Observation):
     lines : Sequence of str, optional
         The names of the emission lines it sees (e.g. the line of the
         data); all by default.
-    band : Band, optional
-        The band of an image: it sees the components that emit in every
+    band : str or Band, optional
+        The band of an image, or the name of a band of the catalogue (of
+        GBKFIT, or in configurations of the configuration, see
+        LineCatalogue): it sees the components that emit in every
         band or in it (see BandEmission), and dust of an extinction law
         dims them at its rest wavelength (see Galaxy).
     pixel_weights : Weights, optional
@@ -228,9 +216,9 @@ class ObservationSky(Observation):
 
         Its band is the name
         of a band of the catalogue, or a band (its name and wavelength).
-        Its data are those of the dataset class of its observable (see
-        e.g. DatasetPixelSpectra.from_files, whose options outliers and
-        mask_whole_spectra clean them).
+        Its data are a dataset of the dataset class of its observable
+        (see e.g. DatasetPixelSpectra.from_files, whose options outliers
+        and mask_whole_spectra clean them).
 
         Parameters
         ----------
@@ -255,17 +243,10 @@ class ObservationSky(Observation):
                 info['band'] = load_band(
                     info['band'],
                     catalogue if catalogue is not None else LineCatalogue())
-        # The data are read in the form of the observable (its dataset
-        # class), and give the observable some of its options
-        dataset = None
-        if info.get('data') is not None:
-            observable_type = dict(info.get('observable') or {}).get('type')
-            observable_cls = observable_parser.registered_class(
-                observable_type)
-            with parseutils.config_path('data'):
-                dataset = observable_cls.dataset_class.load(
-                    dict(info['data']))
-            info['data'] = dataset
+        # The data give the observable some of its options (see
+        # Observable.from_data)
+        parseutils.load_option_and_update_info(dataset_parser, info, 'data')
+        dataset = info.get('data')
         parseutils.load_option_and_update_info(
             likelihood_parser, info, 'likelihood')
         parseutils.load_option_and_update_info(
@@ -320,10 +301,8 @@ class ObservationSky(Observation):
             self._offsets))
         unit = {} if self._light is None else dict(
             unit=unitutils.format_unit(self._light.unit))
-        # The form of the data is that of the observable: no type
         data = {} if self._data is None else dict(
-            data={k: v for k, v in self._data.dump(**kwargs).items()
-                  if k != 'type'},
+            data=dataset_parser.dump(self._data, **kwargs),
             likelihood=likelihood_parser.dump(self._likelihood))
         return name | galaxies | components | lines | band | pixel_weights \
             | flux_scale | offsets | unit | data | dict(
@@ -345,29 +324,21 @@ class ObservationSky(Observation):
             galaxies: Sequence[str] | None = None,
             components: Sequence[str] | None = None,
             lines: Sequence[str] | None = None,
-            band: Band | None = None,
+            band: str | Band | None = None,
             pixel_weights: Weights | None = None,
             flux_scale: str | None = None,
             offsets: Mapping[str, bool] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             oversampling: Sequence[int] | None = None,
-            dtype: str | None = None,
-            fft_dtype: str = 'float64',
+            dtype: _DType | None = None,
+            fft_dtype: _DType = 'float64',
             name: str | None = None,
             unit: str | None = None
     ):
-        # (the second argument was the driver before the line of sight, and
-        # the third until the driver left the observations, 2026-10-25)
-        if not isinstance(line_of_sight, LineOfSight):
-            raise TypeError(
-                f"line_of_sight must be a LineOfSight (e.g. Flat() or "
-                f"Grid()); it is {line_of_sight!r}")
-        if foreground is not None and not isinstance(foreground, Foreground):
-            raise TypeError(
-                f"foreground must be a Foreground; it is {foreground!r} (the "
-                f"driver of an observation is given to its group: see "
-                f"ObservationGroup.plan)")
+        check_options(ObservationSky.__init__, locals())
+        if isinstance(band, str):
+            band = LineCatalogue().band(band)
         if components is not None:
             components = tuple(components)
             check_component_names(components)
@@ -423,8 +394,8 @@ class ObservationSky(Observation):
         if dtype is None:
             dtype = 'float64' if data is not None \
                 and _has_correlated_noise(data) else 'float32'
-        self._dtype = _check_dtype(dtype)
-        self._fft_dtype = _check_dtype(fft_dtype, 'fft_dtype')
+        self._dtype = np.dtype(dtype)
+        self._fft_dtype = np.dtype(fft_dtype)
         if self._fft_dtype.itemsize < self._dtype.itemsize:
             raise ConfigError(
                 f"the fft_dtype ({self._fft_dtype.name}) is less precise "

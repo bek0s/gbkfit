@@ -135,9 +135,11 @@ class _FluxScales(Rule):
                       "the parameter '{name}_flux_scale')")]
         old, new = f'{name}_calibration', f'{name}_flux_scale'
         for params_path, params in _items(config, 'params'):
-            if old in params:
-                _rename(params, old, new)
-                changes.append(Change(params_path, f"{old} -> {new}"))
+            properties = params.get('properties')
+            if isinstance(properties, MutableMapping) and old in properties:
+                _rename(properties, old, new)
+                changes.append(Change(
+                    params_path + ['properties'], f"{old} -> {new}"))
         if len(changes) == 1:
             changes.append(Change(
                 path, f"by hand: rename the parameter {old} to {new}"))
@@ -177,9 +179,10 @@ class _FluxScales(Rule):
                       f"minimum: 0}}}}"))
             return changes
         params_path, params = params[0]
-        params[param] = dict(solve=dict(
+        params.setdefault('properties', {})[param] = dict(solve=dict(
             type='gaussian', mean=1, sigma=sigma, minimum=0))
-        changes.append(Change(params_path, f"{param} added (solved)"))
+        changes.append(Change(
+            params_path + ['properties'], f"{param} added (solved)"))
         return changes
 
 
@@ -638,7 +641,7 @@ class _RangeNames(Rule):
     The ranges of parameters and of solves are min and max (2026-10-28),
     as those of priors: the options minimum and maximum of the
     descriptions of parameters (section pdescs), and minimum of the solves
-    of parameters (section params).
+    of parameters (the properties of section params).
     """
 
     _NEW = dict(minimum='min', maximum='max')
@@ -653,10 +656,14 @@ class _RangeNames(Rule):
             for name, pdesc in pdescs.items():
                 changes += self._renamed(pdesc, path + [name])
         for path, params in _items(config, 'params'):
-            for name, value in params.items():
+            properties = params.get('properties')
+            if not isinstance(properties, MutableMapping):
+                continue
+            for name, value in properties.items():
                 if isinstance(value, MutableMapping):
                     changes += self._renamed(
-                        value.get('solve'), path + [name, 'solve'])
+                        value.get('solve'),
+                        path + ['properties', name, 'solve'])
         return changes
 
     def _renamed(self, info: Any, path: list[str | int]) -> list[Change]:
@@ -668,6 +675,56 @@ class _RangeNames(Rule):
             if old in info:
                 info[new] = info.pop(old)
                 changes.append(Change(path, f"{old} -> {new}"))
+        return changes
+
+
+class _CoverageFiles(Rule):
+    """
+    The coverage of a visibilities observable is given by its file as
+    {file} (2026-10-28), as the other objects read from files.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            observable = item.get('observable')
+            if isinstance(observable, MutableMapping) \
+                    and observable.get('type') == 'visibilities' \
+                    and isinstance(observable.get('coverage'), str):
+                observable['coverage'] = _flow(
+                    dict(file=observable['coverage']))
+                changes.append(Change(
+                    path + ['observable'], "coverage -> coverage {file}"))
+        return changes
+
+
+class _DataTypes(Rule):
+    """
+    The data of a sky observation give their type (2026-10-28), as the
+    members of the other families do: that of its observable (the types
+    of the datasets are those of their observables).
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            data, observable = item.get('data'), item.get('observable')
+            if item.get('type') == 'sky' \
+                    and isinstance(data, MutableMapping) \
+                    and 'type' not in data \
+                    and isinstance(observable, MutableMapping) \
+                    and 'type' in observable:
+                _insert_first(data, 'type', observable['type'])
+                changes.append(Change(
+                    path + ['data'], f"type: {observable['type']} added"))
         return changes
 
 
@@ -685,6 +742,8 @@ RULES: tuple[Rule, ...] = (
     _ImageTraitFiles(),
     _NoiseScaleMin(),
     _RangeNames(),
+    _CoverageFiles(),
+    _DataTypes(),
 )
 
 

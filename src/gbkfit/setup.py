@@ -17,9 +17,11 @@ import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Any, NamedTuple, Self, TypeVar
+from typing import Annotated, Any, NamedTuple, Self, TypeVar
 
+import astropy.units
 import ruamel.yaml
+from annotated_types import Ge
 
 import gbkfit.model
 import gbkfit.observation
@@ -27,15 +29,17 @@ import gbkfit.outputs
 import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import (
-    EvaluationLog, EvaluationPool, FitControl, Fitter, FitResult,
-    ProgressObserver, fitter_parser)
+    BootstrapOptions, EvaluationLog, EvaluationPool, FitControl, Fitter,
+    FitResult, ProgressObserver, fitter_parser)
 from gbkfit.objective import Evaluation, Objective
-from gbkfit.observation import DepthGroup, GroupPlan, ObservationGroup
+from gbkfit.observation import (
+    DepthGroup, GroupPlan, Likelihood, Noise, ObservationGroup)
 from gbkfit.params import (
-    ParamDesc, ParamSpace, ParamValues,
+    JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
     joint_prior_residuals, load_pdescs_dict, param_space_parser)
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import FilePath
 
 
 __all__ = [
@@ -57,12 +61,145 @@ _T = TypeVar('_T')
 # Reads YAML (round trip: dicts keep their order)
 _yaml = ruamel.yaml.YAML()
 
-# The sections of configurations: the required ones, and the others (of
-# load and of the tasks)
-_REQUIRED = ('galaxies', 'observations', 'params')
-_OPTIONAL = (
-    'driver', 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
-    'fitter', 'parallel', 'mock', 'bootstrap')
+
+class _FunctionFile(NamedTuple):
+    """
+    A function of a Python file.
+
+    Parameters
+    ----------
+    file : str
+        The file.
+    func : str
+        The name of the function, defined at the top level of the file.
+    """
+
+    file: FilePath
+    func: str
+
+
+class _ParamsSection(NamedTuple):
+    """
+    The section 'params' (see ParamSpace and ParamSpace.load).
+
+    Parameters
+    ----------
+    properties : Mapping
+        The property of each parameter, or of some of its elements, by
+        its name (with a subscript of its elements, e.g. 'v[0]').
+    modes : Mapping, optional
+        The modes of vector parameters, by name (see ParamMode).
+    transforms : dict, optional
+        The function that sets the elements whose property is null.
+    priors : Sequence, optional
+        The priors on several parameters at once (see JointPrior).
+    derived : Mapping, optional
+        The derived values, by name: the expression of each, or {expr,
+        unit}.
+    """
+
+    properties: Mapping[str, Property]
+    modes: Mapping[str, ParamMode] | None = None
+    transforms: _FunctionFile | None = None
+    priors: Sequence[JointPrior] | None = None
+    derived: Mapping[str, str | Mapping[str, str]] | None = None
+
+
+class _ParallelSection(NamedTuple):
+    """
+    The section 'parallel': evaluations of several parameters at once,
+    on the given drivers.
+
+    Parameters
+    ----------
+    drivers : Sequence of str
+        The names of drivers of the configuration (section 'drivers').
+    """
+
+    drivers: Sequence[str]
+
+
+class _MockSection(NamedTuple):
+    """
+    The section 'mock' of the task eval: mock data of the model.
+
+    Parameters
+    ----------
+    noise : Noise or Sequence of Noise
+        The noise of the observations, or of each.
+    likelihood : Likelihood or Sequence, optional
+        The likelihood of the observations, or of each.
+    nmocks : int, optional
+        The number of mock datasets.
+    nsamples : int, optional
+        The number of samples of the noise.
+    seed : int, optional
+        The seed of the random numbers.
+    """
+
+    noise: Noise | Sequence[Noise]
+    likelihood: Likelihood | Sequence[Likelihood | None] | None = None
+    nmocks: int = 1
+    nsamples: int = 100
+    seed: int | None = None
+
+
+class _Section(NamedTuple):
+    """
+    A section of configurations (see gbkfit.schema): the type of its
+    value, as that of an option; what it is; whether it is required;
+    whether it can be a list of values of the type (or one); and the
+    options that each of them has besides its own.
+    """
+
+    type: Any
+    desc: str
+    required: bool = False
+    listed: bool = False
+    item_options: Mapping[str, Any] = {}
+
+
+# The sections of configurations, by name (those of load and of the
+# tasks)
+_SECTIONS = dict(
+    version=_Section(
+        Annotated[int, Ge(1)],
+        "The version of the format (see gbkfit.project.FORMAT_VERSION)."),
+    galaxies=_Section(
+        gbkfit.model.Galaxy, "The galaxies.", True, True,
+        dict(driver=str)),
+    observations=_Section(
+        gbkfit.observation.Observation, "The observations of the galaxies.",
+        True, True, dict(driver=str)),
+    params=_Section(_ParamsSection, "The parameters.", True),
+    pdescs=_Section(
+        Mapping[str, ParamDesc],
+        "The descriptions of parameters of the configuration, by name."),
+    driver=_Section(Driver, "The driver of the galaxies and observations."),
+    drivers=_Section(
+        Mapping[str, Driver],
+        "The drivers, by name, which galaxies and observations name."),
+    lines=_Section(
+        Mapping[str, str | astropy.units.Quantity],
+        "Emission lines, by name: their rest wavelength or frequency."),
+    bands=_Section(
+        Mapping[str, str | astropy.units.Quantity],
+        "Bands, by name: their wavelength."),
+    depth_order=_Section(
+        Sequence[str | Mapping[str, Sequence[str]]],
+        "The order of the galaxies along the line of sight: names, and "
+        "groups of them as {name: [galaxies]}."),
+    fitter=_Section(Fitter, "The fitter."),
+    parallel=_Section(
+        _ParallelSection,
+        "Evaluations of several parameters at once."),
+    mock=_Section(_MockSection, "Mock data (the task eval)."),
+    bootstrap=_Section(BootstrapOptions, "A bootstrap (the task fit)."))
+
+# The required sections, and the others
+_REQUIRED = tuple(k for k, v in _SECTIONS.items() if v.required)
+_OPTIONAL = tuple(
+    k for k, v in _SECTIONS.items() if not v.required and k != 'version')
 
 
 class ConfigFile(NamedTuple):

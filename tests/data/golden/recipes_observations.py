@@ -180,7 +180,7 @@ def _write_uv_coverage(folder: pathlib.Path) -> None:
         * [15e3, 15e3, 5e3]
     UVCoverage(
         uvw, hi * (1 - velocities / _C_KMS), (150.001, -30.0005), 'LSRK',
-        f'{hi} Hz').dump(str(folder / 'coverage.npz'), overwrite=True)
+        f'{hi} Hz').write(str(folder / 'coverage.npz'), overwrite=True)
 
 
 def _write_detection_noise(folder: pathlib.Path) -> None:
@@ -434,7 +434,7 @@ CASES: list[dict[str, Any]] = [
             "smoothed by a Hanning correlator response.",
         galaxies=_DISK,
         observations=[_sky(
-            dict(type='visibilities', coverage='coverage.npz',
+            dict(type='visibilities', coverage=dict(file='coverage.npz'),
                  fov=[32, 28], step=1, rval=[150, -30]),
             instrument=dict(lsf=dict(type='hanning', width=20)))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,

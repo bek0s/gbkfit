@@ -91,6 +91,12 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     dataset_class: type[Dataset]
 
+    # Its configurations without data have the options of its __init__,
+    # and those with data the other options of its from_data (the data,
+    # which the observation gives, give the others)
+    config_constructors = ('__init__', 'from_data')
+    given_options = ('dataset',)
+
     # The emission it sees: in a band (BandEmission) for an image, lines
     # (LineEmission) for a spectral cube and what is made of one
     emission: type[Emission]

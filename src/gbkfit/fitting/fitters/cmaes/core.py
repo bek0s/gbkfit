@@ -7,7 +7,6 @@ import typing
 from collections.abc import Mapping
 from typing import Annotated, Any, Literal, Self
 
-import cma
 import numpy as np
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
@@ -148,6 +147,8 @@ class FitterCMAES(Fitter):
         Fitter).
     """
 
+    requires = {'cma': "pip install 'gbkfit[cmaes]'"}
+
     @staticmethod
     def type() -> str:
         return 'cmaes'
@@ -201,6 +202,7 @@ class FitterCMAES(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        import cma
         params = typing.cast(list[FitParamCMAES], fit_params)
         x0 = np.array([p.value() for p in params])
         scale = np.array([p.sigma() for p in params])

@@ -9,7 +9,7 @@ import numpy.typing as npt
 import scipy.spatial
 from annotated_types import Ge
 
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import FilePath, Unit
 from .base import Dataset
@@ -38,11 +38,13 @@ _MS_STOKES_I = 1
 _MS_PARALLEL_HANDS = ((5, 8), (9, 12))
 
 
-class UVCoverage:
+class UVCoverage(parseutils.Serializable):
     """
     Where interferometric visibilities are measured: the baselines of
     their rows, the frequencies of their channels, their phase centre, and
     the rest frequency of their line.
+
+    Configurations give its file (see from_file).
 
     Parameters
     ----------
@@ -80,6 +82,8 @@ class UVCoverage:
     # The names of its arrays in files (see arrays)
     _ARRAYS = ('uvw', 'frequencies', 'phase_centre', 'frame', 'rest')
 
+    config_constructors = ('from_file',)
+
     @classmethod
     def from_arrays(cls, arrays: Mapping[str, np.ndarray]) -> 'UVCoverage':
         """
@@ -101,27 +105,24 @@ class UVCoverage:
             str(arrays['frame']), float(arrays['rest']) * astropy.units.Hz)
 
     @classmethod
-    def from_file(cls, file: str) -> 'UVCoverage':
+    def from_file(cls, file: FilePath) -> 'UVCoverage':
         """
         Read the coverage from a numpy file (npz) of its arrays (see
         arrays; e.g. a file of visibilities, see
-        DatasetVisibilities.from_file).
+        DatasetVisibilities.from_file, or one of write).
 
         Raises
         ------
         ConfigError
             If an array is missing, or they are invalid (see the class).
         """
+        check_options(UVCoverage.from_file, locals())
         with np.load(file) as arrays:
             return cls.from_arrays(dict(arrays))
 
-    def dump(
-            self, filename: str, dump_path: bool = True,
-            overwrite: bool = False
-    ) -> str:
+    def write(self, filename: str, overwrite: bool = False) -> None:
         """
-        Write its arrays to a numpy file (npz), and return its filename
-        (the path, or its name only without dump_path).
+        Write its arrays to a numpy file (npz; see from_file).
 
         Raises
         ------
@@ -129,7 +130,14 @@ class UVCoverage:
             If the file exists and overwrite is false.
         """
         _savez(filename, self.arrays(), overwrite)
-        return filename if dump_path else os.path.basename(filename)
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        filename = f'{prefix}coverage.npz'
+        self.write(filename, overwrite)
+        return dict(file=filename if dump_path else os.path.basename(filename))
 
     def __init__(
             self,

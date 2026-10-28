@@ -36,12 +36,15 @@ def run_task(workdir, task, options, *flags):
 def data_grid(observable):
     """
     Remove the grid of an observable, and return it as the options of data
-    without world coordinates, which then give it.
+    without world coordinates, which then give it (with the type of the
+    data, that of the observable).
     """
     observable.pop('size')
     spectral = observable.pop('spectral')
     spectral.pop('size')
-    return dict(step=observable.pop('step'), spectral=spectral)
+    return dict(
+        type=observable['type'], step=observable.pop('step'),
+        spectral=spectral)
 
 
 def run_eval(mode, config, workdir, profile_iters=0):
@@ -300,7 +303,8 @@ def test_region_spectra_outputs_and_residuals(tmp_path):
     for key in ('regions', 'spectral'):
         observable.pop(key)
     observation['data'] = dict(
-        regions=regions, data=str(tmp_path / 'data.fits'), error=2.0)
+        type='region_spectra', regions=regions,
+        data=str(tmp_path / 'data.fits'), error=2.0)
     run = run_eval('objective', config, tmp_path / 'objective')
     np.testing.assert_allclose(array(run, 'residual'), -0.5, rtol=1e-5)
 

@@ -4,9 +4,8 @@ The nautilus nested sampler.
 
 import math
 from collections.abc import Callable
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
-import nautilus
 import numpy as np
 from annotated_types import Gt
 
@@ -17,6 +16,9 @@ from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils.parseutils import ConfigError, check_options
+
+if TYPE_CHECKING:
+    import nautilus
 
 
 __all__ = [
@@ -67,6 +69,8 @@ class FitterNautilus(Fitter):
     ConfigError
         If a number is not positive.
     """
+
+    requires = {'nautilus': "pip install 'gbkfit[nautilus]'"}
 
     @staticmethod
     def type() -> str:
@@ -151,11 +155,12 @@ class FitterNautilus(Fitter):
             problem: FitProblem,
             log_likelihood: Callable[[np.ndarray], np.ndarray],
             rng: np.random.Generator
-    ) -> tuple[nautilus.Sampler, bool]:
+    ) -> 'tuple[nautilus.Sampler, bool]':
         """
         Run the sampler on a log-likelihood (of points, one per row) over
         the priors of the problem; return it, and whether it converged.
         """
+        import nautilus
         sampler = nautilus.Sampler(
             problem.prior_transform, log_likelihood,
             n_dim=problem.ndim(), n_live=self._n_live,

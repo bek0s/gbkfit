@@ -101,7 +101,7 @@ def test_dtypes_without_kernels_are_errors(dtype):
     dataset = Data(np.ones((8, 8)))
     from gbkfit.dataset import DatasetPixelBrightness
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
-    with pytest.raises(ConfigError, match="dtype must be one of"):
+    with pytest.raises(ConfigError, match="'dtype' must be one of 'float32', 'float64'"):
         ObservationSky(observable, Flat(), dtype=dtype)
 
 

@@ -18,6 +18,7 @@ observations:
 - type: sky
   lines: [stars]
   data:
+    type: region_moments
     regions:
       type: bins
       file: observation0_bins.fits

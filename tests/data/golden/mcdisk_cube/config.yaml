@@ -20,6 +20,7 @@ galaxies:
 observations:
 - type: sky
   data:
+    type: pixel_spectra
     step: [0.8, 0.8]
     rpix: [11.5, 11.5]
     rval: [0, 0]

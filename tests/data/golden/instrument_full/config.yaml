@@ -24,6 +24,7 @@ observations:
     traits:
     - {type: azimuth_power, power: 1, axis: minor}
   data:
+    type: pixel_spectra
     step: [0.75, 0.75]
     rpix: [7.5, 7.5]
     rval: [0, 0]

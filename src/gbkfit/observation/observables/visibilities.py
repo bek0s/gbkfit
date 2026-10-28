@@ -154,8 +154,8 @@ class Visibilities(Observable):
             dataset: DatasetVisibilities | None = None
     ) -> 'Visibilities':
         if dataset is None and 'coverage' in info:
-            info['coverage'] = UVCoverage.from_file(
-                parseutils.resolve_path(info['coverage']))
+            info['coverage'] = parseutils.load_option(
+                UVCoverage.load, info, 'coverage')
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod
@@ -192,7 +192,6 @@ class Visibilities(Observable):
             valid.
         """
         check_options(Visibilities.from_data, locals())
-        cls._require_dataset_class(dataset)
         return cls(
             dataset.coverage(), fov, step, rpix, rval, rota, transform, eps)
 
@@ -206,7 +205,7 @@ class Visibilities(Observable):
         info = dict(type=self.type())
         if data is None:
             info.update(coverage=self._coverage.dump(
-                f'{prefix}coverage.npz', dump_path, overwrite))
+                prefix, dump_path, overwrite))
         return info | dict(
             fov=self._fov,
             step=self.step()[:2],

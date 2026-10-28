@@ -190,7 +190,7 @@ class ObservationProfile(Observation):
             inclination:
             Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
             galaxies: Sequence[str] | None = None,
-            data: Dataset | None = None,
+            data: DatasetProfile | None = None,
             likelihood: Likelihood | None = None,
             name: str | None = None
     ):

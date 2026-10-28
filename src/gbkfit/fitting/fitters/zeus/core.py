@@ -9,7 +9,6 @@ from collections.abc import Iterator
 from typing import Annotated, Any, Literal
 
 import numpy as np
-import zeus
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
@@ -105,6 +104,8 @@ class FitterZeus(Fitter):
         not finite and positive.
     """
 
+    requires = {'zeus': "pip install 'gbkfit[zeus]'"}
+
     @staticmethod
     def type() -> str:
         return 'zeus'
@@ -169,6 +170,7 @@ class FitterZeus(Fitter):
         Return the moves of the run and their steps: the differential
         move for all of them, or for the burn-in and then the global move.
         """
+        import zeus
         if self._moves == 'differential':
             return [(zeus.moves.DifferentialMove(), self._nsteps)]
         return [(zeus.moves.DifferentialMove(), self._burnin),
@@ -180,6 +182,7 @@ class FitterZeus(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        import zeus
         params = typing.cast(list[FitParamZeus], fit_params)
         ndim = problem.ndim()
         nwalkers = self._nwalkers or max(32, 4 * ndim)

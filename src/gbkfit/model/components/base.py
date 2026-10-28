@@ -146,6 +146,10 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     Emission.load).
     """
 
+    # (in configurations, a geometry can be the name of one of the
+    # geometries of the galaxy: see Galaxy)
+    config_options = {'geometry': Geometry | Literal['galaxy', 'own'] | str}
+
     def __init__(
             self,
             name: str | None,

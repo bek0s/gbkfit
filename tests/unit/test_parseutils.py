@@ -109,24 +109,30 @@ def test_unknown_types_suggest_similar_ones():
         shape_parser.load(dict(type='circel'))
 
 
-def test_optional_types_are_imported_when_asked_for():
-    # A type whose module needs a missing package is listed, but asking
-    # for it says why it is not available (and nothing is imported, or
-    # warned about, before)
-    parser = parseutils.TypedParser(Shape, Circle)
-    parser.register_optional({'square': 'missing_package.shapes.Square'})
+class Square(Shape):
+    # (of a module that is not installed)
+    requires = {'missing_package': "pip install missing_package"}
+
+    @staticmethod
+    def type():
+        return 'square'
+
+    def __init__(self, side: float):
+        self.side = side
+
+
+def test_types_of_missing_modules_say_what_to_install():
+    # A type whose class needs a missing module is listed, and its options
+    # can be read, but asking for it says what to install
+    parser = parseutils.TypedParser(Shape, [Circle, Square])
     assert parser.types() == ['circle', 'square']
+    assert parseutils.missing_modules(Square) == {
+        'missing_package': "pip install missing_package"}
+    assert parseutils.missing_modules(Circle) == {}
     with pytest.raises(
-            parseutils.ConfigError, match="'square' is not available"):
-        parser.load(dict(type='square'))
-    assert list(parser.registered_classes()) == ['circle']
-
-
-def test_optional_types_must_be_registered_as_their_type():
-    parser = parseutils.TypedParser(Shape)
-    parser.register_optional({'disk': 'test_parseutils.Circle'})
-    with pytest.raises(RuntimeError, match="registered as type 'disk'"):
-        parser.load(dict(type='disk', radius=1))
+            parseutils.ConfigError,
+            match="'square' needs 'missing_package': pip install"):
+        parser.load(dict(type='square', side=1))
 
 
 def test_options_must_match_the_annotations():

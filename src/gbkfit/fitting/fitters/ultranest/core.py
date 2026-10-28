@@ -8,7 +8,6 @@ from collections.abc import Callable, Iterator
 from typing import Annotated, Any
 
 import numpy as np
-import ultranest
 from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
@@ -93,6 +92,8 @@ class FitterUltraNest(Fitter):
         If a number is not positive.
     """
 
+    requires = {'ultranest': "pip install 'gbkfit[ultranest]'"}
+
     @staticmethod
     def type() -> str:
         return 'ultranest'
@@ -168,6 +169,7 @@ class FitterUltraNest(Fitter):
         Run the sampler on a log-likelihood (of points, one per row) over
         the priors of the problem; return its result.
         """
+        import ultranest
         def finite(xs: np.ndarray) -> np.ndarray:
             values = log_likelihood(xs)
             return np.where(np.isfinite(values), values, _REJECTED)

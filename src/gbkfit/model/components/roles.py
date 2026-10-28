@@ -119,10 +119,12 @@ class LineEmission(Emission):
 
     Parameters
     ----------
-    lines : Sequence of Line, optional
-        The lines (the flux of each after the first, relative to the
-        first, is a parameter '{name}_ratio'); by default one line at the
-        velocity of the spectral axis, whatever the line is.
+    lines : Sequence of str or Line, optional
+        The lines, or names of lines of the catalogue (of GBKFIT, or in
+        configurations of the configuration, see LineCatalogue; the flux
+        of each after the first, relative to the first, is a parameter
+        '{name}_ratio'); by default one line at the velocity of the
+        spectral axis, whatever the line is.
     unit : str or astropy.units.UnitBase, optional
         The physical unit of the density (that of the first line; the
         ratios have none): the light of the line integrated over it, per
@@ -193,11 +195,13 @@ class LineEmission(Emission):
 
     def __init__(
             self,
-            lines: Sequence[Line] | None = None,
+            lines: Sequence[str | Line] | None = None,
             unit: str | astropy.units.UnitBase | None = None
     ):
         check_options(LineEmission.__init__, locals())
-        self._lines = Lines(lines)
+        catalogue = LineCatalogue()
+        self._lines = Lines(None if lines is None else [
+            catalogue.line(x) if isinstance(x, str) else x for x in lines])
         if STARS in self._lines.names():
             raise ConfigError(
                 f"no line can be named {STARS!r}: that is the light of "
@@ -236,8 +240,10 @@ class BandEmission(Emission):
 
     Parameters
     ----------
-    bands : Sequence of Band, optional
-        The bands; every band if None.
+    bands : Sequence of str or Band, optional
+        The bands, or names of bands of the catalogue (of GBKFIT, or in
+        configurations of the configuration, see LineCatalogue); every
+        band if None.
     unit : str or astropy.units.UnitBase, optional
         The physical unit of the density (that of the first band; the
         ratios have none): a flux density per solid angle (e.g.
@@ -307,11 +313,13 @@ class BandEmission(Emission):
 
     def __init__(
             self,
-            bands: Sequence[Band] | None = None,
+            bands: Sequence[str | Band] | None = None,
             unit: str | astropy.units.UnitBase | None = None
     ):
         check_options(BandEmission.__init__, locals())
-        self._bands = Bands(bands)
+        catalogue = LineCatalogue()
+        self._bands = Bands(None if bands is None else [
+            catalogue.band(x) if isinstance(x, str) else x for x in bands])
         self._unit = _parse_unit(unit)
         if self._unit is not None:
             _units.check_band_unit(self._unit)
@@ -349,7 +357,7 @@ class StarsEmission(BandEmission):
 
     Parameters
     ----------
-    bands : Sequence of Band, optional
+    bands : Sequence of str or Band, optional
         The bands (see BandEmission).
     unit : str or astropy.units.UnitBase, optional
         The physical unit of the density (see BandEmission).

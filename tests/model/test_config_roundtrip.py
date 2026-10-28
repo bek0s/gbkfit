@@ -10,10 +10,12 @@ import io
 import json
 import pathlib
 
+import jsonschema
 import numpy as np
 import pytest
 import ruamel.yaml
 
+import gbkfit
 import gbkfit.dataset
 import gbkfit.region
 import gbkfit.driver
@@ -21,6 +23,7 @@ import gbkfit.model
 import gbkfit.observation
 import gbkfit.params
 import gbkfit.instrument
+from gbkfit._catalogue import family_of
 from gbkfit.model.components import traits
 from gbkfit.utils import funcutils
 from modelutils import config_group_plan
@@ -86,10 +89,19 @@ OTHER_PARSERS = dict(
     driver=gbkfit.driver.driver_parser)
 
 
+@pytest.fixture(scope='module')
+def schema_defs():
+    return gbkfit.schema()['$defs']
+
+
 @pytest.mark.parametrize(
     'parser, cls', registered_types(TRAIT_PARSERS | OTHER_PARSERS))
-def test_type_roundtrip(parser, cls):
-    roundtrip(parser, sample_info(cls))
+def test_type_roundtrip(parser, cls, schema_defs):
+    dumped = roundtrip(parser, sample_info(cls))
+    # (the dump is a configuration of its family, see gbkfit.schema)
+    family = family_of(parser.cls())
+    jsonschema.validate(
+        dumped, {'$ref': f'#/$defs/{family.name}', '$defs': schema_defs})
 
 
 def test_pdescs_roundtrip():

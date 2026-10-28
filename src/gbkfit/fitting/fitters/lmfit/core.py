@@ -3,9 +3,8 @@ The lmfit least-squares fitter.
 """
 
 import typing
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-import lmfit
 import numpy as np
 from annotated_types import Gt
 
@@ -18,6 +17,9 @@ from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, finite_difference_steps)
 from gbkfit.utils.parseutils import check_options
+
+if TYPE_CHECKING:
+    import lmfit
 
 
 __all__ = [
@@ -62,6 +64,8 @@ class FitterLMFitLeastSquares(Fitter):
         If max_nfev or a tolerance or the step is not positive.
     """
 
+    requires = {'lmfit': "pip install 'gbkfit[lmfit]'"}
+
     @staticmethod
     def type() -> str:
         return 'lmfit.least_squares'
@@ -105,6 +109,7 @@ class FitterLMFitLeastSquares(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        import lmfit
         params = typing.cast(list[FitParamBounded], fit_params)
         x0 = np.array([p.value() for p in params])
         lower = np.array([p.minimum() for p in params])
@@ -127,7 +132,7 @@ class FitterLMFitLeastSquares(Fitter):
             lmfit_params.add(
                 f'p{i}', value=value, min=lower[i], max=upper[i])
 
-        def values(lmfit_values: lmfit.Parameters) -> np.ndarray:
+        def values(lmfit_values: 'lmfit.Parameters') -> np.ndarray:
             return np.array(list(lmfit_values.valuesdict().values()))
 
         options: dict[str, Any] = dict(
@@ -151,7 +156,7 @@ class FitterLMFitLeastSquares(Fitter):
 
     def _message(
             self,
-            result: lmfit.minimizer.MinimizerResult,
+            result: 'lmfit.minimizer.MinimizerResult',
             max_nfev: int
     ) -> str:
         """

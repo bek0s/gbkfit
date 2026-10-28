@@ -38,7 +38,7 @@ def image(path):
     return dict(
         type='sky', line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness'),
-        data=dict(data=path.name))
+        data=dict(type='pixel_brightness', data=path.name))
 
 
 def test_the_front_door_is_gbkfit_load():
@@ -66,8 +66,8 @@ def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.params import ParamSpace
-    obs = image(tmp_path / 'image.fits') | dict(
-        data=dict(data=str(tmp_path / 'image.fits')))
+    obs = image(tmp_path / 'image.fits') | dict(data=dict(
+        type='pixel_brightness', data=str(tmp_path / 'image.fits')))
     with gbkfit.load(dict(
             version=VERSION, galaxies=[GALAXY], observations=[obs],
             params=PARAMS)) as loaded:

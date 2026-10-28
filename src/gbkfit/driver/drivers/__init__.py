@@ -1,9 +1,11 @@
 from gbkfit.driver.base import driver_parser
+from .cuda import DriverCuda
+from .host import DriverHost
 
 
-# The drivers, imported when first asked for: each needs its native module,
-# and cuda needs CuPy
-driver_parser.register_optional({
-    'host': 'gbkfit.driver.drivers.host.DriverHost',
-    'cuda': 'gbkfit.driver.drivers.cuda.DriverCuda',
-})
+# The drivers (each needs its native module, and cuda CuPy: see their
+# requires)
+driver_parser.register([
+    DriverCuda,
+    DriverHost,
+])

@@ -19,6 +19,7 @@ observations:
 - type: sky
   name: cube
   data:
+    type: pixel_spectra
     step: [0.5, 0.5]
     rpix: [9.5, 9.5]
     rval: [0, 0]
@@ -45,6 +46,7 @@ observations:
 - type: sky
   name: maps
   data:
+    type: pixel_moments
     step: [1, 1]
     rpix: [11.5, 11.5]
     rval: [0, 0]
@@ -76,6 +78,7 @@ observations:
 - type: sky
   name: jittered
   data:
+    type: pixel_moments
     step: [1, 1]
     rpix: [11.5, 11.5]
     rval: [0, 0]

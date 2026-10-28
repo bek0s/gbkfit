@@ -138,7 +138,7 @@ def test_region_moments_observation_from_data(tmp_path):
     np.testing.assert_array_equal(loaded['moment1'].data(), [1400, 1500, 1600])
     info = dict(
         type='sky',
-        data=data_info, line_of_sight=FLAT,
+        data=dict(type='region_moments') | data_info, line_of_sight=FLAT,
         observable=dict(
             type='region_moments',
             spectral=dict(step=2, convention='relativistic')),

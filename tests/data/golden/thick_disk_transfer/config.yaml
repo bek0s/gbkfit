@@ -31,6 +31,7 @@ galaxies:
 observations:
 - type: sky
   data:
+    type: pixel_spectra
     step: [0.8, 0.8]
     rpix: [9.5, 9.5]
     rval: [0, 0]
@@ -53,6 +54,7 @@ observations:
   fft_dtype: float64
 - type: sky
   data:
+    type: pixel_spectra
     step: [0.8, 0.8]
     rpix: [9.5, 9.5]
     rval: [0, 0]

@@ -17,7 +17,7 @@ galaxies:
     emission: {type: lines}
 observations:
 - type: sky
-  data: {file: observation0_visibilities.npz}
+  data: {type: visibilities, file: observation0_visibilities.npz}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}

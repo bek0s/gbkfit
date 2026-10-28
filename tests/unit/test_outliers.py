@@ -91,7 +91,7 @@ def test_the_data_of_an_observation_are_screened_as_they_are_read(
     image[5, 7] = 30
     fits.writeto(tmp_path / 'image.fits', image)
     data = dict(
-        data=str(tmp_path / 'image.fits'),
+        type='pixel_brightness', data=str(tmp_path / 'image.fits'),
         outliers=dict(size=[3, 3], nsigma=6))
     with caplog.at_level(logging.INFO):
         observation = observation_parser.load(dict(

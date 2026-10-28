@@ -1,16 +1,13 @@
 import types
-from typing import Any
+from typing import Annotated, Any
 
-import cupy as cp
-import cupyx as cpx
-import cupyx.scipy.ndimage
 import numpy as np
 import numpy.typing as npt
+from annotated_types import Ge
 
-import gbkfit.driver.native._cuda as native_module
 from gbkfit.driver.base import (
     DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape, check_array_size)
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -38,11 +35,19 @@ class DriverCuda(Driver):
         If the machine has no GPU of that number.
     """
 
+    requires = {
+        'gbkfit.driver.native._cuda':
+            "a build of gbkfit with its CUDA module (CMake option "
+            "GBKFIT_CUDA, see the installation guide)",
+        'cupy': "pip install 'gbkfit[cuda]'"}
+
     @staticmethod
     def type() -> str:
         return 'cuda'
 
-    def __init__(self, device: int = 0):
+    def __init__(self, device: Annotated[int, Ge(0)] = 0):
+        check_options(DriverCuda.__init__, locals())
+        import cupy as cp
         ndevices = cp.cuda.runtime.getDeviceCount()
         if not 0 <= device < ndevices:
             raise ConfigError(
@@ -62,15 +67,19 @@ class DriverCuda(Driver):
             shape: Shape,
             dtype: npt.DTypeLike
     ) -> tuple[np.ndarray, DeviceArray]:
+        import cupy as cp
+        import cupyx as cpx
         check_array_size(shape)
         with self._device:
             return cpx.empty_pinned(shape, dtype), cp.empty(shape, dtype)
 
     def mem_alloc_h(self, shape: Shape, dtype: npt.DTypeLike) -> np.ndarray:
+        import cupyx as cpx
         with self._device:
             return cpx.empty_pinned(shape, dtype)
 
     def mem_alloc_d(self, shape: Shape, dtype: npt.DTypeLike) -> DeviceArray:
+        import cupy as cp
         check_array_size(shape)
         with self._device:
             return cp.empty(shape, dtype)
@@ -104,6 +113,7 @@ class DriverCuda(Driver):
             x.fill(value)
 
     def mem_copy_d2d(self, d_src: DeviceArray, d_dst: DeviceArray) -> None:
+        import cupy as cp
         with self._device:
             cp.copyto(d_dst, d_src, casting='same_kind')
 
@@ -113,6 +123,7 @@ class DriverCuda(Driver):
             x2: DeviceArray,
             out: DeviceArray | None = None
     ) -> DeviceArray:
+        import cupy as cp
         with self._device:
             return cp.add(x1, x2, out=out)
 
@@ -122,6 +133,7 @@ class DriverCuda(Driver):
             x2: DeviceArray,
             out: DeviceArray | None = None
     ) -> DeviceArray:
+        import cupy as cp
         with self._device:
             return cp.subtract(x1, x2, out=out)
 
@@ -131,6 +143,7 @@ class DriverCuda(Driver):
             x2: DeviceArray,
             out: DeviceArray | None = None
     ) -> DeviceArray:
+        import cupy as cp
         with self._device:
             return cp.multiply(x1, x2, out=out)
 
@@ -140,6 +153,7 @@ class DriverCuda(Driver):
             size: tuple[int, ...],
             out: DeviceArray
     ) -> None:
+        import cupyx.scipy.ndimage
         with self._device:
             cupyx.scipy.ndimage.median_filter(
                 x, size=size, mode='constant', cval=0.0, output=out)
@@ -150,6 +164,7 @@ class DriverCuda(Driver):
             x2: DeviceArray,
             out: DeviceArray | None = None
     ) -> DeviceArray:
+        import cupy as cp
         with self._device:
             return cp.matmul(x1, x2, out=out)
 
@@ -159,6 +174,7 @@ class DriverCuda(Driver):
             indices: DeviceArray,
             out: DeviceArray | None = None
     ) -> DeviceArray:
+        import cupy as cp
         with self._device:
             return cp.take(x, indices, axis=-1, out=out)
 
@@ -172,6 +188,7 @@ class DriverCuda(Driver):
             out[..., indices] = x
 
     def native_module(self) -> types.ModuleType:
+        import gbkfit.driver.native._cuda as native_module
         return native_module
 
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:

@@ -4,7 +4,6 @@ import numpy as np
 import numpy.typing as npt
 import scipy.ndimage
 
-import gbkfit.driver.native._host as native_module
 from gbkfit.driver.base import (
     DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape, check_array_size)
 
@@ -19,6 +18,11 @@ class DriverHost(Driver):
     The host CPU: numpy arrays, and the C++ kernels (OpenMP) of the native
     host module. The host and device sides of a transfer are one memory.
     """
+
+    requires = {
+        'gbkfit.driver.native._host':
+            "a build of gbkfit with its host module (CMake option "
+            "GBKFIT_HOST, on by default)"}
 
     @staticmethod
     def type() -> str:
@@ -126,11 +130,12 @@ class DriverHost(Driver):
         out[..., indices] = x
 
     def native_module(self) -> types.ModuleType:
+        import gbkfit.driver.native._host as native_module
         return native_module
 
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         from ._fft import DriverFFTHost
-        return DriverFFTHost(native_module, dtype)
+        return DriverFFTHost(self.native_module(), dtype)
 
     def nufft(self) -> DriverNUFFT:
         from ._nufft import DriverNUFFTHost

@@ -34,6 +34,7 @@ observations:
 - type: sky
   band: {name: sdss_r, wavelength: 6.166000000000001e-07 m}
   data:
+    type: pixel_brightness
     step: [0.5, 0.5]
     rpix: [15.5, 15.5]
     rval: [0, 0]

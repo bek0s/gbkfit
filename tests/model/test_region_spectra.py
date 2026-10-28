@@ -213,7 +213,6 @@ def test_region_spectra_observation_from_data(tmp_path):
         Data(np.ones((51, 3))), regions,
         spectral=SpectralAxis(step=10, rval=1500, convention='relativistic'))
     data_info = dataset.dump(prefix=str(tmp_path / ''))
-    data_info.pop('type')
     info = dict(
         type='sky',
         data=data_info, line_of_sight=FLAT,

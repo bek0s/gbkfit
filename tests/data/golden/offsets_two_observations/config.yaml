@@ -19,6 +19,7 @@ observations:
 - type: sky
   name: kmos
   data:
+    type: pixel_spectra
     step: [0.5, 0.5]
     rpix: [9.5, 9.5]
     rval: [150, -30]
@@ -41,6 +42,7 @@ observations:
   name: sinfoni
   offsets: {position: true, velocity: true}
   data:
+    type: pixel_moments
     step: [1, 1]
     rpix: [11.5, 11.5]
     rval: [150.0004, -29.9998]

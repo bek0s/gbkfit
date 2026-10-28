@@ -16,6 +16,7 @@ galaxies:
 observations:
 - type: sky
   data:
+    type: pixel_brightness
     step: [0.5, 0.5]
     rpix: [15.5, 15.5]
     rval: [0, 0]

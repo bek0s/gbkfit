@@ -55,9 +55,10 @@ def evaluate(driver, galaxy, observable, properties):
 
 
 def visibilities(driver, galaxy, properties):
-    COVERAGE.dump('coverage.npz', overwrite=True)
+    COVERAGE.write('coverage.npz', overwrite=True)
     data = evaluate(driver, galaxy, dict(
-        type='visibilities', coverage='coverage.npz') | GRID, properties)
+        type='visibilities', coverage=dict(file='coverage.npz')) | GRID,
+        properties)
     return data['re'] + 1j * data['im']
 
 
@@ -127,10 +128,10 @@ def test_visibilities_have_no_psf():
 
 
 def test_the_pixels_of_visibilities_are_not_oversampled(driver):
-    COVERAGE.dump('coverage.npz', overwrite=True)
+    COVERAGE.write('coverage.npz', overwrite=True)
     with pytest.raises(ConfigError, match="not oversampled"):
         evaluate(driver, DISK, dict(
-            type='visibilities', coverage='coverage.npz',
+            type='visibilities', coverage=dict(file='coverage.npz'),
             oversampling=[2, 2, 1]) | GRID, DISK_PROPERTIES)
 
 
@@ -233,10 +234,10 @@ def test_the_first_evaluation_checks_the_sampling(
     # At half the step, the visibilities of the Nyquist step of the longest
     # baseline change by 5%; a field that cuts the disk has flux at its
     # edges
-    COVERAGE.dump('coverage.npz', overwrite=True)
+    COVERAGE.write('coverage.npz', overwrite=True)
     with caplog.at_level(logging.WARNING):
         evaluate(driver, DISK, dict(
-            type='visibilities', coverage='coverage.npz',
+            type='visibilities', coverage=dict(file='coverage.npz'),
             rval=[150, -30]) | options, DISK_PROPERTIES)
     warnings = [r.message for r in caplog.records
                 if r.levelno == logging.WARNING]

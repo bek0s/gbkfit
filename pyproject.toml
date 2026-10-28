@@ -63,7 +63,9 @@ Documentation = 'https://gbkfit.readthedocs.io'
 test = [
     'pytest>=8', 'pytest-regressions', 'pytest-xdist',
     # (the plot task)
-    'corner', 'matplotlib']
+    'corner', 'matplotlib',
+    # (the schema of configurations, see gbkfit.schema)
+    'jsonschema']
 dev = [{ include-group = 'test' }]
 
 [tool.scikit-build]

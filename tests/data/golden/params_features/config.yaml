@@ -39,6 +39,7 @@ pdescs:
 observations:
 - type: sky
   data:
+    type: pixel_spectra
     step: [1, 1]
     rpix: [11.5, 11.5]
     rval: [0, 0]

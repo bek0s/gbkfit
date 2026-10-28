@@ -15,13 +15,14 @@ import contextvars
 import copy
 import difflib
 import importlib
+import importlib.util
 import inspect
 import logging
 import os
 import re
 import typing
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from typing import Any, Literal, NamedTuple, Self
+from typing import Any, ClassVar, Literal, NamedTuple, Self
 
 import astropy.units
 
@@ -619,7 +620,7 @@ def from_config(value: Any, type_: Any) -> Any:
         if member == typeutils.FitsFile and isinstance(value, str | Mapping):
             file, hdu = parse_file(value)
             return (file, hdu) if isinstance(value, Mapping) else file
-        if _is_record(member) and isinstance(value, Mapping):
+        if is_record(member) and isinstance(value, Mapping):
             return member(**parse_options_for_callable(dict(value), member))
         if typing.get_origin(member) is Mapping \
                 and isinstance(value, Mapping):
@@ -634,7 +635,7 @@ def from_config(value: Any, type_: Any) -> Any:
     return value
 
 
-def _is_record(type_: Any) -> bool:
+def is_record(type_: Any) -> bool:
     """
     Return whether a type annotation is a record (a NamedTuple, e.g.
     typeutils.Column), which configurations give as a dict of its fields.
@@ -836,6 +837,22 @@ class Serializable(abc.ABC):
     # config_constructor)
     config_constructors: tuple[str, ...] = ('__init__',)
 
+    # The options of its configurations that are not those of its
+    # config_constructors, or are in other forms, and their types, which
+    # its load reads (e.g. the named geometries of a galaxy, which its
+    # components name: a configuration cannot hold one object twice)
+    config_options: ClassVar[Mapping[str, Any]] = {}
+
+    # The parameters of its config_constructors that the caller of its
+    # load gives, not its configurations (e.g. the data of an observable,
+    # which its observation gives)
+    given_options: tuple[str, ...] = ()
+
+    # The modules it needs beyond those GBKFIT always has (e.g. optional
+    # packages), each with how to install it: without them it can be
+    # described, but not made (see missing_modules)
+    requires: ClassVar[Mapping[str, str]] = {}
+
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
         """
@@ -872,6 +889,35 @@ class Serializable(abc.ABC):
         """
 
 
+def missing_modules(cls: type[Serializable]) -> dict[str, str]:
+    """
+    Return the modules that a class needs (see Serializable.requires) and
+    that are not installed, each with how to install it.
+
+    Parameters
+    ----------
+    cls : type
+        The class.
+
+    Returns
+    -------
+    dict
+        How to install each missing module, by its name.
+    """
+    return {
+        module: how for module, how in cls.requires.items()
+        if not _is_installed(module)}
+
+
+def _is_installed(module: str) -> bool:
+    """Return whether a module can be found, without importing it."""
+    try:
+        return importlib.util.find_spec(module) is not None
+    except ModuleNotFoundError:
+        # (a missing package of the module)
+        return False
+
+
 def config_constructor(
         cls: type[Serializable], info: Mapping[str, Any]
 ) -> str:
@@ -906,7 +952,8 @@ def config_constructor(
     params = {}
     for name in names:
         func = cls.__init__ if name == '__init__' else getattr(cls, name)
-        params[name] = set(funcutils.parameter_names(func).all)
+        params[name] = set(funcutils.parameter_names(func).all) \
+            - set(cls.given_options)
     own = {
         name: params[name].difference(
             *(params[other] for other in names if other != name))
@@ -1114,11 +1161,10 @@ class TypedParser(Parser):
     The parser of a class whose configurations choose one of its
     subclasses by their type (the option 'type').
 
-    Subclasses whose modules need optional packages are registered by
-    type and path (see register_optional), and imported when a
-    configuration first asks for them: importing gbkfit does not import
-    those packages, and asking for a type whose package is missing says
-    what to install.
+    Subclasses that need modules GBKFIT does not always have (see
+    Serializable.requires) are registered as the others, and their
+    options can be read without them; asking for one whose modules are
+    missing says what to install.
 
     Parameters
     ----------
@@ -1136,8 +1182,6 @@ class TypedParser(Parser):
     ):
         super().__init__(cls)
         self._classes: dict[str, type[TypedSerializable]] = {}
-        # The optional subclasses not imported yet: their paths, by type
-        self._optional: dict[str, str] = {}
         self.register(classes)
 
     def register(
@@ -1164,43 +1208,18 @@ class TypedParser(Parser):
                 raise RuntimeError(
                     f"{self.cls_name()} parser could not register {desc}; "
                     f"it is not a subclass of {self.cls_name()}")
-            if cls.type() in self._classes or cls.type() in self._optional:
+            if cls.type() in self._classes:
                 raise RuntimeError(
                     f"{self.cls_name()} parser could not register {desc}; "
                     f"a class of the same type is already registered")
             self._classes[cls.type()] = cls
 
-    def register_optional(self, paths: dict[str, str]) -> None:
-        """
-        Register subclasses whose modules need optional packages, by type
-        and path (module and name, e.g.
-        'gbkfit.fitting.fitters.nautilus.FitterNautilus'). Each is
-        imported when a configuration first asks for its type.
-
-        Parameters
-        ----------
-        paths : dict
-            The path of the subclass of each type.
-
-        Raises
-        ------
-        RuntimeError
-            If a type is registered.
-        """
-        for type_, path in paths.items():
-            if type_ in self._classes or type_ in self._optional:
-                raise RuntimeError(
-                    f"{self.cls_name()} parser could not register {path} "
-                    f"(type '{type_}'); a class of the same type is already "
-                    f"registered")
-            self._optional[type_] = path
-
     def types(self) -> list[str]:
         """
-        Return all the registered types, optional ones included (whether
-        their packages are installed or not).
+        Return all the registered types, those of classes whose modules
+        are missing included (see Serializable.requires).
         """
-        return sorted([*self._classes, *self._optional])
+        return sorted(self._classes)
 
     def registered_class(self, type_: str) -> type[TypedSerializable]:
         """
@@ -1219,56 +1238,30 @@ class TypedParser(Parser):
         Raises
         ------
         ConfigError
-            If no class is registered for the type, or its module cannot
-            be imported (e.g. an optional package is missing).
+            If no class is registered for the type, or the modules it
+            needs are missing (see Serializable.requires).
         """
-        if isinstance(type_, str) and type_ in self._optional:
-            self._import_optional(type_)
         if not isinstance(type_, str) or type_ not in self._classes:
             raise ConfigError(
                 f"unknown type {describe_unknown([type_], self.types())}; "
                 f"the types are: {_quoted(self.types())}")
-        return self._classes[type_]
+        cls = self._classes[type_]
+        if missing := missing_modules(cls):
+            how = '; '.join(dict.fromkeys(missing.values()))
+            raise ConfigError(f"type '{type_}' needs {_quoted(missing)}: {how}")
+        return cls
 
     def registered_classes(self) -> dict[str, type[TypedSerializable]]:
         """
-        Return the registered classes that can be imported (those whose
-        optional packages are missing are left out).
+        Return the registered classes, those whose modules are missing
+        included (see Serializable.requires).
 
         Returns
         -------
         dict
             The class registered for each type.
         """
-        for type_ in list(self._optional):
-            try:
-                self._import_optional(type_)
-            except ConfigError:
-                pass
         return dict(self._classes)
-
-    def _import_optional(self, type_: str) -> None:
-        """
-        Import the optional subclass of a type, and register it.
-
-        Raises
-        ------
-        ConfigError
-            If its module cannot be imported.
-        """
-        path = self._optional[type_]
-        module_name, class_name = path.rsplit('.', 1)
-        try:
-            cls = getattr(importlib.import_module(module_name), class_name)
-        except ImportError as e:
-            raise ConfigError(
-                f"type '{type_}' is not available: {e}") from e
-        if cls.type() != type_:
-            raise RuntimeError(
-                f"{path} has type '{cls.type()}', but was registered as "
-                f"type '{type_}'")
-        del self._optional[type_]
-        self.register(cls)
 
     def _load_one_impl(
             self,

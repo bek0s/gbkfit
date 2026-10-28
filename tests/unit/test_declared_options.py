@@ -10,71 +10,19 @@ import textwrap
 
 import pytest
 
-import gbkfit.dataset
 import gbkfit.fitting
 import gbkfit.instrument
 import gbkfit.model
 import gbkfit.model.components.disks
 import gbkfit.model.components.parts
-import gbkfit.model.components.roles
-import gbkfit.model.components.spheroids
-import gbkfit.model.components.traits
 import gbkfit.model.mass
 import gbkfit.observation
-import gbkfit.params
-import gbkfit.region
-from gbkfit.observation.observables import apertures, traces
+from gbkfit import catalogue
 from gbkfit.utils import funcutils, typeutils
 
 
-# The families whose options are declared, by their parsers or classes
-PARSERS = [
-    gbkfit.dataset.dataset_parser,
-    gbkfit.fitting.bootstrap_scheme_parser,
-    gbkfit.fitting.fitter_parser,
-    gbkfit.instrument.lsf_parser,
-    gbkfit.instrument.primary_beam_parser,
-    gbkfit.instrument.psf_parser,
-    gbkfit.model.components.traits.dht_parser,
-    gbkfit.model.components.traits.dpt_parser,
-    gbkfit.model.components.traits.rht_parser,
-    gbkfit.model.components.traits.rpt_parser,
-    gbkfit.model.components.traits.spt_parser,
-    gbkfit.model.components.traits.vht_parser,
-    gbkfit.model.components.traits.vpt_parser,
-    gbkfit.model.components.traits.zpt_parser,
-    gbkfit.model.components.roles.emission_parser,
-    gbkfit.model.components.roles.opacity_parser,
-    gbkfit.model.components.parts.cone_kinematics_parser,
-    gbkfit.model.components.spheroids.light_profile_parser,
-    gbkfit.model.components.spheroids.spheroid_kinematics_parser,
-    gbkfit.model.components.parts.disk_kinematics_parser,
-    gbkfit.model.components.parts.equilibrium_parser,
-    gbkfit.model.component_parser,
-    gbkfit.model.distance_parser,
-    gbkfit.model.extinction_law_parser,
-    gbkfit.model.gravity_parser,
-    gbkfit.model.mass.halo_response_parser,
-    gbkfit.model.mass.disk_surface_parser,
-    gbkfit.model.mass.disk_vertical_parser,
-    gbkfit.model.mass.mass_component_parser,
-    gbkfit.model.mass.spheroid_profile_parser,
-    gbkfit.model.mass.spheroid_shape_parser,
-    gbkfit.observation.lens_mass_parser,
-    gbkfit.observation.likelihood_parser,
-    gbkfit.observation.line_of_sight_parser,
-    gbkfit.observation.noise_parser,
-    gbkfit.observation.observable_parser,
-    gbkfit.observation.weight_trait_parser,
-    gbkfit.params.joint_prior_parser,
-    gbkfit.params.param_mode_parser,
-    gbkfit.params.pdesc_parser,
-    gbkfit.params.prior_parser,
-    gbkfit.params.solve_parser,
-    gbkfit.region.aperture_parser,
-    gbkfit.region.regions_parser,
-    apertures.aperture_parser,
-    traces.trace_parser]
+# The classes whose options are declared, besides the members of the
+# families of the catalogue
 CLASSES = [
     gbkfit.fitting.BootstrapOptions,
     gbkfit.fitting.UncertaintyOptions,
@@ -98,13 +46,10 @@ CLASSES = [
 def constructors():
     """The constructors that configurations call, of each class."""
     classes = [*CLASSES, *(
-        cls for parser in PARSERS
-        for cls in parser.registered_classes().values())]
+        member.cls for family in catalogue().values()
+        for member in family.members)]
     for cls in classes:
-        # (an observable with data is made by its from_data)
-        names = (*cls.config_constructors, *(
-            ('from_data',) if hasattr(cls, 'from_data') else ()))
-        for name in names:
+        for name in cls.config_constructors:
             func = cls.__init__ if name == '__init__' else getattr(cls, name)
             # (a class without options of its own has that of object)
             if func is not object.__init__:

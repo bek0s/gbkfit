@@ -1,20 +1,30 @@
 from gbkfit.fitting.base import fitter_parser
+from .cmaes import FitterCMAES
+from .dnest4 import FitterDNest4
+from .dynesty import FitterDynestyDynamic, FitterDynestyStatic
+from .emcee import FitterEmcee
+from .grid import FitterGrid
+from .lmfit import FitterLMFitLeastSquares
+from .multistart import FitterMultiStart
+from .nautilus import FitterNautilus
+from .scipy import FitterScipyLeastSquares
+from .ultranest import FitterUltraNest
+from .zeus import FitterZeus
 
 
-# The fitters, imported when first asked for: most need optional packages
-fitter_parser.register_optional({
-    'lmfit.least_squares':
-        'gbkfit.fitting.fitters.lmfit.FitterLMFitLeastSquares',
-    'scipy.least_squares':
-        'gbkfit.fitting.fitters.scipy.FitterScipyLeastSquares',
-    'multistart': 'gbkfit.fitting.fitters.multistart.FitterMultiStart',
-    'grid': 'gbkfit.fitting.fitters.grid.FitterGrid',
-    'cmaes': 'gbkfit.fitting.fitters.cmaes.FitterCMAES',
-    'emcee': 'gbkfit.fitting.fitters.emcee.FitterEmcee',
-    'zeus': 'gbkfit.fitting.fitters.zeus.FitterZeus',
-    'nautilus': 'gbkfit.fitting.fitters.nautilus.FitterNautilus',
-    'dynesty.static': 'gbkfit.fitting.fitters.dynesty.FitterDynestyStatic',
-    'dynesty.dynamic': 'gbkfit.fitting.fitters.dynesty.FitterDynestyDynamic',
-    'ultranest': 'gbkfit.fitting.fitters.ultranest.FitterUltraNest',
-    'dnest4': 'gbkfit.fitting.fitters.dnest4.FitterDNest4',
-})
+# The fitters (those that need optional packages too: see their
+# requires)
+fitter_parser.register([
+    FitterCMAES,
+    FitterDNest4,
+    FitterDynestyDynamic,
+    FitterDynestyStatic,
+    FitterEmcee,
+    FitterGrid,
+    FitterLMFitLeastSquares,
+    FitterMultiStart,
+    FitterNautilus,
+    FitterScipyLeastSquares,
+    FitterUltraNest,
+    FitterZeus,
+])

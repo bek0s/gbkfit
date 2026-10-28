@@ -118,6 +118,8 @@ class Galaxy(parseutils.Serializable):
         or the redshift is not above -1, or missing where it is required.
     """
 
+    config_options = {'geometries': Sequence[Geometry]}
+
     @classmethod
     def load(
             cls,

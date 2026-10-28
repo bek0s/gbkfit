@@ -3,9 +3,8 @@ The dynesty nested samplers: static and dynamic.
 """
 
 from collections.abc import Callable
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
-import dynesty
 import numpy as np
 from annotated_types import Gt
 
@@ -17,6 +16,9 @@ from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils.parseutils import check_options
 
+if TYPE_CHECKING:
+    import dynesty
+
 
 __all__ = [
     'FitterDynestyDynamic',
@@ -24,7 +26,8 @@ __all__ = [
 ]
 
 
-_Sampler = dynesty.NestedSampler | dynesty.DynamicNestedSampler
+# A sampler of dynesty
+_Sampler: TypeAlias = 'dynesty.NestedSampler | dynesty.DynamicNestedSampler'
 
 
 def _evidence(sampler: _Sampler) -> Evidence:
@@ -38,7 +41,7 @@ def _evidence(sampler: _Sampler) -> Evidence:
 def _fit_run(
         sampler: _Sampler,
         maxcall: int | None,
-        normalisation: _Sampler | None = None
+        normalisation: '_Sampler | None' = None
 ) -> FitRun:
     """
     Return what a run of a dynesty sampler gives, with its evidence
@@ -103,6 +106,8 @@ class FitterDynestyStatic(Fitter):
         If a number is not positive.
     """
 
+    requires = {'dynesty': "pip install 'gbkfit[dynesty]'"}
+
     @staticmethod
     def type() -> str:
         return 'dynesty.static'
@@ -160,10 +165,11 @@ class FitterDynestyStatic(Fitter):
             problem: FitProblem,
             log_likelihood: Callable[[np.ndarray], float],
             rng: np.random.Generator
-    ) -> dynesty.NestedSampler:
+    ) -> 'dynesty.NestedSampler':
         """
         Run the sampler on a log-likelihood over the priors of the problem.
         """
+        import dynesty
         sampler = dynesty.NestedSampler(
             log_likelihood, problem.prior_transform, problem.ndim(),
             nlive=self._nlive, bound=self._bound, sample=self._sample,
@@ -215,6 +221,8 @@ class FitterDynestyDynamic(Fitter):
     ConfigError
         If a number is not positive.
     """
+
+    requires = {'dynesty': "pip install 'gbkfit[dynesty]'"}
 
     @staticmethod
     def type() -> str:
@@ -276,10 +284,11 @@ class FitterDynestyDynamic(Fitter):
             problem: FitProblem,
             log_likelihood: Callable[[np.ndarray], float],
             rng: np.random.Generator
-    ) -> dynesty.DynamicNestedSampler:
+    ) -> 'dynesty.DynamicNestedSampler':
         """
         Run the sampler on a log-likelihood over the priors of the problem.
         """
+        import dynesty
         sampler = dynesty.DynamicNestedSampler(
             log_likelihood, problem.prior_transform, problem.ndim(),
             nlive=self._nlive, bound=self._bound, sample=self._sample,

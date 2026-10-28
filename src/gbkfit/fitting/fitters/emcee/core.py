@@ -3,9 +3,8 @@ The emcee MCMC sampler.
 """
 
 import typing
-from typing import Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
-import emcee
 import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
@@ -17,6 +16,9 @@ from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils.parseutils import ConfigError, check_options
+
+if TYPE_CHECKING:
+    import emcee
 
 
 __all__ = [
@@ -76,6 +78,8 @@ class FitterEmcee(Fitter):
         not finite and positive.
     """
 
+    requires = {'emcee': "pip install 'gbkfit[emcee]'"}
+
     @staticmethod
     def type() -> str:
         return 'emcee'
@@ -130,6 +134,7 @@ class FitterEmcee(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
+        import emcee
         params = typing.cast(list[FitParamEmcee], fit_params)
         ndim = problem.ndim()
         nwalkers = self._nwalkers or max(32, 4 * ndim)
@@ -194,10 +199,11 @@ class FitterEmcee(Fitter):
             params: list[FitParamEmcee],
             nwalkers: int,
             rng: np.random.Generator
-    ) -> emcee.State:
+    ) -> 'emcee.State':
         """
         Return the starting points of the walkers and their posterior
         densities, all finite (see start_walkers).
         """
+        import emcee
         coords, log_prob = start_walkers(problem, params, nwalkers, rng)
         return emcee.State(coords, log_prob=log_prob)
