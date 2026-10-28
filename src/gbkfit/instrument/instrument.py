@@ -77,7 +77,7 @@ class Instrument(parseutils.Serializable):
             psf: PSF | None = None,
             lsf: LSF | None = None
     ):
-        parseutils.check_options(self.__init__, locals())
+        parseutils.check_options(Instrument.__init__, locals())
         self._primary_beam = primary_beam
         self._psf = psf
         self._lsf = lsf

@@ -5,16 +5,17 @@ the posterior from it.
 """
 
 from collections.abc import Callable, Sequence
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
 from gbkfit.objective import Objective
 from gbkfit.params import ParamEvaluationError, ParamKind
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
 
 
 __all__ = [
@@ -68,12 +69,10 @@ class UncertaintyOptions(parseutils.Serializable):
             self,
             covariance: bool = True,
             scale: bool = False,
-            laplace_samples: int = 1000,
-            rcond: float | None = None
+            laplace_samples: Annotated[int, Ge(0)] = 1000,
+            rcond: Annotated[float, Ge(0)] | None = None
     ):
-        if laplace_samples < 0 or (rcond is not None and rcond < 0):
-            raise ConfigError(
-                "options 'laplace_samples' and 'rcond' cannot be negative")
+        check_options(UncertaintyOptions.__init__, locals())
         self._covariance = covariance
         self._scale = scale
         self._laplace_samples = laplace_samples

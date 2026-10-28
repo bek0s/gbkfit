@@ -311,7 +311,7 @@ class LSFGauss(LSF):
             sigma=self._sigma)
 
     def __init__(self, sigma: Annotated[float, Gt(0), Unit('km/s')]):
-        check_options(self.__init__, locals())
+        check_options(LSFGauss.__init__, locals())
         self._sigma = sigma
 
     def _extent(self) -> float:
@@ -367,7 +367,7 @@ class LSFGGauss(LSF):
             alpha: Annotated[float, Gt(0), Unit('km/s')],
             beta: Annotated[float, Gt(0)]
     ):
-        check_options(self.__init__, locals())
+        check_options(LSFGGauss.__init__, locals())
         self._alpha = alpha
         self._beta = beta
 
@@ -419,7 +419,7 @@ class LSFLorentz(LSF):
             gamma=self._gamma)
 
     def __init__(self, gamma: Annotated[float, Gt(0), Unit('km/s')]):
-        check_options(self.__init__, locals())
+        check_options(LSFLorentz.__init__, locals())
         self._gamma = gamma
 
     def _extent(self) -> float:
@@ -475,7 +475,7 @@ class LSFMoffat(LSF):
             alpha: Annotated[float, Gt(0), Unit('km/s')],
             beta: Annotated[float, Gt(0.5)]
     ):
-        check_options(self.__init__, locals())
+        check_options(LSFMoffat.__init__, locals())
         self._alpha = alpha
         self._beta = beta
 
@@ -545,7 +545,7 @@ class LSFImage(LSF):
         LSFImage
             The LSF.
         """
-        check_options(cls.from_file, locals())
+        check_options(LSFImage.from_file, locals())
         data, coords = fitsutils.read_data(*split_fits_file(file))
         return cls(data, coords.step[0] if step is None else step)
 
@@ -567,7 +567,7 @@ class LSFImage(LSF):
             data: np.ndarray,
             step: Annotated[float, Gt(0), Unit('km/s')] = 1.0
     ):
-        check_options(self.__init__, locals())
+        check_options(LSFImage.__init__, locals())
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 1:
             raise ConfigError(
@@ -630,7 +630,7 @@ class LSFSum(LSF):
             weights=self._weights.tolist())
 
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
-        check_options(self.__init__, locals())
+        check_options(LSFSum.__init__, locals())
         self._lsfs = tuple(lsfs)
         self._weights = _detail.sum_weights(
             weights, len(self._lsfs), "a sum of LSFs")
@@ -695,7 +695,7 @@ class LSFConvolution(LSF):
                 lsf_parser, self._lsfs, prefix, dump_path, overwrite))
 
     def __init__(self, lsfs: Sequence[LSF]):
-        check_options(self.__init__, locals())
+        check_options(LSFConvolution.__init__, locals())
         if not lsfs:
             raise ConfigError("a convolution of LSFs needs at least one LSF")
         self._lsfs = tuple(lsfs)
@@ -757,7 +757,7 @@ class LSFHanning(LSF):
         return dict(type=self.type(), width=self._width)
 
     def __init__(self, width: Annotated[float, Gt(0), Unit('km/s')]):
-        check_options(self.__init__, locals())
+        check_options(LSFHanning.__init__, locals())
         self._width = width
 
     def _steps(self, step: float) -> int:
@@ -863,7 +863,7 @@ class LSFImages(LSF):
             If the image is not 2D, or the points or step are neither given
             nor in its header.
         """
-        check_options(cls.from_file, locals())
+        check_options(LSFImages.from_file, locals())
         filename, hdu = split_fits_file(file)
         data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
@@ -900,7 +900,7 @@ class LSFImages(LSF):
             points: u.Quantity,
             step: Annotated[float, Gt(0), Unit('km/s')]
     ):
-        check_options(self.__init__, locals())
+        check_options(LSFImages.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2 or not np.all(np.isfinite(data)):
             raise ConfigError(

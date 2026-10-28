@@ -115,7 +115,7 @@ class JointPriorGauss(JointPrior):
             mean: float | Sequence[float],
             std: float | Sequence[float]
     ):
-        check_options(self.__init__, locals())
+        check_options(JointPriorGauss.__init__, locals())
         _check_std(std)
         self._expr = expr
         self._mean = mean
@@ -184,7 +184,7 @@ class JointPriorSmooth(JointPrior):
             std: Annotated[FiniteFloat, Gt(0)],
             positions: str | None = None
     ):
-        check_options(self.__init__, locals())
+        check_options(JointPriorSmooth.__init__, locals())
         self._expr = expr
         self._order = order
         self._std = std
@@ -297,7 +297,7 @@ class JointPriorSmooth2D(JointPrior):
             order: Literal[1, 2],
             std: Annotated[FiniteFloat, Gt(0)]
     ):
-        check_options(self.__init__, locals())
+        check_options(JointPriorSmooth2D.__init__, locals())
         if not (isinstance(size, Sequence) and len(size) == 2 and all(
                 isinstance(n, numbers.Integral) and not isinstance(n, bool)
                 and n >= 1 for n in size)):
@@ -378,7 +378,7 @@ class JointPriorBound(JointPrior):
             lower: float | None = None,
             upper: float | None = None
     ):
-        check_options(self.__init__, locals())
+        check_options(JointPriorBound.__init__, locals())
         if lower is None and upper is None:
             raise ConfigError("a bound needs lower, upper or both")
         if lower is not None and upper is not None and not lower < upper:
@@ -446,7 +446,7 @@ class JointPriorMVN(JointPrior):
             mean: Sequence[float],
             cov: Sequence[Sequence[float]]
     ):
-        check_options(self.__init__, locals())
+        check_options(JointPriorMVN.__init__, locals())
         n = len(exprs)
         cov_ = np.asarray(cov, dtype=float)
         if len(mean) != n or cov_.shape != (n, n):

@@ -7,9 +7,10 @@ import math
 import tempfile
 import time
 from collections.abc import Mapping
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
+from annotated_types import Ge, Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.control import FitStopped
@@ -18,7 +19,7 @@ from gbkfit.fitting.fitters._tables import TableLayout, table_layout
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 from . import _dnest4
 from ._output import DNest4Files, DNest4Output, posterior
@@ -133,30 +134,21 @@ class FitterDNest4(Fitter):
 
     def __init__(
             self,
-            particles: int = 5,
-            new_level_interval: int = 5000,
-            save_interval: int = 500,
-            thread_steps: int = 100,
-            max_levels: int = 0,
-            backtracking: float = 10.0,
-            beta: float = 100.0,
-            max_saves: int = 4000,
+            particles: Annotated[int, Gt(0)] = 5,
+            new_level_interval: Annotated[int, Gt(0)] = 5000,
+            save_interval: Annotated[int, Gt(0)] = 500,
+            thread_steps: Annotated[int, Gt(0)] = 100,
+            max_levels: Annotated[int, Ge(0)] = 0,
+            backtracking: Annotated[float, Gt(0)] = 10.0,
+            beta: Annotated[float, Ge(0)] = 100.0,
+            max_saves: Annotated[int, Gt(0)] = 4000,
             min_rows: Mapping[str, int] | None = None,
             verbose: bool = False,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterDNest4.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                particles=particles, new_level_interval=new_level_interval,
-                save_interval=save_interval, thread_steps=thread_steps,
-                backtracking=backtracking, max_saves=max_saves).items():
-            if not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
-        if not beta >= 0:
-            raise ConfigError(
-                f"option 'beta' must be at least 0; it is {beta}")
         min_rows = dict(min_rows or {})
         if negative := [k for k, v in min_rows.items() if not v >= 0]:
             raise ConfigError(

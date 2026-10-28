@@ -635,9 +635,11 @@ def check_options(func: Callable, values: Mapping[str, Any]) -> None:
     typeutils.problem).
 
     Each constructor that configurations call (see
-    Serializable.config_constructors) calls it first, with its
-    arguments, e.g. ``check_options(self.__init__, locals())``: options
-    are checked alike in Python and in configurations.
+    Serializable.config_constructors) calls it first, with itself, named
+    by the class that defines it, and its arguments, e.g.
+    ``check_options(PSFGauss.__init__, locals())``: options are checked
+    alike in Python and in configurations. (``self.__init__`` would be
+    that of a subclass, in a constructor that subclasses call.)
 
     Parameters
     ----------

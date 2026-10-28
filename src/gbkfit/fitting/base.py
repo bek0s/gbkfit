@@ -9,7 +9,7 @@ import importlib.metadata
 import logging
 import time
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import numpy as np
 
@@ -26,7 +26,7 @@ from gbkfit.fitting.uncertainty import (
 from gbkfit.objective import Objective
 from gbkfit.params import EvaluationError, ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 _log = logging.getLogger(__name__)
@@ -130,12 +130,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             self,
             seed: int,
             uncertainty: UncertaintyOptions | None,
-            merit: str = 'chi2'
+            merit: Literal[MERITS] = 'chi2'
     ):
-        if merit not in MERITS:
-            raise ConfigError(
-                f"option 'merit' must be one of {list(MERITS)}; it is "
-                f"{merit!r}")
+        check_options(Fitter.__init__, locals())
         if merit == 'aicp' and uncertainty is not None \
                 and uncertainty.covariance():
             raise ConfigError(

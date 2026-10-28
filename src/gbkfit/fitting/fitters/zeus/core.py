@@ -3,14 +3,15 @@ The zeus ensemble slice sampler.
 """
 
 import contextlib
-import math
 import random
 import typing
 from collections.abc import Iterator
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
 import zeus
+from annotated_types import Gt
+from pydantic import FiniteFloat
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.control import FitStopped
@@ -18,7 +19,7 @@ from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -124,29 +125,22 @@ class FitterZeus(Fitter):
 
     def __init__(
             self,
-            nwalkers: int | None = None,
-            nsteps: int = 2000,
+            nwalkers: Annotated[int, Gt(0)] | None = None,
+            nsteps: Annotated[int, Gt(0)] = 2000,
             burnin: int | None = None,
-            thin: int = 1,
+            thin: Annotated[int, Gt(0)] = 1,
             moves: Literal['differential', 'global'] = 'differential',
             light_mode: bool = False,
-            width: float | None = None,
+            width: Annotated[FiniteFloat, Gt(0)] | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterZeus.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                nwalkers=nwalkers, nsteps=nsteps, thin=thin).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
         if nwalkers is not None and nwalkers % 2:
             raise ConfigError(
                 f"option 'nwalkers' must be even (zeus moves two halves of "
                 f"the walkers in turn); it is {nwalkers}")
-        if width is not None and not (math.isfinite(width) and width > 0):
-            raise ConfigError(
-                f"option 'width' must be finite and positive; it is {width}")
         if burnin is not None and not 0 <= burnin < nsteps:
             raise ConfigError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")

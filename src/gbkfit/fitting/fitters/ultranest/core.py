@@ -5,10 +5,11 @@ The UltraNest nested sampler.
 import contextlib
 import logging
 from collections.abc import Callable, Iterator
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import ultranest
+from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import corrected_evidence
@@ -16,7 +17,7 @@ from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
 
 
 __all__ = [
@@ -112,23 +113,17 @@ class FitterUltraNest(Fitter):
 
     def __init__(
             self,
-            min_num_live_points: int = 400,
-            dlogz: float = 0.5,
-            frac_remain: float = 0.01,
-            min_ess: int = 400,
-            max_ncalls: int | None = None,
+            min_num_live_points: Annotated[int, Gt(0)] = 400,
+            dlogz: Annotated[float, Gt(0)] = 0.5,
+            frac_remain: Annotated[float, Gt(0)] = 0.01,
+            min_ess: Annotated[int, Gt(0)] = 400,
+            max_ncalls: Annotated[int, Gt(0)] | None = None,
             verbose: bool = False,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterUltraNest.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                min_num_live_points=min_num_live_points, dlogz=dlogz,
-                frac_remain=frac_remain, min_ess=min_ess,
-                max_ncalls=max_ncalls).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
         self._min_num_live_points = min_num_live_points
         self._dlogz = dlogz
         self._frac_remain = frac_remain

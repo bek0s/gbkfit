@@ -158,7 +158,7 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
             y: Annotated[float, Unit('arcsec')] = 0,
             frequency: Annotated[float, Gt(0), Unit('Hz')] | None = None
     ):
-        check_options(self.__init__, locals())
+        check_options(PrimaryBeamRadial.__init__, locals())
         self._fwhm = fwhm
         self._x = x
         self._y = y
@@ -276,7 +276,7 @@ class PrimaryBeamImage(PrimaryBeam):
         PrimaryBeamImage
             The primary beam.
         """
-        check_options(cls.from_file, locals())
+        check_options(PrimaryBeamImage.from_file, locals())
         data, coords = fitsutils.read_data(*split_fits_file(file), rpix, rval)
         return cls(
             data, coords.step if step is None else step, coords.rpix,
@@ -303,7 +303,7 @@ class PrimaryBeamImage(PrimaryBeam):
                 float | Sequence[float], Unit('deg')] | None = None,
             rota: Annotated[float, Unit('deg')] | None = None
     ):
-        check_options(self.__init__, locals())
+        check_options(PrimaryBeamImage.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2:
             raise parseutils.ConfigError(

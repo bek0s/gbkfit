@@ -3,10 +3,11 @@ The dynesty nested samplers: static and dynamic.
 """
 
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import dynesty
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import corrected_evidence
@@ -14,21 +15,13 @@ from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
 
 
 __all__ = [
     'FitterDynestyDynamic',
     'FitterDynestyStatic'
 ]
-
-
-def _check_positive(**options: float | None) -> None:
-    """Raise ConfigError if an option is given and not positive."""
-    for name, value in options.items():
-        if value is not None and not value > 0:
-            raise ConfigError(
-                f"option '{name}' must be positive; it is {value}")
 
 
 _Sampler = dynesty.NestedSampler | dynesty.DynamicNestedSampler
@@ -129,19 +122,19 @@ class FitterDynestyStatic(Fitter):
 
     def __init__(
             self,
-            nlive: int = 500,
+            nlive: Annotated[int, Gt(0)] = 500,
             bound: Literal[
                 'multi', 'single', 'balls', 'cubes', 'none'] = 'multi',
             sample: Literal[
                 'auto', 'unif', 'rwalk', 'slice', 'rslice'] = 'auto',
-            dlogz: float | None = None,
-            maxcall: int | None = None,
+            dlogz: Annotated[float, Gt(0)] | None = None,
+            maxcall: Annotated[int, Gt(0)] | None = None,
             verbose: bool = False,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterDynestyStatic.__init__, locals())
         super().__init__(seed, uncertainty)
-        _check_positive(nlive=nlive, dlogz=dlogz, maxcall=maxcall)
         self._nlive = nlive
         self._bound = bound
         self._sample = sample
@@ -243,22 +236,20 @@ class FitterDynestyDynamic(Fitter):
 
     def __init__(
             self,
-            nlive: int = 500,
+            nlive: Annotated[int, Gt(0)] = 500,
             bound: Literal[
                 'multi', 'single', 'balls', 'cubes', 'none'] = 'multi',
             sample: Literal[
                 'auto', 'unif', 'rwalk', 'slice', 'rslice'] = 'auto',
-            dlogz_init: float | None = None,
-            n_effective: int | None = None,
-            maxcall: int | None = None,
+            dlogz_init: Annotated[float, Gt(0)] | None = None,
+            n_effective: Annotated[int, Gt(0)] | None = None,
+            maxcall: Annotated[int, Gt(0)] | None = None,
             verbose: bool = False,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterDynestyDynamic.__init__, locals())
         super().__init__(seed, uncertainty)
-        _check_positive(
-            nlive=nlive, dlogz_init=dlogz_init, n_effective=n_effective,
-            maxcall=maxcall)
         self._nlive = nlive
         self._bound = bound
         self._sample = sample

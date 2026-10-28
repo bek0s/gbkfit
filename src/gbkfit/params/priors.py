@@ -198,7 +198,7 @@ class PriorUniform(Prior):
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
 
     def __init__(self, min: FiniteFloat, max: FiniteFloat):
-        check_options(self.__init__, locals())
+        check_options(PriorUniform.__init__, locals())
         _check_range(min, max)
         self._minimum = float(min)
         self._maximum = float(max)
@@ -261,7 +261,7 @@ class PriorLogUniform(Prior):
             min: Annotated[FiniteFloat, Gt(0)],
             max: Annotated[FiniteFloat, Gt(0)]
     ):
-        check_options(self.__init__, locals())
+        check_options(PriorLogUniform.__init__, locals())
         _check_range(min, max)
         self._minimum = float(min)
         self._maximum = float(max)
@@ -326,7 +326,7 @@ class PriorSine(Prior):
             min: Annotated[float, Ge(0), Le(180), Unit('deg')] = 0.0,
             max: Annotated[float, Ge(0), Le(180), Unit('deg')] = 90.0
     ):
-        check_options(self.__init__, locals())
+        check_options(PriorSine.__init__, locals())
         _check_range(min, max)
         self._minimum = float(min)
         self._maximum = float(max)
@@ -399,7 +399,7 @@ class PriorGauss(Prior):
     def __init__(
             self, mean: FiniteFloat, std: Annotated[FiniteFloat, Gt(0)]
     ):
-        check_options(self.__init__, locals())
+        check_options(PriorGauss.__init__, locals())
         self._mean = float(mean)
         self._std = float(std)
 
@@ -471,7 +471,7 @@ class PriorGaussTrunc(Prior):
             min: FiniteFloat,
             max: FiniteFloat
     ):
-        check_options(self.__init__, locals())
+        check_options(PriorGaussTrunc.__init__, locals())
         _check_range(min, max)
         self._mean = float(mean)
         self._std = float(std)
@@ -542,7 +542,7 @@ class PriorHalfGauss(Prior):
         return dict(type=self.type(), std=self._std)
 
     def __init__(self, std: Annotated[FiniteFloat, Gt(0)]):
-        check_options(self.__init__, locals())
+        check_options(PriorHalfGauss.__init__, locals())
         self._std = float(std)
 
     def std(self) -> float:
@@ -606,7 +606,7 @@ class PriorHalfCauchy(Prior):
         return dict(type=self.type(), scale=self._scale)
 
     def __init__(self, scale: Annotated[FiniteFloat, Gt(0)]):
-        check_options(self.__init__, locals())
+        check_options(PriorHalfCauchy.__init__, locals())
         self._scale = float(scale)
 
     def scale(self) -> float:
@@ -704,7 +704,7 @@ class PriorScipy(Prior):
             distribution: str,
             params: Mapping[str, float] | None = None
     ):
-        check_options(self.__init__, locals())
+        check_options(PriorScipy.__init__, locals())
         family = getattr(scipy.stats, distribution, None)
         if not isinstance(family, scipy.stats.rv_continuous):
             raise ConfigError(
@@ -778,7 +778,7 @@ class PriorTruncated(Prior):
             min=self._minimum, max=self._maximum)
 
     def __init__(self, prior: Prior, min: float, max: float):
-        check_options(self.__init__, locals())
+        check_options(PriorTruncated.__init__, locals())
         low, high = prior.support()
         self._prior = prior
         self._minimum = float(np.maximum(min, low))

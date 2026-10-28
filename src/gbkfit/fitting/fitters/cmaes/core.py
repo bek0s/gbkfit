@@ -5,18 +5,20 @@ The CMA-ES fitter (pycma).
 import math
 import typing
 from collections.abc import Mapping
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 import cma
 import numpy as np
+from annotated_types import Ge, Gt
+from pydantic import FiniteFloat
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
-from gbkfit.fitting.problem import FitProblem
+from gbkfit.fitting.problem import MERITS, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.params import FreeElement, Prior
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -167,30 +169,20 @@ class FitterCMAES(Fitter):
 
     def __init__(
             self,
-            popsize: int | None = None,
-            restarts: int = 0,
+            popsize: Annotated[int, Gt(0)] | None = None,
+            restarts: Annotated[int, Ge(0)] = 0,
             bipop: bool = False,
-            maxfevals: int | None = None,
-            tolfun: float = 0.01,
-            tolx: float = 1e-6,
-            sigma: float | None = None,
+            maxfevals: Annotated[int, Gt(0)] | None = None,
+            tolfun: Annotated[float, Gt(0)] = 0.01,
+            tolx: Annotated[float, Gt(0)] = 1e-6,
+            sigma: Annotated[FiniteFloat, Gt(0)] | None = None,
             verbose: bool = False,
-            merit: str = 'chi2',
+            merit: Literal[MERITS] = 'chi2',
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterCMAES.__init__, locals())
         super().__init__(seed, uncertainty, merit)
-        for name, value in dict(
-                popsize=popsize, maxfevals=maxfevals, tolfun=tolfun,
-                tolx=tolx, sigma=sigma).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
-        if sigma is not None and not math.isfinite(sigma):
-            raise ConfigError(f"option 'sigma' must be finite; it is {sigma}")
-        if restarts < 0:
-            raise ConfigError(
-                f"option 'restarts' cannot be negative; it is {restarts}")
         self._popsize = popsize
         self._restarts = restarts
         self._bipop = bipop

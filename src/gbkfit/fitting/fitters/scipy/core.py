@@ -3,10 +3,11 @@ The scipy least-squares fitter.
 """
 
 import typing
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
 import scipy.optimize
+from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import (
@@ -16,7 +17,7 @@ from gbkfit.fitting.fitparams import (
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, finite_difference_steps)
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -130,29 +131,20 @@ class FitterScipyLeastSquares(Fitter):
             self,
             method: Literal['trf', 'dogbox', 'lm'] = 'trf',
             jac: Literal['2-point', '3-point'] = '2-point',
-            x_scale: float | Literal['jac'] | None = None,
+            x_scale: Annotated[float, Gt(0)] | Literal['jac'] | None = None,
             loss: Literal[
                 'linear', 'soft_l1', 'huber', 'cauchy', 'arctan'] = 'linear',
-            f_scale: float = 1.0,
-            max_nfev: int | None = None,
-            ftol: float = 1e-8,
-            xtol: float = 1e-8,
-            gtol: float = 1e-8,
-            step: float | None = None,
+            f_scale: Annotated[float, Gt(0)] = 1.0,
+            max_nfev: Annotated[int, Gt(0)] | None = None,
+            ftol: Annotated[float, Gt(0)] = 1e-8,
+            xtol: Annotated[float, Gt(0)] = 1e-8,
+            gtol: Annotated[float, Gt(0)] = 1e-8,
+            step: Annotated[float, Gt(0)] | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterScipyLeastSquares.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                f_scale=f_scale, max_nfev=max_nfev, ftol=ftol, xtol=xtol,
-                gtol=gtol, step=step).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
-        if x_scale not in (None, 'jac') and not x_scale > 0:
-            raise ConfigError(
-                f"option 'x_scale' must be 'jac' or positive; it is "
-                f"{x_scale}")
         if method == 'lm' and loss != 'linear':
             raise ConfigError("method 'lm' takes only the 'linear' loss")
         self._method = method

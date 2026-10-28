@@ -3,10 +3,11 @@ The lmfit least-squares fitter.
 """
 
 import typing
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import lmfit
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import (
@@ -16,7 +17,7 @@ from gbkfit.fitting.fitparams import (
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, finite_difference_steps)
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
 
 
 __all__ = [
@@ -81,21 +82,16 @@ class FitterLMFitLeastSquares(Fitter):
     def __init__(
             self,
             method: Literal['leastsq', 'least_squares'] = 'leastsq',
-            max_nfev: int | None = None,
-            ftol: float | None = None,
-            xtol: float | None = None,
-            gtol: float | None = None,
-            step: float | None = None,
+            max_nfev: Annotated[int, Gt(0)] | None = None,
+            ftol: Annotated[float, Gt(0)] | None = None,
+            xtol: Annotated[float, Gt(0)] | None = None,
+            gtol: Annotated[float, Gt(0)] | None = None,
+            step: Annotated[float, Gt(0)] | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterLMFitLeastSquares.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                max_nfev=max_nfev, ftol=ftol, xtol=xtol, gtol=gtol,
-                step=step).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
         self._method = method
         self._max_nfev = max_nfev
         self._ftol = ftol

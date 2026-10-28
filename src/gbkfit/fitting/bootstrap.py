@@ -7,9 +7,10 @@ import abc
 import logging
 import numbers
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.dataset import Dataset
 from gbkfit.fitting.base import Fitter, fitter_parser
@@ -18,7 +19,7 @@ from gbkfit.objective import Objective
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
 from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -117,6 +118,7 @@ class BootstrapBlocks(BootstrapScheme):
         return dict(type=self.type(), size=list(self._size))
 
     def __init__(self, size: Sequence[float]):
+        check_options(BootstrapBlocks.__init__, locals())
         size = tuple(size)
         if not size or not all(
                 isinstance(n, numbers.Real) and not isinstance(n, bool)
@@ -223,15 +225,11 @@ class BootstrapOptions(parseutils.Serializable):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'BootstrapOptions':
-        info = parseutils.parse_options(
-            info, required={'nsamples', 'scheme'},
-            optional={'fitter', 'seed'})
-        return cls(
-            info['nsamples'],
-            parseutils.load_option(
-                bootstrap_scheme_parser.load, info, 'scheme', required=True),
-            parseutils.load_option(fitter_parser.load, info, 'fitter'),
-            info.get('seed'))
+        info = dict(info)
+        parseutils.load_option_and_update_info(
+            bootstrap_scheme_parser, info, 'scheme', required=True)
+        parseutils.load_option_and_update_info(fitter_parser, info, 'fitter')
+        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         info: dict[str, Any] = dict(
@@ -245,15 +243,12 @@ class BootstrapOptions(parseutils.Serializable):
 
     def __init__(
             self,
-            nsamples: int,
+            nsamples: Annotated[int, Ge(2)],
             scheme: BootstrapScheme | Sequence[BootstrapScheme],
             fitter: Fitter | None = None,
             seed: int | None = None
     ):
-        if nsamples < 2:
-            raise ConfigError(
-                f"a bootstrap needs at least 2 samples; nsamples is "
-                f"{nsamples}")
+        check_options(BootstrapOptions.__init__, locals())
         self._nsamples = nsamples
         self._scheme = list(scheme) if iterutils.is_sequence(scheme) \
             else scheme

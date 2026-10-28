@@ -4,10 +4,11 @@ The nautilus nested sampler.
 
 import math
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 
 import nautilus
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.fitters._detail import corrected_evidence
@@ -15,7 +16,7 @@ from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -90,26 +91,20 @@ class FitterNautilus(Fitter):
 
     def __init__(
             self,
-            n_live: int = 2000,
-            n_networks: int = 4,
-            n_batch: int | None = None,
-            f_live: float = 0.01,
-            n_eff: int = 10000,
-            n_like_max: int | None = None,
+            n_live: Annotated[int, Gt(0)] = 2000,
+            n_networks: Annotated[int, Gt(0)] = 4,
+            n_batch: Annotated[int, Gt(0)] | None = None,
+            f_live: Annotated[float, Gt(0)] = 0.01,
+            n_eff: Annotated[int, Gt(0)] = 10000,
+            n_like_max: Annotated[int, Gt(0)] | None = None,
             discard_exploration: bool = False,
-            timeout: float | None = None,
+            timeout: Annotated[float, Gt(0)] | None = None,
             verbose: bool = False,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterNautilus.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                n_live=n_live, n_networks=n_networks, n_batch=n_batch,
-                f_live=f_live, n_eff=n_eff, n_like_max=n_like_max,
-                timeout=timeout).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
         self._n_live = n_live
         self._n_networks = n_networks
         self._n_batch = n_batch

@@ -2,12 +2,13 @@
 The emcee MCMC sampler.
 """
 
-import math
 import typing
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import emcee
 import numpy as np
+from annotated_types import Gt
+from pydantic import FiniteFloat
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.control import FitStopped
@@ -15,7 +16,7 @@ from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -94,24 +95,17 @@ class FitterEmcee(Fitter):
 
     def __init__(
             self,
-            nwalkers: int | None = None,
-            nsteps: int = 5000,
+            nwalkers: Annotated[int, Gt(0)] | None = None,
+            nsteps: Annotated[int, Gt(0)] = 5000,
             burnin: int | None = None,
-            thin: int = 1,
+            thin: Annotated[int, Gt(0)] = 1,
             moves: Literal['de', 'stretch'] = 'de',
-            width: float | None = None,
+            width: Annotated[FiniteFloat, Gt(0)] | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterEmcee.__init__, locals())
         super().__init__(seed, uncertainty)
-        for name, value in dict(
-                nwalkers=nwalkers, nsteps=nsteps, thin=thin).items():
-            if value is not None and not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
-        if width is not None and not (math.isfinite(width) and width > 0):
-            raise ConfigError(
-                f"option 'width' must be finite and positive; it is {width}")
         if burnin is not None and not 0 <= burnin < nsteps:
             raise ConfigError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")

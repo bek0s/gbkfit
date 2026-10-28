@@ -5,10 +5,11 @@ with several minima.
 
 import math
 import typing
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import scipy.stats
+from annotated_types import Gt
 
 from gbkfit.fitting.base import FitRun, Fitter, fitter_parser
 from gbkfit.fitting.fitparams import (
@@ -17,7 +18,7 @@ from gbkfit.fitting.problem import FitProblem
 from gbkfit.params import EvaluationError
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -96,24 +97,19 @@ class FitterMultiStart(Fitter):
     def __init__(
             self,
             local: Fitter,
-            nstarts: int = 16,
-            nsolutions: int = 5,
-            tolerance: float = 1e-3,
+            nstarts: Annotated[int, Gt(0)] = 16,
+            nsolutions: Annotated[int, Gt(0)] = 5,
+            tolerance: Annotated[float, Gt(0)] = 1e-3,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterMultiStart.__init__, locals())
         super().__init__(seed, uncertainty, local.merit())
         if not issubclass(local.fit_param_class(), FitParamBounded):
             raise ConfigError(
                 f"the local fitter of multistart must be an optimizer, which "
                 f"starts from an initial value of each free element; "
                 f"'{local.type()}' is not")
-        for name, value in dict(
-                nstarts=nstarts, nsolutions=nsolutions,
-                tolerance=tolerance).items():
-            if not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
         self._local = local
         self._nstarts = nstarts
         self._nsolutions = nsolutions

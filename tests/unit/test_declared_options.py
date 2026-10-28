@@ -1,7 +1,7 @@
 """
 Tests that the constructors that configurations call declare their
-options: each parameter is annotated, and checked first (see
-parseutils.check_options).
+options: each parameter is annotated, and checked first, by the
+constructor named by its class (see parseutils.check_options).
 """
 
 import ast
@@ -10,6 +10,7 @@ import textwrap
 
 import pytest
 
+import gbkfit.fitting
 import gbkfit.instrument
 import gbkfit.params
 from gbkfit.utils import funcutils, typeutils
@@ -17,12 +18,18 @@ from gbkfit.utils import funcutils, typeutils
 
 # The families whose options are declared, by their parsers or classes
 PARSERS = [
+    gbkfit.fitting.bootstrap_scheme_parser,
+    gbkfit.fitting.fitter_parser,
     gbkfit.instrument.lsf_parser,
     gbkfit.instrument.primary_beam_parser,
     gbkfit.instrument.psf_parser,
     gbkfit.params.joint_prior_parser,
     gbkfit.params.prior_parser]
-CLASSES = [gbkfit.instrument.Instrument, gbkfit.instrument.SpectralTable]
+CLASSES = [
+    gbkfit.fitting.BootstrapOptions,
+    gbkfit.fitting.UncertaintyOptions,
+    gbkfit.instrument.Instrument,
+    gbkfit.instrument.SpectralTable]
 
 
 def constructors():
@@ -51,3 +58,4 @@ def test_constructors_declare_their_options(func):
     callee = first.value.func
     assert getattr(callee, 'attr', getattr(callee, 'id', None)) == (
         'check_options')
+    assert ast.unparse(first.value.args[0]) == func.__qualname__

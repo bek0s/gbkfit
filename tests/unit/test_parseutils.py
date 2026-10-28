@@ -249,14 +249,14 @@ class Beam(parseutils.Serializable):
             ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
             shape: Literal['gauss', 'airy'] = 'gauss'
     ):
-        parseutils.check_options(self.__init__, locals())
+        parseutils.check_options(Beam.__init__, locals())
         self.bmaj = bmaj
 
     @classmethod
     def from_file(
             cls, file: FitsFile, scale: u.Quantity | None = None
     ) -> 'Beam':
-        parseutils.check_options(cls.from_file, locals())
+        parseutils.check_options(Beam.from_file, locals())
         beam = cls(1.0)
         beam.file, beam.scale = file, scale
         return beam

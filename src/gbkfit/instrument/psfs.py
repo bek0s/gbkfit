@@ -391,7 +391,7 @@ class PSFGauss(PSF):
             ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
             posa: Annotated[float, Unit('deg')] = 0.0
     ):
-        check_options(self.__init__, locals())
+        check_options(PSFGauss.__init__, locals())
         self._sigma = sigma
         self._ratio = ratio
         self._posa = posa
@@ -467,7 +467,7 @@ class PSFGGauss(PSF):
             ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
             posa: Annotated[float, Unit('deg')] = 0.0
     ):
-        check_options(self.__init__, locals())
+        check_options(PSFGGauss.__init__, locals())
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
@@ -548,7 +548,7 @@ class PSFMoffat(PSF):
             ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
             posa: Annotated[float, Unit('deg')] = 0.0
     ):
-        check_options(self.__init__, locals())
+        check_options(PSFMoffat.__init__, locals())
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
@@ -630,7 +630,7 @@ class PSFImage(PSF):
         PSFImage
             The PSF.
         """
-        check_options(cls.from_file, locals())
+        check_options(PSFImage.from_file, locals())
         data, coords = fitsutils.read_data(*split_fits_file(file))
         return cls(data, coords.step if step is None else step)
 
@@ -652,7 +652,7 @@ class PSFImage(PSF):
             data: np.ndarray,
             step: Annotated[Sequence[float], Unit('arcsec')] = (1.0, 1.0)
     ):
-        check_options(self.__init__, locals())
+        check_options(PSFImage.__init__, locals())
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 2:
             raise ConfigError(
@@ -732,7 +732,7 @@ class PSFSum(PSF):
             weights=self._weights.tolist())
 
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
-        check_options(self.__init__, locals())
+        check_options(PSFSum.__init__, locals())
         self._psfs = tuple(psfs)
         self._weights = _detail.sum_weights(
             weights, len(self._psfs), "a sum of PSFs")
@@ -811,7 +811,7 @@ class PSFConvolution(PSF):
                 psf_parser, self._psfs, prefix, dump_path, overwrite))
 
     def __init__(self, psfs: Sequence[PSF]):
-        check_options(self.__init__, locals())
+        check_options(PSFConvolution.__init__, locals())
         if not psfs:
             raise ConfigError("a convolution of PSFs needs at least one PSF")
         self._psfs = tuple(psfs)
@@ -900,7 +900,7 @@ class PSFGaussBeam(PSF):
         ConfigError
             If the header has no beam.
         """
-        check_options(cls.from_file, locals())
+        check_options(PSFGaussBeam.from_file, locals())
         filename, hdu = split_fits_file(file)
         header = astropy.io.fits.getheader(filename, hdu)
         missing = [
@@ -924,7 +924,7 @@ class PSFGaussBeam(PSF):
             bmin: Annotated[float, Gt(0), Unit('arcsec')],
             bpa: Annotated[float, Unit('deg')] = 0.0
     ):
-        check_options(self.__init__, locals())
+        check_options(PSFGaussBeam.__init__, locals())
         if bmin > bmaj:
             raise ConfigError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
@@ -1047,7 +1047,7 @@ class PSFImages(PSF):
             If the cube is not 3D, or the points or step are neither given
             nor in its header.
         """
-        check_options(cls.from_file, locals())
+        check_options(PSFImages.from_file, locals())
         filename, hdu = split_fits_file(file)
         data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
@@ -1084,7 +1084,7 @@ class PSFImages(PSF):
             points: u.Quantity,
             step: Annotated[Sequence[float], Unit('arcsec')]
     ):
-        check_options(self.__init__, locals())
+        check_options(PSFImages.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 3 or not np.all(np.isfinite(data)):
             raise ConfigError(

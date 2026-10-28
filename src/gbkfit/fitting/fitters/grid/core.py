@@ -5,17 +5,18 @@ The brute-force grid.
 import math
 import typing
 from collections.abc import Mapping
-from typing import Any, Self
+from typing import Annotated, Any, Literal, Self
 
 import numpy as np
+from annotated_types import Ge, Gt
 
 from gbkfit.fitting.base import FitRun, Fitter
 from gbkfit.fitting.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
-from gbkfit.fitting.problem import FitProblem
+from gbkfit.fitting.problem import MERITS, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.params import FreeElement, Prior
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -156,22 +157,15 @@ class FitterGrid(Fitter):
 
     def __init__(
             self,
-            batch: int = 1000,
-            max_points: int = 1_000_000,
-            n: int | None = None,
-            merit: str = 'chi2',
+            batch: Annotated[int, Gt(0)] = 1000,
+            max_points: Annotated[int, Gt(0)] = 1_000_000,
+            n: Annotated[int, Ge(2)] | None = None,
+            merit: Literal[MERITS] = 'chi2',
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):
+        check_options(FitterGrid.__init__, locals())
         super().__init__(seed, uncertainty, merit)
-        for name, value in dict(batch=batch, max_points=max_points).items():
-            if not value > 0:
-                raise ConfigError(
-                    f"option '{name}' must be positive; it is {value}")
-        if n is not None and (
-                isinstance(n, bool) or not isinstance(n, int) or n < 2):
-            raise ConfigError(
-                f"option 'n' must be an integer of at least 2; it is {n!r}")
         self._batch = batch
         self._max_points = max_points
         self._n = n

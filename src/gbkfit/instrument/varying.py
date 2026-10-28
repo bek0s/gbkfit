@@ -271,7 +271,7 @@ class SpectralTable(parseutils.Serializable):
             values: Sequence[float] | np.ndarray,
             unit: str | u.UnitBase | None = None
     ):
-        check_options(self.__init__, locals())
+        check_options(SpectralTable.__init__, locals())
         try:
             points = as_points(points)
         except TypeError as e:
@@ -328,7 +328,7 @@ class SpectralTable(parseutils.Serializable):
             If the file has no column of points or values, or its points
             have no unit.
         """
-        check_options(cls.from_file, locals())
+        check_options(SpectralTable.from_file, locals())
         options = {} if hdu is None else dict(hdu=hdu)
         table = astropy.table.Table.read(file, **options)
         units = units or {}
