@@ -283,7 +283,7 @@ def test_hu_sawicki_options(tmp_path):
         galaxy(mass=user, distance=DISTANCE, gravity=dict(type='hu_sawicki'))
     galaxy(mass=user, distance=DISTANCE,
            gravity=dict(type='hu_sawicki', screened=['mine']))
-    with pytest.raises(ConfigError, match="n must be positive"):
+    with pytest.raises(ConfigError, match="'n' must be greater than 0"):
         galaxy(mass=THICK, distance=DISTANCE,
                gravity=dict(type='hu_sawicki', n=0))
     screened = galaxy(mass=THICK, distance=DISTANCE,

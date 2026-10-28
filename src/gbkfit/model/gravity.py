@@ -11,17 +11,18 @@ need it check when the galaxy is made.
 
 import abc
 from collections.abc import Callable, Collection, Sequence
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import astropy.constants
 import astropy.units
 import numpy as np
 import numpy.typing as npt
+from annotated_types import Gt
 
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from ._scalar_field import FieldGradient, solve_field
 from .mass import MassContext, MassModel
 from .mass.units import G
@@ -294,11 +295,8 @@ class GravityMOND(Gravity):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), interpolation=self._interpolation)
 
-    def __init__(self, interpolation: str):
-        if interpolation not in MOND_INTERPOLATIONS:
-            raise ConfigError(
-                f"interpolation must be one of {list(MOND_INTERPOLATIONS)}; "
-                f"it is {interpolation!r}")
+    def __init__(self, interpolation: Literal[MOND_INTERPOLATIONS]):
+        check_options(GravityMOND.__init__, locals())
         self._interpolation = interpolation
 
     def interpolation(self) -> str:
@@ -456,12 +454,11 @@ class GravityHuSawicki(Gravity):
 
     def __init__(
             self,
-            n: float = 1,
+            n: Annotated[float, Gt(0)] = 1,
             screened: Sequence[str] = (),
             environment: bool = False
     ):
-        if not n > 0:
-            raise ConfigError(f"n must be positive; it is {n}")
+        check_options(GravityHuSawicki.__init__, locals())
         self._n = float(n)
         self._screened = tuple(screened)
         self._environment = bool(environment)

@@ -6,12 +6,14 @@ DustOpacity) at the wavelength of each line or band.
 
 import abc
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 
 __all__ = [
@@ -96,9 +98,8 @@ class ExtinctionCCM(ExtinctionLaw):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), rv=self._rv)
 
-    def __init__(self, rv: float = 3.1):
-        if not rv > 0:
-            raise ConfigError(f"rv must be positive; it is {rv}")
+    def __init__(self, rv: Annotated[float, Gt(0)] = 3.1):
+        check_options(ExtinctionCCM.__init__, locals())
         self._rv = float(rv)
 
     def range(self) -> tuple[float, float]:
@@ -158,9 +159,8 @@ class ExtinctionCalzetti(ExtinctionLaw):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), rv=self._rv)
 
-    def __init__(self, rv: float = 4.05):
-        if not rv > 0:
-            raise ConfigError(f"rv must be positive; it is {rv}")
+    def __init__(self, rv: Annotated[float, Gt(0)] = 4.05):
+        check_options(ExtinctionCalzetti.__init__, locals())
         self._rv = float(rv)
 
     def range(self) -> tuple[float, float]:
@@ -203,7 +203,12 @@ class ExtinctionTable(ExtinctionLaw):
             type=self.type(), wavelengths=list(self._wavelengths),
             ratios=list(self._ratios))
 
-    def __init__(self, wavelengths: Sequence[float], ratios: Sequence[float]):
+    def __init__(
+            self,
+            wavelengths: Annotated[Sequence[float], Unit('um')],
+            ratios: Sequence[float]
+    ):
+        check_options(ExtinctionTable.__init__, locals())
         wavelengths = tuple(float(w) for w in wavelengths)
         ratios = tuple(float(r) for r in ratios)
         if len(wavelengths) < 2 or len(ratios) != len(wavelengths):

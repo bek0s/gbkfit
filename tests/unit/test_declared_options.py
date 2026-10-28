@@ -25,6 +25,8 @@ PARSERS = [
     gbkfit.instrument.primary_beam_parser,
     gbkfit.instrument.psf_parser,
     gbkfit.model.distance_parser,
+    gbkfit.model.extinction_law_parser,
+    gbkfit.model.gravity_parser,
     gbkfit.params.joint_prior_parser,
     gbkfit.params.prior_parser]
 CLASSES = [
