@@ -5,6 +5,7 @@ import numpy as np
 
 from gbkfit.instrument import PSF
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
@@ -19,9 +20,6 @@ __all__ = [
 # The axes of its blocks and windows (see resample_blocks and
 # screen_outliers)
 _AXES = ('x', 'y')
-
-# The axes along which its noise can be correlated (see Data)
-_CORRELATIONS = ('spatial',)
 
 
 class DatasetPixelBrightness(Dataset):
@@ -46,17 +44,17 @@ class DatasetPixelBrightness(Dataset):
     ndim = 2
     spectral_axis = None
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'pixel_brightness'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetPixelBrightness':
+    def load(cls, info: dict[str, Any]) -> 'DatasetPixelBrightness':
         info = dict(info)
-        files = _detail.pop_item_options(info, prefix, _CORRELATIONS)
-        return _detail.load_with_files(cls, info, cls.ndim, **files)
+        _detail.load_correlations(info)
+        return _detail.load_with_files(cls, info, cls.ndim)
 
     @classmethod
     def from_files(
@@ -70,7 +68,8 @@ class DatasetPixelBrightness(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spatial_correlation: PSF | None = None
+            spatial_correlation: PSF | None = None,
+            outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetPixelBrightness':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -99,16 +98,21 @@ class DatasetPixelBrightness(Dataset):
             header.
         spatial_correlation : PSF, optional
             The correlation of the noise on the sky (see Data).
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
 
         Returns
         -------
         DatasetPixelBrightness
             The dataset.
         """
+        check_options(DatasetPixelBrightness.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
             spatial_correlation=spatial_correlation)
-        return cls(item, **_detail.grid_coords(coords, step, rota))
+        dataset = cls(item, **_detail.grid_coords(coords, step, rota))
+        return _detail.cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -126,6 +130,7 @@ class DatasetPixelBrightness(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
+        check_options(DatasetPixelBrightness.__init__, locals())
         super().__init__(dict(brightness=brightness))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 

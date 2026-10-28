@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
@@ -49,17 +50,15 @@ class DatasetSlitSpectra(Dataset):
     ndim = 2
     spectral_axis = 1
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'slit_spectra'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetSlitSpectra':
-        info = dict(info)
-        files = _detail.pop_item_options(info, prefix)
-        return _detail.load_with_files(cls, info, cls.ndim - 1, **files)
+    def load(cls, info: dict[str, Any]) -> 'DatasetSlitSpectra':
+        return _detail.load_with_files(cls, dict(info), cls.ndim - 1)
 
     @classmethod
     def from_files(
@@ -73,7 +72,8 @@ class DatasetSlitSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spectral: gridutils.SpectralAxis | None = None
+            spectral: gridutils.SpectralAxis | None = None,
+            outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetSlitSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -107,18 +107,24 @@ class DatasetSlitSpectra(Dataset):
             those of the header (as those of the axes on the sky; the
             medium of the header, see fitsutils.read_data); not its size,
             which the data give.
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
 
         Returns
         -------
         DatasetSlitSpectra
             The dataset.
         """
+        check_options(DatasetSlitSpectra.from_files, locals())
         references = _detail.file_references(1, rpix, rval, spectral)
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam)
-        return cls(item, **_detail.cube_coords(coords, step, rota, spectral))
+        dataset = cls(
+            item, **_detail.cube_coords(coords, step, rota, spectral))
+        return _detail.cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -137,6 +143,7 @@ class DatasetSlitSpectra(Dataset):
             rota: float | None = None,
             spectral: gridutils.SpectralAxis | None = None
     ):
+        check_options(DatasetSlitSpectra.__init__, locals())
         super().__init__(dict(spectra=spectra))
         self._grid = _detail.cube_grid(
             self, step, rpix, rval, rota, spectral)

@@ -1,12 +1,15 @@
 import abc
 import os.path
 from collections.abc import Sequence
+from typing import Annotated, Any, TypeAlias
 
 import numpy as np
+import numpy.typing as npt
 import scipy.sparse
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
 from .apertures import Aperture, aperture_parser
 
 
@@ -16,6 +19,18 @@ __all__ = [
     'RegionsBins',
     'regions_parser'
 ]
+
+
+# The world coordinates of a grid with one value per axis, x and y, or one
+# for both (see gridutils.Coords), and its rotation
+_PerAxis: TypeAlias = float | Sequence[float] | None
+_Angle: TypeAlias = Annotated[float, Unit('deg')]
+
+
+def _per_axis(value: _PerAxis) -> list[float] | None:
+    """Return one value of a world coordinate per axis, x and y."""
+    return [value] * 2 if isinstance(value, int | float) \
+        else None if value is None else list(value)
 
 
 class Regions(parseutils.TypedSerializable, abc.ABC):
@@ -69,31 +84,45 @@ class RegionsBins(Regions):
     def type():
         return 'bins'
 
+    config_constructors = ('from_file',)
+
     @classmethod
-    def load(cls, info, prefix=''):
+    def from_file(
+            cls,
+            file: FitsFile,
+            step: _PerAxis = None,
+            rpix: _PerAxis = None,
+            rval: _PerAxis = None,
+            rota: _Angle | None = None
+    ) -> 'RegionsBins':
         """
-        Load the bins from a file (a filename, or a dict with the filename
-        and the HDU), with the world coordinates of its header or of the
-        options step, rpix, rval and rota.
+        Read the bins from a FITS file, with the world coordinates of its
+        header unless given.
+
+        Parameters
+        ----------
+        file : str or tuple
+            The file of the bin of each pixel (see the class): a filename,
+            or a filename and the HDU.
+        step, rpix, rval : float or Sequence of float, optional
+            The world coordinates of the grid (see gridutils.Coords); by
+            default, those of the header. Either rpix or rval can be given,
+            and the other comes from the header (see fitsutils.read_data).
+        rota : float, optional
+            The rotation of the grid on the sky; by default, that of the
+            header.
+
+        Returns
+        -------
+        RegionsBins
+            The bins.
         """
-        desc = parseutils.make_typed_desc(cls, 'regions')
-        parseutils.sanitize_dimensional_options(info, dict(
-            step=float, rpix=float, rval=float), 2)
-        if info.get('file') is None:
-            raise ConfigError(f"option 'file' of {desc} is required")
-        with parseutils.config_path('file'):
-            file, hdu = parseutils.parse_file(info['file'])
-            index, coords = fitsutils.read_data(
-                prefix + file, hdu, info.get('rpix'), info.get('rval'))
-        info = dict(info) | dict(
-            index=index,
-            step=coords.step if info.get('step') is None else info['step'],
-            rpix=coords.rpix,
-            rval=coords.rval,
-            rota=coords.rota if info.get('rota') is None else info['rota'])
-        info.pop('file')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        check_options(RegionsBins.from_file, locals())
+        index, coords = fitsutils.read_data(
+            *split_fits_file(file), _per_axis(rpix), _per_axis(rval))
+        return cls(
+            index, coords.step if step is None else step, coords.rpix,
+            coords.rval, coords.rota if rota is None else rota)
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         filename = f'{prefix}bins.fits'
@@ -110,16 +139,17 @@ class RegionsBins(Regions):
 
     def __init__(
             self,
-            index: np.ndarray,
-            step: float | Sequence[float] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            index: npt.ArrayLike,
+            step: _PerAxis = None,
+            rpix: _PerAxis = None,
+            rval: _PerAxis = None,
+            rota: _Angle | None = None
     ):
         """
         The world coordinates of the grid of the bins (see
         gridutils.Coords) have defaults (see gridutils.make_grid).
         """
+        check_options(RegionsBins.__init__, locals())
         index = np.asarray(index)
         if index.ndim != 2:
             raise RuntimeError(
@@ -183,11 +213,10 @@ class RegionsApertures(Regions):
         return 'apertures'
 
     @classmethod
-    def load(cls, info, prefix=''):
+    def load(cls, info: dict[str, Any]) -> 'RegionsApertures':
         parseutils.load_option_and_update_info(
             aperture_parser, info, 'apertures', required=True)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return super().load(info)
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         return dict(
@@ -195,6 +224,7 @@ class RegionsApertures(Regions):
             apertures=aperture_parser.dump(list(self._apertures)))
 
     def __init__(self, apertures: Sequence[Aperture]):
+        check_options(RegionsApertures.__init__, locals())
         if not apertures:
             raise RuntimeError("at least one aperture is required")
         self._apertures = tuple(apertures)

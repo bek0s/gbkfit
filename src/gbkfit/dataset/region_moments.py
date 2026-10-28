@@ -5,12 +5,12 @@ import astropy.io.fits
 import numpy as np
 
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils import parseutils, tableutils
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FilePath
 from . import _detail, _outliers, _resampling
 from .base import Dataset
-from .data import Data, dump_data
+from .data import Data, DataColumns, DataFiles, dump_data
 
 
 __all__ = [
@@ -29,15 +29,9 @@ class DatasetRegionMoments(Dataset):
     moment0 to moment7 (above 2, central moments or the coefficients of a
     Gauss-Hermite series, see moment_items of _detail).
 
-    Its configuration has the regions, and the data items moment0 to
-    moment7: the files of each (data, mask, error; see from_files), or the
-    columns of a table of one row for each region, in their order (e.g.
-    the V, sigma, h3 and h4 of the bins of pPXF): the file of the table
-    ('file'; any that astropy reads, see Table.read: e.g. FITS, ECSV or
-    CSV), its format if astropy cannot tell it ('format'), and of each
-    item, {column, error (a column, or one error for all the values), mask
-    (a column: 0 for the values to leave out), unit (by default that of
-    the column)}.
+    Its configuration has the options of from_files (the regions, and the
+    files of the data items moment0 to moment7), or those of from_table
+    (the regions, a table file, and the columns of the data items).
 
     Parameters
     ----------
@@ -55,32 +49,33 @@ class DatasetRegionMoments(Dataset):
 
     ndim = 1
 
+    config_constructors = ('from_files', 'from_table')
+
     @staticmethod
     def type() -> str:
         return 'region_moments'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetRegionMoments':
+    def load(cls, info: dict[str, Any]) -> 'DatasetRegionMoments':
         info = dict(info)
         parseutils.load_option_and_update_info(
-            regions_parser, info, 'regions', required=True, prefix=prefix)
-        if 'file' in info:
-            regions = info.pop('regions')
-            return cls(_detail.read_table_moments(info, prefix), regions)
-        files = _detail.pop_moment_options(info, prefix)
-        return _detail.load_with_files(cls, info, **files)
+            regions_parser, info, 'regions', required=True)
+        _detail.load_moment_correlations(info)
+        return super().load(info)
 
     @classmethod
     def from_files(
             cls,
-            moments: Mapping[int, FitsFile],
             regions: Regions,
-            masks: Mapping[int, FitsFile] | None = None,
-            errors: Mapping[int, FitsFile | float] | None = None,
-            units: Mapping[int, str] | None = None,
-            beams: Mapping[int, Mapping[str, Any]] | None = None
+            moment0: DataFiles | None = None,
+            moment1: DataFiles | None = None,
+            moment2: DataFiles | None = None,
+            moment3: DataFiles | None = None,
+            moment4: DataFiles | None = None,
+            moment5: DataFiles | None = None,
+            moment6: DataFiles | None = None,
+            moment7: DataFiles | None = None,
+            outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetRegionMoments':
         """
         Read the dataset from FITS files, each a vector of one value for
@@ -88,30 +83,77 @@ class DatasetRegionMoments(Dataset):
 
         Parameters
         ----------
-        moments : Mapping
-            The file of the moments of each order: a filename, or a
-            filename and the HDU.
         regions : Regions
             The regions.
-        masks : Mapping, optional
-            The files of the masks of some of the moments.
-        errors : Mapping, optional
-            The files of the errors of some of the moments, or one error
-            for all the values of each.
-        units : Mapping, optional
-            The units of some of the moments; by default, those of the
-            headers (see Data.from_files).
-        beams : Mapping, optional
-            The options of the beams of some of the moments (see Beam); by
-            default, those of the headers.
+        moment0, ..., moment7 : DataFiles, optional
+            The files of the moments of each order given (at least one),
+            and their options (e.g. their unit; by default, that of the
+            header).
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
 
         Returns
         -------
         DatasetRegionMoments
             The dataset.
         """
-        items, _ = _detail.read_moments(moments, masks, errors, units, beams)
-        return cls(items, regions)
+        check_options(DatasetRegionMoments.from_files, locals())
+        items, _ = _detail.read_moments(_detail.moment_options(locals()))
+        dataset = cls(items, regions)
+        return _detail.cleaned(dataset, outliers)
+
+    @classmethod
+    def from_table(
+            cls,
+            file: FilePath,
+            regions: Regions,
+            format: str | None = None,
+            moment0: DataColumns | None = None,
+            moment1: DataColumns | None = None,
+            moment2: DataColumns | None = None,
+            moment3: DataColumns | None = None,
+            moment4: DataColumns | None = None,
+            moment5: DataColumns | None = None,
+            moment6: DataColumns | None = None,
+            moment7: DataColumns | None = None,
+            outliers: Mapping[str, Any] | None = None
+    ) -> 'DatasetRegionMoments':
+        """
+        Read the dataset from the columns of a table of one row for each
+        region, in their order (e.g. the V, sigma, h3 and h4 of the bins of
+        pPXF).
+
+        Parameters
+        ----------
+        file : str
+            The table file: any that astropy reads (see
+            tableutils.read_table: e.g. FITS, ECSV or CSV).
+        regions : Regions
+            The regions.
+        format : str, optional
+            The format of the file, if astropy cannot tell it.
+        moment0, ..., moment7 : DataColumns, optional
+            The columns of the moments of each order given (at least one).
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
+
+        Returns
+        -------
+        DatasetRegionMoments
+            The dataset.
+        """
+        check_options(DatasetRegionMoments.from_table, locals())
+        table = tableutils.read_table(file, format)
+        items = {}
+        for order, columns in _detail.moment_options(locals()).items():
+            with parseutils.config_path(f'moment{order}'):
+                items[order] = _detail.table_item(table, columns)
+        if not items:
+            raise ConfigError("a dataset needs at least one moment")
+        dataset = cls(items, regions)
+        return _detail.cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -130,6 +172,7 @@ class DatasetRegionMoments(Dataset):
         return info
 
     def __init__(self, moments: Mapping[int, Data], regions: Regions):
+        check_options(DatasetRegionMoments.__init__, locals())
         super().__init__(_detail.moment_items(moments))
         if self.shape() != (regions.nregions(),):
             raise ConfigError(

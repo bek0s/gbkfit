@@ -1,16 +1,18 @@
 import os.path
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import astropy.units as u
 import numpy as np
+from annotated_types import Gt
 from astropy.table import Table
 
 from gbkfit.utils import parseutils, tableutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Column, FilePath, Unit
 from . import _detail, _resampling
 from .base import Dataset
-from .data import Data
+from .data import Data, DataColumns
 
 
 __all__ = [
@@ -66,14 +68,7 @@ class DatasetProfile(Dataset):
     a distance, if given (their angles are the lengths over it), or
     physical (e.g. galactocentric radii in the Milky Way).
 
-    Its configuration has the file of the table (any that astropy reads,
-    see Table.read: e.g. ECSV, FITS, CSV or text; the columns of a text
-    file without a header are named col1, col2, ...), its format if
-    astropy cannot tell it, the column of the radii (radius: {column,
-    unit}; by default the unit of the column), the distance (Mpc), if any,
-    and each data item, by name: {column, error (a column, or one error
-    for all the values), mask (a column: 0 for the values to leave out),
-    unit (by default that of the column)}.
+    Configurations give the file of its table (see from_file).
 
     Parameters
     ----------
@@ -82,8 +77,8 @@ class DatasetProfile(Dataset):
         least one.
     radii : Quantity
         The radii.
-    distance : Quantity, optional
-        The distance of radii in lengths that were measured at one.
+    distance : float, optional
+        The distance of radii in lengths that were measured at one (Mpc).
 
     Raises
     ------
@@ -94,40 +89,59 @@ class DatasetProfile(Dataset):
 
     ndim = 1
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'profile'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
+    def from_file(
+            cls,
+            file: FilePath,
+            radius: Column,
+            format: str | None = None,
+            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None,
+            **items: DataColumns
     ) -> 'DatasetProfile':
-        info = dict(info)
-        options = {
-            key: info.pop(key) for key in ('file', 'format', 'radius',
-                                           'distance') if key in info}
-        options = parseutils.parse_options(
-            options, required={'file', 'radius'},
-            optional={'format', 'distance'})
-        with parseutils.config_path('file'):
-            table = tableutils.read_table(
-                options['file'], options.get('format'), prefix)
+        """
+        Read a profile from a table file (any that astropy reads, see
+        Table.read: e.g. ECSV, FITS, CSV or text; the columns of a text
+        file without a header are named col1, col2, ...).
+
+        Parameters
+        ----------
+        file : str
+            The file.
+        radius : Column
+            The column of the radii (by default in the unit of the
+            column, which must have one).
+        format : str, optional
+            The format of the file, if astropy cannot tell it.
+        distance : float, optional
+            The distance of radii in lengths that were measured at one
+            (Mpc).
+        **items : DataColumns
+            The columns of each data item, by name.
+
+        Returns
+        -------
+        DatasetProfile
+            The dataset.
+        """
+        check_options(DatasetProfile.from_file, locals())
+        table = tableutils.read_table(file, format)
         with parseutils.config_path('radius'):
-            radius = parseutils.parse_options(
-                options['radius'], required={'column'}, optional={'unit'})
-            radii = tableutils.read_column(
-                table, radius['column'], radius.get('unit'))
+            radii = tableutils.read_column(table, radius.column, radius.unit)
             if radii.unit is u.dimensionless_unscaled:
                 raise ConfigError(
                     "the radii need their unit (e.g. unit: kpc), which their "
                     "column does not have")
-        distance = options.get('distance')
-        items = {}
-        for key, item in info.items():
+        data = {}
+        for key, item in items.items():
             with parseutils.config_path(key):
-                items[key] = _detail.table_item(table, item)
-        return cls(
-            items, radii, None if distance is None else distance * u.Mpc)
+                data[key] = _detail.table_item(table, item)
+        return cls(data, radii, distance)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -162,10 +176,12 @@ class DatasetProfile(Dataset):
             self,
             items: Mapping[str, Data],
             radii: u.Quantity,
-            distance: u.Quantity | None = None
+            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
     ):
+        check_options(DatasetProfile.__init__, locals())
         super().__init__(items)
-        radii, distance = check_profile_radii(radii, distance)
+        radii, distance = check_profile_radii(
+            radii, None if distance is None else distance * u.Mpc)
         if self.shape() != radii.shape:
             raise ConfigError(
                 f"the data items have {self.shape()[0]} values, but there "

@@ -134,7 +134,7 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
 
 # A profile of the circular velocity at 1 kpc
 PROFILE = dict(
-    type='profile', functions=['vcirc'], radii=[1.0], radius_unit='kpc')
+    type='profile', functions=['vcirc'], radii=dict(value=[1.0], unit='kpc'))
 
 
 def rotating_disk_of_image(path):

@@ -41,7 +41,7 @@ def test_the_file_of_a_dataset_is_the_dataset():
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(frame='TOPO'), "regrid"),
+    (dict(frame='TOPO'), "'frame' must be one of"),
     (dict(frequencies=[1.42e9, 1.4201e9, 1.4203e9]), "uniform")])
 def test_the_channels_are_checked(options, message):
     with pytest.raises(ConfigError, match=message):

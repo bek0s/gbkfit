@@ -3,12 +3,11 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.instrument import PSF
 from gbkfit.utils import gridutils
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.parseutils import check_options
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
-from .data import Data
+from .data import Data, DataFiles
 
 
 __all__ = [
@@ -47,31 +46,34 @@ class DatasetPixelMoments(Dataset):
     ndim = 2
     spectral_axis = None
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'pixel_moments'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetPixelMoments':
+    def load(cls, info: dict[str, Any]) -> 'DatasetPixelMoments':
         info = dict(info)
-        files = _detail.pop_moment_options(info, prefix, _CORRELATIONS)
-        return _detail.load_with_files(cls, info, cls.ndim, **files)
+        _detail.load_moment_correlations(info)
+        return _detail.load_with_files(cls, info, cls.ndim)
 
     @classmethod
     def from_files(
             cls,
-            moments: Mapping[int, FitsFile],
-            masks: Mapping[int, FitsFile] | None = None,
-            errors: Mapping[int, FitsFile | float] | None = None,
-            units: Mapping[int, str] | None = None,
-            beams: Mapping[int, Mapping[str, Any]] | None = None,
+            moment0: DataFiles | None = None,
+            moment1: DataFiles | None = None,
+            moment2: DataFiles | None = None,
+            moment3: DataFiles | None = None,
+            moment4: DataFiles | None = None,
+            moment5: DataFiles | None = None,
+            moment6: DataFiles | None = None,
+            moment7: DataFiles | None = None,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spatial_correlations: Mapping[int, PSF] | None = None
+            outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetPixelMoments':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -79,20 +81,10 @@ class DatasetPixelMoments(Dataset):
 
         Parameters
         ----------
-        moments : Mapping
-            The file of each moment map, by order: a filename, or a
-            filename and the HDU.
-        masks : Mapping, optional
-            The files of the masks of some of the moment maps.
-        errors : Mapping, optional
-            The files of the errors of some of the moment maps, or one
-            error for all the values of each.
-        units : Mapping, optional
-            The units of some of the moment maps; by default, those of the
-            headers (see Data.from_files).
-        beams : Mapping, optional
-            The options of the beams of some of the moment maps (see Beam); by
-            default, those of the headers.
+        moment0, ..., moment7 : DataFiles, optional
+            The files of the moment map of each order given (at least
+            one), and their options (e.g. their unit; by default, that of
+            the header).
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the headers. Either rpix or rval can be
@@ -101,19 +93,20 @@ class DatasetPixelMoments(Dataset):
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             headers.
-        spatial_correlations : Mapping, optional
-            The correlations of the noise of some of the moment maps on the
-            sky (see Data).
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
 
         Returns
         -------
         DatasetPixelMoments
             The dataset.
         """
+        check_options(DatasetPixelMoments.from_files, locals())
         items, coords = _detail.read_moments(
-            moments, masks, errors, units, beams, rpix, rval,
-            spatial_correlations)
-        return cls(items, **_detail.grid_coords(coords, step, rota))
+            _detail.moment_options(locals()), rpix, rval)
+        dataset = cls(items, **_detail.grid_coords(coords, step, rota))
+        return _detail.cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -129,6 +122,7 @@ class DatasetPixelMoments(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
+        check_options(DatasetPixelMoments.__init__, locals())
         super().__init__(_detail.moment_items(moments))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 

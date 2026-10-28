@@ -61,7 +61,7 @@ def test_rotation_curve_of_a_mass_model():
     radii = np.array([0.5, 2.0, 8.0])
     for profile_radii, distance, expected in (
             (radii * u.arcsec, None, radii * KPC_PER_ARCSEC),
-            (radii * u.kpc, 20 * u.Mpc, radii / 2),
+            (radii * u.kpc, 20, radii / 2),
             (radii * u.kpc, None, radii)):
         observation = ObservationProfile(['vcirc'], profile_radii, distance)
         group = ObservationGroup(galaxy, observation)

@@ -1,11 +1,14 @@
 import abc
 from collections.abc import Sequence
+from typing import Annotated
 
 import numpy as np
+from annotated_types import Gt
 
 from gbkfit.math import overlap
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 
 __all__ = [
@@ -18,6 +21,11 @@ __all__ = [
     'aperture_parser'
 ]
 
+
+# A position or a length on the sky, and a position angle
+_Arcsec = Annotated[float, Unit('arcsec')]
+_Length = Annotated[float, Gt(0), Unit('arcsec')]
+_Angle = Annotated[float, Unit('deg')]
 
 # The smallest overlap of a pixel with an aperture that counts, as a
 # fraction of the pixel (smaller ones are rounding errors of zero)
@@ -113,11 +121,10 @@ class ApertureEllipse(Aperture):
             type=self.type(), x=self._x, y=self._y, a=self._a, b=self._b,
             posa=self._posa)
 
-    def __init__(self, x: float, y: float, a: float, b: float, posa: float = 0):
-        if not (a > 0 and b > 0):
-            raise RuntimeError(
-                f"the semi-axes of an ellipse must be positive; they are "
-                f"{a} and {b}")
+    def __init__(
+            self, x: _Arcsec, y: _Arcsec, a: _Length, b: _Length,
+            posa: _Angle = 0):
+        check_options(ApertureEllipse.__init__, locals())
         self._x = x
         self._y = y
         self._a = a
@@ -142,10 +149,8 @@ class ApertureCircle(Aperture):
     def dump(self):
         return dict(type=self.type(), x=self._x, y=self._y, radius=self._radius)
 
-    def __init__(self, x: float, y: float, radius: float):
-        if not radius > 0:
-            raise RuntimeError(
-                f"the radius of a circle must be positive; it is {radius}")
+    def __init__(self, x: _Arcsec, y: _Arcsec, radius: _Length):
+        check_options(ApertureCircle.__init__, locals())
         self._x = x
         self._y = y
         self._radius = radius
@@ -191,7 +196,10 @@ class AperturePolygon(Aperture):
     def dump(self):
         return dict(type=self.type(), vertices=self._vertices.tolist())
 
-    def __init__(self, vertices: Sequence[Sequence[float]]):
+    def __init__(
+            self,
+            vertices: Annotated[Sequence[Sequence[float]], Unit('arcsec')]):
+        check_options(AperturePolygon.__init__, locals())
         vertices = np.array(vertices, dtype=float)
         if vertices.ndim != 2 or vertices.shape[1] != 2 \
                 or vertices.shape[0] < 3:
@@ -226,12 +234,9 @@ class ApertureRectangle(Aperture):
             width=self._width, posa=self._posa)
 
     def __init__(
-            self, x: float, y: float, length: float, width: float,
-            posa: float = 0):
-        if not (length > 0 and width > 0):
-            raise RuntimeError(
-                f"the length and the width of a rectangle must be positive; "
-                f"they are {length} and {width}")
+            self, x: _Arcsec, y: _Arcsec, length: _Length, width: _Length,
+            posa: _Angle = 0):
+        check_options(ApertureRectangle.__init__, locals())
         self._x = x
         self._y = y
         self._length = length
@@ -279,7 +284,7 @@ class ApertureField(Aperture):
         return dict(type=self.type())
 
     def __init__(self):
-        pass
+        check_options(ApertureField.__init__, locals())
 
     def centre(self):
         raise ConfigError("a field (the whole grid) has no centre")

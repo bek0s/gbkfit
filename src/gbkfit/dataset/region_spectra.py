@@ -5,7 +5,7 @@ import numpy as np
 
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
@@ -53,19 +53,18 @@ class DatasetRegionSpectra(Dataset):
     # (the velocity along FITS y)
     spectral_axis = 1
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'region_spectra'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetRegionSpectra':
+    def load(cls, info: dict[str, Any]) -> 'DatasetRegionSpectra':
         info = dict(info)
         parseutils.load_option_and_update_info(
-            regions_parser, info, 'regions', required=True, prefix=prefix)
-        files = _detail.pop_item_options(info, prefix)
-        return _detail.load_with_files(cls, info, **files)
+            regions_parser, info, 'regions', required=True)
+        return _detail.load_with_files(cls, info)
 
     @classmethod
     def from_files(
@@ -76,7 +75,8 @@ class DatasetRegionSpectra(Dataset):
             error: FitsFile | float | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
-            spectral: gridutils.SpectralAxis | None = None
+            spectral: gridutils.SpectralAxis | None = None,
+            outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetRegionSpectra':
         """
         Read the dataset from FITS files (the regions along x, the velocity
@@ -105,20 +105,25 @@ class DatasetRegionSpectra(Dataset):
             those of the header (either rpix or rval can be given, and the
             other comes from the header; see fitsutils.read_data); not its
             size, which the data give.
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
 
         Returns
         -------
         DatasetRegionSpectra
             The dataset.
         """
+        check_options(DatasetRegionSpectra.from_files, locals())
         references = _detail.file_references(1, None, None, spectral)
         spectra, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam)
-        return cls(
+        dataset = cls(
             spectra, regions,
             _detail.cube_coords(coords, None, None, spectral)['spectral'])
+        return _detail.cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -148,6 +153,7 @@ class DatasetRegionSpectra(Dataset):
             regions: Regions,
             spectral: gridutils.SpectralAxis | None = None
     ):
+        check_options(DatasetRegionSpectra.__init__, locals())
         super().__init__(dict(spectra=spectra))
         nchannels, nregions = spectra.shape()
         if nregions != regions.nregions():

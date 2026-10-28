@@ -5,6 +5,7 @@ import numpy as np
 
 from gbkfit.instrument import LSF, PSF
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
@@ -19,9 +20,6 @@ __all__ = [
 # The axes of its blocks and windows (see resample_blocks and
 # screen_outliers)
 _AXES = ('x', 'y', 'the channels')
-
-# The axes along which its noise can be correlated (see Data)
-_CORRELATIONS = ('spatial', 'spectral')
 
 
 class DatasetPixelSpectra(Dataset):
@@ -50,17 +48,17 @@ class DatasetPixelSpectra(Dataset):
     ndim = 3
     spectral_axis = 2
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'pixel_spectra'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetPixelSpectra':
+    def load(cls, info: dict[str, Any]) -> 'DatasetPixelSpectra':
         info = dict(info)
-        files = _detail.pop_item_options(info, prefix, _CORRELATIONS)
-        return _detail.load_with_files(cls, info, cls.ndim - 1, **files)
+        _detail.load_correlations(info)
+        return _detail.load_with_files(cls, info, cls.ndim - 1)
 
     @classmethod
     def from_files(
@@ -76,7 +74,9 @@ class DatasetPixelSpectra(Dataset):
             rota: float | None = None,
             spectral: gridutils.SpectralAxis | None = None,
             spatial_correlation: PSF | None = None,
-            spectral_correlation: LSF | None = None
+            spectral_correlation: LSF | None = None,
+            outliers: Mapping[str, Any] | None = None,
+            mask_whole_spectra: bool = False
     ) -> 'DatasetPixelSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -114,18 +114,27 @@ class DatasetPixelSpectra(Dataset):
             The correlation of the noise on the sky (see Data).
         spectral_correlation : LSF, optional
             The correlation of the noise along the spectral axis.
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
+        mask_whole_spectra : bool, optional
+            Whether every spectrum with a masked value is masked whole
+            (see mask_whole_spectra), after the outliers.
 
         Returns
         -------
         DatasetPixelSpectra
             The dataset.
         """
+        check_options(DatasetPixelSpectra.from_files, locals())
         references = _detail.file_references(2, rpix, rval, spectral)
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spatial_correlation, spectral_correlation)
-        return cls(item, **_detail.cube_coords(coords, step, rota, spectral))
+        dataset = cls(
+            item, **_detail.cube_coords(coords, step, rota, spectral))
+        return _detail.cleaned(dataset, outliers, mask_whole_spectra)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -144,6 +153,7 @@ class DatasetPixelSpectra(Dataset):
             rota: float | None = None,
             spectral: gridutils.SpectralAxis | None = None
     ):
+        check_options(DatasetPixelSpectra.__init__, locals())
         super().__init__(dict(spectra=spectra))
         self._grid = _detail.cube_grid(
             self, step, rpix, rval, rota, spectral)

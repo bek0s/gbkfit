@@ -1,14 +1,17 @@
 import numbers
 import os.path
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import astropy.units
 import numpy as np
+import numpy.typing as npt
 import scipy.spatial
+from annotated_types import Ge
 
-from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FilePath, Unit
 from .base import Dataset
 from .data import Data
 
@@ -130,12 +133,13 @@ class UVCoverage:
 
     def __init__(
             self,
-            uvw: np.ndarray,
+            uvw: npt.ArrayLike,
             frequencies: Sequence[float],
-            phase_centre: Sequence[float],
-            frame: str,
+            phase_centre: Annotated[Sequence[float], Unit('deg')],
+            frame: Literal[_FRAMES],
             rest: str | astropy.units.Quantity
     ):
+        check_options(UVCoverage.__init__, locals())
         uvw = np.array(uvw, float)
         frequencies = np.array(frequencies, float)
         if uvw.ndim != 2 or uvw.shape[1] != 3 or not np.isfinite(uvw).all():
@@ -155,13 +159,6 @@ class UVCoverage:
             raise ConfigError(
                 f"the phase centre must be an RA and a Dec; it is "
                 f"{phase_centre}")
-        # TODO: TOPO frequencies, with the Doppler shift of the time of
-        # each row (for now, regridded to LSRK by CASA mstransform)
-        if frame not in _FRAMES:
-            raise ConfigError(
-                f"the frequencies must be in the rest frame "
-                f"{' or '.join(_FRAMES)}; they are in {frame} (regrid them, "
-                f"e.g. by CASA mstransform with outframe='LSRK')")
         rest = gridutils.make_rest(rest)
         if rest is None or rest.unit != astropy.units.Hz:
             raise ConfigError(
@@ -245,34 +242,14 @@ class DatasetVisibilities(Dataset):
 
     ndim = 2
 
+    config_constructors = ('from_file', 'from_ms')
+
     @staticmethod
     def type() -> str:
         return 'visibilities'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetVisibilities':
-        options = parseutils.parse_options(
-            info, required=set(), optional={
-                'file', 'ms', 'field', 'spw', 'column', 'rest', 'error'})
-        if ('file' in options) == ('ms' in options):
-            raise ConfigError(
-                "the visibilities are read from a file (option file) or a "
-                "measurement set (option ms), one of them")
-        if 'file' in options:
-            ms_options = set(options) - {'file'}
-            if ms_options:
-                raise ConfigError(
-                    f"the options {sorted(ms_options)} are of measurement "
-                    f"sets (option ms)")
-            return cls.from_file(
-                parseutils.resolve_path(prefix + options['file']))
-        return cls.from_ms(
-            parseutils.resolve_path(prefix + options.pop('ms')), **options)
-
-    @classmethod
-    def from_file(cls, file: str) -> 'DatasetVisibilities':
+    def from_file(cls, file: FilePath) -> 'DatasetVisibilities':
         """
         Read the dataset from a numpy file (npz) of its arrays: data, the
         complex visibilities (nchannels, nrows); error, the error of each
@@ -295,6 +272,7 @@ class DatasetVisibilities(Dataset):
         ConfigError
             If an array is missing (see the class).
         """
+        check_options(DatasetVisibilities.from_file, locals())
         with np.load(file) as arrays:
             arrays = dict(arrays)
         missing = {'data', 'error'} - set(arrays)
@@ -312,12 +290,12 @@ class DatasetVisibilities(Dataset):
     @classmethod
     def from_ms(
             cls,
-            ms: str,
+            ms: FilePath,
             field: int | str | None = None,
-            spw: int = 0,
+            spw: Annotated[int, Ge(0)] = 0,
             column: str = 'DATA',
             rest: str | astropy.units.Quantity | None = None,
-            error: str = 'weights'
+            error: Literal['weights', 'scatter'] = 'weights'
     ) -> 'DatasetVisibilities':
         """
         Read the dataset from a measurement set (python-casacore): the
@@ -375,14 +353,12 @@ class DatasetVisibilities(Dataset):
         ConfigError
             If the field, the spectral window or the column are not in the
             measurement set, it has neither Stokes I nor a pair of parallel
-            hands, or no rest frequency (see UVCoverage), or error is not
-            one of those.
+            hands, its frequencies are not in a rest frame of UVCoverage,
+            or it has no rest frequency (see UVCoverage).
         ModuleNotFoundError
             If python-casacore is not installed.
         """
-        if error not in ('weights', 'scatter'):
-            raise ConfigError(
-                f"error must be 'weights' or 'scatter'; it is {error!r}")
+        check_options(DatasetVisibilities.from_ms, locals())
         try:
             from casacore import tables
         except ModuleNotFoundError as e:
@@ -407,6 +383,13 @@ class DatasetVisibilities(Dataset):
             frequencies = windows.getcell('CHAN_FREQ', spw)
             frame = _MS_FRAMES.get(
                 int(windows.getcell('MEAS_FREQ_REF', spw)), 'unknown')
+        # TODO: TOPO frequencies, with the Doppler shift of the time of
+        # each row (for now, regridded to LSRK by CASA mstransform)
+        if frame not in _FRAMES:
+            raise ConfigError(
+                f"the frequencies must be in the rest frame "
+                f"{' or '.join(_FRAMES)}; they are in {frame} (regrid them, "
+                f"e.g. by CASA mstransform with outframe='LSRK')")
         with subtable('DATA_DESCRIPTION') as descriptions:
             description = list(descriptions.getcol('SPECTRAL_WINDOW_ID')) \
                 .index(spw)
@@ -460,6 +443,7 @@ class DatasetVisibilities(Dataset):
             file=filename if dump_path else os.path.basename(filename))
 
     def __init__(self, re: Data, im: Data, coverage: UVCoverage):
+        check_options(DatasetVisibilities.__init__, locals())
         super().__init__(dict(re=re, im=im))
         if re.error() is None or im.error() is None:
             raise ConfigError(

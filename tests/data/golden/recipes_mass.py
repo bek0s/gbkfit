@@ -224,7 +224,8 @@ _FR_GRAVITY_RESPONSE = dict(
         gravity=dict(type='hu_sawicki', screened=['halo']))],
     observations=[
         dict(type='profile', name='rc', functions=['vcirc', 'rotation_gas'],
-             radii=[1.0, 2.5, 4.0, 6.0, 8.0, 10.0], radius_unit='arcsec'),
+             radii=dict(value=[1.0, 2.5, 4.0, 6.0, 8.0, 10.0],
+                        unit='arcsec')),
         _moments(size=16, name='maps')],
     truth=_prefixed('gas', _GEOMETRY_TRUTH | dict(dpt_a=20)) | dict(
         distance=80, mass_stars_log_m=10.3, mass_stars_rd=1.2,

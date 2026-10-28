@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
@@ -49,17 +50,15 @@ class DatasetSlitlessSpectra(Dataset):
     ndim = 2
     spectral_axis = None
 
+    config_constructors = ('from_files',)
+
     @staticmethod
     def type() -> str:
         return 'slitless_spectra'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'DatasetSlitlessSpectra':
-        info = dict(info)
-        files = _detail.pop_item_options(info, prefix)
-        return _detail.load_with_files(cls, info, cls.ndim, **files)
+    def load(cls, info: dict[str, Any]) -> 'DatasetSlitlessSpectra':
+        return _detail.load_with_files(cls, dict(info), cls.ndim)
 
     @classmethod
     def from_files(
@@ -72,7 +71,8 @@ class DatasetSlitlessSpectra(Dataset):
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rota: float | None = None,
+            outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetSlitlessSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -99,15 +99,20 @@ class DatasetSlitlessSpectra(Dataset):
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
+        outliers : Mapping, optional
+            Screen the data for outliers by the options size and nsigma
+            (see screen_outliers), which are masked.
 
         Returns
         -------
         DatasetSlitlessSpectra
             The dataset.
         """
+        check_options(DatasetSlitlessSpectra.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam)
-        return cls(item, **_detail.grid_coords(coords, step, rota))
+        dataset = cls(item, **_detail.grid_coords(coords, step, rota))
+        return _detail.cleaned(dataset, outliers)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -125,6 +130,7 @@ class DatasetSlitlessSpectra(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
+        check_options(DatasetSlitlessSpectra.__init__, locals())
         super().__init__(dict(spectra=spectra))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 

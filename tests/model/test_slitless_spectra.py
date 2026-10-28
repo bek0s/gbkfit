@@ -212,13 +212,13 @@ def test_grismconf_traces_from_files(tmp_path):
     wavelength, x, y = np.array([4.05e-6, 4.1e-6]), [0.0, 10], [5.0, 30]
     np.testing.assert_allclose(
         trace.offsets(wavelength, x, y), expected.offsets(wavelength, x, y))
-    second = TraceGrismConf.read(str(path), order=2)
+    second = TraceGrismConf.from_file(str(path), order=2)
     np.testing.assert_allclose(second.offsets(2.5e-6, 0.0, 0.0), [49.5, 0])
     with pytest.raises(RuntimeError, match="no order '-1'"):
-        TraceGrismConf.read(str(path), order=-1)
+        TraceGrismConf.from_file(str(path), order=-1)
     path.write_text("# Wavelength unit: Angstrom\nBEAM_+1\n")
     with pytest.raises(RuntimeError, match="not micron"):
-        TraceGrismConf.read(str(path))
+        TraceGrismConf.from_file(str(path))
 
 
 def test_grismconf_traces_constant_over_the_detector(driver):

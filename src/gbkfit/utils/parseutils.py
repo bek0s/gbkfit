@@ -15,6 +15,7 @@ import contextvars
 import copy
 import difflib
 import importlib
+import inspect
 import logging
 import os
 import re
@@ -523,16 +524,17 @@ def parse_options_for_callable(
     callable, and return them as its arguments.
 
     The parameters without a default value are required options, and the
-    others optional ones. An option must match the type annotation of its
-    parameter, if any, and its range (see typeutils.problem). Unknown
-    options are reported (see report_unknown) and left out.
+    others optional ones; a ``**kwargs`` parameter takes the other
+    options. An option must match the type annotation of its parameter,
+    if any, and its range (see typeutils.problem). Unknown options are
+    reported (see report_unknown) and left out.
 
     Options of some types are given in a form of their own (see
     from_config): a FilePath is relative to the directory of the
     configuration (see resolve_path), a FitsFile is a filename or a dict
-    with the filename (file) and the HDU (hdu), a Column is a dict with
-    its name (column) and unit (unit), and a Quantity is a dict with its
-    value and unit (e.g. {value: [1, 2], unit: kpc}).
+    with the filename (file) and the HDU (hdu), a record (a NamedTuple,
+    e.g. a Column) is a dict of its fields, and a Quantity is a dict with
+    its value and unit (e.g. {value: [1, 2], unit: kpc}).
 
     Parameters
     ----------
@@ -562,14 +564,19 @@ def parse_options_for_callable(
     if unknown := ignore_params - set(required) - set(optional):
         raise RuntimeError(
             f"{func.__qualname__} has no parameters {_quoted(unknown)}")
+    others = next((
+        p.name for p in inspect.signature(func).parameters.values()
+        if p.kind is inspect.Parameter.VAR_KEYWORD), None)
+    known = set(required) | set(optional) | ignore_params
     options = parse_options(
         info,
         [p for p in required if p not in ignore_params],
-        [p for p in optional if p not in ignore_params])
+        [p for p in optional if p not in ignore_params]
+        + ([] if others is None else [k for k in info if k not in known]))
     types = typeutils.option_types(func)
     args = {}
     for option, value in options.items():
-        type_ = types.get(option)
+        type_ = types.get(option if option in known else others)
         if type_ is not None:
             with config_path(option):
                 value = from_config(value, type_)
@@ -608,12 +615,20 @@ def from_config(value: Any, type_: Any) -> Any:
         if member == typeutils.FitsFile and isinstance(value, str | Mapping):
             file, hdu = parse_file(value)
             return (file, hdu) if isinstance(value, Mapping) else file
-        if member is typeutils.Column and isinstance(value, Mapping):
-            return typeutils.Column(**parse_options(
-                dict(value), required={'column'}, optional={'unit'}))
+        if _is_record(member) and isinstance(value, Mapping):
+            return member(**parse_options_for_callable(dict(value), member))
         if member is astropy.units.Quantity and isinstance(value, Mapping):
             return _quantity(value)
     return value
+
+
+def _is_record(type_: Any) -> bool:
+    """
+    Return whether a type annotation is a record (a NamedTuple, e.g.
+    typeutils.Column), which configurations give as a dict of its fields.
+    """
+    return isinstance(type_, type) and issubclass(type_, tuple) \
+        and hasattr(type_, '_fields')
 
 
 def _quantity(info: Mapping[str, Any]) -> astropy.units.Quantity:
@@ -851,7 +866,9 @@ def config_constructor(
     """
     Return the name of the constructor of a class (one of its
     config_constructors) whose options a configuration has: the one
-    whose own options (those the others do not have) it has.
+    whose own options (those the others do not have) it has, or, if it
+    has none of those, the one without own options (whose options the
+    others all have, e.g. DatasetRegionMoments.from_files).
 
     Parameters
     ----------
@@ -883,8 +900,9 @@ def config_constructor(
             *(params[other] for other in names if other != name))
         for name in names}
     given = [name for name in names if own[name] & set(info)]
-    if len(given) == 1:
-        return given[0]
+    default = [name for name in names if not own[name]]
+    if len(given) == 1 or (not given and len(default) == 1):
+        return (given or default)[0]
     forms = '; or '.join(_quoted(own[name]) for name in names)
     raise ConfigError(
         f"give the options of one of its forms, which have {forms}; it has "

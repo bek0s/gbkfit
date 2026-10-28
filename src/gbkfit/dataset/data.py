@@ -19,6 +19,8 @@ from gbkfit.utils.typeutils import FitsFile
 __all__ = [
     'Beam',
     'Data',
+    'DataColumns',
+    'DataFiles',
     'dump_data',
     'fits_file'
 ]
@@ -41,6 +43,62 @@ class Beam(NamedTuple):
     def area(self) -> float | np.ndarray:
         """Return its solid angle (arcsec^2): pi / (4 ln 2) bmaj bmin."""
         return np.pi / (4 * np.log(2)) * np.multiply(self.bmaj, self.bmin)
+
+
+class DataFiles(NamedTuple):
+    """
+    The files of a data item, and their options (see Data.from_files); in
+    a configuration, a dict of them.
+
+    Parameters
+    ----------
+    data : str or tuple
+        The file of the values: a filename, or a filename and the HDU.
+    mask : str or tuple, optional
+        The file of the mask.
+    error : str or tuple or float, optional
+        The file of the errors, or one error for all the values.
+    unit : str, optional
+        The unit of the values; by default, that of the header.
+    beam : Mapping, optional
+        The options of their beam (see Beam); by default, that of the
+        header.
+    spatial_correlation : PSF, optional
+        The correlation of the noise on the sky.
+    spectral_correlation : LSF, optional
+        The correlation of the noise along the spectral axis.
+    """
+
+    data: FitsFile
+    mask: FitsFile | None = None
+    error: FitsFile | float | None = None
+    unit: str | None = None
+    beam: Mapping[str, Any] | None = None
+    spatial_correlation: PSF | None = None
+    spectral_correlation: LSF | None = None
+
+
+class DataColumns(NamedTuple):
+    """
+    The columns of a data item in a table file; in a configuration, a dict
+    of them.
+
+    Parameters
+    ----------
+    column : str
+        The column of the values.
+    error : str or float, optional
+        The column of the errors, or one error for all the values.
+    mask : str, optional
+        The column of the mask (0 for the values left out).
+    unit : str, optional
+        The unit of the values; by default, that of their column.
+    """
+
+    column: str
+    error: str | float | None = None
+    mask: str | None = None
+    unit: str | None = None
 
 
 def _read(

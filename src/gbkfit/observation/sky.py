@@ -228,13 +228,9 @@ class ObservationSky(Observation):
 
         Its band is the name
         of a band of the catalogue, or a band (its name and wavelength).
-        Its data can have the option outliers, {size, nsigma}: the data
-        are screened for outliers as they are read, which are masked (see
-        Dataset.screen_outliers), and their number logged. They can also
-        have the option mask_whole_spectra (false by default): then
-        every spectrum with a masked value is masked whole (see
-        Dataset.mask_whole_spectra), after the outliers, and their number
-        logged.
+        Its data are those of the dataset class of its observable (see
+        e.g. DatasetPixelSpectra.from_files, whose options outliers and
+        mask_whole_spectra clean them).
 
         Parameters
         ----------
@@ -267,16 +263,8 @@ class ObservationSky(Observation):
             observable_cls = observable_parser.registered_class(
                 observable_type)
             with parseutils.config_path('data'):
-                data_info = dict(info['data'])
-                outliers = data_info.pop('outliers', None)
-                whole = data_info.pop('mask_whole_spectra', False)
-                dataset = observable_cls.dataset_class.load(data_info)
-                if outliers is not None:
-                    with parseutils.config_path('outliers'):
-                        dataset = _screened(dataset, outliers)
-                if whole:
-                    with parseutils.config_path('mask_whole_spectra'):
-                        dataset = _masked_whole(dataset)
+                dataset = observable_cls.dataset_class.load(
+                    dict(info['data']))
             info['data'] = dataset
         parseutils.load_option_and_update_info(
             likelihood_parser, info, 'likelihood')
@@ -899,38 +887,3 @@ def _check_beams(data: Dataset, instrument: Instrument) -> None:
                 f"the instrument is the beam {psf.bmaj():g} x {psf.bmin():g} "
                 f"arcsec at {psf.bpa():g} deg: the model is smoothed by the "
                 f"PSF, and its light per beam is per beam of the data")
-
-
-def _masked_whole(dataset: Dataset) -> Dataset:
-    """
-    Return a dataset with every spectrum of its data that has a masked
-    value masked whole (see Dataset.mask_whole_spectra), and log how many
-    values each item loses.
-    """
-    masked = dataset.mask_whole_spectra()
-    counts = {
-        key: int(np.count_nonzero(dataset[key].mask())
-                 - np.count_nonzero(masked[key].mask()))
-        for key in dataset}
-    _log.info(f"values masked with whole spectra: {counts}")
-    return masked
-
-
-def _screened(dataset: Dataset, info: Any) -> Dataset:
-    """
-    Return a dataset with its outliers masked by the options of its
-    configuration (size and nsigma; see Dataset.screen_outliers), and log
-    how many each item has.
-    """
-    if not isinstance(info, Mapping):
-        raise ConfigError(
-            f"outliers are screened by the options size and nsigma; they "
-            f"are {info!r}")
-    options = parseutils.parse_options(info, required={'size', 'nsigma'})
-    screened = dataset.screen_outliers(options['size'], options['nsigma'])
-    counts = {
-        key: int(np.count_nonzero(dataset[key].mask())
-                 - np.count_nonzero(screened[key].mask()))
-        for key in dataset}
-    _log.info(f"outliers masked in the data: {counts}")
-    return screened

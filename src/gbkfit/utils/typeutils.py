@@ -286,8 +286,9 @@ def problem(value: Any, type_: Any) -> str | None:
     if value is None and type(None) in union_members(type_):
         return None
     type_, bounds = _split_bounds(_without_none(type_))
+    # (a plain array, not a subclass, e.g. a Quantity)
     if not matches_type(value, type_) and not (
-            isinstance(value, np.ndarray)
+            type(value) is np.ndarray
             and matches_type(value.tolist(), type_)):
         if typing.get_origin(type_) is Literal:
             choices = ', '.join(repr(x) for x in typing.get_args(type_))

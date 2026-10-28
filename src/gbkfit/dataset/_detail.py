@@ -2,6 +2,7 @@
 Helpers shared by the datasets.
 """
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -9,162 +10,109 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
-from gbkfit.instrument import PSF, lsf_parser, psf_parser
+from gbkfit.instrument import lsf_parser, psf_parser
 from gbkfit.utils import (
     fitsutils, gridutils, parseutils, tableutils, unitutils)
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
-from .data import Data, dump_data, fits_file
+from .data import Data, DataColumns, DataFiles, dump_data
 
 if TYPE_CHECKING:
     from .base import Dataset, NoiseCorrelation
 
 
-# The options of the files of a data item
-_ITEM_OPTIONS = ('data', 'mask', 'error', 'unit', 'beam')
+_log = logging.getLogger(__name__)
 
-# The options of a data item of the columns of a table (see table_item)
-_TABLE_ITEM_OPTIONS = ('column', 'error', 'mask', 'unit')
+# The parsers of the correlations of the noise of a data item, by their
+# options (see Data)
+_CORRELATION_PARSERS = dict(
+    spatial_correlation=psf_parser, spectral_correlation=lsf_parser)
 
-# The parsers of the correlations of the noise of a data item, by kind
-# (see Data)
-_CORRELATION_PARSERS = dict(spatial=psf_parser, spectral=lsf_parser)
-
-# The orders of the moments that datasets can hold
+# The orders of the moments that datasets can hold, and the names of their
+# data items (and of the options of their files)
 _ORDERS = range(8)
+MOMENTS = tuple(f'moment{order}' for order in _ORDERS)
 
 
-def item_options(
-        info: Any,
-        prefix: str,
-        correlations: Sequence[str] = ()
-) -> dict[str, Any]:
+def cleaned(
+        dataset: 'Dataset',
+        outliers: Mapping[str, Any] | None,
+        mask_whole_spectra: bool = False
+) -> 'Dataset':
     """
-    Return the options of a data item from its configuration (the file of
-    its data, and optionally those of its mask and its error, or one
-    error, its unit, its beam, and the correlations of its noise of the
-    given kinds, if its dataset takes them: see Dataset.noise_correlations),
-    as the arguments data, mask, error, unit, beam, spatial_correlation and
-    spectral_correlation of Data.from_files, with the prefix prepended to
-    the filenames of the arrays.
+    Return a dataset with its outliers masked, if given the options size
+    and nsigma (see Dataset.screen_outliers), and then every spectrum with
+    a masked value masked whole, if asked (see
+    Dataset.mask_whole_spectra); and log how many values each item loses
+    to each.
     """
-    names = [f'{kind}_correlation' for kind in correlations]
-    if not isinstance(info, Mapping):
-        raise ConfigError(
-            f"a data item has the file of its data ('data'), and optionally "
-            f"those of its mask ('mask') and error ('error'), its unit "
-            f"('unit'), beam ('beam') and the correlations of its noise "
-            f"{names}; it is {info!r}")
-    info = parseutils.parse_options(
-        info, required={'data'},
-        optional={'mask', 'error', 'unit', 'beam', *names})
-    options = {}
-    for key, value in info.items():
-        if value is None:
-            continue
-        if key in ('unit', 'beam') \
-                or (key == 'error' and isinstance(value, (int, float))):
-            options[key] = value
-        elif key in names:
-            kind = key.removesuffix('_correlation')
-            with parseutils.config_path(key):
-                options[key] = _CORRELATION_PARSERS[kind].load(value)
-        else:
-            with parseutils.config_path(key):
-                options[key] = fits_file(value, prefix)
-    return options
+    if outliers is not None:
+        with parseutils.config_path('outliers'):
+            options = parseutils.parse_options(
+                dict(outliers), required={'size', 'nsigma'})
+            dataset = _logged(
+                dataset,
+                dataset.screen_outliers(options['size'], options['nsigma']),
+                "outliers masked in the data")
+    if mask_whole_spectra:
+        dataset = _logged(
+            dataset, dataset.mask_whole_spectra(),
+            "values masked with whole spectra")
+    return dataset
 
 
-def pop_item_options(
-        info: dict[str, Any],
-        prefix: str,
-        correlations: Sequence[str] = ()
-) -> dict[str, Any]:
-    """
-    Remove the options of the one data item of a dataset from its
-    configuration, where they are given beside its own options, and
-    return them (see item_options; with the correlations of the noise of
-    the given kinds).
-    """
-    keys = (*_ITEM_OPTIONS, *(f'{kind}_correlation' for kind in correlations))
-    return item_options(
-        {key: info.pop(key) for key in keys if key in info}, prefix,
-        correlations)
+def _logged(before: 'Dataset', after: 'Dataset', what: str) -> 'Dataset':
+    """Return a dataset after a change, and log how many values it masked."""
+    counts = {
+        key: int(np.count_nonzero(before[key].mask())
+                 - np.count_nonzero(after[key].mask()))
+        for key in before}
+    _log.info(f"{what}: {counts}")
+    return after
 
 
-def pop_moment_options(
-        info: dict[str, Any],
-        prefix: str,
-        correlations: Sequence[str] = ()
-) -> dict[str, Any]:
+def load_correlations(info: dict[str, Any]) -> None:
     """
-    Remove the data items moment0 to moment7 from the configuration of a
-    dataset, and return their options as the arguments moments, masks,
-    errors, units and beams of its from_files (see item_options), and
-    spatial_correlations if the noise of moments can be correlated on the
-    sky (correlations has 'spatial').
+    Load the correlations of the noise of a data item in the options of
+    its files (spatial_correlation and spectral_correlation; see
+    DataFiles), in place.
     """
-    moments, masks, errors, units, beams = {}, {}, {}, {}, {}
-    spatial = {}
-    for order in _ORDERS:
-        name = f'moment{order}'
-        if info.get(name) is None:
-            info.pop(name, None)
-            continue
-        with parseutils.config_path(name):
-            options = item_options(info.pop(name), prefix, correlations)
-        moments[order] = options['data']
-        for key, values in (
-                ('mask', masks), ('error', errors), ('unit', units),
-                ('beam', beams), ('spatial_correlation', spatial)):
-            if key in options:
-                values[order] = options[key]
-    correlated = dict(spatial_correlations=spatial) \
-        if 'spatial' in correlations else {}
-    return dict(
-        moments=moments, masks=masks, errors=errors, units=units,
-        beams=beams) | correlated
+    for key, parser in _CORRELATION_PARSERS.items():
+        parseutils.load_option_and_update_info(parser, info, key)
 
 
-def read_table_moments(info: dict[str, Any], prefix: str) -> dict[int, Data]:
+def load_moment_correlations(info: dict[str, Any]) -> None:
     """
-    Return the moments of a dataset of the columns of a table, from the
-    options of its configuration: the file of the table ('file'; any that
-    astropy reads, see tableutils.read_table; the prefix is prepended to
-    its filename), its format ('format', if astropy cannot tell it), and
-    the data items moment0 to moment7, each of its columns (see
-    table_item). Raise ConfigError for other options, or without moments.
+    Load the correlations of the noise of the moments in the options of
+    their files (moment0 to moment7; see load_correlations), in place.
     """
-    names = {f'moment{order}': order for order in _ORDERS}
-    options = parseutils.parse_options(
-        info, required={'file'}, optional={'format', *names})
-    with parseutils.config_path('file'):
-        table = tableutils.read_table(
-            options['file'], options.get('format'), prefix)
-    moments = {}
-    for name, order in names.items():
-        if options.get(name) is not None:
+    for name in MOMENTS:
+        if isinstance(info.get(name), Mapping):
+            info[name] = dict(info[name])
             with parseutils.config_path(name):
-                moments[order] = table_item(table, options[name])
-    if not moments:
-        raise ConfigError("a dataset needs at least one moment")
-    return moments
+                load_correlations(info[name])
+
+
+def moment_options(values: Mapping[str, Any]) -> dict[int, Any]:
+    """
+    Return the options of the moments given among the arguments of a
+    constructor (moment0 to moment7, e.g. its locals()), by order.
+    """
+    return {
+        order: values[name] for order, name in enumerate(MOMENTS)
+        if values[name] is not None}
 
 
 def load_with_files(
         cls: type['Dataset'],
         info: dict[str, Any],
-        ndim: int | None = None,
-        **files: Any
+        ndim: int | None = None
 ) -> 'Dataset':
     """
     Return the dataset of class cls that its from_files makes with the
-    given files and the other options of its configuration, which are
-    checked against the parameters of from_files, and its spectral axis,
-    if it has one (see spectral_axis). With ndim, the options of the world
-    coordinates with one value per axis (on the sky, of a dataset with a
-    spectral axis) are made lists (see
-    parseutils.sanitize_dimensional_options).
+    options of its configuration, with its spectral axis, if it has one
+    (see spectral_axis). With ndim, the options of the world coordinates
+    with one value per axis (on the sky, of a dataset with a spectral axis)
+    are made lists (see parseutils.sanitize_dimensional_options).
     """
     if ndim is not None:
         parseutils.sanitize_dimensional_options(
@@ -172,9 +120,8 @@ def load_with_files(
     if cls.spectral_axis is not None:
         parseutils.load_option_and_update_info(
             gridutils.spectral_axis_parser, info, 'spectral')
-    options = parseutils.parse_options_for_callable(
-        info, cls.from_files, ignore_params=list(files))
-    return cls.from_files(**files, **options)
+    return cls.from_files(
+        **parseutils.parse_options_for_callable(info, cls.from_files))
 
 
 def moment_items(moments: Mapping[int, Data]) -> dict[str, Data]:
@@ -235,27 +182,17 @@ def _in_kms(data: Data, order: int) -> Data:
         data.spatial_correlation(), data.spectral_correlation())
 
 
-def table_item(table: Table, info: Any) -> Data:
+def table_item(table: Table, columns: DataColumns) -> Data:
     """
-    Return a data item of the columns of a table from its configuration:
-    its column ('column'), and optionally its error ('error': a column, or
-    one error for all its values), mask ('mask': a column, 0 for the values
-    to leave out) and unit ('unit'; by default that of its column); its
-    values, errors and mask, in its unit.
+    Return a data item of the columns of a table: its values, errors and
+    mask, in its unit (by default that of its column).
     """
-    if not isinstance(info, Mapping):
-        raise ConfigError(
-            f"a data item has its column ('column'), and optionally its "
-            f"error ('error': a column, or one error), mask ('mask': a "
-            f"column) and unit ('unit'); it is {info!r}")
-    info = parseutils.parse_options(
-        info, required={'column'},
-        optional=set(_TABLE_ITEM_OPTIONS) - {'column'})
-    values = tableutils.read_column(table, info['column'], info.get('unit'))
+    with parseutils.config_path('column'):
+        values = tableutils.read_column(table, columns.column, columns.unit)
     unit = None if values.unit is astropy.units.dimensionless_unscaled \
         else values.unit
-    error = info.get('error')
-    if isinstance(error, (int, float)):
+    error = columns.error
+    if isinstance(error, int | float):
         error = np.full(values.shape, float(error))
     elif error is not None:
         with parseutils.config_path('error'):
@@ -269,10 +206,10 @@ def table_item(table: Table, info: Any) -> Data:
                         f"{values.unit}") from None
             error = error.value
     mask = None
-    if info.get('mask') is not None:
+    if columns.mask is not None:
         with parseutils.config_path('mask'):
             mask = np.nan_to_num(
-                tableutils.read_column(table, info['mask'], None).value)
+                tableutils.read_column(table, columns.mask, None).value)
     return Data(values.value, mask, error, unit)
 
 
@@ -282,37 +219,21 @@ def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:
 
 
 def read_moments(
-        moments: Mapping[int, FitsFile],
-        masks: Mapping[int, FitsFile] | None = None,
-        errors: Mapping[int, FitsFile | float] | None = None,
-        units: Mapping[int, str] | None = None,
-        beams: Mapping[int, Mapping[str, Any]] | None = None,
+        files: Mapping[int, DataFiles],
         rpix: float | Sequence[float] | None = None,
-        rval: float | Sequence[float] | None = None,
-        spatial_correlations: Mapping[int, PSF] | None = None
+        rval: float | Sequence[float] | None = None
 ) -> tuple[dict[int, Data], gridutils.Coords]:
     """
     Read the moments of the given orders from their files (see
     Data.from_files), and return them with the world coordinates of their
     files, which must agree.
     """
-    masks = masks or {}
-    errors = errors or {}
-    units = units or {}
-    beams = beams or {}
-    spatial_correlations = spatial_correlations or {}
-    if extra := sorted(
-            (set(masks) | set(errors) | set(units) | set(beams)
-             | set(spatial_correlations)) - set(moments)):
-        raise ConfigError(
-            f"the moments {extra} have masks, errors, units, beams or "
-            f"correlations of their noise but no data")
     items, coords = {}, {}
-    for order, data in moments.items():
+    for order, item in files.items():
         items[order], coords[order] = Data.from_files(
-            data, masks.get(order), errors.get(order), rpix, rval,
-            unit=units.get(order), beam=beams.get(order),
-            spatial_correlation=spatial_correlations.get(order))
+            item.data, item.mask, item.error, rpix, rval, unit=item.unit,
+            beam=item.beam, spatial_correlation=item.spatial_correlation,
+            spectral_correlation=item.spectral_correlation)
     if not coords:
         raise ConfigError("a dataset needs at least one moment")
     first = next(iter(coords.values()))

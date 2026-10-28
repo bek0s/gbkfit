@@ -535,8 +535,9 @@ class _SpectralTables(Rule):
 
 class _QuantityRadii(Rule):
     """
-    The radii of inline mass tables are a Quantity (2026-10-28): radii
-    {value, unit}, not radii and radius_unit.
+    The radii of inline mass tables and of profile observations are a
+    Quantity (2026-10-28): radii {value, unit}, not radii and
+    radius_unit.
     """
 
     @staticmethod
@@ -559,6 +560,13 @@ class _QuantityRadii(Rule):
                     changes.append(Change(
                         path + ['mass', i],
                         "radii and radius_unit -> radii {value, unit}"))
+        for path, item in _items(config, 'observations'):
+            if item.get('type') == 'profile' and 'radius_unit' in item \
+                    and 'radii' in item:
+                item['radii'] = _flow(dict(
+                    value=item['radii'], unit=item.pop('radius_unit')))
+                changes.append(Change(
+                    path, "radii and radius_unit -> radii {value, unit}"))
         return changes
 
 

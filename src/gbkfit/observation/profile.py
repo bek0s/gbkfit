@@ -1,8 +1,9 @@
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 import astropy.units as u
 import numpy as np
+from annotated_types import Gt, Le
 from astropy.table import Table
 
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
@@ -11,7 +12,8 @@ from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState, LineCatalogue)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan
@@ -68,9 +70,7 @@ class ObservationProfile(Observation):
     its driver, and copied to its driver.
 
     In its configuration (type 'profile'), the data have the form of
-    DatasetProfile (no type); without data, it has its functions, its
-    radii (a list) and their unit (radius_unit), and their distance (Mpc),
-    if any.
+    DatasetProfile (no type; see DatasetProfile.from_file).
 
     Parameters
     ----------
@@ -135,19 +135,9 @@ class ObservationProfile(Observation):
         if info.get('data') is not None:
             with parseutils.config_path('data'):
                 info['data'] = DatasetProfile.load(dict(info['data']))
-        if 'radii' in info:
-            with parseutils.config_path('radii'):
-                unit = info.pop('radius_unit', None)
-                if unit is None:
-                    raise ConfigError(
-                        "the radii need their unit (radius_unit, e.g. kpc)")
-                info['radii'] = np.asarray(
-                    info['radii'], dtype=float) * unitutils.parse_unit(unit)
-        if info.get('distance') is not None:
-            info['distance'] = info['distance'] * u.Mpc
         parseutils.load_option_and_update_info(
             likelihood_parser, info, 'likelihood')
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
+        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -185,8 +175,9 @@ class ObservationProfile(Observation):
                 likelihood=likelihood_parser.dump(self._likelihood))
         info |= dict(
             functions=list(self.keys()),
-            radii=self._radii.value.tolist(),
-            radius_unit=unitutils.format_unit(self._radii.unit))
+            radii=dict(
+                value=self._radii.value.tolist(),
+                unit=unitutils.format_unit(self._radii.unit)))
         if self._distance is not None:
             info['distance'] = float(self._distance.to_value(u.Mpc))
         return info
@@ -195,13 +186,15 @@ class ObservationProfile(Observation):
             self,
             functions: Sequence[str] | None = None,
             radii: u.Quantity | None = None,
-            distance: u.Quantity | None = None,
-            inclination: float | None = None,
+            distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None,
+            inclination:
+            Annotated[float, Gt(0), Le(90), Unit('deg')] | None = None,
             galaxies: Sequence[str] | None = None,
             data: Dataset | None = None,
             likelihood: Likelihood | None = None,
             name: str | None = None
     ):
+        check_options(ObservationProfile.__init__, locals())
         if data is not None:
             if functions is not None or radii is not None \
                     or distance is not None:
@@ -214,6 +207,8 @@ class ObservationProfile(Observation):
                     f"(DatasetProfile); they are {type(data).__name__}")
             functions, radii, distance = \
                 tuple(data.keys()), data.radii(), data.distance()
+        elif distance is not None:
+            distance = distance * u.Mpc
         elif functions is None or radii is None:
             raise ConfigError(
                 "a profile without data needs its functions and its radii")
@@ -232,10 +227,6 @@ class ObservationProfile(Observation):
             raise ConfigError(
                 f"a profile is of one galaxy; it sees {list(galaxies)}")
         if inclination is not None:
-            if not 0 < inclination <= 90:
-                raise ConfigError(
-                    f"the inclination must be above 0 and at most 90 "
-                    f"degrees; it is {inclination}")
             if name is None:
                 raise ConfigError(
                     "a profile with an inclination needs a name, which "
@@ -301,7 +292,9 @@ class ObservationProfile(Observation):
         Make the table of data items of its functions (e.g. mock data) at
         its radii (see DatasetProfile).
         """
-        return DatasetProfile(items, self._radii, self._distance)
+        return DatasetProfile(
+            items, self._radii,
+            None if self._distance is None else self._distance.to_value(u.Mpc))
 
     def data_unit(self) -> DataUnit | None:
         """Return None: its data are not of light."""

@@ -366,11 +366,11 @@ def test_data_error_is_a_number_or_a_file():
 
 def test_data_items_are_mappings_or_null():
     # A null item is absent; an item that is not a mapping (e.g. a file
-    # name) is an error that says what an item has
+    # name) is an error that names the type of an item
     fits.writeto('m1.fits', np.ones((4, 4), np.float32))
     dataset = DatasetPixelMoments.load(dict(moment1=dict(data='m1.fits'), moment2=None))
     assert set(dataset.keys()) == {'moment1'}
-    with pytest.raises(Exception, match="has the file of its data"):
+    with pytest.raises(Exception, match="must be of type DataFiles"):
         DatasetPixelMoments.load(dict(moment1='m1.fits'))
 
 
@@ -399,8 +399,8 @@ def test_datasets_from_files_in_python(tmp_path):
     for order in (0, 1):
         fits.writeto(tmp_path / f'm{order}.fits', np.ones((5, 6)))
     moments = DatasetPixelMoments.from_files(
-        {0: str(tmp_path / 'm0.fits'), 1: str(tmp_path / 'm1.fits')},
-        errors={1: 0.5}, step=2)
+        moment0=DataFiles(str(tmp_path / 'm0.fits')),
+        moment1=DataFiles(str(tmp_path / 'm1.fits'), error=0.5), step=2)
     assert list(moments) == ['moment0', 'moment1']
     assert moments['moment1'].error()[0, 0] == 0.5
     assert moments.grid().coords.step == (2, 2)
@@ -409,9 +409,8 @@ def test_datasets_from_files_in_python(tmp_path):
 @pytest.mark.parametrize('call, message', [
     (lambda: DatasetPixelMoments({8: Data(np.ones((2, 2)))}),
      "orders of the moments are 0 to 7"),
-    (lambda: DatasetPixelMoments.from_files({0: 'm0.fits'}, masks={1: 'm'}),
-     r"moments \[1\] have masks, errors, units, beams or correlations of "
-     r"their noise but no data")])
+    (lambda: DatasetPixelMoments.from_files(),
+     "a dataset needs at least one moment")])
 def test_moments_of_datasets_are_checked(call, message):
     with pytest.raises(ConfigError, match=message):
         call()

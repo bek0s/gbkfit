@@ -10,6 +10,7 @@ import textwrap
 
 import pytest
 
+import gbkfit.dataset
 import gbkfit.fitting
 import gbkfit.instrument
 import gbkfit.model
@@ -20,11 +21,14 @@ import gbkfit.model.components.spheroids
 import gbkfit.model.components.traits
 import gbkfit.model.mass
 import gbkfit.params
+import gbkfit.region
+from gbkfit.observation.observables import traces
 from gbkfit.utils import funcutils, typeutils
 
 
 # The families whose options are declared, by their parsers or classes
 PARSERS = [
+    gbkfit.dataset.dataset_parser,
     gbkfit.fitting.bootstrap_scheme_parser,
     gbkfit.fitting.fitter_parser,
     gbkfit.instrument.lsf_parser,
@@ -56,7 +60,10 @@ PARSERS = [
     gbkfit.model.mass.spheroid_profile_parser,
     gbkfit.model.mass.spheroid_shape_parser,
     gbkfit.params.joint_prior_parser,
-    gbkfit.params.prior_parser]
+    gbkfit.params.prior_parser,
+    gbkfit.region.aperture_parser,
+    gbkfit.region.regions_parser,
+    traces.trace_parser]
 CLASSES = [
     gbkfit.fitting.BootstrapOptions,
     gbkfit.fitting.UncertaintyOptions,
@@ -85,7 +92,7 @@ def constructors():
                 yield pytest.param(func, id=f'{cls.__qualname__}.{name}')
 
 
-@pytest.mark.parametrize('func', constructors())
+@pytest.mark.parametrize('func', list(constructors()))
 def test_constructors_declare_their_options(func):
     params = funcutils.parameter_names(func).all
     assert set(params) <= set(typeutils.option_types(func))

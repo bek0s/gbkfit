@@ -8,7 +8,7 @@ import abc
 import os.path
 import re
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import astropy.io.fits as fits
 import astropy.units
@@ -18,7 +18,8 @@ import numpy.typing as npt
 import scipy.interpolate
 
 from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FilePath, Unit
 
 
 __all__ = [
@@ -92,9 +93,10 @@ class TracePolynomial(Trace):
     def __init__(
             self,
             wave: str | astropy.units.Quantity,
-            dx: Sequence[float],
-            dy: Sequence[float] = (0.0,)
+            dx: Annotated[Sequence[float], Unit('pixel')],
+            dy: Annotated[Sequence[float], Unit('pixel')] = (0.0,)
     ):
+        check_options(TracePolynomial.__init__, locals())
         quantity = gridutils.make_rest(wave)
         if quantity.unit.physical_type != 'length':
             raise ConfigError(
@@ -140,7 +142,7 @@ class TraceGrismConf(Trace):
         the image (e.g. of a cutout); (0, 0) by default.
 
     Its configuration has the coefficients, or a GRISMCONF file and the
-    order (file and order, and origin; see read).
+    order (file and order, and origin; see from_file).
 
     Raises
     ------
@@ -149,25 +151,18 @@ class TraceGrismConf(Trace):
         number of coefficients that is not (n + 1)(n + 2) / 2.
     """
 
+    config_constructors = ('__init__', 'from_file')
+
     @staticmethod
     def type() -> str:
         return 'grismconf'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'TraceGrismConf':
-        if 'file' not in info:
-            return super().load(info)
-        options = parseutils.parse_options(
-            info, ['file'], ['order', 'origin'])
-        return cls.read(
-            parseutils.resolve_path(options.pop('file')), **options)
-
-    @classmethod
-    def read(
+    def from_file(
             cls,
-            filename: str,
+            file: FilePath,
             order: str | int = '+1',
-            origin: Sequence[float] = (0, 0)
+            origin: Annotated[Sequence[float], Unit('pixel')] = (0, 0)
     ) -> 'TraceGrismConf':
         """
         Read the trace of an order of a GRISMCONF file (e.g. those of the
@@ -177,8 +172,8 @@ class TraceGrismConf(Trace):
 
         Parameters
         ----------
-        filename : str
-            The file.
+        file : str
+            The filename.
         order : str or int, optional
             The order (e.g. '+1', 0 or -1).
         origin : Sequence of float, optional
@@ -195,13 +190,14 @@ class TraceGrismConf(Trace):
             If the file lacks the order or some of its coefficients, or
             gives its wavelengths in other units than micron.
         """
+        check_options(TraceGrismConf.from_file, locals())
         beam = order if isinstance(order, str) \
             else f'+{order}' if order > 0 else str(order)
         terms: dict[str, dict[int, list[float]]] = dict(
             DISPL={}, DISPX={}, DISPY={})
         beams = []
-        with open(filename) as file:
-            for line in file:
+        with open(file) as lines:
+            for line in lines:
                 fields = line.split()
                 if not fields:
                     continue
@@ -210,7 +206,7 @@ class TraceGrismConf(Trace):
                         r'#\s*wavelength unit:\s*(\S+)', line, re.I)
                     if unit and unit.group(1).lower() != 'micron':
                         raise ConfigError(
-                            f"the GRISMCONF file {filename!r} gives its "
+                            f"the GRISMCONF file {file!r} gives its "
                             f"wavelengths in {unit.group(1)}, not micron")
                     continue
                 key, *values = fields
@@ -222,13 +218,13 @@ class TraceGrismConf(Trace):
                     terms[name][int(power)] = [float(v) for v in values]
         if beam not in beams:
             raise ConfigError(
-                f"the GRISMCONF file {filename!r} has no order {beam!r}; its "
+                f"the GRISMCONF file {file!r} has no order {beam!r}; its "
                 f"orders are {beams}")
         coefficients = {}
         for name, powers in terms.items():
             if sorted(powers) != list(range(len(powers))) or not powers:
                 raise ConfigError(
-                    f"the GRISMCONF file {filename!r} lacks coefficients "
+                    f"the GRISMCONF file {file!r} lacks coefficients "
                     f"{name}_{beam}_n: it has those of n = {sorted(powers)}")
             coefficients[name.lower()] = [powers[n] for n in sorted(powers)]
         return cls(**coefficients, origin=origin)
@@ -246,8 +242,9 @@ class TraceGrismConf(Trace):
             displ: Sequence[Sequence[float]],
             dispx: Sequence[Sequence[float]],
             dispy: Sequence[Sequence[float]],
-            origin: Sequence[float] = (0.0, 0.0)
+            origin: Annotated[Sequence[float], Unit('pixel')] = (0.0, 0.0)
     ):
+        check_options(TraceGrismConf.__init__, locals())
         polynomials = dict(displ=displ, dispx=dispx, dispy=dispy)
         for name, terms in polynomials.items():
             if not len(terms):
@@ -338,7 +335,7 @@ class TraceTable(Trace):
     along each axis. Places beyond the grid take the offsets of its
     nearest edge; wavelengths beyond it are refused.
 
-    Its configuration is a FITS file of it (see read and write).
+    Its configuration is a FITS file of it (see from_file and write).
 
     Parameters
     ----------
@@ -358,14 +355,11 @@ class TraceTable(Trace):
         ascending, or the offsets are not finite or not of their shape.
     """
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'table'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'TraceTable':
-        options = parseutils.parse_options(info, ['file'], [])
-        return cls.read(parseutils.resolve_path(options['file']))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -377,7 +371,7 @@ class TraceTable(Trace):
             file=filename if dump_path else os.path.basename(filename))
 
     @classmethod
-    def read(cls, filename: str) -> 'TraceTable':
+    def from_file(cls, file: FilePath) -> 'TraceTable':
         """
         Read a trace from a FITS file of its nodes and offsets (see write).
 
@@ -386,11 +380,12 @@ class TraceTable(Trace):
         ConfigError
             If the file lacks an extension of the trace.
         """
-        with fits.open(filename) as hdus:
+        check_options(TraceTable.from_file, locals())
+        with fits.open(file) as hdus:
             names = [hdu.name for hdu in hdus]
             if missing := [n for n in _TABLE_EXTENSIONS if n not in names]:
                 raise ConfigError(
-                    f"the trace file {filename!r} lacks the extensions "
+                    f"the trace file {file!r} lacks the extensions "
                     f"{missing}")
             return cls(*(np.array(hdus[n].data) for n in _TABLE_EXTENSIONS))
 
@@ -407,12 +402,13 @@ class TraceTable(Trace):
 
     def __init__(
             self,
-            wave: Sequence[float],
-            x: Sequence[float],
-            y: Sequence[float],
-            dx: npt.ArrayLike,
-            dy: npt.ArrayLike
+            wave: Annotated[Sequence[float], Unit('m')],
+            x: Annotated[Sequence[float], Unit('pixel')],
+            y: Annotated[Sequence[float], Unit('pixel')],
+            dx: Annotated[npt.ArrayLike, Unit('pixel')],
+            dy: Annotated[npt.ArrayLike, Unit('pixel')]
     ):
+        check_options(TraceTable.__init__, locals())
         nodes = [np.asarray(a, dtype=float) for a in (wave, y, x)]
         for name, axis in zip(('wave', 'y', 'x'), nodes):
             if axis.ndim != 1 or len(axis) < 4 \
