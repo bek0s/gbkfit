@@ -2,10 +2,11 @@
 Parsing of configurations.
 
 A configuration describes an object with a dict of options: the
-parameters of the __init__ of its class. A configuration with the option
-'type' describes an object of one of several classes (e.g. a component),
-which is chosen by its type. The errors in a configuration have the path
-to the part with the error (see ConfigError).
+parameters of a constructor of its class, __init__ or a named one (e.g.
+from_file; see Serializable.config_constructors). A configuration with
+the option 'type' describes an object of one of several classes (e.g. a
+component), which is chosen by its type. The errors in a configuration
+have the path to the part with the error (see ConfigError).
 """
 
 import abc
@@ -14,12 +15,13 @@ import contextvars
 import copy
 import difflib
 import importlib
-import inspect
 import logging
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from typing import Any, Literal, NamedTuple, Self
+
+import astropy.units
 
 from . import funcutils, iterutils, typeutils
 
@@ -525,8 +527,14 @@ def parse_options_for_callable(
 
     The parameters without a default value are required options, and the
     others optional ones. An option must match the type annotation of its
-    parameter, if any (see typeutils.matches_type). Unknown options are
-    reported (see report_unknown) and left out.
+    parameter, if any, and its range (see typeutils.problem). Unknown
+    options are reported (see report_unknown) and left out.
+
+    Options of some types are given in a form of their own (see
+    from_config): a FilePath is relative to the directory of the
+    configuration (see resolve_path), a FitsFile is a filename or a dict
+    with the filename (file) and the HDU (hdu), and a Quantity is a dict
+    with its value and unit (e.g. {value: [1, 2], unit: kpc}).
 
     Parameters
     ----------
@@ -572,18 +580,98 @@ def parse_options_for_callable(
     # The types of the options, and their parameters
     types = {
         rename_params.get(p, p): type_
-        for p, type_ in inspect.get_annotations(func).items()}
+        for p, type_ in typeutils.option_types(func).items()}
     types |= add_required | add_optional
     option_params = {option: p for p, option in rename_params.items()}
     args = {}
     for option, value in options.items():
         type_ = types.get(option)
-        if type_ is not None and not typeutils.matches_type(value, type_):
-            raise ConfigError(
-                f"option '{option}' must be of type "
-                f"{typeutils.describe_type(type_)}; it is {value!r}")
+        if type_ is not None:
+            with config_path(option):
+                value = from_config(value, type_)
+            if problem := typeutils.problem(value, type_):
+                raise ConfigError(f"option '{option}' {problem}")
         args[option_params.get(option, option)] = value
     return args
+
+
+def from_config(value: Any, type_: Any) -> Any:
+    """
+    Return the value of an option of a type annotation from the form a
+    configuration gives it in (see parse_options_for_callable); values in
+    no form of their own are returned as they are.
+
+    Parameters
+    ----------
+    value : Any
+        The value in the configuration.
+    type_ : Any
+        The annotation.
+
+    Returns
+    -------
+    Any
+        The value.
+
+    Raises
+    ------
+    ConfigError
+        If the value is in a form of its own and invalid.
+    """
+    for member in typeutils.union_members(type_):
+        if member == typeutils.FilePath and isinstance(value, str):
+            return resolve_path(value)
+        if member == typeutils.FitsFile and isinstance(value, str | Mapping):
+            file, hdu = parse_file(value)
+            return (file, hdu) if isinstance(value, Mapping) else file
+        if member is astropy.units.Quantity and isinstance(value, Mapping):
+            return _quantity(value)
+    return value
+
+
+def _quantity(info: Mapping[str, Any]) -> astropy.units.Quantity:
+    """Return the Quantity of a dict with its value and unit."""
+    # (unitutils imports this module)
+    from gbkfit.utils import unitutils
+    options = parse_options(dict(info), required={'value', 'unit'})
+    with config_path('unit'):
+        unit = unitutils.parse_unit(options['unit'])
+    try:
+        return astropy.units.Quantity(options['value'], unit, dtype=float)
+    except (TypeError, ValueError) as e:
+        raise ConfigError(
+            f"option 'value' must be a number or a list of numbers; it is "
+            f"{options['value']!r}") from e
+
+
+def check_options(func: Callable, values: Mapping[str, Any]) -> None:
+    """
+    Check the arguments of a call of a constructor against the type
+    annotations of its parameters: their types, ranges (e.g.
+    ``Annotated[float, Gt(0)]``) and choices (``Literal``; see
+    typeutils.problem).
+
+    Each constructor that configurations call (see
+    Serializable.config_constructors) calls it first, with its
+    arguments, e.g. ``check_options(self.__init__, locals())``: options
+    are checked alike in Python and in configurations.
+
+    Parameters
+    ----------
+    func : Callable
+        The constructor.
+    values : Mapping
+        The arguments, by name (others are ignored, e.g. self).
+
+    Raises
+    ------
+    ConfigError
+        If an argument does not match its annotation.
+    """
+    for name, type_ in typeutils.option_types(func).items():
+        if name in values \
+                and (problem := typeutils.problem(values[name], type_)):
+            raise ConfigError(f"option '{name}' {problem}")
 
 
 def _check_param_options(
@@ -758,12 +846,19 @@ class Serializable(abc.ABC):
     An object that can be loaded from, and dumped to, a configuration.
     """
 
+    # The constructors that configurations call, by name: '__init__' or
+    # named ones (e.g. 'from_file'). A configuration has the options of
+    # one of them, which it is the only one to have (see
+    # config_constructor)
+    config_constructors: tuple[str, ...] = ('__init__',)
+
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
         """
         Load an object from its configuration.
 
-        By default, the options are the parameters of __init__ (see
+        By default, the options are the parameters of one of its
+        config_constructors (see config_constructor and
         parse_options_for_callable).
 
         Parameters
@@ -776,7 +871,10 @@ class Serializable(abc.ABC):
         Self
             The object.
         """
-        return cls(**parse_options_for_callable(info, cls.__init__))
+        name = config_constructor(cls, info)
+        func = cls.__init__ if name == '__init__' else getattr(cls, name)
+        args = parse_options_for_callable(info, func)
+        return cls(**args) if name == '__init__' else func(**args)
 
     @abc.abstractmethod
     def dump(self, *args, **kwargs) -> dict[str, Any]:
@@ -788,6 +886,54 @@ class Serializable(abc.ABC):
         dict
             The options.
         """
+
+
+def config_constructor(
+        cls: type[Serializable], info: Mapping[str, Any]
+) -> str:
+    """
+    Return the name of the constructor of a class (one of its
+    config_constructors) whose options a configuration has: the one
+    whose own options (those the others do not have) it has.
+
+    Parameters
+    ----------
+    cls : type
+        The class.
+    info : Mapping
+        The options.
+
+    Returns
+    -------
+    str
+        The name of the constructor.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration has the own options of none or of several of
+        the constructors.
+    """
+    names = cls.config_constructors
+    if len(names) == 1:
+        return names[0]
+    params = {}
+    for name in names:
+        func = cls.__init__ if name == '__init__' else getattr(cls, name)
+        params[name] = set(funcutils.parameter_names(func).all)
+    own = {
+        name: params[name].difference(
+            *(params[other] for other in names if other != name))
+        for name in names}
+    given = [name for name in names if own[name] & set(info)]
+    if len(given) == 1:
+        return given[0]
+    forms = '; or '.join(_quoted(own[name]) for name in names)
+    raise ConfigError(
+        f"give the options of one of its forms, which have {forms}; it has "
+        + (f"those of several: "
+           f"{_quoted(set(info) & set().union(*own.values()))}"
+           if given else "none of them"))
 
 
 class TypedSerializable(Serializable, abc.ABC):

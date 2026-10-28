@@ -6,9 +6,10 @@ import numpy as np
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
-from .data import Data, FitsFile, dump_data
+from .data import Data, dump_data
 
 
 __all__ = [

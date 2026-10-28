@@ -2,14 +2,18 @@
 Tests for the parsing of configurations.
 """
 
+import re
 import typing
 from collections.abc import Mapping, Sequence
-from typing import Literal
+from typing import Annotated, Literal
 
+import astropy.units as u
 import numpy as np
 import pytest
+from annotated_types import Gt, Le
 
 from gbkfit.utils import parseutils, typeutils
+from gbkfit.utils.typeutils import FitsFile, Unit
 
 
 DIMENSIONAL = dict(size=int, step=float)
@@ -252,3 +256,67 @@ def test_matches_type_of_unrecognized_types(type_):
     (Mapping[str, float], 'Mapping[str, float]')])
 def test_describe_type(type_, label):
     assert typeutils.describe_type(type_) == label
+
+
+class Beam(parseutils.Serializable):
+    """A beam given by its axes, or by a file."""
+
+    config_constructors = ('__init__', 'from_file')
+
+    def __init__(
+            self,
+            bmaj: Annotated[float, Gt(0), Unit('arcsec')],
+            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
+            shape: Literal['gauss', 'airy'] = 'gauss'
+    ):
+        parseutils.check_options(self.__init__, locals())
+        self.bmaj = bmaj
+
+    @classmethod
+    def from_file(
+            cls, file: FitsFile, scale: u.Quantity | None = None
+    ) -> 'Beam':
+        parseutils.check_options(cls.from_file, locals())
+        beam = cls(1.0)
+        beam.file, beam.scale = file, scale
+        return beam
+
+    def dump(self):
+        return {}
+
+
+@pytest.mark.parametrize('kwargs, message', [
+    (dict(bmaj=-1), "option 'bmaj' must be greater than 0; it is -1"),
+    (dict(bmaj=1, ratio=1.5),
+     "option 'ratio' must be greater than 0 and at most 1; it is 1.5"),
+    (dict(bmaj=1, shape='box'),
+     "option 'shape' must be one of 'gauss', 'airy'; it is 'box'"),
+    (dict(bmaj='1'), "option 'bmaj' must be of type float; it is '1'")])
+def test_python_calls_are_checked(kwargs, message):
+    with pytest.raises(parseutils.ConfigError, match=re.escape(message)):
+        Beam(**kwargs)
+    with pytest.raises(parseutils.ConfigError, match=re.escape(message)):
+        Beam.load(kwargs)
+
+
+def test_numpy_values_are_checked_as_python_values():
+    assert Beam(np.float64(2)).bmaj == 2
+
+
+def test_configurations_call_the_constructor_of_their_options(tmp_path):
+    assert Beam.load(dict(bmaj=2)).bmaj == 2
+    with parseutils.paths_relative_to(str(tmp_path)):
+        beam = Beam.load(dict(
+            file=dict(file='beam.fits', hdu=1),
+            scale=dict(value=2, unit='arcsec')))
+    assert beam.file == (str(tmp_path / 'beam.fits'), 1)
+    assert beam.scale == 2 * u.arcsec
+
+
+@pytest.mark.parametrize('info, message', [
+    (dict(bmaj=2, file='beam.fits'),
+     "it has those of several: 'bmaj', 'file'"),
+    (dict(), "it has none of them")])
+def test_configurations_have_the_options_of_one_constructor(info, message):
+    with pytest.raises(parseutils.ConfigError, match=message):
+        Beam.load(info)

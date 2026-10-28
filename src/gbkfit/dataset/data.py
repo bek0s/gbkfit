@@ -5,7 +5,7 @@ Data items: measured values, with their mask and error.
 
 import os.path
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any, NamedTuple, TypeAlias
+from typing import Any, NamedTuple
 
 import astropy.units
 import numpy as np
@@ -13,12 +13,12 @@ import numpy as np
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import FitsFile
 
 
 __all__ = [
     'Beam',
     'Data',
-    'FitsFile',
     'dump_data',
     'fits_file'
 ]
@@ -41,11 +41,6 @@ class Beam(NamedTuple):
     def area(self) -> float | np.ndarray:
         """Return its solid angle (arcsec^2): pi / (4 ln 2) bmaj bmin."""
         return np.pi / (4 * np.log(2)) * np.multiply(self.bmaj, self.bmin)
-
-
-# A FITS file: its filename, or its filename and the HDU to read (by
-# default the first)
-FitsFile: TypeAlias = str | tuple[str, int | str]
 
 
 def _read(

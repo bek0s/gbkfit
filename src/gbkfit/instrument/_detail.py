@@ -2,7 +2,7 @@
 Helpers shared by the PSFs, the LSFs and the primary beams.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, TypeVar
 
 import astropy.units as u
@@ -26,19 +26,6 @@ _Term = TypeVar('_Term', 'PSF', 'LSF')
 # they are 0, and the arrays are normalised to sum to 1.
 MIN_EXTENT = 8
 WING_FLUX = 0.01
-
-
-def check_scale(name: str, value: float) -> None:
-    """Raise ConfigError unless a scale length (e.g. sigma) is > 0."""
-    if not value > 0:
-        raise ConfigError(f"{name} must be greater than 0; it is {value}")
-
-
-def check_ratio(ratio: float) -> None:
-    """Raise ConfigError unless an axis ratio is in (0, 1]."""
-    if not 0 < ratio <= 1:
-        raise ConfigError(
-            f"ratio must be greater than 0 and at most 1; it is {ratio}")
 
 
 def check_finite_size(kernel: 'PSF | LSF', *size: float) -> None:
@@ -73,25 +60,6 @@ def embed(
         slices.append(slice(start, start + k))
     data[tuple(slices)] = kernel
     return data
-
-
-def load_from_file(
-        cls: type, info: Mapping[str, Any], prefix: str = '', **given: Any
-) -> Any:
-    """
-    Load an object of a class with a from_file from a configuration: its
-    file (a filename, or a dict with the filename and the HDU; prefix is
-    prepended to the filename), and the other parameters of from_file,
-    which are checked like options, with those given.
-    """
-    info = dict(info)
-    file, hdu = parseutils.load_option(
-        parseutils.parse_file, info, 'file', required=True)
-    del info['file']
-    options = parseutils.parse_options_for_callable(
-        info, cls.from_file, ignore_params=['filename', 'hdu', *given])
-    with parseutils.config_path('file'):
-        return cls.from_file(prefix + file, hdu, **options, **given)
 
 
 def spectral_points(wcs: astropy.wcs.WCS, n: int) -> u.Quantity | None:

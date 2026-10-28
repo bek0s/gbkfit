@@ -6,16 +6,18 @@ where it points (e.g. the primary beam of a radio interferometer).
 import abc
 import os.path
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import astropy.units as u
 import numpy as np
 import scipy.ndimage
 import scipy.special
+from annotated_types import Gt
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from . import _detail, varying
-from ._detail import check_scale
+from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from . import varying
 
 
 __all__ = [
@@ -151,14 +153,12 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
 
     def __init__(
             self,
-            fwhm: float,
-            x: float = 0,
-            y: float = 0,
-            frequency: float | None = None
+            fwhm: Annotated[float, Gt(0), Unit('arcsec')],
+            x: Annotated[float, Unit('arcsec')] = 0,
+            y: Annotated[float, Unit('arcsec')] = 0,
+            frequency: Annotated[float, Gt(0), Unit('Hz')] | None = None
     ):
-        check_scale('fwhm', fwhm)
-        if frequency is not None:
-            check_scale('frequency', frequency)
+        check_options(self.__init__, locals())
         self._fwhm = fwhm
         self._x = x
         self._y = y
@@ -222,9 +222,7 @@ class PrimaryBeamImage(PrimaryBeam):
     image: the same at all frequencies (not supported yet: a cube of an
     image for each channel, e.g. a CASA .pb cube).
 
-    Its configuration has its file (a filename, or a dict with the
-    filename and the HDU); the world coordinates come from the header,
-    unless given.
+    Configurations give its file (see from_file).
 
     Parameters
     ----------
@@ -239,25 +237,22 @@ class PrimaryBeamImage(PrimaryBeam):
     # TODO: a cube of an image for each channel (e.g. a CASA .pb cube),
     # which varies (see varies and at), as the beams of PrimaryBeamRadial
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'image'
 
     @classmethod
-    def load(
-            cls, info: dict[str, Any], prefix: str = ''
-    ) -> 'PrimaryBeamImage':
-        return _detail.load_from_file(cls, info, prefix)
-
-    @classmethod
     def from_file(
             cls,
-            filename: str,
-            hdu: int | str = 0,
-            step: float | Sequence[float] | None = None,
+            file: FitsFile,
+            step: Annotated[
+                float | Sequence[float], Unit('arcsec')] | None = None,
             rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rval: Annotated[
+                float | Sequence[float], Unit('deg')] | None = None,
+            rota: Annotated[float, Unit('deg')] | None = None
     ) -> 'PrimaryBeamImage':
         """
         Read a primary beam image, and its world coordinates, from a FITS
@@ -265,10 +260,8 @@ class PrimaryBeamImage(PrimaryBeam):
 
         Parameters
         ----------
-        filename : str
-            The file.
-        hdu : int or str, optional
-            The HDU of the image.
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the image.
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the image (see gridutils.make_grid);
             by default, those of the header. Either rpix or rval can be
@@ -283,7 +276,8 @@ class PrimaryBeamImage(PrimaryBeam):
         PrimaryBeamImage
             The primary beam.
         """
-        data, coords = fitsutils.read_data(filename, hdu, rpix, rval)
+        check_options(cls.from_file, locals())
+        data, coords = fitsutils.read_data(*split_fits_file(file), rpix, rval)
         return cls(
             data, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota)
@@ -302,11 +296,14 @@ class PrimaryBeamImage(PrimaryBeam):
     def __init__(
             self,
             data: np.ndarray,
-            step: float | Sequence[float] | None = None,
+            step: Annotated[
+                float | Sequence[float], Unit('arcsec')] | None = None,
             rpix: float | Sequence[float] | None = None,
-            rval: float | Sequence[float] | None = None,
-            rota: float | None = None
+            rval: Annotated[
+                float | Sequence[float], Unit('deg')] | None = None,
+            rota: Annotated[float, Unit('deg')] | None = None
     ):
+        check_options(self.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2:
             raise parseutils.ConfigError(

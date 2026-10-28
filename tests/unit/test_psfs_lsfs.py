@@ -321,13 +321,13 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
 
 
 @pytest.mark.parametrize('make, message', [
-    (lambda: PSFGauss(0), "sigma must be greater than 0"),
-    (lambda: PSFGauss(1, ratio=0), "ratio must be greater than 0"),
-    (lambda: PSFGGauss(1, 1, ratio=1.5), "ratio must be greater than 0"),
-    (lambda: PSFGGauss(1, -1), "beta must be greater than 0"),
-    (lambda: PSFMoffat(1, 1), "finite flux only for beta > 1"),
-    (lambda: LSFLorentz(-1), "gamma must be greater than 0"),
-    (lambda: LSFMoffat(1, 0.5), "finite flux only for beta > 0.5")])
+    (lambda: PSFGauss(0), "option 'sigma' must be greater than 0"),
+    (lambda: PSFGauss(1, ratio=0), "option 'ratio' must be greater than 0"),
+    (lambda: PSFGGauss(1, 1, ratio=1.5), "and at most 1; it is 1.5"),
+    (lambda: PSFGGauss(1, -1), "option 'beta' must be greater than 0"),
+    (lambda: PSFMoffat(1, 1), "option 'beta' must be greater than 1"),
+    (lambda: LSFLorentz(-1), "option 'gamma' must be greater than 0"),
+    (lambda: LSFMoffat(1, 0.5), "option 'beta' must be greater than 0.5")])
 def test_invalid_profiles_are_rejected(make, message):
     with pytest.raises(RuntimeError, match=message):
         make()
@@ -446,7 +446,8 @@ def test_psf_beam_from_a_header(tmp_path):
 
 @pytest.mark.parametrize('info, message', [
     (dict(bmaj=1, bmin=2), "at most bmaj"),
-    (dict(bmaj=1, bmin=1, file='cube.fits'), "either a file")])
+    (dict(bmaj=1, bmin=1, file='cube.fits'),
+     "those of several: 'bmaj', 'bmin', 'file'")])
 def test_psf_beam_options_are_checked(info, message):
     from gbkfit.instrument import psf_parser
     with pytest.raises(Exception, match=message):

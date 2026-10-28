@@ -467,6 +467,72 @@ class _VisibilityFields(Rule):
         return changes
 
 
+class _SpectralTables(Rule):
+    """
+    The tables of the options of PSFs and LSFs that vary along the
+    spectral axis, and image PSFs and LSFs, have the options of their
+    constructors (2026-10-28): the file of a table is file, not table;
+    their points are points, {value, unit}, not wavelength, frequency or
+    velocity, {values, unit} (velocities without a unit are in km/s);
+    values with a unit are values and unit.
+    """
+
+    _AXES = ('wavelength', 'frequency', 'velocity')
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            changes += self._walk(item, path)
+        return changes
+
+    def _walk(self, value: Any, path: list[str | int]) -> list[Change]:
+        """Rewrite the tables in a value and its items, in place."""
+        changes = []
+        if isinstance(value, MutableMapping):
+            if self._table(value):
+                changes.append(Change(path, (
+                    "a table (or images): file, points {value, unit}, "
+                    "values and unit")))
+            for key, item in value.items():
+                changes += self._walk(item, path + [key])
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                changes += self._walk(item, path + [i])
+        return changes
+
+    def _table(self, mapping: MutableMapping[str, Any]) -> bool:
+        """
+        Rewrite a dictionary in place if it is a table or image PSF or
+        LSF, and return whether it is.
+        """
+        changed = False
+        if 'table' in mapping and 'column' in mapping:
+            _rename(mapping, 'table', 'file')
+            changed = True
+        axes = [axis for axis in self._AXES if axis in mapping]
+        if len(axes) == 1 and (
+                'values' in mapping or mapping.get('type') == 'images'):
+            axis = axes[0]
+            points = mapping[axis]
+            if isinstance(points, MutableMapping) and 'values' in points:
+                _rename(points, 'values', 'value')
+            elif axis == 'velocity':
+                mapping[axis] = _flow(dict(value=points, unit='km/s'))
+            _rename(mapping, axis, 'points')
+            changed = True
+        values = mapping.get('values')
+        if 'points' in mapping and isinstance(values, MutableMapping) \
+                and 'values' in values:
+            mapping['values'] = values['values']
+            mapping['unit'] = values.get('unit')
+            changed = True
+        return changed
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -476,6 +542,7 @@ RULES: tuple[Rule, ...] = (
     _TypedKinematics(),
     _SpectralAxes(),
     _VisibilityFields(),
+    _SpectralTables(),
 )
 
 

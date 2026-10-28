@@ -10,7 +10,7 @@ along the spectral axis (see varying).
 import abc
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import astropy.io.fits
 import astropy.units as u
@@ -20,12 +20,14 @@ import numpy as np
 import scipy.ndimage
 import scipy.signal
 import scipy.special
+from annotated_types import Gt, Le
 
 import gbkfit.math
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
 from . import _detail, varying
-from ._detail import MIN_EXTENT, WING_FLUX, check_ratio, check_scale
+from ._detail import MIN_EXTENT, WING_FLUX
 
 
 __all__ = [
@@ -54,8 +56,9 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         """
         Load a PSF from its configuration.
 
-        Options that are tables make a PSF that varies along the spectral
-        axis (see varying and PSFVarying).
+        Options that can vary (see VARYING_OPTIONS) given as tables make a
+        PSF that varies along the spectral axis (see varying and
+        PSFVarying).
 
         Parameters
         ----------
@@ -67,7 +70,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         PSF
             The PSF.
         """
-        options = varying.load_tables(info)
+        options = varying.load_tables(cls, info)
         if options != info:
             return cls.varying(**options)
         return super().load(info)
@@ -366,7 +369,7 @@ class PSFGauss(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = dict(sigma='arcsec', ratio='', posa='deg')
+    VARYING_OPTIONS = ('sigma', 'ratio', 'posa')
 
     @staticmethod
     def type() -> str:
@@ -382,9 +385,13 @@ class PSFGauss(PSF):
             ratio=self._ratio,
             posa=self._posa)
 
-    def __init__(self, sigma: float, ratio: float = 1.0, posa: float = 0.0):
-        check_scale('sigma', sigma)
-        check_ratio(ratio)
+    def __init__(
+            self,
+            sigma: Annotated[float, Gt(0), Unit('arcsec')],
+            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
+            posa: Annotated[float, Unit('deg')] = 0.0
+    ):
+        check_options(self.__init__, locals())
         self._sigma = sigma
         self._ratio = ratio
         self._posa = posa
@@ -436,7 +443,7 @@ class PSFGGauss(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = dict(alpha='arcsec', beta='', ratio='', posa='deg')
+    VARYING_OPTIONS = ('alpha', 'beta', 'ratio', 'posa')
 
     @staticmethod
     def type() -> str:
@@ -455,14 +462,12 @@ class PSFGGauss(PSF):
 
     def __init__(
             self,
-            alpha: float,
-            beta: float,
-            ratio: float = 1.0,
-            posa: float = 0.0
+            alpha: Annotated[float, Gt(0), Unit('arcsec')],
+            beta: Annotated[float, Gt(0)],
+            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
+            posa: Annotated[float, Unit('deg')] = 0.0
     ):
-        check_scale('alpha', alpha)
-        check_scale('beta', beta)
-        check_ratio(ratio)
+        check_options(self.__init__, locals())
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
@@ -519,7 +524,7 @@ class PSFMoffat(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = dict(alpha='arcsec', beta='', ratio='', posa='deg')
+    VARYING_OPTIONS = ('alpha', 'beta', 'ratio', 'posa')
 
     @staticmethod
     def type() -> str:
@@ -538,17 +543,12 @@ class PSFMoffat(PSF):
 
     def __init__(
             self,
-            alpha: float,
-            beta: float,
-            ratio: float = 1.0,
-            posa: float = 0.0
+            alpha: Annotated[float, Gt(0), Unit('arcsec')],
+            beta: Annotated[float, Gt(1)],
+            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
+            posa: Annotated[float, Unit('deg')] = 0.0
     ):
-        check_scale('alpha', alpha)
-        if not beta > 1:
-            raise ConfigError(
-                "a Moffat PSF has finite flux only for beta > 1; "
-                f"beta is {beta}")
-        check_ratio(ratio)
+        check_options(self.__init__, locals())
         self._alpha = alpha
         self._beta = beta
         self._ratio = ratio
@@ -592,9 +592,7 @@ class PSFImage(PSF):
     resampled to the pixels it is drawn on (with splines of order 5).
 
     The image is in the frame of the pixels of the data, so it is not
-    rotated with them. Its configuration has its file (a filename, or a
-    dict with the filename and the HDU), and the size of its pixels comes
-    from the header unless step is given.
+    rotated with them. Configurations give its file (see from_file).
 
     Parameters
     ----------
@@ -604,30 +602,25 @@ class PSFImage(PSF):
         The size of the pixels of the image along x and y (arcsec).
     """
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'image'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'PSFImage':
-        return _detail.load_from_file(cls, info)
-
-    @classmethod
     def from_file(
             cls,
-            filename: str,
-            hdu: int | str = 0,
-            step: Sequence[float] | None = None
+            file: FitsFile,
+            step: Annotated[Sequence[float], Unit('arcsec')] | None = None
     ) -> 'PSFImage':
         """
         Read a PSF image from a FITS file.
 
         Parameters
         ----------
-        filename : str
-            The file.
-        hdu : int or str, optional
-            The HDU of the image.
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the image.
         step : Sequence of float, optional
             The size of the pixels of the image along x and y (arcsec); by
             default, that of the header.
@@ -637,7 +630,8 @@ class PSFImage(PSF):
         PSFImage
             The PSF.
         """
-        data, coords = fitsutils.read_data(filename, hdu)
+        check_options(cls.from_file, locals())
+        data, coords = fitsutils.read_data(*split_fits_file(file))
         return cls(data, coords.step if step is None else step)
 
     def dump(
@@ -654,8 +648,11 @@ class PSFImage(PSF):
             step=self._step)
 
     def __init__(
-            self, data: np.ndarray, step: Sequence[float] = (1.0, 1.0)
+            self,
+            data: np.ndarray,
+            step: Annotated[Sequence[float], Unit('arcsec')] = (1.0, 1.0)
     ):
+        check_options(self.__init__, locals())
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 2:
             raise ConfigError(
@@ -735,6 +732,7 @@ class PSFSum(PSF):
             weights=self._weights.tolist())
 
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
+        check_options(self.__init__, locals())
         self._psfs = tuple(psfs)
         self._weights = _detail.sum_weights(
             weights, len(self._psfs), "a sum of PSFs")
@@ -813,6 +811,7 @@ class PSFConvolution(PSF):
                 psf_parser, self._psfs, prefix, dump_path, overwrite))
 
     def __init__(self, psfs: Sequence[PSF]):
+        check_options(self.__init__, locals())
         if not psfs:
             raise ConfigError("a convolution of PSFs needs at least one PSF")
         self._psfs = tuple(psfs)
@@ -860,9 +859,8 @@ class PSFGaussBeam(PSF):
     """
     An elliptical Gaussian given as radio data give their beams.
 
-    Its configuration can instead have a FITS file (a filename, or a dict
-    with the filename and the HDU), e.g. of the data, whose header has
-    BMAJ, BMIN and BPA (degrees): {type: gauss_beam, file: cube.fits}.
+    Configurations give it by its axes, or by a FITS file whose header
+    has them (see from_file), e.g. {type: gauss_beam, file: cube.fits}.
 
     Parameters
     ----------
@@ -873,35 +871,24 @@ class PSFGaussBeam(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = dict(bmaj='arcsec', bmin='arcsec', bpa='deg')
+    VARYING_OPTIONS = ('bmaj', 'bmin', 'bpa')
+
+    config_constructors = ('__init__', 'from_file')
 
     @staticmethod
     def type() -> str:
         return 'gauss_beam'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'PSFGaussBeam':
-        if 'file' in info:
-            if any(key in info for key in ('bmaj', 'bmin', 'bpa')):
-                raise ConfigError(
-                    "give either a file, or bmaj, bmin and bpa")
-            return _detail.load_from_file(cls, info)
-        return super().load(info)
-
-    @classmethod
-    def from_file(
-            cls, filename: str, hdu: int | str = 0
-    ) -> 'PSFGaussBeam':
+    def from_file(cls, file: FitsFile) -> 'PSFGaussBeam':
         """
         Read a beam from the header of a FITS file (BMAJ, BMIN and BPA, in
         degrees), e.g. of the data.
 
         Parameters
         ----------
-        filename : str
-            The file.
-        hdu : int or str, optional
-            The HDU of the header.
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the header.
 
         Returns
         -------
@@ -913,6 +900,8 @@ class PSFGaussBeam(PSF):
         ConfigError
             If the header has no beam.
         """
+        check_options(cls.from_file, locals())
+        filename, hdu = split_fits_file(file)
         header = astropy.io.fits.getheader(filename, hdu)
         missing = [
             key for key in ('BMAJ', 'BMIN', 'BPA') if key not in header]
@@ -929,9 +918,13 @@ class PSFGaussBeam(PSF):
         return dict(
             type=self.type(), bmaj=self._bmaj, bmin=self._bmin, bpa=self._bpa)
 
-    def __init__(self, bmaj: float, bmin: float, bpa: float = 0.0):
-        check_scale('bmaj', bmaj)
-        check_scale('bmin', bmin)
+    def __init__(
+            self,
+            bmaj: Annotated[float, Gt(0), Unit('arcsec')],
+            bmin: Annotated[float, Gt(0), Unit('arcsec')],
+            bpa: Annotated[float, Unit('deg')] = 0.0
+    ):
+        check_options(self.__init__, locals())
         if bmin > bmaj:
             raise ConfigError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
@@ -1002,12 +995,8 @@ class PSFImages(PSF):
     PSF (see PSFImage) of the images of the two nearest points,
     interpolated linearly; beyond the points, that of the nearest image.
 
-    Its configuration has its file (a filename, or a dict with the
-    filename and the HDU): a FITS cube of the images (nz, ny, nx), with
-    its spectral axis last. The points come from its spectral axis unless
-    given as wavelength, frequency or velocity (see varying.load_points),
-    and the size of the pixels comes from its celestial axes unless step
-    is given.
+    Configurations give its file, a FITS cube of the images (see
+    from_file).
 
     Parameters
     ----------
@@ -1019,33 +1008,27 @@ class PSFImages(PSF):
         The size of the pixels of the images along x and y (arcsec).
     """
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'images'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'PSFImages':
-        info = dict(info)
-        return _detail.load_from_file(
-            cls, info, points=varying.load_points(info))
-
-    @classmethod
     def from_file(
             cls,
-            filename: str,
-            hdu: int | str = 0,
+            file: FitsFile,
             points: u.Quantity | None = None,
-            step: Sequence[float] | None = None
+            step: Annotated[Sequence[float], Unit('arcsec')] | None = None
     ) -> 'PSFImages':
         """
-        Read PSF images from a FITS cube (nz, ny, nx).
+        Read PSF images from a FITS cube (nz, ny, nx), with its spectral
+        axis last.
 
         Parameters
         ----------
-        filename : str
-            The file.
-        hdu : int or str, optional
-            The HDU of the cube.
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the cube.
         points : Quantity, optional
             The point of each image: wavelengths, frequencies or velocities;
             by default, those of the spectral axis of the cube.
@@ -1064,13 +1047,14 @@ class PSFImages(PSF):
             If the cube is not 3D, or the points or step are neither given
             nor in its header.
         """
+        check_options(cls.from_file, locals())
+        filename, hdu = split_fits_file(file)
         data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
             if file_points is None:
                 raise ConfigError(
                     f"{filename}: the cube has no spectral axis; give the "
-                    f"points of its images (wavelength, frequency or "
-                    f"velocity)")
+                    f"points of its images (points)")
             points = file_points
         if step is None:
             if file_step is None:
@@ -1089,14 +1073,18 @@ class PSFImages(PSF):
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
-            step=list(self._step)) | varying.dump_points(self._points)
+            points=dict(
+                value=self._points.value.tolist(),
+                unit=str(self._points.unit)),
+            step=list(self._step))
 
     def __init__(
             self,
             data: np.ndarray,
             points: u.Quantity,
-            step: Sequence[float]
+            step: Annotated[Sequence[float], Unit('arcsec')]
     ):
+        check_options(self.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 3 or not np.all(np.isfinite(data)):
             raise ConfigError(

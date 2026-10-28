@@ -9,7 +9,7 @@ spectral axis (see varying).
 import abc
 import os
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any
 
 import astropy.io.fits
 import astropy.units as u
@@ -17,12 +17,14 @@ import astropy.wcs
 import numpy as np
 import scipy.ndimage
 import scipy.special
+from annotated_types import Gt
 
 import gbkfit.math
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
 from . import _detail, varying
-from ._detail import MIN_EXTENT, WING_FLUX, check_scale
+from ._detail import MIN_EXTENT, WING_FLUX
 
 
 __all__ = [
@@ -52,8 +54,9 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         Load an LSF from its configuration.
 
-        Options that are tables make an LSF that varies along the spectral
-        axis (see varying and LSFVarying).
+        Options that can vary (see VARYING_OPTIONS) given as tables make
+        an LSF that varies along the spectral axis (see varying and
+        LSFVarying).
 
         Parameters
         ----------
@@ -65,7 +68,7 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         LSF
             The LSF.
         """
-        options = varying.load_tables(info)
+        options = varying.load_tables(cls, info)
         if options != info:
             return cls.varying(**options)
         return super().load(info)
@@ -293,7 +296,7 @@ class LSFGauss(LSF):
         The standard deviation (km/s).
     """
 
-    VARYING_OPTIONS = dict(sigma='km/s')
+    VARYING_OPTIONS = ('sigma',)
 
     @staticmethod
     def type() -> str:
@@ -307,8 +310,8 @@ class LSFGauss(LSF):
             type=self.type(),
             sigma=self._sigma)
 
-    def __init__(self, sigma: float):
-        check_scale('sigma', sigma)
+    def __init__(self, sigma: Annotated[float, Gt(0), Unit('km/s')]):
+        check_options(self.__init__, locals())
         self._sigma = sigma
 
     def _extent(self) -> float:
@@ -344,7 +347,7 @@ class LSFGGauss(LSF):
         The shape, > 0: 2 is a Gaussian, and 1 an exponential.
     """
 
-    VARYING_OPTIONS = dict(alpha='km/s', beta='')
+    VARYING_OPTIONS = ('alpha', 'beta')
 
     @staticmethod
     def type() -> str:
@@ -359,9 +362,12 @@ class LSFGGauss(LSF):
             alpha=self._alpha,
             beta=self._beta)
 
-    def __init__(self, alpha: float, beta: float):
-        check_scale('alpha', alpha)
-        check_scale('beta', beta)
+    def __init__(
+            self,
+            alpha: Annotated[float, Gt(0), Unit('km/s')],
+            beta: Annotated[float, Gt(0)]
+    ):
+        check_options(self.__init__, locals())
         self._alpha = alpha
         self._beta = beta
 
@@ -398,7 +404,7 @@ class LSFLorentz(LSF):
         The scale (km/s): the half width at half maximum.
     """
 
-    VARYING_OPTIONS = dict(gamma='km/s')
+    VARYING_OPTIONS = ('gamma',)
 
     @staticmethod
     def type() -> str:
@@ -412,8 +418,8 @@ class LSFLorentz(LSF):
             type=self.type(),
             gamma=self._gamma)
 
-    def __init__(self, gamma: float):
-        check_scale('gamma', gamma)
+    def __init__(self, gamma: Annotated[float, Gt(0), Unit('km/s')]):
+        check_options(self.__init__, locals())
         self._gamma = gamma
 
     def _extent(self) -> float:
@@ -449,7 +455,7 @@ class LSFMoffat(LSF):
         The slope of the wings, > 0.5 (for a finite flux).
     """
 
-    VARYING_OPTIONS = dict(alpha='km/s', beta='')
+    VARYING_OPTIONS = ('alpha', 'beta')
 
     @staticmethod
     def type() -> str:
@@ -464,12 +470,12 @@ class LSFMoffat(LSF):
             alpha=self._alpha,
             beta=self._beta)
 
-    def __init__(self, alpha: float, beta: float):
-        check_scale('alpha', alpha)
-        if not beta > 0.5:
-            raise ConfigError(
-                "a Moffat LSF has finite flux only for beta > 0.5; "
-                f"beta is {beta}")
+    def __init__(
+            self,
+            alpha: Annotated[float, Gt(0), Unit('km/s')],
+            beta: Annotated[float, Gt(0.5)]
+    ):
+        check_options(self.__init__, locals())
         self._alpha = alpha
         self._beta = beta
 
@@ -501,9 +507,7 @@ class LSFImage(LSF):
     An LSF given as a 1D image, centred on the centre of the image, and
     resampled to the channels it is drawn on (with splines of order 5).
 
-    Its configuration has its file (a filename, or a dict with the
-    filename and the HDU), and the width of its channels comes from the
-    header unless step is given.
+    Configurations give its file (see from_file).
 
     Parameters
     ----------
@@ -513,30 +517,25 @@ class LSFImage(LSF):
         The width of the channels of the image (km/s).
     """
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'image'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'LSFImage':
-        return _detail.load_from_file(cls, info)
-
-    @classmethod
     def from_file(
             cls,
-            filename: str,
-            hdu: int | str = 0,
-            step: float | None = None
+            file: FitsFile,
+            step: Annotated[float, Gt(0), Unit('km/s')] | None = None
     ) -> 'LSFImage':
         """
         Read an LSF image (a profile) from a FITS file.
 
         Parameters
         ----------
-        filename : str
-            The file.
-        hdu : int or str, optional
-            The HDU of the image.
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the image.
         step : float, optional
             The width of the channels of the image (km/s); by default, that
             of the header.
@@ -546,7 +545,8 @@ class LSFImage(LSF):
         LSFImage
             The LSF.
         """
-        data, coords = fitsutils.read_data(filename, hdu)
+        check_options(cls.from_file, locals())
+        data, coords = fitsutils.read_data(*split_fits_file(file))
         return cls(data, coords.step[0] if step is None else step)
 
     def dump(
@@ -562,7 +562,12 @@ class LSFImage(LSF):
             file=filename if dump_path else os.path.basename(filename),
             step=self._step)
 
-    def __init__(self, data: np.ndarray, step: float = 1.0):
+    def __init__(
+            self,
+            data: np.ndarray,
+            step: Annotated[float, Gt(0), Unit('km/s')] = 1.0
+    ):
+        check_options(self.__init__, locals())
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 1:
             raise ConfigError(
@@ -625,6 +630,7 @@ class LSFSum(LSF):
             weights=self._weights.tolist())
 
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
+        check_options(self.__init__, locals())
         self._lsfs = tuple(lsfs)
         self._weights = _detail.sum_weights(
             weights, len(self._lsfs), "a sum of LSFs")
@@ -689,6 +695,7 @@ class LSFConvolution(LSF):
                 lsf_parser, self._lsfs, prefix, dump_path, overwrite))
 
     def __init__(self, lsfs: Sequence[LSF]):
+        check_options(self.__init__, locals())
         if not lsfs:
             raise ConfigError("a convolution of LSFs needs at least one LSF")
         self._lsfs = tuple(lsfs)
@@ -749,8 +756,8 @@ class LSFHanning(LSF):
     ) -> dict[str, Any]:
         return dict(type=self.type(), width=self._width)
 
-    def __init__(self, width: float):
-        check_scale('width', width)
+    def __init__(self, width: Annotated[float, Gt(0), Unit('km/s')]):
+        check_options(self.__init__, locals())
         self._width = width
 
     def _steps(self, step: float) -> int:
@@ -805,12 +812,8 @@ class LSFImages(LSF):
     LSFImage) of the profiles of the two nearest points, interpolated
     linearly; beyond the points, that of the nearest profile.
 
-    Its configuration has its file (a filename, or a dict with the
-    filename and the HDU): a FITS image with one profile per row (nz, nk).
-    The points come from the spectral axis of the rows unless given as
-    wavelength, frequency or velocity (see varying.load_points), and the
-    width of the channels comes from the axis of the columns (in a
-    velocity unit) unless step is given.
+    Configurations give its file, a FITS image with one profile per row
+    (see from_file).
 
     Parameters
     ----------
@@ -822,33 +825,26 @@ class LSFImages(LSF):
         The width of the channels of the profiles (km/s).
     """
 
+    config_constructors = ('from_file',)
+
     @staticmethod
     def type() -> str:
         return 'images'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'LSFImages':
-        info = dict(info)
-        return _detail.load_from_file(
-            cls, info, points=varying.load_points(info))
-
-    @classmethod
     def from_file(
             cls,
-            filename: str,
-            hdu: int | str = 0,
+            file: FitsFile,
             points: u.Quantity | None = None,
-            step: float | None = None
+            step: Annotated[float, Gt(0), Unit('km/s')] | None = None
     ) -> 'LSFImages':
         """
         Read LSF profiles from a FITS image, one per row (nz, nk).
 
         Parameters
         ----------
-        filename : str
-            The file.
-        hdu : int or str, optional
-            The HDU of the image.
+        file : str or tuple
+            The file: a filename, or a filename and the HDU of the image.
         points : Quantity, optional
             The point of each profile: wavelengths, frequencies or
             velocities; by default, those of the spectral axis of the rows.
@@ -867,13 +863,14 @@ class LSFImages(LSF):
             If the image is not 2D, or the points or step are neither given
             nor in its header.
         """
+        check_options(cls.from_file, locals())
+        filename, hdu = split_fits_file(file)
         data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
             if file_points is None:
                 raise ConfigError(
                     f"{filename}: the rows have no spectral axis; give the "
-                    f"points of the profiles (wavelength, frequency or "
-                    f"velocity)")
+                    f"points of the profiles (points)")
             points = file_points
         if step is None:
             if file_step is None:
@@ -892,9 +889,18 @@ class LSFImages(LSF):
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
-            step=self._step) | varying.dump_points(self._points)
+            points=dict(
+                value=self._points.value.tolist(),
+                unit=str(self._points.unit)),
+            step=self._step)
 
-    def __init__(self, data: np.ndarray, points: u.Quantity, step: float):
+    def __init__(
+            self,
+            data: np.ndarray,
+            points: u.Quantity,
+            step: Annotated[float, Gt(0), Unit('km/s')]
+    ):
+        check_options(self.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2 or not np.all(np.isfinite(data)):
             raise ConfigError(
@@ -907,7 +913,6 @@ class LSFImages(LSF):
                 f"profiles; they have {points.size}")
         if np.unique(points).size != points.size:
             raise ConfigError("the points of the profiles must be distinct")
-        check_scale('step', step)
         # (each profile holds all the light)
         self._data = data / data.sum(axis=1, keepdims=True)
         self._points = points

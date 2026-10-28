@@ -28,6 +28,7 @@ classifiers = [
     'Topic :: Scientific/Engineering :: Astronomy'
 ]
 dependencies = [
+    'annotated-types',
     'astropy',
     'numpy',
     'pydantic>=2',

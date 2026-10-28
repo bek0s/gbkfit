@@ -49,7 +49,8 @@ def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
 
 def table(low, high):
     """A table of a value from low at -500 km/s to high at 500 km/s."""
-    return dict(velocity=[-500, 500], values=[low, high])
+    return dict(
+        points=dict(value=[-500, 500], unit='km/s'), values=[low, high])
 
 
 @pytest.mark.parametrize('psf, lsf', [
@@ -114,7 +115,8 @@ def test_each_channel_has_its_lsf(driver):
 
 
 def test_the_psf_must_be_known_at_the_channels_of_the_data(driver):
-    psf = dict(type='gauss', sigma=dict(velocity=[-100, 500], values=[1, 2]))
+    psf = dict(type='gauss', sigma=dict(
+        points=dict(value=[-100, 500], unit='km/s'), values=[1, 2]))
     with pytest.raises(ConfigError, match="from -100 to 500 km/s"):
         spectra(driver, psf=psf)
 
@@ -126,7 +128,7 @@ def test_psf_images_of_one_image_are_that_image(driver, tmp_path):
     astropy.io.fits.writeto(tmp_path / 'cube.fits', np.stack([image, image]))
     cube = spectra(driver, psf=dict(
         type='images', file=str(tmp_path / 'cube.fits'), step=[0.5, 0.5],
-        velocity=[-500, 500]))
+        points=dict(value=[-500, 500], unit='km/s')))
     single = spectra(driver, psf=dict(
         type='image', file=str(tmp_path / 'image.fits'), step=[0.5, 0.5]))
     np.testing.assert_allclose(cube, single, atol=2e-6 * np.abs(single).max())
@@ -140,7 +142,7 @@ def test_lsf_images_of_one_profile_are_that_profile(driver, tmp_path):
         tmp_path / 'profiles.fits', np.stack([profile, profile]))
     images = spectra(driver, lsf=dict(
         type='images', file=str(tmp_path / 'profiles.fits'), step=4,
-        velocity=[-500, 500]))
+        points=dict(value=[-500, 500], unit='km/s')))
     single = spectra(driver, lsf=dict(
         type='image', file=str(tmp_path / 'profile.fits'), step=4))
     np.testing.assert_allclose(

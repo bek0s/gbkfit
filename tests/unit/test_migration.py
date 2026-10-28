@@ -209,3 +209,20 @@ def test_the_field_of_visibilities_is_migrated_to_an_angle():
     # (the default step depends on the coverage: the field is by hand)
     assert default == dict(type='visibilities')
     assert any(c.message.startswith("by hand: give fov") for c in changes)
+
+
+def test_spectral_tables_are_migrated_to_the_options_of_their_class():
+    psf = dict(type='moffat', beta=2.5, alpha=dict(
+        velocity=[-500, 500], values=dict(values=[1, 2], unit='arcsec')))
+    lsf = dict(type='gauss', sigma=dict(table='lsf.ecsv', column='sigma'))
+    images = dict(type='images', file='psf.fits', wavelength=dict(
+        values=[5000, 7000], unit='Angstrom'))
+    migration.migrate(dict(observations=[
+        dict(instrument=dict(psf=psf, lsf=lsf)),
+        dict(instrument=dict(psf=images))]), 2)
+    assert psf['alpha'] == dict(
+        points=dict(value=[-500, 500], unit='km/s'), values=[1, 2],
+        unit='arcsec')
+    assert lsf['sigma'] == dict(file='lsf.ecsv', column='sigma')
+    assert images == dict(type='images', file='psf.fits', points=dict(
+        value=[5000, 7000], unit='Angstrom'))

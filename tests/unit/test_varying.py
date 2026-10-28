@@ -22,20 +22,18 @@ def alpha_table(tmp_path, source):
     """The table of alpha against wavelength, from the given source."""
     if source == 'inline':
         return dict(
-            wavelength=dict(values=WAVELENGTHS, unit='Angstrom'),
-            values=ALPHAS)
+            points=dict(value=WAVELENGTHS, unit='Angstrom'), values=ALPHAS)
     if source == 'csv':
         # (a plain CSV file has no units)
         path = tmp_path / 'psf.csv'
         path.write_text('wavelength,alpha\n' + ''.join(
             f'{w},{a}\n' for w, a in zip(WAVELENGTHS, ALPHAS)))
         return dict(
-            table=str(path), column='alpha',
-            units=dict(wavelength='Angstrom'))
+            file=str(path), column='alpha', units=dict(wavelength='Angstrom'))
     path = tmp_path / f'psf.{source}'
     astropy.table.QTable(dict(
         wavelength=WAVELENGTHS * u.AA, alpha=ALPHAS * u.arcsec)).write(path)
-    return dict(table=str(path), column='alpha')
+    return dict(file=str(path), column='alpha')
 
 
 @pytest.mark.parametrize('source', ['inline', 'csv', 'ecsv', 'fits'])
@@ -61,7 +59,7 @@ def test_beams_vary_with_frequency():
     # The velocities of an axis of a rest frequency are radio
     beam = psf_parser.load(dict(
         type='gauss_beam', bmin=1.0,
-        bmaj=dict(frequency=dict(values=[1419.0, 1421.0], unit='MHz'),
+        bmaj=dict(points=dict(value=[1419.0, 1421.0], unit='MHz'),
                   values=[3.0, 2.0])))
     rest = 1420.405752 * u.MHz
     velocities = np.array([0.0, 100.0])
@@ -75,8 +73,8 @@ def test_beams_vary_with_frequency():
 def test_lsf_widths_in_wavelength_are_converted_to_velocities():
     # With the optical convention, a width of dw is c dw / rest
     lsf = lsf_parser.load(dict(type='gauss', sigma=dict(
-        velocity=[-100, 100],
-        values=dict(values=[1.0, 2.0], unit='Angstrom'))))
+        points=dict(value=[-100, 100], unit='km/s'), values=[1.0, 2.0],
+        unit='Angstrom')))
     rest = 6562.8 * u.AA
     sigmas = [x.dump()['sigma'] for x in lsf.at(
         [0, 100] * KMS, gridutils.VelocityConvention(rest))]
@@ -84,10 +82,12 @@ def test_lsf_widths_in_wavelength_are_converted_to_velocities():
 
 
 def test_sums_of_varying_psfs_vary():
-    table = dict(velocity=[0, 100, 200], values=[1.0, 2.0, 3.0])
+    table = dict(
+        points=dict(value=[0, 100, 200], unit='km/s'), values=[1.0, 2.0, 3.0])
     psf = psf_parser.load(dict(type='sum', weights=[1, 1], psfs=[
         dict(type='gauss', sigma=table),
-        dict(type='gauss', sigma=dict(velocity=[50, 300], values=[1, 1]))]))
+        dict(type='gauss', sigma=dict(
+            points=dict(value=[50, 300], unit='km/s'), values=[1, 1]))]))
     assert psf.varies()
     assert psf.velocity_range() == (50, 200)
     sums = psf.at([150] * KMS)
@@ -102,10 +102,10 @@ def test_sums_of_varying_psfs_vary():
 def test_varying_psfs_round_trip():
     info = dict(
         type='gauss', ratio=0.5,
-        sigma=dict(wavelength=dict(values=[5000.0, 6000.0], unit='Angstrom'),
+        sigma=dict(points=dict(value=[5000.0, 6000.0], unit='Angstrom'),
                    values=[1.0, 2.0]),
-        posa=dict(velocity=dict(values=[0.0, 10.0], unit='km / s'),
-                  values=dict(values=[0.1, 0.2], unit='rad')))
+        posa=dict(points=dict(value=[0.0, 10.0], unit='km / s'),
+                  values=[0.1, 0.2], unit='rad'))
     psf = psf_parser.load(dict(info))
     dumped = psf_parser.dump(psf)
     assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
@@ -116,14 +116,19 @@ def test_varying_psfs_round_trip():
         np.degrees(0.2))
 
 
+def kms(values):
+    """The configuration of the points of a table at the given velocities."""
+    return dict(value=values, unit='km/s')
+
+
 @pytest.mark.parametrize('info, message', [
-    (dict(type='hanning', width=dict(velocity=[0], values=[1])),
-     "option 'width' of LSFHanning cannot vary"),
-    (dict(type='gauss', sigma=dict(velocity=[0, 1], values=[1, -1])),
-     "sigma: sigma must be greater than 0"),
-    (dict(type='gauss', sigma=dict(wavelength=[1, 2], values=[1, 1])),
-     "sigma.wavelength: the wavelength needs a unit"),
-    (dict(type='gauss', sigma=dict(velocity=[0, 0], values=[1, 1])),
+    (dict(type='hanning', width=dict(points=kms([0]), values=[1])),
+     "option 'width' must be of type float"),
+    (dict(type='gauss', sigma=dict(points=kms([0, 1]), values=[1, -1])),
+     "sigma: option 'sigma' must be greater than 0"),
+    (dict(type='gauss', sigma=dict(points=[1, 2], values=[1, 1])),
+     "sigma: option 'points' must be of type Quantity"),
+    (dict(type='gauss', sigma=dict(points=kms([0, 0]), values=[1, 1])),
      "must be distinct")])
 def test_varying_options_are_checked(info, message):
     with pytest.raises(ConfigError, match=message):
@@ -172,9 +177,8 @@ def test_psf_images_from_files(tmp_path):
     psf = psf_parser.load(dict(type='images', file=str(path)))
     dumped = psf_parser.dump(psf, prefix=str(tmp_path / 'd_'))
     np.testing.assert_allclose(dumped['step'], [0.05, 0.05])
-    assert dumped['wavelength']['unit'] == 'm'
-    np.testing.assert_allclose(
-        dumped['wavelength']['values'], [6.5e-7, 6.6e-7])
+    assert dumped['points']['unit'] == 'm'
+    np.testing.assert_allclose(dumped['points']['value'], [6.5e-7, 6.6e-7])
     again = psf_parser.load(dict(dumped))
     rest = 6.5e-7 * u.m
     convention = gridutils.VelocityConvention(rest)
@@ -204,9 +208,9 @@ def test_lsf_images_from_files(tmp_path):
     assert lsf.varies()
     dumped = lsf_parser.dump(lsf, prefix=str(tmp_path / 'd_'))
     assert dumped['step'] == 5
-    wavelengths = dumped['wavelength']
+    points = dumped['points']
     np.testing.assert_allclose(
-        u.Quantity(wavelengths['values'], wavelengths['unit']).to_value(u.AA),
+        u.Quantity(points['value'], points['unit']).to_value(u.AA),
         [5000, 7000])
     # Halfway between the points, half of each profile
     middle = lsf_parser.load(dict(dumped)).at(6000 * u.AA)
@@ -237,7 +241,7 @@ def test_varying_psfs_in_python(tmp_path):
 def test_spectral_tables_from_files(tmp_path):
     from gbkfit.instrument import SpectralTable
     table = SpectralTable.from_file(
-        alpha_table(tmp_path, 'ecsv')['table'], 'alpha')
+        alpha_table(tmp_path, 'ecsv')['file'], 'alpha')
     np.testing.assert_allclose(table.points().to_value(u.AA), WAVELENGTHS)
     np.testing.assert_allclose(table.values(), ALPHAS)
     assert table.unit() == u.arcsec
@@ -249,7 +253,7 @@ def test_table_files_are_relative_to_the_configuration(tmp_path):
     from gbkfit.utils import parseutils
     folder = tmp_path / 'config'
     folder.mkdir()
-    info = alpha_table(folder, 'ecsv') | dict(table='psf.ecsv')
+    info = alpha_table(folder, 'ecsv') | dict(file='psf.ecsv')
     with parseutils.paths_relative_to(str(folder)):
         psf = psf_parser.load(dict(type='moffat', alpha=info, beta=2.5))
     assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)

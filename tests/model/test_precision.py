@@ -25,7 +25,7 @@ PROPERTIES = dict(
 GAUSS_PSF = dict(type='gauss', sigma=1.3)
 GAUSS_LSF = dict(type='gauss', sigma=17)
 VARYING_PSF = dict(type='gauss', sigma=dict(
-    velocity=[-500, 500], values=[1, 2]))
+    points=dict(value=[-500, 500], unit='km/s'), values=[1, 2]))
 FLAT = dict(type='flat')
 GRID = dict(type='grid')
 # A galaxy, and an observable seen along a line of sight through an

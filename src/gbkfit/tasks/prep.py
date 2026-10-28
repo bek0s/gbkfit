@@ -558,8 +558,8 @@ def prep_psf_muse(
         prep.muse_psf_table(fits.getheader(file, 0)), output_dir, 'psf')
     _log.info(
         f"the PSF is in {filename}; use it as psf: {{type: moffat, "
-        f"alpha: {{table: {filename}, column: alpha}}, "
-        f"beta: {{table: {filename}, column: beta}}}}")
+        f"alpha: {{file: {filename}, column: alpha}}, "
+        f"beta: {{file: {filename}, column: beta}}}}")
 
 
 def prep_lsf_muse(
@@ -574,7 +574,7 @@ def prep_lsf_muse(
     filename = _write_table(prep.muse_lsf_table(), output_dir, 'lsf')
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, "
-        f"sigma: {{table: {filename}, column: sigma}}}}")
+        f"sigma: {{file: {filename}, column: sigma}}}}")
 
 
 def prep_psf_casa_beams(
@@ -590,5 +590,5 @@ def prep_psf_casa_beams(
     filename = _write_table(fitsutils.casa_beam_table(file), output_dir, 'psf')
     _log.info(
         f"the beams are in {filename}; use them as psf: {{type: "
-        f"gauss_beam, bmaj: {{table: {filename}, column: bmaj}}, ...}} "
+        f"gauss_beam, bmaj: {{file: {filename}, column: bmaj}}, ...}} "
         f"(and bmin and bpa)")

@@ -473,9 +473,11 @@ CASES: list[dict[str, Any]] = [
                 type='azimuth_power', power=1)),
             instrument=dict(
                 psf=dict(type='moffat', beta=2.5, alpha=dict(
-                    velocity=[-500, 0, 500], values=[1.2, 0.9, 0.6])),
+                    points=dict(value=[-500, 0, 500], unit='km/s'),
+                    values=[1.2, 0.9, 0.6])),
                 lsf=dict(type='gauss', sigma=dict(
-                    velocity=[-500, 500], values=[12, 30])),
+                    points=dict(value=[-500, 500], unit='km/s'),
+                    values=[12, 30])),
                 primary_beam=dict(type='gauss', fwhm=8, x=1, y=-0.5)))],
         truth=_named('gas', _DISK_TRUTH),
         trial=_named('gas', _DISK_TRIAL),

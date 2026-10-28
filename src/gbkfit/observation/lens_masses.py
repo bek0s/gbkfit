@@ -21,10 +21,11 @@ from typing import Any
 import numpy as np
 import scipy.ndimage
 
-from gbkfit.dataset import FitsFile, fits_file
+from gbkfit.dataset import fits_file
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import FitsFile
 
 
 __all__ = [

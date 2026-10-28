@@ -13,7 +13,8 @@ from gbkfit.instrument import PSF, lsf_parser, psf_parser
 from gbkfit.utils import (
     fitsutils, gridutils, parseutils, tableutils, unitutils)
 from gbkfit.utils.parseutils import ConfigError
-from .data import Data, FitsFile, dump_data, fits_file
+from gbkfit.utils.typeutils import FitsFile
+from .data import Data, dump_data, fits_file
 
 if TYPE_CHECKING:
     from .base import Dataset, NoiseCorrelation

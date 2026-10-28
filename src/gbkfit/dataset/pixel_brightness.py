@@ -5,9 +5,10 @@ import numpy as np
 
 from gbkfit.instrument import PSF
 from gbkfit.utils import gridutils
+from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
-from .data import Data, FitsFile
+from .data import Data
 
 
 __all__ = [

@@ -11,16 +11,17 @@ the varying of its class, e.g.
     psf = PSFMoffat.varying(alpha=alpha, beta=2.5)
     psf.at(6500 * u.AA)  # the PSFMoffat at 6500 Angstrom
 
-In a configuration, a table is given inline, e.g.
+In a configuration, a table is given inline (see SpectralTable), e.g.
 
     alpha:
-      wavelength: {values: [4800, 7000, 9300], unit: Angstrom}
+      points: {value: [4800, 7000, 9300], unit: Angstrom}
       values: [0.75, 0.65, 0.58]
 
 or as a column of a table file (FITS, ECSV or CSV), which has a column of
-the points named wavelength, frequency or velocity, e.g.
+the points named wavelength, frequency or velocity (see
+SpectralTable.from_file), e.g.
 
-    alpha: {table: psf.ecsv, column: alpha}
+    alpha: {file: psf.ecsv, column: alpha}
 
 Values without units are in the units of the option. Velocities are in
 the convention of the spectral axis (see gridutils.VelocityConvention):
@@ -34,8 +35,9 @@ import astropy.table
 import astropy.units as u
 import numpy as np
 
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils, parseutils, typeutils
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import FilePath
 
 
 __all__ = [
@@ -85,19 +87,6 @@ def _equivalency(
             "the convention of the velocities of the spectral axis, which "
             "is not given")
     return convention.equivalency()
-
-
-def _quantity(
-        x: Sequence[float] | Mapping[str, Any], unit: u.UnitBase | None
-) -> tuple[np.ndarray, u.UnitBase | None]:
-    """
-    The values and the unit of an option: a list of values, in the given
-    unit (None for none), or a dict with the values and their unit.
-    """
-    if isinstance(x, Mapping):
-        x = parseutils.parse_options(x, required={'values', 'unit'})
-        return np.asarray(x['values'], dtype=float), u.Unit(x['unit'])
-    return np.asarray(x, dtype=float), unit
 
 
 def as_points(points: u.Quantity) -> u.Quantity:
@@ -209,66 +198,6 @@ def to_frequencies(
     return _convert(as_points(points), u.Hz, convention)
 
 
-def load_points(info: dict[str, Any]) -> u.Quantity | None:
-    """
-    Remove the points of the spectral axis from a configuration, if any,
-    and load them.
-
-    Parameters
-    ----------
-    info : dict
-        The options; the points are one of wavelength, frequency or
-        velocity: a list of values (velocities in km/s), or a dict with the
-        values and their unit (e.g. dict(values=[4800, 7000],
-        unit='Angstrom')).
-
-    Returns
-    -------
-    Quantity or None
-        The points, or None if there are none.
-
-    Raises
-    ------
-    ConfigError
-        If there are points of more than one kind, or wavelengths or
-        frequencies without a unit.
-    """
-    axes = [axis for axis in _AXES if axis in info]
-    if not axes:
-        return None
-    if len(axes) > 1:
-        raise ConfigError(
-            f"the points of the spectral axis are given as several of "
-            f"{list(_AXES)}: {axes}")
-    axis = axes[0]
-    with parseutils.config_path(axis):
-        values, unit = _quantity(
-            info.pop(axis), _KMS if axis == 'velocity' else None)
-        if unit is None:
-            raise ConfigError(f"the {axis} needs a unit")
-    return values * unit
-
-
-def dump_points(points: u.Quantity) -> dict[str, Any]:
-    """
-    Return the configuration of points of the spectral axis.
-
-    Parameters
-    ----------
-    points : Quantity
-        Wavelengths, frequencies or velocities.
-
-    Returns
-    -------
-    dict
-        The configuration (see load_points).
-    """
-    axis = ('velocity' if points.unit.is_equivalent(_KMS) else
-            'wavelength' if points.unit.is_equivalent(u.m) else
-            'frequency')
-    return {axis: dict(values=points.value.tolist(), unit=str(points.unit))}
-
-
 def blend(
         points: u.Quantity,
         at: u.Quantity,
@@ -310,7 +239,7 @@ def blend(
     return result
 
 
-class SpectralTable:
+class SpectralTable(parseutils.Serializable):
     """
     The values of an option at points of the spectral axis.
 
@@ -334,12 +263,15 @@ class SpectralTable:
         repeated, or there is not a value for each.
     """
 
+    config_constructors = ('__init__', 'from_file')
+
     def __init__(
             self,
             points: u.Quantity,
             values: Sequence[float] | np.ndarray,
             unit: str | u.UnitBase | None = None
     ):
+        check_options(self.__init__, locals())
         try:
             points = as_points(points)
         except TypeError as e:
@@ -362,10 +294,10 @@ class SpectralTable:
     @classmethod
     def from_file(
             cls,
-            filename: str,
+            file: FilePath,
             column: str,
             hdu: int | str | None = None,
-            units: Mapping[str, Any] | None = None
+            units: Mapping[str, str] | None = None
     ) -> 'SpectralTable':
         """
         Read a table from a column of a table file (FITS, ECSV or CSV).
@@ -375,7 +307,7 @@ class SpectralTable:
 
         Parameters
         ----------
-        filename : str
+        file : str
             The file.
         column : str
             The column of the values.
@@ -396,17 +328,18 @@ class SpectralTable:
             If the file has no column of points or values, or its points
             have no unit.
         """
+        check_options(cls.from_file, locals())
         options = {} if hdu is None else dict(hdu=hdu)
-        table = astropy.table.Table.read(filename, **options)
+        table = astropy.table.Table.read(file, **options)
         units = units or {}
         axes = [axis for axis in _AXES if axis in table.colnames]
         if len(axes) != 1:
             raise ConfigError(
-                f"{filename}: a table needs a column of its points, named "
+                f"{file}: a table needs a column of its points, named "
                 f"one of {list(_AXES)}; its columns are {table.colnames}")
         if column not in table.colnames:
             raise ConfigError(
-                f"{filename}: there is no column '{column}'; the columns "
+                f"{file}: there is no column '{column}'; the columns "
                 f"are {table.colnames}")
 
         def unit(name):
@@ -415,51 +348,11 @@ class SpectralTable:
         points_unit = unit(axis) or (_KMS if axis == 'velocity' else None)
         if points_unit is None:
             raise ConfigError(
-                f"{filename}: the column '{axis}' has no unit; give it in "
+                f"{file}: the column '{axis}' has no unit; give it in "
                 f"units")
         return cls(
             np.asarray(table[axis], dtype=float) * u.Unit(points_unit),
             np.asarray(table[column], dtype=float), unit(column))
-
-    @classmethod
-    def load(cls, info: Mapping[str, Any]) -> 'SpectralTable':
-        """
-        Load a table from its configuration (see the module).
-
-        Parameters
-        ----------
-        info : Mapping
-            The table: its points (wavelength, frequency or velocity) and
-            values, or a file (table), its column, and optionally the HDU
-            of a FITS file and the units of columns without units (units;
-            see from_file).
-
-        Returns
-        -------
-        SpectralTable
-            The table.
-
-        Raises
-        ------
-        ConfigError
-            If the configuration or the table is invalid.
-        """
-        if 'table' in info:
-            info = parseutils.parse_options(
-                info, required={'table', 'column'},
-                optional={'hdu', 'units'})
-            with parseutils.config_path('table'):
-                return cls.from_file(
-                    parseutils.resolve_path(info['table']), info['column'],
-                    info.get('hdu'), info.get('units'))
-        info = parseutils.parse_options(
-            info, required={'values'}, optional=set(_AXES))
-        points = load_points(info)
-        if points is None:
-            raise ConfigError(
-                f"a table needs its points as one of {list(_AXES)}")
-        values, unit = _quantity(info['values'], None)
-        return cls(points, values, unit)
 
     def dump(self) -> dict[str, Any]:
         """
@@ -470,10 +363,10 @@ class SpectralTable:
         dict
             The configuration.
         """
-        values = self._values.tolist()
-        return dump_points(self._points) | {
-            'values': values if self._unit is None
-            else dict(values=values, unit=str(self._unit))}
+        points = dict(
+            value=self._points.value.tolist(), unit=str(self._points.unit))
+        unit = {} if self._unit is None else dict(unit=str(self._unit))
+        return dict(points=points, values=self._values.tolist()) | unit
 
     def points(self) -> u.Quantity:
         """
@@ -588,13 +481,16 @@ class SpectralTable:
             f"to '{unit}'")
 
 
-def load_tables(info: dict[str, Any]) -> dict[str, Any]:
+def load_tables(cls: type, info: dict[str, Any]) -> dict[str, Any]:
     """
-    Return the options of a configuration with those that are tables
-    (dicts) loaded (see SpectralTable.load).
+    Return the options of a configuration of an object of a class (e.g. a
+    PSF) with those that can vary (see _VaryingOptions) and are given as
+    tables (dicts) loaded (see SpectralTable).
 
     Parameters
     ----------
+    cls : type
+        The class.
     info : dict
         The options.
 
@@ -609,10 +505,10 @@ def load_tables(info: dict[str, Any]) -> dict[str, Any]:
         If a table is invalid.
     """
     options = dict(info)
-    for name, value in info.items():
-        if isinstance(value, Mapping):
+    for name in getattr(cls, 'VARYING_OPTIONS', ()):
+        if isinstance(info.get(name), Mapping):
             with parseutils.config_path(name):
-                options[name] = SpectralTable.load(value)
+                options[name] = SpectralTable.load(info[name])
     return options
 
 
@@ -621,8 +517,9 @@ class _VaryingOptions:
     The options of an object of a class (e.g. a PSF), some of which are
     tables of values along the spectral axis (see PSF.varying).
 
-    The class lists its options that can vary, with their units, in
-    VARYING_OPTIONS (e.g. dict(sigma='arcsec', ratio='')).
+    The class lists the names of its options that can vary in
+    VARYING_OPTIONS (e.g. ('sigma', 'ratio')); their units are those of
+    the annotations of its __init__ (see typeutils.Unit; none for none).
 
     Parameters
     ----------
@@ -643,7 +540,7 @@ class _VaryingOptions:
             name: value for name, value in options.items()
             if isinstance(value, SpectralTable)}
         for name in tables:
-            if name not in getattr(cls, 'VARYING_OPTIONS', {}):
+            if name not in getattr(cls, 'VARYING_OPTIONS', ()):
                 raise ConfigError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
@@ -656,7 +553,10 @@ class _VaryingOptions:
             with parseutils.config_path(name):
                 for value in table.values():
                     cls(**checked | {name: value})
+        types = typeutils.option_types(cls.__init__)
         self._cls = cls
+        self._units = {
+            name: typeutils.unit_of(types[name]) or '' for name in tables}
         self._constants = {
             name: value for name, value in checked.items()
             if name not in tables}
@@ -678,7 +578,7 @@ class _VaryingOptions:
     ) -> list[Any]:
         """Return an object of the class at each of the points (1D)."""
         values = {
-            name: table.at(points, self._cls.VARYING_OPTIONS[name], convention)
+            name: table.at(points, self._units[name], convention)
             for name, table in self._tables.items()}
         return [
             self._cls(**self._constants | {

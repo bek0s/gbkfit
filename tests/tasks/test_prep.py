@@ -592,8 +592,8 @@ def test_psf_of_muse(tmp_path, keywords):
     prep.prep_psf_muse(str(path), str(tmp_path))
     table = str(tmp_path / 'prep_psf.ecsv')
     psf = psf_parser.load(dict(
-        type='moffat', alpha=dict(table=table, column='alpha'),
-        beta=dict(table=table, column='beta')))
+        type='moffat', alpha=dict(file=table, column='alpha'),
+        beta=dict(file=table, column='beta')))
     moffat = psf.at(7000 * u.AA)
     alpha, beta = moffat.dump()['alpha'], moffat.dump()['beta']
     assert beta == pytest.approx(2.5)
@@ -606,7 +606,7 @@ def test_lsf_of_muse(tmp_path):
     prep.prep_lsf_muse(str(tmp_path))
     table = str(tmp_path / 'prep_lsf.ecsv')
     lsf = lsf_parser.load(dict(
-        type='gauss', sigma=dict(table=table, column='sigma')))
+        type='gauss', sigma=dict(file=table, column='sigma')))
     # (a width in wavelength becomes a velocity with the rest)
     gauss = lsf.at(7000 * u.AA, gridutils.VelocityConvention(7000 * u.AA))
     # A FWHM of 2.48 Angstrom at 7000 Angstrom, in km/s
@@ -638,7 +638,7 @@ def test_beams_of_casa(tmp_path):
     prep.prep_psf_casa_beams(str(path), str(tmp_path))
     table = str(tmp_path / 'prep_psf.ecsv')
     psf = psf_parser.load(dict(type='gauss_beam', **{
-        name: dict(table=table, column=name)
+        name: dict(file=table, column=name)
         for name in ('bmaj', 'bmin', 'bpa')}))
     # (the frequency of the second channel)
     beam = psf.at(1.4201e9 * u.Hz)
