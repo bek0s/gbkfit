@@ -12,17 +12,18 @@ galaxies, peculiar velocities make it wrong.
 
 import abc
 import functools
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import astropy.constants
 import astropy.cosmology
 import astropy.units
 import numpy as np
+from annotated_types import Ge
 
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 from .mass.units import G
 
 
@@ -40,6 +41,9 @@ KPC_PER_ARCSEC_MPC = (1 * astropy.units.arcsec).to_value('rad') * 1e3
 
 # The cosmology by default: Planck Collaboration (2020), Table 2
 COSMOLOGY_DEFAULT = 'Planck18'
+
+# The cosmologies: the realizations of astropy
+_COSMOLOGIES = tuple(astropy.cosmology.realizations.available)
 
 # The speed of light (km/s)
 _C = astropy.constants.c.to_value('km/s')
@@ -121,7 +125,8 @@ class Distance(parseutils.TypedSerializable, abc.ABC):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), cosmology=self._cosmology_name)
 
-    def __init__(self, cosmology: str = COSMOLOGY_DEFAULT):
+    def __init__(self, cosmology: Literal[_COSMOLOGIES] = COSMOLOGY_DEFAULT):
+        check_options(Distance.__init__, locals())
         self._cosmology = _cosmology(cosmology)
         self._cosmology_name = cosmology
 
@@ -288,13 +293,11 @@ class DistanceRedshift(Distance):
 
     def __init__(
             self,
-            redshift: float | None = None,
-            cosmology: str = COSMOLOGY_DEFAULT
+            redshift: Annotated[float, Ge(0)] | None = None,
+            cosmology: Literal[_COSMOLOGIES] = COSMOLOGY_DEFAULT
     ):
+        check_options(DistanceRedshift.__init__, locals())
         super().__init__(cosmology)
-        if redshift is not None and not redshift >= 0:
-            raise ConfigError(
-                f"redshift cannot be negative; it is {redshift}")
         self._redshift = None if redshift is None else float(redshift)
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:

@@ -5,10 +5,11 @@ by default (see Component.geometry); others are named.
 """
 
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 from . import _detail
 
 
@@ -83,24 +84,21 @@ class Geometry(parseutils.Serializable):
     def __init__(
             self,
             name: str | None = None,
-            params: Sequence[str] | None = None,
+            params: Sequence[Literal[tuple(GEOMETRY_PARAMS)]] | None = None,
             loose: bool = False,
             tilted: bool = False,
-            rnmin: float | None = None,
-            rnmax: float | None = None,
-            rnsep: float | None = None,
+            rnmin: Annotated[float, Unit('arcsec')] | None = None,
+            rnmax: Annotated[float, Unit('arcsec')] | None = None,
+            rnsep: Annotated[float, Unit('arcsec')] | None = None,
             rnlen: int | None = None,
-            rnodes: Sequence[float] | None = None
+            rnodes: Annotated[Sequence[float], Unit('arcsec')] | None = None
     ):
+        check_options(Geometry.__init__, locals())
         parseutils.check_name(name)
         if params is not None:
             params = tuple(params)
             if not params:
                 raise ConfigError("a geometry needs at least one parameter")
-            if unknown := [p for p in params if p not in GEOMETRY_PARAMS]:
-                raise ConfigError(
-                    f"the parameters of a geometry are some of "
-                    f"{list(GEOMETRY_PARAMS)}; {unknown} are not")
             if len(set(params)) != len(params):
                 raise ConfigError(
                     f"the parameters of a geometry repeat: {list(params)}")

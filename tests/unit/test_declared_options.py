@@ -12,6 +12,7 @@ import pytest
 
 import gbkfit.fitting
 import gbkfit.instrument
+import gbkfit.model
 import gbkfit.params
 from gbkfit.utils import funcutils, typeutils
 
@@ -23,13 +24,15 @@ PARSERS = [
     gbkfit.instrument.lsf_parser,
     gbkfit.instrument.primary_beam_parser,
     gbkfit.instrument.psf_parser,
+    gbkfit.model.distance_parser,
     gbkfit.params.joint_prior_parser,
     gbkfit.params.prior_parser]
 CLASSES = [
     gbkfit.fitting.BootstrapOptions,
     gbkfit.fitting.UncertaintyOptions,
     gbkfit.instrument.Instrument,
-    gbkfit.instrument.SpectralTable]
+    gbkfit.instrument.SpectralTable,
+    gbkfit.model.Geometry]
 
 
 def constructors():

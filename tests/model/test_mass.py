@@ -1316,9 +1316,9 @@ def test_distances_give_the_length_of_an_arcsec():
     assert own.kpc_per_arcsec({}, 0.5) == pytest.approx(kpc_per_arcsec(0.4))
     assert own.epoch({}, 0.5) == 0.4
     assert own.dump()['redshift'] == 0.4
-    with pytest.raises(ConfigError, match="redshift cannot be negative"):
+    with pytest.raises(ConfigError, match="'redshift' must be at least 0"):
         DistanceRedshift(redshift=-1)
-    with pytest.raises(ConfigError, match="cosmology must be one of"):
+    with pytest.raises(ConfigError, match="'cosmology' must be one of"):
         DistanceRedshift(cosmology='Planck99')
     # (by the redshift of a galaxy without one, or blueshifted: no length)
     for redshift in ({}, dict(redshift=-0.001)):
