@@ -158,8 +158,9 @@ class FitParamBounded(FitParam):
     ):
         self._prior = prior
         if prior is not None:
-            minimum = max(minimum, prior.minimum())
-            maximum = min(maximum, prior.maximum())
+            low, high = prior.support()
+            minimum = max(minimum, low)
+            maximum = min(maximum, high)
         if not minimum < maximum:
             raise ConfigError(
                 f"the bounds, with the support of the prior, must not be "
@@ -254,7 +255,7 @@ class FitParamPrior(FitParam):
 
     def __init__(self, prior: Prior, value: float | None = None):
         if value is not None:
-            _check_value(value, prior.minimum(), prior.maximum())
+            _check_value(value, *prior.support())
         self._prior = prior
         self._value = None if value is None else float(value)
 
@@ -263,10 +264,10 @@ class FitParamPrior(FitParam):
         return self._value
 
     def minimum(self) -> float:
-        return self._prior.minimum()
+        return self._prior.support()[0]
 
     def maximum(self) -> float:
-        return self._prior.maximum()
+        return self._prior.support()[1]
 
     def prior(self) -> Prior:
         return self._prior

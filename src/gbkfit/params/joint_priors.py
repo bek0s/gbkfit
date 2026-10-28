@@ -7,14 +7,16 @@ free element (see Prior).
 import abc
 import numbers
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Annotated, Any, Literal
 
 import numpy as np
 import scipy.linalg
+from annotated_types import Gt
+from pydantic import FiniteFloat
 
 from .space import ParamFunctions, ParamSpace, ParamValues
 from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -113,6 +115,7 @@ class JointPriorGauss(JointPrior):
             mean: float | Sequence[float],
             std: float | Sequence[float]
     ):
+        check_options(self.__init__, locals())
         _check_std(std)
         self._expr = expr
         self._mean = mean
@@ -177,13 +180,11 @@ class JointPriorSmooth(JointPrior):
     def __init__(
             self,
             expr: str,
-            order: int,
-            std: float,
+            order: Literal[1, 2],
+            std: Annotated[FiniteFloat, Gt(0)],
             positions: str | None = None
     ):
-        if order not in (1, 2):
-            raise ConfigError(f"order must be 1 or 2; it is {order}")
-        _check_std(std)
+        check_options(self.__init__, locals())
         self._expr = expr
         self._order = order
         self._std = std
@@ -293,18 +294,16 @@ class JointPriorSmooth2D(JointPrior):
             self,
             expr: str,
             size: Sequence[int],
-            order: int,
-            std: float
+            order: Literal[1, 2],
+            std: Annotated[FiniteFloat, Gt(0)]
     ):
+        check_options(self.__init__, locals())
         if not (isinstance(size, Sequence) and len(size) == 2 and all(
                 isinstance(n, numbers.Integral) and not isinstance(n, bool)
                 and n >= 1 for n in size)):
             raise ConfigError(
                 f"size must be the numbers of cells along x and y, [nx, "
                 f"ny], each at least 1; it is {size!r}")
-        if order not in (1, 2):
-            raise ConfigError(f"order must be 1 or 2; it is {order}")
-        _check_std(std)
         self._expr = expr
         self._size = (int(size[0]), int(size[1]))
         self._order = order
@@ -375,16 +374,16 @@ class JointPriorBound(JointPrior):
     def __init__(
             self,
             expr: str,
-            std: float,
+            std: Annotated[FiniteFloat, Gt(0)],
             lower: float | None = None,
             upper: float | None = None
     ):
+        check_options(self.__init__, locals())
         if lower is None and upper is None:
             raise ConfigError("a bound needs lower, upper or both")
         if lower is not None and upper is not None and not lower < upper:
             raise ConfigError(
                 f"lower must be below upper; they are {lower} and {upper}")
-        _check_std(std)
         self._expr = expr
         self._std = std
         self._lower = lower
@@ -447,6 +446,7 @@ class JointPriorMVN(JointPrior):
             mean: Sequence[float],
             cov: Sequence[Sequence[float]]
     ):
+        check_options(self.__init__, locals())
         n = len(exprs)
         cov_ = np.asarray(cov, dtype=float)
         if len(mean) != n or cov_.shape != (n, n):

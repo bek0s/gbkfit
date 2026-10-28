@@ -141,38 +141,18 @@ def ellipse(centre, axes: Sequence[float], angle: float = 0, colour=None):
 
 
 def test_options_for_callable():
-    # Parameters ignored (centre), renamed (axes) or not, and options
-    # added (required, typed or not, and optional)
+    # The parameters ignored (centre) are not options
     def parse(**info):
         return parseutils.parse_options_for_callable(
-            info, ellipse, ignore_params=['centre'],
-            rename_params=dict(axes='ab'), add_required=dict(shape=str),
-            add_optional=dict(label=None))
-    assert parse(ab=[2, 1], shape='e', label=3) == dict(
-        axes=[2, 1], shape='e', label=3)
-    with pytest.raises(parseutils.ConfigError, match="'shape'"):
-        parse(ab=[2, 1])
-    with pytest.raises(parseutils.ConfigError, match="'shape' must be of"):
-        parse(ab=[2, 1], shape=5)
-    with pytest.raises(parseutils.ConfigError, match="'ab' must be of"):
-        parse(ab=2, shape='e')
-
-
-@pytest.mark.parametrize('options, message', [
-    (dict(ignore_params=['radius']), "has no parameters 'radius'"),
-    (dict(rename_params=dict(radius='r')), "has no parameters 'radius'"),
-    (dict(ignore_params=['axes'], rename_params=dict(axes='ab')),
-     "both ignored and renamed"),
-    (dict(rename_params=dict(axes='a', angle='a')), "to the same name"),
-    (dict(rename_params=dict(axes='angle')), "with the new names 'angle'"),
-    (dict(add_required=dict(x=int), add_optional=dict(x=int)),
-     "both required and optional"),
-    (dict(add_optional=dict(angle=float)), "names of the parameters"),
-    (dict(rename_params=dict(axes='ab'), add_optional=dict(ab=None)),
-     "names of the parameters")])
-def test_options_for_callable_must_fit_its_parameters(options, message):
-    with pytest.raises(RuntimeError, match=message):
-        parseutils.parse_options_for_callable({}, ellipse, **options)
+            info, ellipse, ignore_params=['centre'])
+    assert parse(axes=[2, 1], angle=3) == dict(axes=[2, 1], angle=3)
+    with pytest.raises(parseutils.ConfigError, match="'axes'"):
+        parse(angle=3)
+    with pytest.raises(parseutils.ConfigError, match="'axes' must be of"):
+        parse(axes=2)
+    with pytest.raises(RuntimeError, match="has no parameters 'radius'"):
+        parseutils.parse_options_for_callable(
+            {}, ellipse, ignore_params=['radius'])
 
 
 def test_warnings_have_the_path_of_the_configuration(caplog):

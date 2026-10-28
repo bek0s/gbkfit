@@ -11,6 +11,7 @@ units (``Unit``). They are checked against them in Python calls (see
 
 import dataclasses
 import functools
+import math
 import types
 import typing
 import warnings
@@ -81,10 +82,11 @@ def split_fits_file(file: FitsFile) -> tuple[str, int | str]:
     return (file, 0) if isinstance(file, str) else file
 
 
-# The bounds of the ranges of options (see problem)
+# The bounds of the ranges of options, and finiteness (e.g. of
+# pydantic.FiniteFloat; see problem)
 _BOUNDS = (
     annotated_types.Gt, annotated_types.Ge, annotated_types.Lt,
-    annotated_types.Le)
+    annotated_types.Le, pydantic.AllowInfNan(False))
 
 
 @functools.cache
@@ -213,16 +215,23 @@ def _without_none(type_: Any) -> Any:
         if len(members) > 1 else members[0]
 
 
+def _is_bound(x: Any) -> bool:
+    """Return whether the metadata of an Annotated is a bound (see _BOUNDS)."""
+    return any(
+        x == bound if isinstance(bound, pydantic.AllowInfNan)
+        else isinstance(x, bound) for bound in _BOUNDS)
+
+
 def _split_bounds(type_: Any) -> tuple[Any, list[Any]]:
     """
-    Return an annotation without the bounds of its range (Gt, Ge, Lt and
-    Le of an Annotated), and the bounds.
+    Return an annotation without the bounds of its range (those of an
+    Annotated, see _BOUNDS), and the bounds.
     """
     if typing.get_origin(type_) is not Annotated:
         return type_, []
     inner, *metadata = typing.get_args(type_)
-    bounds = [x for x in metadata if isinstance(x, _BOUNDS)]
-    others = [x for x in metadata if not isinstance(x, _BOUNDS)]
+    bounds = [x for x in metadata if _is_bound(x)]
+    others = [x for x in metadata if not _is_bound(x)]
     return (Annotated[inner, *others] if others else inner), bounds
 
 
@@ -232,8 +241,9 @@ def problem(value: Any, type_: Any) -> str | None:
     annotation, or None if nothing.
 
     The value must be of the type, and within the range of the bounds of
-    the annotation (Gt, Ge, Lt and Le of annotated_types). A numpy value
-    is checked as its Python value (e.g. an array as a list).
+    the annotation (Gt, Ge, Lt and Le of annotated_types, and finite, of
+    pydantic.FiniteFloat). A numpy value is checked as its Python value
+    (e.g. an array as a list).
 
     Parameters
     ----------
@@ -285,6 +295,8 @@ def _bound(bound: Any) -> tuple[str, Callable[[Any], bool]]:
             return f"less than {b}", lambda x: x < b
         case annotated_types.Le(le=b):
             return f"at most {b}", lambda x: x <= b
+        case pydantic.AllowInfNan(allow_inf_nan=False):
+            return "finite", math.isfinite
     raise TypeError(f"unknown bound {bound!r}")
 
 

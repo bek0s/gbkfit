@@ -102,8 +102,8 @@ class FreeElement:
     value : float, optional
         The starting value (optimizers need it; walkers start around
         it, see width).
-    minimum, maximum : float, optional
-        The bounds (config: min, max; by default none).
+    min, max : float, optional
+        The bounds (by default none).
     prior : Prior, optional
         The prior.
     sigma : float, optional
@@ -130,28 +130,27 @@ class FreeElement:
             info['prior'] = parseutils.load_option(
                 prior_parser.load, info, 'prior')
         return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__,
-            rename_params=dict(minimum='min', maximum='max')))
+            info, cls.__init__))
 
     def __init__(
             self,
             value: float | None = None,
-            minimum: float = -math.inf,
-            maximum: float = math.inf,
+            min: float = -math.inf,
+            max: float = math.inf,
             prior: Prior | None = None,
             sigma: float | None = None,
             width: float | None = None,
             n: int | None = None
     ):
-        if not minimum < maximum:
+        if not min < max:
             raise ConfigError(
-                f"the bounds must not be empty; they are [{minimum}, "
-                f"{maximum}]")
-        if prior is not None and (
-                minimum > prior.minimum() or maximum < prior.maximum()):
-            prior = PriorTruncated(prior, minimum, maximum)
+                f"the bounds must not be empty; they are [{min}, {max}]")
+        minimum, maximum = min, max
         if prior is not None:
-            minimum, maximum = prior.minimum(), prior.maximum()
+            low, high = prior.support()
+            if minimum > low or maximum < high:
+                prior = PriorTruncated(prior, minimum, maximum)
+            minimum, maximum = prior.support()
         if value is not None:
             if not math.isfinite(value):
                 raise ConfigError(

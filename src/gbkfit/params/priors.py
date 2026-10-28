@@ -7,16 +7,19 @@ FreeElement).
 import abc
 import math
 from collections.abc import Mapping
-from typing import Any
+from typing import Annotated, Any
 
 import numpy as np
 import numpy.typing as npt
 import scipy.optimize
 import scipy.special
 import scipy.stats
+from annotated_types import Ge, Gt, Le
+from pydantic import FiniteFloat
 
-from gbkfit.utils import funcutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.typeutils import Unit
 
 
 __all__ = [
@@ -34,31 +37,12 @@ __all__ = [
 ]
 
 
-def _check_range(minimum: float, maximum: float) -> None:
-    """Check that a range is finite and not empty."""
-    if not (math.isfinite(minimum) and math.isfinite(maximum)):
+def _check_range(min: float, max: float) -> None:
+    """Check that a range is not empty."""
+    if not min < max:
         raise ConfigError(
-            f"the minimum and maximum must be finite; they are {minimum} "
-            f"and {maximum}")
-    if minimum >= maximum:
-        raise ConfigError(
-            f"the minimum must be less than the maximum; they are "
-            f"{minimum} and {maximum}")
-
-
-def _check_std(std: float) -> None:
-    """Check that a standard deviation is finite and positive."""
-    if not (math.isfinite(std) and std > 0):
-        raise ConfigError(
-            f"the standard deviation must be finite and positive; it is "
-            f"{std}")
-
-
-def _check_scale(scale: float) -> None:
-    """Check that a scale is finite and positive."""
-    if not (math.isfinite(scale) and scale > 0):
-        raise ConfigError(
-            f"the scale must be finite and positive; it is {scale}")
+            f"option 'min' must be less than option 'max'; they are {min} "
+            f"and {max}")
 
 
 class Prior(parseutils.TypedSerializable, abc.ABC):
@@ -66,7 +50,7 @@ class Prior(parseutils.TypedSerializable, abc.ABC):
     The prior of a free element: a probability distribution of its value.
     Priors are immutable, and take arrays of values.
 
-    The support (minimum, maximum) is where the density is positive; the
+    The support (see support) is where the density is positive; the
     finite differences of the uncertainty stay inside it. The nested
     samplers draw from the unit cube through ppf, the MCMC samplers add
     log_pdf to the log-likelihood, and the optimizers add chi2 to the
@@ -74,22 +58,12 @@ class Prior(parseutils.TypedSerializable, abc.ABC):
     FitProblem.cost).
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Prior':
-        # (config: min and max, of the priors that have a range)
-        names = funcutils.parameter_names(cls.__init__)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__, rename_params={
-                name: name[:3] for name in ('minimum', 'maximum')
-                if name in names.required + names.optional}))
-
     @abc.abstractmethod
-    def minimum(self) -> float:
-        """Return the lower end of the support (may be -inf)."""
-
-    @abc.abstractmethod
-    def maximum(self) -> float:
-        """Return the upper end of the support (may be inf)."""
+    def support(self) -> tuple[float, float]:
+        """
+        Return the support: the range where the density is positive (its
+        ends may be -inf and inf).
+        """
 
     @abc.abstractmethod
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
@@ -207,8 +181,8 @@ class PriorUniform(Prior):
 
     Parameters
     ----------
-    minimum, maximum : float
-        The range (config: min, max).
+    min, max : float
+        The range.
 
     Raises
     ------
@@ -223,16 +197,14 @@ class PriorUniform(Prior):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
 
-    def __init__(self, minimum: float, maximum: float):
-        _check_range(minimum, maximum)
-        self._minimum = float(minimum)
-        self._maximum = float(maximum)
+    def __init__(self, min: FiniteFloat, max: FiniteFloat):
+        check_options(self.__init__, locals())
+        _check_range(min, max)
+        self._minimum = float(min)
+        self._maximum = float(max)
 
-    def minimum(self) -> float:
-        return self._minimum
-
-    def maximum(self) -> float:
-        return self._maximum
+    def support(self) -> tuple[float, float]:
+        return self._minimum, self._maximum
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)
@@ -268,8 +240,8 @@ class PriorLogUniform(Prior):
 
     Parameters
     ----------
-    minimum, maximum : float
-        The range, positive (config: min, max).
+    min, max : float
+        The range, positive.
 
     Raises
     ------
@@ -284,21 +256,19 @@ class PriorLogUniform(Prior):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
 
-    def __init__(self, minimum: float, maximum: float):
-        _check_range(minimum, maximum)
-        if minimum <= 0:
-            raise ConfigError(
-                f"the minimum of a log-uniform prior must be positive; it "
-                f"is {minimum}")
-        self._minimum = float(minimum)
-        self._maximum = float(maximum)
+    def __init__(
+            self,
+            min: Annotated[FiniteFloat, Gt(0)],
+            max: Annotated[FiniteFloat, Gt(0)]
+    ):
+        check_options(self.__init__, locals())
+        _check_range(min, max)
+        self._minimum = float(min)
+        self._maximum = float(max)
         self._log_ratio = math.log(self._maximum / self._minimum)
 
-    def minimum(self) -> float:
-        return self._minimum
-
-    def maximum(self) -> float:
-        return self._maximum
+    def support(self) -> tuple[float, float]:
+        return self._minimum, self._maximum
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)
@@ -335,9 +305,8 @@ class PriorSine(Prior):
 
     Parameters
     ----------
-    minimum, maximum : float, optional
-        The range, in degrees, within [0, 180] (config: min, max; by
-        default [0, 90]).
+    min, max : float, optional
+        The range, in degrees, within [0, 180] (by default [0, 90]).
 
     Raises
     ------
@@ -352,23 +321,21 @@ class PriorSine(Prior):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
 
-    def __init__(self, minimum: float = 0.0, maximum: float = 90.0):
-        _check_range(minimum, maximum)
-        if not (0 <= minimum and maximum <= 180):
-            raise ConfigError(
-                f"the range of a sine prior must be within [0, 180] "
-                f"degrees; it is [{minimum}, {maximum}]")
-        self._minimum = float(minimum)
-        self._maximum = float(maximum)
+    def __init__(
+            self,
+            min: Annotated[float, Ge(0), Le(180), Unit('deg')] = 0.0,
+            max: Annotated[float, Ge(0), Le(180), Unit('deg')] = 90.0
+    ):
+        check_options(self.__init__, locals())
+        _check_range(min, max)
+        self._minimum = float(min)
+        self._maximum = float(max)
         # (the cosines of the ends, whose difference normalises it)
         self._cos_min = math.cos(math.radians(self._minimum))
         self._cos_max = math.cos(math.radians(self._maximum))
 
-    def minimum(self) -> float:
-        return self._minimum
-
-    def maximum(self) -> float:
-        return self._maximum
+    def support(self) -> tuple[float, float]:
+        return self._minimum, self._maximum
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)
@@ -429,10 +396,10 @@ class PriorGauss(Prior):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), mean=self._mean, std=self._std)
 
-    def __init__(self, mean: float, std: float):
-        if not math.isfinite(mean):
-            raise ConfigError(f"the mean must be finite; it is {mean}")
-        _check_std(std)
+    def __init__(
+            self, mean: FiniteFloat, std: Annotated[FiniteFloat, Gt(0)]
+    ):
+        check_options(self.__init__, locals())
         self._mean = float(mean)
         self._std = float(std)
 
@@ -444,11 +411,8 @@ class PriorGauss(Prior):
         """Return the standard deviation."""
         return self._std
 
-    def minimum(self) -> float:
-        return -math.inf
-
-    def maximum(self) -> float:
-        return math.inf
+    def support(self) -> tuple[float, float]:
+        return -math.inf, math.inf
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         z = (np.asarray(x, dtype=float) - self._mean) / self._std
@@ -481,8 +445,8 @@ class PriorGaussTrunc(Prior):
         The mean of the Gaussian before the truncation.
     std : float
         The standard deviation of the Gaussian before the truncation.
-    minimum, maximum : float
-        The range (config: min, max).
+    min, max : float
+        The range.
 
     Raises
     ------
@@ -502,22 +466,20 @@ class PriorGaussTrunc(Prior):
 
     def __init__(
             self,
-            mean: float,
-            std: float,
-            minimum: float,
-            maximum: float
+            mean: FiniteFloat,
+            std: Annotated[FiniteFloat, Gt(0)],
+            min: FiniteFloat,
+            max: FiniteFloat
     ):
-        if not math.isfinite(mean):
-            raise ConfigError(f"the mean must be finite; it is {mean}")
-        _check_std(std)
-        _check_range(minimum, maximum)
+        check_options(self.__init__, locals())
+        _check_range(min, max)
         self._mean = float(mean)
         self._std = float(std)
-        self._minimum = float(minimum)
-        self._maximum = float(maximum)
+        self._minimum = float(min)
+        self._maximum = float(max)
         # (scipy's truncnorm keeps the tails far from the mean accurate)
         self._dist = scipy.stats.truncnorm(
-            (minimum - mean) / std, (maximum - mean) / std, mean, std)
+            (min - mean) / std, (max - mean) / std, mean, std)
 
     def mean(self) -> float:
         """Return the mean of the Gaussian before the truncation."""
@@ -530,11 +492,8 @@ class PriorGaussTrunc(Prior):
         """
         return self._std
 
-    def minimum(self) -> float:
-        return self._minimum
-
-    def maximum(self) -> float:
-        return self._maximum
+    def support(self) -> tuple[float, float]:
+        return self._minimum, self._maximum
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         return np.asarray(self._dist.logpdf(np.asarray(x, dtype=float)))
@@ -582,19 +541,16 @@ class PriorHalfGauss(Prior):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), std=self._std)
 
-    def __init__(self, std: float):
-        _check_std(std)
+    def __init__(self, std: Annotated[FiniteFloat, Gt(0)]):
+        check_options(self.__init__, locals())
         self._std = float(std)
 
     def std(self) -> float:
         """Return the standard deviation of the Gaussian."""
         return self._std
 
-    def minimum(self) -> float:
-        return 0.0
-
-    def maximum(self) -> float:
-        return math.inf
+    def support(self) -> tuple[float, float]:
+        return 0.0, math.inf
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)
@@ -649,19 +605,16 @@ class PriorHalfCauchy(Prior):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), scale=self._scale)
 
-    def __init__(self, scale: float):
-        _check_scale(scale)
+    def __init__(self, scale: Annotated[FiniteFloat, Gt(0)]):
+        check_options(self.__init__, locals())
         self._scale = float(scale)
 
     def scale(self) -> float:
         """Return the scale."""
         return self._scale
 
-    def minimum(self) -> float:
-        return 0.0
-
-    def maximum(self) -> float:
-        return math.inf
+    def support(self) -> tuple[float, float]:
+        return 0.0, math.inf
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)
@@ -751,6 +704,7 @@ class PriorScipy(Prior):
             distribution: str,
             params: Mapping[str, float] | None = None
     ):
+        check_options(self.__init__, locals())
         family = getattr(scipy.stats, distribution, None)
         if not isinstance(family, scipy.stats.rv_continuous):
             raise ConfigError(
@@ -773,11 +727,9 @@ class PriorScipy(Prior):
         self._frozen = frozen
         self._max_log_pdf = _max_log_pdf(frozen)
 
-    def minimum(self) -> float:
-        return float(self._frozen.support()[0])
-
-    def maximum(self) -> float:
-        return float(self._frozen.support()[1])
+    def support(self) -> tuple[float, float]:
+        low, high = self._frozen.support()
+        return float(low), float(high)
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         return np.asarray(self._frozen.logpdf(x), dtype=float)
@@ -806,7 +758,7 @@ class PriorTruncated(Prior):
     ----------
     prior : Prior
         The prior.
-    minimum, maximum : float
+    min, max : float
         The range (may be infinite); the support is the part of that of
         the prior within it.
 
@@ -825,26 +777,25 @@ class PriorTruncated(Prior):
             type=self.type(), prior=prior_parser.dump(self._prior),
             min=self._minimum, max=self._maximum)
 
-    def __init__(self, prior: Prior, minimum: float, maximum: float):
+    def __init__(self, prior: Prior, min: float, max: float):
+        check_options(self.__init__, locals())
+        low, high = prior.support()
         self._prior = prior
-        self._minimum = max(float(minimum), prior.minimum())
-        self._maximum = min(float(maximum), prior.maximum())
+        self._minimum = float(np.maximum(min, low))
+        self._maximum = float(np.minimum(max, high))
         self._cdf_minimum = float(prior.cdf(self._minimum))
         self._mass = float(prior.cdf(self._maximum)) - self._cdf_minimum
         if not (self._minimum < self._maximum and self._mass > 0):
             raise ConfigError(
-                f"the bounds [{minimum}, {maximum}] hold none of the "
-                f"probability of the prior")
+                f"the bounds [{min}, {max}] hold none of the probability of "
+                f"the prior")
 
     def prior(self) -> Prior:
         """Return the prior that it cuts."""
         return self._prior
 
-    def minimum(self) -> float:
-        return self._minimum
-
-    def maximum(self) -> float:
-        return self._maximum
+    def support(self) -> tuple[float, float]:
+        return self._minimum, self._maximum
 
     def log_pdf(self, x: npt.ArrayLike) -> np.ndarray:
         x = np.asarray(x, dtype=float)

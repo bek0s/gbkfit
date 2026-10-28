@@ -516,10 +516,7 @@ def parse_file(x: str | dict[str, Any]) -> tuple[str, int | str]:
 def parse_options_for_callable(
         info: dict[str, Any],
         func: Callable,
-        ignore_params: Iterable[str] | None = None,
-        rename_params: dict[str, str] | None = None,
-        add_required: dict[str, Any] | None = None,
-        add_optional: dict[str, Any] | None = None
+        ignore_params: Iterable[str] | None = None
 ) -> dict[str, Any]:
     """
     Check the options of a configuration against the parameters of a
@@ -545,44 +542,30 @@ def parse_options_for_callable(
     ignore_params : Iterable of str, optional
         The parameters that are not options (e.g. those given by the
         caller).
-    rename_params : dict, optional
-        The option name of each renamed parameter (e.g. dict(minimum='min')).
-    add_required, add_optional : dict, optional
-        The required and the optional options that are not parameters,
-        with their types (None for any type).
 
     Returns
     -------
     dict
-        The options: those of the parameters keyed by parameter name, and
-        the added ones by option name.
+        The options, by parameter.
 
     Raises
     ------
     ConfigError
         If a required option is missing, an option does not match its
         type, or an option is unknown (unless in lenient mode).
+    RuntimeError
+        If func has no parameters of the names of ignore_params.
     """
     ignore_params = iterutils.setify(ignore_params)
-    rename_params = rename_params or {}
-    add_required = add_required or {}
-    add_optional = add_optional or {}
     required, optional = funcutils.parameter_names(func)
-    _check_param_options(
-        func, set(required) | set(optional), ignore_params, rename_params,
-        add_required, add_optional)
+    if unknown := ignore_params - set(required) - set(optional):
+        raise RuntimeError(
+            f"{func.__qualname__} has no parameters {_quoted(unknown)}")
     options = parse_options(
         info,
-        {rename_params.get(p, p) for p in required if p not in ignore_params}
-        | set(add_required),
-        {rename_params.get(p, p) for p in optional if p not in ignore_params}
-        | set(add_optional))
-    # The types of the options, and their parameters
-    types = {
-        rename_params.get(p, p): type_
-        for p, type_ in typeutils.option_types(func).items()}
-    types |= add_required | add_optional
-    option_params = {option: p for p, option in rename_params.items()}
+        [p for p in required if p not in ignore_params],
+        [p for p in optional if p not in ignore_params])
+    types = typeutils.option_types(func)
     args = {}
     for option, value in options.items():
         type_ = types.get(option)
@@ -591,7 +574,7 @@ def parse_options_for_callable(
                 value = from_config(value, type_)
             if problem := typeutils.problem(value, type_):
                 raise ConfigError(f"option '{option}' {problem}")
-        args[option_params.get(option, option)] = value
+        args[option] = value
     return args
 
 
@@ -672,40 +655,6 @@ def check_options(func: Callable, values: Mapping[str, Any]) -> None:
         if name in values \
                 and (problem := typeutils.problem(values[name], type_)):
             raise ConfigError(f"option '{name}' {problem}")
-
-
-def _check_param_options(
-        func, params, ignore_params, rename_params, add_required,
-        add_optional):
-    """
-    Check the options of parse_options_for_callable against the
-    parameters (params) of func.
-    """
-    name = func.__qualname__
-    renamed = set(rename_params)
-    new_names = list(rename_params.values())
-    added = set(add_required) | set(add_optional)
-    if unknown := (ignore_params | renamed) - params:
-        raise RuntimeError(f"{name} has no parameters {_quoted(unknown)}")
-    if both := ignore_params & renamed:
-        raise RuntimeError(
-            f"the parameters of {name} cannot be both ignored and renamed: "
-            f"{_quoted(both)}")
-    if repeated := {x for x in new_names if new_names.count(x) > 1}:
-        raise RuntimeError(
-            f"several parameters of {name} cannot be renamed to the same "
-            f"name: {_quoted(repeated)}")
-    if clashing := set(new_names) & params:
-        raise RuntimeError(
-            f"{name} has parameters with the new names {_quoted(clashing)}")
-    if both := set(add_required) & set(add_optional):
-        raise RuntimeError(
-            f"added options cannot be both required and optional: "
-            f"{_quoted(both)}")
-    if clashing := added & (params | set(new_names)):
-        raise RuntimeError(
-            f"added options cannot have the names of the parameters of "
-            f"{name}, or their new names: {_quoted(clashing)}")
 
 
 def sanitize_dimensional_options(

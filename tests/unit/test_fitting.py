@@ -101,7 +101,7 @@ def test_fitter_configs_round_trip():
 def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
     # (over the whole support: the half-Cauchy has 1% of its mass beyond
     # 60 scales)
-    lo, hi = prior.minimum(), prior.maximum()
+    lo, hi = prior.support()
     total, _ = scipy.integrate.quad(
         lambda x: math.exp(prior.log_pdf(x)), lo, hi)
     assert total == pytest.approx(1, rel=1e-6)
@@ -111,8 +111,7 @@ def test_priors_are_normalised_and_ppf_inverts_their_cdf(prior):
             lambda x: math.exp(prior.log_pdf(x)), lo, float(prior.ppf(u)))
         assert below == pytest.approx(u, rel=1e-6)
         assert prior.cdf(prior.ppf(u)) == pytest.approx(u, rel=1e-9)
-    assert prior.log_pdf(prior.minimum() - 1) == -np.inf or \
-        prior.minimum() == -np.inf
+    assert prior.log_pdf(lo - 1) == -np.inf or lo == -np.inf
 
 
 def test_the_residual_of_the_sine_prior_is_smooth_through_edge_on():
@@ -161,7 +160,7 @@ def test_priors_of_scipy_distributions():
         prior.log_pdf(x), scipy.stats.lognorm(s, scale=scale).logpdf(x))
     assert prior.chi2(scale * math.exp(-s ** 2)) == pytest.approx(
         0, abs=1e-9)
-    assert (prior.minimum(), prior.maximum()) == (0, np.inf)
+    assert prior.support() == (0, np.inf)
     assert not prior.has_residual()
     info = dict(type='scipy', distribution='lognorm',
                 params=dict(s=s, scale=scale))
@@ -180,7 +179,7 @@ def test_free_elements_mean_the_same_for_every_fitter():
     assert FitParamBounded.of(bounded, {}).prior() is None
     prior = FitParamPrior.of(bounded, {}).prior()
     assert isinstance(prior, PriorUniform)
-    assert (prior.minimum(), prior.maximum()) == (-2, 5)
+    assert prior.support() == (-2, 5)
     # A prior with bounds is cut to them, for both
     cut = FreeElement.load(dict(
         prior=dict(type='gauss', mean=0, std=1), min=-2, max=5, value=1))

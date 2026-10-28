@@ -11,6 +11,7 @@ import textwrap
 import pytest
 
 import gbkfit.instrument
+import gbkfit.params
 from gbkfit.utils import funcutils, typeutils
 
 
@@ -18,7 +19,9 @@ from gbkfit.utils import funcutils, typeutils
 PARSERS = [
     gbkfit.instrument.lsf_parser,
     gbkfit.instrument.primary_beam_parser,
-    gbkfit.instrument.psf_parser]
+    gbkfit.instrument.psf_parser,
+    gbkfit.params.joint_prior_parser,
+    gbkfit.params.prior_parser]
 CLASSES = [gbkfit.instrument.Instrument, gbkfit.instrument.SpectralTable]
 
 
