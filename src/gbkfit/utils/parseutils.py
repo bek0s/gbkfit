@@ -877,6 +877,39 @@ class Serializable(abc.ABC):
         args = parse_options_for_callable(info, func)
         return cls(**args) if name == '__init__' else func(**args)
 
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        """
+        Return the JSON Schema (2020-12) of the configurations of the class.
+
+        Those of the base of a family (e.g. PSF) are those of any of its
+        members, with their type, as the parser of the family reads them;
+        those of another class (e.g. PSFGauss, or Galaxy) are its own
+        options, as its load reads them. See gbkfit.schema, of whole
+        configurations.
+
+        Returns
+        -------
+        dict
+            The schema.
+
+        Raises
+        ------
+        TypeError
+            If the class has no configurations (an abstract class that is
+            the base of no family).
+
+        Examples
+        --------
+        >>> import jsonschema
+        >>> from gbkfit.instrument import PSF, PSFGauss
+        >>> jsonschema.validate(dict(type='gauss', sigma=0.6), PSF.schema())
+        >>> jsonschema.validate(dict(sigma=0.6), PSFGauss.schema())
+        """
+        # (the schema imports the catalogue, which imports every family)
+        from gbkfit._schema import class_schema
+        return class_schema(cls)
+
     @abc.abstractmethod
     def dump(self, *args, **kwargs) -> dict[str, Any]:
         """

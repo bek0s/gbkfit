@@ -14,7 +14,8 @@ import ruamel.yaml
 import gbkfit
 from gbkfit._catalogue import Family, Member
 from gbkfit._schema import SchemaWriter
-from gbkfit.instrument import PSF
+from gbkfit.instrument import PSF, PSFGauss
+from gbkfit.model import Galaxy
 from gbkfit.observation import FittedNoise
 from gbkfit.utils import parseutils
 from gbkfit.utils.typeutils import Column, FitsFile
@@ -110,3 +111,17 @@ def test_golden_configurations_are_valid(validator, path):
         f"{'/'.join(map(str, e.absolute_path))}: {e.message[:200]}"
         for e in validator.iter_errors(config)]
     assert not errors
+
+
+def test_classes_have_the_schemas_of_their_configurations():
+    # (a family's have the type, as its parser reads them; a member's are
+    # its own options, as its load reads them)
+    psf = dict(type='gauss', sigma=0.6)
+    jsonschema.validate(psf, PSF.schema())
+    jsonschema.validate(dict(sigma=0.6), PSFGauss.schema())
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(psf, PSFGauss.schema())
+    # (a galaxy alone, with named geometries)
+    path = GOLDEN_DIR / 'params_features' / 'config.yaml'
+    galaxy, = ruamel.yaml.YAML(typ='safe').load(path)['galaxies']
+    jsonschema.validate(galaxy, Galaxy.schema())

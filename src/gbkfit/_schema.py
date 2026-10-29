@@ -31,9 +31,13 @@ from gbkfit.utils import parseutils, typeutils
 
 __all__ = [
     'SchemaWriter',
+    'class_schema',
     'schema'
 ]
 
+
+# The dialect of the schemas
+_DIALECT = 'https://json-schema.org/draft/2020-12/schema'
 
 # The keywords of JSON Schema of the bounds of a range
 _BOUNDS = {
@@ -64,7 +68,8 @@ def schema() -> dict[str, Any]:
     choices, units (the keyword 'unit'), defaults and descriptions. The
     members of families that need modules that are not installed are in
     it too, with the keywords 'available' (false) and 'requires' (what to
-    install): it is the same on every machine.
+    install): it is the same on every machine. Classes have the schemas
+    of their own configurations (see Serializable.schema).
 
     Returns
     -------
@@ -84,9 +89,27 @@ def schema() -> dict[str, Any]:
         properties[name] = value | {'description': section.desc}
     required = [k for k, v in _SECTIONS.items() if v.required]
     return {
-        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        '$schema': _DIALECT,
         'title': 'GBKFIT configuration',
         **_object(properties, required),
+        '$defs': writer.defs()}
+
+
+def class_schema(cls: type[parseutils.Serializable]) -> dict[str, Any]:
+    """
+    Return the JSON Schema (2020-12) of the configurations of a class (see
+    Serializable.schema).
+
+    Raises
+    ------
+    TypeError
+        If the class has no configurations.
+    """
+    writer = SchemaWriter()
+    return {
+        '$schema': _DIALECT,
+        'title': cls.__qualname__,
+        **writer.option(cls),
         '$defs': writer.defs()}
 
 
