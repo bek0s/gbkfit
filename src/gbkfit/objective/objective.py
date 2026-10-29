@@ -140,7 +140,9 @@ class Objective:
     evaluation, and released by close, or when Python collects it. An
     objective is a context manager that closes on exit: fitters can keep
     it alive after a fit (e.g. lmfit, in reference cycles), with its
-    memory, until Python collects it.
+    memory, until Python collects it. A copy of it (e.g. pickled for
+    another process) is an objective of a copy of its plan (see
+    GroupPlan), with memory of its own.
 
     The methods for fitters return totals over all observations and new
     arrays (chi2, log_likelihood, aicp, merits, residuals). The others
@@ -216,6 +218,10 @@ class Objective:
         self._d_scales: dict[int, DeviceArray] = {}
         # The memory is allocated on the first evaluation (see prepare)
         self._prepared = False
+
+    def __reduce__(self) -> tuple[type, tuple]:
+        # (copies make their memory again)
+        return Objective, (self._group_plan, self._solves)
 
     def nobservations(self) -> int:
         """Return the number of observations."""

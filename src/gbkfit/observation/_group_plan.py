@@ -98,6 +98,9 @@ class GroupPlan:
     too big for one) at the same time, each driver in a thread of its own,
     after the stages of the galaxies and the recordings of orbits.
 
+    A copy of it (e.g. pickled for another process) is a plan of its group
+    on drivers like its own, with memory of its own.
+
     Parameters
     ----------
     group : ObservationGroup
@@ -214,6 +217,17 @@ class GroupPlan:
         recording = self._recordings[k]
         return StageCache(
             (recording.weights(),), (self._recording_caches[k],))
+
+    def __reduce__(self) -> tuple[type, tuple]:
+        # (pickled copies make their memory, lock and threads again)
+        return GroupPlan, (
+            self._group, self._galaxy_drivers, self._observation_drivers)
+
+    def __copy__(self) -> Self:
+        # (shallow copies share them, see with_data)
+        copied = object.__new__(type(self))
+        copied.__dict__.update(self.__dict__)
+        return copied
 
     def group(self) -> 'ObservationGroup':
         """Return the group."""

@@ -166,6 +166,17 @@ class Expression:
         self._check(tree, pdescs, constants, names, unavailable or {})
         self._code: CodeType = compile(tree, '<expression>', 'eval')
 
+    # Copies (e.g. pickled for other processes) compile the source again:
+    # code objects do not pickle
+    def __getstate__(self) -> dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items() if k != '_code'}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._code = compile(
+            ast.parse(self.source.strip(), mode='eval'), '<expression>',
+            'eval')
+
     def evaluate(self, namespace: Mapping[str, Any]) -> Any:
         """Evaluate with the values of the parameters and constants."""
         return eval(self._code, {

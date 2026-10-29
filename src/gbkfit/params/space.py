@@ -9,6 +9,7 @@ import copy
 import dataclasses
 import enum
 import graphlib
+import inspect
 import logging
 import math
 import numbers
@@ -300,6 +301,8 @@ def _dump_transforms(transforms: Transforms) -> dict[str, str]:
     Return the file and the name of a transforms function. It must be
     defined at the top level of a file, from which it loads again.
     """
+    # (that of a file, see load_function_from_file)
+    transforms = inspect.unwrap(transforms)
     code = getattr(transforms, '__code__', None)
     name = getattr(transforms, '__name__', None)
     if (code is None or code.co_filename.startswith('<')
