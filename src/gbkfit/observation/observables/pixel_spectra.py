@@ -66,6 +66,7 @@ class PixelSpectra(Observable):
     dataset_class = DatasetPixelSpectra
 
     emission = LineEmission
+    orbit_stars = None
 
     # The axes of a spectral cube: x, y and the spectral axis
     spectral_axis = 2

@@ -9,7 +9,7 @@ import importlib.metadata
 import logging
 import time
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, Literal, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Literal, NamedTuple, Self
 
 import numpy as np
 
@@ -38,8 +38,48 @@ _log = logging.getLogger(__name__)
 __all__ = [
     'FitRun',
     'Fitter',
+    'FitterInfo',
     'fitter_parser'
 ]
+
+
+class FitterInfo(NamedTuple):
+    """
+    What a kind of fitter is and gives, and what it needs (see
+    Fitter.info): its fits check it (see Fitter.load_fit_params and
+    Fitter.fit), and it can be asked of its class (e.g. which samplers
+    give an evidence). The properties of the free elements that it reads
+    are those of the class of its options (see Fitter.fit_param_class and
+    FitParam.properties).
+
+    Attributes
+    ----------
+    family : {'least_squares', 'optimizer', 'mcmc', 'nested', 'grid',
+              'multistart'}
+        What it is: least squares (of the residuals), an optimizer of one
+        number (its merit, see FitProblem.cost), a sampler of Markov
+        chains, a nested sampler, a grid, or runs of an optimizer from
+        many starts (see FitterMultiStart).
+    gives : tuple of {'posterior', 'evidence'}
+        What it gives besides its solutions and their uncertainty (see
+        UncertaintyOptions).
+    needs : tuple of {'residuals'}
+        What it needs of the objective: its residuals (see
+        Objective.gives_residuals).
+    batches : bool
+        Whether it evaluates points in batches, which workers evaluate at
+        once (see WorkerPool; of multistart, its starts, which they run at
+        once).
+    min_free : int
+        The fewest free elements that it fits.
+    """
+    family: Literal[
+        'least_squares', 'optimizer', 'mcmc', 'nested', 'grid',
+        'multistart']
+    gives: tuple[Literal['posterior', 'evidence'], ...] = ()
+    needs: tuple[Literal['residuals'], ...] = ()
+    batches: bool = True
+    min_free: int = 1
 
 
 @dataclasses.dataclass
@@ -120,6 +160,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         If the merit is unknown, or it is 'aicp' and the uncertainty
         options ask for a covariance.
     """
+
+    # What it is and gives, and what it needs
+    info: ClassVar[FitterInfo]
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'Fitter':
@@ -206,7 +249,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         ConfigError
-            If the properties of an element are invalid for the fitter.
+            If the properties of an element are invalid for the fitter, or
+            the elements are fewer than it fits (see FitterInfo.min_free).
         """
         cls = self.fit_param_class()
         defaults = self._tuning()
@@ -214,6 +258,11 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         for name, element in params.free_elements().items():
             with parseutils.config_path(name):
                 fit_params[name] = cls.of(element, defaults)
+        if fit_params and len(fit_params) < self.info.min_free:
+            raise ConfigError(
+                f"the fitter {self.type()!r} needs at least "
+                f"{self.info.min_free} free elements; {len(fit_params)} "
+                f"are free")
         return fit_params
 
     def _tuning(self) -> dict[str, Any]:
@@ -290,6 +339,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         fit_params = self.load_fit_params(params)
         if not fit_params:
             raise ValueError("no parameter is free")
+        if 'residuals' in self.info.needs:
+            objective.require_residuals()
         _check_valid_ranges(fit_params, params.free_valid_ranges())
         self._check_merit(objective)
         uncertainty = self._fit_uncertainty(objective)

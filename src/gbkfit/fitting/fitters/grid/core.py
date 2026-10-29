@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, Self
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import MERITS, FitProblem
@@ -49,6 +49,8 @@ class FitParamGrid(FitParam):
         If the range is not finite or is empty, or n is not an integer of
         at least 2.
     """
+
+    properties = ('min', 'max', 'n', 'prior')
 
     @classmethod
     def of(
@@ -138,6 +140,8 @@ class FitterGrid(Fitter):
         Fitter), or the grid has more than max_points points (when it
         runs).
     """
+
+    info = FitterInfo('grid')
 
     @staticmethod
     def type() -> str:

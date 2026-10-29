@@ -18,7 +18,8 @@ from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
 from .._native import ParamBuffer
-from .._needs import Need, NeedsForces, NeedsMass
+from .._needs import Need
+from ...gravity import Capability
 from .._nodal import (
     NodalTraits, TraitTable, native_traits, parse_component_rnode_args,
     subring_radii, with_default_height_traits)
@@ -181,9 +182,9 @@ class SpheroidKinematics(parseutils.TypedSerializable, abc.ABC):
         if not self.uses_mass():
             return ()
         return (
-            NeedsMass(f"{label} need the mass of its galaxy"),
-            NeedsForces(f"{label} take the forces of its gravity off its "
-                        f"plane"))
+            Need(Capability.MASS, f"{label} need the mass of its galaxy"),
+            Need(Capability.FORCES,
+                 f"{label} take the forces of its gravity off its plane"))
 
 
 # The kinds of the traits of SpheroidTraitsKinematics: velocity (v) and

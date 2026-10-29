@@ -22,7 +22,8 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc, ParamValues, ParamVectorDesc
 from gbkfit.utils.parseutils import check_options
 from .._native import ParamBuffer
-from .._needs import Need, NeedsMass, NeedsPotential
+from .._needs import Need
+from ...gravity import Capability
 from .._stage import GalaxyMass
 from ..base import ComponentState
 from ._jeans import light
@@ -153,10 +154,10 @@ class SchwarzschildKinematics(SpheroidKinematics):
 
     def needs(self, label: str) -> tuple[Need, ...]:
         return (
-            NeedsMass(f"{label} need the mass of its galaxy"),
-            NeedsPotential(
-                f"the orbits of {label} take forces that are the gradient "
-                f"of a potential"))
+            Need(Capability.MASS, f"{label} need the mass of its galaxy"),
+            Need(Capability.POTENTIAL,
+                 f"the orbits of {label} take forces that are the gradient "
+                 f"of a potential"))
 
     def motion(self, rmax: float) -> 'SchwarzschildMotion':
         return SchwarzschildMotion(self, rmax)

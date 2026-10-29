@@ -1,160 +1,116 @@
 """
-What the components of a galaxy need from it (Need): each need checks
-itself against the mass and the gravity of the galaxy when the galaxy is
-made (see Component.needs).
+What the components of a galaxy need from it (Need): capabilities of the
+galaxy (see Capability: its mass, and what its gravity gives of it),
+which the galaxy checks when it is made (see check_needs), and which can
+be asked before (see galaxy_gives).
 """
 
-import abc
-from collections.abc import Callable, Sequence
-from typing import Any
+from collections.abc import Iterable, Sequence
+from typing import NamedTuple
 
 from gbkfit.utils.parseutils import ConfigError
-from ..gravity import Gravity
+from ..gravity import Capability, Gravity
 from ..mass import MassModel
 
 
 __all__ = [
     'Need',
-    'NeedsForces',
-    'NeedsMass',
-    'NeedsMassDensities',
-    'NeedsPotential'
+    'check_needs',
+    'density_needs',
+    'galaxy_gives'
 ]
 
 
-class Need(abc.ABC):
+class Need(NamedTuple):
     """
     Something that a component needs from its galaxy (see
-    Component.needs), which checks itself against the mass and the
-    gravity of the galaxy.
-    """
+    Component.needs): a capability, what needs it, and the mass
+    components whose densities it takes, if any.
 
-    @abc.abstractmethod
-    def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
-        """
-        Check that a galaxy of the given mass model (None without mass) and
-        gravity gives it.
-
-        Raises
-        ------
-        ConfigError
-            If the galaxy does not give it, saying what needs it.
-        """
-        pass
-
-
-class NeedsMass(Need):
-    """
-    The mass of the galaxy (e.g. its circular velocity).
-
-    Parameters
+    Attributes
     ----------
-    message : str
-        What needs it, and why: the message of the error without mass.
-    """
-
-    def __init__(self, message: str):
-        self._message = message
-
-    def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
-        if mass_model is None:
-            raise ConfigError(self._message)
-
-
-class NeedsForces(Need):
-    """
-    The forces of the mass in the gravity of the galaxy, off the midplane
-    of its disks (see Gravity.check_forces), if it has mass (see NeedsMass
-    for the mass itself).
-
-    Parameters
-    ----------
+    capability : Capability
+        The capability.
     what : str
-        What takes them (e.g. "the jeans equilibrium of the component
-        'gas' takes the vertical force of the gravity of its galaxy").
+        Of the mass alone, the message of the error without it (e.g. "the
+        'mass' velocity traits of the component 'gas' need the mass of
+        their galaxy"); else, what takes the capability (e.g. "the jeans
+        equilibrium of the component 'gas' takes the vertical force of the
+        gravity of its galaxy").
+    densities : tuple of str
+        The names of the mass components whose densities it takes (e.g.
+        the pressure support of a disk; see density_needs).
     """
-
-    def __init__(self, what: str):
-        self._what = what
-
-    def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
-        if mass_model is not None:
-            _check_gravity(gravity.check_forces, mass_model, what=self._what)
+    capability: Capability
+    what: str
+    densities: tuple[str, ...] = ()
 
 
-class NeedsPotential(Need):
+def density_needs(
+        names: Sequence[str],
+        surface: bool,
+        what: str
+) -> list[Need]:
     """
-    Forces of the mass in the gravity of the galaxy that are the gradient
-    of a potential (see Gravity.check_potential), if it has mass (see
-    NeedsMass for the mass itself): e.g. for orbits, which keep their
-    energy in them.
-
-    Parameters
-    ----------
-    what : str
-        What takes them (e.g. "the orbits of the spheroid 'stars'").
+    Return the needs of the densities of mass components (by name), or of
+    their surface densities as self-gravitating sheets in Newtonian
+    gravity (none: the surface densities of the sheets only, e.g. of the
+    disk itself), of what takes them (e.g. "the hydrostatic pressure
+    support of the component 'gas'").
     """
+    kind = 'surface density' if surface else 'density'
+    needs = [Need(Capability.MASS, f"{what} takes the {kind}", tuple(names))] \
+        if names else []
+    if surface:
+        needs.append(Need(
+            Capability.SHEETS,
+            f"{what} takes the vertical structure of self-gravitating sheets "
+            f"in Newtonian gravity"))
+    return needs
 
-    def __init__(self, what: str):
-        self._what = what
 
-    def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
-        if mass_model is not None:
-            _check_gravity(
-                gravity.check_potential, mass_model, what=self._what)
-
-
-class NeedsMassDensities(Need):
+def galaxy_gives(
+        mass_model: MassModel | None,
+        gravity: Gravity
+) -> dict[Capability, str | None]:
     """
-    The densities of mass components of the galaxy, by name, if it has
-    mass (see NeedsMass for the mass itself): their densities, or their
-    surface densities as self-gravitating sheets in Newtonian gravity (see
-    Gravity.check_self_gravitating_sheets).
-
-    Parameters
-    ----------
-    names : Sequence of str
-        The names of the mass components (none: the surface densities of
-        the sheets only, e.g. of the disk itself).
-    surface : bool
-        Whether they are surface densities of self-gravitating sheets.
-    what : str
-        What takes them (e.g. "the jeans pressure support of the
-        component 'gas'").
+    Return what a galaxy of a mass model (None without mass) and a gravity
+    gives its components: of each capability, None if it gives it, or else
+    why not.
     """
-
-    def __init__(self, names: Sequence[str], surface: bool, what: str):
-        self._names = tuple(names)
-        self._surface = surface
-        self._what = what
-
-    def check(self, mass_model: MassModel | None, gravity: Gravity) -> None:
-        if mass_model is None:
-            return
-        names = [component.name() for component in mass_model.components()]
-        if unknown := [name for name in self._names if name not in names]:
-            kind = 'surface density' if self._surface else 'density'
-            raise ConfigError(
-                f"{self._what} takes the {kind} of the mass components "
-                f"{unknown}, which its galaxy does not have; its mass "
-                f"components: {names}")
-        if self._surface:
-            _check_gravity(
-                gravity.check_self_gravitating_sheets,
-                what=f"{self._what} takes the vertical structure of "
-                     f"self-gravitating sheets in Newtonian gravity")
+    if mass_model is None:
+        return {capability: "it has no mass" for capability in Capability}
+    return {Capability.MASS: None} | gravity.gives(mass_model)
 
 
-def _check_gravity(
-        check: Callable[..., None], *args: Any, what: str
+def check_needs(
+        needs: Iterable[Need],
+        mass_model: MassModel | None,
+        gravity: Gravity
 ) -> None:
     """
-    Call a check of what a gravity gives (see Gravity) with the given
-    arguments, and raise ConfigError with what a feature takes (what) if
-    it does not give it.
+    Check that a galaxy of a mass model (None without mass) and a gravity
+    gives what its components need (see galaxy_gives). Without mass, only
+    the needs of the mass alone fail: those of the rest of what the mass
+    gives come with them.
+
+    Raises
+    ------
+    ConfigError
+        If the galaxy does not give a need, saying what needs it.
     """
-    try:
-        check(*args)
-    except ConfigError as e:
-        raise ConfigError(
-            f"{what}, which it does not give: {e.message}") from None
+    gives = galaxy_gives(mass_model, gravity)
+    names = [] if mass_model is None \
+        else [component.name() for component in mass_model.components()]
+    for need in needs:
+        if mass_model is None:
+            if need.capability is Capability.MASS and not need.densities:
+                raise ConfigError(need.what)
+            continue
+        if unknown := [name for name in need.densities if name not in names]:
+            raise ConfigError(
+                f"{need.what} of the mass components {unknown}, which its "
+                f"galaxy does not have; its mass components: {names}")
+        if (reason := gives[need.capability]) is not None:
+            raise ConfigError(
+                f"{need.what}, which it does not give: {reason}")

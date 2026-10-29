@@ -1,6 +1,6 @@
 import abc
 from collections.abc import Mapping, Sequence
-from typing import TYPE_CHECKING, Any, NamedTuple, Self, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -9,7 +9,7 @@ from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import (
-    DataUnit, Emission, Extras, GalaxyState, LightUnit, LineEmission)
+    DataUnit, Emission, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -100,6 +100,11 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     # The emission it sees: in a band (BandEmission) for an image, lines
     # (LineEmission) for a spectral cube and what is made of one
     emission: type[Emission]
+
+    # What it sees of the stars on orbits whose weights are solved (see
+    # Component.orbit_weights and check_scene): their light ('light', of
+    # an image), their moments ('moments', see RegionMoments), or nothing
+    orbit_stars: Literal['light', 'moments'] | None
 
     @classmethod
     @abc.abstractmethod
@@ -362,23 +367,24 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         Check that the observable can see a scene (see make_scene), through
         the foreground and the instrument, with the given flux scale of one
-        value (its parameter), if any, before any plan: here, of the stars
-        on orbits whose weights are solved (see Component.orbit_weights),
-        it sees the light only (as an image), which RegionMoments
-        overrides.
+        value (its parameter), if any, before any plan: here, that it sees
+        the stars on orbits whose weights are solved, if any (see
+        orbit_stars); RegionMoments checks more.
 
         Raises
         ------
         ConfigError
             If it cannot.
         """
-        if self.emission is LineEmission and scene.orbit_emitters():
+        if scene.orbit_emitters() and self.orbit_stars is None:
+            seeing = sorted(
+                f"{type_} (their {cls.orbit_stars})" for type_, cls
+                in observable_parser.registered_classes().items()
+                if cls.orbit_stars is not None)
             raise ConfigError(
                 f"stars on orbits whose weights are solved to fit the data "
-                f"(e.g. of Schwarzschild kinematics) are seen in the bins of "
-                f"region_moments of the method gauss_hermite, which an "
-                f"objective models (see Objective); {self.type()} does not "
-                f"see them")
+                f"(e.g. of Schwarzschild kinematics) are seen by "
+                f"{', '.join(seeing)}; {self.type()} does not see them")
 
     def require_matching(self, dataset: Dataset) -> None:
         """

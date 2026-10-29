@@ -10,7 +10,7 @@ import copy
 import math
 import typing
 from collections.abc import Mapping
-from typing import Any, Self, TypeAlias
+from typing import Any, ClassVar, Self, TypeAlias
 
 import numpy as np
 
@@ -63,6 +63,10 @@ def _scale(minimum: float, maximum: float, width: float) -> float:
 
 class FitParam(abc.ABC):
     """The options of a free element for a fitter."""
+
+    # The properties of the free elements that it reads (see FreeElement):
+    # each fitter reads those of its class, and ignores the others
+    properties: ClassVar[tuple[str, ...]] = ()
 
     @classmethod
     @abc.abstractmethod
@@ -140,6 +144,8 @@ class FitParamBounded(FitParam):
         If the bounds (with the support of the prior) are empty, or the
         value is not finite or not in them.
     """
+
+    properties = ('value', 'min', 'max', 'prior')
 
     @classmethod
     def of(
@@ -247,6 +253,8 @@ class FitParamPrior(FitParam):
         If the value is not finite or not in the support of the prior.
     """
 
+    properties = ('prior', 'min', 'max', 'value')
+
     @classmethod
     def of(
             cls, element: FreeElement, defaults: Mapping[str, Any]
@@ -308,6 +316,8 @@ class FitParamWalkers(FitParamPrior):
         If the value is not in the support of the prior, or a width is
         given without a value, or is not positive.
     """
+
+    properties = FitParamPrior.properties + ('width',)
 
     @classmethod
     def of(

@@ -10,6 +10,7 @@ need it check when the galaxy is made.
 """
 
 import abc
+import enum
 from collections.abc import Callable, Collection, Sequence
 from typing import Annotated, Any, Literal
 
@@ -30,6 +31,7 @@ from .mass.units import G
 
 __all__ = [
     'A0_UNIT',
+    'Capability',
     'Gravity',
     'GravityField',
     'GravityHuSawicki',
@@ -70,6 +72,27 @@ _FR_RMAX_COMPTON = 10.0
 _FR_RMAX_MIN = 1000.0
 
 
+class Capability(enum.Enum):
+    """
+    What a galaxy gives the components that need it (see Component.needs):
+    its mass, and what its gravity gives of it (see Gravity.gives).
+    """
+
+    # The mass (e.g. the circular velocity in its gravity)
+    MASS = 'mass'
+    # The forces of the mass anywhere (off the plane too)
+    FORCES = 'forces'
+    # Forces that are the gradient of a potential, in which orbits keep
+    # their energy
+    POTENTIAL = 'potential'
+    # The vertical structure of self-gravitating isothermal sheets of
+    # Newtonian gravity (h ~ sigma^2 / (G Sigma))
+    SHEETS = 'sheets'
+    # The shares of the components in the squared circular velocity (they
+    # add up to that of the mass)
+    SHARES = 'shares'
+
+
 class GravityField(abc.ABC):
     """
     The gravity of the mass of a galaxy in one evaluation, in kpc (see
@@ -91,7 +114,7 @@ class GravityField(abc.ABC):
         """
         Return the forces per unit mass ((km/s)^2/kpc), radial and
         vertical, at the points (R, z) (kpc), broadcast together, if its
-        gravity gives them (see Gravity.check_forces).
+        gravity gives them (see Gravity.gives).
         """
 
     @abc.abstractmethod
@@ -100,8 +123,7 @@ class GravityField(abc.ABC):
     ) -> np.ndarray:
         """
         Return the vertical force per unit mass ((km/s)^2/kpc) at the
-        points (R, z) (kpc), if its gravity gives it (see
-        Gravity.check_forces).
+        points (R, z) (kpc), if its gravity gives it (see Gravity.gives).
         """
 
 
@@ -109,21 +131,21 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
     """
     How the mass of a galaxy pulls: its parameters, and the field of the
     mass in each evaluation (see GravityField). Every field gives the
-    circular velocity in the plane; the features that need more check
-    when the galaxy is made that its gravity gives it:
+    circular velocity in the plane; what features need beyond it, a
+    gravity gives or not (see gives), which the galaxy checks when it is
+    made (see Component.needs):
 
-    - the forces anywhere (off the plane too), which the jeans
-      equilibrium and the rotation at each height take (see check_forces,
+    - the forces anywhere (off the plane too; Capability.FORCES), which
+      the jeans equilibrium and the rotation at each height take (see
       parts.JeansEquilibrium and traits.VHTraitMass)
-    - forces that are the gradient of a potential, in which orbits keep
-      their energy, as the orbits of Schwarzschild models take (see
-      check_potential)
-    - the vertical structure of self-gravitating isothermal sheets,
-      which the self_gravitating equilibrium and pressure support take
-      (see check_self_gravitating_sheets, parts.SelfGravitatingEquilibrium
-      and traits.VPTraitMass)
-    - the shares of the components in the squared circular velocity,
-      which the dark fraction of a spheroid takes (see check_shares and
+    - forces that are the gradient of a potential (POTENTIAL), in which
+      orbits keep their energy, as the orbits of Schwarzschild models take
+    - the vertical structure of self-gravitating isothermal sheets
+      (SHEETS), which the self_gravitating equilibrium and pressure
+      support take (see parts.SelfGravitatingEquilibrium and
+      traits.VPTraitMass)
+    - the shares of the components in the squared circular velocity
+      (SHARES), which the dark fraction of a spheroid takes (see
       mass.DarkFraction)
     """
 
@@ -154,33 +176,22 @@ class Gravity(parseutils.TypedSerializable, abc.ABC):
         """
 
     @abc.abstractmethod
-    def check_forces(self, mass_model: MassModel) -> None:
+    def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
         """
-        Raise ConfigError, saying why, unless its fields give the forces
-        of the mass model anywhere (off the plane too).
-        """
+        Return what it gives of a mass model to the components of its
+        galaxy that need it (see Capability; all but the mass, which is
+        that of the galaxy): of each, None if it gives it, or else why
+        not.
 
-    @abc.abstractmethod
-    def check_potential(self, mass_model: MassModel) -> None:
-        """
-        Raise ConfigError, saying why, unless its fields give the forces
-        of the mass model anywhere (see check_forces), and they are the
-        gradient of a potential (they have no curl).
-        """
+        Parameters
+        ----------
+        mass_model : MassModel
+            The mass model of its galaxy.
 
-    @abc.abstractmethod
-    def check_self_gravitating_sheets(self) -> None:
-        """
-        Raise ConfigError, saying why, unless the vertical structure of a
-        self-gravitating isothermal sheet in it is that of Newtonian
-        gravity (h ~ sigma^2 / (G Sigma)).
-        """
-
-    @abc.abstractmethod
-    def check_shares(self) -> None:
-        """
-        Raise ConfigError, saying why, unless the squared circular
-        velocities of the components add up to that of the mass.
+        Returns
+        -------
+        dict
+            None, or why not, by capability.
         """
 
 
@@ -205,18 +216,12 @@ class GravityNewton(Gravity):
     ) -> GravityField:
         return _NewtonField(mass_model, params, context)
 
-    def check_forces(self, mass_model: MassModel) -> None:
-        _check_components_give_forces(mass_model)
-
-    def check_potential(self, mass_model: MassModel) -> None:
-        # (that of the mass)
-        self.check_forces(mass_model)
-
-    def check_self_gravitating_sheets(self) -> None:
-        pass
-
-    def check_shares(self) -> None:
-        pass
+    def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
+        # (the potential of the mass, wherever it gives its forces)
+        forces = _forces_of_components(mass_model)
+        return {
+            Capability.FORCES: forces, Capability.POTENTIAL: forces,
+            Capability.SHEETS: None, Capability.SHARES: None}
 
 
 class _NewtonField(GravityField):
@@ -319,25 +324,21 @@ class GravityMOND(Gravity):
             _MOND_NU[self._interpolation],
             float(params['gravity_a0']) * A0_UNIT)
 
-    def check_forces(self, mass_model: MassModel) -> None:
-        # (of the Newtonian forces of all the mass)
-        _check_components_give_forces(mass_model)
-
-    def check_potential(self, mass_model: MassModel) -> None:
-        raise ConfigError(
-            "the forces of MOND here (the Newtonian forces times the "
-            "interpolation function) are not the gradient of a potential "
-            "off the plane: orbits do not keep their energy in them")
-
-    def check_self_gravitating_sheets(self) -> None:
-        raise ConfigError(
-            "the self-gravitating sheets of MOND are not those of Newtonian "
-            "gravity")
-
-    def check_shares(self) -> None:
-        raise ConfigError(
-            "the squared circular velocities of the components do not add "
-            "up in MOND")
+    def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
+        # (the forces of the Newtonian forces of all the mass)
+        return {
+            Capability.FORCES: _forces_of_components(mass_model),
+            Capability.POTENTIAL:
+                "the forces of MOND here (the Newtonian forces times the "
+                "interpolation function) are not the gradient of a "
+                "potential off the plane: orbits do not keep their energy "
+                "in them",
+            Capability.SHEETS:
+                "the self-gravitating sheets of MOND are not those of "
+                "Newtonian gravity",
+            Capability.SHARES:
+                "the squared circular velocities of the components do not "
+                "add up in MOND"}
 
 
 class _MONDField(GravityField):
@@ -547,24 +548,19 @@ class GravityHuSawicki(Gravity):
                 f"components {massless} do not give where their mass is "
                 f"(e.g. tables or user components): screen them")
 
-    def check_forces(self, mass_model: MassModel) -> None:
-        # (of the Newtonian forces of all the mass)
-        _check_components_give_forces(mass_model)
-
-    def check_potential(self, mass_model: MassModel) -> None:
-        raise ConfigError(
-            "the forces of f(R) gravity here are not given as the gradient "
-            "of a potential off the plane")
-
-    def check_self_gravitating_sheets(self) -> None:
-        raise ConfigError(
-            "the self-gravitating sheets of f(R) gravity are not those of "
-            "Newtonian gravity")
-
-    def check_shares(self) -> None:
-        raise ConfigError(
-            "the fifth force of f(R) gravity is not a sum over the "
-            "components")
+    def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
+        # (the forces of the Newtonian forces of all the mass)
+        return {
+            Capability.FORCES: _forces_of_components(mass_model),
+            Capability.POTENTIAL:
+                "the forces of f(R) gravity here are not given as the "
+                "gradient of a potential off the plane",
+            Capability.SHEETS:
+                "the self-gravitating sheets of f(R) gravity are not those "
+                "of Newtonian gravity",
+            Capability.SHARES:
+                "the fifth force of f(R) gravity is not a sum over the "
+                "components"}
 
 
 class _HuSawickiField(GravityField):
@@ -672,24 +668,19 @@ class GravityPalatini(Gravity):
                 f"it (e.g. thin disks, tables, user components or halos "
                 f"that respond to their baryons)")
 
-    def check_forces(self, mass_model: MassModel) -> None:
-        # (of the Newtonian forces of all the mass)
-        _check_components_give_forces(mass_model)
-
-    def check_potential(self, mass_model: MassModel) -> None:
-        raise ConfigError(
-            "the forces of Palatini f(R) gravity here are not given as the "
-            "gradient of a potential off the plane")
-
-    def check_self_gravitating_sheets(self) -> None:
-        raise ConfigError(
-            "the self-gravitating sheets of Palatini f(R) gravity are not "
-            "those of Newtonian gravity")
-
-    def check_shares(self) -> None:
-        raise ConfigError(
-            "the shares of the components that the dark fraction takes are "
-            "Newtonian, not those of Palatini f(R) gravity")
+    def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
+        # (the forces of the Newtonian forces of all the mass)
+        return {
+            Capability.FORCES: _forces_of_components(mass_model),
+            Capability.POTENTIAL:
+                "the forces of Palatini f(R) gravity here are not given as "
+                "the gradient of a potential off the plane",
+            Capability.SHEETS:
+                "the self-gravitating sheets of Palatini f(R) gravity are "
+                "not those of Newtonian gravity",
+            Capability.SHARES:
+                "the shares of the components that the dark fraction takes "
+                "are Newtonian, not those of Palatini f(R) gravity"}
 
 
 class _PalatiniField(GravityField):
@@ -747,18 +738,19 @@ class _PalatiniField(GravityField):
         return grad_R, grad_z
 
 
-def _check_components_give_forces(mass_model: MassModel) -> None:
+def _forces_of_components(mass_model: MassModel) -> str | None:
     """
-    Raise ConfigError unless every component of the mass model gives its
-    forces off its plane (see MassComponent.gives_forces).
+    Return None if every component of the mass model gives its forces off
+    its plane (see MassComponent.gives_forces), or else why not.
     """
     if forceless := [
             component.name() for component in mass_model.components()
             if not component.gives_forces()]:
-        raise ConfigError(
+        return (
             f"the mass components {forceless} do not give their forces off "
             f"their plane (user components give them by a function of the "
             f"forces, see MassUser)")
+    return None
 
 
 gravity_parser = parseutils.TypedParser(

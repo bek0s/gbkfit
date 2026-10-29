@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Annotated, Any
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils.parseutils import check_options
 
 if TYPE_CHECKING:
     import nautilus
@@ -69,6 +69,9 @@ class FitterNautilus(Fitter):
     ConfigError
         If a number is not positive.
     """
+
+    info = FitterInfo(
+        'nested', ('posterior', 'evidence'), min_free=2)
 
     requires = {'nautilus': "pip install 'gbkfit[nautilus]'"}
 
@@ -125,8 +128,6 @@ class FitterNautilus(Fitter):
             fit_params: list[FitParam],
             rng: np.random.Generator
     ) -> FitRun:
-        if problem.ndim() < 2:
-            raise ConfigError("nautilus needs at least 2 free elements")
         sampler, success = self._sample(
             problem, problem.nested_log_likelihood_batch, rng)
         points, log_w, log_l = sampler.posterior()

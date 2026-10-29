@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.problem import FitProblem
@@ -91,6 +91,8 @@ class FitterUltraNest(Fitter):
     ConfigError
         If a number is not positive.
     """
+
+    info = FitterInfo('nested', ('posterior', 'evidence'))
 
     requires = {'ultranest': "pip install 'gbkfit[ultranest]'"}
 

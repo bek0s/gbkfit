@@ -64,6 +64,7 @@ class PixelBrightness(Observable):
     dataset_class = DatasetPixelBrightness
 
     emission = BandEmission
+    orbit_stars = 'light'
 
     # An image has no spectral axis
     spectral_axis = None

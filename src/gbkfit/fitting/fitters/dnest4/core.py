@@ -12,7 +12,7 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.fitters._tables import TableLayout, table_layout
@@ -109,6 +109,9 @@ class FitterDNest4(Fitter):
         not positive, backtracking is not positive, beta is negative, or
         a value of min_rows is negative.
     """
+
+    info = FitterInfo(
+        'nested', ('posterior', 'evidence'), batches=False)
 
     @staticmethod
     def type() -> str:

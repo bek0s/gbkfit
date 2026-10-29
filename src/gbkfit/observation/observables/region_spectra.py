@@ -64,6 +64,7 @@ class RegionSpectra(Observable):
     dataset_class = DatasetRegionSpectra
 
     emission = LineEmission
+    orbit_stars = None
 
     # The axes of the cube of the model: x, y and the spectral axis
     spectral_axis = 2

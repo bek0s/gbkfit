@@ -16,7 +16,8 @@ from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import (
     NodalTraits, TraitParams, fill_param_values, native_traits, subring_radii)
 from ..base import ComponentState, FrameParams, NativeGrid
-from .._needs import Need, NeedsForces, NeedsMass, NeedsMassDensities
+from .._needs import Need, density_needs
+from ...gravity import Capability
 from ..geometries import GEOMETRY_PARAMS, GEOMETRY_UNITS
 from ..parts import (
     CentralEquilibrium, Equilibrium, JeansEquilibrium,
@@ -228,16 +229,18 @@ class NodalDisk(abc.ABC):
         label = repr(name)
         needs: list[Need] = []
         if self.circular_velocity_params():
-            needs.append(NeedsMass(
+            needs.append(Need(
+                Capability.MASS,
                 f"the 'mass' velocity traits of the component {label} need "
                 f"the mass of their galaxy"))
         for support in self.pressure_supported_params().values():
-            needs.append(NeedsMassDensities(
+            needs += density_needs(
                 support.density or (), support.mode == 'self_gravitating',
                 f"the {support.mode} pressure support of the component "
-                f"{label}"))
+                f"{label}")
         if self.rotation_factor_params():
-            needs.append(NeedsForces(
+            needs.append(Need(
+                Capability.FORCES,
                 f"the rotation at each height of the component {label} "
                 f"takes the radial force of the gravity of its galaxy off "
                 f"its plane"))
@@ -245,25 +248,28 @@ class NodalDisk(abc.ABC):
         if equilibrium is None:
             return tuple(needs)
         if not isinstance(equilibrium, CentralEquilibrium):
-            needs.append(NeedsMass(
+            needs.append(Need(
+                Capability.MASS,
                 f"the vertical equilibrium {equilibrium.type()!r} of the "
                 f"component {label} needs the mass of its galaxy"))
         elif not any(
                 trait.direction() == 'tan' for trait in self.traits('vpt')):
-            needs.append(NeedsMass(
+            needs.append(Need(
+                Capability.MASS,
                 f"the vertical equilibrium of the component {label} takes "
                 f"the circular velocity of the mass of its galaxy, or "
                 f"without mass, the rotation of its disk; it has neither: "
                 f"give it tangential velocity traits, or the galaxy mass"))
         if isinstance(equilibrium, JeansEquilibrium):
-            needs.append(NeedsForces(
+            needs.append(Need(
+                Capability.FORCES,
                 f"the jeans equilibrium of the component {label} takes the "
                 f"vertical force of the gravity of its galaxy"))
         if isinstance(equilibrium, SelfGravitatingEquilibrium):
-            needs.append(NeedsMassDensities(
+            needs += density_needs(
                 (equilibrium.density(),), True,
                 f"the self_gravitating equilibrium of the component "
-                f"{label}"))
+                f"{label}")
         return tuple(needs)
 
     def pressure_supported_params(self) -> dict[str, PressureSupport]:

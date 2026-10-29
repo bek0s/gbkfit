@@ -481,7 +481,7 @@ class Objective:
             the residuals of earlier calls, e.g. scipy's least_squares,
             need one).
         """
-        self._check_residuals()
+        self.require_residuals()
         vectors = self.residual_vector_h(params, True, out_extra)
         noise = [c.noise_residuals() for c in self._comparisons]
         return np.concatenate(
@@ -596,11 +596,16 @@ class Objective:
         """
         return all(c.gives_residuals() for c in self._comparisons)
 
-    def _check_residuals(self) -> None:
+    def require_residuals(self) -> None:
         """
         Raise ConfigError if the comparison of an observation gives no
         residuals (e.g. a user likelihood of the log-likelihood; see
-        LikelihoodUser).
+        LikelihoodUser), which least squares need.
+
+        Raises
+        ------
+        ConfigError
+            If an observation gives no residuals.
         """
         for i, comparison_ in enumerate(self._comparisons):
             if not comparison_.gives_residuals():

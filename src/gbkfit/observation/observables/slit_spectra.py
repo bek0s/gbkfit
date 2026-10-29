@@ -80,6 +80,7 @@ class SlitSpectra(Observable):
     dataset_class = DatasetSlitSpectra
 
     emission = LineEmission
+    orbit_stars = None
 
     # The axes of a long-slit spectrum: the position along the slit
     # and the spectral axis

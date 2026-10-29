@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
 from gbkfit.fitting.fitparams import (
@@ -63,6 +63,8 @@ class FitterLMFitLeastSquares(Fitter):
     ConfigError
         If max_nfev or a tolerance or the step is not positive.
     """
+
+    info = FitterInfo('least_squares', needs=('residuals',))
 
     requires = {'lmfit': "pip install 'gbkfit[lmfit]'"}
 

@@ -9,7 +9,7 @@ import numpy as np
 import scipy.optimize
 from annotated_types import Gt
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
 from gbkfit.fitting.fitparams import (
@@ -108,6 +108,8 @@ class FitterScipyLeastSquares(Fitter):
     ConfigError
         If a number is not positive, or 'lm' is given a robust loss.
     """
+
+    info = FitterInfo('least_squares', needs=('residuals',))
 
     @staticmethod
     def type() -> str:

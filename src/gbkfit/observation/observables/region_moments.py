@@ -92,6 +92,7 @@ class RegionMoments(Observable):
     dataset_class = DatasetRegionMoments
 
     emission = LineEmission
+    orbit_stars = 'moments'
 
     # The moments have no spectral axis
     spectral_axis = None

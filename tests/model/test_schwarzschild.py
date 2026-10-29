@@ -134,6 +134,20 @@ def test_orbits_take_the_forces_of_a_potential():
         galaxy(gravity=dict(type='mond', interpolation='simple'))
 
 
+def test_what_orbits_need_and_gravities_give_can_be_asked():
+    # (as data, before a galaxy of them is made: e.g. the gravities that
+    # give the orbits what they need)
+    from gbkfit.model import Capability, GravityMOND, GravityNewton
+    loaded = galaxy()
+    spheroid, = loaded.components()
+    assert [need.capability for need in spheroid.needs()] == [
+        Capability.MASS, Capability.POTENTIAL]
+    mass_model = loaded.mass_model()
+    assert GravityNewton().gives(mass_model)[Capability.POTENTIAL] is None
+    assert "not the gradient of a potential" in GravityMOND('simple').gives(
+        mass_model)[Capability.POTENTIAL]
+
+
 def test_orbits_take_a_mass_disk_far_from_it():
     # The potential of the orbits reaches 1e4 rmax (here 300 Mpc), beyond
     # the tables of the forces of an exponential disk (1000 rd from its
@@ -156,7 +170,10 @@ def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
                 size=16, step=20, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         lines=['stars'])
-    with pytest.raises(ConfigError, match="pixel_spectra does not see them"):
+    # (the message names those that see them; see Observable.orbit_stars)
+    with pytest.raises(ConfigError, match=(
+            r"seen by pixel_brightness \(their light\), region_moments "
+            r"\(their moments\); pixel_spectra does not see them")):
         ObservationGroup([galaxy()], [spectra]).plan(driver)
 
 

@@ -3,6 +3,7 @@ Tests for the fitting core (priors, the options of the free elements, the
 uncertainty) and the fitters, on a mock image with known parameters.
 """
 
+import inspect
 import math
 import threading
 import time
@@ -93,6 +94,29 @@ def test_fitter_configs_round_trip():
             info['local'] = dict(type='scipy.least_squares')
         dumped = fitter_parser.dump(fitter_parser.load(info))
         assert fitter_parser.dump(fitter_parser.load(dumped)) == dumped
+
+
+def test_fitters_say_what_they_are_give_and_need():
+    # (asked of their classes; the properties they read are those of free
+    # elements, and their fits check what they need)
+    from gbkfit.fitting import FitterInfo, fitter_parser
+    known = set(inspect.signature(FreeElement).parameters)
+    for cls in fitter_parser.registered_classes().values():
+        assert isinstance(cls.info, FitterInfo)
+        if cls.info.family != 'multistart':
+            assert set(cls.fit_param_class().properties) <= known
+    evidence = sorted(
+        type_ for type_, cls in fitter_parser.registered_classes().items()
+        if 'evidence' in cls.info.gives)
+    assert evidence == [
+        'dnest4', 'dynesty.dynamic', 'dynesty.static', 'nautilus',
+        'ultranest']
+    objective = mock_objective(DriverHost())
+    one_free = ParamSpace(
+        objective.pdescs(), bounded_properties() | dict(
+            xpos=0, ypos=0, posa=40, incl=55, pt_a=1))
+    with pytest.raises(ConfigError, match="at least 2 free elements"):
+        fitter_parser.load(dict(type='nautilus')).load_fit_params(one_free)
 
 @pytest.mark.parametrize('prior', [
     PriorUniform(-1, 3), PriorLogUniform(0.1, 10), PriorGauss(1, 2),

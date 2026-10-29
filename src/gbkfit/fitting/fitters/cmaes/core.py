@@ -11,7 +11,7 @@ import numpy as np
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import MERITS, FitProblem
@@ -54,6 +54,8 @@ class FitParamCMAES(FitParamBounded):
         If the bounds are empty, the value is not finite or not in them,
         or sigma is not positive or is missing without both bounds.
     """
+
+    properties = FitParamBounded.properties + ('sigma',)
 
     @classmethod
     def of(
@@ -146,6 +148,8 @@ class FitterCMAES(Fitter):
         finite, or the merit and the uncertainty do not go together (see
         Fitter).
     """
+
+    info = FitterInfo('optimizer')
 
     requires = {'cma': "pip install 'gbkfit[cmaes]'"}
 

@@ -13,7 +13,7 @@ import scipy.stats
 from annotated_types import Gt
 
 from gbkfit.fitting._subfits import Outcome, run_subfits
-from gbkfit.fitting.base import FitRun, Fitter, fitter_parser
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, fitter_parser
 from gbkfit.fitting.control import FitControl
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
@@ -81,6 +81,8 @@ class FitterMultiStart(Fitter):
         (see Fitter).
     """
 
+    info = FitterInfo('multistart')
+
     @staticmethod
     def type() -> str:
         return 'multistart'
@@ -116,7 +118,7 @@ class FitterMultiStart(Fitter):
     ):
         check_options(FitterMultiStart.__init__, locals())
         super().__init__(seed, uncertainty, local.merit())
-        if not issubclass(local.fit_param_class(), FitParamBounded):
+        if local.info.family not in ('least_squares', 'optimizer'):
             raise ConfigError(
                 f"the local fitter of multistart must be an optimizer, which "
                 f"starts from an initial value of each free element; "

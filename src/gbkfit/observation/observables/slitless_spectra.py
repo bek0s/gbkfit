@@ -381,6 +381,7 @@ class SlitlessSpectra(Observable):
     dataset_class = DatasetSlitlessSpectra
 
     emission = LineEmission
+    orbit_stars = None
 
     # The image has no spectral axis: wavelength and position share the
     # axes of the detector

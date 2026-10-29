@@ -14,7 +14,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ..distance import Distance
 from ..extras import Extras
-from ..gravity import Gravity, GravityNewton
+from ..gravity import Capability, Gravity, GravityNewton
 from ..mass import (
     ComponentDensity, DiskDensity, MassComponent, MassModel, SpheroidDensity,
     mass_component_parser)
@@ -22,6 +22,7 @@ from . import _units
 from ._component_plans import ComponentPlans
 from ._detail import geometry_desc, shared_params
 from ._functions import GalaxyFunctions
+from ._needs import Need, check_needs
 from ._stage import GalaxyStage
 from ._transfer import LineResolution
 from ._units import DataUnit
@@ -73,9 +74,9 @@ def _with_mass_params(
             "the gravity of a galaxy is that of its mass; give the galaxy "
             "mass, or no gravity")
     gravity = GravityNewton() if gravity is None else gravity
-    for cmp in components:
-        for need in cmp.needs():
-            need.check(mass_model, gravity)
+    check_needs(
+        [need for cmp in components for need in cmp.needs()], mass_model,
+        gravity)
     if mass_model is None:
         return params
     if distance is None:
@@ -93,17 +94,13 @@ def _with_mass_params(
     thick = [cmp.name() for cmp in components
              if isinstance(cmp, Disk) and cmp.density_disk().traits('rht')]
     gravity.check_mass_model(mass_model, thick)
-    for mass_component in mass_model.components():
-        if not mass_component.takes_shares():
-            continue
-        try:
-            gravity.check_shares()
-        except ConfigError as e:
-            raise ConfigError(
-                f"the mass component {mass_component.name()!r} takes the "
-                f"shares of the components in the squared circular velocity "
-                f"(its dark fraction), which it does not give: {e.message}"
-            ) from None
+    check_needs([
+        Need(Capability.SHARES,
+             f"the mass component {mass_component.name()!r} takes the "
+             f"shares of the components in the squared circular velocity "
+             f"(its dark fraction)")
+        for mass_component in mass_model.components()
+        if mass_component.takes_shares()], mass_model, gravity)
     emissions = {cmp.name(): cmp.emission() for cmp in components}
     mass = pdescs_with_units(mass_model.pdescs(), {
         name: _units.mass_ratio_unit(emissions[followed])

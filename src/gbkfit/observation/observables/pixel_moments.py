@@ -93,6 +93,7 @@ class PixelMoments(Observable):
     dataset_class = DatasetPixelMoments
 
     emission = LineEmission
+    orbit_stars = None
 
     # Moment maps have no spectral axis
     spectral_axis = None

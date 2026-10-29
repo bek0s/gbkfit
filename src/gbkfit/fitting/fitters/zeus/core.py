@@ -12,7 +12,7 @@ import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
-from gbkfit.fitting.base import FitRun, Fitter
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
@@ -103,6 +103,8 @@ class FitterZeus(Fitter):
         the burn-in, the moves are 'global' without a burn-in, or width is
         not finite and positive.
     """
+
+    info = FitterInfo('mcmc', ('posterior',))
 
     requires = {'zeus': "pip install 'gbkfit[zeus]'"}
 
