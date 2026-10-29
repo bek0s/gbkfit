@@ -7,7 +7,8 @@ name = 'gbkfit'
 dynamic = ['version']
 description = 'Galaxy kinematic modelling and fitting'
 readme = 'README.rst'
-license = 'BSD-3-Clause'
+# (MIT: DNest4, which the native modules build in)
+license = 'BSD-3-Clause AND MIT'
 license-files = [
     'LICENSE',
     # (of the code that the native modules build in)
@@ -74,6 +75,8 @@ build-dir = 'build/{wheel_tag}'
 wheel.packages = ['src/gbkfit']
 wheel.py-api = 'cp312'
 sdist.include = ['src/gbkfit/_version.py']
+# (the apps are packages of their own)
+sdist.exclude = ['apps/']
 
 [[tool.dynamic-metadata]]
 provider = 'scikit_build_core.metadata.setuptools_scm'
