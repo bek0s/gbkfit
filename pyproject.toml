@@ -55,6 +55,10 @@ cmaes = ['cma']
 ultranest = ['ultranest']
 # (the datamodels of JWST files, and their transforms; not the pipeline)
 jwst = ['stdatamodels']
+# (workers of clusters, see gbkfit.parallel)
+mpi = ['mpi4py']
+ray = ['ray']
+dask = ['distributed']
 
 [project.urls]
 Homepage = 'https://github.com/bek0s/gbkfit'
