@@ -5,18 +5,22 @@ with several minima.
 
 import math
 import typing
-from typing import Annotated, Any
+from collections.abc import Sequence
+from typing import Annotated, Any, NamedTuple
 
 import numpy as np
 import scipy.stats
 from annotated_types import Gt
 
+from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import FitRun, Fitter, fitter_parser
+from gbkfit.fitting.control import FitControl
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
-from gbkfit.fitting.problem import FitProblem
-from gbkfit.params import EvaluationError
+from gbkfit.fitting.problem import FitCounts, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
+from gbkfit.objective import Objective
+from gbkfit.params import EvaluationError, ParamSpace, Prior
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
@@ -40,6 +44,13 @@ class FitterMultiStart(Fitter):
     CMA-ES), of which min and max are required: the starts are drawn
     between them. Each start runs the optimizer with these options, at
     another initial value (see FitParamBounded.with_value).
+
+    The starts are the sub-fits of the fit (see run_subfits), each with a
+    fit problem and a random stream of its own: they run at once on the
+    workers of the fit, if any (see Fitter.fit), or one after the other,
+    and a fit that resumes takes those that finished from its log. The
+    fit counts their model evaluations, and its raw results are the
+    outcomes of the starts.
 
     Parameters
     ----------
@@ -144,42 +155,102 @@ class FitterMultiStart(Fitter):
             nsobol = 2 ** math.ceil(math.log2(self._nstarts - 1))
             points = sobol.random(nsobol)[:self._nstarts - 1]
             starts += list(lower + points * (upper - lower))
+        seeds = np.random.SeedSequence(
+            int(rng.integers(2 ** 63))).spawn(len(starts))
+
+        def make(k: int) -> _Start:
+            return _Start(
+                problem.params(), problem.priors(),
+                tuple(p.with_value(v) for v, p in zip(starts[k], params)),
+                self._local, problem.merit(), seeds[k])
+        ndone = 0
+        problem.set_stage(f'0 of {len(starts)} starts done')
+
+        def report(k: int, outcome: Outcome, logged: bool) -> None:
+            nonlocal ndone
+            ndone += 1
+            counts = outcome['counts']
+            problem.add_counts(FitCounts(
+                counts['nevals'], counts['nan_nevals'],
+                counts['failed_nevals'],
+                None if counts['best'] is None else tuple(counts['best'])))
+            problem.set_stage(f'{ndone} of {len(starts)} starts done')
         # Each start: its run, or why it failed (e.g. a start where the
         # parameters cannot be evaluated), and its model evaluations
-        runs: list[FitRun] = []
-        starts_info: list[dict[str, Any]] = []
-        for i, start in enumerate(starts):
-            problem.set_stage(f'start {i + 1} of {len(starts)}')
-            start_params = [p.with_value(v) for v, p in zip(start, params)]
-            nevals = problem.nevals()
-            try:
-                run = self._local._run(problem, start_params, rng)
-            except (EvaluationError, ValueError) as e:
-                starts_info.append(dict(
-                    error=str(e), nevals=problem.nevals() - nevals))
-                continue
-            cost = problem.cost(run.solutions[0])
-            runs.append(run)
-            starts_info.append(dict(
-                cost=cost, success=run.success,
-                nevals=problem.nevals() - nevals))
+        outcomes = run_subfits(
+            problem.objective(), _run_start, make, len(starts),
+            problem.pool(), problem.control(), problem.subfit_log(), report)
+        runs = [x for x in outcomes if 'error' not in x]
+        starts_info = [
+            {key: x[key] for key in ('error', 'cost', 'success') if key in x}
+            | dict(nevals=x['counts']['nevals']) for x in outcomes]
         if not runs:
             raise RuntimeError(
                 f"every start of multistart failed; the first: "
                 f"{starts_info[0]['error']}")
         # The minima, best first, and the distinct ones among them
-        costs = [info['cost'] for info in starts_info if 'cost' in info]
+        costs = [run['cost'] for run in runs]
         solutions: list[np.ndarray] = []
         for i in np.argsort(costs):
-            x = runs[i].solutions[0]
+            x = np.array(runs[i]['solution'])
             if not any(np.all(np.abs(x - s) <= self._tolerance
                               * (upper - lower)) for s in solutions):
                 solutions.append(x)
         nfailed = len(starts) - len(runs)
         return FitRun(
             solutions=solutions[:self._nsolutions],
-            success=any(run.success for run in runs),
+            success=any(run['success'] for run in runs),
             message=f"{len(solutions)} distinct minima from "
                     f"{len(starts)} starts ({nfailed} failed)",
             diagnostics=dict(nminima=len(solutions), starts=starts_info),
-            raw=[run.raw for run in runs])
+            raw=outcomes)
+
+
+class _Start(NamedTuple):
+    """
+    A start of multistart (see FitterMultiStart): the parameters, the
+    priors of the free elements, their options at the start, the local
+    fitter, its merit, and the seed of its random stream.
+    """
+    params: ParamSpace
+    priors: Sequence[Prior | None] | None
+    fit_params: tuple[FitParamBounded, ...]
+    fitter: Fitter
+    merit: str
+    seed: np.random.SeedSequence
+
+
+def _run_start(
+        objective: Objective,
+        start: _Start,
+        control: FitControl
+) -> Outcome:
+    """
+    Run the local fitter of a start on an objective of the fit (or a copy
+    of it), with a fit problem of its own, until the control stops it:
+    its outcome, its minimum (its solution, cost, and whether, and how,
+    the fitter converged) or why it failed (e.g. the parameters cannot be
+    evaluated at the start), with its model evaluations (see FitCounts).
+
+    Raises
+    ------
+    FitStopped
+        If the control stopped it.
+    """
+    problem = FitProblem(
+        objective, start.params, start.priors, control=control,
+        merit=start.merit)
+    try:
+        run = start.fitter._run(
+            problem, list(start.fit_params),
+            np.random.default_rng(start.seed))
+        x = run.solutions[0]
+        outcome = dict(
+            solution=np.asarray(x, dtype=float).tolist(),
+            cost=float(problem.cost(x)), success=bool(run.success),
+            message=str(run.message))
+    except (EvaluationError, ValueError) as e:
+        outcome = dict(error=str(e))
+    finally:
+        problem.close()
+    return outcome | dict(counts=problem.counts()._asdict())

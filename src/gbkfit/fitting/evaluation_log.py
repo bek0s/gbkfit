@@ -1,14 +1,16 @@
 """
-The log of the model evaluations of a fit, from which a stopped or killed
-fit resumes (see EvaluationLog).
+The logs of a fit, from which a stopped or killed fit resumes: of its
+model evaluations (see EvaluationLog), and of the outcomes of its
+sub-fits (see SubFitLog).
 """
 
 import json
 import logging
 import os
+import threading
 import time
-from collections.abc import Sequence
-from typing import BinaryIO
+from collections.abc import Mapping, Sequence
+from typing import Any, BinaryIO, TextIO
 
 import numpy as np
 
@@ -16,7 +18,8 @@ from gbkfit.objective import Merits
 
 
 __all__ = [
-    'EvaluationLog'
+    'EvaluationLog',
+    'SubFitLog'
 ]
 
 
@@ -24,6 +27,9 @@ _log = logging.getLogger(__name__)
 
 # The first line of the files of a log (of the version of their format)
 _MAGIC = b'GBKFIT EVALUATIONS 2\n'
+
+# The first line of the files of a log of sub-fits
+_SUBFITS_HEADER = dict(format='GBKFIT SUBFITS 1')
 
 # The numbers of each evaluation
 _NNUMBERS = len(Merits._fields)
@@ -43,13 +49,15 @@ class EvaluationLog:
     had it not stopped; the replay costs only the fitter's own work.
 
     The fit problem logs the evaluations of fitters that ask for numbers
-    (samplers, CMA-ES, the ranking of multistart). Least squares, which
-    ask for residuals (too many to log), are not logged: they restart
-    from their best point (e.g. best.yaml of the fit task).
+    (samplers, CMA-ES). Least squares, which ask for residuals (too many
+    to log), are not logged: they restart from their best point (e.g.
+    best.yaml of the fit task).
 
     Beside it, '<name>-chain<ext>' holds the steps of the chain of an MCMC
     sampler (see record_chain), written as it runs; a resumed fit writes
-    it again as its replay runs the chain again.
+    it again as its replay runs the chain again. '<name>-subfits.jsonl'
+    holds the outcomes of the sub-fits of a fitter (see subfits; e.g. the
+    starts of multistart), which a resumed fit takes as they are.
 
     The files: a first line naming the format, a line of JSON (the names
     of the free elements; of a chain, also its walkers), then rows of
@@ -73,6 +81,8 @@ class EvaluationLog:
         self._file: BinaryIO | None = None
         self._chain_file: BinaryIO | None = None
         self._flushed = time.perf_counter()
+        self._subfits = SubFitLog(
+            '{0}-subfits.jsonl'.format(os.path.splitext(filename)[0]))
 
     @classmethod
     def resume(cls, filename: str) -> 'EvaluationLog':
@@ -91,6 +101,7 @@ class EvaluationLog:
         log._rows = rows.reshape(-1, len(names) + _NNUMBERS)
         log._header = header
         log._replaying = len(log._rows) > 0
+        log._subfits = SubFitLog.resume(log._subfits.filename())
         return log
 
     def filename(self) -> str:
@@ -100,6 +111,10 @@ class EvaluationLog:
     def nreplayed(self) -> int:
         """Return the number of evaluations answered from the log so far."""
         return self._next
+
+    def subfits(self) -> 'SubFitLog':
+        """Return the log of the outcomes of the sub-fits of the fit."""
+        return self._subfits
 
     def begin(self, names: Sequence[str]) -> None:
         """
@@ -183,6 +198,7 @@ class EvaluationLog:
             if file is not None:
                 file.close()
         self._file = self._chain_file = None
+        self._subfits.close()
 
     def _end_replay(self) -> None:
         """Drop the rest of the log, and append to it from here."""
@@ -217,3 +233,98 @@ def _read(filename: str) -> tuple[tuple[str, ...], np.ndarray, int]:
     width = len(names) + _NNUMBERS
     values = np.frombuffer(values[:len(values) // 8 * 8], dtype=np.float64)
     return names, values[:len(values) // width * width], header
+
+
+class SubFitLog:
+    """
+    A file of the outcomes of the sub-fits of a fit (e.g. the refits of a
+    bootstrap, or the starts of multistart; see run_subfits), each written
+    as its sub-fit finishes: a fit that resumes from it takes them as they
+    are, and runs only the others. Writes can come from several threads.
+
+    The file: a line of JSON naming the format, then one per outcome,
+    {index, outcome}. A line cut short (a fit killed while writing it) is
+    ignored.
+
+    Parameters
+    ----------
+    filename : str
+        The file, written anew (on the first outcome).
+    """
+
+    def __init__(self, filename: str):
+        self._filename = filename
+        self._outcomes: dict[int, dict[str, Any]] = {}
+        self._file: TextIO | None = None
+        self._lock = threading.Lock()
+
+    @classmethod
+    def resume(cls, filename: str) -> 'SubFitLog':
+        """
+        Return the log of a fit to resume: its outcomes (none if the file
+        does not exist), to which the new ones are added.
+
+        Raises
+        ------
+        ValueError
+            If the file is not a log of sub-fits (of this version).
+        """
+        log = cls(filename)
+        if os.path.exists(filename):
+            log._outcomes = _read_subfits(filename)
+        return log
+
+    def filename(self) -> str:
+        """Return the file of the log."""
+        return self._filename
+
+    def outcomes(self) -> dict[int, dict[str, Any]]:
+        """Return the outcomes, by the index of their sub-fit."""
+        return dict(self._outcomes)
+
+    def append(self, index: int, outcome: Mapping[str, Any]) -> None:
+        """Write the outcome of a sub-fit (a dictionary of JSON values)."""
+        with self._lock:
+            if self._file is None:
+                # (anew, with the outcomes of the log it resumes)
+                self._file = open(self._filename, 'w')
+                self._file.write(json.dumps(_SUBFITS_HEADER) + '\n')
+                for i, previous in self._outcomes.items():
+                    self._write(i, previous)
+            self._outcomes[index] = dict(outcome)
+            self._write(index, outcome)
+            self._file.flush()
+
+    def close(self) -> None:
+        """Close the file."""
+        with self._lock:
+            if self._file is not None:
+                self._file.close()
+            self._file = None
+
+    def _write(self, index: int, outcome: Mapping[str, Any]) -> None:
+        """Write a line of an outcome."""
+        assert self._file is not None
+        self._file.write(json.dumps(dict(index=index, outcome=outcome)) + '\n')
+
+
+def _read_subfits(filename: str) -> dict[int, dict[str, Any]]:
+    """Return the outcomes of a log of sub-fits, by index."""
+    with open(filename) as file:
+        lines = file.read().split('\n')
+    try:
+        header = json.loads(lines[0])
+    except json.JSONDecodeError:
+        header = None
+    if header != _SUBFITS_HEADER:
+        raise ValueError(
+            f"{filename} is not a log of sub-fits of this version of GBKFIT")
+    outcomes = {}
+    for line in lines[1:]:
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            # (cut short, or the empty end)
+            continue
+        outcomes[int(record['index'])] = record['outcome']
+    return outcomes

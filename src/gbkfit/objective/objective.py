@@ -249,7 +249,7 @@ class Objective:
         (see ObservationGroup.plan, which takes the drivers) and their
         residuals. The copy shares the data; its memory is its own.
         Copies on several devices evaluate several points at once (see
-        EvaluationPool).
+        WorkersThreads).
         """
         return Objective(self._group.plan(driver, drivers), self._solves)
 

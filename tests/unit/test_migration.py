@@ -287,6 +287,13 @@ def test_data_of_observations_are_migrated_to_their_type():
         type='region_moments', regions=dict(type='bins', file='bins.fits'))
 
 
+def test_parallel_evaluations_are_migrated_to_workers_of_threads():
+    config = dict(fitter=dict(type='cmaes'), parallel=dict(drivers=['a']))
+    migration.migrate(config, 2)
+    assert list(config) == ['version', 'fitter', 'workers']
+    assert config['workers'] == dict(type='threads', drivers=['a'])
+
+
 def test_datasets_have_the_types_of_their_observables():
     # (on which the migration of the data of observations relies)
     for type_, cls in observable_parser.registered_classes().items():

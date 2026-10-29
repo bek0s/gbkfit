@@ -102,7 +102,7 @@ class GalaxyFunctions:
     of their own stage of the galaxy (see bind). They have their own stage
     and plans of the disks, on the given driver and in float64, apart from
     those of the evaluations of the galaxy (which may run at the same
-    time, e.g. in an EvaluationPool).
+    time, e.g. in workers of threads; see WorkersThreads).
 
     Parameters
     ----------

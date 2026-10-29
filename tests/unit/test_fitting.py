@@ -4,6 +4,8 @@ uncertainty) and the fitters, on a mock image with known parameters.
 """
 
 import math
+import threading
+import time
 
 import numpy as np
 from astropy.table import Table
@@ -14,11 +16,12 @@ import scipy.stats
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
-    EvaluationLog, EvaluationPool, FitControl, FitParamBounded,
-    FitParamPrior, FitProblem)
+    EvaluationLog, FitControl, FitParamBounded, FitParamPrior, FitProblem,
+    FitStopped, SubFitLog)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
+from gbkfit.parallel import WorkersProcesses, WorkersThreads
 from gbkfit.observation import (
     FittedNoise, Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
     ObservationSky, PixelBrightness)
@@ -477,56 +480,59 @@ def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
     assert resumed.chi2 == pytest.approx(whole.chi2, rel=1e-12)
 
 
-def test_a_pool_evaluates_batches_as_the_objective_does(driver):
-    # (two copies on one device: the objective itself and a copy; the
-    # chi-squares of the host differ at rounding, its sums being in the
-    # order of the threads of each copy)
+def two_workers(kind, driver):
+    """Return two workers of a kind on a driver."""
+    return WorkersThreads([driver, driver]) if kind == 'threads' \
+        else WorkersProcesses(drivers=[driver, driver])
+
+
+@pytest.mark.parametrize('kind', ['threads', 'processes'])
+def test_workers_evaluate_batches_as_the_objective_does(driver, kind):
+    # (copies on one device: the chi-squares differ at rounding, their
+    # sums being in the order of the threads of each copy)
     objective = mock_objective(driver)
     params = ParamSpace(objective.pdescs(), bounded_properties())
     xs = np.random.default_rng(2).uniform(
         [-1, -1, 30, 45, 0.8, 3], [1, 1, 50, 65, 1.2, 5], (5, 6))
     alone = FitProblem(objective, params)
-    with EvaluationPool(objective, [driver, driver]) as pool:
-        assert pool.copies()[0] is objective
-        assert pool.copies()[1] is not objective
+    with two_workers(kind, driver).start(objective) as pool:
         pooled = FitProblem(objective, params, pool=pool)
         np.testing.assert_allclose(
             pooled.chi2_batch(xs), alone.chi2_batch(xs), rtol=1e-12)
         for got, want in zip(
                 pooled.residuals_batch(xs), alone.residuals_batch(xs)):
-            np.testing.assert_array_equal(got, want)
+            np.testing.assert_allclose(got, want, rtol=1e-12, atol=1e-12)
     assert pooled.nevals() == alone.nevals() == 10
     assert pooled.best()[1] == pytest.approx(alone.best()[1], rel=1e-12)
 
 
-def test_a_pool_takes_placements_of_its_copies(driver):
-    # (that of the objective takes the objective itself; one of other
-    # drivers of its observation, by its name, gives the same values)
+def test_workers_take_placements_of_their_copies(driver):
+    # (one of other drivers of its observation, by its name, gives the
+    # same values)
     objective = mock_objective(driver, name='image')
     params = ParamSpace(objective.pdescs(), bounded_properties())
     xs = np.random.default_rng(3).uniform(
         [-1, -1, 30, 45, 0.8, 3], [1, 1, 50, 65, 1.2, 5], (4, 6))
-    host = DriverHost()
-    with EvaluationPool(
-            objective, [(driver, {}), (driver, dict(image=host))]) as pool:
-        own, moved = pool.copies()
-        assert own is objective
-        assert moved.group_plan().observation_drivers() == (host,)
+    workers = WorkersThreads([(driver, {}), (driver, dict(image=DriverHost()))])
+    with workers.start(objective) as pool:
         np.testing.assert_allclose(
             FitProblem(objective, params, pool=pool).chi2_batch(xs),
             FitProblem(objective, params).chi2_batch(xs), rtol=1e-5)
+    with pytest.raises(ConfigError, match="unknown galaxies or observations"):
+        WorkersThreads([(driver, dict(hi=driver))]).start(objective)
 
 
+@pytest.mark.parametrize('kind', ['threads', 'processes'])
 @pytest.mark.parametrize('fitter', [
     dict(type='lmfit.least_squares'), dict(type='cmaes')])
-def test_a_fit_with_a_pool_is_the_fit_without(driver, fitter):
+def test_a_fit_with_workers_is_the_fit_without(driver, fitter, kind):
     pytest.importorskip('cma')
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(driver)
     params = ParamSpace(objective.pdescs(), bounded_properties())
     alone = fitter_parser.load(fitter).fit(objective, params)
-    with EvaluationPool(objective, [driver, driver]) as pool:
+    with two_workers(kind, driver).start(objective) as pool:
         pooled = fitter_parser.load(fitter).fit(objective, params, pool=pool)
     assert pooled.best().free == pytest.approx(alone.best().free, rel=1e-12)
     assert pooled.best().covariance.std == pytest.approx(
@@ -534,15 +540,15 @@ def test_a_fit_with_a_pool_is_the_fit_without(driver, fitter):
     assert pooled.nevals == alone.nevals
 
 
-def test_a_fit_with_a_pool_logs_its_evaluations_in_order(tmp_path):
-    # (a fit that resumes from its log without a pool replays all of it)
+def test_a_fit_with_workers_logs_its_evaluations_in_order(tmp_path):
+    # (a fit that resumes from its log without workers replays all of it)
     pytest.importorskip('cma')
     from gbkfit.fitting.fitters.cmaes import FitterCMAES
     driver = DriverHost()
     objective = mock_objective(driver)
     params = ParamSpace(objective.pdescs(), bounded_properties())
     filename = str(tmp_path / 'evaluations.bin')
-    with EvaluationPool(objective, [driver, driver]) as pool:
+    with WorkersThreads([driver, driver]).start(objective) as pool:
         pooled = FitterCMAES().fit(
             objective, params, log=EvaluationLog(filename), pool=pool)
     log = EvaluationLog.resume(filename)
@@ -895,6 +901,88 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn():
         == list(boot.names) + ['converged']
 
 
+@pytest.mark.parametrize('kind', ['threads', 'processes'])
+def test_a_bootstrap_on_workers_is_the_bootstrap_without(kind):
+    # (each refit draws its residuals with a stream of its own: on workers,
+    # in any order, it refits the same data)
+    from gbkfit.fitting import (
+        BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
+    driver = DriverHost()
+    objective = mock_objective(driver)
+    params = ParamSpace(
+        objective.pdescs(), bounded_properties(),
+        derived=dict(d='xpos + 2 * ypos'))
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    start = fitter.fit(objective, params).best().elements
+    options = BootstrapOptions(5, BootstrapBlocks([4, 4]))
+    alone = bootstrap(objective, params, start, fitter, options)
+    with two_workers(kind, driver).start(objective) as pool:
+        pooled = bootstrap(objective, params, start, fitter, options, pool)
+    assert pooled.names == alone.names
+    np.testing.assert_allclose(pooled.samples, alone.samples, rtol=1e-9)
+    assert list(pooled.converged) == list(alone.converged)
+
+
+class StopAfterOutcomes(SubFitLog):
+    """A log of sub-fits that stops a fit once it has n outcomes."""
+
+    def __init__(self, filename, control, n):
+        super().__init__(filename)
+        self._control = control
+        self._n = n
+
+    def append(self, index, outcome):
+        super().append(index, outcome)
+        if len(self.outcomes()) >= self._n:
+            self._control.stop()
+
+
+def test_a_stopped_bootstrap_resumes_from_its_log(tmp_path):
+    # (stopped after two refits, it resumes with them, and ends as the
+    # bootstrap that did not stop)
+    from gbkfit.fitting import (
+        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    start = fitter.fit(objective, params).best().elements
+    options = BootstrapOptions(4, BootstrapGaussian())
+    whole = bootstrap(objective, params, start, fitter, options)
+    filename = str(tmp_path / 'bootstrap.jsonl')
+    control = FitControl()
+    log = StopAfterOutcomes(filename, control, 2)
+    with pytest.raises(FitStopped):
+        bootstrap(objective, params, start, fitter, options, None, control,
+                  log)
+    log.close()
+    assert sorted(SubFitLog.resume(filename).outcomes()) == [0, 1]
+    resumed = bootstrap(
+        objective, params, start, fitter, options,
+        log=SubFitLog.resume(filename))
+    np.testing.assert_array_equal(resumed.samples, whole.samples)
+
+
+def run_until_stopped(objective, item, control):
+    """A sub-fit that runs until its control stops it."""
+    while not control.stopped():
+        time.sleep(0.01)
+    raise FitStopped("stopped")
+
+
+@pytest.mark.parametrize('kind', ['threads', 'processes'])
+def test_workers_stop_their_sub_fits(kind):
+    driver = DriverHost()
+    control = FitControl()
+    threading.Timer(0.5, control.stop).start()
+    with two_workers(kind, driver).start(mock_objective(driver)) as pool:
+        begin = time.perf_counter()
+        with pytest.raises(FitStopped):
+            pool.map_lazily(
+                run_until_stopped, lambda i: i, 10, control=control)
+        # (processes take seconds to start; the sub-fits would never end)
+        assert time.perf_counter() - begin < 30
+
+
 def test_a_gaussian_bootstrap_draws_the_noise_anew():
     # Refits of the model plus Gaussian noise of the errors: of white
     # noise, they scatter about as the covariance says
@@ -1080,6 +1168,55 @@ def test_a_fit_beyond_the_valid_range_of_a_parameter_fails():
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     with pytest.raises(ConfigError, match=r"'pt_s' \[1, 10\] \(valid: "):
         fitter.fit(objective, params)
+
+
+@pytest.mark.parametrize('kind', ['threads', 'processes'])
+def test_multistart_on_workers_is_multistart_without(kind):
+    # (each start is a fit of its own, with its own random stream)
+    pytest.importorskip('cma')
+    from gbkfit.fitting import fitter_parser
+    driver = DriverHost()
+    objective = mock_objective(driver)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = dict(type='multistart', local=dict(type='cmaes'), nstarts=4)
+    alone = fitter_parser.load(fitter).fit(objective, params)
+    with two_workers(kind, driver).start(objective) as pool:
+        pooled = fitter_parser.load(fitter).fit(objective, params, pool=pool)
+    assert pooled.best().free == pytest.approx(alone.best().free, rel=1e-9)
+    assert pooled.nevals == alone.nevals
+
+
+class LogStoppingAfterStarts(EvaluationLog):
+    """A log of a fit whose log of sub-fits stops it after n outcomes."""
+
+    def __init__(self, filename, control, n):
+        super().__init__(filename)
+        self._stopping = StopAfterOutcomes(
+            super().subfits().filename(), control, n)
+
+    def subfits(self):
+        return self._stopping
+
+
+def test_a_stopped_multistart_resumes_from_the_starts_of_its_log(tmp_path):
+    # (stopped after two starts, it resumes with them, and runs the others)
+    pytest.importorskip('cma')
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = dict(type='multistart', local=dict(type='cmaes'), nstarts=4)
+    whole = fitter_parser.load(fitter).fit(objective, params)
+    filename = str(tmp_path / 'evaluations.bin')
+    control = FitControl()
+    stopped = fitter_parser.load(fitter).fit(
+        objective, params, control=control,
+        log=LogStoppingAfterStarts(filename, control, 2))
+    assert not stopped.success
+    log = EvaluationLog.resume(filename)
+    assert sorted(log.subfits().outcomes()) == [0, 1]
+    resumed = fitter_parser.load(fitter).fit(objective, params, log=log)
+    assert resumed.best().free == whole.best().free
+    assert resumed.nevals == whole.nevals
 
 
 def test_multistart_skips_starts_the_parameters_reject():
@@ -1323,8 +1460,9 @@ def test_multistart_runs_any_optimizer_with_its_options():
 
 
 def test_fits_report_their_progress():
-    # Every stage (each start of multistart, then the uncertainty), at the
-    # end a final report; the evaluations grow, the best never worsens
+    # Every stage (as the starts of multistart finish, then the
+    # uncertainty), at the end a final report; the evaluations grow, the
+    # best never worsens
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
@@ -1334,7 +1472,9 @@ def test_fits_report_their_progress():
         type='multistart', local=dict(type='scipy.least_squares'),
         nstarts=2)).fit(objective, params, [reports.append])
     stages = list(dict.fromkeys(report.stage for report in reports))
-    assert stages == ['start 1 of 2', 'start 2 of 2', 'uncertainty']
+    assert stages == [
+        '0 of 2 starts done', '1 of 2 starts done', '2 of 2 starts done',
+        'uncertainty']
     assert reports[-1].final and not any(r.final for r in reports[:-1])
     assert reports[-1].nevals == result.nevals
     nevals = [report.nevals for report in reports]

@@ -7,19 +7,26 @@ import abc
 import logging
 import numbers
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 
 import numpy as np
 from annotated_types import Ge
 
 from gbkfit.dataset import Dataset
+from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import Fitter, fitter_parser
+from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.fitting.evaluation_log import SubFitLog
 from gbkfit.fitting.result import Bootstrap
 from gbkfit.objective import Objective
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
+
+if TYPE_CHECKING:
+    # (the workers import fitting, for its control)
+    from gbkfit.parallel import WorkerPool
 
 
 __all__ = [
@@ -306,7 +313,10 @@ def bootstrap(
         params: ParamSpace,
         start: Mapping[str, float],
         fitter: Fitter,
-        options: BootstrapOptions
+        options: BootstrapOptions,
+        pool: 'WorkerPool | None' = None,
+        control: FitControl | None = None,
+        log: SubFitLog | None = None
 ) -> Bootstrap:
     """
     Work out the errors of a fit by a bootstrap: refit data made of the
@@ -338,6 +348,14 @@ def bootstrap(
     those of the best fit, not of the median of the posterior; and a
     local fitter keeps to the minimum of the fit.
 
+    The refits are the sub-fits of the bootstrap (see run_subfits): they
+    run at once on workers (see WorkerPool), or one after the other, and
+    the bootstrap can be stopped (it raises FitStopped once the running
+    refits stop) and resumed from its log. The residuals of each refit are
+    drawn with a random stream of its own (of the seed of the options, or
+    else of the refits' fitter): in any order, the refits refit the same
+    data.
+
     Parameters
     ----------
     objective : Objective
@@ -351,6 +369,15 @@ def bootstrap(
         The fitter of the fit.
     options : BootstrapOptions
         The options.
+    pool : WorkerPool, optional
+        Workers of copies of the objective, which make the refits at once,
+        each on its copy (see WorkerPool.map_lazily).
+    control : FitControl, optional
+        The control of the bootstrap, to stop it.
+    log : SubFitLog, optional
+        The log of the refits: a new one, or that of a bootstrap to resume
+        (with the same fit, options and seed), whose refits are taken as
+        they are.
 
     Returns
     -------
@@ -363,11 +390,13 @@ def bootstrap(
         If the options do not suit the observations or the parameters
         (see BootstrapOptions.check), or the data of an observation cannot
         be redrawn by its scheme (see BootstrapScheme.resample).
+    FitStopped
+        If it was asked to stop (see control).
     """
     options.check(objective.group(), params)
     refitter = (options.fitter() or fitter).without_uncertainty()
     seed = refitter.seed() if options.seed() is None else options.seed()
-    rng = np.random.default_rng(seed)
+    seeds = np.random.SeedSequence(seed).spawn(options.nsamples())
     start_params = params.with_values(start)
     # (the model that the objective compares with the data: with the
     # values of the solved elements that it solves there)
@@ -393,12 +422,9 @@ def bootstrap(
     except ParamEvaluationError:
         derived = ()
     names = tuple(params.kinds()) + derived
-    # (the refits share its whitening of correlated noise; see with_data)
-    objective.prepare()
-    rows = []
-    converged = []
-    failures = []
-    for k in range(options.nsamples()):
+
+    def make(k: int) -> _Refit:
+        rng = np.random.default_rng(seeds[k])
         datasets = []
         for scheme, dataset, residual, model, noise in zip(
                 schemes, objective.datasets(), residuals, models, noises):
@@ -410,33 +436,83 @@ def bootstrap(
                     model[key] + noise[key] * drawn[key],
                     dataset[key].data())
                 for key in dataset}))
-        refit = f"bootstrap refit {k + 1}/{options.nsamples()}"
-        try:
-            # (closed after the refit: the fitter can keep it alive)
-            with objective.with_data(datasets) as refit_objective:
-                result = refitter.fit(refit_objective, start_params)
-        except (ParamEvaluationError, RuntimeError) as e:
-            failures.append(str(e))
-            _log.warning(f"{refit} failed: {e}")
-            continue
-        # A refit whose fitter reports no success (e.g. stopped by its
-        # budget of evaluations, or stagnating on round-off) is kept, and
-        # flagged. A choice: leaving it out would keep only the refits
-        # that were easy to fit, a biased sample of the noise. Only refits
-        # without a best point at all are failures.
-        best = result.best()
-        rows.append(
-            [best.elements[name] for name in params.kinds()]
-            + [best.derived.get(name, np.nan) for name in derived])
-        converged.append(result.success)
-        if result.success:
-            _log.info(f"{refit}: chi2 {best.chi2:.6g}")
+        return _Refit(tuple(datasets), start_params, refitter, derived)
+
+    def report(k: int, outcome: Outcome, logged: bool) -> None:
+        refit = f"bootstrap refit {k + 1}/{options.nsamples()}" + (
+            " (from the log)" if logged else "")
+        if 'error' in outcome:
+            _log.warning(f"{refit} failed: {outcome['error']}")
+        elif outcome['success']:
+            _log.info(f"{refit}: chi2 {outcome['chi2']:.6g}")
         else:
             _log.warning(
-                f"{refit}: chi2 {best.chi2:.6g}, kept, but the fitter did "
-                f"not converge: {result.message}")
+                f"{refit}: chi2 {outcome['chi2']:.6g}, kept, but the fitter "
+                f"did not converge: {outcome['message']}")
+    outcomes = run_subfits(
+        objective, _refit, make, options.nsamples(), pool, control, log,
+        report)
+    refits = [x for x in outcomes if 'error' not in x]
+    rows = [x['row'] for x in refits]
+    converged = [x['success'] for x in refits]
+    failures = [x['error'] for x in outcomes if 'error' in x]
     return Bootstrap(
         names=names, samples=np.array(rows, dtype=float).reshape(
             -1, len(names)),
         converged=np.array(converged, dtype=bool),
         failures=tuple(failures), options=options.dump())
+
+
+class _Refit(NamedTuple):
+    """
+    A refit of a bootstrap (see bootstrap): its data, the parameters at
+    the best fit, its fitter, and the derived values to keep.
+    """
+    datasets: tuple[Dataset, ...]
+    params: ParamSpace
+    fitter: Fitter
+    derived: tuple[str, ...]
+
+
+def _refit(
+        objective: Objective,
+        refit: _Refit,
+        control: FitControl
+) -> Outcome:
+    """
+    Make a refit on an objective of the fit (or a copy of it), until the
+    control stops it: its outcome, the best fit (the value of each element,
+    see ParamSpace.kinds, and of each derived value, its chi-square, and
+    whether, and how, its fitter converged), or why it failed (the fitter
+    found no point, or the parameters cannot be evaluated).
+
+    Raises
+    ------
+    FitStopped
+        If the control stopped it.
+    """
+    # (the refits share its whitening of correlated noise; see with_data)
+    objective.prepare()
+    try:
+        # (closed after the refit: the fitter can keep it alive)
+        with objective.with_data(refit.datasets) as refit_objective:
+            result = refit.fitter.fit(
+                refit_objective, refit.params, control=control)
+    except (ParamEvaluationError, RuntimeError) as e:
+        if control.stopped():
+            raise FitStopped("the bootstrap was asked to stop") from e
+        return dict(error=str(e))
+    # (a fit asked to stop ends with what it has: not a refit)
+    if control.stopped():
+        raise FitStopped("the bootstrap was asked to stop")
+    # A refit whose fitter reports no success (e.g. stopped by its budget
+    # of evaluations, or stagnating on round-off) is kept, and flagged. A
+    # choice: leaving it out would keep only the refits that were easy to
+    # fit, a biased sample of the noise. Only refits without a best point
+    # at all are failures.
+    best = result.best()
+    return dict(
+        row=[float(best.elements[name]) for name in refit.params.kinds()]
+        + [float(best.derived.get(name, np.nan)) for name in refit.derived],
+        chi2=float(best.chi2), success=bool(result.success),
+        message=str(result.message))

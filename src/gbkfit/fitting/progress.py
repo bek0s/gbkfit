@@ -24,9 +24,9 @@ class FitProgress:
     Attributes
     ----------
     stage : str
-        What the fit is doing: 'fit', a stage of the fitter (e.g. 'start 3
-        of 16' for multistart), or 'uncertainty' (the uncertainty of the
-        solutions, after the fitter).
+        What the fit is doing: 'fit', a stage of the fitter (e.g. '3 of 16
+        starts done' for multistart), or 'uncertainty' (the uncertainty of
+        the solutions, after the fitter).
     nevals : int
         The model evaluations so far.
     elapsed : float

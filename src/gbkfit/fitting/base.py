@@ -9,14 +9,13 @@ import importlib.metadata
 import logging
 import time
 from collections.abc import Sequence
-from typing import Any, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
 import numpy as np
 
 from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
-from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.fitting.problem import MERITS, FitProblem
 from gbkfit.fitting.progress import ProgressObserver
 from gbkfit.fitting.result import (
@@ -27,6 +26,10 @@ from gbkfit.objective import Objective
 from gbkfit.params import EvaluationError, ParamEvaluationError, ParamSpace
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
+
+if TYPE_CHECKING:
+    # (the workers import fitting, for its control)
+    from gbkfit.parallel import WorkerPool
 
 
 _log = logging.getLogger(__name__)
@@ -228,7 +231,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             observers: Sequence[ProgressObserver] = (),
             control: FitControl | None = None,
             log: EvaluationLog | None = None,
-            pool: EvaluationPool | None = None
+            pool: 'WorkerPool | None' = None
     ) -> FitResult:
         """
         Fit the data of an objective.
@@ -253,12 +256,12 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         log : EvaluationLog, optional
             The log of the evaluations: a new one, or that of a fit to
             resume (with the same objective, parameters and fitter).
-        pool : EvaluationPool, optional
-            Copies of the objective (e.g. one per GPU) that evaluate the
-            batches of points of the fitter at once (e.g. the members of
-            a generation of CMA-ES, the walkers of emcee, or the steps of
-            a Jacobian); the result is that of the fit without it, to
-            the rounding of the devices.
+        pool : WorkerPool, optional
+            Workers of copies of the objective (e.g. one per GPU) that
+            evaluate the batches of points of the fitter at once (e.g. the
+            members of a generation of CMA-ES, the walkers of emcee, or
+            the steps of a Jacobian); the result is that of the fit
+            without them, to the rounding of the devices.
 
         Returns
         -------

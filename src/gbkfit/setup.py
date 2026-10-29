@@ -8,7 +8,7 @@ A configuration (a YAML or JSON file, or a dictionary) has the section
 a setup of a project has that of its project), the sections 'galaxies',
 'observations' and 'params', and can have the sections
 'driver' or 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
-'fitter' and 'parallel', and those of the tasks ('mock' and 'bootstrap';
+'fitter' and 'workers', and those of the tasks ('mock' and 'bootstrap';
 see gbkfit.tasks), which load leaves to them.
 """
 
@@ -29,9 +29,10 @@ import gbkfit.outputs
 import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import (
-    BootstrapOptions, EvaluationLog, EvaluationPool, FitControl, Fitter,
-    FitResult, ProgressObserver, fitter_parser)
+    BootstrapOptions, EvaluationLog, FitControl, Fitter, FitResult,
+    ProgressObserver, fitter_parser)
 from gbkfit.objective import Evaluation, Objective
+from gbkfit.parallel import WorkerPool, Workers, workers_parser
 from gbkfit.observation import (
     DepthGroup, GroupPlan, Likelihood, Noise, ObservationGroup)
 from gbkfit.params import (
@@ -105,20 +106,6 @@ class _ParamsSection(NamedTuple):
     derived: Mapping[str, str | Mapping[str, str]] | None = None
 
 
-class _ParallelSection(NamedTuple):
-    """
-    The section 'parallel': evaluations of several parameters at once,
-    on the given drivers.
-
-    Parameters
-    ----------
-    drivers : Sequence of str
-        The names of drivers of the configuration (section 'drivers').
-    """
-
-    drivers: Sequence[str]
-
-
 class _MockSection(NamedTuple):
     """
     The section 'mock' of the task eval: mock data of the model.
@@ -190,9 +177,8 @@ _SECTIONS = dict(
         "The order of the galaxies along the line of sight: names, and "
         "groups of them as {name: [galaxies]}."),
     fitter=_Section(Fitter, "The fitter."),
-    parallel=_Section(
-        _ParallelSection,
-        "Evaluations of several parameters at once."),
+    workers=_Section(
+        Workers, "The workers of evaluations of several parameters at once."),
     mock=_Section(_MockSection, "Mock data (the task eval)."),
     bootstrap=_Section(BootstrapOptions, "A bootstrap (the task fit)."))
 
@@ -243,11 +229,11 @@ class Setup:
     Galaxies, their observations and their parameters, set up on drivers:
     the plan of the group (see ObservationGroup.plan), the parameters, the
     objective if every observation has data, the fitter if given, and
-    the pool of evaluations if given (see EvaluationPool). load sets up a
-    configuration as one.
+    workers of copies of the objective if given (see WorkerPool). load sets
+    up a configuration as one.
 
-    It holds the memory of its objective and the threads of its pool
-    until it is closed (see close; e.g. at the end of a with block).
+    It holds the memory of its objective and its workers until it is
+    closed (see close; e.g. at the end of a with block).
 
     Parameters
     ----------
@@ -265,17 +251,17 @@ class Setup:
     drivers : Mapping of str to Driver, optional
         Other drivers of some of them, by their labels (see
         ObservationGroup.plan).
-    parallel : Sequence of Driver, optional
-        The drivers of copies of the objective, which evaluate batches of
-        points at once (see EvaluationPool).
+    workers : Workers, optional
+        The workers of copies of the objective, which evaluate the batches
+        of points of fits at once (see Workers.start).
 
     Raises
     ------
     ConfigError
         If the parameters are not of the group, the fitter does not take
         their free elements (see Fitter.load_fit_params), a prior on
-        several parameters is invalid, a fitter or parallel drivers are
-        given and an observation has no data, or the group cannot be
+        several parameters is invalid, a fitter or workers are given and
+        an observation has no data, or the group cannot be
         planned (see ObservationGroup.plan).
 
     Examples
@@ -296,7 +282,7 @@ class Setup:
             fitter: Fitter | None = None,
             driver: Driver | None = None,
             drivers: Mapping[str, Driver] | None = None,
-            parallel: Sequence[Driver] | None = None
+            workers: Workers | None = None
     ):
         if missing := [n for n in group.pdescs() if n not in params.pdescs()]:
             raise ConfigError(
@@ -315,13 +301,13 @@ class Setup:
         self._group_plan = group.plan(driver, drivers)
         self._params = params
         self._objective = None
-        if fitter is not None or parallel is not None or all(
+        if fitter is not None or workers is not None or all(
                 obs.data() is not None for obs in group.observations()):
             _log.info("setting up objective...")
             self._objective = Objective(self._group_plan, params.solves())
         self._fitter = fitter
-        self._pool = None if parallel is None \
-            else EvaluationPool(self._objective, parallel)
+        self._pool = None if workers is None \
+            else workers.start(self._objective)
 
     @property
     def group_plan(self) -> GroupPlan:
@@ -344,8 +330,8 @@ class Setup:
         return self._fitter
 
     @property
-    def pool(self) -> EvaluationPool | None:
-        """The pool of evaluations, if given."""
+    def pool(self) -> WorkerPool | None:
+        """The workers of copies of the objective, if given."""
         return self._pool
 
     def evaluate(
@@ -425,8 +411,8 @@ class Setup:
             log: EvaluationLog | None = None
     ) -> FitResult:
         """
-        Fit the data of its objective with its fitter, on its pool if it
-        has one (see Fitter.fit).
+        Fit the data of its objective with its fitter, on its workers if
+        it has them (see Fitter.fit).
 
         Parameters
         ----------
@@ -461,7 +447,7 @@ class Setup:
         """
         Release the memory of its objective and its plan (allocated again by
         their next evaluation; see Objective.close and GroupPlan.close),
-        and stop the threads of its pool.
+        and stop its workers.
         """
         if self.pool is not None:
             self.pool.close()
@@ -630,7 +616,10 @@ def describe(
             declared = {None: cfg['driver']} if 'driver' in cfg \
                 else dict(cfg.get('drivers', {}))
             _load_placement(cfg, group, declared, 'host')
-            _load_parallel(cfg, declared)
+            # (on a host driver in place of each of theirs: it needs no
+            # device)
+            from gbkfit.driver.drivers.host import DriverHost
+            _load_workers(cfg, declared, DriverHost())
     return Description(
         tuple(problems), None if file is None else file.config, group,
         params, fitter, {} if file is None else file.sources)
@@ -643,9 +632,9 @@ def load(
     """
     Set up a configuration: the plan of the observations of its galaxies
     on its drivers, its parameters, its objective if every observation
-    has data, its fitter if it has one, and its pool of evaluations if it
-    has one (see Setup). A configuration with a fitter or a pool is of a
-    fit: its observations need data.
+    has data, its fitter if it has one, and its workers if it has them
+    (see Setup). A configuration with a fitter or workers is of a fit: its
+    observations need data.
 
     Parameters
     ----------
@@ -658,7 +647,7 @@ def load(
         The drivers to evaluate on, by name, in place of those that the
         configuration declares (its section 'driver', of the name None, or
         'drivers'; e.g. {None: DriverCuda()}), which its galaxies,
-        observations and pool name.
+        observations and workers name.
 
     Returns
     -------
@@ -668,7 +657,7 @@ def load(
     Raises
     ------
     ConfigError
-        If the configuration is invalid, or it has a fitter or a pool and
+        If the configuration is invalid, or it has a fitter or workers and
         an observation has no data.
 
     Examples
@@ -695,8 +684,8 @@ def load(
         params = _load_params(
             cfg, group.pdescs(), group.constants(), group.function_names())
         fitter = _load_fitter(cfg)
-        parallel = _load_parallel(cfg, drivers)
-        return Setup(group, params, fitter, driver, placed, parallel)
+        workers = _load_workers(cfg, drivers)
+        return Setup(group, params, fitter, driver, placed, workers)
 
 
 def _root(config: Any) -> str | None:
@@ -796,7 +785,7 @@ def _prepare_config(
     # (empty sections are loaded as such, for clearer messages)
     config = {s: {} if v is None else v for s, v in config.items()}
     for s in ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'params',
-              'fitter', 'parallel'):
+              'fitter', 'workers'):
         if s in config and not iterutils.is_mapping(config[s]):
             raise ConfigError(f"section '{s}' must be a dictionary")
     for s in ('galaxies', 'observations'):
@@ -1006,37 +995,39 @@ def _load_fitter(cfg: dict[str, Any]) -> Fitter | None:
         return fitter_parser.load(cfg['fitter'])
 
 
-def _load_parallel(
+def _load_workers(
         cfg: dict[str, Any],
-        drivers: Mapping[str | None, _T]
-) -> list[_T] | None:
+        drivers: Mapping[str | None, _T],
+        stand_in: Driver | None = None
+) -> Workers | None:
     """
-    Return the drivers of the section 'parallel' of a configuration, if it
-    has one: {drivers: [names]}, those of the drivers of the
-    configuration where copies of its objective go (see Setup); of the
-    given ones, or of anything that stands for them (see
-    _load_placement).
+    Return the workers of the section 'workers' of a configuration, if it
+    has one (see Workers): their placements are names of the given
+    drivers (those of the configuration, or anything that stands for them,
+    see _load_placement), or drivers; all of them on the stand-in driver,
+    if given (e.g. to check the section without devices).
 
     Raises
     ------
     ConfigError
         If the section has an error, or a name is not one of the drivers.
     """
-    if 'parallel' not in cfg:
+    if 'workers' not in cfg:
         return None
-    with parseutils.config_path('parallel'):
-        info = cfg['parallel']
-        if unknown := [key for key in info if key != 'drivers']:
-            parseutils.report_unknown("unknown options", unknown, ['drivers'])
-        names = info.get('drivers')
-        if not isinstance(names, list) or not names:
-            raise ConfigError(
-                "option 'drivers' must be a list of the names of drivers of "
-                "the configuration (section 'drivers')")
-        with parseutils.config_path('drivers'):
-            return [
-                driver_by_name(name, drivers, 'parallel evaluations')
-                for name in names]
+
+    def load_driver(item: Any) -> Any:
+        if isinstance(item, str):
+            # (checks the name)
+            driver = driver_by_name(item, drivers, 'workers')
+            return driver if stand_in is None else stand_in
+        return driver_parser.load(item) if stand_in is None else stand_in
+    with parseutils.config_path('workers'):
+        info = dict(cfg['workers'])
+        if iterutils.is_sequence(info.get('drivers')):
+            with parseutils.config_path('drivers'):
+                info['drivers'] = [
+                    load_driver(item) for item in info['drivers']]
+        return workers_parser.load(info)
 
 
 def _load_depth_order(

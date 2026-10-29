@@ -7,6 +7,7 @@ from astropy.io import fits
 import gbkfit
 import gbkfit.project
 from gbkfit import setup
+from gbkfit.objective import Objective
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -261,21 +262,23 @@ def test_driver_errors(sections, message):
         load_plan(**sections)
 
 
-def test_parallel_evaluations_are_on_drivers_of_the_configuration(tmp_path):
+def test_workers_are_on_drivers_of_the_configuration(tmp_path):
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         drivers=dict(cpu1=HOST, cpu2=HOST),
         observations=[image(tmp_path / 'image.fits') | dict(driver='cpu1')],
         params=PARAMS)
-    with gbkfit.load(
-            config | dict(parallel=dict(drivers=['cpu1', 'cpu2']))) as loaded:
-        first, second = loaded.pool.copies()
-        assert first is loaded.objective
-        assert second.group_plan().observation_drivers() != \
-            first.group_plan().observation_drivers()
+    workers = dict(type='threads', drivers=['cpu1', 'cpu2'])
+    with gbkfit.load(config | dict(workers=workers)) as loaded:
+        values = loaded.params.evaluate()
+        assert loaded.pool.size() == 2
+        assert loaded.pool.map(Objective.chi2, [values] * 3) == \
+            pytest.approx([loaded.objective.chi2(values)] * 3, rel=1e-12)
     assert gbkfit.load(config).pool is None
+    workers = dict(type='threads', drivers=['gpu'])
     with pytest.raises(ConfigError, match="unknown driver 'gpu'"):
-        gbkfit.load(config | dict(parallel=dict(drivers=['gpu'])))
+        gbkfit.load(config | dict(workers=workers))
+    assert gbkfit.describe(config | dict(workers=workers)).problems
 
 
 def test_depth_order_has_galaxies_and_groups_of_them():

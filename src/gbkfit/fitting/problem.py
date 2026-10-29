@@ -8,15 +8,14 @@ import math
 import time
 import typing
 from collections.abc import Callable, Iterator, Sequence
-from typing import TypeVar
+from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 import numpy as np
 import numpy.typing as npt
 
 from gbkfit.fitting.control import FitControl, FitStopped
-from gbkfit.fitting.evaluation_log import EvaluationLog
+from gbkfit.fitting.evaluation_log import EvaluationLog, SubFitLog
 from gbkfit.params.joint_priors import joint_prior_residuals
-from gbkfit.fitting.pool import EvaluationPool
 from gbkfit.params.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Merits, Objective
@@ -24,12 +23,17 @@ from gbkfit.params import (
     ModelEvaluationError, ParamEvaluationError, ParamSpace, ParamValues)
 from gbkfit.utils import threadutils
 
+if TYPE_CHECKING:
+    # (the workers import fitting, for its control)
+    from gbkfit.parallel import WorkerPool
+
 
 _log = logging.getLogger(__name__)
 
 
 __all__ = [
     'MERITS',
+    'FitCounts',
     'FitProblem'
 ]
 
@@ -38,6 +42,19 @@ _T = TypeVar('_T')
 
 # What optimizers may minimise (see FitProblem.cost): the fields of Merits
 MERITS = ('chi2', 'aicp')
+
+class FitCounts(NamedTuple):
+    """
+    The model evaluations of a fit problem (see FitProblem.counts): their
+    numbers (see FitProblem.nevals, nan_nevals and failed_nevals), and the
+    best point and its chi-square (see FitProblem.best), if any; of a
+    sub-fit, those that its fit adds to its own (see add_counts).
+    """
+    nevals: int
+    nan_nevals: int
+    failed_nevals: int
+    best: tuple[list[float], float] | None
+
 
 # The numbers of a point whose parameters cannot be evaluated
 _UNEVALUATED = Merits(math.inf, -math.inf, math.inf)
@@ -67,8 +84,8 @@ class FitProblem:
     them at once (see ParamSpace and JointPrior), which add to the priors
     of the elements the same way.
 
-    The batch functions take several points (one per row). With a pool
-    (see EvaluationPool), they evaluate them at once, on copies of the
+    The batch functions take several points (one per row). With a pool of
+    workers (see WorkerPool), they evaluate them at once, on copies of the
     objective; the problem counts, keeps, logs and reports them in their
     order, as without one.
 
@@ -86,7 +103,8 @@ class FitProblem:
 
     Every model evaluation raises FitStopped once the control (if any) is
     stopped: those of a batch before it count, without a pool (with one,
-    none of the batch do). The numbers it evaluates (see Merits; not
+    a batch raises it before and after the workers evaluate it, and none
+    of the batch count). The numbers it evaluates (see Merits; not
     residuals) go to the log (if any), and those of a fit that resumes
     come from it while it lasts (see EvaluationLog).
 
@@ -107,8 +125,9 @@ class FitProblem:
         The control of the fit, to stop it.
     log : EvaluationLog, optional
         The log of the evaluations (of a fit that resumes, or a new one).
-    pool : EvaluationPool, optional
-        Copies of the objective that evaluate the batches at once.
+    pool : WorkerPool, optional
+        Workers of copies of the objective, which evaluate the batches at
+        once.
     merit : {'chi2', 'aicp'}, optional
         What optimizers minimise (see cost).
 
@@ -133,7 +152,7 @@ class FitProblem:
             interval: float = 2.0,
             control: FitControl | None = None,
             log: EvaluationLog | None = None,
-            pool: EvaluationPool | None = None,
+            pool: 'WorkerPool | None' = None,
             merit: str = 'chi2'
     ):
         if missing := set(objective.pdescs()) - set(params.pdescs()):
@@ -153,7 +172,7 @@ class FitProblem:
                 f"expected {len(names)} priors, one per free element, got "
                 f"{len(priors)}")
         if pool is not None and pool.objective() is not objective:
-            raise ValueError("the pool is of copies of another objective")
+            raise ValueError("the pool is of workers of another objective")
         if merit not in MERITS:
             raise ValueError(
                 f"the merit must be one of {list(MERITS)}; it is {merit!r}")
@@ -247,6 +266,47 @@ class FitProblem:
         if self._best_x is None:
             return None
         return self._best_x.copy(), self._best_chi2
+
+    def counts(self) -> FitCounts:
+        """
+        Return the numbers of its model evaluations so far, and its best
+        point (in JSON values: e.g. for the log of the sub-fits of a fit).
+        """
+        best = None if self._best_x is None \
+            else (self._best_x.tolist(), float(self._best_chi2))
+        return FitCounts(
+            self._nevals, self._nan_nevals, self._failed_nevals, best)
+
+    def add_counts(self, counts: FitCounts) -> None:
+        """
+        Add the model evaluations of a sub-fit of the fit (e.g. a start of
+        multistart, run on its own problem; see run_subfits) to its own
+        (reported with the next report; see set_stage).
+        """
+        self._nevals += counts.nevals
+        self._nan_nevals += counts.nan_nevals
+        self._failed_nevals += counts.failed_nevals
+        if counts.best is not None:
+            x, chi2 = counts.best
+            self._last_chi2 = chi2
+            if chi2 < self._best_chi2:
+                self._best_chi2 = chi2
+                self._best_x = np.array(x, dtype=float)
+
+    def pool(self) -> 'WorkerPool | None':
+        """Return the workers of copies of the objective, if any."""
+        return self._pool
+
+    def control(self) -> FitControl | None:
+        """Return the control of the fit, if any."""
+        return self._control
+
+    def subfit_log(self) -> SubFitLog | None:
+        """
+        Return the log of the outcomes of the sub-fits of the fit (see
+        EvaluationLog.subfits), if it has a log.
+        """
+        return None if self._log is None else self._log.subfits()
 
     def derived_elements(self, values: ParamValues) -> dict[str, float]:
         """
@@ -562,9 +622,10 @@ class FitProblem:
     ) -> Iterator[_T]:
         """
         Yield function(objective, v) for each of the given parameter
-        values v (see evaluate), in order: with a pool, on its copies of
-        the objective at once (see EvaluationPool); else on the objective,
-        one after the other as they are taken. It does not count, keep or
+        values v (see evaluate), in order: with a pool, on its workers at
+        once (see WorkerPool; the function and the values are pickled for
+        those of other processes); else on the objective, one after the
+        other as they are taken. It does not count, keep or
         log the evaluations (the other functions do).
 
         Raises
@@ -572,10 +633,13 @@ class FitProblem:
         FitStopped
             At an evaluation, if the fit was asked to stop.
         """
-        function = self._stoppable(function)
         if self._pool is not None:
-            yield from self._pool.map(function, values)
+            self._check_stop()
+            evaluated = self._pool.map(function, values)
+            self._check_stop()
+            yield from evaluated
         else:
+            function = self._stoppable(function)
             for v in values:
                 yield function(self._objective, v)
 

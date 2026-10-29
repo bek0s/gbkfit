@@ -12,7 +12,8 @@ import dataclasses
 from collections.abc import Mapping
 
 from gbkfit import (
-    dataset, driver, fitting, instrument, model, observation, params, region)
+    dataset, driver, fitting, instrument, model, observation, parallel,
+    params, region)
 from gbkfit.model.components import spheroids, traits
 from gbkfit.observation.observables import apertures, traces
 from gbkfit.utils import parseutils
@@ -75,6 +76,7 @@ _PARSERS: dict[str, parseutils.TypedParser] = dict(
     vht=traits.vht_parser,
     vpt=traits.vpt_parser,
     weight_trait=observation.weight_trait_parser,
+    workers=parallel.workers_parser,
     zpt=traits.zpt_parser)
 
 

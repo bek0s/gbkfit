@@ -728,6 +728,26 @@ class _DataTypes(Rule):
         return changes
 
 
+class _Workers(Rule):
+    """
+    The evaluations of several parameters at once are on workers of a
+    kind (2026-10-29): the section 'parallel' ({drivers}) is the section
+    'workers' of threads.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        parallel = config.get('parallel')
+        if not isinstance(parallel, MutableMapping) or 'workers' in config:
+            return []
+        _insert_first(parallel, 'type', 'threads')
+        _rename(config, 'parallel', 'workers')
+        return [Change(['parallel'], "parallel -> workers {type: threads}")]
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _FluxScales(),
@@ -744,6 +764,7 @@ RULES: tuple[Rule, ...] = (
     _RangeNames(),
     _CoverageFiles(),
     _DataTypes(),
+    _Workers(),
 )
 
 

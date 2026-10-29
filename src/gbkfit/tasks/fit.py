@@ -36,6 +36,7 @@ _log = logging.getLogger(__name__)
 # result, to bootstrap it
 _CONFIG = 'config.yaml'
 _EVALUATIONS = 'logs/evaluations.bin'
+_BOOTSTRAP_LOG = 'logs/bootstrap.jsonl'
 _RESULT = 'fit/result.json'
 
 
@@ -53,9 +54,9 @@ def fit(
     evaluation_outputs), and fit/restart.yaml ('restart_config'): the
     configuration with the free parameters starting at the best fit, to
     fit again from there (e.g. with another fitter). With a section
-    'parallel' ({drivers: [names]}), the batches of points of the fitter
-    are evaluated at once on copies of the objective on those drivers
-    (see EvaluationPool), e.g. one per GPU. As it fits, it shows its
+    'workers' (e.g. {type: threads, drivers: [names]}), the batches of
+    points of the fitter are evaluated at once on copies of the objective
+    (see Workers), e.g. one per GPU. As it fits, it shows its
     progress on the console, writes every report of it to
     logs/progress.jsonl ('progress'), its log to logs/gbkfit.log ('log';
     see run_log), and the configuration at the best
@@ -66,15 +67,17 @@ def fit(
 
     With a section 'bootstrap' (see BootstrapOptions), the errors of the
     best fit are then bootstrapped too (see gbkfit.fitting.bootstrap),
-    after the outputs of the fit are written, and the result is written
-    again with the bootstrap; a fit can be bootstrapped later as well (see
-    bootstrap).
+    after the outputs of the fit are written, on its workers if any, and
+    the result is written again with the bootstrap; a fit can be
+    bootstrapped later as well (see bootstrap).
 
     Ctrl-C stops the fit, which ends with the best point so far (and the
-    chain so far of an MCMC sampler; see Fitter.fit); a second Ctrl-C
-    quits at once. Unless turned off, the evaluations are logged
-    (logs/evaluations.bin, 'evaluations'; see EvaluationLog), from which
-    a stopped or killed fit resumes (see resume).
+    chain so far of an MCMC sampler; see Fitter.fit), or the bootstrap,
+    which ends without its result; a second Ctrl-C quits at once. Unless
+    turned off, the evaluations are logged (logs/evaluations.bin,
+    'evaluations'; see EvaluationLog), and so are the refits of the
+    bootstrap (logs/bootstrap.jsonl, 'bootstrap_log'; see SubFitLog),
+    from which a stopped or killed fit resumes (see resume).
 
     Parameters
     ----------
@@ -104,20 +107,23 @@ def fit(
         _log.info(f"output will be stored under directory: {run.path}")
         _detail.write_config(run, _CONFIG, 'config', file.config, file.root)
         _detail.write_setup(run, file)
-        log = None
+        log = bootstrap_log = None
         if evaluation_log:
             log = gbkfit.fitting.EvaluationLog(run.filename(_EVALUATIONS))
             run.record(_EVALUATIONS, 'evaluations', 'bin')
+            bootstrap_log = gbkfit.fitting.SubFitLog(
+                run.filename(_BOOTSTRAP_LOG))
         with gbkfit.setup.load(file) as setup:
-            _fit(file.config, file.root, setup, run, log)
+            _fit(file.config, file.root, setup, run, log, bootstrap_log)
 
 
 def resume(output_dir: str) -> None:
     """
     Resume a fit that stopped or was killed, in its run: run it again from
     its configuration, answering the fitter from the log of its
-    evaluations while it lasts (see EvaluationLog), and write its outputs
-    to the run (see fit). The fit must have had the log; a least-squares
+    evaluations while it lasts (see EvaluationLog), and its bootstrap, if
+    any, taking the refits of its log (see SubFitLog), and write its
+    outputs to the run (see fit). The fit must have had the log; a least-squares
     fit, which has nothing in it, starts again (fit fit/best.yaml
     instead, to start from its best point).
 
@@ -137,11 +143,13 @@ def resume(output_dir: str) -> None:
     file = _read_config(config)
     try:
         log = gbkfit.fitting.EvaluationLog.resume(evaluations)
+        bootstrap_log = gbkfit.fitting.SubFitLog.resume(os.path.join(
+            output_dir, _BOOTSTRAP_LOG))
     except ValueError as e:
         raise ConfigError(str(e)) from e
     with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run), \
             gbkfit.setup.load(file) as setup:
-        _fit(file.config, file.root, setup, run, log)
+        _fit(file.config, file.root, setup, run, log, bootstrap_log)
 
 
 def bootstrap(output_dir: str, config: str) -> None:
@@ -182,7 +190,11 @@ def bootstrap(output_dir: str, config: str) -> None:
         options = _load_bootstrap(
             bootstrap_cfg, setup.group_plan.group(), setup.params)
         with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
-            boot = _bootstrap(setup, best['elements'], options)
+            control = gbkfit.fitting.FitControl()
+            with _stop_on_interrupt(control):
+                boot = _bootstrap(setup, best['elements'], options, control)
+            if boot is None:
+                return
             result['bootstrap'] = boot.info()
             run.write(_RESULT, 'fit_result', result)
             run.write('fit/bootstrap.ecsv', 'bootstrap', boot.table())
@@ -249,13 +261,26 @@ def _load_bootstrap(
 def _bootstrap(
         setup: Setup,
         start: dict[str, float],
-        options: gbkfit.fitting.BootstrapOptions
-) -> gbkfit.fitting.Bootstrap:
-    """Bootstrap a fit from its best fit (the value of every element)."""
+        options: gbkfit.fitting.BootstrapOptions,
+        control: gbkfit.fitting.FitControl,
+        log: gbkfit.fitting.SubFitLog | None = None
+) -> gbkfit.fitting.Bootstrap | None:
+    """
+    Bootstrap a fit from its best fit (the value of every element), on the
+    workers of the setup, if any, with the log, if given: the bootstrap,
+    or None if it was stopped.
+    """
     _log.info(f"bootstrap started ({options.nsamples()} refits)")
     begin = time.perf_counter()
-    boot = gbkfit.fitting.bootstrap(
-        setup.objective, setup.params, start, setup.fitter, options)
+    try:
+        boot = gbkfit.fitting.bootstrap(
+            setup.objective, setup.params, start, setup.fitter, options,
+            setup.pool, control, log)
+    except gbkfit.fitting.FitStopped:
+        _log.warning(
+            "bootstrap stopped: the result has no bootstrap"
+            + ("; resume continues it" if log is not None else ""))
+        return None
     _log.info(
         f"bootstrap completed ({len(boot.failures)} refits failed, "
         f"{int((~boot.converged).sum())} kept unconverged; elapsed "
@@ -292,11 +317,12 @@ def _fit(
         root: str,
         setup: Setup,
         run: gbkfit.outputs.RunWriter,
-        log: gbkfit.fitting.EvaluationLog | None
+        log: gbkfit.fitting.EvaluationLog | None,
+        bootstrap_log: gbkfit.fitting.SubFitLog | None
 ) -> None:
     """
-    Fit the setup of a configuration, and write the outputs to its run (see
-    fit).
+    Fit the setup of a configuration, and bootstrap it if it asks for it,
+    with the logs, if given, and write the outputs to its run (see fit).
     """
     params = setup.params
     options = _load_bootstrap(
@@ -329,9 +355,16 @@ def _fit(
         run, 'fit/restart.yaml', 'restart_config', cfg, root, params,
         result.best().elements)
     if options is not None:
-        result = dataclasses.replace(result, bootstrap=_bootstrap(
-            setup, result.best().elements, options))
-        result.write(run)
+        if bootstrap_log is not None:
+            run.record(_BOOTSTRAP_LOG, 'bootstrap_log', 'jsonl')
+        control = gbkfit.fitting.FitControl()
+        with _stop_on_interrupt(control):
+            boot = _bootstrap(
+                setup, result.best().elements, options, control,
+                bootstrap_log)
+        if boot is not None:
+            result = dataclasses.replace(result, bootstrap=boot)
+            result.write(run)
     _log.info(f"result:\n{result.summary()}")
 
 
