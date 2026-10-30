@@ -147,7 +147,7 @@ class SchwarzschildKinematics(SpheroidKinematics):
             2 * self._norbits,
             desc="the factor of the share of the light of each orbit "
                  "(orbit k at 2k, its twin at 2k + 1), solved",
-            min=0, unit=''))
+            min=0, unit='', default=1))
 
     def uses_mass(self) -> bool:
         return True

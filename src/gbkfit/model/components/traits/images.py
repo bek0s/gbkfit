@@ -157,7 +157,8 @@ class RPTraitMap(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         nx, ny = self._size
         return dict(a=ParamVectorDesc(
-            nx * ny, desc="the density of each cell, row by row"))
+            nx * ny, desc="the density of each cell, row by row",
+            default=1))
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -372,16 +373,17 @@ class RPTraitImage(RPTrait):
         params = dict(
             m=ParamVectorDesc(
                 nx * ny, desc="the face-on light of each cell, row by row "
-                              "(made by the galaxy)"),
-            a=ParamScalarDesc(desc="the light per unit of the image"))
+                              "(made by the galaxy)", default=1),
+            a=ParamScalarDesc(
+                desc="the light per unit of the image", default=1))
         if self._offsets:
             params |= dict(
                 dx=ParamScalarDesc(
                     desc="the offset of the image to the west",
-                    unit='arcsec'),
+                    unit='arcsec', default=0),
                 dy=ParamScalarDesc(
                     desc="the offset of the image to the north",
-                    unit='arcsec'))
+                    unit='arcsec', default=0))
         return params
 
     def amplitudes(self) -> tuple[str, ...]:

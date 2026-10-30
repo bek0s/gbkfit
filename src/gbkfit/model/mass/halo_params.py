@@ -88,23 +88,23 @@ def parameterisation_pdescs(
         parameterisation: str) -> dict[str, ParamScalarDesc]:
     """Return the parameters of a parameterisation, by name."""
     c = ParamScalarDesc(
-        desc="the concentration, r_D / r_s", min=0, unit='')
+        desc="the concentration, r_D / r_s", min=0, unit='', default=10)
     return dict(
         mass_concentration=dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass M_D", unit='dex(solMass)'),
+                desc="log10 of the mass M_D", unit='dex(solMass)', default=12),
             c=c),
         velocity_concentration=dict(
             v=ParamScalarDesc(
                 desc="the circular velocity V_D at r_D", min=0,
-                unit='km/s'),
+                unit='km/s', default=150),
             c=c),
         density_radius=dict(
             log_rho=ParamScalarDesc(
                 desc="log10 of the scale density rho_s",
-                unit='dex(solMass / kpc3)'),
+                unit='dex(solMass / kpc3)', default=7),
             rs=ParamScalarDesc(
-                desc="the scale radius r_s", min=0, unit='kpc')),
+                desc="the scale radius r_s", min=0, unit='kpc', default=20)),
     )[parameterisation]
 
 

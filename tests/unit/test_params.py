@@ -12,7 +12,8 @@ import pytest
 import gbkfit
 from gbkfit.params._expressions import Expression, InvalidExpressionError
 from gbkfit.params._keys import InvalidKeyError, parse_key
-from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc, pdesc_parser
+from gbkfit.params.pdescs import (
+    ParamScalarDesc, ParamVectorDesc, default_values, pdesc_parser)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -42,12 +43,28 @@ def test_param_desc_vector():
     assert describe(pdesc_parser.load(info)) == describe(pdesc)
 
 
+def test_param_desc_default():
+    # A typical value: dumped and loaded with the rest, and given for each
+    # element of a vector by default_values (none for those without one)
+    pdesc = ParamScalarDesc(min=0, default=2)
+    info = dict(type='scalar', min=0, default=2)
+    assert pdesc.dump() == info
+    assert pdesc_parser.load(info).default() == 2
+    values = default_values(dict(
+        s=pdesc, v=ParamVectorDesc(3, default=1), n=ParamScalarDesc()))
+    assert list(values) == ['s', 'v']
+    assert values['s'] == 2
+    assert np.array_equal(values['v'], [1, 1, 1])
+
+
 @pytest.mark.parametrize('make, message', [
     (lambda: ParamVectorDesc(0), "'size' must be at least 1"),
     (lambda: ParamVectorDesc(-1), "'size' must be at least 1"),
     (lambda: ParamVectorDesc(1.5), "'size' must be of type int"),
     (lambda: ParamVectorDesc(True), "'size' must be of type int"),
-    (lambda: ParamScalarDesc(min=1, max=0), "above its max")])
+    (lambda: ParamScalarDesc(min=1, max=0), "above its max"),
+    (lambda: ParamScalarDesc(min=0, default=-1), "in its valid range"),
+    (lambda: ParamVectorDesc(2, default=np.nan), "must be finite")])
 def test_invalid_param_descs(make, message):
     with pytest.raises(ConfigError, match=message):
         make()

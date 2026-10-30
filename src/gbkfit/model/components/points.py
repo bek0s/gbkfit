@@ -15,7 +15,7 @@ from ._units import DataUnit, band_factors, line_factors
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
-from .geometries import GEOMETRY_UNITS, Geometry
+from .geometries import GEOMETRY_DEFAULTS, GEOMETRY_UNITS, Geometry
 from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
 from .roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -46,9 +46,12 @@ def point_pdescs(
     for spectral ones its systemic velocity and dispersion.
     """
     units = GEOMETRY_UNITS | dict(depth='arcsec', flux=flux_unit, disp='km/s')
+    defaults = GEOMETRY_DEFAULTS | dict(depth=0, flux=1, disp=20)
     names = ('xpos', 'ypos') + (('depth',) if depth else ()) + ('flux',) \
         + (('vsys', 'disp') if spectral else ())
-    return {name: ParamScalarDesc(unit=units[name]) for name in names}
+    return {
+        name: ParamScalarDesc(unit=units[name], default=defaults[name])
+        for name in names}
 
 
 def _light_pdescs(

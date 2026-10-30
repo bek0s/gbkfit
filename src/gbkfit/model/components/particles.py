@@ -22,7 +22,7 @@ from ._units import DataUnit
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
-from .geometries import GEOMETRY_UNITS, Geometry
+from .geometries import GEOMETRY_DEFAULTS, GEOMETRY_UNITS, Geometry
 from .lines import Band, LineCatalogue, LinePlacement
 from .points import band_light, line_light
 from .roles import (
@@ -479,7 +479,8 @@ class Particles(Component):
             self._bands = emission.bands()
             light = self._bands
         pdescs = {
-            name: ParamScalarDesc(unit=GEOMETRY_UNITS[name])
+            name: ParamScalarDesc(
+                unit=GEOMETRY_UNITS[name], default=GEOMETRY_DEFAULTS[name])
             for name in names}
         if repeated := sorted(set(light.pdescs()) & set(pdescs)):
             raise ConfigError(

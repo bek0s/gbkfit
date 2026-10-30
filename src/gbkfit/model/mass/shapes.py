@@ -292,7 +292,7 @@ class ShapeFlattened(SpheroidShape):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(q=ParamScalarDesc(
             desc="the axis ratio (height over width)", min=0,
-            unit=''))
+            unit='', default=0.8))
 
     def vcirc2(
             self,

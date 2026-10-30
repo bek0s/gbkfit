@@ -15,6 +15,7 @@ from . import _detail
 
 __all__ = [
     'GEOMETRY_PARAMS',
+    'GEOMETRY_DEFAULTS',
     'GEOMETRY_UNITS',
     'Geometry',
     'geometry_parser'
@@ -31,6 +32,8 @@ GEOMETRY_PARAMS = dict(
 # the same names of the components without geometries, e.g. particles)
 GEOMETRY_UNITS = dict(
     vsys='km/s', xpos='arcsec', ypos='arcsec', posa='deg', incl='deg')
+# and their typical values (see ParamDesc): at the centre, inclined
+GEOMETRY_DEFAULTS = dict(vsys=0, xpos=0, ypos=0, posa=0, incl=45)
 
 
 class Geometry(parseutils.Serializable):

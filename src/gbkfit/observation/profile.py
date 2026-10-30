@@ -280,7 +280,8 @@ class ObservationProfile(Observation):
         inclination = {} if param is None else {param: ParamScalarDesc(
             desc=f"the inclination of the galaxy, of observation "
                  f"{self._name}, whose rotation velocities were deprojected "
-                 f"at {self._inclination:g} degrees", unit='deg')}
+                 f"at {self._inclination:g} degrees", unit='deg',
+            default=self._inclination)}
         return inclination | super().pdescs()
 
     def _inclination_param(self) -> str | None:

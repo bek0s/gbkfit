@@ -427,7 +427,7 @@ class ZPTrait(PTrait, abc.ABC):
         """Return the description of its node-wise amplitude, a."""
         return ParamVectorDesc(
             nnodes, desc="the amplitude of the displacement",
-            min=-self.zmax(), max=self.zmax(), unit='arcsec')
+            min=-self.zmax(), max=self.zmax(), unit='arcsec', default=0)
 
 
 class SPTrait(PTrait, abc.ABC):
@@ -476,9 +476,9 @@ def params_nw_distortion(
     density, whose component knows it), azimuth p and width s.
     """
     return dict(
-        a=ParamVectorDesc(nnodes, unit=unit),
-        p=ParamVectorDesc(nnodes, unit='deg'),
-        s=ParamVectorDesc(nnodes, unit='arcsec'))
+        a=ParamVectorDesc(nnodes, unit=unit, default=0),
+        p=ParamVectorDesc(nnodes, unit='deg', default=0),
+        s=ParamVectorDesc(nnodes, unit='arcsec', default=1))
 
 
 def splits_nw_distortion(

@@ -52,8 +52,8 @@ class SPTraitAzimuthalRange(SPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            p=ParamScalarDesc(unit='deg'),
-            s=ParamScalarDesc(unit='deg'))
+            p=ParamScalarDesc(unit='deg', default=0),
+            s=ParamScalarDesc(unit='deg', default=90))
 
     def azimuthal_edges(
             self,
@@ -90,8 +90,8 @@ class SPTraitRadialRange(SPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            rmin=ParamScalarDesc(unit='arcsec'),
-            rmax=ParamScalarDesc(unit='arcsec'))
+            rmin=ParamScalarDesc(unit='arcsec', default=0),
+            rmax=ParamScalarDesc(unit='arcsec', default=10))
 
 
 class SPTraitNWAzimuthalRange(SPTrait):
@@ -136,8 +136,8 @@ class SPTraitNWAzimuthalRange(SPTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(
-            p=ParamVectorDesc(nnodes, unit='deg'),
-            s=ParamVectorDesc(nnodes, unit='deg'))
+            p=ParamVectorDesc(nnodes, unit='deg', default=0),
+            s=ParamVectorDesc(nnodes, unit='deg', default=90))
 
     def azimuthal_edges(
             self,

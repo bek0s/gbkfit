@@ -91,7 +91,7 @@ class DPTraitUniform(DPTrait):
         return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc(unit='km/s'))
+        return dict(a=ParamScalarDesc(unit='km/s', default=20))
 
 
 class DPTraitExponential(DPTrait):
@@ -134,8 +134,8 @@ class DPTraitExponential(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(unit='km/s'),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(unit='km/s', default=20),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
 
 class DPTraitGauss(DPTrait):
@@ -179,8 +179,8 @@ class DPTraitGauss(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(unit='km/s'),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(unit='km/s', default=20),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
 
 class DPTraitGGauss(DPTrait):
@@ -225,9 +225,9 @@ class DPTraitGGauss(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(unit='km/s'),
-            s=ParamScalarDesc(unit='arcsec'),
-            b=ParamScalarDesc(unit=''))
+            a=ParamScalarDesc(unit='km/s', default=20),
+            s=ParamScalarDesc(unit='arcsec', default=1),
+            b=ParamScalarDesc(unit='', default=1))
 
 
 class DPTraitLorentz(DPTrait):
@@ -271,8 +271,8 @@ class DPTraitLorentz(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(unit='km/s'),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(unit='km/s', default=20),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
 
 class DPTraitMoffat(DPTrait):
@@ -316,9 +316,9 @@ class DPTraitMoffat(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(unit='km/s'),
-            s=ParamScalarDesc(unit='arcsec'),
-            b=ParamScalarDesc(unit=''))
+            a=ParamScalarDesc(unit='km/s', default=20),
+            s=ParamScalarDesc(unit='arcsec', default=1),
+            b=ParamScalarDesc(unit='', default=2))
 
 
 class DPTraitSech2(DPTrait):
@@ -361,8 +361,8 @@ class DPTraitSech2(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(unit='km/s'),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(unit='km/s', default=20),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
 
 class DPTraitMixtureExponential(DPTrait):
@@ -611,7 +611,7 @@ class DPTraitNWUniform(DPTrait):
         return True
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(nnodes, unit='km/s'))
+        return dict(a=ParamVectorDesc(nnodes, unit='km/s', default=20))
 
 
 class DPTraitNWHarmonic(DPTrait):

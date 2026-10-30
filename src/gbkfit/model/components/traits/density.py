@@ -289,7 +289,7 @@ class RPTraitUniform(RPTrait):
         return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc())
+        return dict(a=ParamScalarDesc(default=1))
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -324,8 +324,8 @@ class RPTraitExponential(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(default=1),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -362,8 +362,8 @@ class RPTraitGauss(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(default=1),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -401,9 +401,9 @@ class RPTraitGGauss(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(unit='arcsec'),
-            b=ParamScalarDesc(unit=''))
+            a=ParamScalarDesc(default=1),
+            s=ParamScalarDesc(unit='arcsec', default=1),
+            b=ParamScalarDesc(unit='', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -441,8 +441,8 @@ class RPTraitLorentz(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(default=1),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -479,9 +479,9 @@ class RPTraitMoffat(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(unit='arcsec'),
-            b=ParamScalarDesc(unit=''))
+            a=ParamScalarDesc(default=1),
+            s=ParamScalarDesc(unit='arcsec', default=1),
+            b=ParamScalarDesc(unit='', default=2))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -518,8 +518,8 @@ class RPTraitSech2(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(),
-            s=ParamScalarDesc(unit='arcsec'))
+            a=ParamScalarDesc(default=1),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -769,7 +769,7 @@ class RPTraitNWUniform(RPTrait):
         return True
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(nnodes))
+        return dict(a=ParamVectorDesc(nnodes, default=1))
 
     def has_analytical_integral(self) -> bool:
         return False

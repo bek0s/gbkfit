@@ -32,6 +32,7 @@ __all__ = [
     'ParamVectorDesc',
     'param_tables',
     'ParamUnit',
+    'default_values',
     'make_param_unit',
     'pdesc_parser',
     'pdescs_with_units',
@@ -108,11 +109,16 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         Its valid range: the values for which the models that have it are
         defined (e.g. 0 for a dispersion), not the values that are likely.
         Every element of a vector has the same range.
+    default : float, optional
+        A typical value, in its valid range, with which a model that has
+        it can be evaluated before values are chosen (e.g. 200 km/s for a
+        rotation speed); every element of a vector has it.
 
     Raises
     ------
     ConfigError
-        If the unit is not a unit, or min is above max.
+        If the unit is not a unit, min is above max, or the default is
+        not finite or outside the valid range.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -127,6 +133,8 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             info.update(min=self._minimum)
         if np.isfinite(self._maximum):
             info.update(max=self._maximum)
+        if self._default is not None:
+            info.update(default=self._default)
         return info
 
     def __init__(
@@ -135,7 +143,8 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             desc: str | None,
             min: float | None,
             max: float | None,
-            unit: str | ParamUnit | None = None
+            unit: str | ParamUnit | None = None,
+            default: float | None = None
     ):
         minimum = -np.inf if min is None else float(min)
         maximum = +np.inf if max is None else float(max)
@@ -143,11 +152,17 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             raise ConfigError(
                 f"the min of a parameter ({minimum}) cannot be above its max "
                 f"({maximum})")
+        if default is not None and not (
+                np.isfinite(default) and minimum <= default <= maximum):
+            raise ConfigError(
+                f"the default of a parameter ({default}) must be finite and "
+                f"in its valid range [{minimum}, {maximum}]")
         self._size = int(size)
         self._desc = desc
         self._unit = make_param_unit(unit)
         self._minimum = minimum
         self._maximum = maximum
+        self._default = None if default is None else float(default)
 
     @abc.abstractmethod
     def is_scalar(self) -> bool:
@@ -204,6 +219,10 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         """Check whether its valid range is finite on either side."""
         return bool(np.isfinite(self._minimum) or np.isfinite(self._maximum))
 
+    def default(self) -> float | None:
+        """Return its typical value, if given (see ParamDesc)."""
+        return self._default
+
 
 class ParamScalarDesc(ParamDesc):
     """
@@ -217,11 +236,14 @@ class ParamScalarDesc(ParamDesc):
         Its valid range (see ParamDesc).
     unit : str or UnitBase, optional
         The unit of its values (see ParamDesc).
+    default : float, optional
+        Its typical value (see ParamDesc).
 
     Raises
     ------
     ConfigError
-        If the unit is not a unit, or min is above max.
+        If the unit is not a unit, min is above max, or the default is
+        not finite or outside the valid range.
     """
 
     @staticmethod
@@ -233,10 +255,11 @@ class ParamScalarDesc(ParamDesc):
             desc: str | None = None,
             min: float | None = None,
             max: float | None = None,
-            unit: str | ParamUnit | None = None
+            unit: str | ParamUnit | None = None,
+            default: float | None = None
     ):
         check_options(ParamScalarDesc.__init__, locals())
-        super().__init__(1, desc, min, max, unit)
+        super().__init__(1, desc, min, max, unit, default)
 
     def is_scalar(self) -> bool:
         return True
@@ -257,11 +280,14 @@ class ParamVectorDesc(ParamDesc):
         The valid range of each element (see ParamDesc).
     unit : str or UnitBase, optional
         The unit of the values of its elements (see ParamDesc).
+    default : float, optional
+        The typical value of each element (see ParamDesc).
 
     Raises
     ------
     ConfigError
-        If the unit is not a unit, or min is above max.
+        If the unit is not a unit, min is above max, or the default is
+        not finite or outside the valid range.
     """
 
     @staticmethod
@@ -274,10 +300,11 @@ class ParamVectorDesc(ParamDesc):
             desc: str | None = None,
             min: float | None = None,
             max: float | None = None,
-            unit: str | ParamUnit | None = None
+            unit: str | ParamUnit | None = None,
+            default: float | None = None
     ):
         check_options(ParamVectorDesc.__init__, locals())
-        super().__init__(size, desc, min, max, unit)
+        super().__init__(size, desc, min, max, unit, default)
         self._column: ParamColumn | None = None
 
     def is_scalar(self) -> bool:
@@ -300,6 +327,32 @@ class ParamVectorDesc(ParamDesc):
 pdesc_parser = parseutils.TypedParser(ParamDesc, [
     ParamScalarDesc,
     ParamVectorDesc])
+
+
+def default_values(
+        pdescs: Mapping[str, ParamDesc]
+) -> dict[str, float | np.ndarray]:
+    """
+    Return the typical values of parameters (see ParamDesc), by name: of
+    those that have one; an array of it for a vector. With them, models
+    can be evaluated before their values are chosen (e.g. the parameters
+    of a configuration, see gbkfit.setup.describe and
+    ObservationGroup.pdescs).
+
+    Parameters
+    ----------
+    pdescs : Mapping
+        The descriptions of the parameters, by name.
+
+    Returns
+    -------
+    dict
+        The values, by name.
+    """
+    return {
+        name: pdesc.default() if pdesc.is_scalar()
+        else np.full(pdesc.size(), pdesc.default())
+        for name, pdesc in pdescs.items() if pdesc.default() is not None}
 
 
 def param_tables(

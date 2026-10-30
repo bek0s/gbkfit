@@ -33,7 +33,7 @@ from .._native import (
 from .._units import DataUnit, mass_per_unit
 from ..base import (
     Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
-from ..geometries import GEOMETRY_UNITS, Geometry
+from ..geometries import GEOMETRY_DEFAULTS, GEOMETRY_UNITS, Geometry
 from ..lines import Band, LineCatalogue
 from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -201,12 +201,12 @@ class LightSersic(LightProfile):
         return dict(
             ie=ParamScalarDesc(
                 desc="the surface brightness at the effective radius, "
-                     "face-on"),
+                     "face-on", default=1),
             re=ParamScalarDesc(
-                desc="the effective radius", min=0, unit='arcsec'),
+                desc="the effective radius", min=0, unit='arcsec', default=1),
             n=ParamScalarDesc(
                 desc="the Sersic index", min=0.3, max=12,
-                unit=''))
+                unit='', default=4))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('ie',)
@@ -337,13 +337,13 @@ class LightMGE(LightProfile):
         return dict(
             i0=ParamVectorDesc(
                 n, desc="the peak surface brightness of each Gaussian, "
-                        "face-on"),
+                        "face-on", default=1),
             sigma=ParamVectorDesc(
                 n, desc="the dispersion of each Gaussian", min=0,
-                unit='arcsec'),
+                unit='arcsec', default=1),
             q=ParamVectorDesc(
                 n, desc="the intrinsic axis ratio of each Gaussian "
-                        "(height over width)", min=0, unit=''))
+                        "(height over width)", min=0, unit='', default=0.8))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('i0',)
@@ -452,7 +452,8 @@ spheroid_kinematics_parser = parseutils.TypedParser(SpheroidKinematics, [
 # its axis unless it is a sphere without kinematics, and with kinematics,
 # its systemic velocity
 GEOMETRY_PDESCS = {
-    name: ParamScalarDesc(unit=GEOMETRY_UNITS[name])
+    name: ParamScalarDesc(
+        unit=GEOMETRY_UNITS[name], default=GEOMETRY_DEFAULTS[name])
     for name in ('xpos', 'ypos', 'posa', 'incl', 'vsys')}
 
 

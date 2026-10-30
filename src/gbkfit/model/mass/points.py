@@ -33,7 +33,7 @@ class MassPoint(MassSpherical):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_m=ParamScalarDesc(
-            desc="log10 of the mass", unit='dex(solMass)'))
+            desc="log10 of the mass", unit='dex(solMass)', default=8))
 
     def density_spherical(
             self,

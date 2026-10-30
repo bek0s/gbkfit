@@ -130,7 +130,7 @@ class VPTraitUniform(VPTrait):
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {self.speed(): ParamScalarDesc(unit='km/s')}
+        return {self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitArctan(VPTrait):
@@ -170,8 +170,8 @@ class VPTraitArctan(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitBoissier(VPTrait):
@@ -211,8 +211,8 @@ class VPTraitBoissier(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitEpinat(VPTrait):
@@ -253,10 +253,10 @@ class VPTraitEpinat(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s'),
-            'a': ParamScalarDesc(unit=''),
-            'g': ParamScalarDesc(unit='')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200),
+            'a': ParamScalarDesc(unit='', default=1),
+            'g': ParamScalarDesc(unit='', default=1)}
 
 
 class VPTraitLRamp(VPTrait):
@@ -296,8 +296,8 @@ class VPTraitLRamp(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitTanh(VPTrait):
@@ -337,8 +337,8 @@ class VPTraitTanh(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitPolyex(VPTrait):
@@ -379,9 +379,9 @@ class VPTraitPolyex(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s'),
-            'a': ParamScalarDesc(unit='')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200),
+            'a': ParamScalarDesc(unit='', default=0)}
 
 
 class VPTraitRix(VPTrait):
@@ -423,10 +423,10 @@ class VPTraitRix(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s'),
-            'b': ParamScalarDesc(unit=''),
-            'g': ParamScalarDesc(unit='')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200),
+            'b': ParamScalarDesc(unit='', default=0),
+            'g': ParamScalarDesc(unit='', default=2)}
 
 
 class VPTraitCourteau(VPTrait):
@@ -467,10 +467,10 @@ class VPTraitCourteau(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s'),
-            'b': ParamScalarDesc(unit=''),
-            'g': ParamScalarDesc(unit='')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200),
+            'b': ParamScalarDesc(unit='', default=0),
+            'g': ParamScalarDesc(unit='', default=2)}
 
 
 class VPTraitBrandt(VPTrait):
@@ -511,9 +511,9 @@ class VPTraitBrandt(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s'),
-            'n': ParamScalarDesc(unit='')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200),
+            'n': ParamScalarDesc(unit='', default=1)}
 
 
 class VPTraitIso(VPTrait):
@@ -554,8 +554,8 @@ class VPTraitIso(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitNFW(VPTrait):
@@ -596,8 +596,8 @@ class VPTraitNFW(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(unit='arcsec'),
-            self.speed(): ParamScalarDesc(unit='km/s')}
+            'rt': ParamScalarDesc(unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
 
 
 class VPTraitNWUniform(VPTrait):
@@ -640,7 +640,8 @@ class VPTraitNWUniform(VPTrait):
         super().__init__(Direction(direction), Sampling(sampling), name=name)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return {self.speed(): ParamVectorDesc(nnodes, unit='km/s')}
+        return {self.speed(): ParamVectorDesc(
+            nnodes, unit='km/s', default=200)}
 
 
 class VPTraitNWHarmonic(VPTrait):
@@ -744,9 +745,9 @@ class VPTraitWedge(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            self.speed(): ParamScalarDesc(unit='km/s'),
-            'p': ParamScalarDesc(unit='deg'),
-            's': ParamScalarDesc(unit='deg')}
+            self.speed(): ParamScalarDesc(unit='km/s', default=50),
+            'p': ParamScalarDesc(unit='deg', default=0),
+            's': ParamScalarDesc(unit='deg', default=30)}
 
     def axisymmetric(self) -> bool:
         return False
@@ -796,9 +797,9 @@ class VPTraitBar(VPTraitPlanar):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            v=ParamScalarDesc(unit='km/s'),
-            p=ParamScalarDesc(unit='deg'),
-            s=ParamScalarDesc(unit='arcsec'))
+            v=ParamScalarDesc(unit='km/s', default=50),
+            p=ParamScalarDesc(unit='deg', default=0),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
     def azimuthal_edges(
             self,
@@ -852,11 +853,11 @@ class VPTraitNWBar(VPTraitPlanar):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            p=ParamScalarDesc(unit='deg'),
-            s=ParamScalarDesc(unit='arcsec'))
+            p=ParamScalarDesc(unit='deg', default=0),
+            s=ParamScalarDesc(unit='arcsec', default=1))
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(v=ParamVectorDesc(nnodes, unit='km/s'))
+        return dict(v=ParamVectorDesc(nnodes, unit='km/s', default=50))
 
     def azimuthal_edges(
             self,
@@ -1083,7 +1084,7 @@ class VPTraitMass(VPTrait):
         return 'subrings'
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(vt=ParamVectorDesc(nnodes, unit='km/s'))
+        return dict(vt=ParamVectorDesc(nnodes, unit='km/s', default=200))
 
     def from_galaxy(self) -> RotationInput:
         return RotationInput(('vt',), self._pressure_support)

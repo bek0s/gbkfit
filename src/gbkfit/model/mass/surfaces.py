@@ -303,9 +303,9 @@ class SurfaceExponential(DiskSurface):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)'),
+                desc="log10 of the mass", unit='dex(solMass)', default=10),
             rd=ParamScalarDesc(
-                desc="the scale length", min=0, unit='kpc'))
+                desc="the scale length", min=0, unit='kpc', default=3))
 
     def surface_density(
             self,
@@ -448,12 +448,12 @@ class SurfaceGaussianRing(DiskSurface):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)'),
+                desc="log10 of the mass", unit='dex(solMass)', default=9),
             r_peak=ParamScalarDesc(
-                desc="the radius of the peak", min=0, unit='kpc'),
+                desc="the radius of the peak", min=0, unit='kpc', default=5),
             fwhm=ParamScalarDesc(
                 desc="the full width at half maximum", min=0,
-                unit='kpc'))
+                unit='kpc', default=2))
 
     def surface_density(
             self,
@@ -582,7 +582,7 @@ class SurfaceNodewise(DiskSurface):
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1,
             desc="log10 of the surface density at each node but the last",
-            unit='dex(solMass / kpc2)'))
+            unit='dex(solMass / kpc2)', default=7))
 
     def surface_density(
             self,
@@ -719,7 +719,7 @@ class SurfaceComponent(DiskSurface):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
             desc="the mass per unit of the density of the component (see "
-                 "SurfaceComponent)", min=0))
+                 "SurfaceComponent)", min=0, default=1))
 
     def mass_ratios(self) -> dict[str, str]:
         return dict(upsilon=self._component)

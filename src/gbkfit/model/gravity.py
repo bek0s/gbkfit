@@ -311,7 +311,7 @@ class GravityMOND(Gravity):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(gravity_a0=ParamScalarDesc(
             desc="the acceleration a0 of MOND", min=0,
-            unit='1e-10 m / s2'))
+            unit='1e-10 m / s2', default=1.2))
 
     def field(
             self,
@@ -479,11 +479,11 @@ class GravityHuSawicki(Gravity):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         pdescs = dict(gravity_log_fr0=ParamScalarDesc(
             desc="log10 of |f_R0|, the scalar field of the background "
-                 "today", unit='dex'))
+                 "today", unit='dex', default=-6))
         if self._environment:
             pdescs['gravity_log_phi_ext'] = ParamScalarDesc(
                 desc="log10 of -Phi_ext / c^2, the depth of the Newtonian "
-                     "potential of the environment", unit='dex')
+                     "potential of the environment", unit='dex', default=-6)
         return pdescs
 
     def field(
@@ -635,7 +635,7 @@ class GravityPalatini(Gravity):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(gravity_alpha=ParamScalarDesc(
-            desc="alpha of f(R) = R + alpha R^2", unit='kpc2'))
+            desc="alpha of f(R) = R + alpha R^2", unit='kpc2', default=0))
 
     def field(
             self,

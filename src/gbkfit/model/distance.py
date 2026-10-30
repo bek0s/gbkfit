@@ -248,7 +248,7 @@ class DistanceDirect(Distance):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(distance=ParamScalarDesc(
             desc="the angular diameter distance of the galaxy",
-            min=0, unit='Mpc'))
+            min=0, unit='Mpc', default=10))
 
     def kpc_per_arcsec(self, params: ParamValues, redshift: float) -> float:
         return float(params['distance']) * KPC_PER_ARCSEC_MPC

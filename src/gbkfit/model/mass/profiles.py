@@ -127,12 +127,12 @@ class ProfileSersic(SpheroidProfile):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)'),
+                desc="log10 of the mass", unit='dex(solMass)', default=10),
             re=ParamScalarDesc(
-                desc="the effective radius", min=0, unit='kpc'),
+                desc="the effective radius", min=0, unit='kpc', default=3),
             n=ParamScalarDesc(
                 desc="the Sersic index", min=0.3, max=12,
-                unit=''))
+                unit='', default=4))
 
     def density(
             self,
@@ -204,9 +204,9 @@ class ProfileGaussian(SpheroidProfile):
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)'),
+                desc="log10 of the mass", unit='dex(solMass)', default=9),
             sigma=ParamScalarDesc(
-                desc="the dispersion", min=0, unit='kpc'))
+                desc="the dispersion", min=0, unit='kpc', default=1))
 
     def density(
             self,
@@ -312,7 +312,8 @@ class ProfileNodewise(SpheroidProfile):
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1,
             desc="log10 of the projected density at each node but the "
-                 "last", unit='dex(solMass / kpc2)'))
+                 "last", unit='dex(solMass / kpc2)',
+            default=7))
 
     def density(
             self,

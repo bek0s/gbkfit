@@ -18,7 +18,7 @@ from .._nodal import (
 from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
-from ..geometries import GEOMETRY_PARAMS, GEOMETRY_UNITS
+from ..geometries import GEOMETRY_DEFAULTS, GEOMETRY_PARAMS, GEOMETRY_UNITS
 from ..parts import (
     CentralEquilibrium, Equilibrium, JeansEquilibrium,
     SelfGravitatingEquilibrium)
@@ -38,9 +38,9 @@ TRAIT_KINDS = (
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
     """Return the geometric parameter of the given name, node-wise if nw."""
-    unit = GEOMETRY_UNITS[key]
-    return {key: ParamVectorDesc(nnodes, unit=unit) if nw
-            else ParamScalarDesc(unit=unit)}
+    unit, default = GEOMETRY_UNITS[key], GEOMETRY_DEFAULTS[key]
+    return {key: ParamVectorDesc(nnodes, unit=unit, default=default) if nw
+            else ParamScalarDesc(unit=unit, default=default)}
 
 
 class NodalDisk(abc.ABC):
