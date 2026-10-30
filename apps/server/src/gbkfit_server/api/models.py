@@ -75,8 +75,9 @@ class ArrayInfo(BaseModel):
     the unit of its values, the size of its pixels in that order (arcsec,
     and km/s along a velocity axis; none if its coordinates cannot be
     read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
-    a beam of each channel), and what a dataset of it refuses or needs
-    given.
+    a beam of each channel), the noise of its values that its header
+    states (keyword RMS or NOISE), and what a dataset of it refuses or
+    needs given.
     """
     index: int
     name: str
@@ -85,6 +86,7 @@ class ArrayInfo(BaseModel):
     unit: str | None
     step: list[float] | None
     beam: dict[str, float | list[float]] | None
+    rms: float | None
     problems: list[str]
 
 

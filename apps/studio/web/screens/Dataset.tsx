@@ -1,5 +1,6 @@
 // A dataset: its files (its data, their errors and their mask: an array
-// of a file each) and what GBKFIT reads from their headers. A new one is
+// of a file each; the errors can be one value for all the data instead)
+// and what GBKFIT reads from their headers. A new one is
 // named, given its files and added to the project, once nothing stops
 // it; one of the project is shown as it is.
 import { useRef, useState } from 'react';
@@ -27,22 +28,29 @@ interface FileArray {
 
 type Files = Partial<Record<Role, FileArray>>;
 
+// What a dataset is made of: the arrays of files of its roles, and for its
+// errors, one value for all the data instead (as typed; null: none)
+interface Sources {
+  files: Files;
+  errorValue: string | null;
+}
+
 export function NewDataset({ data }: { data: string }) {
   const { project, go } = useStudio();
   const info = useProject(project);
   const create = useCreateBlock(project ?? '.');
   const kind = dataKind(data);
   const [name, setName] = useState('');
-  const [files, setFiles] = useState<Files>({});
-  const arrays = useArrays(files);
+  const [sources, setSources] = useState<Sources>({ files: {}, errorValue: null });
+  const arrays = useArrays(sources.files);
   if (kind === undefined || project === null) return null;
   const taken = info.data?.pieces.datasets.includes(name.trim()) ?? false;
   const reason =
-    blocker(kind, arrays) ??
+    blocker(kind, arrays, sources.errorValue) ??
     (name.trim() === '' ? 'Name the dataset' : taken ? 'The project has a dataset of that name' : null);
   const add = () =>
     create.mutate(
-      { folder: 'datasets', name: name.trim(), content: toBlock(kind, arrays, files, project) },
+      { folder: 'datasets', name: name.trim(), content: toBlock(kind, arrays, sources, project) },
       { onSuccess: () => go({ kind: 'block', folder: 'datasets', name: name.trim() }) },
     );
   return (
@@ -70,7 +78,7 @@ export function NewDataset({ data }: { data: string }) {
         </div>
       </div>
       {create.error && <p className="error screen-error">{create.error.message}</p>}
-      <DatasetBody project={project} files={files} arrays={arrays} onChange={setFiles} />
+      <DatasetBody project={project} sources={sources} arrays={arrays} onChange={setSources} />
     </section>
   );
 }
@@ -78,8 +86,8 @@ export function NewDataset({ data }: { data: string }) {
 export function Dataset({ name }: { name: string }) {
   const { project } = useStudio();
   const piece = usePiece(project === null ? null : joinPath(project, `datasets/${name}.yaml`));
-  const files = piece.data === undefined || project === null ? {} : fromBlock(piece.data, project);
-  const arrays = useArrays(files);
+  const sources = piece.data === undefined || project === null ? NO_SOURCES : fromBlock(piece.data, project);
+  const arrays = useArrays(sources.files);
   const kind = dataKindOfType(piece.data?.type);
   return (
     <section className="screen">
@@ -90,10 +98,12 @@ export function Dataset({ name }: { name: string }) {
         </div>
       </div>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
-      {project !== null && <DatasetBody project={project} files={files} arrays={arrays} />}
+      {project !== null && <DatasetBody project={project} sources={sources} arrays={arrays} />}
     </section>
   );
 }
+
+const NO_SOURCES: Sources = { files: {}, errorValue: null };
 
 // The arrays of the files of a dataset, by role, from their descriptions
 // (undefined until described, or if the file cannot be)
@@ -145,8 +155,9 @@ function arrayRef(arrays: ArrayInfo[], array: ArrayInfo): string | number {
   return array.name && arrays.filter((a) => a.name === array.name).length === 1 ? array.name : array.index;
 }
 
-// Why a dataset of these arrays cannot be added yet (null: it can)
-function blocker(kind: DataKind, arrays: Arrays): string | null {
+// Why a dataset of these arrays (and error value) cannot be added yet
+// (null: it can)
+function blocker(kind: DataKind, arrays: Arrays, errorValue: string | null): string | null {
   const data = arrays.found.data;
   if (arrays.errors.data) return 'The data cannot be read';
   if (data === undefined) return `Choose the ${kind.title.toLowerCase()}`;
@@ -159,16 +170,21 @@ function blocker(kind: DataKind, arrays: Arrays): string | null {
       return `The ${role === 'error' ? 'errors are' : 'mask is'} not of the shape of the data`;
     }
   }
+  if (errorValue !== null && !(Number(errorValue) > 0)) return 'Give the error a value above 0';
   return null;
 }
 
 // The options of a dataset of the arrays of files (their paths relative
-// to the project)
-function toBlock(kind: DataKind, arrays: Arrays, files: Files, project: string): Record<string, unknown> {
+// to the project), and of its error value
+function toBlock(kind: DataKind, arrays: Arrays, sources: Sources, project: string): Record<string, unknown> {
   const prefix = project === '.' ? '' : `${project}/`;
   const options: Record<string, unknown> = { type: kind.type };
   for (const { role } of ROLES) {
-    const chosen = files[role];
+    if (role === 'error' && sources.errorValue !== null) {
+      options.error = Number(sources.errorValue);
+      continue;
+    }
+    const chosen = sources.files[role];
     const array = arrays.found[role];
     if (chosen !== undefined && array !== undefined) {
       options[role] = [chosen.file.slice(prefix.length), arrayRef(arrays.inFile[role] ?? [], array)];
@@ -177,9 +193,11 @@ function toBlock(kind: DataKind, arrays: Arrays, files: Files, project: string):
   return options;
 }
 
-// The files of the options of a dataset: a file, or a file and its array
-function fromBlock(options: Record<string, unknown>, project: string): Files {
+// The sources of the options of a dataset: a file, or a file and its
+// array, or for the errors a number
+function fromBlock(options: Record<string, unknown>, project: string): Sources {
   const files: Files = {};
+  const errorValue = typeof options.error === 'number' ? String(options.error) : null;
   for (const { role } of ROLES) {
     const value = options[role];
     const [file, array] = typeof value === 'string' ? [value, 0] : Array.isArray(value) ? value : [];
@@ -187,23 +205,25 @@ function fromBlock(options: Record<string, unknown>, project: string): Files {
       files[role] = { file: joinPath(project, file), array };
     }
   }
-  return files;
+  return { files, errorValue };
 }
 
 // The files of a dataset (editable when it changes them), and what GBKFIT
 // reads from them
 function DatasetBody({
   project,
-  files,
+  sources,
   arrays,
   onChange,
 }: {
   project: string;
-  files: Files;
+  sources: Sources;
   arrays: Arrays;
-  onChange?: (files: Files) => void;
+  onChange?: (sources: Sources) => void;
 }) {
-  const set = (role: Role, value: FileArray | undefined) => onChange?.({ ...files, [role]: value });
+  const { files, errorValue } = sources;
+  const set = (role: Role, value: FileArray | undefined) => onChange?.({ ...sources, files: { ...files, [role]: value } });
+  const setErrorValue = (value: string | null) => onChange?.({ ...sources, errorValue: value });
   const data = arrays.found.data;
   // The other arrays of the file of the data of its shape (e.g. its
   // errors), offered for the errors
@@ -221,11 +241,43 @@ function DatasetBody({
             return (
               <div className="slot-row" key={role}>
                 <span className="slot-label">{title}</span>
-                {chosen === undefined ? (
+                {role === 'error' && errorValue !== null ? (
+                  <div className="slot">
+                    {onChange ? (
+                      <input
+                        className="slot-value"
+                        type="number"
+                        step="any"
+                        min="0"
+                        autoFocus
+                        value={errorValue}
+                        aria-label="The error of every value"
+                        onChange={(event) => setErrorValue(event.target.value)}
+                      />
+                    ) : (
+                      <span className="slot-file">{errorValue}</span>
+                    )}
+                    <span className="note">{data?.unit ?? 'in the unit of the data'} · for every value</span>
+                    {onChange && (
+                      <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
+                        ×
+                      </button>
+                    )}
+                  </div>
+                ) : chosen === undefined ? (
                   <div className="slot empty">
                     {onChange ? (
                       <>
                         <FileSources project={project} onFile={(file) => set(role, { file })} />
+                        {role === 'error' && (
+                          <button
+                            className="link"
+                            title="One error for every value of the data (e.g. the rms of a radio cube)"
+                            onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
+                          >
+                            One value
+                          </button>
+                        )}
                         {role === 'error' &&
                           files.data !== undefined &&
                           siblings.map((a) => (

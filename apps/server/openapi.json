@@ -995,6 +995,17 @@
             ],
             "title": "Beam"
           },
+          "rms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rms"
+          },
           "problems": {
             "items": {
               "type": "string"
@@ -1012,10 +1023,11 @@
           "unit",
           "step",
           "beam",
+          "rms",
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; none if its coordinates cannot be\nread), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for\na beam of each channel), and what a dataset of it refuses or needs\ngiven."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; none if its coordinates cannot be\nread), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for\na beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), and what a dataset of it refuses or\nneeds given."
       },
       "CheckRequest": {
         "properties": {

@@ -259,7 +259,8 @@ class Workspace:
         Describe a file of data from its headers (see
         gbkfit.dataset.describe_fits): each of its arrays (its index,
         name, shape and axes, in the order of the model, unit, the size of
-        its pixels in that order, beam and problems).
+        its pixels in that order, beam, the noise its header states, and
+        problems).
 
         Raises
         ------
@@ -286,6 +287,7 @@ class Workspace:
                      bmaj=np.asarray(hdu.beam.bmaj).tolist(),
                      bmin=np.asarray(hdu.beam.bmin).tolist(),
                      bpa=np.asarray(hdu.beam.bpa).tolist()),
+                 rms=hdu.rms,
                  # (the paths of the problems in the workspace)
                  problems=[p.replace(path, relative) for p in hdu.problems])
             for hdu in hdus]

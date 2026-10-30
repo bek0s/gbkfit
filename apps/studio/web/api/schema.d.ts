@@ -446,8 +446,9 @@ export interface components {
          *     the unit of its values, the size of its pixels in that order (arcsec,
          *     and km/s along a velocity axis; none if its coordinates cannot be
          *     read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
-         *     a beam of each channel), and what a dataset of it refuses or needs
-         *     given.
+         *     a beam of each channel), the noise of its values that its header
+         *     states (keyword RMS or NOISE), and what a dataset of it refuses or
+         *     needs given.
          */
         ArrayInfo: {
             /** Index */
@@ -466,6 +467,8 @@ export interface components {
             beam: {
                 [key: string]: number | number[];
             } | null;
+            /** Rms */
+            rms: number | null;
             /** Problems */
             problems: string[];
         };

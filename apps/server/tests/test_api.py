@@ -151,7 +151,7 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
         CTYPE1='RA---TAN', CRVAL1=10, CDELT1=-1 / 3600, CUNIT1='deg',
         CTYPE2='DEC--TAN', CRVAL2=-30, CDELT2=1 / 3600, CUNIT2='deg',
         CTYPE3='VRAD', CRVAL3=0, CDELT3=10000, CUNIT3='m/s',
-        BUNIT='Jy/beam', BMAJ=3 / 3600, BMIN=2 / 3600, BPA=30))
+        BUNIT='Jy/beam', BMAJ=3 / 3600, BMIN=2 / 3600, BPA=30, RMS=0.002))
     fits.writeto(
         pathlib.Path(root, 'study/data/cube.fits'),
         np.zeros((4, 3, 2), np.float32), header)
@@ -164,6 +164,7 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
     assert array['axes'] == ['RA---TAN', 'DEC--TAN', 'VRAD']
     assert [abs(step) for step in array['step']] == pytest.approx([1, 1, 10])
     assert array['beam'] == pytest.approx(dict(bmaj=3, bmin=2, bpa=30))
+    assert array['rms'] == 0.002
     assert array['problems'] == []
     assert client.get(
         '/api/v1/describe/study/setups/disk.yaml').status_code == 400

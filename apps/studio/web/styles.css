@@ -135,6 +135,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .slot.empty { border-style: dashed; background: transparent; }
 .slot-file { min-width: 0; font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot select { border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); font: 11.5px var(--mono); color: var(--fg); padding: 1px 4px; }
+.slot-value { width: 120px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); padding: 2px 6px; font: 12px var(--mono); color: var(--fg); text-align: right; }
 .slot-clear { margin-left: auto; border: 0; background: transparent; color: var(--faint); padding: 0 4px; }
 .slot-clear:hover { color: var(--err); }
 .slot-error { grid-column: 2; }

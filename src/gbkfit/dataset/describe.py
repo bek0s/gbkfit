@@ -23,6 +23,11 @@ __all__ = [
 ]
 
 
+# The keywords of headers that state the noise of the values (see
+# HDUDescription.rms), in order
+_RMS_KEYS = ('RMS', 'NOISE')
+
+
 @dataclasses.dataclass(frozen=True)
 class HDUDescription:
     """
@@ -48,6 +53,10 @@ class HDUDescription:
     coords : Coords or None
         The world coordinates of its data in the model (see
         fitsutils.read_coords); None if they cannot be read.
+    rms : float or None
+        The noise of its values that the header states (keyword RMS or
+        NOISE, in the unit of the values; e.g. that of the cubes of
+        LVHIS), if any.
     problems : tuple of str
         What a dataset of it refuses or needs given (e.g. the convention
         of velocities that the header does not state, or the beam of a
@@ -60,6 +69,7 @@ class HDUDescription:
     unit: str | None
     beam: Beam | None
     coords: gridutils.Coords | None
+    rms: float | None
     problems: tuple[str, ...]
 
 
@@ -135,9 +145,13 @@ def _describe(
                     f"the unit, {unit}, is per beam, but the header has no "
                     f"beam (BMAJ and BMIN): give it (option beam of the "
                     f"data)")
+    rms = next(
+        (float(header[key]) for key in _RMS_KEYS
+         if isinstance(header.get(key), (int, float))
+         and not isinstance(header.get(key), bool)), None)
     return HDUDescription(
         index=index, name=name, shape=shape, axes=axes, unit=unit,
-        beam=beam, coords=coords, problems=tuple(problems))
+        beam=beam, coords=coords, rms=rms, problems=tuple(problems))
 
 
 def _model_order(header: astropy.io.fits.Header) -> tuple[int, ...]:

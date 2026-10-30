@@ -545,7 +545,7 @@ def test_fits_files_are_described_from_their_headers(tmp_path):
     cube = fits.PrimaryHDU(np.zeros((5, 6, 7), np.float32), fits.Header(
         sky | dict(CTYPE3='VRAD', CRVAL3=1e6, CDELT3=1e4, CRPIX3=1,
                    CUNIT3='m/s', BUNIT='Jy/beam', BMAJ=2 / 3600,
-                   BMIN=1 / 3600, BPA=30)))
+                   BMIN=1 / 3600, BPA=30, RMS=0.002)))
     velocity = fits.ImageHDU(
         np.zeros((6, 7)), fits.Header(sky | dict(BUNIT='km/s')),
         name='MOM1')
@@ -561,12 +561,12 @@ def test_fits_files_are_described_from_their_headers(tmp_path):
         (0, 'PRIMARY'), (1, 'MOM1'), (3, 'CASA')]
     first, second, third = hdus
     assert first.shape == (7, 6, 5) and first.axes[2] == 'VRAD'
-    assert (first.unit, first.problems) == ('Jy/beam', ())
+    assert (first.unit, first.rms, first.problems) == ('Jy/beam', 0.002, ())
     np.testing.assert_allclose(first.beam[:3], (2, 1, 30))
     np.testing.assert_allclose(first.coords.step, (1, 1, 10))
     assert first.coords.convention == 'radio'
-    assert (second.shape, second.unit, second.problems) == (
-        (7, 6), 'km/s', ())
+    assert (second.shape, second.unit, second.rms, second.problems) == (
+        (7, 6), 'km/s', None, ())
     assert third.shape == (7, 6, 1, 5) and third.coords is None
     for problem, words in zip(third.problems, [
             'axes of length 1 (STOKES)', 'may be radio or optical',
