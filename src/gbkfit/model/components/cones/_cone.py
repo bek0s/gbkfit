@@ -17,7 +17,7 @@ from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import NodalTraits, native_traits, subring_radii
 from ..base import (
     ComponentState, FieldsLayout, FrameParams, NativeGrid)
-from ..geometries import GEOMETRY_DEFAULTS, GEOMETRY_UNITS
+from ..geometries import GEOMETRY_UNITS, geometry_pdesc
 from ..traits import Trait
 
 
@@ -41,8 +41,7 @@ SIDES = ('both', 'positive', 'negative')
 # The geometric parameters of a cone: its systemic velocity (only with
 # velocity traits), its apex, its axis and its wall
 GEOMETRY_PDESCS = {
-    name: ParamScalarDesc(unit=unit, default=GEOMETRY_DEFAULTS[name])
-    for name, unit in GEOMETRY_UNITS.items()
+    name: geometry_pdesc(name) for name in GEOMETRY_UNITS
 } | dict(
     wall=ParamScalarDesc(
         desc="the angle of the mid-surface of the walls from the axis",

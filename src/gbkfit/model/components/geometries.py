@@ -7,6 +7,7 @@ by default (see Component.geometry); others are named.
 from collections.abc import Sequence
 from typing import Annotated, Any, Literal
 
+from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
@@ -15,10 +16,10 @@ from . import _detail
 
 __all__ = [
     'GEOMETRY_PARAMS',
-    'GEOMETRY_DEFAULTS',
     'GEOMETRY_UNITS',
     'Geometry',
-    'geometry_parser'
+    'geometry_parser',
+    'geometry_pdesc'
 ]
 
 
@@ -33,7 +34,7 @@ GEOMETRY_PARAMS = dict(
 GEOMETRY_UNITS = dict(
     vsys='km/s', xpos='arcsec', ypos='arcsec', posa='deg', incl='deg')
 # and their typical values (see ParamDesc): at the centre, inclined
-GEOMETRY_DEFAULTS = dict(vsys=0, xpos=0, ypos=0, posa=0, incl=45)
+_DEFAULTS = dict(vsys=0, xpos=0, ypos=0, posa=0, incl=45)
 
 
 class Geometry(parseutils.Serializable):
@@ -153,3 +154,16 @@ class Geometry(parseutils.Serializable):
 
 
 geometry_parser = parseutils.BasicParser(Geometry)
+
+
+def geometry_pdesc(name: str, nnodes: int | None = None) -> ParamDesc:
+    """
+    Return the description of a geometric parameter (see GEOMETRY_UNITS):
+    a scalar, or node-wise (one value for each of nnodes rings) if nnodes
+    is given. The position angle repeats every 360 degrees.
+    """
+    options: dict[str, Any] = dict(
+        unit=GEOMETRY_UNITS[name], default=_DEFAULTS[name],
+        period=360 if name == 'posa' else None)
+    return ParamScalarDesc(**options) if nnodes is None \
+        else ParamVectorDesc(nnodes, **options)

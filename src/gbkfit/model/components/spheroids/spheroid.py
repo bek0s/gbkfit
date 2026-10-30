@@ -33,7 +33,7 @@ from .._native import (
 from .._units import DataUnit, mass_per_unit
 from ..base import (
     Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
-from ..geometries import GEOMETRY_DEFAULTS, GEOMETRY_UNITS, Geometry
+from ..geometries import Geometry, geometry_pdesc
 from ..lines import Band, LineCatalogue
 from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -205,8 +205,7 @@ class LightSersic(LightProfile):
             re=ParamScalarDesc(
                 desc="the effective radius", min=0, unit='arcsec', default=1),
             n=ParamScalarDesc(
-                desc="the Sersic index", min=0.3, max=12,
-                unit='', default=4))
+                desc="the Sersic index", min=0.3, max=12, unit='', default=4))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('ie',)
@@ -452,8 +451,7 @@ spheroid_kinematics_parser = parseutils.TypedParser(SpheroidKinematics, [
 # its axis unless it is a sphere without kinematics, and with kinematics,
 # its systemic velocity
 GEOMETRY_PDESCS = {
-    name: ParamScalarDesc(
-        unit=GEOMETRY_UNITS[name], default=GEOMETRY_DEFAULTS[name])
+    name: geometry_pdesc(name)
     for name in ('xpos', 'ypos', 'posa', 'incl', 'vsys')}
 
 

@@ -477,8 +477,9 @@ def params_nw_distortion(
     """
     return dict(
         a=ParamVectorDesc(nnodes, unit=unit, default=0),
-        p=ParamVectorDesc(nnodes, unit='deg', default=0),
-        s=ParamVectorDesc(nnodes, unit='arcsec', default=1))
+        p=ParamVectorDesc(nnodes, unit='deg', default=0, period=360),
+        s=ParamVectorDesc(
+            nnodes, min=0, unit='arcsec', default=1))
 
 
 def splits_nw_distortion(

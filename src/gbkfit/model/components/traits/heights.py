@@ -86,11 +86,12 @@ class RHTraitP1(RHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else dict(
-            s=ParamScalarDesc(unit='arcsec', default=0.2))
+            s=ParamScalarDesc(min=0, unit='arcsec', default=0.2))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.rnodes() else dict(
-            s=ParamVectorDesc(nrnodes, unit='arcsec', default=0.2))
+            s=ParamVectorDesc(
+                nrnodes, min=0, unit='arcsec', default=0.2))
 
 
 class RHTraitP2(RHTrait, abc.ABC):
@@ -111,13 +112,15 @@ class RHTraitP2(RHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.rnodes() else dict(
-            s=ParamScalarDesc(unit='arcsec', default=0.2),
-            b=ParamScalarDesc(unit='', default=1))
+            s=ParamScalarDesc(min=0, unit='arcsec', default=0.2),
+            b=ParamScalarDesc(min=0, unit='', default=1))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.rnodes() else dict(
-            s=ParamVectorDesc(nrnodes, unit='arcsec', default=0.2),
-            b=ParamVectorDesc(nrnodes, unit='', default=1))
+            s=ParamVectorDesc(
+                nrnodes, min=0, unit='arcsec', default=0.2),
+            b=ParamVectorDesc(
+                nrnodes, min=0, unit='', default=1))
 
 
 class RHTraitUniform(RHTraitP1):

@@ -272,11 +272,17 @@ class Blobs(TraitOption):
             r='arcsec', t='deg', a=unit, s='arcsec', b='', q='', p='deg')
         # (amplitudes 0: those of the empty row, see Blobs)
         defaults = dict(r=1, t=0, a=0, s=0.2, b=2, q=1, p=0)
+        # (their valid ranges and periods: an elliptical blob is the same
+        # turned by 180 degrees)
+        valid = dict(
+            r=dict(min=0), t=dict(period=360), s=dict(min=0), b=dict(min=0),
+            q=dict(min=0), p=dict(period=180))
         names = ('r', 't', 'a', 's', 'b', 'q', 'p') if shape \
             else ('r', 't', 'a', 's', 'q', 'p')
         return {
             name: ParamVectorDesc(
-                self.nblobs, unit=units[name], default=defaults[name]
+                self.nblobs, unit=units[name], default=defaults[name],
+                **valid.get(name, {})
             ).with_column(ParamColumn(self.table, name))
             for name in names}
 
@@ -325,7 +331,8 @@ class Harmonic(TraitOption):
         """
         params = dict(a=ParamVectorDesc(nnodes, unit=unit, default=0))
         if self.order > 0:
-            params.update(p=ParamVectorDesc(nnodes, unit='deg', default=0))
+            params.update(p=ParamVectorDesc(
+                nnodes, unit='deg', default=0, period=360))
         return params
 
 
@@ -419,9 +426,9 @@ class Spiral(TraitOption):
         and o with it or if pattern_speed.
         """
         dispersion = self.wavenumber == 'dispersion'
-        params = dict(p=ParamScalarDesc(unit='deg', default=0))
+        params = dict(p=ParamScalarDesc(unit='deg', default=0, period=360))
         if dispersion:
-            params['c'] = ParamScalarDesc(unit='km/s', default=10)
+            params['c'] = ParamScalarDesc(min=0, unit='km/s', default=10)
         params['e'] = ParamScalarDesc(unit='', default=0.1)
         if dispersion or pattern_speed:
             params['o'] = ParamScalarDesc(unit='km / (s arcsec)', default=0)

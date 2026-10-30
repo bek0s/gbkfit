@@ -25,7 +25,8 @@ from gbkfit.params._expressions import (
 from gbkfit.params._keys import (
     InvalidKeyError, Key, element_name, element_names, parse_key)
 from gbkfit.params.modes import ParamMode, param_mode_parser
-from gbkfit.params.pdescs import ParamDesc, ParamUnit, make_param_unit
+from gbkfit.params.pdescs import (
+    ParamDesc, ParamUnit, ValidRange, make_param_unit)
 from gbkfit.params.priors import (
     Prior, PriorTruncated, PriorUniform, prior_parser)
 from gbkfit.params.solves import Solve, solve_parser
@@ -700,15 +701,14 @@ class ParamSpace(parseutils.Serializable):
         """
         return {element_name(*e): self._solves[e] for e in self._solved}
 
-    def free_valid_ranges(self) -> dict[str, tuple[float, float]]:
+    def free_valid_ranges(self) -> dict[str, ValidRange]:
         """
         Return the valid range of each free element whose value is that of
         its parameter (see ParamDesc), by element name: of all but those
         of the parameters with a mode, whose values are coded.
         """
         return {
-            element_name(name, index): (
-                self._pdescs[name].minimum(), self._pdescs[name].maximum())
+            element_name(name, index): self._pdescs[name].valid_range()
             for name, index in self._free_elements
             if name not in self._modes}
 
@@ -1277,9 +1277,9 @@ class ParamSpace(parseutils.Serializable):
                 f"parameters with a mode cannot have solved elements: "
                 f"{moded}")
         for element, solve in self._solves.items():
-            pdesc = self._pdescs[element[0]]
+            valid = self._pdescs[element[0]].valid_range()
             low, high = solve.bounds()
-            if low < pdesc.minimum() or high > pdesc.maximum():
+            if not (valid.contains(low) and valid.contains(high)):
                 errors.append(
                     f"the solve of '{element_name(*element)}' gives values "
                     f"in [{low}, {high}], outside its valid range "
@@ -1310,14 +1310,12 @@ class ParamSpace(parseutils.Serializable):
             f"'{element_name(*e)}' is {value}, outside its valid range "
             f"{self._range_text(e[0])}"
             for e, value in self._fixed.items()
-            if e[0] not in self._modes and not (
-                self._pdescs[e[0]].minimum() <= value
-                <= self._pdescs[e[0]].maximum())]
+            if e[0] not in self._modes
+            and not self._pdescs[e[0]].valid_range().contains(value)]
 
     def _range_text(self, name: str) -> str:
         """Return the valid range of a parameter, as text."""
-        pdesc = self._pdescs[name]
-        return f"[{pdesc.minimum()}, {pdesc.maximum()}]"
+        return str(self._pdescs[name].valid_range())
 
     def _order_steps(self) -> list[str]:
         """
@@ -1388,7 +1386,8 @@ class ParamSpace(parseutils.Serializable):
         self._free_flat = np.array(
             [self._flat[e] for e in self._free_elements], dtype=int)
         self._ranged = [
-            name for name, pdesc in self._pdescs.items() if pdesc.has_range()]
+            name for name, pdesc in self._pdescs.items()
+            if pdesc.valid_range().bounded()]
 
     def _free_values(
             self, free: Mapping[str, float] | Sequence[float] | None
@@ -1497,7 +1496,7 @@ class ParamSpace(parseutils.Serializable):
         for name in self._ranged:
             pdesc = self._pdescs[name]
             value = np.atleast_1d(values[name])
-            outside = (value < pdesc.minimum()) | (value > pdesc.maximum())
+            outside = ~pdesc.valid_range().contains(value)
             if np.any(outside):
                 names = element_names(
                     name, None if pdesc.is_scalar()

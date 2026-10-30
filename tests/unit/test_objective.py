@@ -291,8 +291,8 @@ def test_a_fitted_noise_has_parameters_of_the_observation():
         DriverHost(), data, likelihood, 'obs',
         obs_noise_scale_brightness=1.0, obs_noise_jitter_brightness=0.0)
     pdescs = objective.pdescs()
-    assert pdescs['obs_noise_scale_brightness'].minimum() == 0.1
-    assert pdescs['obs_noise_jitter_brightness'].minimum() == 0
+    assert pdescs['obs_noise_scale_brightness'].valid_range().min == 0.1
+    assert pdescs['obs_noise_jitter_brightness'].valid_range().min == 0
     assert likelihood.dump()['noise'] == dict(
         brightness=dict(scale=True, scale_min=0.1, jitter=True))
     assert LikelihoodGaussian.load({

@@ -21,7 +21,7 @@ def describe(pdesc):
     """The properties of a parameter description."""
     return (
         type(pdesc), pdesc.is_scalar(), pdesc.size(), pdesc.desc(),
-        pdesc.minimum(), pdesc.maximum())
+        pdesc.valid_range().min, pdesc.valid_range().max)
 
 
 def test_param_desc_scalar():
@@ -57,13 +57,31 @@ def test_param_desc_default():
     assert np.array_equal(values['v'], [1, 1, 1])
 
 
+def test_param_desc_exclusive_bounds_and_period():
+    # A scale length, above 0 (min 0 exclusive), and an azimuth, which
+    # repeats every 360 degrees
+    pdesc = ParamScalarDesc(min=0, min_exclusive=True, default=1)
+    info = dict(type='scalar', min=0, min_exclusive=True, default=1)
+    assert pdesc.dump() == info
+    valid = pdesc_parser.load(info).valid_range()
+    assert str(valid) == '(0, inf)'
+    assert list(valid.contains([-1, 0, 1])) == [False, False, True]
+    azimuth = ParamScalarDesc(unit='deg', period=360)
+    assert azimuth.period() == 360 and azimuth.dump()['period'] == 360
+
+
 @pytest.mark.parametrize('make, message', [
     (lambda: ParamVectorDesc(0), "'size' must be at least 1"),
     (lambda: ParamVectorDesc(-1), "'size' must be at least 1"),
     (lambda: ParamVectorDesc(1.5), "'size' must be of type int"),
     (lambda: ParamVectorDesc(True), "'size' must be of type int"),
-    (lambda: ParamScalarDesc(min=1, max=0), "above its max"),
+    (lambda: ParamScalarDesc(min=1, max=0), r"\[1, 0\], is empty"),
+    (lambda: ParamScalarDesc(min=0, max=0, max_exclusive=True), "is empty"),
+    (lambda: ParamScalarDesc(min_exclusive=True), "needs a min"),
     (lambda: ParamScalarDesc(min=0, default=-1), "in its valid range"),
+    (lambda: ParamScalarDesc(min=0, min_exclusive=True, default=0),
+     "in its valid range"),
+    (lambda: ParamScalarDesc(period=0), "must be positive"),
     (lambda: ParamVectorDesc(2, default=np.nan), "must be finite")])
 def test_invalid_param_descs(make, message):
     with pytest.raises(ConfigError, match=message):

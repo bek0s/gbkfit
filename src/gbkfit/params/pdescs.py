@@ -14,7 +14,7 @@ import abc
 import copy
 import dataclasses
 from collections.abc import Mapping
-from typing import Annotated, Any, Self, TypeAlias
+from typing import Annotated, Any, NamedTuple, Self, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -30,6 +30,7 @@ __all__ = [
     'ParamScalarDesc',
     'ParamTable',
     'ParamVectorDesc',
+    'ValidRange',
     'param_tables',
     'ParamUnit',
     'default_values',
@@ -90,6 +91,38 @@ class ParamColumn:
     name: str
 
 
+class ValidRange(NamedTuple):
+    """
+    The valid range of a parameter (see ParamDesc): its lowest and highest
+    values (-inf and +inf where it has none), and whether each is out of
+    it (exclusive).
+    """
+    min: float = -np.inf
+    max: float = np.inf
+    min_exclusive: bool = False
+    max_exclusive: bool = False
+
+    def bounded(self) -> bool:
+        """Check whether it is finite on either side."""
+        return bool(np.isfinite(self.min) or np.isfinite(self.max))
+
+    def contains(self, value: float | np.ndarray) -> bool | np.ndarray:
+        """Check whether a value is in it (or each of an array)."""
+        value = np.asarray(value)
+        above = value > self.min if self.min_exclusive else value >= self.min
+        below = value < self.max if self.max_exclusive else value <= self.max
+        inside = above & below
+        return bool(inside) if inside.ndim == 0 else inside
+
+    def __str__(self) -> str:
+        # (as in mathematics: open at an exclusive or infinite end)
+        low = self.min_exclusive or not np.isfinite(self.min)
+        high = self.max_exclusive or not np.isfinite(self.max)
+        return (
+            f"{'(' if low else '['}{self.min:g}, {self.max:g}"
+            f"{')' if high else ']'}")
+
+
 class ParamDesc(parseutils.TypedSerializable, abc.ABC):
     """
     The description of a parameter: a scalar, or a vector of elements.
@@ -106,19 +139,28 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         (in configurations, expressions and evaluations), for people and
         outputs.
     min, max : float, optional
-        Its valid range: the values for which the models that have it are
-        defined (e.g. 0 for a dispersion), not the values that are likely.
-        Every element of a vector has the same range.
+        Its lowest and highest valid values. Its valid range holds the
+        values for which the models that have it are defined, not those
+        that are likely; every element of a vector has it.
+    min_exclusive, max_exclusive : bool, optional
+        Whether min and max are out of its valid range (e.g. min 0 for a
+        dispersion, and min 0 exclusive for a scale length); false by
+        default.
     default : float, optional
         A typical value, in its valid range, with which a model that has
         it can be evaluated before values are chosen (e.g. 200 km/s for a
         rotation speed); every element of a vector has it.
+    period : float, optional
+        The period of its values, if they repeat (e.g. 360 for an azimuth
+        in degrees): a value and that value plus the period give the same
+        models.
 
     Raises
     ------
     ConfigError
-        If the unit is not a unit, min is above max, or the default is
-        not finite or outside the valid range.
+        If the unit is not a unit, a bound is exclusive but not given, the
+        valid range is empty, the default is not finite or outside it, or
+        the period is not positive.
     """
 
     def dump(self) -> dict[str, Any]:
@@ -129,40 +171,60 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
             info.update(desc=self._desc)
         if self._unit is not None:
             info.update(unit=self._unit.to_string())
-        if np.isfinite(self._minimum):
-            info.update(min=self._minimum)
-        if np.isfinite(self._maximum):
-            info.update(max=self._maximum)
+        valid = self._valid
+        if np.isfinite(valid.min):
+            info.update(min=valid.min)
+            if valid.min_exclusive:
+                info.update(min_exclusive=True)
+        if np.isfinite(valid.max):
+            info.update(max=valid.max)
+            if valid.max_exclusive:
+                info.update(max_exclusive=True)
         if self._default is not None:
             info.update(default=self._default)
+        if self._period is not None:
+            info.update(period=self._period)
         return info
 
     def __init__(
             self,
             size: int,
-            desc: str | None,
-            min: float | None,
-            max: float | None,
+            desc: str | None = None,
+            min: float | None = None,
+            max: float | None = None,
+            min_exclusive: bool = False,
+            max_exclusive: bool = False,
             unit: str | ParamUnit | None = None,
-            default: float | None = None
+            default: float | None = None,
+            period: float | None = None
     ):
-        minimum = -np.inf if min is None else float(min)
-        maximum = +np.inf if max is None else float(max)
-        if not minimum <= maximum:
+        for name, bound, exclusive in (
+                ('min', min, min_exclusive), ('max', max, max_exclusive)):
+            if exclusive and bound is None:
+                raise ConfigError(
+                    f"a parameter with {name}_exclusive needs a {name}")
+        valid = ValidRange(
+            -np.inf if min is None else float(min),
+            np.inf if max is None else float(max),
+            bool(min_exclusive), bool(max_exclusive))
+        if not (valid.min < valid.max or valid.min == valid.max and not (
+                valid.min_exclusive or valid.max_exclusive)):
             raise ConfigError(
-                f"the min of a parameter ({minimum}) cannot be above its max "
-                f"({maximum})")
+                f"the valid range of a parameter, {valid}, is empty")
         if default is not None and not (
-                np.isfinite(default) and minimum <= default <= maximum):
+                np.isfinite(default) and valid.contains(default)):
             raise ConfigError(
                 f"the default of a parameter ({default}) must be finite and "
-                f"in its valid range [{minimum}, {maximum}]")
+                f"in its valid range {valid}")
+        if period is not None and not (np.isfinite(period) and period > 0):
+            raise ConfigError(
+                f"the period of a parameter ({period}) must be positive")
         self._size = int(size)
         self._desc = desc
         self._unit = make_param_unit(unit)
-        self._minimum = minimum
-        self._maximum = maximum
+        self._valid = valid
         self._default = None if default is None else float(default)
+        self._period = None if period is None else float(period)
 
     @abc.abstractmethod
     def is_scalar(self) -> bool:
@@ -207,21 +269,17 @@ class ParamDesc(parseutils.TypedSerializable, abc.ABC):
         pdesc._unit = make_param_unit(unit)
         return pdesc
 
-    def minimum(self) -> float:
-        """Return the lowest valid value (-inf if none)."""
-        return self._minimum
-
-    def maximum(self) -> float:
-        """Return the highest valid value (+inf if none)."""
-        return self._maximum
-
-    def has_range(self) -> bool:
-        """Check whether its valid range is finite on either side."""
-        return bool(np.isfinite(self._minimum) or np.isfinite(self._maximum))
+    def valid_range(self) -> ValidRange:
+        """Return its valid range (see ParamDesc)."""
+        return self._valid
 
     def default(self) -> float | None:
         """Return its typical value, if given (see ParamDesc)."""
         return self._default
+
+    def period(self) -> float | None:
+        """Return the period of its values, if they repeat."""
+        return self._period
 
 
 class ParamScalarDesc(ParamDesc):
@@ -233,17 +291,20 @@ class ParamScalarDesc(ParamDesc):
     desc : str, optional
         What it is (see ParamDesc).
     min, max : float, optional
-        Its valid range (see ParamDesc).
+        Its lowest and highest valid values (see ParamDesc).
+    min_exclusive, max_exclusive : bool, optional
+        Whether min and max are out of its valid range (see ParamDesc).
     unit : str or UnitBase, optional
         The unit of its values (see ParamDesc).
     default : float, optional
         Its typical value (see ParamDesc).
+    period : float, optional
+        The period of its values, if they repeat (see ParamDesc).
 
     Raises
     ------
     ConfigError
-        If the unit is not a unit, min is above max, or the default is
-        not finite or outside the valid range.
+        See ParamDesc.
     """
 
     @staticmethod
@@ -255,11 +316,16 @@ class ParamScalarDesc(ParamDesc):
             desc: str | None = None,
             min: float | None = None,
             max: float | None = None,
+            min_exclusive: bool = False,
+            max_exclusive: bool = False,
             unit: str | ParamUnit | None = None,
-            default: float | None = None
+            default: float | None = None,
+            period: float | None = None
     ):
         check_options(ParamScalarDesc.__init__, locals())
-        super().__init__(1, desc, min, max, unit, default)
+        super().__init__(
+            1, desc, min, max, min_exclusive, max_exclusive, unit, default,
+            period)
 
     def is_scalar(self) -> bool:
         return True
@@ -277,17 +343,22 @@ class ParamVectorDesc(ParamDesc):
     desc : str, optional
         What it is (see ParamDesc).
     min, max : float, optional
-        The valid range of each element (see ParamDesc).
+        The lowest and highest valid values of each element (see
+        ParamDesc).
+    min_exclusive, max_exclusive : bool, optional
+        Whether min and max are out of the valid range (see ParamDesc).
     unit : str or UnitBase, optional
         The unit of the values of its elements (see ParamDesc).
     default : float, optional
         The typical value of each element (see ParamDesc).
+    period : float, optional
+        The period of the values of its elements, if they repeat (see
+        ParamDesc).
 
     Raises
     ------
     ConfigError
-        If the unit is not a unit, min is above max, or the default is
-        not finite or outside the valid range.
+        See ParamDesc.
     """
 
     @staticmethod
@@ -300,11 +371,16 @@ class ParamVectorDesc(ParamDesc):
             desc: str | None = None,
             min: float | None = None,
             max: float | None = None,
+            min_exclusive: bool = False,
+            max_exclusive: bool = False,
             unit: str | ParamUnit | None = None,
-            default: float | None = None
+            default: float | None = None,
+            period: float | None = None
     ):
         check_options(ParamVectorDesc.__init__, locals())
-        super().__init__(size, desc, min, max, unit, default)
+        super().__init__(
+            size, desc, min, max, min_exclusive, max_exclusive, unit,
+            default, period)
         self._column: ParamColumn | None = None
 
     def is_scalar(self) -> bool:

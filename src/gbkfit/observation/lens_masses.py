@@ -479,7 +479,8 @@ class LensMultipole(LensMass):
                 "the Einstein radius of its lens", min=0,
                 unit='arcsec', default=1),
             a=ParamScalarDesc("the strength", unit='', default=0),
-            pa=ParamScalarDesc("the position angle", unit='deg', default=0),
+            pa=ParamScalarDesc(
+                "the position angle", unit='deg', default=0, period=360),
         ) | _centre_pdescs()
 
     def deflection(
@@ -530,8 +531,10 @@ class LensShear(LensMass):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
-            gamma=ParamScalarDesc("the strength", min=0, unit='', default=0),
-            pa=ParamScalarDesc("the position angle", unit='deg', default=0))
+            gamma=ParamScalarDesc(
+                "the strength", min=0, unit='', default=0),
+            pa=ParamScalarDesc(
+                "the position angle", unit='deg', default=0, period=180))
 
     def deflection(
             self, grid: gridutils.Grid, params: ParamValues
@@ -561,7 +564,8 @@ def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
         # (q > 0 keeps the deflection finite)
         q=ParamScalarDesc(
             "the axis ratio", min=1e-3, max=1, unit='', default=0.8),
-        pa=ParamScalarDesc("the position angle", unit='deg', default=0),
+        pa=ParamScalarDesc(
+            "the position angle", unit='deg', default=0, period=180),
     ) | _centre_pdescs()
 
 

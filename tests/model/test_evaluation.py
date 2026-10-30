@@ -181,7 +181,8 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
     # A NaN velocity (here of a rotation curve whose parameters are out of
     # their range: a negative power of a negative number within -rt) makes
     # the spectra NaN, so that it is seen, instead of picking channels
-    # out of the cube
+    # out of the cube (values given to the plan as they are: a ParamSpace
+    # refuses those out of their valid ranges)
     plan = group_plan([dict(
         driver=dict(type=driver.type()),
         observable=dict(
@@ -190,10 +191,10 @@ def test_a_velocity_that_is_not_a_number_makes_spectra_nan(driver):
         line_of_sight=dict(type='flat'),
         galaxy=line_disk(
             dict(type='courteau', direction='tan'), rnodes=list(range(0, 8))))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
+    cube = plan.model_h(dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=45, pt_a=1, pt_s=4,
-        vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10))
-    cube = plan.model_h(params.evaluate())[0]['spectra']['d']
+        vpt_rt=-3, vpt_vt=100, vpt_b=0.4, vpt_g=2, dpt_a=10
+    ))[0]['spectra']['d']
     nan = np.isnan(cube)
     assert nan.any() and np.isfinite(cube[~nan]).all()
     # The spectra of the spaxels within -rt are NaN

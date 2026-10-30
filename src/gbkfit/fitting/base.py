@@ -23,7 +23,8 @@ from gbkfit.fitting.result import (
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, covariance, laplace_posterior, sample_values)
 from gbkfit.objective import Objective
-from gbkfit.params import EvaluationError, ParamEvaluationError, ParamSpace
+from gbkfit.params import (
+    EvaluationError, ParamEvaluationError, ParamSpace, ValidRange)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
@@ -614,7 +615,7 @@ def _stopped_run(problem: FitProblem) -> FitRun:
 
 def _check_valid_ranges(
         fit_params: dict[str, FitParam],
-        ranges: dict[str, tuple[float, float]]
+        ranges: dict[str, ValidRange]
 ) -> None:
     """
     Raise ConfigError if the fitter may try values of free elements (in
@@ -624,11 +625,11 @@ def _check_valid_ranges(
     """
     outside = [
         f"'{name}' [{fit_param.minimum():g}, {fit_param.maximum():g}] "
-        f"(valid: [{ranges[name][0]:g}, {ranges[name][1]:g}])"
+        f"(valid: {ranges[name]})"
         for name, fit_param in fit_params.items()
         if name in ranges and not (
-            ranges[name][0] <= fit_param.minimum()
-            and fit_param.maximum() <= ranges[name][1])]
+            ranges[name].contains(fit_param.minimum())
+            and ranges[name].contains(fit_param.maximum()))]
     if outside:
         raise ConfigError(
             f"the fit may try values of free elements outside the valid "

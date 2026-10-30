@@ -131,8 +131,7 @@ class ProfileSersic(SpheroidProfile):
             re=ParamScalarDesc(
                 desc="the effective radius", min=0, unit='kpc', default=3),
             n=ParamScalarDesc(
-                desc="the Sersic index", min=0.3, max=12,
-                unit='', default=4))
+                desc="the Sersic index", min=0.3, max=12, unit='', default=4))
 
     def density(
             self,
@@ -312,8 +311,7 @@ class ProfileNodewise(SpheroidProfile):
         return dict(log_sigma=ParamVectorDesc(
             len(self._nodes) - 1,
             desc="log10 of the projected density at each node but the "
-                 "last", unit='dex(solMass / kpc2)',
-            default=7))
+                 "last", unit='dex(solMass / kpc2)', default=7))
 
     def density(
             self,

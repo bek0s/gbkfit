@@ -11,14 +11,14 @@ import numpy.typing as npt
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import (
-    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
+    ParamDesc, ParamValues)
 from .._native import NativePlan, ParamBuffer, evaluate_native
 from .._nodal import (
     NodalTraits, TraitParams, fill_param_values, native_traits, subring_radii)
 from ..base import ComponentState, FrameParams, NativeGrid
 from .._needs import Need, density_needs
 from ...gravity import Capability
-from ..geometries import GEOMETRY_DEFAULTS, GEOMETRY_PARAMS, GEOMETRY_UNITS
+from ..geometries import GEOMETRY_PARAMS, geometry_pdesc
 from ..parts import (
     CentralEquilibrium, Equilibrium, JeansEquilibrium,
     SelfGravitatingEquilibrium)
@@ -38,9 +38,7 @@ TRAIT_KINDS = (
 
 def _make_param_descs(key: str, nnodes: int, nw: bool) -> dict[str, ParamDesc]:
     """Return the geometric parameter of the given name, node-wise if nw."""
-    unit, default = GEOMETRY_UNITS[key], GEOMETRY_DEFAULTS[key]
-    return {key: ParamVectorDesc(nnodes, unit=unit, default=default) if nw
-            else ParamScalarDesc(unit=unit, default=default)}
+    return {key: geometry_pdesc(key, nnodes if nw else None)}
 
 
 class NodalDisk(abc.ABC):
