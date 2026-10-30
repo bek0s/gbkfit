@@ -170,26 +170,30 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
 
 
 def test_files_of_data_are_imported_and_uploaded_into_a_project(client, root):
-    source = pathlib.Path(root, 'survey/cube.fits')
-    source.parent.mkdir()
-    fits.writeto(source, np.zeros((2, 2, 2), np.float32))
-    imported = client.post('/api/v1/imports', json=dict(
-        project='study', path='survey/cube.fits'))
-    assert imported.json() == 'study/data/cube.fits'
-    assert pathlib.Path(root, imported.json()).read_bytes() \
-        == source.read_bytes()
-    # (a file of the folder data stays where it is; another of its name is
-    # refused)
-    assert client.post('/api/v1/imports', json=dict(
-        project='study', path='study/data/cube.fits')).json() \
-        == 'study/data/cube.fits'
-    assert client.post('/api/v1/imports', json=dict(
-        project='study', path='survey/cube.fits')).status_code == 400
-    uploaded = client.post(
-        '/api/v1/uploads', params=dict(project='study', name='sent.fits'),
-        content=b'SIMPLE')
-    assert uploaded.json() == 'study/data/sent.fits'
-    assert pathlib.Path(root, uploaded.json()).read_bytes() == b'SIMPLE'
-    assert client.post(
-        '/api/v1/uploads', params=dict(project='study', name='../sent.fits'),
-        content=b'').status_code == 400
+    survey = pathlib.Path(root, 'survey')
+    for name, value in (('cube.fits', 0), ('other/cube.fits', 1)):
+        (survey / name).parent.mkdir(parents=True, exist_ok=True)
+        fits.writeto(survey / name, np.full((2, 2, 2), value, np.float32))
+
+    def imported(path):
+        return client.post('/api/v1/imports', json=dict(
+            project='study', path=path)).json()
+
+    assert imported('survey/cube.fits') == 'study/data/cube.fits'
+    assert pathlib.Path(root, 'study/data/cube.fits').read_bytes() \
+        == (survey / 'cube.fits').read_bytes()
+    # (the same file again is the copy it has; another of its name gets a
+    # number, and a file of the project stays where it is)
+    assert imported('survey/cube.fits') == 'study/data/cube.fits'
+    assert imported('survey/other/cube.fits') == 'study/data/cube-2.fits'
+    assert imported('study/data/cube-2.fits') == 'study/data/cube-2.fits'
+
+    def uploaded(name, content):
+        return client.post(
+            '/api/v1/uploads', params=dict(project='study', name=name),
+            content=content)
+
+    assert uploaded('sent.fits', b'SIMPLE').json() == 'study/data/sent.fits'
+    assert uploaded('sent.fits', b'SIMPLE').json() == 'study/data/sent.fits'
+    assert uploaded('sent.fits', b'OTHER').json() == 'study/data/sent-2.fits'
+    assert uploaded('../sent.fits', b'').status_code == 400

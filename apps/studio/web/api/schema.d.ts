@@ -141,8 +141,8 @@ export interface paths {
         put?: never;
         /**
          * Import Data
-         * @description Copy a file of data of the workspace into the folder data of a
-         *     project; return its path there.
+         * @description Copy a file of data of the workspace into a project; return the path
+         *     of the copy (that of the same file if it has one).
          */
         post: operations["import_data_api_v1_imports_post"];
         delete?: never;
@@ -163,8 +163,8 @@ export interface paths {
         /**
          * Upload Data
          * @description Write a file of data sent in the body (e.g. from the computer of the
-         *     page) into the folder data of a project, by its name; return its path
-         *     there.
+         *     page) into a project, by its name; return its path (that of the same
+         *     file if it has one).
          */
         post: operations["upload_data_api_v1_uploads_post"];
         delete?: never;
@@ -532,8 +532,8 @@ export interface components {
         };
         /**
          * ImportRequest
-         * @description A file of data of the workspace to copy into the folder data of a
-         *     project: the project, and the path of the file.
+         * @description A file of data of the workspace to copy into a project: the project,
+         *     and the path of the file.
          */
         ImportRequest: {
             /** Project */

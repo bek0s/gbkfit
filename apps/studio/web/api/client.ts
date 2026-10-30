@@ -54,9 +54,9 @@ export async function data<T>(request: Promise<{ data?: T; error?: unknown; resp
   return value;
 }
 
-// Send a file of this computer into the folder data of a project (see the
-// server's /uploads), reporting the fraction sent; resolves to its path
-// there. (A request of XMLHttpRequest, as fetch does not report what it
+// Send a file of this computer into a project (see the server's
+// /uploads), reporting the fraction sent; resolves to the path of the
+// file. (A request of XMLHttpRequest, as fetch does not report what it
 // has sent.)
 export function upload(project: string, file: File, onProgress: (fraction: number) => void): Promise<string> {
   const url = new URL('/api/v1/uploads', window.location.href);

@@ -173,8 +173,8 @@ class ProjectRequest(BaseModel):
 
 class ImportRequest(BaseModel):
     """
-    A file of data of the workspace to copy into the folder data of a
-    project: the project, and the path of the file.
+    A file of data of the workspace to copy into a project: the project,
+    and the path of the file.
     """
     project: str
     path: str

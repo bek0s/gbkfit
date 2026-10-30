@@ -274,7 +274,7 @@
     "/api/v1/imports": {
       "post": {
         "summary": "Import Data",
-        "description": "Copy a file of data of the workspace into the folder data of a\nproject; return its path there.",
+        "description": "Copy a file of data of the workspace into a project; return the path\nof the copy (that of the same file if it has one).",
         "operationId": "import_data_api_v1_imports_post",
         "requestBody": {
           "content": {
@@ -314,7 +314,7 @@
     "/api/v1/uploads": {
       "post": {
         "summary": "Upload Data",
-        "description": "Write a file of data sent in the body (e.g. from the computer of the\npage) into the folder data of a project, by its name; return its path\nthere.",
+        "description": "Write a file of data sent in the body (e.g. from the computer of the\npage) into a project, by its name; return its path (that of the same\nfile if it has one).",
         "operationId": "upload_data_api_v1_uploads_post",
         "parameters": [
           {
@@ -1160,7 +1160,7 @@
           "path"
         ],
         "title": "ImportRequest",
-        "description": "A file of data of the workspace to copy into the folder data of a\nproject: the project, and the path of the file."
+        "description": "A file of data of the workspace to copy into a project: the project,\nand the path of the file."
       },
       "JobInfo": {
         "properties": {

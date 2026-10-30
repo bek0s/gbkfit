@@ -1,6 +1,6 @@
-// A dialog to choose a file of data in a folder of the workspace (e.g.
-// the folder data of a project), whose folders are browsed but never
-// above it; only the files of data that GBKFIT reads are shown.
+// A dialog to choose a file of data in a folder of the workspace, whose
+// folders are browsed but never above it; only the files of data that
+// GBKFIT reads are shown.
 import { useState } from 'react';
 import { useFolder } from '../api/queries';
 import { Dialog } from './Dialog';

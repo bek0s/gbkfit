@@ -5,10 +5,12 @@ The paths of the requests are relative to it, and stay in it.
 """
 
 import dataclasses
+import filecmp
+import itertools
 import os
 import shutil
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -290,56 +292,53 @@ class Workspace:
 
     def import_data(self, project: str, relative: str) -> str:
         """
-        Copy a file of data of the workspace into the folder data of a
-        project, and return its path there; a file in that folder already
-        stays where it is.
+        Copy a file of data of the workspace into a project (its folder
+        data), and return the path of the copy (see _keep); a file of that
+        folder is not copied.
 
         Raises
         ------
         NotFound
             If the project or the file does not exist.
         Invalid
-            If it is not a file of data that GBKFIT reads, or the folder
-            data of the project has a file of its name.
+            If it is not a file of data that GBKFIT reads.
         """
         source = Path(self.file(relative))
-        if source.is_relative_to(self._data_folder(project)):
+        folder = self._data_folder(project)
+        if source.is_relative_to(folder):
             return self.relative(str(source))
-        target = self._data_target(project, source.name)
-        temporary = _temporary(target)
+        temporary = self._temporary_data(folder, source.name)
         try:
             shutil.copyfile(source, temporary)
-            os.replace(temporary, target)
-        finally:
+        except BaseException:
             temporary.unlink(missing_ok=True)
-        return self.relative(str(target))
+            raise
+        return self._keep(temporary, source.name)
 
     async def receive_data(
             self, project: str, name: str, chunks: AsyncIterator[bytes]
     ) -> str:
         """
         Write a file of data received in chunks (e.g. from the computer of
-        a page) into the folder data of a project, by its name, and return
-        its path there.
+        a page) into a project (its folder data), by its name, and return
+        the path of the file (see _keep).
 
         Raises
         ------
         NotFound
             If the project does not exist.
         Invalid
-            If the name is not that of a file of data that GBKFIT reads, or
-            the folder data of the project has a file of the name.
+            If the name is not that of a file of data that GBKFIT reads.
         """
-        target = self._data_target(project, name)
-        temporary = _temporary(target)
+        temporary = self._temporary_data(self._data_folder(project), name)
         try:
             with temporary.open('wb') as f:
                 async for chunk in chunks:
                     f.write(chunk)
-            os.replace(temporary, target)
-        finally:
+        except BaseException:
             temporary.unlink(missing_ok=True)
-        return self.relative(str(target))
+            raise
+        return self._keep(temporary, name)
 
     def _data_folder(self, project: str) -> Path:
         """
@@ -355,31 +354,40 @@ class Workspace:
         except ValueError as e:
             raise NotFound(str(e)) from e
 
-    def _data_target(self, project: str, name: str) -> Path:
+    def _temporary_data(self, folder: Path, name: str) -> Path:
         """
-        Return a new file of data of a project by its name, in its folder
-        data (made if needed).
+        Return a temporary file of a file of data of a folder (made if
+        needed) by its name.
 
         Raises
         ------
-        NotFound
-            If the project does not exist.
         Invalid
-            If the name is not that of a file of data that GBKFIT reads, or
-            the folder has a file of the name.
+            If the name is not that of a file of data that GBKFIT reads.
         """
-        folder = self._data_folder(project)
         if name != Path(name).name or not name.lower().endswith(_DATA_FILES):
             raise Invalid(
                 f"'{name}' is not the name of a file of data that GBKFIT "
                 f"reads: FITS ({', '.join(_DATA_FILES)})")
-        target = folder / name
-        if target.exists():
-            raise Invalid(
-                f"the project has a file '{self.relative(str(target))}' "
-                f"already")
         folder.mkdir(exist_ok=True)
-        return target
+        return _temporary(folder / name)
+
+    def _keep(self, temporary: Path, name: str) -> str:
+        """
+        Keep a new file of data (a temporary file of its folder) by its
+        name, and return its path: that of the file of the name already
+        there if it is the same, or else of the name, or of the first free
+        one numbered after it (e.g. cube-2.fits).
+        """
+        try:
+            for target in _numbered(temporary.parent, name):
+                if not target.exists():
+                    os.replace(temporary, target)
+                    return self.relative(str(target))
+                if filecmp.cmp(temporary, target, shallow=False):
+                    return self.relative(str(target))
+        finally:
+            temporary.unlink(missing_ok=True)
+        raise AssertionError("unreachable: the names are endless")
 
     def file(self, relative: str) -> str:
         """
@@ -457,3 +465,15 @@ def _temporary(path: Path) -> Path:
     replaces it, so that readers see the old file or the whole new one.
     """
     return path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
+
+
+def _numbered(folder: Path, name: str) -> Iterator[Path]:
+    """
+    Yield the files of a name of a file of data in a folder: itself, then
+    numbered (e.g. cube.fits, cube-2.fits, cube-3.fits).
+    """
+    ending = next(e for e in _DATA_FILES if name.lower().endswith(e))
+    stem, ending = name[:-len(ending)], name[-len(ending):]
+    yield folder / name
+    for number in itertools.count(2):
+        yield folder / f'{stem}-{number}{ending}'

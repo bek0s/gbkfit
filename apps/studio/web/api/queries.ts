@@ -65,13 +65,11 @@ export function useCreateProject() {
   });
 }
 
-// Copy a file of data of the workspace into the folder data of a project;
-// resolves to its path there
+// Copy a file of data of the workspace into a project; resolves to the
+// path of the copy
 export function useImportData(project: string) {
-  const client = useQueryClient();
   return useMutation({
     mutationFn: (path: string) => data(api.POST('/api/v1/imports', { body: { project, path } })),
-    onSuccess: () => client.invalidateQueries({ queryKey: ['folder'] }),
   });
 }
 

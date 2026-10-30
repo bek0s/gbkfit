@@ -100,8 +100,8 @@ def describe(server: ServerDep, path: str) -> list[ArrayInfo]:
 @router.post('/imports', status_code=status.HTTP_201_CREATED)
 def import_data(server: ServerDep, request: ImportRequest) -> str:
     """
-    Copy a file of data of the workspace into the folder data of a
-    project; return its path there.
+    Copy a file of data of the workspace into a project; return the path
+    of the copy (that of the same file if it has one).
     """
     return server.workspace.import_data(request.project, request.path)
 
@@ -116,8 +116,8 @@ async def upload_data(
 ) -> str:
     """
     Write a file of data sent in the body (e.g. from the computer of the
-    page) into the folder data of a project, by its name; return its path
-    there.
+    page) into a project, by its name; return its path (that of the same
+    file if it has one).
     """
     return await server.workspace.receive_data(
         project, name, request.stream())

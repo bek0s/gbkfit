@@ -2,7 +2,6 @@
 // of a file each) and what GBKFIT reads from their headers. A new one is
 // named, given its files and added to the project, once nothing stops
 // it; one of the project is shown as it is.
-import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { upload, type ArrayInfo } from '../api/client';
 import { useCreateBlock, useDescription, useImportData, usePiece, useProject } from '../api/queries';
@@ -284,13 +283,12 @@ function DatasetBody({
   );
 }
 
-// The ways to give a slot its file, which is always one of the folder data
-// of the project: one of its files (Choose), or a file copied into it,
-// from the workspace of the server (Import) or from this computer (Upload)
+// The two ways to give a slot its file, each copying it into the project:
+// a file of the workspace of the server (Import), or one of this computer
+// (Upload)
 function FileSources({ project, onFile }: { project: string; onFile: (path: string) => void }) {
-  const client = useQueryClient();
   const importing = useImportData(project);
-  const [picking, setPicking] = useState<'choose' | 'import' | null>(null);
+  const [picking, setPicking] = useState(false);
   // The fraction of the file sent while uploading, and why it failed
   const [sent, setSent] = useState<number | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
@@ -299,31 +297,17 @@ function FileSources({ project, onFile }: { project: string; onFile: (path: stri
     setFailure(null);
     setSent(0);
     upload(project, file, setSent)
-      .then((path) => {
-        void client.invalidateQueries({ queryKey: ['folder'] });
-        onFile(path);
-      })
+      .then(onFile)
       .catch((error: Error) => setFailure(error.message))
       .finally(() => setSent(null));
   };
   const error = failure ?? importing.error?.message;
   return (
     <>
-      <button className="link" title="Choose a file of the folder data of the project" onClick={() => setPicking('choose')}>
-        Choose
-      </button>
-      <button
-        className="link"
-        title="Import from the server: copy a file of its workspace into the folder data of the project"
-        onClick={() => setPicking('import')}
-      >
+      <button className="link" title="A file of the server's workspace; the project keeps a copy" onClick={() => setPicking(true)}>
         Import
       </button>
-      <button
-        className="link"
-        title="Upload from this computer: copy a file into the folder data of the project"
-        onClick={() => input.current?.click()}
-      >
+      <button className="link" title="A file of this computer; the project keeps a copy" onClick={() => input.current?.click()}>
         Upload
       </button>
       <input
@@ -340,26 +324,14 @@ function FileSources({ project, onFile }: { project: string; onFile: (path: stri
       {sent !== null && <span className="note">uploading {Math.round(100 * sent)}%</span>}
       {importing.isPending && <span className="note">copying…</span>}
       {error && <span className="error">{error}</span>}
-      {picking === 'choose' && (
+      {picking && (
         <FilePicker
-          title="Choose a file of the project"
-          root={joinPath(project, 'data')}
-          label="data"
-          onClose={() => setPicking(null)}
-          onChoose={(path) => {
-            setPicking(null);
-            onFile(path);
-          }}
-        />
-      )}
-      {picking === 'import' && (
-        <FilePicker
-          title="Import a file of the server"
+          title="Import a file"
           root="."
           label="workspace"
-          onClose={() => setPicking(null)}
+          onClose={() => setPicking(false)}
           onChoose={(path) => {
-            setPicking(null);
+            setPicking(false);
             importing.mutate(path, { onSuccess: onFile });
           }}
         />
