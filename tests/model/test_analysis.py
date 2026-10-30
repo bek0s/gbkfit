@@ -11,7 +11,8 @@ from modelutils import group_plan
 import gbkfit.params
 from gbkfit.analysis import (
     asymmetry_maps, compare, information_gain, kinematic_pa, kinemetry, loo,
-    pattern_speed, pv_diagram, structure_function, trace_rotation, waic)
+    moment_maps, pattern_speed, pv_diagram, structure_function,
+    trace_rotation, waic)
 
 
 PA, INCL, VSYS, VMAX, RT = 130.0, 55.0, 1200.0, 200.0, 3.0
@@ -131,6 +132,35 @@ def test_a_terminal_velocity_next_to_a_masked_channel_is_a_number():
     assert _terminal_velocity(velocities, spectrum, 0.5, True) == 30.0
     spectrum[4] = 0.0
     assert _terminal_velocity(velocities, spectrum, 0.5, True) == 35.0
+
+
+@pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
+def test_the_moment_maps_of_a_cube_are_its_lines(driver, method):
+    # Gaussian lines, on channels of decreasing velocity (as those of many
+    # radio cubes), with a channel blanked (NaN) far from them: the maps
+    # are their flux, centre and dispersion; a spectrum without flux is
+    # masked, and one blanked whole has no value
+    rng = np.random.default_rng(5)
+    flux = rng.uniform(1, 10, (3, 4))
+    centre = rng.uniform(-100, 100, (3, 4))
+    sigma = rng.uniform(10, 40, (3, 4))
+    velocities = np.arange(300, -301, -5.0)
+    cube = flux / (sigma * np.sqrt(2 * np.pi)) * np.exp(
+        -0.5 * ((velocities[:, None, None] - centre) / sigma) ** 2)
+    cube[0] = np.nan
+    cube[:, 0, 0] = 0
+    cube[:, 0, 1] = np.nan
+    maps = moment_maps(
+        cube, velocities, method=method, flux_floor=1e-3, driver=driver)
+    assert not maps.mask[0, :2].any() and maps.mask.sum() == 10
+    assert np.isnan(maps.data['moment0'][0, 1])
+    good = maps.mask
+    np.testing.assert_allclose(
+        maps.data['moment0'][good], flux[good], rtol=1e-3)
+    np.testing.assert_allclose(
+        maps.data['moment1'][good], centre[good], atol=0.05)
+    np.testing.assert_allclose(
+        maps.data['moment2'][good], sigma[good], rtol=1e-3)
 
 
 def test_structure_functions_are_the_mean_over_pairs_of_pixels():
