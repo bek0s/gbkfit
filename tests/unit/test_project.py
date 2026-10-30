@@ -4,6 +4,7 @@ and the layers of their parameters merge in order.
 """
 
 import os
+from pathlib import Path
 
 import pytest
 import ruamel.yaml
@@ -16,6 +17,10 @@ yaml = ruamel.yaml.YAML(typ='safe')
 
 GALAXY = dict(components=[dict(type='disk', name='disk')])
 OBSERVATION = dict(data=dict(data='data/ngc1313/hi.fits'))
+DATASET = dict(type='pixel_spectra', data='data/ngc1313/hi.fits')
+PSF = dict(type='gauss', sigma=1.5)
+LSF = dict(type='gauss', sigma=15)
+NOISE = dict(type='gauss', rms=0.01)
 FITTER = dict(type='nautilus', n_live=2000)
 PRIOR = dict(type='gauss', expr='disk_incl', mean=60, std=10)
 
@@ -61,6 +66,7 @@ def test_a_setup_has_its_pieces_in_place(study):
         file='setups/ngc1313/arctan.yaml',
         galaxies=['galaxies/arctan.yaml', 'setups/ngc1313/arctan.yaml'],
         observations=['observations/ngc1313/hi.yaml'],
+        data=['observations/ngc1313/hi.yaml'],
         params=[
             'params/bounds.yaml', 'params/ngc1313.yaml',
             'setups/ngc1313/arctan.yaml'],
@@ -70,6 +76,31 @@ def test_a_setup_has_its_pieces_in_place(study):
         fitter='fitters/nautilus.yaml')
     assert study.setup_name(filename) == os.path.join('ngc1313', 'arctan')
     assert study.setup_name(os.path.join(study.path, 'fit.yaml')) is None
+
+
+def test_observations_name_their_parts_and_mock_data_their_noise(study):
+    path = Path(study.path)
+    write(path / 'datasets/ngc1313/hi.yaml', DATASET)
+    write(path / 'psfs/beam.yaml', PSF)
+    write(path / 'noise/radio.yaml', NOISE)
+    write(path / 'observations/named.yaml', dict(
+        data='ngc1313/hi', instrument=dict(psf='beam', lsf=LSF)))
+    setup = dict(
+        observations=['named', 'ngc1313/hi'],
+        mock=dict(noise=['radio', None], seed=1))
+    filename = os.path.join(study.path, 'setups/mock.yaml')
+    config, sources = project.resolve(setup, filename, study)
+    assert config == dict(
+        observations=[
+            dict(data=DATASET, instrument=dict(psf=PSF, lsf=LSF)),
+            OBSERVATION],
+        mock=dict(noise=[NOISE, None], seed=1))
+    # (the parts in place are from the files of their observations)
+    assert sources['data'] == [
+        'datasets/ngc1313/hi.yaml', 'observations/ngc1313/hi.yaml']
+    assert sources['psf'] == ['psfs/beam.yaml', None]
+    assert sources['lsf'] == ['observations/named.yaml', None]
+    assert sources['noise'] == ['noise/radio.yaml', None]
 
 
 def test_a_layer_replaces_all_the_properties_of_a_parameter():
@@ -89,6 +120,9 @@ def test_a_layer_replaces_all_the_properties_of_a_parameter():
     (dict(galaxies=['spiral']), "galaxies[0]: the project has no piece "
                                 "'spiral' of galaxies (galaxies/spiral.yaml)"),
     (dict(fitter='../galaxies/arctan'), "must be a path in fitters/"),
+    (dict(observations=[dict(instrument=dict(psf='beam'))]),
+     "observations[0].instrument.psf: the project has no piece 'beam' of "
+     "psfs (psfs/beam.yaml)"),
     (dict(params=['bounds', [3]]), "params[1]: a layer of parameters must "
                                    "be a dictionary")])
 def test_invalid_names_and_layers(study, setup, message):

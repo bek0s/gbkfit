@@ -31,7 +31,9 @@ __all__ = [
 _SKIPPED = ('data', 'runs', 'node_modules', '__pycache__')
 
 # The folders of the pieces and of the setups of a project
-_PIECES = ('galaxies', 'observations', 'params', 'fitters', 'setups')
+_PIECES = (
+    'galaxies', 'observations', 'datasets', 'psfs', 'lsfs', 'noise',
+    'params', 'fitters', 'setups')
 
 
 @dataclasses.dataclass

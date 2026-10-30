@@ -5,6 +5,10 @@ setups, one piece per file:
     gbkfit-project.yaml       the marker of the project (its format)
     galaxies/<name>.yaml      a galaxy (an item of the section 'galaxies')
     observations/<name>.yaml  an observation (of 'observations')
+    datasets/<name>.yaml      a dataset (the option 'data' of an observation)
+    psfs/<name>.yaml          a PSF (the option 'psf' of an instrument)
+    lsfs/<name>.yaml          an LSF (the option 'lsf' of an instrument)
+    noise/<name>.yaml         a noise (the option 'noise' of the mock data)
     params/<name>.yaml        parameters (a section 'params')
     fitters/<name>.yaml       a fitter (a section 'fitter')
     setups/<name>.yaml        the configurations of the tasks (eval, fit)
@@ -14,11 +18,14 @@ setups, one piece per file:
 The name of a piece is the path of its file in the folder of its kind,
 without .yaml, and can have folders (e.g. 'ngc1313/hi'). In the sections
 galaxies, observations, params and fitter of a configuration in a
-project, a string names a piece, and a dictionary is one in place; the
-pieces never name others. The section 'params' can also be a list of
-them, merged in order (see merge_params). The relative paths of the
-configurations in a project, and of its pieces, are relative to its
-folder.
+project, in the options data, instrument.psf and instrument.lsf of its
+observations, and in the option noise of its section mock, a string
+names a piece, and a dictionary is one in place. Of the pieces, only
+observations name others (their dataset, PSF and LSF). The section
+'params' can also be a list of pieces, merged in order (see
+merge_params), and the option noise one for each observation. The
+relative paths of the configurations in a project, and of its pieces,
+are relative to its folder.
 """
 
 import copy
@@ -56,10 +63,11 @@ FORMAT = 'gbkfit-project'
 FORMAT_VERSION = 3
 MARKER = 'gbkfit-project.yaml'
 
-# The folders of the pieces, by the sections of the configurations that
-# name them
+# The folders of the pieces, by the sections and options of the
+# configurations that name them (see the module)
 _FOLDERS = dict(
-    galaxies='galaxies', observations='observations', params='params',
+    galaxies='galaxies', observations='observations', data='datasets',
+    psf='psfs', lsf='lsfs', noise='noise', params='params',
     fitter='fitters')
 
 _yaml = ruamel.yaml.YAML(typ='safe')
@@ -91,9 +99,9 @@ components:
     'observations': """\
 # An observation: here a cube of 48 x 48 spaxels of 1 arcsec and 40
 # channels of 10 km/s of radio velocities (as of HI; optical for lines of
-# ionised gas), with Gaussian PSF and LSF. To fit data, give them instead
-# of the grid (paths relative to the project):
-#   data: {data: data/cube.fits, error: data/error.fits}
+# ionised gas), with Gaussian PSF and LSF. To fit data, name a dataset of
+# the project instead of the grid (data: <name>); the PSF and the LSF can
+# be named too (psf: <name>, lsf: <name>).
 type: sky
 observable:
   type: pixel_spectra
@@ -104,6 +112,32 @@ line_of_sight: {type: flat}
 instrument:
   psf: {type: gauss, sigma: 1.5}
   lsf: {type: gauss, sigma: 15.0}
+""",
+    'datasets': """\
+# A dataset: here a cube and its errors (FITS files; paths relative to the
+# project), of the type of the observable of the observations that name it
+# (data: <name>).
+type: pixel_spectra
+data: data/cube.fits
+error: data/error.fits
+""",
+    'psfs': """\
+# A PSF: here a Gaussian of dispersion 1.5 arcsec. Observations name it in
+# their instrument (psf: <name>).
+type: gauss
+sigma: 1.5
+""",
+    'lsfs': """\
+# An LSF: here a Gaussian of dispersion 15 km/s. Observations name it in
+# their instrument (lsf: <name>).
+type: gauss
+sigma: 15.0
+""",
+    'noise': """\
+# A noise, of mock data: here Gaussian, of dispersion 0.01 at every value.
+# The section mock of a setup names it (noise: <name>).
+type: gauss
+rms: 0.01
 """,
     'params': """\
 # Parameters: fixed values, and free ones (value, min, max). Setups list
@@ -170,12 +204,15 @@ class Project:
 
     def piece(self, section: str, name: str) -> dict[str, Any]:
         """
-        Return a piece of a section of the configurations by name.
+        Return a piece of a section (or an option) of the configurations
+        by name.
 
         Parameters
         ----------
-        section : {'galaxies', 'observations', 'params', 'fitter'}
-            The section.
+        section : str
+            The section, or the option, that names it (see the module):
+            'galaxies', 'observations', 'data', 'psf', 'lsf', 'noise',
+            'params' or 'fitter'.
         name : str
             The name of the piece.
 
@@ -196,7 +233,7 @@ class Project:
             piece = _yaml.load(Path(filename) if text is None else text)
         except FileNotFoundError:
             raise ConfigError(
-                f"the project has no piece '{name}' of {section} "
+                f"the project has no piece '{name}' of {_FOLDERS[section]} "
                 f"({os.path.relpath(filename, self._path)})") from None
         except (OSError, ruamel.yaml.YAMLError) as e:
             raise ConfigError(f"cannot read the piece {filename}: {e}") \
@@ -248,8 +285,9 @@ class Project:
 
         Parameters
         ----------
-        folder : {'galaxies', 'observations', 'params', 'fitters', 'setups'}
-            The folder.
+        folder : str
+            The folder: one of pieces (e.g. 'galaxies', 'psfs'), or
+            'setups' (see TEMPLATES).
         name : str
             The name of the piece (e.g. 'ngc1313/hi').
 
@@ -378,8 +416,12 @@ class Resolved(NamedTuple):
     A configuration with its pieces in place (see resolve), and its
     sources, relative to its project: its file ('file'), the file of each
     item of its sections galaxies, observations and params (a list, of the
-    layers), and of its fitter, and the file of the layer that gives the
-    properties of each parameter ('parameters', by name).
+    layers), and of its fitter; the file of the dataset, the PSF and the
+    LSF of each observation ('data', 'psf' and 'lsf': lists, None for an
+    observation without one), if any has one; the file of the noise of its
+    mock data ('noise'; a list if it is one for each observation); and the
+    file of the layer that gives the properties of each parameter
+    ('parameters', by name).
     """
     config: dict[str, Any]
     sources: dict[str, Any]
@@ -433,6 +475,14 @@ def resolve(
         loaded = [
             _piece(project, item, section, i) for i, item in enumerate(items)]
         sources[section] = [source(section, item) for item in items]
+        if section == 'observations':
+            parts = [
+                _parts(project, item, i, sources[section][i], base)
+                for i, item in enumerate(loaded)]
+            loaded = [observation for observation, _ in parts]
+            for key in ('data', 'psf', 'lsf'):
+                if any(key in found for _, found in parts):
+                    sources[key] = [found.get(key) for _, found in parts]
         if section != 'params':
             config[section] = loaded
             continue
@@ -444,7 +494,58 @@ def resolve(
         item = config['fitter']
         config['fitter'] = _piece(project, item, 'fitter')
         sources['fitter'] = source('fitter', item)
+    if isinstance(mock := config.get('mock'), Mapping) and 'noise' in mock:
+        mock = config['mock'] = dict(mock)
+        noise = mock['noise']
+        with parseutils.config_path('mock'):
+            if isinstance(noise, list):
+                mock['noise'] = [
+                    _piece(project, item, 'noise', i)
+                    for i, item in enumerate(noise)]
+                sources['noise'] = [
+                    None if item is None else source('noise', item)
+                    for item in noise]
+            else:
+                mock['noise'] = _piece(project, noise, 'noise')
+                sources['noise'] = source('noise', noise)
     return Resolved(config, sources)
+
+
+def _parts(
+        project: Project | None,
+        observation: Any,
+        index: int,
+        source: str,
+        base: str
+) -> tuple[Any, dict[str, str]]:
+    """
+    Return an observation (the item of the section observations at an
+    index) with the pieces that its options data, instrument.psf and
+    instrument.lsf name in place, and the source of each of those options
+    that it has, by name: the file of its piece, or that of the
+    observation (source) if it is in place.
+    """
+    if not isinstance(observation, Mapping):
+        return observation, {}
+    observation, found = dict(observation), {}
+
+    def part(options: dict[str, Any], key: str) -> None:
+        value = options[key]
+        options[key] = _piece(project, value, key)
+        found[key] = source if not isinstance(value, str) \
+            else os.path.relpath(project.piece_file(key, value), base)
+
+    with parseutils.config_path('observations', index):
+        if 'data' in observation:
+            part(observation, 'data')
+        if isinstance(observation.get('instrument'), Mapping):
+            instrument = observation['instrument'] = dict(
+                observation['instrument'])
+            with parseutils.config_path('instrument'):
+                for key in ('psf', 'lsf'):
+                    if key in instrument:
+                        part(instrument, key)
+    return observation, found
 
 
 def _piece(
@@ -454,8 +555,8 @@ def _piece(
         *index: int
 ) -> Any:
     """
-    Return an item of a section of a configuration: the piece it names,
-    or itself.
+    Return an item of a section (or an option) of a configuration: the
+    piece it names, or itself.
     """
     if not isinstance(item, str):
         return item

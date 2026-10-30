@@ -65,8 +65,19 @@ def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
 
 def test_the_templates_of_a_project_make_a_setup_without_problems(tmp_path):
     study = project.create(str(tmp_path / 'study'))
-    for folder in ('galaxies', 'observations', 'params', 'fitters'):
+    folders = (
+        'galaxies', 'observations', 'psfs', 'lsfs', 'noise', 'params',
+        'fitters')
+    for folder in folders:
         study.create_piece(folder, 'first')
-    setup = study.create_piece('setups', 'first')
-    assert 'galaxies: [first]' in pathlib.Path(setup).read_text()
-    assert check(setup).problems == []
+    # (the observation names the PSF and the LSF of the project)
+    observation = pathlib.Path(study.piece_file('observations', 'first'))
+    named = observation.read_text() \
+        .replace('psf: {type: gauss, sigma: 1.5}', 'psf: first') \
+        .replace('lsf: {type: gauss, sigma: 15.0}', 'lsf: first')
+    assert 'psf: first' in named and 'lsf: first' in named
+    observation.write_text(named)
+    setup = pathlib.Path(study.create_piece('setups', 'first'))
+    assert 'galaxies: [first]' in setup.read_text()
+    setup.write_text(setup.read_text() + 'mock: {noise: first}\n')
+    assert check(str(setup)).problems == []

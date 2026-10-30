@@ -22,9 +22,12 @@ import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 
-# The sections of the configurations that name the pieces of a folder
+# The sections (or options) of the configurations that name the pieces of
+# a folder; the pieces of the options of observations and mock data are
+# only read (see _uses)
 _SECTIONS = dict(
-    galaxies='galaxies', observations='observations', params='params',
+    galaxies='galaxies', observations='observations', datasets='data',
+    psfs='psf', lsfs='lsf', noise='noise', params='params',
     fitters='fitter')
 
 _yaml = ruamel.yaml.YAML()

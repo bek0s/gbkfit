@@ -31,7 +31,9 @@ def write_data_setup(root):
         type='sky',
         observable=dict(type='pixel_brightness'),
         line_of_sight=dict(type='flat'),
-        data=dict(data='data/image.fits', error=0.01, step=[1, 1])),
+        data=dict(
+            type='pixel_brightness', data='data/image.fits', error=0.01,
+            step=[1, 1])),
         study / 'observations/image-data.yaml')
     yaml.dump(dict(
         driver=dict(type='host'), galaxies=['disk'],
