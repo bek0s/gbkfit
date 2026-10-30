@@ -1,9 +1,12 @@
 """
 The logs of a fit, from which a stopped or killed fit resumes: of its
 model evaluations (see EvaluationLog), and of the outcomes of its
-sub-fits (see SubFitLog).
+sub-fits (see SubFitLog); and their readers, for watching a fit as it
+runs (e.g. the traces of its parameters): of its evaluations (see
+read_evaluations) and of the chain of an MCMC sampler (see read_chain).
 """
 
+import dataclasses
 import json
 import logging
 import os
@@ -18,8 +21,12 @@ from gbkfit.objective import Merits
 
 
 __all__ = [
+    'Chain',
     'EvaluationLog',
-    'SubFitLog'
+    'Evaluations',
+    'SubFitLog',
+    'read_chain',
+    'read_evaluations'
 ]
 
 
@@ -96,10 +103,10 @@ class EvaluationLog:
             If the file is not a log of evaluations (of this version).
         """
         log = cls(filename)
-        names, rows, header = _read(filename)
-        log._names = names
-        log._rows = rows.reshape(-1, len(names) + _NNUMBERS)
-        log._header = header
+        header, rows, size = _read(filename, chain=False)
+        log._names = tuple(header['names'])
+        log._rows = rows
+        log._header = size
         log._replaying = len(log._rows) > 0
         log._subfits = SubFitLog.resume(log._subfits.filename())
         return log
@@ -138,6 +145,7 @@ class EvaluationLog:
             self._file = open(self._filename, 'wb')
             self._file.write(_MAGIC)
             self._file.write(json.dumps(dict(names=names)).encode() + b'\n')
+            self._file.flush()
             self._header = self._file.tell()
         self._chain_file = None
 
@@ -188,6 +196,7 @@ class EvaluationLog:
             self._chain_file.write(_MAGIC)
             self._chain_file.write(json.dumps(dict(
                 names=self._names, nwalkers=len(positions))).encode() + b'\n')
+            self._chain_file.flush()
         self._chain_file.write(np.column_stack(
             [positions, np.asarray(log_probs, dtype=np.float64)]).tobytes())
         self._flush_now_and_then()
@@ -217,22 +226,147 @@ class EvaluationLog:
             self._flushed = now
 
 
-def _read(filename: str) -> tuple[tuple[str, ...], np.ndarray, int]:
+@dataclasses.dataclass(frozen=True)
+class Evaluations:
     """
-    Return the names of the free elements of a log, its values (the
-    complete rows, flattened), and the size of its header (bytes).
+    The model evaluations of a fit, from its log (see read_evaluations).
+
+    Attributes
+    ----------
+    names : tuple of str
+        The names of the free elements.
+    values : np.ndarray
+        The free values of each evaluation (evaluations, free elements).
+    chi2, log_likelihood, aicp : np.ndarray
+        The numbers of each evaluation (see Merits).
     """
+    names: tuple[str, ...]
+    values: np.ndarray
+    chi2: np.ndarray
+    log_likelihood: np.ndarray
+    aicp: np.ndarray
+
+
+@dataclasses.dataclass(frozen=True)
+class Chain:
+    """
+    The chain of an MCMC sampler of a fit, from its log (see read_chain).
+
+    Attributes
+    ----------
+    names : tuple of str
+        The names of the free elements.
+    positions : np.ndarray
+        The position of each walker at each step (steps, walkers, free
+        elements).
+    log_probs : np.ndarray
+        Their log-probabilities (steps, walkers).
+    """
+    names: tuple[str, ...]
+    positions: np.ndarray
+    log_probs: np.ndarray
+
+
+def read_evaluations(filename: str, start: int = 0) -> Evaluations:
+    """
+    Read the model evaluations of a fit from its log (see EvaluationLog),
+    also while the fit writes it: those from the given one on, written
+    whole.
+
+    Parameters
+    ----------
+    filename : str
+        The file of the log (e.g. logs/evaluations.bin of the fit task).
+    start : int, optional
+        The index of the first evaluation to read (e.g. the number read so
+        far, to read only the new ones).
+
+    Returns
+    -------
+    Evaluations
+        The evaluations (none if the log has no more).
+
+    Raises
+    ------
+    ValueError
+        If the file is not a log of evaluations (of this version), or
+        start is negative.
+    """
+    header, rows, _ = _read(filename, chain=False, start=start)
+    nfree = len(header['names'])
+    return Evaluations(
+        names=tuple(header['names']), values=rows[:, :nfree],
+        chi2=rows[:, nfree], log_likelihood=rows[:, nfree + 1],
+        aicp=rows[:, nfree + 2])
+
+
+def read_chain(filename: str, start: int = 0) -> Chain:
+    """
+    Read the chain of an MCMC sampler of a fit from its log (see
+    EvaluationLog.record_chain), also while the fit writes it: its steps
+    from the given one on, written whole.
+
+    Parameters
+    ----------
+    filename : str
+        The file of the log (e.g. logs/evaluations-chain.bin of the fit
+        task).
+    start : int, optional
+        The index of the first step to read (e.g. the number read so far,
+        to read only the new ones).
+
+    Returns
+    -------
+    Chain
+        The steps (none if the log has no more).
+
+    Raises
+    ------
+    ValueError
+        If the file is not a log of a chain (of this version), or start is
+        negative.
+    """
+    header, rows, _ = _read(filename, chain=True, start=start)
+    nfree = len(header['names'])
+    steps = rows.reshape(len(rows), header['nwalkers'], nfree + 1)
+    return Chain(
+        names=tuple(header['names']), positions=steps[..., :nfree],
+        log_probs=steps[..., nfree])
+
+
+def _read(
+        filename: str,
+        chain: bool,
+        start: int = 0
+) -> tuple[dict[str, Any], np.ndarray, int]:
+    """
+    Return the header of a log of evaluations, or of a chain (its line of
+    JSON), its records from the given one on, written whole (one per row:
+    of an evaluation, its free values and numbers; of a step of a chain,
+    the free values and log-probability of each walker), and the size of
+    its header (bytes).
+    """
+    if start < 0:
+        raise ValueError(f"start must not be negative; it is {start}")
+    kind = 'a chain' if chain else 'evaluations'
     with open(filename, 'rb') as file:
         if file.readline() != _MAGIC:
             raise ValueError(
-                f"{filename} is not a log of evaluations of this version of "
+                f"{filename} is not a log of {kind} of this version of "
                 f"GBKFIT")
-        names = tuple(json.loads(file.readline())['names'])
-        header = file.tell()
-        values = file.read()
-    width = len(names) + _NNUMBERS
-    values = np.frombuffer(values[:len(values) // 8 * 8], dtype=np.float64)
-    return names, values[:len(values) // width * width], header
+        header = json.loads(file.readline())
+        if ('nwalkers' in header) != chain:
+            raise ValueError(f"{filename} is not a log of {kind}")
+        size = file.tell()
+        nfree = len(header['names'])
+        width = header['nwalkers'] * (nfree + 1) if chain \
+            else nfree + _NNUMBERS
+        offset = size + start * width * 8
+        count = max(0, os.fstat(file.fileno()).st_size - offset) \
+            // (width * 8) * width
+        file.seek(offset)
+        values = np.fromfile(file, dtype=np.float64, count=count)
+    return header, values.reshape(-1, width), size
 
 
 class SubFitLog:

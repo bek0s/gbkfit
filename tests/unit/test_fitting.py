@@ -18,10 +18,10 @@ from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
     EvaluationLog, FitControl, FitParamBounded, FitParamPrior, FitProblem,
-    FitStopped, SubFitLog)
+    FitStopped, SubFitLog, read_chain, read_evaluations)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
-from gbkfit.objective import Objective
+from gbkfit.objective import Merits, Objective
 from gbkfit.parallel import WorkersProcesses, WorkersThreads
 from gbkfit.observation import (
     FittedNoise, Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
@@ -579,6 +579,35 @@ def test_a_fit_with_workers_logs_its_evaluations_in_order(tmp_path):
     resumed = FitterCMAES().fit(objective, params, log=log)
     assert log.nreplayed() == pooled.nevals
     assert resumed.best().free == pooled.best().free
+
+
+def test_logs_are_read_as_the_fit_writes_them(tmp_path):
+    # The evaluations from a given one, and the steps of a chain of four
+    # walkers; a record cut short (being written) is left out
+    filename = str(tmp_path / 'evaluations.bin')
+    chain_filename = str(tmp_path / 'evaluations-chain.bin')
+    log = EvaluationLog(filename)
+    log.begin(['a', 'b'])
+    for i in range(3):
+        log.append(np.array([i, -i]), Merits(10.0 * i, -5.0 * i, 20.0 * i))
+    for i in range(2):
+        log.record_chain(np.full((4, 2), float(i)), np.arange(4.0) - i)
+    log.close()
+    for name in (filename, chain_filename):
+        with open(name, 'ab') as file:
+            file.write(np.zeros(3).tobytes())
+    evaluations = read_evaluations(filename, start=1)
+    assert evaluations.names == ('a', 'b')
+    np.testing.assert_array_equal(evaluations.values, [[1, -1], [2, -2]])
+    np.testing.assert_array_equal(evaluations.chi2, [10, 20])
+    np.testing.assert_array_equal(evaluations.log_likelihood, [-5, -10])
+    np.testing.assert_array_equal(evaluations.aicp, [20, 40])
+    assert len(read_evaluations(filename, start=5).chi2) == 0
+    chain = read_chain(chain_filename)
+    assert chain.positions.shape == (2, 4, 2)
+    np.testing.assert_array_equal(chain.log_probs[1], [-1, 0, 1, 2])
+    with pytest.raises(ValueError, match="not a log of a chain"):
+        read_chain(filename)
 
 
 @pytest.mark.parametrize('sampler', ['emcee', 'zeus'])
