@@ -429,6 +429,13 @@ class Objective:
             The evaluation.
         """
         self._update_residual_d(params, True, out_extra)
+        return self._evaluation()
+
+    def _evaluation(self) -> Evaluation:
+        """
+        Return the evaluation of the residuals last evaluated (see
+        evaluate).
+        """
         with self._group_plan.timers().measure('objective_residual_sum_eval'):
             data_chi2 = float(sum(
                 comparison_.chi2() for comparison_ in self._comparisons))
@@ -486,6 +493,32 @@ class Objective:
         noise = [c.noise_residuals() for c in self._comparisons]
         return np.concatenate(
             [*vectors, *self._solve_residuals(), *noise], dtype=np.float64)
+
+    def residuals_and_merits(
+            self,
+            params: ParamValues,
+            out_extra: Extras | None = None
+    ) -> tuple[np.ndarray, Merits]:
+        """
+        Return the weighted residuals (see residuals) and the merits (see
+        merits) of one evaluation of the models.
+
+        Parameters
+        ----------
+        params : ParamValues
+            The parameters of the models, prefixed (see pdescs).
+        out_extra : Extras, optional
+            Where the extra outputs of the models go, if wanted.
+
+        Returns
+        -------
+        np.ndarray
+            The residuals (a new array).
+        Merits
+            The merits.
+        """
+        residuals = self.residuals(params, out_extra)
+        return residuals, self._evaluation().merits
 
     def pointwise_log_likelihood(self, params: ParamValues) -> np.ndarray:
         """

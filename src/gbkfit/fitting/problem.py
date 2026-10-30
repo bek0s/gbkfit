@@ -104,9 +104,10 @@ class FitProblem:
     Every model evaluation raises FitStopped once the control (if any) is
     stopped: those of a batch before it count, without a pool (with one,
     a batch raises it before and after the workers evaluate it, and none
-    of the batch count). The numbers it evaluates (see Merits; not
-    residuals) go to the log (if any), and those of a fit that resumes
-    come from it while it lasts (see EvaluationLog).
+    of the batch count). The numbers of each evaluation (see Merits; of
+    residuals too, but not the residuals) go to the log (if any), and
+    those of a fit that resumes come from it while it lasts (see
+    EvaluationLog).
 
     Parameters
     ----------
@@ -356,9 +357,11 @@ class FitProblem:
         """
         xs = _points(xs)
         values = [self.evaluate(x) for x in xs]
-        evaluated = self.map_objective(Objective.residuals, values)
+        evaluated = self.map_objective(Objective.residuals_and_merits, values)
         batch = []
-        for x, residuals in zip(xs, evaluated):
+        for x, (residuals, merits) in zip(xs, evaluated):
+            if self._log is not None:
+                self._log.append(x, merits)
             if self._priors is not None or self._joint:
                 residuals = np.concatenate(
                     [residuals, self.prior_residuals(x, strict=True)])

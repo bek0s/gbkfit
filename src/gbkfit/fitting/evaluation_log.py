@@ -55,10 +55,11 @@ class EvaluationLog:
     exactly, then evaluated (and logged). The result is that of the fit
     had it not stopped; the replay costs only the fitter's own work.
 
-    The fit problem logs the evaluations of fitters that ask for numbers
-    (samplers, CMA-ES). Least squares, which ask for residuals (too many
-    to log), are not logged: they restart from their best point (e.g.
-    best.yaml of the fit task).
+    The fit problem logs the evaluations of every fitter. Those of least
+    squares, which ask for residuals, are logged without them (too many to
+    log), so that they cannot be replayed: a least-squares fit that
+    resumes starts again, and writes the log anew (fit from its best
+    point instead, e.g. best.yaml of the fit task).
 
     Beside it, '<name>-chain<ext>' holds the steps of the chain of an MCMC
     sampler (see record_chain), written as it runs; a resumed fit writes
@@ -175,8 +176,14 @@ class EvaluationLog:
         return None
 
     def append(self, x: np.ndarray, merits: Merits) -> None:
-        """Log an evaluation."""
-        assert self._file is not None and not self._replaying
+        """
+        Log an evaluation. In the log of a fit that resumes, it ends the
+        replay if it lasts (the rest of the log is dropped): that of a fit
+        that does not replay it (least squares) is written anew.
+        """
+        assert self._file is not None
+        if self._replaying:
+            self._end_replay()
         self._file.write(np.concatenate(
             [np.asarray(x, dtype=np.float64), merits]).tobytes())
         self._flush_now_and_then()

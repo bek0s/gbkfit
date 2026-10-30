@@ -504,6 +504,27 @@ def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
     assert resumed.chi2 == pytest.approx(whole.chi2, rel=1e-12)
 
 
+def test_a_least_squares_fit_logs_its_evaluations_and_resumes_anew(
+        tmp_path):
+    # Without their residuals: a fit that resumes starts again, and
+    # writes the log anew
+    from gbkfit.fitting import fitter_parser
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = fitter_parser.load(dict(type='scipy.least_squares'))
+    filename = str(tmp_path / 'evaluations.bin')
+    fitter.fit(
+        objective, params, control=StopAfter(20), log=EvaluationLog(filename))
+    stopped = read_evaluations(filename)
+    assert len(stopped.chi2) == 20
+    result = fitter.fit(objective, params, log=EvaluationLog.resume(filename))
+    evaluations = read_evaluations(filename)
+    assert len(evaluations.chi2) == result.nevals
+    np.testing.assert_array_equal(evaluations.values[:20], stopped.values)
+    assert evaluations.chi2.min() == pytest.approx(
+        result.best().chi2, rel=1e-12)
+
+
 def two_workers(kind, driver):
     """Return two workers of a kind on a driver."""
     return WorkersThreads([driver, driver]) if kind == 'threads' \

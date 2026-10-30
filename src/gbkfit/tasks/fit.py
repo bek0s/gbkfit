@@ -123,9 +123,9 @@ def resume(output_dir: str) -> None:
     its configuration, answering the fitter from the log of its
     evaluations while it lasts (see EvaluationLog), and its bootstrap, if
     any, taking the refits of its log (see SubFitLog), and write its
-    outputs to the run (see fit). The fit must have had the log; a least-squares
-    fit, which has nothing in it, starts again (fit fit/best.yaml
-    instead, to start from its best point).
+    outputs to the run (see fit). The fit must have had the log; a
+    least-squares fit, whose log has no residuals, starts again (fit
+    fit/best.yaml instead, to start from its best point).
 
     Parameters
     ----------
