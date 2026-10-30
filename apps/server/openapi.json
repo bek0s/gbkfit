@@ -271,6 +271,172 @@
         }
       }
     },
+    "/api/v1/views/channel/{path}": {
+      "get": {
+        "summary": "View Channel",
+        "description": "Return a channel of a cube (an array of a file of data, in the\norientation of the model) as a frame of one array (ny, nx), with the\nnumber of channels of the cube, the coordinate of the channel along\nthe spectral axis and its unit (null if unknown; see SpectrumView),\nand the range of the values of the cube for colours.",
+        "operationId": "view_channel_api_v1_views_channel__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "hdu",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Hdu"
+            }
+          },
+          {
+            "name": "channel",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Channel"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/spectrum/{path}": {
+      "get": {
+        "summary": "View Spectrum",
+        "description": "Return the spectrum of a pixel (x, y) of a cube.",
+        "operationId": "view_spectrum_api_v1_views_spectrum__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "hdu",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Hdu"
+            }
+          },
+          {
+            "name": "x",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "X"
+            }
+          },
+          {
+            "name": "y",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Y"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpectrumView"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/moments/{path}": {
+      "get": {
+        "summary": "View Moments",
+        "description": "Return the quick moment maps of a cube (its flux, velocity and\ndispersion, NaN where they are not defined) as a frame of three\narrays (ny, nx), named moment0, moment1 and moment2.",
+        "operationId": "view_moments_api_v1_views_moments__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "hdu",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Hdu"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/imports": {
       "post": {
         "summary": "Import Data",
@@ -1510,6 +1676,57 @@
         ],
         "title": "SessionRequest",
         "description": "A live session to open: its configuration (its path)."
+      },
+      "SpectrumView": {
+        "properties": {
+          "values": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Values"
+          },
+          "spectral": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Spectral"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "spectral",
+          "unit"
+        ],
+        "title": "SpectrumView",
+        "description": "The spectrum of a pixel of a cube: its values (none where it has\nnone), and the coordinates of its channels along its spectral axis\nand their unit (km/s for velocities, GHz for frequencies, micron for\nwavelengths; none if its header does not give them)."
       },
       "ValidationError": {
         "properties": {

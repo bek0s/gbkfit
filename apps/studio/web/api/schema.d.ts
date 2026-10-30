@@ -130,6 +130,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/views/channel/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Channel
+         * @description Return a channel of a cube (an array of a file of data, in the
+         *     orientation of the model) as a frame of one array (ny, nx), with the
+         *     number of channels of the cube, the coordinate of the channel along
+         *     the spectral axis and its unit (null if unknown; see SpectrumView),
+         *     and the range of the values of the cube for colours.
+         */
+        get: operations["view_channel_api_v1_views_channel__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/spectrum/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Spectrum
+         * @description Return the spectrum of a pixel (x, y) of a cube.
+         */
+        get: operations["view_spectrum_api_v1_views_spectrum__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/moments/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * View Moments
+         * @description Return the quick moment maps of a cube (its flux, velocity and
+         *     dispersion, NaN where they are not defined) as a frame of three
+         *     arrays (ny, nx), named moment0, moment1 and moment2.
+         */
+        get: operations["view_moments_api_v1_views_moments__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/imports": {
         parameters: {
             query?: never;
@@ -710,6 +776,21 @@ export interface components {
             /** Config */
             config: string;
         };
+        /**
+         * SpectrumView
+         * @description The spectrum of a pixel of a cube: its values (none where it has
+         *     none), and the coordinates of its channels along its spectral axis
+         *     and their unit (km/s for velocities, GHz for frequencies, micron for
+         *     wavelengths; none if its header does not give them).
+         */
+        SpectrumView: {
+            /** Values */
+            values: (number | null)[];
+            /** Spectral */
+            spectral: number[] | null;
+            /** Unit */
+            unit: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -931,6 +1012,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArrayInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_channel_api_v1_views_channel__path__get: {
+        parameters: {
+            query: {
+                hdu: number;
+                channel: number;
+            };
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_spectrum_api_v1_views_spectrum__path__get: {
+        parameters: {
+            query: {
+                hdu: number;
+                x: number;
+                y: number;
+            };
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpectrumView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_moments_api_v1_views_moments__path__get: {
+        parameters: {
+            query: {
+                hdu: number;
+            };
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description Validation Error */

@@ -1,7 +1,8 @@
 // What the page reads from the server and changes on it, with the keys of
 // its cache (which the events of the server refresh, see events.ts).
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, data } from './client';
+import { decodeFrame } from './frames';
 
 export const keys = {
   projects: ['projects'],
@@ -9,6 +10,7 @@ export const keys = {
   piece: (path: string) => ['piece', path],
   folder: (path: string) => ['folder', path],
   description: (path: string) => ['description', path],
+  view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
 };
 
@@ -49,6 +51,63 @@ export function useDescription(path: string | null) {
     queryKey: keys.description(path ?? ''),
     enabled: path !== null,
     queryFn: () => data(api.GET('/api/v1/describe/{path}', { params: { path: { path: path ?? '' } } })),
+  });
+}
+
+// A channel of a cube (an array of a file of data): its values (ny, nx),
+// the number of channels of the cube, the coordinate of the channel along
+// its spectral axis and its unit (null if unknown), and the range of the
+// values of the cube for colours.
+// The channel shown before stays while the next one comes.
+export function useChannel(path: string, hdu: number, channel: number) {
+  return useQuery({
+    queryKey: keys.view('channel', path, hdu, channel),
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const frame = decodeFrame(
+        await data(
+          api.GET('/api/v1/views/channel/{path}', {
+            params: { path: { path }, query: { hdu, channel } },
+            parseAs: 'arrayBuffer',
+          }),
+        ),
+      );
+      const { nchannels, spectral, unit, range } = frame.header as {
+        nchannels: number;
+        spectral: number | null;
+        unit: string | null;
+        range: [number, number];
+      };
+      return { plane: frame.arrays[0], nchannels, spectral, unit, range };
+    },
+  });
+}
+
+// The spectrum of a pixel of a cube, and the coordinates of its channels
+// along its spectral axis, with their unit
+export function useSpectrum(path: string, hdu: number, x: number, y: number) {
+  return useQuery({
+    queryKey: keys.view('spectrum', path, hdu, x, y),
+    placeholderData: keepPreviousData,
+    queryFn: () =>
+      data(api.GET('/api/v1/views/spectrum/{path}', { params: { path: { path }, query: { hdu, x, y } } })),
+  });
+}
+
+// The quick moment maps of a cube (flux, velocity and dispersion), by name
+export function useMoments(path: string, hdu: number, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.view('moments', path, hdu),
+    enabled,
+    queryFn: async () =>
+      decodeFrame(
+        await data(
+          api.GET('/api/v1/views/moments/{path}', {
+            params: { path: { path }, query: { hdu } },
+            parseAs: 'arrayBuffer',
+          }),
+        ),
+      ).arrays,
   });
 }
 

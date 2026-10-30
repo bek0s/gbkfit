@@ -7,6 +7,7 @@ from .events import Events
 from .executors import Executor
 from .jobs import Jobs
 from .sessions import Sessions
+from .views import Views
 from .workspace import Workspace
 
 
@@ -33,6 +34,7 @@ class Server:
     jobs : Jobs
     sessions : Sessions
     checks : Checks
+    views : Views
     """
 
     def __init__(self, root: str, executor: Executor):
@@ -41,6 +43,7 @@ class Server:
         self.jobs = Jobs(self.workspace, executor, self.events)
         self.sessions = Sessions(self.workspace)
         self.checks = Checks(self.workspace)
+        self.views = Views(self.workspace)
 
     async def close(self) -> None:
         """Close the sessions, and stop the jobs."""

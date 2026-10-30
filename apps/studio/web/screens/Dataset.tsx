@@ -6,7 +6,9 @@
 import { useRef, useState } from 'react';
 import { upload, type ArrayInfo } from '../api/client';
 import { useCreateBlock, useDescription, useImportData, usePiece, useProject } from '../api/queries';
+import { CubeViewer } from '../components/CubeViewer';
 import { FilePicker, joinPath } from '../components/FilePicker';
+import { significant } from '../components/format';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
 import { useStudio } from '../studio';
 
@@ -230,105 +232,112 @@ function DatasetBody({
   const siblings = (arrays.inFile.data ?? []).filter(
     (a) => data !== undefined && a.index !== data.index && a.shape.join() === data.shape.join(),
   );
+  // (the shape of a cube of the data, without its axes of length 1)
+  const cube = data?.shape.filter((size) => size > 1);
   return (
     <div className="screen-body dataset">
-      <div className="card">
-        <h2 className="card-head">Files</h2>
-        <div className="card-body slots">
-          {ROLES.map(({ role, title }) => {
-            const chosen = files[role];
-            const inFile = arrays.inFile[role] ?? [];
-            return (
-              <div className="slot-row" key={role}>
-                <span className="slot-label">{title}</span>
-                {role === 'error' && errorValue !== null ? (
-                  <div className="slot">
-                    {onChange ? (
-                      <input
-                        className="slot-value"
-                        type="number"
-                        step="any"
-                        min="0"
-                        autoFocus
-                        value={errorValue}
-                        aria-label="The error of every value"
-                        onChange={(event) => setErrorValue(event.target.value)}
-                      />
-                    ) : (
-                      <span className="slot-file">{errorValue}</span>
-                    )}
-                    <span className="note">{data?.unit ?? 'in the unit of the data'} · for every value</span>
-                    {onChange && (
-                      <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
-                        ×
-                      </button>
-                    )}
-                  </div>
-                ) : chosen === undefined ? (
-                  <div className="slot empty">
-                    {onChange ? (
-                      <>
-                        <FileSources project={project} onFile={(file) => set(role, { file })} />
-                        {role === 'error' && (
-                          <button
-                            className="link"
-                            title="One error for every value of the data (e.g. the rms of a radio cube)"
-                            onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
-                          >
-                            One value
-                          </button>
-                        )}
-                        {role === 'error' &&
-                          files.data !== undefined &&
-                          siblings.map((a) => (
+      <div className="col">
+        <div className="card">
+          <h2 className="card-head">Files</h2>
+          <div className="card-body slots">
+            {ROLES.map(({ role, title }) => {
+              const chosen = files[role];
+              const inFile = arrays.inFile[role] ?? [];
+              return (
+                <div className="slot-row" key={role}>
+                  <span className="slot-label">{title}</span>
+                  {role === 'error' && errorValue !== null ? (
+                    <div className="slot">
+                      {onChange ? (
+                        <input
+                          className="slot-value"
+                          type="number"
+                          step="any"
+                          min="0"
+                          autoFocus
+                          value={errorValue}
+                          aria-label="The error of every value"
+                          onChange={(event) => setErrorValue(event.target.value)}
+                        />
+                      ) : (
+                        <span className="slot-file">{errorValue}</span>
+                      )}
+                      <span className="note">{data?.unit ?? 'in the unit of the data'} · for every value</span>
+                      {onChange && (
+                        <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ) : chosen === undefined ? (
+                    <div className="slot empty">
+                      {onChange ? (
+                        <>
+                          <FileSources project={project} onFile={(file) => set(role, { file })} />
+                          {role === 'error' && (
                             <button
-                              key={a.index}
                               className="link"
-                              onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
+                              title="One error for every value of the data (e.g. the rms of a radio cube)"
+                              onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
                             >
-                              use {a.name || `array ${a.index}`} of the same file
+                              One value
                             </button>
+                          )}
+                          {role === 'error' &&
+                            files.data !== undefined &&
+                            siblings.map((a) => (
+                              <button
+                                key={a.index}
+                                className="link"
+                                onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
+                              >
+                                use {a.name || `array ${a.index}`} of the same file
+                              </button>
+                            ))}
+                        </>
+                      ) : (
+                        <span className="note">none</span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="slot">
+                      <span className="slot-file" title={chosen.file}>
+                        {chosen.file.split('/').pop()}
+                      </span>
+                      {inFile.length > 1 && onChange ? (
+                        <select
+                          aria-label={`The array of the ${title.toLowerCase()}`}
+                          value={arrays.found[role]?.index ?? ''}
+                          onChange={(event) => {
+                            const array = inFile.find((a) => a.index === Number(event.target.value));
+                            if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
+                          }}
+                        >
+                          {inFile.map((a) => (
+                            <option key={a.index} value={a.index}>
+                              {a.name || `array ${a.index}`}
+                            </option>
                           ))}
-                      </>
-                    ) : (
-                      <span className="note">none</span>
-                    )}
-                  </div>
-                ) : (
-                  <div className="slot">
-                    <span className="slot-file" title={chosen.file}>
-                      {chosen.file.split('/').pop()}
-                    </span>
-                    {inFile.length > 1 && onChange ? (
-                      <select
-                        aria-label={`The array of the ${title.toLowerCase()}`}
-                        value={arrays.found[role]?.index ?? ''}
-                        onChange={(event) => {
-                          const array = inFile.find((a) => a.index === Number(event.target.value));
-                          if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
-                        }}
-                      >
-                        {inFile.map((a) => (
-                          <option key={a.index} value={a.index}>
-                            {a.name || `array ${a.index}`}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
-                    )}
-                    {onChange && (
-                      <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
-                        ×
-                      </button>
-                    )}
-                  </div>
-                )}
-                {arrays.errors[role] && <p className="error slot-error">{arrays.errors[role]}</p>}
-              </div>
-            );
-          })}
+                        </select>
+                      ) : (
+                        <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
+                      )}
+                      {onChange && (
+                        <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {arrays.errors[role] && <p className="error slot-error">{arrays.errors[role]}</p>}
+                </div>
+              );
+            })}
+          </div>
         </div>
+        {files.data !== undefined && data !== undefined && cube?.length === 3 && (
+          <CubeViewer key={`${files.data.file}:${data.index}`} path={files.data.file} hdu={data.index} shape={cube} />
+        )}
       </div>
       <Facts array={data} />
     </div>
@@ -405,13 +414,13 @@ function Facts({ array }: { array: ArrayInfo | undefined }) {
             <dt>shape</dt>
             <dd>{shapeText(array.shape)}</dd>
             <dt>pixel</dt>
-            <dd>{array.step ? `${round(Math.abs(array.step[0]))}″ × ${round(Math.abs(array.step[1]))}″` : 'unknown'}</dd>
+            <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'unknown'}</dd>
             {array.shape.length === 3 && (
               <>
                 <dt>spectral</dt>
                 <dd>
                   {array.axes[2] || 'no type'}
-                  {array.step && ` · ${round(Math.abs(array.step[2]))} km/s a channel`}
+                  {array.step && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
                 </dd>
               </>
             )}
@@ -446,11 +455,6 @@ function shapeText(shape: number[]): string {
 function beamText(beam: ArrayInfo['beam']): string {
   if (!beam) return 'none in the header';
   const { bmaj, bmin, bpa } = beam;
-  if (Array.isArray(bmaj)) return `one for each channel: ${round(Math.min(...bmaj))}″ to ${round(Math.max(...bmaj))}″`;
-  return `${round(bmaj)}″ × ${round(Number(bmin))}″ at ${round(Number(bpa))}°`;
-}
-
-// A value to 3 significant digits
-function round(value: number): string {
-  return String(Number(value.toPrecision(3)));
+  if (Array.isArray(bmaj)) return `one for each channel: ${significant(Math.min(...bmaj), 3)}″ to ${significant(Math.max(...bmaj), 3)}″`;
+  return `${significant(bmaj, 3)}″ × ${significant(Number(bmin), 3)}″ at ${significant(Number(bpa), 3)}°`;
 }

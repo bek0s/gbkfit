@@ -10,6 +10,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
+import numpy as np
 from fastapi import (
     APIRouter, Body, Depends, Request, Response, WebSocket,
     WebSocketException, status)
@@ -24,7 +25,7 @@ from gbkfit_server.services.sessions import Latest
 from .models import (
     ArrayInfo, CheckRequest, CheckResult, FolderInfo, ImportRequest,
     JobInfo, JobRequest, PieceRequest, ProjectInfo, ProjectRequest, RunInfo,
-    SessionInfo, SessionRequest)
+    SessionInfo, SessionRequest, SpectrumView)
 
 
 __all__ = [
@@ -95,6 +96,62 @@ def describe(server: ServerDep, path: str) -> list[ArrayInfo]:
     return [
         ArrayInfo.model_validate(array)
         for array in server.workspace.describe(path)]
+
+
+# (the responses of frames of arrays)
+_FRAME = {200: {'content': {'application/octet-stream': {}}}}
+
+
+@router.get(
+    '/views/channel/{path:path}', response_class=Response, responses=_FRAME)
+def view_channel(
+        server: ServerDep, path: str, hdu: int, channel: int) -> Response:
+    """
+    Return a channel of a cube (an array of a file of data, in the
+    orientation of the model) as a frame of one array (ny, nx), with the
+    number of channels of the cube, the coordinate of the channel along
+    the spectral axis and its unit (null if unknown; see SpectrumView),
+    and the range of the values of the cube for colours.
+    """
+    cube = server.views.cube(path, hdu)
+    plane = server.views.channel(path, hdu, channel)
+    spectral = None if cube.spectral is None \
+        else float(cube.spectral[channel])
+    header = dict(
+        path=path, hdu=hdu, channel=channel,
+        nchannels=cube.values.shape[0], spectral=spectral, unit=cube.unit,
+        range=list(cube.range))
+    return Response(
+        frames.array_frame(header, [({}, plane)]),
+        media_type='application/octet-stream')
+
+
+@router.get('/views/spectrum/{path:path}')
+def view_spectrum(
+        server: ServerDep, path: str, hdu: int, x: int, y: int
+) -> SpectrumView:
+    """Return the spectrum of a pixel (x, y) of a cube."""
+    values = server.views.spectrum(path, hdu, x, y)
+    cube = server.views.cube(path, hdu)
+    return SpectrumView(
+        values=[float(v) if np.isfinite(v) else None for v in values],
+        spectral=None if cube.spectral is None else cube.spectral.tolist(),
+        unit=cube.unit)
+
+
+@router.get(
+    '/views/moments/{path:path}', response_class=Response, responses=_FRAME)
+def view_moments(server: ServerDep, path: str, hdu: int) -> Response:
+    """
+    Return the quick moment maps of a cube (its flux, velocity and
+    dispersion, NaN where they are not defined) as a frame of three
+    arrays (ny, nx), named moment0, moment1 and moment2.
+    """
+    maps = server.views.moments(path, hdu)
+    arrays = [(dict(name=name), data) for name, data in maps.data.items()]
+    return Response(
+        frames.array_frame(dict(path=path, hdu=hdu), arrays),
+        media_type='application/octet-stream')
 
 
 @router.post('/imports', status_code=status.HTTP_201_CREATED)

@@ -198,3 +198,38 @@ def test_files_of_data_are_imported_and_uploaded_into_a_project(client, root):
     assert uploaded('sent.fits', b'SIMPLE').json() == 'study/data/sent.fits'
     assert uploaded('sent.fits', b'OTHER').json() == 'study/data/sent-2.fits'
     assert uploaded('../sent.fits', b'').status_code == 400
+
+
+def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
+    # A line of flux 1 at 20 km/s in the spectra of a cube of 5 channels
+    # of 10 km/s (from 0), with an axis of Stokes
+    values = np.zeros((1, 5, 3, 4), np.float32)
+    values[0, 2] = 1
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CRVAL1=10, CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CRVAL2=-30, CDELT2=1 / 3600, CUNIT2='deg',
+        CTYPE3='VRAD', CRVAL3=0, CDELT3=10000, CRPIX3=1, CUNIT3='m/s',
+        CTYPE4='STOKES', CRVAL4=1, CDELT4=1, CRPIX4=1))
+    fits.writeto(pathlib.Path(root, 'study/data/cube.fits'), values, header)
+    path, query = 'study/data/cube.fits', dict(hdu=0)
+    header, data = frames.decode(client.get(
+        f'/api/v1/views/channel/{path}', params=query | dict(channel=2)
+    ).content)
+    (channel,) = frames.arrays(header, data)
+    assert channel.shape == (3, 4) and np.all(channel == 1)
+    assert (header['nchannels'], header['spectral'], header['unit']) == (
+        5, 20, 'km/s')
+    spectrum = client.get(
+        f'/api/v1/views/spectrum/{path}', params=query | dict(x=1, y=2)
+    ).json()
+    assert spectrum['values'] == [0, 0, 1, 0, 0]
+    assert spectrum['spectral'] == pytest.approx([0, 10, 20, 30, 40])
+    assert spectrum['unit'] == 'km/s'
+    flux, velocity, dispersion = frames.arrays(*frames.decode(client.get(
+        f'/api/v1/views/moments/{path}', params=query).content))
+    np.testing.assert_allclose(flux, 10)
+    np.testing.assert_allclose(velocity, 20)
+    np.testing.assert_allclose(dispersion, 0, atol=1e-6)
+    assert client.get(
+        f'/api/v1/views/channel/{path}', params=query | dict(channel=5)
+    ).status_code == 400

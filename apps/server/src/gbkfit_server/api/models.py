@@ -26,7 +26,8 @@ __all__ = [
     'RunInfo',
     'ServerInfo',
     'SessionInfo',
-    'SessionRequest'
+    'SessionRequest',
+    'SpectrumView'
 ]
 
 
@@ -88,6 +89,18 @@ class ArrayInfo(BaseModel):
     beam: dict[str, float | list[float]] | None
     rms: float | None
     problems: list[str]
+
+
+class SpectrumView(BaseModel):
+    """
+    The spectrum of a pixel of a cube: its values (none where it has
+    none), and the coordinates of its channels along its spectral axis
+    and their unit (km/s for velocities, GHz for frequencies, micron for
+    wavelengths; none if its header does not give them).
+    """
+    values: list[float | None]
+    spectral: list[float] | None
+    unit: str | None
 
 
 class RunInfo(BaseModel):
