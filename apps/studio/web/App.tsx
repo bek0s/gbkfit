@@ -4,6 +4,7 @@
 import { useServerEvents } from './api/events';
 import { useJobs } from './api/queries';
 import { Logo } from './components/icons';
+import { Dataset, NewDataset } from './screens/Dataset';
 import { Home } from './screens/Home';
 import { Pending } from './screens/Pending';
 import { Welcome } from './screens/Welcome';
@@ -58,7 +59,10 @@ function ScreenView({ screen }: { screen: Screen }) {
     case 'home':
       return <Home />;
     case 'block':
+      if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} />;
+    case 'new-dataset':
+      return <NewDataset key={address(screen)} data={screen.data} />;
     case 'observe':
       return <Pending eyebrow="Observe · no data" title="Galaxies through observations" />;
     case 'compare':

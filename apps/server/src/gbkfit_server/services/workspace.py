@@ -11,8 +11,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import ruamel.yaml
 from astropy.io import fits
 
+import gbkfit.dataset
 import gbkfit.outputs
 import gbkfit.project
 from gbkfit.utils.parseutils import ConfigError
@@ -21,6 +23,7 @@ from .errors import Invalid, NotFound
 
 
 __all__ = [
+    'FolderInfo',
     'ProjectInfo',
     'Workspace'
 ]
@@ -29,6 +32,11 @@ __all__ = [
 # The folders not searched for projects: of their data and runs, and
 # hidden ones
 _SKIPPED = ('data', 'runs', 'node_modules', '__pycache__')
+
+# The endings of the names of the files of data that GBKFIT reads (FITS)
+_DATA_FILES = ('.fits', '.fit', '.fts', '.fits.gz')
+
+_yaml = ruamel.yaml.YAML(typ='safe')
 
 # The folders of the pieces and of the setups of a project
 _PIECES = (
@@ -45,6 +53,17 @@ class ProjectInfo:
     path: str
     pieces: dict[str, list[str]]
     runs: list[str]
+
+
+@dataclasses.dataclass
+class FolderInfo:
+    """
+    A folder: its path, and the names of its folders and the names and
+    sizes (bytes) of its files ({name, size}), but the hidden ones.
+    """
+    path: str
+    folders: list[str]
+    files: list[dict[str, Any]]
 
 
 class Workspace:
@@ -149,10 +168,17 @@ class Workspace:
                 from e
         return self.project(relative)
 
-    def create_piece(self, project: str, folder: str, name: str) -> str:
+    def create_piece(
+            self,
+            project: str,
+            folder: str,
+            name: str,
+            content: dict[str, Any] | None = None
+    ) -> str:
         """
-        Create a piece (or a setup) of a project from its template (see
-        gbkfit.project.Project.create_piece), and return its path.
+        Create a piece (or a setup) of a project with its content, or from
+        its template (see gbkfit.project.Project.create_piece), and return
+        its path.
 
         Raises
         ------
@@ -166,7 +192,7 @@ class Workspace:
         except ValueError as e:
             raise NotFound(str(e)) from e
         try:
-            return self.relative(target.create_piece(folder, name))
+            return self.relative(target.create_piece(folder, name, content))
         except (ConfigError, OSError) as e:
             raise Invalid(f"cannot create the piece '{name}': {e}") from e
 
@@ -183,6 +209,82 @@ class Workspace:
             return Path(self.path(relative)).read_text()
         except (FileNotFoundError, IsADirectoryError) as e:
             raise NotFound(f"no file '{relative}'") from e
+
+    def piece(self, relative: str) -> dict[str, Any]:
+        """
+        Return a piece (or a setup) of a project: the options of its file.
+
+        Raises
+        ------
+        NotFound
+            If the file does not exist.
+        Invalid
+            If it is not YAML, or not a dictionary.
+        """
+        try:
+            piece = _yaml.load(self.read_text(relative))
+        except ruamel.yaml.YAMLError as e:
+            raise Invalid(f"cannot read '{relative}': {e}") from e
+        if not isinstance(piece, dict):
+            raise Invalid(f"'{relative}' is not a dictionary of options")
+        return piece
+
+    def folder(self, relative: str) -> FolderInfo:
+        """
+        Return a folder.
+
+        Raises
+        ------
+        NotFound
+            If the folder does not exist.
+        """
+        path = Path(self.path(relative))
+        if not path.is_dir():
+            raise NotFound(f"no folder '{relative}'")
+        entries = sorted(
+            entry for entry in path.iterdir()
+            if not entry.name.startswith('.'))
+        return FolderInfo(
+            self.relative(str(path)),
+            [entry.name for entry in entries if entry.is_dir()],
+            [dict(name=entry.name, size=entry.stat().st_size)
+             for entry in entries if entry.is_file()])
+
+    def describe(self, relative: str) -> list[dict[str, Any]]:
+        """
+        Describe a file of data from its headers (see
+        gbkfit.dataset.describe_fits): each of its arrays (its index,
+        name, shape and axes, in the order of the model, unit, the size of
+        its pixels in that order, beam and problems).
+
+        Raises
+        ------
+        NotFound
+            If the file does not exist.
+        Invalid
+            If it is not a file of data that GBKFIT reads.
+        """
+        path = self.file(relative)
+        if not path.lower().endswith(_DATA_FILES):
+            raise Invalid(
+                f"'{relative}' is not a file of data that GBKFIT reads: "
+                f"FITS ({', '.join(_DATA_FILES)})")
+        try:
+            hdus = gbkfit.dataset.describe_fits(path)
+        except OSError as e:
+            raise Invalid(f"cannot read '{relative}': {e}") from e
+        return [
+            dict(index=hdu.index, name=hdu.name, shape=list(hdu.shape),
+                 axes=list(hdu.axes), unit=hdu.unit,
+                 step=None if hdu.coords is None
+                 else [float(step) for step in hdu.coords.step],
+                 beam=None if hdu.beam is None else dict(
+                     bmaj=np.asarray(hdu.beam.bmaj).tolist(),
+                     bmin=np.asarray(hdu.beam.bmin).tolist(),
+                     bpa=np.asarray(hdu.beam.bpa).tolist()),
+                 # (the paths of the problems in the workspace)
+                 problems=[p.replace(path, relative) for p in hdu.problems])
+            for hdu in hdus]
 
     def file(self, relative: str) -> str:
         """

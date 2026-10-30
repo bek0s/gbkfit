@@ -39,10 +39,30 @@ export interface paths {
         put?: never;
         /**
          * Create Piece
-         * @description Create a piece (or a setup) of a project from its template; return
-         *     its path.
+         * @description Create a piece (or a setup) of a project, with its content or from
+         *     its template; return its path.
          */
         post: operations["create_piece_api_v1_pieces_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/pieces/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Piece
+         * @description Return a piece (or a setup) of a project: its options.
+         */
+        get: operations["piece_api_v1_pieces__path__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -61,6 +81,47 @@ export interface paths {
          * @description Return a project: its pieces, setups and runs.
          */
         get: operations["project_api_v1_projects__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/folders/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Folder
+         * @description Return a folder: its folders and its files ('.': the workspace).
+         */
+        get: operations["folder_api_v1_folders__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/describe/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Describe
+         * @description Describe a file of data from its headers, without reading its data:
+         *     each of its arrays, and what a dataset of it refuses or needs given.
+         */
+        get: operations["describe_api_v1_describe__path__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -335,6 +396,37 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         /**
+         * ArrayInfo
+         * @description An array of a file of data (e.g. an HDU of a FITS file), from its
+         *     header: its index and name in the file, its shape and the types of
+         *     its axes, in the order of the model (x, y, then the spectral axis),
+         *     the unit of its values, the size of its pixels in that order (arcsec,
+         *     and km/s along a velocity axis; none if its coordinates cannot be
+         *     read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
+         *     a beam of each channel), and what a dataset of it refuses or needs
+         *     given.
+         */
+        ArrayInfo: {
+            /** Index */
+            index: number;
+            /** Name */
+            name: string;
+            /** Shape */
+            shape: number[];
+            /** Axes */
+            axes: string[];
+            /** Unit */
+            unit: string | null;
+            /** Step */
+            step: number[] | null;
+            /** Beam */
+            beam: {
+                [key: string]: number | number[];
+            } | null;
+            /** Problems */
+            problems: string[];
+        };
+        /**
          * CheckRequest
          * @description The text of a file to check (e.g. not saved yet), and its path.
          */
@@ -366,6 +458,29 @@ export interface components {
             severity: "error" | "warning";
             /** Message */
             message: string;
+        };
+        /**
+         * FileEntry
+         * @description A file of a folder: its name, and its size (bytes).
+         */
+        FileEntry: {
+            /** Name */
+            name: string;
+            /** Size */
+            size: number;
+        };
+        /**
+         * FolderInfo
+         * @description A folder: its path, and its folders and files (but the hidden ones),
+         *     by name.
+         */
+        FolderInfo: {
+            /** Path */
+            path: string;
+            /** Folders */
+            folders: string[];
+            /** Files */
+            files: components["schemas"]["FileEntry"][];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -429,9 +544,10 @@ export interface components {
         };
         /**
          * PieceRequest
-         * @description A piece (or a setup) to create from its template: its project, its
-         *     folder (galaxies, observations, params, fitters or setups), and its
-         *     name (its path in the folder, without .yaml).
+         * @description A piece (or a setup) to create: its project, its folder (e.g.
+         *     galaxies, psfs or setups), its name (its path in the folder, without
+         *     .yaml), and its content (its options); by default, that of the
+         *     template of its folder.
          */
         PieceRequest: {
             /** Project */
@@ -440,6 +556,10 @@ export interface components {
             folder: string;
             /** Name */
             name: string;
+            /** Content */
+            content?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * ProjectInfo
@@ -641,6 +761,39 @@ export interface operations {
             };
         };
     };
+    piece_api_v1_pieces__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     project_api_v1_projects__path__get: {
         parameters: {
             query?: never;
@@ -659,6 +812,68 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    folder_api_v1_folders__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FolderInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    describe_api_v1_describe__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArrayInfo"][];
                 };
             };
             /** @description Validation Error */

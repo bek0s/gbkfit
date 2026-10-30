@@ -8,7 +8,7 @@ the event loop of their services.
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import (
     APIRouter, Body, Depends, Response, WebSocket, WebSocketException,
@@ -22,8 +22,9 @@ from gbkfit_server.services.errors import Failed, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    CheckRequest, CheckResult, JobInfo, JobRequest, PieceRequest,
-    ProjectInfo, ProjectRequest, RunInfo, SessionInfo, SessionRequest)
+    ArrayInfo, CheckRequest, CheckResult, FolderInfo, JobInfo, JobRequest,
+    PieceRequest, ProjectInfo, ProjectRequest, RunInfo, SessionInfo,
+    SessionRequest)
 
 
 __all__ = [
@@ -58,11 +59,17 @@ def create_project(server: ServerDep, request: ProjectRequest) -> ProjectInfo:
 @router.post('/pieces', status_code=status.HTTP_201_CREATED)
 def create_piece(server: ServerDep, request: PieceRequest) -> str:
     """
-    Create a piece (or a setup) of a project from its template; return
-    its path.
+    Create a piece (or a setup) of a project, with its content or from
+    its template; return its path.
     """
     return server.workspace.create_piece(
-        request.project, request.folder, request.name)
+        request.project, request.folder, request.name, request.content)
+
+
+@router.get('/pieces/{path:path}')
+def piece(server: ServerDep, path: str) -> dict[str, Any]:
+    """Return a piece (or a setup) of a project: its options."""
+    return server.workspace.piece(path)
 
 
 @router.get('/projects/{path:path}')
@@ -70,6 +77,24 @@ def project(server: ServerDep, path: str) -> ProjectInfo:
     """Return a project: its pieces, setups and runs."""
     return ProjectInfo.model_validate(
         server.workspace.project(path), from_attributes=True)
+
+
+@router.get('/folders/{path:path}')
+def folder(server: ServerDep, path: str) -> FolderInfo:
+    """Return a folder: its folders and its files ('.': the workspace)."""
+    return FolderInfo.model_validate(
+        server.workspace.folder(path), from_attributes=True)
+
+
+@router.get('/describe/{path:path}')
+def describe(server: ServerDep, path: str) -> list[ArrayInfo]:
+    """
+    Describe a file of data from its headers, without reading its data:
+    each of its arrays, and what a dataset of it refuses or needs given.
+    """
+    return [
+        ArrayInfo.model_validate(array)
+        for array in server.workspace.describe(path)]
 
 
 @router.get('/files/{path:path}', response_class=PlainTextResponse)

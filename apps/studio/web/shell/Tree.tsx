@@ -3,11 +3,12 @@
 // blocks and the rest on demand, and makes new blocks (+); the box finds
 // blocks by name. Folded whole, the tree is a strip of the icons of its
 // sections, each opening its groups over the page.
-import { useState } from 'react';
+import { useState, type ComponentType } from 'react';
 import { useCreateBlock, useProject } from '../api/queries';
 import { DataIcon, FitIcon, ModelIcon } from '../components/icons';
 import { useStudio } from '../studio';
 import { SECTIONS, type Group as GroupInfo, type Section } from './blocks';
+import { DataKindDialog } from './DataKindDialog';
 import { ProjectMenu } from './ProjectMenu';
 import { useRemembered } from './remember';
 
@@ -15,6 +16,16 @@ const ICONS = { data: <DataIcon />, model: <ModelIcon />, fit: <FitIcon /> };
 
 // The blocks a group shows before 'show all'
 const SHOWN = 5;
+
+// How a new block of a folder is made (+): by its name, from the template
+// of its folder (see NewBlock), or by a flow of its own
+export interface AdderProps {
+  project: string;
+  folder: string;
+  onDone: () => void;
+}
+
+const ADDERS: Record<string, ComponentType<AdderProps>> = { datasets: DataKindDialog };
 
 export function Tree() {
   const { project, folded, setFolded } = useStudio();
@@ -170,6 +181,7 @@ function Group({
   const [all, setAll] = useState(false);
   const shown = whole || all ? names : names.slice(0, SHOWN);
   const { folder, title } = group;
+  const Adder = ADDERS[folder] ?? NewBlock;
   return (
     <>
       <div className="tree-group">
@@ -190,7 +202,7 @@ function Group({
           +
         </button>
       </div>
-      {adding === folder && <NewBlock project={project} folder={folder} onDone={() => startAdding(null)} />}
+      {adding === folder && <Adder project={project} folder={folder} onDone={() => startAdding(null)} />}
       {open &&
         shown.map((name) => (
           <button
@@ -216,7 +228,7 @@ function Group({
 
 // The name of a new block of a folder, made from its template: Enter makes
 // and opens it, Escape cancels
-function NewBlock({ project, folder, onDone }: { project: string; folder: string; onDone: () => void }) {
+function NewBlock({ project, folder, onDone }: AdderProps) {
   const { go } = useStudio();
   const create = useCreateBlock(project);
   const [name, setName] = useState('');

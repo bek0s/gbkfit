@@ -11,11 +11,14 @@ from gbkfit_server.services.jobs import TASKS
 
 
 __all__ = [
+    'ArrayInfo',
     'CheckRequest',
     'PieceRequest',
     'ProjectRequest',
     'CheckResult',
     'Diagnostic',
+    'FileEntry',
+    'FolderInfo',
     'JobInfo',
     'JobRequest',
     'ProjectInfo',
@@ -45,6 +48,43 @@ class ProjectInfo(BaseModel):
     path: str
     pieces: dict[str, list[str]]
     runs: list[str]
+
+
+class FileEntry(BaseModel):
+    """A file of a folder: its name, and its size (bytes)."""
+    name: str
+    size: int
+
+
+class FolderInfo(BaseModel):
+    """
+    A folder: its path, and its folders and files (but the hidden ones),
+    by name.
+    """
+    path: str
+    folders: list[str]
+    files: list[FileEntry]
+
+
+class ArrayInfo(BaseModel):
+    """
+    An array of a file of data (e.g. an HDU of a FITS file), from its
+    header: its index and name in the file, its shape and the types of
+    its axes, in the order of the model (x, y, then the spectral axis),
+    the unit of its values, the size of its pixels in that order (arcsec,
+    and km/s along a velocity axis; none if its coordinates cannot be
+    read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
+    a beam of each channel), and what a dataset of it refuses or needs
+    given.
+    """
+    index: int
+    name: str
+    shape: list[int]
+    axes: list[str]
+    unit: str | None
+    step: list[float] | None
+    beam: dict[str, float | list[float]] | None
+    problems: list[str]
 
 
 class RunInfo(BaseModel):
@@ -132,10 +172,12 @@ class ProjectRequest(BaseModel):
 
 class PieceRequest(BaseModel):
     """
-    A piece (or a setup) to create from its template: its project, its
-    folder (galaxies, observations, params, fitters or setups), and its
-    name (its path in the folder, without .yaml).
+    A piece (or a setup) to create: its project, its folder (e.g.
+    galaxies, psfs or setups), its name (its path in the folder, without
+    .yaml), and its content (its options); by default, that of the
+    template of its folder.
     """
     project: str
     folder: str
     name: str
+    content: dict[str, Any] | None = None

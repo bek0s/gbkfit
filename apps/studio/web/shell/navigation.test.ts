@@ -7,6 +7,7 @@ test('every screen has an address that leads back to it', () => {
     { kind: 'home' },
     { kind: 'fit' },
     { kind: 'block', folder: 'observations', name: 'ngc1313/hi #2' },
+    { kind: 'new-dataset', data: 'cube' },
   ];
   for (const screen of screens) expect(parseAddress(address(screen))).toEqual(screen);
 });

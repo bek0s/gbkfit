@@ -71,6 +71,11 @@ _FOLDERS = dict(
     fitter='fitters')
 
 _yaml = ruamel.yaml.YAML(typ='safe')
+# (pieces written with their content: lists and dictionaries of plain
+# values on one line, e.g. data: [data/cube.fits, SCI])
+_yaml_out = ruamel.yaml.YAML(typ='safe')
+_yaml_out.default_flow_style = None
+_yaml_out.sort_base_mapping_type_on_output = False
 
 # The templates of new pieces and setups, by folder (see
 # Project.create_piece): a disk seen in a cube; a setup names the first
@@ -277,11 +282,17 @@ class Project:
             .as_posix()
             for path in Path(self._path, folder).rglob('*.yaml'))
 
-    def create_piece(self, folder: str, name: str) -> str:
+    def create_piece(
+            self,
+            folder: str,
+            name: str,
+            content: Mapping[str, Any] | None = None
+    ) -> str:
         """
-        Create a piece (or a setup) from the template of its folder (see
-        TEMPLATES), and return its file. A setup names the first piece of
-        each folder, if there is one.
+        Create a piece (or a setup) with its content, or from the template
+        of its folder (see TEMPLATES), and return its file. A setup made
+        from its template names the first piece of each folder, if there
+        is one.
 
         Parameters
         ----------
@@ -290,6 +301,9 @@ class Project:
             'setups' (see TEMPLATES).
         name : str
             The name of the piece (e.g. 'ngc1313/hi').
+        content : Mapping, optional
+            The content of the piece (its options); by default, that of
+            the template.
 
         Returns
         -------
@@ -314,7 +328,10 @@ class Project:
                 f: next(iter(self.names(f)), '') for f in _FOLDERS.values()})
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
         with Path(filename).open('x') as f:
-            f.write(text)
+            if content is None:
+                f.write(text)
+            else:
+                _yaml_out.dump(dict(content), f)
         return filename
 
     def _file(self, folder: str, name: str) -> str:

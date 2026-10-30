@@ -68,7 +68,7 @@
     "/api/v1/pieces": {
       "post": {
         "summary": "Create Piece",
-        "description": "Create a piece (or a setup) of a project from its template; return\nits path.",
+        "description": "Create a piece (or a setup) of a project, with its content or from\nits template; return its path.",
         "operationId": "create_piece_api_v1_pieces_post",
         "requestBody": {
           "content": {
@@ -88,6 +88,48 @@
                 "schema": {
                   "type": "string",
                   "title": "Response Create Piece Api V1 Pieces Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pieces/{path}": {
+      "get": {
+        "summary": "Piece",
+        "description": "Return a piece (or a setup) of a project: its options.",
+        "operationId": "piece_api_v1_pieces__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Piece Api V1 Pieces  Path  Get"
                 }
               }
             }
@@ -128,6 +170,90 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/folders/{path}": {
+      "get": {
+        "summary": "Folder",
+        "description": "Return a folder: its folders and its files ('.': the workspace).",
+        "operationId": "folder_api_v1_folders__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FolderInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/describe/{path}": {
+      "get": {
+        "summary": "Describe",
+        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given.",
+        "operationId": "describe_api_v1_describe__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ArrayInfo"
+                  },
+                  "title": "Response Describe Api V1 Describe  Path  Get"
                 }
               }
             }
@@ -700,6 +826,101 @@
   },
   "components": {
     "schemas": {
+      "ArrayInfo": {
+        "properties": {
+          "index": {
+            "type": "integer",
+            "title": "Index"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "shape": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Shape"
+          },
+          "axes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Axes"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "beam": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "items": {
+                        "type": "number"
+                      },
+                      "type": "array"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beam"
+          },
+          "problems": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Problems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "index",
+          "name",
+          "shape",
+          "axes",
+          "unit",
+          "step",
+          "beam",
+          "problems"
+        ],
+        "title": "ArrayInfo",
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; none if its coordinates cannot be\nread), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for\na beam of each channel), and what a dataset of it refuses or needs\ngiven."
+      },
       "CheckRequest": {
         "properties": {
           "path": {
@@ -763,6 +984,55 @@
         ],
         "title": "Diagnostic",
         "description": "A problem of a text: its line (from 1), severity and message."
+      },
+      "FileEntry": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "size"
+        ],
+        "title": "FileEntry",
+        "description": "A file of a folder: its name, and its size (bytes)."
+      },
+      "FolderInfo": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "folders": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Folders"
+          },
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/FileEntry"
+            },
+            "type": "array",
+            "title": "Files"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "folders",
+          "files"
+        ],
+        "title": "FolderInfo",
+        "description": "A folder: its path, and its folders and files (but the hidden ones),\nby name."
       },
       "HTTPValidationError": {
         "properties": {
@@ -911,6 +1181,18 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "content": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
           }
         },
         "type": "object",
@@ -920,7 +1202,7 @@
           "name"
         ],
         "title": "PieceRequest",
-        "description": "A piece (or a setup) to create from its template: its project, its\nfolder (galaxies, observations, params, fitters or setups), and its\nname (its path in the folder, without .yaml)."
+        "description": "A piece (or a setup) to create: its project, its folder (e.g.\ngalaxies, psfs or setups), its name (its path in the folder, without\n.yaml), and its content (its options); by default, that of the\ntemplate of its folder."
       },
       "ProjectInfo": {
         "properties": {

@@ -158,6 +158,8 @@ def test_pieces_are_made_from_templates_in_their_folders(study):
     assert path == os.path.join(study.path, 'observations/ngc1313/halpha.yaml')
     with pytest.raises(FileExistsError):
         study.create_piece('observations', 'ngc1313/halpha')
+    path = study.create_piece('psfs', 'beam', PSF)
+    assert yaml.load(Path(path)) == PSF
     with pytest.raises(ConfigError, match="pieces are in the folders"):
         study.create_piece('runs', 'x')
     with pytest.raises(ConfigError, match="must be a path in setups/"):

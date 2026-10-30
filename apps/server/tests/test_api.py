@@ -7,7 +7,9 @@ import json
 import pathlib
 import time
 
+import numpy as np
 import pytest
+from astropy.io import fits
 from fastapi.testclient import TestClient
 
 from gbkfit_server.api import create_app, openapi
@@ -131,3 +133,37 @@ def test_projects_and_pieces_are_created_from_templates(client):
     assert client.post('/api/v1/pieces', json=dict(
         project='new', folder='galaxies', name='disk')).status_code == 400
     assert sorted(client.get('/api/v1/projects').json()) == ['new', 'study']
+
+
+def test_pieces_are_created_with_their_content_and_read(client):
+    content = dict(type='pixel_spectra', data=['data/cube.fits', 'SCI'])
+    path = client.post('/api/v1/pieces', json=dict(
+        project='study', folder='datasets', name='kmos', content=content)
+    ).json()
+    assert path == 'study/datasets/kmos.yaml'
+    assert client.get(f'/api/v1/pieces/{path}').json() == content
+    assert client.get('/api/v1/pieces/study/datasets/no.yaml').status_code \
+        == 404
+
+
+def test_folders_are_listed_and_files_of_data_described(client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CRVAL1=10, CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CRVAL2=-30, CDELT2=1 / 3600, CUNIT2='deg',
+        CTYPE3='VRAD', CRVAL3=0, CDELT3=10000, CUNIT3='m/s',
+        BUNIT='Jy/beam', BMAJ=3 / 3600, BMIN=2 / 3600, BPA=30))
+    fits.writeto(
+        pathlib.Path(root, 'study/data/cube.fits'),
+        np.zeros((4, 3, 2), np.float32), header)
+    folder = client.get('/api/v1/folders/study/data').json()
+    assert folder['folders'] == []
+    assert [f['name'] for f in folder['files']] == ['cube.fits']
+    assert client.get('/api/v1/folders/study/none').status_code == 404
+    (array,) = client.get('/api/v1/describe/study/data/cube.fits').json()
+    assert array['shape'] == [2, 3, 4]
+    assert array['axes'] == ['RA---TAN', 'DEC--TAN', 'VRAD']
+    assert [abs(step) for step in array['step']] == pytest.approx([1, 1, 10])
+    assert array['beam'] == pytest.approx(dict(bmaj=3, bmin=2, bpa=30))
+    assert array['problems'] == []
+    assert client.get(
+        '/api/v1/describe/study/setups/disk.yaml').status_code == 400
