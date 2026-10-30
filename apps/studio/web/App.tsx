@@ -1,96 +1,69 @@
-// The Studio: a bar, a rail, the explorer of the projects, a dock of panels
-// (editors, the live preview, the jobs, runs), and the parameters of the
-// live session.
-import { useQuery } from '@tanstack/react-query';
-import {
-  DockviewReact,
-  themeDark,
-  type DockviewApi,
-  type DockviewReadyEvent,
-  type IDockviewPanelProps,
-} from 'dockview-react';
-import { useCallback, useMemo, useRef, useState, type FunctionComponent } from 'react';
-import { api, data } from './api/client';
+// The Studio: a bar (the tabs of the tasks, and the state of the server),
+// the tree of the blocks of the open project, and the stage, with one
+// screen at a time.
 import { useServerEvents } from './api/events';
-import { useLiveSession } from './api/session';
-import { useFitWatch } from './api/watch';
-import { FilesIcon, JobsIcon, Logo, PreviewIcon } from './components/icons';
-import { EditorPanel } from './panels/EditorPanel';
-import { Explorer } from './panels/Explorer';
-import { JobsPanel } from './panels/JobsPanel';
-import { Parameters } from './panels/Parameters';
-import { PreviewPanel } from './panels/PreviewPanel';
-import { RunPanel } from './panels/RunPanel';
-import { StudioContext, type Studio } from './studio';
-
-// The panels of the dock, by component name
-const PANELS: Record<string, FunctionComponent<IDockviewPanelProps>> = {
-  editor: EditorPanel,
-  preview: PreviewPanel,
-  jobs: JobsPanel,
-  run: RunPanel,
-};
+import { useJobs } from './api/queries';
+import { Logo } from './components/icons';
+import { Home } from './screens/Home';
+import { Pending } from './screens/Pending';
+import { Welcome } from './screens/Welcome';
+import { kindOf } from './shell/blocks';
+import { address, type Screen } from './shell/navigation';
+import { Tabs } from './shell/Tabs';
+import { Tree } from './shell/Tree';
+import { StudioProvider, useStudio } from './studio';
 
 export function App() {
-  const connected = useServerEvents();
-  const live = useLiveSession();
-  useFitWatch(live);
-  const dock = useRef<DockviewApi | null>(null);
-  const [explorer, setExplorer] = useState(true);
-  const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => data(api.GET('/api/v1/jobs')) });
-  const running = (jobs.data ?? []).filter((job) => job.state === 'running').length;
-
-  const open = useCallback((id: string, component: string, title: string, params = {}) => {
-    const panel = dock.current?.getPanel(id) ?? dock.current?.addPanel({ id, component, title, params });
-    panel?.api.setActive();
-  }, []);
-
-  const studio = useMemo<Studio>(
-    () => ({
-      openFile: (path) => open(`file:${path}`, 'editor', path.split('/').slice(-2).join('/'), { path }),
-      openRun: (path) => open(`run:${path}`, 'run', path.replace(/^.*\/runs\//, 'runs/'), { path }),
-      openPanel: (kind) => open(kind, kind, kind === 'preview' ? 'Live preview' : 'Jobs'),
-      live,
-    }),
-    [open, live],
-  );
-
-  const onReady = (event: DockviewReadyEvent) => {
-    dock.current = event.api;
-  };
-
   return (
-    <StudioContext.Provider value={studio}>
-      <div className="app">
-        <header className="bar">
-          <div className="logo">
-            <Logo />
-            GBKFIT <span>Studio</span>
-          </div>
-          <div className="status" data-kind={connected ? (running ? 'run' : 'ok') : 'err'}>
-            <span className="dot" />
-            {connected ? `connected · ${running} running` : 'not connected'}
-          </div>
-        </header>
-        <div className="body">
-          <nav className="rail">
-            <button aria-pressed={explorer} title="Explorer" onClick={() => setExplorer(!explorer)}>
-              <FilesIcon />
-            </button>
-            <button title="Live preview" onClick={() => studio.openPanel('preview')}>
-              <PreviewIcon />
-            </button>
-            <button title="Jobs" onClick={() => studio.openPanel('jobs')}>
-              <JobsIcon />
-            </button>
-          </nav>
-          {explorer && <Explorer />}
-          <main className="dock">
-            <DockviewReact components={PANELS} onReady={onReady} theme={themeDark} />
-          </main>
-          {live.config !== null && <Parameters />}
-        </div>
-      </div>
-    </StudioContext.Provider>
+    <StudioProvider>
+      <Layout />
+    </StudioProvider>
   );
+}
+
+function Layout() {
+  const { project, screen, folded } = useStudio();
+  return (
+    <div className={folded ? 'app folded' : 'app'}>
+      <header className="bar">
+        <div className="logo">
+          <Logo />
+          <span className="logo-text">
+            GBKFIT <span>Studio</span>
+          </span>
+        </div>
+        <Tabs />
+        <ServerStatus />
+      </header>
+      <Tree />
+      <main className="stage">{project === null ? <Welcome /> : <ScreenView screen={screen} />}</main>
+    </div>
+  );
+}
+
+// Whether the page is connected to the server, and how many jobs run
+function ServerStatus() {
+  const connected = useServerEvents();
+  const running = (useJobs().data ?? []).filter((job) => job.state === 'running').length;
+  return (
+    <div className="status" data-state={connected ? (running ? 'run' : 'ok') : 'off'}>
+      <span className="dot" />
+      {connected ? `connected · ${running} running` : 'not connected'}
+    </div>
+  );
+}
+
+function ScreenView({ screen }: { screen: Screen }) {
+  switch (screen.kind) {
+    case 'home':
+      return <Home />;
+    case 'block':
+      return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} />;
+    case 'observe':
+      return <Pending eyebrow="Observe · no data" title="Galaxies through observations" />;
+    case 'compare':
+      return <Pending eyebrow="Compare with data" title="Galaxies and data" />;
+    case 'fit':
+      return <Pending eyebrow="Fit" title="Fits and their runs" />;
+  }
 }

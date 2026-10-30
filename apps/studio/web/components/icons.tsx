@@ -9,22 +9,28 @@ function Icon({ children }: { children: ReactNode }) {
   );
 }
 
-export const FilesIcon = () => (
+// Data: a cube
+export const DataIcon = () => (
   <Icon>
-    <path d="M4 5h6l2 2h8v12H4z" />
+    <path d="M4 8l8-4 8 4-8 4z" />
+    <path d="M4 8v8l8 4 8-4V8" />
+    <path d="M12 12v8" />
   </Icon>
 );
 
-export const JobsIcon = () => (
+// The model: a galaxy seen inclined
+export const ModelIcon = () => (
   <Icon>
-    <path d="M5 6h14M5 12h14M5 18h9" />
+    <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-25 12 12)" />
+    <circle cx="12" cy="12" r="1.6" />
   </Icon>
 );
 
-export const PreviewIcon = () => (
+// The fit: a curve through a point
+export const FitIcon = () => (
   <Icon>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+    <path d="M3.5 19c3-9 6-12 9-12s4 6 8 6" />
+    <circle cx="12.5" cy="7" r="1.4" />
   </Icon>
 );
 

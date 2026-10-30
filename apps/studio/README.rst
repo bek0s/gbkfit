@@ -1,10 +1,11 @@
 gbkfit-studio
 =============
 
-The Studio of GBKFIT: a page, served by gbkfit-server, to explore the
-projects of a folder, edit their pieces and setups, preview a setup live
-(its models as its parameters change), run evaluations and fits and
-follow them, and see the products of their runs.
+The Studio of GBKFIT: a page, served by gbkfit-server, to make and open
+the projects of a folder, and work with their blocks (data, models,
+fits). It is being built: today it has its frame (the tree of the blocks
+of a project, the tabs of the tasks, the home of a project, and the
+start without one).
 
 Run it with ``gbkfit-studio [FOLDER]``: it starts the server and opens
 the page in the browser.
