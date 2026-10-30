@@ -192,6 +192,7 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data vvec_cmp,
             Data fields,
             T rdata_scale, T image_scale)
     {
@@ -204,6 +205,7 @@ struct GModel
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                vvec_cmp,
                 rdata_scale, image_scale);
         // (a thick disk writes three fields: j, v and s)
         Kernels::gmodel_smdisk_evaluate(
@@ -225,6 +227,7 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data vvec_cmp,
             Data fields,
             T rdata_scale, T image_scale)
     {
@@ -236,6 +239,7 @@ struct GModel
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                vvec_cmp,
                 rdata_scale, image_scale);
         // (a cone writes three fields: j, v and s)
         Kernels::gmodel_smcone_evaluate(
@@ -256,6 +260,7 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data vvec_cmp,
             Data fields,
             T rdata_scale, T image_scale)
     {
@@ -269,6 +274,7 @@ struct GModel
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                vvec_cmp,
                 rdata_scale, image_scale);
         // (a spheroid on voxels writes three fields: j, v and s)
         require(!projected || (spat_size[2] == 1 && spat_step[2] == 0
@@ -298,6 +304,7 @@ struct GModel
             Data rdata, Data rdata_cmp,
             Data ordata, Data ordata_cmp,
             Data vdata_cmp, Data ddata_cmp, Data vdweight_cmp,
+            Data vvec_cmp,
             Data fields,
             T rdata_scale, T image_scale)
     {
@@ -309,6 +316,7 @@ struct GModel
                 opacity, opacity_ratios,
                 image, scube, rdata, rdata_cmp,
                 ordata, ordata_cmp, vdata_cmp, ddata_cmp, vdweight_cmp,
+                vvec_cmp,
                 rdata_scale, image_scale);
         require(disk.rht.has_value(),
                 "a Monte Carlo disk needs density height traits");
@@ -680,6 +688,7 @@ struct GModel
                     nb::arg("vdata_cmp").noconvert().none() = nb::none(),
                     nb::arg("ddata_cmp").noconvert().none() = nb::none(),
                     nb::arg("vdweight_cmp").noconvert().none() = nb::none(),
+                    nb::arg("vvec_cmp").noconvert().none() = nb::none(),
                     nb::arg("fields").noconvert().none() = nb::none(),
                     nb::arg("rdata_scale") = T{1},
                     nb::arg("image_scale") = T{1});
@@ -1042,7 +1051,7 @@ private:
             const Data& rdata, const Data& rdata_cmp,
             const Data& ordata, const Data& ordata_cmp,
             const Data& vdata_cmp, const Data& ddata_cmp,
-            const Data& vdweight_cmp,
+            const Data& vdweight_cmp, const Data& vvec_cmp,
             T rdata_scale, T image_scale)
     {
         GridArgs<T> g;
@@ -1104,6 +1113,8 @@ private:
         g.vdata_cmp = output(vdata_cmp, nspat, "vdata_cmp");
         g.ddata_cmp = output(ddata_cmp, nspat, "ddata_cmp");
         g.vdweight_cmp = output(vdweight_cmp, nspat, "vdweight_cmp");
+        // (three planes: its parts along x, y and the line of sight)
+        g.vvec_cmp = output(vvec_cmp, 3 * nspat, "vvec_cmp");
         g.rdata_scale = rdata_scale;
         g.image_scale = image_scale;
         return g;

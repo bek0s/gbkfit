@@ -70,6 +70,11 @@ struct GridArgs
     T* vdata_cmp = nullptr;
     T* ddata_cmp = nullptr;
     T* vdweight_cmp = nullptr;
+    // The velocity of each voxel as a vector, without the systemic
+    // velocity: three planes of the 3d grid, of its parts along the x and
+    // y axes of the grid and along the line of sight (away from the
+    // viewer), each the weighted sum of the mean as vdata_cmp
+    T* vvec_cmp = nullptr;
 
     // The factor of the density in rdata (e.g. the ratio of the optical
     // depth of dust at the wavelength of an observation to that at V), and

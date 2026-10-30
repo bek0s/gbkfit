@@ -53,6 +53,17 @@ _ON_THE_GRID = (
     "along the line of sight if it has a depth axis (z = 0 at the plane of "
     "the galaxy, away from the viewer), or else in an image.")
 
+# The axes of the parts of the velocity as a vector (see vxdata), and what
+# they are
+_VECTOR_AXES = dict(
+    x="the x axis of the grid", y="the y axis of the grid",
+    z="the line of sight (away from the viewer)")
+_VECTOR_DESCRIPTION = (
+    "The part along {axis} of the velocity of {whose} in each voxel, as a "
+    "vector (km/s; the mean weighted by {weight} there; without the "
+    "systemic velocity, which vdata has: along the line of sight, vzdata "
+    "is vdata less it).")
+
 # The titles and the descriptions of the extra outputs of each component,
 # by name, and of their totals over the components of a galaxy (see
 # ComponentPlans.add_extras)
@@ -76,7 +87,11 @@ _COMPONENT_EXTRAS = dict(
     obdata=(
         "Dimmed brightness",
         "The light of the component in each voxel after the opacity that "
-        "dims it there."))
+        "dims it there.")) | {
+    f'v{axis}data': (
+        f"Velocity along {axis}", _VECTOR_DESCRIPTION.format(
+            axis=desc, whose="the component", weight="its density"))
+    for axis, desc in _VECTOR_AXES.items()}
 _TOTAL_EXTRAS = dict(
     total_bdata=(
         "Total brightness",
@@ -89,7 +104,31 @@ _TOTAL_EXTRAS = dict(
     total_odata=(
         "Total optical depth of dust at V",
         "The optical depth at V of the dust of the components of the galaxy "
-        "in each voxel."))
+        "in each voxel.")) | {
+    f'total_v{axis}data': (
+        f"Total velocity along {axis}", _VECTOR_DESCRIPTION.format(
+            axis=desc, whose="the components of the galaxy",
+            weight="their brightness"))
+    for axis, desc in _VECTOR_AXES.items()}
+
+
+def _total_vector(extras: list[dict[str, Any]]) -> dict[str, np.ndarray]:
+    """
+    Return the velocity as a vector of the given extra outputs of
+    components that move (vxdata ...), the mean weighted by their
+    brightness (bdata); NaN where none has any.
+    """
+    weights = [np.abs(extra['bdata']) for extra in extras]
+    weight = sum(weights)
+    total = {}
+    for axis in _VECTOR_AXES:
+        weighted = sum(
+            np.where(w > 0, w * extra[f'v{axis}data'], 0)
+            for w, extra in zip(weights, extras))
+        total[f'v{axis}data'] = np.divide(
+            weighted, weight, out=np.full_like(weight, np.nan),
+            where=weight > 0)
+    return total
 
 
 class ComponentPlans:
@@ -318,9 +357,11 @@ class ComponentPlans:
         'bdata', see _COMPONENT_EXTRAS) to out_extra, with the id
         'component': its name, or its position if it has none (e.g.
         'component0'); and their totals ('total_*', see _TOTAL_EXTRAS):
-        the given ones and the optical depth at V of all the absorbers
-        ('total_odata'); with the given position of the first voxel of the
-        depth axis, if not that of the axis (see extra).
+        the given ones, the optical depth at V of all the absorbers
+        ('total_odata') and the velocity as a vector of the components
+        that move, weighted by their brightness ('total_vxdata' ...);
+        with the given position of the first voxel of the depth axis, if
+        not that of the axis (see extra).
         """
         components = self._component_set.components()
         for index, extra in extras.items():
@@ -333,6 +374,8 @@ class ComponentPlans:
         if self.absorbers:
             totals = dict(odata=sum(
                 extras[i]['odata'] for i in self.absorbers)) | totals
+        if movers := [extra for extra in extras.values() if 'vxdata' in extra]:
+            totals = totals | _total_vector(movers)
         for name, total in totals.items():
             title, description = _TOTAL_EXTRAS[f'total_{name}']
             out_extra.add(

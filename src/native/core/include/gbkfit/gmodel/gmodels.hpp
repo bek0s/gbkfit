@@ -293,11 +293,12 @@ gmodel_light_write(
 // point of the component writes to: its density (rvalue) to rdata (times
 // rdata_scale, added to those of the other components) and rdata_cmp, its
 // density after the opacity in front of it (orvalue) to ordata and
-// ordata_cmp, and the means of its velocity and dispersion (of one value)
-// to vdata_cmp, ddata_cmp and vdweight_cmp (see GridArgs)
+// ordata_cmp, and the means of its velocity, of its velocity as a vector
+// (vvec) and of its dispersion (of one value) to vdata_cmp, vvec_cmp,
+// ddata_cmp and vdweight_cmp (see GridArgs)
 template<typename T> constexpr void
-gmodel_maps_write(int idx, T rvalue, T orvalue, T vvalue, T dvalue,
-                  const GridArgs<T>& g)
+gmodel_maps_write(int idx, T rvalue, T orvalue, T vvalue, const T* vvec,
+                  T dvalue, const GridArgs<T>& g)
 {
     if (g.rdata) {
         g.rdata[idx] += rvalue * g.rdata_scale;
@@ -313,6 +314,12 @@ gmodel_maps_write(int idx, T rvalue, T orvalue, T vvalue, T dvalue,
     }
     if (g.vdata_cmp) {
         g.vdata_cmp[idx] = std::abs(rvalue) * vvalue;
+    }
+    if (g.vvec_cmp) {
+        const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+                * g.spat_size[2];
+        for (int i = 0; i < 3; ++i)
+            g.vvec_cmp[i * nspat + idx] = std::abs(rvalue) * vvec[i];
     }
     if (g.ddata_cmp) {
         g.ddata_cmp[idx] = std::abs(rvalue) * dvalue;
@@ -455,6 +462,56 @@ struct Unprojected
         return value;
     }
 };
+
+// The velocity of the velocity traits of a disk (or of a spheroid) at the
+// point (x, y) of its frame, at the radius r and the azimuth theta, with
+// its height traits at the height h, as a vector of its frame (see
+// vp_disk_vector, with the height z): the speeds of the traits along their
+// directions (of directions), and of planar ones in its plane (see
+// vp_trait_plane_x)
+template<typename T> constexpr void
+gmodel_disk_velocity(
+        T* out, const TraitSet<T>& pt, const TraitSet<T>& ht,
+        const int* directions, int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta, T h, T z, T incl)
+{
+    out[0] = out[1] = out[2] = 0;
+    gmodel_traits_each<vp_trait<T>, vh_trait<T>>(
+            [&](int i, T value) {
+                if (directions[i] == VPT_DIRECTION_PLANE)
+                    out[1] += value;
+                else
+                    vp_disk_vector(
+                            out, value, directions[i], r, theta, z, incl);
+            },
+            pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h,
+            Unprojected{});
+    gmodel_traits_each<vp_trait_plane_x<T>, vh_trait<T>>(
+            [&](int i, T value) {
+                if (directions[i] == VPT_DIRECTION_PLANE)
+                    out[0] += value;
+            },
+            pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h,
+            Unprojected{});
+}
+
+// The velocity of the velocity traits of a cone at the point (x, y, z) of
+// its frame (see ConeArgs), at the distance r from its apex and the
+// azimuth theta, with its height traits at the distance d from the
+// mid-surface of its walls, as a vector of its frame (see vp_cone_vector)
+template<typename T> constexpr void
+gmodel_cone_velocity(
+        T* out, const ConeArgs<T>& a, int rnidx,
+        T x, T y, T z, T r, T theta, T d)
+{
+    out[0] = out[1] = out[2] = 0;
+    gmodel_traits_each<vp_trait<T>, vh_trait<T>>(
+            [&](int i, T value) {
+                vp_cone_vector(out, value, a.vpt_directions[i], x, y, z, r);
+            },
+            a.vpt, a.vht, rnidx, a.rnodes, a.nrnodes, x, y, r, theta, d,
+            Unprojected{});
+}
 
 // The velocity dispersion on the line of sight of a velocity ellipsoid of
 // the dispersions srad, stan and sver along the radial, tangential and
@@ -600,6 +657,19 @@ transform_cpos_posa_incl_inverse(
     transform_incl(y, z, -incli);
     transform_posa_inverse(x, y, posai);
     transform_cpos(x, y, -xposi, -yposi);
+}
+
+// A vector of the frame of a component at the position angle posa and the
+// inclination incl (radians; see transform_cpos_posa_incl) as a vector of
+// the grid g: along its x and y axes and the line of sight (see
+// GridArgs::vvec_cmp)
+template<typename T> constexpr void
+gmodel_vector_to_grid(T* v, T posa, T incl, const GridArgs<T>& g)
+{
+    transform_incl(v[1], v[2], -incl);
+    transform_posa_inverse(v[0], v[1], posa);
+    transform_rh_rotate_z(
+            v[0], v[1], v[0], v[1], -g.spat_rota * DEG_TO_RAD<T>);
 }
 
 // The radius of a point (x, y) of the sky in the plane of the node of the
@@ -802,12 +872,14 @@ gmodel_fields_vref(const DiskArgs<T>& a)
 // opacity dims the disk (g.opacity is not null), HasFields whether it
 // writes the fields of the march instead of its light (f.fields is not
 // null), HasLineOpacity whether they have its line opacity (a.opt has
-// traits), and Anisotropic whether its dispersion is anisotropic (see
-// gmodel_disk_dispersion): template parameters, so that the other kernels
-// have none of their code (nor its registers and local memory, on a GPU).
+// traits), Anisotropic whether its dispersion is anisotropic (see
+// gmodel_disk_dispersion), and HasVectors whether it writes its velocity
+// as a vector (g.vvec_cmp is not null): template parameters, so that the
+// other kernels have none of their code (nor its registers and local
+// memory, on a GPU).
 template<
         auto AtomicAddFunT, bool HasOpacity, bool HasFields,
-        bool HasLineOpacity, bool Anisotropic, typename T>
+        bool HasLineOpacity, bool Anisotropic, bool HasVectors, typename T>
 constexpr void
 gmodel_mcdisk_evaluate_cloud(
         int ci, const DiskArgs<T>& a, const GridArgs<T>& g,
@@ -939,6 +1011,15 @@ gmodel_mcdisk_evaluate_cloud(
     // Apply systemic velocity
     vvalue += vsysi;
 
+    // The velocity as a vector of the grid (if wanted)
+    T vvec[3] = {0, 0, 0};
+    if (HasVectors) {
+        gmodel_disk_velocity(
+                vvec, a.vpt, a.vht, a.vpt_directions, rnidx, a.rnodes,
+                a.nrnodes, xd, yd, rd, theta, height, height, incli);
+        gmodel_vector_to_grid(vvec, posai, incli, g);
+    }
+
     // Dispersion traits, and the dispersion of the vertical equilibrium,
     // on the line of sight
     dvalue = gmodel_disk_dispersion<Anisotropic>(
@@ -975,6 +1056,13 @@ gmodel_mcdisk_evaluate_cloud(
     // The clouds of a voxel add to the means of its velocity and dispersion
     if (g.vdata_cmp) {
         AtomicAddFunT(&g.vdata_cmp[idx], std::abs(rvalue) * vvalue);
+    }
+    if (HasVectors) {
+        const long long nspat = 1LL * g.spat_size[0] * g.spat_size[1]
+                * g.spat_size[2];
+        for (int i = 0; i < 3; ++i)
+            AtomicAddFunT(
+                    &g.vvec_cmp[i * nspat + idx], std::abs(rvalue) * vvec[i]);
     }
     if (g.ddata_cmp) {
         AtomicAddFunT(&g.ddata_cmp[idx], std::abs(rvalue) * dvalue);
@@ -1183,6 +1271,16 @@ gmodel_smdisk_evaluate_spaxel(
     // Apply systemic velocity
     vvalue += vsysi;
 
+    // The velocity as a vector of the grid (if wanted)
+    T vvec[3] = {0, 0, 0};
+    if (g.vvec_cmp) {
+        gmodel_disk_velocity(
+                vvec, a.vpt, a.vht, a.vpt_directions, rnidx, a.rnodes,
+                a.nrnodes, xn, yn, rn, theta, zn, is_thin ? T(0) : zn,
+                incli);
+        gmodel_vector_to_grid(vvec, posai, incli, g);
+    }
+
     // Dispersion traits, and the dispersion of the vertical equilibrium,
     // on the line of sight
     dvalue = gmodel_disk_dispersion<Anisotropic>(
@@ -1225,7 +1323,7 @@ gmodel_smdisk_evaluate_spaxel(
     }
     const int idx = index_3d_to_1d(
             x, y, int(vz), g.spat_size[0], g.spat_size[1]);
-    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
+    gmodel_maps_write(idx, rvalue, orvalue, vvalue, vvec, dvalue, g);
 
     // The fields of the voxel of a thick disk, and its light times the
     // coefficient of each line
@@ -1308,6 +1406,13 @@ gmodel_smcone_evaluate_voxel(
             });
     vvalue += a.vsys ? a.vsys[0] : 0;
 
+    // The velocity as a vector of the grid (if wanted)
+    T vvec[3] = {0, 0, 0};
+    if (g.vvec_cmp) {
+        gmodel_cone_velocity(vvec, a, rnidx, xn, yn, zn, rn, theta, dn);
+        gmodel_vector_to_grid(vvec, a.posa[0] * DEG_TO_RAD<T>, incli, g);
+    }
+
     // Dispersion traits (positive, as that of a disk)
     const T dvalue = std::abs(gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
             a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
@@ -1327,7 +1432,7 @@ gmodel_smcone_evaluate_voxel(
             HasOpacity ? &opacity : nullptr, g);
 
     const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
-    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
+    gmodel_maps_write(idx, rvalue, orvalue, vvalue, vvec, dvalue, g);
     if (HasFields)
         gmodel_volume_fields_write(idx, rvalue, vvalue, dvalue, g, f);
 }
@@ -1486,11 +1591,12 @@ gmodel_spheroid_moves(const SpheroidArgs<T>& a)
 // The mean velocity and the dispersion on the line of sight of the stars
 // of a spheroid at the point of its frame at the distance R from its
 // axis, the azimuth theta and the height z, seen at the inclination incl
-// (radians), of its Jeans tables (see SpheroidArgs::jeans)
+// (radians), of its Jeans tables (see SpheroidArgs::jeans), and the mean
+// velocity as a vector of its frame, if wanted (vector): its rotation
 template<typename T> constexpr void
 gmodel_spheroid_jeans_kinematics(
         T R, T theta, T z, T incl, const SpheroidArgs<T>& a,
-        T& velocity, T& dispersion)
+        T& velocity, T& dispersion, T* vector)
 {
     // (the position in the tables, in points, at their nearest point
     // beyond them: e.g. at the centre, R = 0)
@@ -1503,6 +1609,8 @@ gmodel_spheroid_jeans_kinematics(
     if (std::isnan(pr) || std::isnan(pz))
     {
         velocity = dispersion = T(NAN);
+        if (vector)
+            vector[0] = vector[1] = vector[2] = T(NAN);
         return;
     }
     const int i = std::min(int(pr), a.jeans_nr - 2);
@@ -1515,24 +1623,37 @@ gmodel_spheroid_jeans_kinematics(
     const T sver = gmodel_spheroid_jeans_value(a, 3, i, j, tr, tz);
     velocity = a.vsys[0] + vphi * std::cos(theta) * std::sin(incl);
     dispersion = gmodel_ellipsoid_dispersion(srad, stan, sver, theta, incl);
+    if (vector)
+    {
+        vector[0] = -vphi * std::sin(theta);
+        vector[1] = vphi * std::cos(theta);
+        vector[2] = 0;
+    }
 }
 
 // The mean velocity and the dispersion on the line of sight of the stars
 // of a spheroid at the point (x, y, z) of its frame, at the distance R
 // from its axis and the azimuth theta, seen at the inclination incl
 // (radians), of its traits (see SpheroidArgs::vpt); NaN beyond its nodes
-// (where it has no light)
+// (where it has no light); and the mean velocity as a vector of its
+// frame, if wanted (vector)
 template<typename T> constexpr void
 gmodel_spheroid_traits_kinematics(
         T x, T y, T z, T R, T theta, T incl, const SpheroidArgs<T>& a,
-        T& velocity, T& dispersion)
+        T& velocity, T& dispersion, T* vector)
 {
     int rnidx = -1;
     if (!disk_info(rnidx, R, a.nrnodes, a.rnodes))
     {
         velocity = dispersion = T(NAN);
+        if (vector)
+            vector[0] = vector[1] = vector[2] = T(NAN);
         return;
     }
+    if (vector)
+        gmodel_disk_velocity(
+                vector, a.vpt, a.vht, a.vpt_directions, rnidx, a.rnodes,
+                a.nrnodes, x, y, R, theta, z, z, incl);
 
     // Velocity traits: their speeds, projected on the line of sight, and
     // the systemic velocity
@@ -1567,37 +1688,39 @@ gmodel_spheroid_traits_kinematics(
 // The mean velocity and the dispersion on the line of sight of the stars
 // of a spheroid at the point (x, y, z) of its frame, seen at the
 // inclination incl (radians), of its kinematics (see
-// gmodel_spheroid_moves)
+// gmodel_spheroid_moves), and the mean velocity as a vector of its frame,
+// if wanted (vector)
 template<typename T> constexpr void
 gmodel_spheroid_kinematics(
         T x, T y, T z, T incl, const SpheroidArgs<T>& a,
-        T& velocity, T& dispersion)
+        T& velocity, T& dispersion, T* vector)
 {
     const T R = std::sqrt(x * x + y * y);
     const T theta = std::atan2(y, x);
     if (a.jeans)
         gmodel_spheroid_jeans_kinematics(
-                R, theta, z, incl, a, velocity, dispersion);
+                R, theta, z, incl, a, velocity, dispersion, vector);
     else
         gmodel_spheroid_traits_kinematics(
-                x, y, z, R, theta, incl, a, velocity, dispersion);
+                x, y, z, R, theta, incl, a, velocity, dispersion, vector);
 }
 
 // Write the light of a point of a spheroid (rvalue; with opacity, orvalue
-// after it), of the given velocity and dispersion, at (x, y, z) of the
-// grid g: to its pixel of the image or its spectrum of the spectral cube
-// (with AddFunT, see gmodel_light_write), and to its maps and fields.
+// after it), of the given velocity (also as a vector of the grid, vvec)
+// and dispersion, at (x, y, z) of the grid g: to its pixel of the image or
+// its spectrum of the spectral cube (with AddFunT, see
+// gmodel_light_write), and to its maps and fields.
 template<auto AddFunT, bool HasFields, typename T>
 constexpr void
 gmodel_spheroid_light_write(
-        int x, int y, int z, T rvalue, T orvalue, T vvalue, T dvalue,
-        const VoxelOpacity<T>* opacity,
+        int x, int y, int z, T rvalue, T orvalue, T vvalue, const T* vvec,
+        T dvalue, const VoxelOpacity<T>* opacity,
         const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
     gmodel_light_write<AddFunT>(
             x, y, rvalue, orvalue, vvalue, dvalue, opacity, g);
     const int idx = index_3d_to_1d(x, y, z, g.spat_size[0], g.spat_size[1]);
-    gmodel_maps_write(idx, rvalue, orvalue, vvalue, dvalue, g);
+    gmodel_maps_write(idx, rvalue, orvalue, vvalue, vvec, dvalue, g);
     if (HasFields)
         gmodel_volume_fields_write(idx, rvalue, vvalue, dvalue, g, f);
 }
@@ -1634,6 +1757,9 @@ gmodel_smspheroid_evaluate_voxel(
     T rvalue = 0;
     T vvalue = 0;
     T dvalue = 0;
+    // (the velocity as a vector, if wanted)
+    T vvec[3] = {0, 0, 0};
+    T* const vector = g.vvec_cmp ? vvec : nullptr;
     if (rn < SPHEROID_CENTRE_VOXELS<T> * diagonal)
     {
         // (and the first two moments of the velocities of the sub-points,
@@ -1642,6 +1768,7 @@ gmodel_smspheroid_evaluate_voxel(
         const T vref = a.vsys[0];
         T sum_v = 0;
         T sum_v2 = 0;
+        T sum_vec[3] = {0, 0, 0};
         constexpr int n = SPHEROID_SUBGRID;
         for (int i = 0; i < n; ++i)
         for (int j = 0; j < n; ++j)
@@ -1657,11 +1784,15 @@ gmodel_smspheroid_evaluate_voxel(
             rvalue += density;
             if (moves && density)
             {
-                T v, s;
-                gmodel_spheroid_kinematics(xs, ys, zs, incl, a, v, s);
+                T v, s, vs[3];
+                gmodel_spheroid_kinematics(
+                        xs, ys, zs, incl, a, v, s, vector ? vs : nullptr);
                 const T dv = v - vref;
                 sum_v += density * dv;
                 sum_v2 += density * (dv * dv + s * s);
+                if (vector)
+                    for (int c = 0; c < 3; ++c)
+                        sum_vec[c] += density * vs[c];
             }
         }
         if (moves && rvalue)
@@ -1670,6 +1801,9 @@ gmodel_smspheroid_evaluate_voxel(
             vvalue = vref + mean;
             dvalue = std::sqrt(std::max(sum_v2 / rvalue - mean * mean,
                                         T{0}));
+            if (vector)
+                for (int c = 0; c < 3; ++c)
+                    vvec[c] = sum_vec[c] / rvalue;
         }
         rvalue /= n * n * n;
     }
@@ -1677,10 +1811,13 @@ gmodel_smspheroid_evaluate_voxel(
     {
         rvalue = gmodel_spheroid_density(xn, yn, zn, a);
         if (moves && rvalue)
-            gmodel_spheroid_kinematics(xn, yn, zn, incl, a, vvalue, dvalue);
+            gmodel_spheroid_kinematics(
+                    xn, yn, zn, incl, a, vvalue, dvalue, vector);
     }
     if (!rvalue)
         return;
+    if (vector && moves)
+        gmodel_vector_to_grid(vvec, posa, incl, g);
     rvalue *= g.spat_step[2];
 
     // The opacity in front of the light, and the light that it lets
@@ -1693,7 +1830,7 @@ gmodel_smspheroid_evaluate_voxel(
                     opacity, g.nopacity, g.opacity_ratios)
             : rvalue;
     gmodel_spheroid_light_write<AddFunT, HasFields>(
-            x, y, z, rvalue, orvalue, vvalue, dvalue,
+            x, y, z, rvalue, orvalue, vvalue, vvec, dvalue,
             HasOpacity ? &opacity : nullptr, g, f);
 }
 
@@ -1736,8 +1873,10 @@ gmodel_smspheroid_evaluate_pixel(
     }
     if (!rvalue)
         return;
+    // (a spheroid without kinematics, seen without depth: no velocity)
+    const T vvec[3] = {0, 0, 0};
     gmodel_spheroid_light_write<AddFunT, false, T>(
-            x, y, 0, rvalue, rvalue, T{0}, T{0}, nullptr, g,
+            x, y, 0, rvalue, rvalue, T{0}, vvec, T{0}, nullptr, g,
             FieldsArgs<T>{});
 }
 

@@ -73,9 +73,10 @@ class ExtraMaps:
     """
     The maps of the extra outputs that the plan of a component writes, on
     its 3d grid (each if asked for): the density of the component, the
-    means of its velocity and dispersion, weighted by the absolute density
-    (the kernels add to their weighted sums and to the sum of the
-    weights), and its density after the opacity that dims it.
+    means of its velocity (on the line of sight, and as a vector) and of
+    its dispersion, weighted by the absolute density (the kernels add to
+    their weighted sums and to the sum of the weights), and its density
+    after the opacity that dims it.
     """
 
     def __init__(
@@ -90,14 +91,16 @@ class ExtraMaps:
     ):
         shape = tuple(grid['spat_size'][::-1])
 
-        def zeros() -> DeviceArray:
-            array = driver.mem_alloc_d(shape, dtype)
+        def zeros(planes: tuple[int, ...] = ()) -> DeviceArray:
+            array = driver.mem_alloc_d(planes + shape, dtype)
             driver.mem_fill(array, 0)
             return array
 
         self._driver = driver
         self._density = zeros() if density else None
         self._velocity = zeros() if velocity else None
+        # (its parts along the x and y axes and the line of sight)
+        self._vector = zeros((3,)) if velocity else None
         self._dispersion = zeros() if dispersion else None
         self._weight = zeros() if velocity or dispersion else None
         self._opacity = zeros() if opacity else None
@@ -107,14 +110,15 @@ class ExtraMaps:
         return dict(
             rdata_cmp=self._density, ordata_cmp=self._opacity,
             vdata_cmp=self._velocity, ddata_cmp=self._dispersion,
-            vdweight_cmp=self._weight)
+            vdweight_cmp=self._weight, vvec_cmp=self._vector)
 
     def collect(self, out_extra: dict[str, Any], density_key: str) -> None:
         """
         Add the maps to the extra outputs: the density by density_key
         (e.g. 'bdata' for light, 'odata' for dust), the velocity
-        ('vdata'), the dispersion ('ddata') and the density after the
-        opacity ('obdata').
+        ('vdata'), its parts along the axes of the grid ('vxdata',
+        'vydata', 'vzdata'), the dispersion ('ddata') and the density
+        after the opacity ('obdata').
         """
         driver = self._driver
         if self._density is not None:
@@ -124,6 +128,10 @@ class ExtraMaps:
         if self._velocity is not None:
             out_extra['vdata'] = _weighted_mean(
                 driver.mem_copy_d2h(self._velocity), weight)
+        if self._vector is not None:
+            vector = driver.mem_copy_d2h(self._vector)
+            for axis, part in zip('xyz', vector):
+                out_extra[f'v{axis}data'] = _weighted_mean(part, weight)
         if self._dispersion is not None:
             out_extra['ddata'] = _weighted_mean(
                 driver.mem_copy_d2h(self._dispersion), weight)

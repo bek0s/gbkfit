@@ -186,17 +186,26 @@ Wrapper<T>::dmodel_regions_sum(
 }
 
 // The kernel of a Monte Carlo disk: of the fields of disks with line
-// opacity and without, of disks dimmed by opacity, or of the others (see
+// opacity and without, of disks dimmed by opacity, or of the others, with
+// the velocity as a vector or without it (see
 // gmodel_mcdisk_evaluate_cloud)
-template<typename T, bool Anisotropic> auto
+template<typename T, bool Anisotropic, bool HasVectors> auto
 mcdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
 {
     namespace k = kernels;
     constexpr bool A = Anisotropic;
-    return f.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1, A>
-            : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0, A>
-            : g.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0, A>
-            : k::gmodel_mcdisk_evaluate<T, 0, 0, 0, A>;
+    constexpr bool V = HasVectors;
+    return f.fields && a.opt.uids ? k::gmodel_mcdisk_evaluate<T, 0, 1, 1, A, V>
+            : f.fields ? k::gmodel_mcdisk_evaluate<T, 0, 1, 0, A, V>
+            : g.opacity ? k::gmodel_mcdisk_evaluate<T, 1, 0, 0, A, V>
+            : k::gmodel_mcdisk_evaluate<T, 0, 0, 0, A, V>;
+}
+
+template<typename T, bool Anisotropic> auto
+mcdisk_kernel(const DiskArgs<T>& a, const GridArgs<T>& g, const FieldsArgs<T>& f)
+{
+    return g.vvec_cmp ? mcdisk_kernel<T, Anisotropic, true>(a, g, f)
+            : mcdisk_kernel<T, Anisotropic, false>(a, g, f);
 }
 
 // The kernel of a smooth disk (see mcdisk_kernel)

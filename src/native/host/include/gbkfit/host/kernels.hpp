@@ -237,7 +237,7 @@ dmodel_regions_sum(
 
 template<
         typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic>
+        bool Anisotropic, bool HasVectors>
 void
 gmodel_mcdisk_evaluate(
         const DiskArgs<T>& a, const GridArgs<T>& g, const MCDiskArgs<T>& mc,
@@ -250,7 +250,7 @@ gmodel_mcdisk_evaluate(
     {
         gbkfit::gmodel_mcdisk_evaluate_cloud<
                 atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-                Anisotropic>(ci, a, g, mc, f);
+                Anisotropic, HasVectors>(ci, a, g, mc, f);
     }
 
     // The fields of each voxel, from the moments of its clouds.
@@ -602,32 +602,42 @@ struct Wrapper
 
     // (the kernels of the fields of disks with line opacity and without, of
     // disks dimmed by opacity, and of the others, each of an isotropic
-    // dispersion and of an anisotropic one: see
-    // gmodel_mcdisk_evaluate_cloud)
+    // dispersion and of an anisotropic one, with the velocity as a vector
+    // and without it: see gmodel_mcdisk_evaluate_cloud)
     static void
     gmodel_mcdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const MCDiskArgs<T>& mc, const FieldsArgs<T>& f) {
-        if (gbkfit::gmodel_disk_anisotropic(a))
-            mcdisk_evaluate<true>(a, g, mc, f);
+        const bool anisotropic = gbkfit::gmodel_disk_anisotropic(a);
+        if (anisotropic && g.vvec_cmp)
+            mcdisk_evaluate<true, true>(a, g, mc, f);
+        else if (anisotropic)
+            mcdisk_evaluate<true, false>(a, g, mc, f);
+        else if (g.vvec_cmp)
+            mcdisk_evaluate<false, true>(a, g, mc, f);
         else
-            mcdisk_evaluate<false>(a, g, mc, f);
+            mcdisk_evaluate<false, false>(a, g, mc, f);
     }
 
-    template<bool Anisotropic> static void
+    template<bool Anisotropic, bool HasVectors> static void
     mcdisk_evaluate(
             const DiskArgs<T>& a, const GridArgs<T>& g,
             const MCDiskArgs<T>& mc, const FieldsArgs<T>& f) {
         namespace k = kernels;
         constexpr bool A = Anisotropic;
+        constexpr bool V = HasVectors;
         if (f.fields && a.opt.uids)
-            k::gmodel_mcdisk_evaluate<T, false, true, true, A>(a, g, mc, f);
+            k::gmodel_mcdisk_evaluate<T, false, true, true, A, V>(
+                    a, g, mc, f);
         else if (f.fields)
-            k::gmodel_mcdisk_evaluate<T, false, true, false, A>(a, g, mc, f);
+            k::gmodel_mcdisk_evaluate<T, false, true, false, A, V>(
+                    a, g, mc, f);
         else if (g.opacity)
-            k::gmodel_mcdisk_evaluate<T, true, false, false, A>(a, g, mc, f);
+            k::gmodel_mcdisk_evaluate<T, true, false, false, A, V>(
+                    a, g, mc, f);
         else
-            k::gmodel_mcdisk_evaluate<T, false, false, false, A>(a, g, mc, f);
+            k::gmodel_mcdisk_evaluate<T, false, false, false, A, V>(
+                    a, g, mc, f);
     }
 
     static void

@@ -178,7 +178,7 @@ dmodel_regions_sum(
 
 template<
         typename T, bool HasOpacity, bool HasFields, bool HasLineOpacity,
-        bool Anisotropic>
+        bool Anisotropic, bool HasVectors>
 __global__ void
 gmodel_mcdisk_evaluate(
         GBKFIT_GRID_CONSTANT const DiskArgs<T> a,
@@ -195,7 +195,7 @@ gmodel_mcdisk_evaluate(
     // gmodel_mcdisk_evaluate_cloud)
     gbkfit::gmodel_mcdisk_evaluate_cloud<
             atomic_add<T>, HasOpacity, HasFields, HasLineOpacity,
-            Anisotropic>(tid, a, g, mc, f);
+            Anisotropic, HasVectors>(tid, a, g, mc, f);
 }
 
 template<typename T> __global__ void

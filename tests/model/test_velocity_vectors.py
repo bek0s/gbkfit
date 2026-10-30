@@ -1,0 +1,144 @@
+"""
+Tests for the velocity of the components as vectors (the extra outputs
+vxdata, vydata and vzdata, along the axes of the grid): their part along
+the line of sight is their velocity there (vdata) without the systemic
+velocity, and their length the speed of their traits, for each kind of
+component that moves.
+"""
+
+import numpy as np
+import pytest
+
+
+LINES = dict(type='lines')
+UNIFORM = dict(type='uniform')
+THICK = dict(
+    ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=4))
+GEOMETRY = dict(xpos=0.5, ypos=-0.5, posa=30, incl=55, vsys=20)
+
+# A speed along each direction of a disk (but outward), and a flow along a
+# bar, in the plane
+SPEEDS = [
+    dict(type='uniform', direction='tan'),
+    dict(type='uniform', direction='rad'),
+    dict(type='uniform', direction='ver'),
+    dict(type='bar')]
+SPEED_VALUES = dict(
+    vpt_vt=100, vpt1_vr=20, vpt2_vv=10, vpt3_v=30, vpt3_p=20, vpt3_s=2)
+
+
+def disk(density, **options):
+    """A disk of the given density, with the speeds of SPEEDS."""
+    return dict(
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        density=density, emission=LINES, kinematics=dict(
+            type='traits', vptraits=SPEEDS, dptraits=UNIFORM)) | options
+
+
+# The components that move, and the values of their parameters
+COMPONENTS = dict(
+    thin_disk=(
+        disk(dict(ptraits=dict(type='exponential'))),
+        dict(pt_a=1, pt_s=3, dpt_a=10) | SPEED_VALUES),
+    thick_disk=(
+        disk(THICK), dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10) | SPEED_VALUES),
+    cloud_disk=(
+        disk(THICK, clouds=dict(cflux=1e-3)),
+        dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10) | SPEED_VALUES),
+    cone=(
+        dict(
+            type='cone', rnodes=[1, 6], emission=LINES,
+            density=dict(
+                ptraits=UNIFORM, htraits=dict(type='gauss', zmax=1.5)),
+            kinematics=dict(
+                type='traits',
+                vptraits=[
+                    dict(type='uniform', direction='tan'),
+                    dict(type='uniform', direction='out')],
+                dptraits=UNIFORM)),
+        dict(wall=30, pt_a=1, ht_s=0.5, vpt_vt=100, vpt1_vo=50, dpt_a=10)),
+    spheroid=(
+        dict(
+            type='spheroid', profile=dict(type='sersic'), rmax=6,
+            emission=dict(type='band'), kinematics=dict(
+                type='traits', vptraits=dict(type='uniform', direction='tan'),
+                dptraits=UNIFORM, rnodes=[0, 6])),
+        dict(ie=1, re=2, n=1, vpt_vt=100, dpt_a=10)))
+
+
+def case(driver, component):
+    """
+    A cube of a galaxy of the component (an image of a spheroid, which
+    emits in bands), with a depth axis.
+    """
+    grid = dict(size=[24, 24], step=[0.5, 0.5])
+    observable = dict(type='pixel_brightness') | grid \
+        if component['type'] == 'spheroid' else dict(
+            type='pixel_spectra', spectral=dict(
+                size=41, step=10, convention='relativistic')) | grid
+    return dict(
+        driver=dict(type=driver.type()), observable=observable,
+        line_of_sight=dict(type='grid', depth=dict(step=0.5)),
+        galaxy=dict(components=[component]))
+
+
+def vectors(extra):
+    """Return the velocity as a vector of the component of the extras."""
+    return np.stack([
+        extra.get(f'v{axis}data', component='component0').data
+        for axis in 'xyz'])
+
+
+@pytest.mark.parametrize('name', COMPONENTS)
+def test_the_vector_along_the_line_of_sight_is_the_velocity(
+        driver, evaluate_cases, name):
+    component, values = COMPONENTS[name]
+    _, extra = evaluate_cases([case(driver, component)], GEOMETRY | values)
+    vdata = extra.get('vdata', component='component0').data
+    vector = vectors(extra)
+    moves = np.isfinite(vdata)
+    assert moves.sum() > 100
+    assert np.isfinite(vector[:, moves]).all()
+    np.testing.assert_allclose(
+        vector[2][moves] + GEOMETRY['vsys'], vdata[moves], atol=1e-2)
+
+
+def test_the_length_of_the_vector_is_the_speed(driver, evaluate_cases):
+    # A smooth thick disk: one point of it in each voxel, of the speeds 100,
+    # 20 and 10 km/s along the tangential, radial and vertical directions
+    # (wherever the disk has them: off its axis and its midplane)
+    component = disk(THICK) | dict(kinematics=dict(
+        type='traits', vptraits=SPEEDS[:3], dptraits=UNIFORM))
+    _, extra = evaluate_cases(
+        [case(driver, component)],
+        GEOMETRY | dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10, vpt_vt=100,
+                        vpt1_vr=20, vpt2_vv=10))
+    length = np.linalg.norm(vectors(extra), axis=0)
+    moves = np.isfinite(length)
+    assert moves.sum() > 100
+    np.testing.assert_allclose(
+        np.median(length[moves]), np.sqrt(100 ** 2 + 20 ** 2 + 10 ** 2),
+        rtol=1e-4)
+
+
+def test_a_flow_along_a_bar_is_in_the_plane(driver, evaluate_cases):
+    # A bar as wide as the disk: the flow of 30 km/s along its axis
+    component = disk(THICK) | dict(kinematics=dict(
+        type='traits', vptraits=SPEEDS[3], dptraits=UNIFORM))
+    _, extra = evaluate_cases(
+        [case(driver, component)],
+        GEOMETRY | dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10, vpt_v=30,
+                        vpt_p=20, vpt_s=100))
+    length = np.linalg.norm(vectors(extra), axis=0)
+    moves = np.isfinite(length)
+    assert np.mean(np.isclose(length[moves], 30, rtol=1e-4)) > 0.99
+
+
+def test_the_total_vector_of_one_component_is_its_own(
+        driver, evaluate_cases):
+    component, values = COMPONENTS['thick_disk']
+    _, extra = evaluate_cases([case(driver, component)], GEOMETRY | values)
+    for axis in 'xyz':
+        own = extra.get(f'v{axis}data', component='component0').data
+        total = extra.get(f'total_v{axis}data').data
+        np.testing.assert_allclose(total, own, equal_nan=True, rtol=1e-6)

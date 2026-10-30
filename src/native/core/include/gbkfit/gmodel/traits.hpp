@@ -1264,56 +1264,79 @@ vp_trait_wedge(T& out, T theta, const T* params)
     out = std::abs(std::cos(theta - p)) >= std::cos(s * T{0.5}) ? v : 0;
 }
 
-// The part v_y, along the azimuth 90 degrees, of the flow of the speed v
-// along the axis of a bar at the azimuth p, away from its centre, within
-// the strip of the full width s along the axis: v sign(x) sin(p) where
-// |y| < s / 2, x along the axis and y across it, 0 outside
-template<typename T> constexpr T
-bar_flow(T v, T p, T s, T r, T theta)
+// The flow of the speed v along the axis of a bar at the azimuth p, away
+// from its centre, within the strip of the full width s along the axis:
+// its parts v_x and v_y along the azimuths 0 and 90 degrees, v sign(x)
+// (cos(p), sin(p)) where |y| < s / 2, x along the axis and y across it,
+// 0 outside
+template<typename T> constexpr void
+bar_flow(T& vx, T& vy, T v, T p, T s, T r, T theta)
 {
     T x = r * std::cos(theta - p);
     T y = r * std::sin(theta - p);
-    return std::abs(y) < s * T{0.5} ? v * sign(x) * std::sin(p) : 0;
+    T flow = std::abs(y) < s * T{0.5} ? v * sign(x) : 0;
+    vx = flow * std::cos(p);
+    vy = flow * std::sin(p);
+}
+
+// The flow along a bar (see bar_flow) of the speed v = params[0] at the
+// azimuth p = params[1] in the strip of the width s = params[2]: its parts
+// v_x and v_y (see vp_trait_plane_x; vp_trait_bar gives v_y)
+template<typename T> constexpr void
+vp_trait_bar_plane(T& vx, T& vy, T r, T theta, const T* params)
+{
+    T v = params[0];
+    T p = params[1] * DEG_TO_RAD<T>;
+    T s = params[2];
+    bar_flow(vx, vy, v, p, s, r, theta);
 }
 
 template<typename T> constexpr void
 vp_trait_bar(T& out, T r, T theta, const T* params)
 {
-    T v = params[0];
-    T p = params[1] * DEG_TO_RAD<T>;
-    T s = params[2];
-    out = bar_flow(v, p, s, r, theta);
+    T vx = 0;
+    vp_trait_bar_plane(vx, out, r, theta, params);
 }
 
 // A flow along a bar (see bar_flow) of the speed v(|x|) at the distance
 // |x| along its axis, of the values params[2 + i] at the distances
 // rnodes[i] (interpolated linearly), 0 within the first or beyond the
-// last
+// last: its parts v_x and v_y
 template<typename T> constexpr void
-vp_trait_nw_bar(
-        T& out, const T* rnodes, int nrnodes, T r, T theta, const T* params)
+vp_trait_nw_bar_plane(
+        T& vx, T& vy,
+        const T* rnodes, int nrnodes, T r, T theta, const T* params)
 {
     T p = params[0] * DEG_TO_RAD<T>;
     T s = params[1];
     T d = std::abs(r * std::cos(theta - p));
-    out = 0;
+    vx = vy = 0;
     if (d < rnodes[0] || d >= rnodes[nrnodes - 1])
         return;
     int index = 1;
     while (d >= rnodes[index])
         ++index;
     T v = nodewise(d, index, rnodes, params, 2, 1);
-    out = bar_flow(v, p, s, r, theta);
+    bar_flow(vx, vy, v, p, s, r, theta);
 }
 
-// The part v_y, along the azimuth 90 degrees, of the velocity of a spiral
-// density wave of m = consts[0] arms (see traits.VPTraitSpiral): v_R
-// sin(theta) + v_t cos(theta), v_R = a_R cos(phi) and v_t = a_t sin(phi),
-// phi = m (theta - p) - f, of p = params[0] and the tables a_R, a_t and f
-// at the subnodes, after the consts[1] parameters that are not node-wise
 template<typename T> constexpr void
-vp_trait_spiral(
-        T& out,
+vp_trait_nw_bar(
+        T& out, const T* rnodes, int nrnodes, T r, T theta, const T* params)
+{
+    T vx = 0;
+    vp_trait_nw_bar_plane(vx, out, rnodes, nrnodes, r, theta, params);
+}
+
+// The velocity of a spiral density wave of m = consts[0] arms (see
+// traits.VPTraitSpiral), v_R = a_R cos(phi) and v_t = a_t sin(phi), phi =
+// m (theta - p) - f, of p = params[0] and the tables a_R, a_t and f at the
+// subnodes, after the consts[1] parameters that are not node-wise: its
+// parts along the azimuths 0 and 90 degrees, v_x = v_R cos(theta) - v_t
+// sin(theta) and v_y = v_R sin(theta) + v_t cos(theta)
+template<typename T> constexpr void
+vp_trait_spiral_plane(
+        T& vx, T& vy,
         int rnidx, const T* rnodes, int nrnodes, T r, T theta,
         const T* consts, const T* params)
 {
@@ -1324,8 +1347,21 @@ vp_trait_spiral(
     T at = nodewise(r, rnidx, rnodes, params, offset + nrnodes, 1);
     T f = nodewise(r, rnidx, rnodes, params, offset + 2 * nrnodes, 1);
     T phi = m * (theta - p) - f;
-    out = ar * std::cos(phi) * std::sin(theta)
-        + at * std::sin(phi) * std::cos(theta);
+    T vr = ar * std::cos(phi);
+    T vt = at * std::sin(phi);
+    vx = vr * std::cos(theta) - vt * std::sin(theta);
+    vy = vr * std::sin(theta) + vt * std::cos(theta);
+}
+
+template<typename T> constexpr void
+vp_trait_spiral(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T theta,
+        const T* consts, const T* params)
+{
+    T vx = 0;
+    vp_trait_spiral_plane(
+            vx, out, rnidx, rnodes, nrnodes, r, theta, consts, params);
 }
 
 template<typename T> constexpr void
@@ -1840,6 +1876,37 @@ vp_trait(
     }
 }
 
+// The part v_x, along the azimuth 0, of the velocity of a planar velocity
+// polar trait (see VPT_DIRECTION_PLANE; vp_trait gives its part v_y), and
+// 0 of the others: for the velocities as vectors (see vp_disk_vector)
+template<typename T> constexpr void
+vp_trait_plane_x(
+        T& out,
+        int uid, const T* consts, const T* params,
+        int rnidx, const T* rnodes, int nrnodes,
+        T x, T y, T r, T theta)
+{
+    (void)x;
+    (void)y;
+    T vy = 0;
+    switch (uid)
+    {
+    case VPT_UID_BAR:
+        vp_trait_bar_plane(out, vy, r, theta, params);
+        break;
+    case VPT_UID_NW_BAR:
+        vp_trait_nw_bar_plane(out, vy, rnodes, nrnodes, r, theta, params);
+        break;
+    case VPT_UID_SPIRAL:
+        vp_trait_spiral_plane(
+                out, vy, rnidx, rnodes, nrnodes, r, theta, consts, params);
+        break;
+    default:
+        out = 0;
+        break;
+    }
+}
+
 // The line-of-sight velocity of the speed v of a velocity polar trait of
 // a disk of inclination incl, at the radius r, the azimuth theta and the
 // height z of the disk, by the direction of the speed: tangential, v
@@ -1882,6 +1949,59 @@ vp_disk_project(T v, int direction, T r, T theta, T z, T incl)
     }
 }
 
+// The velocity of the speed v of a velocity polar trait of a disk (see
+// vp_disk_project), at the radius r, the azimuth theta and the height z of
+// the disk, as a vector of its frame (x and y in its plane, theta from x,
+// z along its spin axis), added to out, by the direction of the speed:
+// tangential, v (-sin(theta), cos(theta), 0); radial, v (cos(theta),
+// sin(theta), 0); vertical, v (0, 0, 1); away from the midplane, v (0, 0,
+// sign(z)); outward, v (r cos(theta), r sin(theta), z) / sqrt(r^2 + z^2);
+// the line of sight, v (0, sin(incl), cos(incl)), along which
+// vp_disk_project projects them all. A planar trait gives its parts in
+// the plane instead (see vp_trait_plane_x).
+template<typename T> constexpr void
+vp_disk_vector(T* out, T v, int direction, T r, T theta, T z, T incl)
+{
+    switch (direction)
+    {
+    case VPT_DIRECTION_TAN:
+        if (r != 0) {
+            out[0] -= v * std::sin(theta);
+            out[1] += v * std::cos(theta);
+        }
+        break;
+    case VPT_DIRECTION_RAD:
+        if (r != 0) {
+            out[0] += v * std::cos(theta);
+            out[1] += v * std::sin(theta);
+        }
+        break;
+    case VPT_DIRECTION_VER:
+        out[2] += v;
+        break;
+    case VPT_DIRECTION_AWAY:
+        out[2] += v * sign(z);
+        break;
+    case VPT_DIRECTION_OUT: {
+        const T radius = std::sqrt(r * r + z * z);
+        if (radius != 0) {
+            out[0] += v * r * std::cos(theta) / radius;
+            out[1] += v * r * std::sin(theta) / radius;
+            out[2] += v * z / radius;
+        }
+        break;
+    }
+    case VPT_DIRECTION_LOS:
+        out[1] += v * std::sin(incl);
+        out[2] += v * std::cos(incl);
+        break;
+    default:
+        assert(false);
+        out[0] = out[1] = out[2] = NAN;
+        break;
+    }
+}
+
 // The line-of-sight velocity of the speed v of a velocity polar trait of
 // a cone of inclination incl, at the point (x, y, z) of its frame (the
 // frame of a thick disk whose spin axis is the axis of the cone) at the
@@ -1906,6 +2026,37 @@ vp_cone_project(T v, int direction, T x, T y, T z, T r, T incl)
     default:
         assert(false);
         return NAN;
+    }
+}
+
+// The velocity of the speed v of a velocity polar trait of a cone (see
+// vp_cone_project) at the point (x, y, z) of its frame, at the distance r
+// from its apex, as a vector of its frame, added to out: tangential, v
+// (-y, x, 0) / R; outward, v (x, y, z) / r
+template<typename T> constexpr void
+vp_cone_vector(T* out, T v, int direction, T x, T y, T z, T r)
+{
+    switch (direction)
+    {
+    case VPT_DIRECTION_TAN: {
+        const T radius = std::sqrt(x * x + y * y);
+        if (radius != 0) {
+            out[0] -= v * y / radius;
+            out[1] += v * x / radius;
+        }
+        break;
+    }
+    case VPT_DIRECTION_OUT:
+        if (r != 0) {
+            out[0] += v * x / r;
+            out[1] += v * y / r;
+            out[2] += v * z / r;
+        }
+        break;
+    default:
+        assert(false);
+        out[0] = out[1] = out[2] = NAN;
+        break;
     }
 }
 
