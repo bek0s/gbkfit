@@ -101,7 +101,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 
 /* controls and text */
 .primary { border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: var(--on-accent); font-weight: 600; padding: 4px 12px; }
-.primary:disabled { border-color: var(--line2); background: transparent; color: var(--faint); font-weight: 500; }
+.primary:disabled { opacity: .45; }
 .ghost { border: 1px solid var(--line2); border-radius: 7px; background: transparent; padding: 4px 12px; }
 .ghost:hover { border-color: var(--faint); }
 .link { border: 0; background: transparent; padding: 0; color: var(--accent); font: 12px var(--mono); text-align: left; }
