@@ -31,10 +31,12 @@ __all__ = [
     'coords_from_wcs',
     'flip_data',
     'flip_wcs',
+    'header_shape',
     'model_axis_flips',
     'model_axis_order',
     'read_beam',
     'read_companion',
+    'read_coords',
     'read_data',
     'read_unit',
     'reorder_data',
@@ -199,21 +201,79 @@ def read_data(
         with_velocity_convention), or the medium is not valid.
     """
     data, header = _read_hdu(filename, hdu)
-    header = with_velocity_convention(header, None, filename)
-    wcs, log = _file_wcs(filename, header, data.shape, rest)
+    wcs, coords = _header_coords(
+        filename, header, data.shape, rpix, rval, rest, medium)
     data, wcs = to_model_axes(data, wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
         raise ConfigError(
             f"{filename}: the spectral axis must be the axis "
             f"{spectral_axis + 1}; it is the axis {spec + 1}")
-    coords = coords_from_wcs(filename, wcs, rpix, rval, rest, medium)
+    return np.ascontiguousarray(data), coords
+
+
+def read_coords(filename: str, hdu: int | str = 0) -> Coords:
+    """
+    Read the world coordinates of the data of a FITS file, as read_data
+    does, from its header alone (the data are not read).
+
+    Parameters
+    ----------
+    filename : str
+        The name of the file.
+    hdu : int or str
+        The HDU with the data; by default the first.
+
+    Returns
+    -------
+    Coords
+        The world coordinates.
+
+    Raises
+    ------
+    ConfigError
+        As read_data, for the world coordinates of the header.
+    """
+    header = astropy.io.fits.getheader(filename, hdu)
+    return _header_coords(
+        filename, header, header_shape(header), None, None, None, None)[1]
+
+
+def header_shape(header: astropy.io.fits.Header) -> tuple[int, ...]:
+    """
+    Return the shape of the data of a FITS header (in the order of numpy:
+    NAXISn first).
+    """
+    ndim = header.get('NAXIS', 0)
+    return tuple(header.get(f'NAXIS{i}', 0) for i in range(ndim, 0, -1))
+
+
+def _header_coords(
+        filename: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...],
+        rpix: typing.Sequence[float] | None,
+        rval: typing.Sequence[float] | None,
+        rest: typing.Any,
+        medium: str | None
+) -> tuple[astropy.wcs.WCS, Coords]:
+    """
+    Return the world coordinates of the header of a FITS file of data of
+    the given shape, in the axes of the file (see _file_wcs), and those of
+    the model that they give (see read_data).
+    """
+    header = with_velocity_convention(header, None, filename)
+    wcs, log = _file_wcs(filename, header, shape, rest)
+    # (in the orientation of the model, by a stand-in of the data without
+    # memory)
+    _, model_wcs = to_model_axes(np.broadcast_to(0.0, shape), wcs)
+    coords = coords_from_wcs(filename, model_wcs, rpix, rval, rest, medium)
     if medium is None and coords.medium is not None:
         coords = coords._replace(
             medium=_header_medium(filename, header) or coords.medium)
     if log:
         coords = coords._replace(convention='log')
-    return np.ascontiguousarray(data), coords
+    return wcs, coords
 
 
 def read_companion(
@@ -255,9 +315,7 @@ def read_companion(
     data_name, data_hdu = data_file
     with astropy.io.fits.open(data_name) as hdulist:
         data_header = hdulist[data_hdu].header
-    shape = tuple(
-        data_header.get(f'NAXIS{i}', 0)
-        for i in range(data_header.get('NAXIS', 0), 0, -1))
+    shape = header_shape(data_header)
     if values.shape != shape:
         raise ConfigError(
             f"{filename}: without world coordinates, its values must be of "
@@ -1022,7 +1080,10 @@ def _axis_scale(source, wcs, axis):
     if ctype[:4] not in VELOCITY_TYPES:
         raise ConfigError(
             f"{source}: the spectral axis is of type '{ctype}'; only "
-            f"velocity axes ({', '.join(VELOCITY_TYPES)}) are supported")
+            f"velocity axes ({', '.join(VELOCITY_TYPES)}) are supported: "
+            f"convert it to velocities with gbkfit-cli prep and the option "
+            f"--velocity-rest (the rest frequency or wavelength of the "
+            f"line)")
     if ctype[4:].strip('-').strip():
         raise ConfigError(
             f"{source}: the spectral axis ({ctype}) is not linear in "

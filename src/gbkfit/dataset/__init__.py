@@ -1,5 +1,6 @@
 from .base import *
 from .data import *
+from .describe import *
 from .pixel_brightness import *
 from .pixel_moments import *
 from .pixel_spectra import *

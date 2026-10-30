@@ -532,3 +532,43 @@ def test_noise_correlations_only_where_the_data_have_them(tmp_path):
     with pytest.raises(ConfigError, match="must not vary"):
         Data(np.ones((8, 20)), spatial_correlation=PSFGauss.varying(
             sigma=sigma))
+
+
+def test_fits_files_are_described_from_their_headers(tmp_path):
+    # A cube of radio velocities per beam, with its beam; its velocity
+    # field; a table (not described); and a cube of CASA whose header
+    # leaves out the convention of its velocities (VELO-LSR without
+    # VELREF), the beam of its unit per beam, with an axis of Stokes
+    sky = dict(
+        CTYPE1='RA---SIN', CRVAL1=150.0, CDELT1=-1 / 3600, CRPIX1=4,
+        CTYPE2='DEC--SIN', CRVAL2=2.0, CDELT2=1 / 3600, CRPIX2=3)
+    cube = fits.PrimaryHDU(np.zeros((5, 6, 7), np.float32), fits.Header(
+        sky | dict(CTYPE3='VRAD', CRVAL3=1e6, CDELT3=1e4, CRPIX3=1,
+                   CUNIT3='m/s', BUNIT='Jy/beam', BMAJ=2 / 3600,
+                   BMIN=1 / 3600, BPA=30)))
+    velocity = fits.ImageHDU(
+        np.zeros((6, 7)), fits.Header(sky | dict(BUNIT='km/s')),
+        name='MOM1')
+    table = fits.BinTableHDU.from_columns(
+        [fits.Column(name='x', format='E', array=np.zeros(3))])
+    casa = fits.ImageHDU(np.zeros((5, 1, 6, 7)), fits.Header(sky | dict(
+        CTYPE3='STOKES', CRVAL3=1, CDELT3=1, CRPIX3=1,
+        CTYPE4='VELO-LSR', CRVAL4=1e6, CDELT4=1e4, CRPIX4=1,
+        CUNIT4='m/s', BUNIT='Jy/beam')), name='CASA')
+    fits.HDUList([cube, velocity, table, casa]).writeto(tmp_path / 'f.fits')
+    hdus = describe_fits(str(tmp_path / 'f.fits'))
+    assert [(h.index, h.name) for h in hdus] == [
+        (0, 'PRIMARY'), (1, 'MOM1'), (3, 'CASA')]
+    first, second, third = hdus
+    assert first.shape == (7, 6, 5) and first.axes[2] == 'VRAD'
+    assert (first.unit, first.problems) == ('Jy/beam', ())
+    np.testing.assert_allclose(first.beam[:3], (2, 1, 30))
+    np.testing.assert_allclose(first.coords.step, (1, 1, 10))
+    assert first.coords.convention == 'radio'
+    assert (second.shape, second.unit, second.problems) == (
+        (7, 6), 'km/s', ())
+    assert third.shape == (7, 6, 1, 5) and third.coords is None
+    for problem, words in zip(third.problems, [
+            'axes of length 1 (STOKES)', 'may be radio or optical',
+            'is per beam, but the header has no beam'], strict=True):
+        assert words in problem
