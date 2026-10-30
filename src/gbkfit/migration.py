@@ -92,6 +92,25 @@ class Rule(abc.ABC):
         """
 
 
+class _ObservationTypes(Rule):
+    """
+    Observations give their kind (2026-10-24): those that do not are on
+    the sky (type: sky), as all observations were before.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 2
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, item in _items(config, 'observations'):
+            if 'type' not in item:
+                _insert_first(item, 'type', 'sky')
+                changes.append(Change(path, "type: sky added"))
+        return changes
+
+
 class _FluxScales(Rule):
     """
     Flux scales replaced the calibration of observations and the
@@ -750,6 +769,7 @@ class _Workers(Rule):
 
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
+    _ObservationTypes(),
     _FluxScales(),
     _DiskTypes(),
     _OwnGeometries(),

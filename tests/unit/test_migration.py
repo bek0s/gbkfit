@@ -68,7 +68,8 @@ def test_a_file_is_migrated_in_place_with_its_comments(tmp_path):
     assert filename.read_text() == (
         "version: 3\n"
         "observations:\n"
-        "- name: kmos\n"
+        "- type: sky\n"
+        "  name: kmos\n"
         "  flux_scale: one    # the flux of the model is off\n"
         "params:\n"
         "  properties:\n"
@@ -157,6 +158,13 @@ def test_components_of_version_2_keep_the_geometry_of_their_galaxy():
     components = [dict(type='disk', name='a'), dict(type='point', name='b')]
     migration.migrate(dict(galaxies=[dict(components=components)]), 2)
     assert all('geometry' not in c for c in components)
+
+
+def test_observations_without_a_type_are_migrated_to_the_sky():
+    observation = dict(observable=dict(type='pixel_brightness'))
+    migration.migrate(dict(observations=[observation, 'named']), 1)
+    assert list(observation) == ['type', 'observable']
+    assert observation['type'] == 'sky'
 
 
 def test_the_old_observation_options_are_migrated():
