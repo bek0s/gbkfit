@@ -1,7 +1,7 @@
-// A dialog to choose a file of data of a project: its folders are browsed
-// from a start (e.g. its folder data), never above the project, and only
-// the files of data that GBKFIT reads are shown.
-import { useEffect, useState } from 'react';
+// A dialog to choose a file of data in a folder of the workspace (e.g.
+// the folder data of a project), whose folders are browsed but never
+// above it; only the files of data that GBKFIT reads are shown.
+import { useState } from 'react';
 import { useFolder } from '../api/queries';
 import { Dialog } from './Dialog';
 
@@ -22,28 +22,26 @@ function parentOf(path: string): string {
 }
 
 export function FilePicker({
+  title,
   root,
-  start,
+  label,
   onChoose,
   onClose,
 }: {
-  // The folder of the project, and the folder shown first
+  title: string;
+  // The folder, and its name as the dialog shows it
   root: string;
-  start: string;
+  label: string;
   onChoose: (path: string) => void;
   onClose: () => void;
 }) {
-  const [folder, setFolder] = useState(start);
+  const [folder, setFolder] = useState(root);
   const listing = useFolder(folder);
-  // (a start that does not exist falls back to the project)
-  useEffect(() => {
-    if (listing.error && folder !== root) setFolder(root);
-  }, [listing.error, folder, root]);
   const files = (listing.data?.files ?? []).filter((file) => isDataFile(file.name));
-  const shown = folder === root ? '' : folder.slice(root === '.' ? 0 : root.length + 1);
+  const inside = folder === root ? '' : folder.slice(root === '.' ? 0 : root.length + 1);
   return (
-    <Dialog title="Choose a file" onClose={onClose}>
-      <div className="picker-path">{`project/${shown}`}</div>
+    <Dialog title={title} onClose={onClose}>
+      <div className="picker-path">{`${label}/${inside}`}</div>
       <div className="dialog-list">
         {folder !== root && <button onClick={() => setFolder(parentOf(folder))}>..</button>}
         {listing.data?.folders.map((name) => (
@@ -57,6 +55,7 @@ export function FilePicker({
             <small>{size(file.size)}</small>
           </button>
         ))}
+        {listing.error && <p className="note">Nothing here yet.</p>}
         {listing.data && listing.data.folders.length + files.length === 0 && (
           <p className="note">No files of data here (FITS).</p>
         )}

@@ -19,6 +19,7 @@ __all__ = [
     'Diagnostic',
     'FileEntry',
     'FolderInfo',
+    'ImportRequest',
     'JobInfo',
     'JobRequest',
     'ProjectInfo',
@@ -167,6 +168,15 @@ class CheckResult(BaseModel):
 
 class ProjectRequest(BaseModel):
     """A project to create: its folder (its path)."""
+    path: str
+
+
+class ImportRequest(BaseModel):
+    """
+    A file of data of the workspace to copy into the folder data of a
+    project: the project, and the path of the file.
+    """
+    project: str
     path: str
 
 

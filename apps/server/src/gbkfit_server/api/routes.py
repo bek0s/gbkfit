@@ -11,8 +11,8 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
 from fastapi import (
-    APIRouter, Body, Depends, Response, WebSocket, WebSocketException,
-    status)
+    APIRouter, Body, Depends, Request, Response, WebSocket,
+    WebSocketException, status)
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from starlette.requests import HTTPConnection
@@ -22,9 +22,9 @@ from gbkfit_server.services.errors import Failed, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    ArrayInfo, CheckRequest, CheckResult, FolderInfo, JobInfo, JobRequest,
-    PieceRequest, ProjectInfo, ProjectRequest, RunInfo, SessionInfo,
-    SessionRequest)
+    ArrayInfo, CheckRequest, CheckResult, FolderInfo, ImportRequest,
+    JobInfo, JobRequest, PieceRequest, ProjectInfo, ProjectRequest, RunInfo,
+    SessionInfo, SessionRequest)
 
 
 __all__ = [
@@ -95,6 +95,32 @@ def describe(server: ServerDep, path: str) -> list[ArrayInfo]:
     return [
         ArrayInfo.model_validate(array)
         for array in server.workspace.describe(path)]
+
+
+@router.post('/imports', status_code=status.HTTP_201_CREATED)
+def import_data(server: ServerDep, request: ImportRequest) -> str:
+    """
+    Copy a file of data of the workspace into the folder data of a
+    project; return its path there.
+    """
+    return server.workspace.import_data(request.project, request.path)
+
+
+@router.post(
+    '/uploads', status_code=status.HTTP_201_CREATED,
+    openapi_extra={'requestBody': {
+        'required': True,
+        'content': {'application/octet-stream': {}}}})
+async def upload_data(
+        server: ServerDep, request: Request, project: str, name: str
+) -> str:
+    """
+    Write a file of data sent in the body (e.g. from the computer of the
+    page) into the folder data of a project, by its name; return its path
+    there.
+    """
+    return await server.workspace.receive_data(
+        project, name, request.stream())
 
 
 @router.get('/files/{path:path}', response_class=PlainTextResponse)

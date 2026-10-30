@@ -2,9 +2,10 @@
 // of a file each) and what GBKFIT reads from their headers. A new one is
 // named, given its files and added to the project, once nothing stops
 // it; one of the project is shown as it is.
-import { useState } from 'react';
-import type { ArrayInfo } from '../api/client';
-import { useCreateBlock, useDescription, usePiece, useProject } from '../api/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
+import { upload, type ArrayInfo } from '../api/client';
+import { useCreateBlock, useDescription, useImportData, usePiece, useProject } from '../api/queries';
 import { FilePicker, joinPath } from '../components/FilePicker';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
 import { useStudio } from '../studio';
@@ -203,7 +204,6 @@ function DatasetBody({
   arrays: Arrays;
   onChange?: (files: Files) => void;
 }) {
-  const [choosing, setChoosing] = useState<Role | null>(null);
   const set = (role: Role, value: FileArray | undefined) => onChange?.({ ...files, [role]: value });
   const data = arrays.found.data;
   // The other arrays of the file of the data of its shape (e.g. its
@@ -226,9 +226,7 @@ function DatasetBody({
                   <div className="slot empty">
                     {onChange ? (
                       <>
-                        <button className="link" onClick={() => setChoosing(role)}>
-                          Choose a file…
-                        </button>
+                        <FileSources project={project} onFile={(file) => set(role, { file })} />
                         {role === 'error' &&
                           files.data !== undefined &&
                           siblings.map((a) => (
@@ -282,19 +280,91 @@ function DatasetBody({
         </div>
       </div>
       <Facts array={data} />
-      {choosing !== null && (
+    </div>
+  );
+}
+
+// The ways to give a slot its file, which is always one of the folder data
+// of the project: one of its files (Choose), or a file copied into it,
+// from the workspace of the server (Import) or from this computer (Upload)
+function FileSources({ project, onFile }: { project: string; onFile: (path: string) => void }) {
+  const client = useQueryClient();
+  const importing = useImportData(project);
+  const [picking, setPicking] = useState<'choose' | 'import' | null>(null);
+  // The fraction of the file sent while uploading, and why it failed
+  const [sent, setSent] = useState<number | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const send = (file: File) => {
+    setFailure(null);
+    setSent(0);
+    upload(project, file, setSent)
+      .then((path) => {
+        void client.invalidateQueries({ queryKey: ['folder'] });
+        onFile(path);
+      })
+      .catch((error: Error) => setFailure(error.message))
+      .finally(() => setSent(null));
+  };
+  const error = failure ?? importing.error?.message;
+  return (
+    <>
+      <button className="link" title="Choose a file of the folder data of the project" onClick={() => setPicking('choose')}>
+        Choose
+      </button>
+      <button
+        className="link"
+        title="Import from the server: copy a file of its workspace into the folder data of the project"
+        onClick={() => setPicking('import')}
+      >
+        Import
+      </button>
+      <button
+        className="link"
+        title="Upload from this computer: copy a file into the folder data of the project"
+        onClick={() => input.current?.click()}
+      >
+        Upload
+      </button>
+      <input
+        ref={input}
+        type="file"
+        accept=".fits,.fit,.fts,.gz"
+        hidden
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          if (file) send(file);
+        }}
+      />
+      {sent !== null && <span className="note">uploading {Math.round(100 * sent)}%</span>}
+      {importing.isPending && <span className="note">copying…</span>}
+      {error && <span className="error">{error}</span>}
+      {picking === 'choose' && (
         <FilePicker
-          root={project}
-          start={joinPath(project, 'data')}
-          onClose={() => setChoosing(null)}
-          onChoose={(file) => {
-            const role = choosing;
-            setChoosing(null);
-            set(role, { file });
+          title="Choose a file of the project"
+          root={joinPath(project, 'data')}
+          label="data"
+          onClose={() => setPicking(null)}
+          onChoose={(path) => {
+            setPicking(null);
+            onFile(path);
           }}
         />
       )}
-    </div>
+      {picking === 'import' && (
+        <FilePicker
+          title="Import a file of the server"
+          root="."
+          label="workspace"
+          onClose={() => setPicking(null)}
+          onChoose={(path) => {
+            setPicking(null);
+            importing.mutate(path, { onSuccess: onFile });
+          }}
+        />
+      )}
+    </>
   );
 }
 

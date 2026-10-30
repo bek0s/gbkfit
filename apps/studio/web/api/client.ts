@@ -53,3 +53,27 @@ export async function data<T>(request: Promise<{ data?: T; error?: unknown; resp
   }
   return value;
 }
+
+// Send a file of this computer into the folder data of a project (see the
+// server's /uploads), reporting the fraction sent; resolves to its path
+// there. (A request of XMLHttpRequest, as fetch does not report what it
+// has sent.)
+export function upload(project: string, file: File, onProgress: (fraction: number) => void): Promise<string> {
+  const url = new URL('/api/v1/uploads', window.location.href);
+  url.searchParams.set('project', project);
+  url.searchParams.set('name', file.name);
+  return new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open('POST', url);
+    request.setRequestHeader('Authorization', `Bearer ${token}`);
+    request.setRequestHeader('Content-Type', 'application/octet-stream');
+    request.upload.onprogress = (event) => event.lengthComputable && onProgress(event.loaded / event.total);
+    request.onload = () => {
+      const body = JSON.parse(request.responseText || 'null') as unknown;
+      if (request.status === 201 && typeof body === 'string') resolve(body);
+      else reject(new Error(String((body as { detail?: unknown } | null)?.detail ?? `${request.status} ${request.statusText}`)));
+    };
+    request.onerror = () => reject(new Error('the file could not be sent'));
+    request.send(file);
+  });
+}

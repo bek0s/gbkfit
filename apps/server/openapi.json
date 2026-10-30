@@ -271,6 +271,102 @@
         }
       }
     },
+    "/api/v1/imports": {
+      "post": {
+        "summary": "Import Data",
+        "description": "Copy a file of data of the workspace into the folder data of a\nproject; return its path there.",
+        "operationId": "import_data_api_v1_imports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Import Data Api V1 Imports Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/uploads": {
+      "post": {
+        "summary": "Upload Data",
+        "description": "Write a file of data sent in the body (e.g. from the computer of the\npage) into the folder data of a project, by its name; return its path\nthere.",
+        "operationId": "upload_data_api_v1_uploads_post",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Project"
+            }
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Upload Data Api V1 Uploads Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {}
+          }
+        }
+      }
+    },
     "/api/v1/files/{path}": {
       "get": {
         "summary": "Read File",
@@ -1046,6 +1142,25 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "ImportRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "path"
+        ],
+        "title": "ImportRequest",
+        "description": "A file of data of the workspace to copy into the folder data of a\nproject: the project, and the path of the file."
       },
       "JobInfo": {
         "properties": {

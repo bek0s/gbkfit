@@ -167,3 +167,29 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
     assert array['problems'] == []
     assert client.get(
         '/api/v1/describe/study/setups/disk.yaml').status_code == 400
+
+
+def test_files_of_data_are_imported_and_uploaded_into_a_project(client, root):
+    source = pathlib.Path(root, 'survey/cube.fits')
+    source.parent.mkdir()
+    fits.writeto(source, np.zeros((2, 2, 2), np.float32))
+    imported = client.post('/api/v1/imports', json=dict(
+        project='study', path='survey/cube.fits'))
+    assert imported.json() == 'study/data/cube.fits'
+    assert pathlib.Path(root, imported.json()).read_bytes() \
+        == source.read_bytes()
+    # (a file of the folder data stays where it is; another of its name is
+    # refused)
+    assert client.post('/api/v1/imports', json=dict(
+        project='study', path='study/data/cube.fits')).json() \
+        == 'study/data/cube.fits'
+    assert client.post('/api/v1/imports', json=dict(
+        project='study', path='survey/cube.fits')).status_code == 400
+    uploaded = client.post(
+        '/api/v1/uploads', params=dict(project='study', name='sent.fits'),
+        content=b'SIMPLE')
+    assert uploaded.json() == 'study/data/sent.fits'
+    assert pathlib.Path(root, uploaded.json()).read_bytes() == b'SIMPLE'
+    assert client.post(
+        '/api/v1/uploads', params=dict(project='study', name='../sent.fits'),
+        content=b'').status_code == 400

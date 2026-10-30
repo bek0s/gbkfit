@@ -6,7 +6,9 @@ The paths of the requests are relative to it, and stay in it.
 
 import dataclasses
 import os
+import shutil
 import uuid
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
@@ -286,6 +288,99 @@ class Workspace:
                  problems=[p.replace(path, relative) for p in hdu.problems])
             for hdu in hdus]
 
+    def import_data(self, project: str, relative: str) -> str:
+        """
+        Copy a file of data of the workspace into the folder data of a
+        project, and return its path there; a file in that folder already
+        stays where it is.
+
+        Raises
+        ------
+        NotFound
+            If the project or the file does not exist.
+        Invalid
+            If it is not a file of data that GBKFIT reads, or the folder
+            data of the project has a file of its name.
+        """
+        source = Path(self.file(relative))
+        if source.is_relative_to(self._data_folder(project)):
+            return self.relative(str(source))
+        target = self._data_target(project, source.name)
+        temporary = _temporary(target)
+        try:
+            shutil.copyfile(source, temporary)
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return self.relative(str(target))
+
+    async def receive_data(
+            self, project: str, name: str, chunks: AsyncIterator[bytes]
+    ) -> str:
+        """
+        Write a file of data received in chunks (e.g. from the computer of
+        a page) into the folder data of a project, by its name, and return
+        its path there.
+
+        Raises
+        ------
+        NotFound
+            If the project does not exist.
+        Invalid
+            If the name is not that of a file of data that GBKFIT reads, or
+            the folder data of the project has a file of the name.
+        """
+        target = self._data_target(project, name)
+        temporary = _temporary(target)
+        try:
+            with temporary.open('wb') as f:
+                async for chunk in chunks:
+                    f.write(chunk)
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return self.relative(str(target))
+
+    def _data_folder(self, project: str) -> Path:
+        """
+        Return the folder data of a project.
+
+        Raises
+        ------
+        NotFound
+            If the project does not exist.
+        """
+        try:
+            return Path(gbkfit.project.open(self.path(project)).path, 'data')
+        except ValueError as e:
+            raise NotFound(str(e)) from e
+
+    def _data_target(self, project: str, name: str) -> Path:
+        """
+        Return a new file of data of a project by its name, in its folder
+        data (made if needed).
+
+        Raises
+        ------
+        NotFound
+            If the project does not exist.
+        Invalid
+            If the name is not that of a file of data that GBKFIT reads, or
+            the folder has a file of the name.
+        """
+        folder = self._data_folder(project)
+        if name != Path(name).name or not name.lower().endswith(_DATA_FILES):
+            raise Invalid(
+                f"'{name}' is not the name of a file of data that GBKFIT "
+                f"reads: FITS ({', '.join(_DATA_FILES)})")
+        target = folder / name
+        if target.exists():
+            raise Invalid(
+                f"the project has a file '{self.relative(str(target))}' "
+                f"already")
+        folder.mkdir(exist_ok=True)
+        return target
+
     def file(self, relative: str) -> str:
         """
         Return the absolute path of a file.
@@ -307,7 +402,7 @@ class Workspace:
         """
         path = Path(self.path(relative))
         path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')
+        temporary = _temporary(path)
         temporary.write_text(text)
         os.replace(temporary, path)
 
@@ -354,3 +449,11 @@ class Workspace:
                     f"'{relative}' of shape {data.shape} has no plane {plane}")
             data = data[plane]
         return np.ascontiguousarray(data, dtype=np.float32)
+
+
+def _temporary(path: Path) -> Path:
+    """
+    Return a temporary file beside a file, which is written first and then
+    replaces it, so that readers see the old file or the whole new one.
+    """
+    return path.with_name(f'.{path.name}.{uuid.uuid4().hex}.tmp')

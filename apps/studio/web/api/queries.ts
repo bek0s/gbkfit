@@ -65,6 +65,16 @@ export function useCreateProject() {
   });
 }
 
+// Copy a file of data of the workspace into the folder data of a project;
+// resolves to its path there
+export function useImportData(project: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (path: string) => data(api.POST('/api/v1/imports', { body: { project, path } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: ['folder'] }),
+  });
+}
+
 // Make a block of a project: with its content (its options), or from the
 // template of its folder
 export function useCreateBlock(project: string) {
