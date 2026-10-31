@@ -456,10 +456,11 @@ def test_mcdisk_dispersion_directions_match_smdisk(driver):
 
 
 def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
+    # (b > 1 is their valid range: b <= 1 is refused before the model)
     component = dict(density=dict(
         ptraits=dict(type='mixture_moffat', nblobs=2),
         htraits=dict(type='sech2', zmax=8)))
-    with pytest.raises(RuntimeError, match="need b > 1"):
+    with pytest.raises(RuntimeError, match=r"'pt_b\[1\]' is 0.9, outside"):
         evaluate_disk('mcdisk', driver.type(), component,
                       BLOBS | dict(pt_b=[2.0, 0.9]))
 

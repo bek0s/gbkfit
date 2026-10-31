@@ -569,7 +569,7 @@ class RPTraitMixtureExponential(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False, unit=None)
+        return self._option(Blobs).params(shape=None, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -618,7 +618,7 @@ class RPTraitMixtureGauss(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False, unit=None)
+        return self._option(Blobs).params(shape=None, unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -668,7 +668,7 @@ class RPTraitMixtureGGauss(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True, unit=None)
+        return self._option(Blobs).params(shape=dict(min=0), unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -718,7 +718,9 @@ class RPTraitMixtureMoffat(RPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True, unit=None)
+        # (b > 1: the flux of a blob is infinite otherwise)
+        return self._option(Blobs).params(
+            shape=dict(min=1, min_exclusive=True), unit=None)
 
     def has_analytical_integral(self) -> bool:
         return True

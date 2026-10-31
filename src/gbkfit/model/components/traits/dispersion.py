@@ -412,7 +412,7 @@ class DPTraitMixtureExponential(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False, unit='km/s')
+        return self._option(Blobs).params(shape=None, unit='km/s')
 
 
 class DPTraitMixtureGauss(DPTrait):
@@ -462,7 +462,7 @@ class DPTraitMixtureGauss(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=False, unit='km/s')
+        return self._option(Blobs).params(shape=None, unit='km/s')
 
 
 class DPTraitMixtureGGauss(DPTrait):
@@ -513,7 +513,7 @@ class DPTraitMixtureGGauss(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True, unit='km/s')
+        return self._option(Blobs).params(shape=dict(min=0), unit='km/s')
 
 
 class DPTraitMixtureMoffat(DPTrait):
@@ -563,7 +563,7 @@ class DPTraitMixtureMoffat(DPTrait):
         return False
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return self._option(Blobs).params(shape=True, unit='km/s')
+        return self._option(Blobs).params(shape=dict(min=0), unit='km/s')
 
 
 class DPTraitNWUniform(DPTrait):

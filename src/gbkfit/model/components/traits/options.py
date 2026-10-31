@@ -262,11 +262,14 @@ class Blobs(TraitOption):
     def consts(self) -> tuple[float, ...]:
         return (self.nblobs,)
 
-    def params(self, shape: bool, unit: str | None) -> dict[str, ParamDesc]:
+    def params(
+            self, shape: dict[str, Any] | None, unit: str | None
+    ) -> dict[str, ParamDesc]:
         """
         Return the parameters of the blobs: the columns of their table
-        (with the shape b of the 7-parameter mixtures), of the amplitudes a
-        of the given unit (None for a density, whose component knows it).
+        (with the shape b of the 7-parameter mixtures, of the given valid
+        range, e.g. dict(min=0); None for none), of the amplitudes a of the
+        given unit (None for a density, whose component knows it).
         """
         units = dict(
             r='arcsec', t='deg', a=unit, s='arcsec', b='', q='', p='deg')
@@ -275,9 +278,9 @@ class Blobs(TraitOption):
         # (their valid ranges and periods: an elliptical blob is the same
         # turned by 180 degrees)
         valid = dict(
-            r=dict(min=0), t=dict(period=360), s=dict(min=0), b=dict(min=0),
+            r=dict(min=0), t=dict(period=360), s=dict(min=0), b=shape,
             q=dict(min=0), p=dict(period=180))
-        names = ('r', 't', 'a', 's', 'b', 'q', 'p') if shape \
+        names = ('r', 't', 'a', 's', 'b', 'q', 'p') if shape is not None \
             else ('r', 't', 'a', 's', 'q', 'p')
         return {
             name: ParamVectorDesc(
