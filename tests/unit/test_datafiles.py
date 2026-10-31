@@ -88,6 +88,20 @@ def test_errors_follow_their_own_world_coordinates(tmp_path):
         np.testing.assert_array_equal(arrays.error, arrays.data)
 
 
+def test_a_footprint_follows_the_data(tmp_path):
+    # Without world coordinates, in the axes of the file of the data,
+    # whose velocities decrease along it: read in increasing velocity,
+    # as the data (here observed in the first channel of the file only)
+    write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
+    footprint = np.zeros(SHAPE)
+    footprint[0] = 1
+    write(tmp_path / 'footprint.fits', footprint)
+    arrays = datafiles.read_arrays(
+        str(tmp_path / 'data.fits'),
+        footprint=str(tmp_path / 'footprint.fits'))
+    np.testing.assert_array_equal(arrays.footprint, footprint[::-1])
+
+
 def test_errors_on_other_pixels_are_an_error(tmp_path):
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
     write(tmp_path / 'error.fits', np.ones(SHAPE), CUBE | dict(CRVAL3=990.0))

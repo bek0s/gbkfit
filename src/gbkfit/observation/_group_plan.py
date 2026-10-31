@@ -896,9 +896,9 @@ def _mock_options(
 ) -> dict[str, dict[str, Any]]:
     """
     Return the options of the mock data of each data item of an
-    observation (see GroupPlan.mock): the unit and the beam of its
-    data, if any, and the correlation of the noise of those that are what
-    the instrument records plus the noise (exact errors).
+    observation (see GroupPlan.mock): the unit, the beam and the footprint
+    of its data, if any, and the correlation of the noise of those that
+    are what the instrument records plus the noise (exact errors).
 
     Raises
     ------
@@ -924,7 +924,8 @@ def _mock_options(
         key: dict(
             spatial_correlation=spatial, spectral_correlation=spectral)
         | ({} if data is None else dict(
-            unit=data[key].unit(), beam=data[key].beam()))
+            unit=data[key].unit(), beam=data[key].beam(),
+            footprint=data[key].footprint()))
         for key in observation.keys()}
 
 

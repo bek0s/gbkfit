@@ -14,9 +14,9 @@ from gbkfit.dataset import Dataset, NoiseCorrelation
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import fitsutils, funcutils, parseutils
+from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath, FitsFile, split_fits_file
+from gbkfit.utils.typeutils import FilePath
 
 
 __all__ = [
@@ -71,14 +71,10 @@ class UpperLimit(NamedTuple):
         The limit, in the units of the data.
     error : float
         The noise of the non-detections, in the units of the data.
-    footprint : str or tuple, optional
-        The FITS file of where the instrument looked (1 inside, 0
-        outside): a filename, or a filename and the HDU.
     """
 
     limit: FiniteFloat
     error: Annotated[FiniteFloat, Gt(0)]
-    footprint: FitsFile | None = None
 
 
 class Likelihood(parseutils.TypedSerializable, abc.ABC):
@@ -196,12 +192,10 @@ class LikelihoodGaussian(Likelihood):
     e)^2 well above it). Without limits a model could put light where the
     data are blank for free (e.g. a disk too large). The limits are for
     values of light (brightness, spectra, moment 0), not for velocities,
-    of which a blank says nothing. An upper limit can have a footprint:
-    where the instrument looked (e.g. the field of an IFU, whose corners
-    are blank but were never observed), 1 inside and 0 outside, of the
-    shape of the data or of their last axes (e.g. an image of the field
-    of a cube, the same in every channel); the masked values outside it
-    count nothing, and the data must have none there.
+    of which a blank says nothing. The masked values outside the
+    footprint of their data item, if it has one (where the instrument
+    looked, e.g. the field of an IFU, whose corners are blank but were
+    never observed; see Data), count nothing.
 
     With noise, the noise of data items is fitted: the errors e of an item
     (1 where the data have none) are times a scale f, and a jitter j adds
@@ -295,8 +289,7 @@ class LikelihoodGaussian(Likelihood):
     Raises
     ------
     ConfigError
-        If a footprint cannot be read or has values other than 0 and 1,
-        or the noise of an item fits neither its scale nor its jitter, or
+        If the noise of an item fits neither its scale nor its jitter, or
         has scale_min without the scale or the scale without it.
     """
 
@@ -331,10 +324,6 @@ class LikelihoodGaussian(Likelihood):
             else float(missing_residual)
         self._upper_limits = None if upper_limits is None \
             else dict(upper_limits)
-        self._footprints = {
-            key: _read_footprint(key, limit.footprint)
-            for key, limit in (self._upper_limits or {}).items()
-            if limit.footprint is not None}
         for key, item in (noise or {}).items():
             _check_noise(key, item)
         self._noise = dict(noise or {})
@@ -468,13 +457,6 @@ class LikelihoodGaussian(Likelihood):
             return None
         limit = self._upper_limits[key]
         return limit.limit, limit.error
-
-    def footprint(self, key: str) -> np.ndarray | None:
-        """
-        Return where the data item of the given name was observed, for its
-        upper limit: 1 inside, 0 outside; None for all of it.
-        """
-        return self._footprints.get(key)
 
     def fitted_noise(self) -> dict[str, FittedNoise]:
         """
@@ -638,29 +620,8 @@ def _check_noise(key: str, noise: FittedNoise) -> None:
 
 
 def _record_config(record: NamedTuple) -> dict[str, Any]:
-    """
-    Return the configuration of a record: its fields that are not None, a
-    FITS file of an HDU as {file, hdu}.
-    """
-    return {
-        name: dict(file=value[0], hdu=value[1])
-        if isinstance(value, tuple) else value
-        for name, value in record._asdict().items() if value is not None}
-
-
-def _read_footprint(key: str, file: FitsFile) -> np.ndarray:
-    """
-    Return the footprint of the upper limit of a data item, read from its
-    FITS file (see LikelihoodGaussian), or raise ConfigError unless its
-    values are 0 and 1.
-    """
-    with parseutils.config_path('upper_limits', key, 'footprint'):
-        footprint = fitsutils.read_data(*split_fits_file(file))[0]
-    if not np.all(np.isin(footprint, (0, 1))):
-        raise ConfigError(
-            f"upper limit of '{key}': its footprint must be 1 where the "
-            f"data were observed and 0 elsewhere")
-    return footprint.astype(float)
+    """Return the configuration of a record: its fields that are not None."""
+    return {k: v for k, v in record._asdict().items() if v is not None}
 
 
 # What the function of a LikelihoodUser returns

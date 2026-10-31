@@ -65,6 +65,9 @@ class Arrays:
         The beam of the values, if they have one (see
         fitsutils.header_beam): of a cube of CASA, that of each of its
         channels, in the order of the channels of the values.
+    footprint : np.ndarray or None
+        Where the instrument looked, if given (see Data): as the file
+        has it.
     """
     data: np.ndarray
     error: np.ndarray | None
@@ -72,6 +75,7 @@ class Arrays:
     header: astropy.io.fits.Header
     unit: astropy.units.UnitBase | None
     beam: dict[str, typing.Any] | None = None
+    footprint: np.ndarray | None = None
 
 
 def read_arrays(
@@ -82,11 +86,12 @@ def read_arrays(
         error_kind: ErrorKind = 'sigma',
         unit: str | astropy.units.UnitBase | None = None,
         rest: str | astropy.units.Quantity | None = None,
-        velocity: str | None = None
+        velocity: str | None = None,
+        footprint: DataFile | None = None
 ) -> Arrays:
     """
-    Read data, and their errors and mask, from files in the orientation of
-    the model.
+    Read data, and their errors, mask and footprint, from files in the
+    orientation of the model.
 
     A file is a FITS file and its HDU, or, by default, its first HDU with
     data (see fitsutils.read_hdu); or an ASDF file and the path of its
@@ -94,9 +99,9 @@ def read_arrays(
     Quantity, and world coordinates those of the WCS of the file, if it
     has one (see _read_asdf). Each is put in the orientation of the
     model by its own world coordinates (see fitsutils.model_header). The
-    errors and the mask follow the axes of the file of the data, whose
-    shape they must have, if they or the data have no world coordinates;
-    else theirs must put their pixels on those of the data.
+    errors, the mask and the footprint follow the axes of the file of the
+    data, whose shape they must have, if they or the data have no world
+    coordinates; else theirs must put their pixels on those of the data.
 
     The errors are standard deviations, variances or inverse variances
     (error_kind), and become standard deviations in the unit of the data.
@@ -132,6 +137,8 @@ def read_arrays(
     velocity : str, optional
         The convention of the velocities of a spectral axis that the
         headers leave ambiguous: 'radio' or 'optical'.
+    footprint : DataFile, optional
+        The file of where the instrument looked (see Data).
 
     Returns
     -------
@@ -170,10 +177,14 @@ def read_arrays(
         valid &= np.isfinite(errors) & (errors > 0)
     if masks is not None:
         valid &= np.isfinite(masks) & (masks != 0)
+    footprints = None
+    if footprint is not None:
+        footprints, _ = _read_companion(
+            footprint, header, orientation, rest, velocity)
     return Arrays(
         np.where(valid, values, np.nan),
         None if errors is None else np.where(valid, errors, np.nan),
-        valid.astype(float), header, unit, beam)
+        valid.astype(float), header, unit, beam, footprints)
 
 
 def _filename(file: DataFile) -> str:

@@ -71,6 +71,8 @@ class DataFiles(NamedTuple):
         What the file of the errors holds: 'sigma' (standard
         deviations), 'variance' or 'inverse_variance' (see
         datafiles.read_arrays).
+    footprint : str or tuple, optional
+        The file of where the instrument looked (see Data).
     """
 
     data: DataFile
@@ -81,6 +83,7 @@ class DataFiles(NamedTuple):
     spatial_correlation: PSF | None = None
     spectral_correlation: LSF | None = None
     error_kind: datafiles.ErrorKind = 'sigma'
+    footprint: DataFile | None = None
 
 
 class DataColumns(NamedTuple):
@@ -131,6 +134,14 @@ class Data:
     finite, or have an error that is not finite or is 0 (e.g. blank
     pixels of an error map) are NaN, with mask 0.
 
+    The footprint of the values says where the instrument looked (e.g.
+    the field of an IFU, whose corners are blank but were never
+    observed): 1 inside, 0 outside, where the values are masked too. Of
+    the masked values, those inside are non-detections, which an upper
+    limit of their likelihood takes (see LikelihoodGaussian), and those
+    outside say nothing; without a footprint, every masked value is
+    inside.
+
     The noise of values on the sky can be correlated (e.g. by the beam of
     a radio image, or by the resampling of the spaxels of an IFU cube),
     and that of values along a spectral axis too (e.g. by Hanning
@@ -164,13 +175,17 @@ class Data:
     spectral_correlation : LSF, optional
         The correlation of their noise along the spectral axis; it must
         not vary.
+    footprint : ndarray, optional
+        Where the instrument looked: 1 inside, 0 outside; by default,
+        everywhere.
 
     Raises
     ------
     ConfigError
-        If the mask is not finite, an error is negative, the arrays are
-        not of one shape, the unit is not a unit, the widths of the beam
-        are not positive, or a correlation varies.
+        If the mask is not finite, an error is negative, the footprint has
+        values other than 0 and 1, the arrays are not of one shape, the
+        unit is not a unit, the widths of the beam are not positive, or a
+        correlation varies.
     """
 
     def __init__(
@@ -181,7 +196,8 @@ class Data:
             unit: str | astropy.units.UnitBase | None = None,
             beam: Beam | Mapping[str, Any] | None = None,
             spatial_correlation: PSF | None = None,
-            spectral_correlation: LSF | None = None
+            spectral_correlation: LSF | None = None,
+            footprint: np.ndarray | None = None
     ):
         data = _as_float(data)
         mask = np.ones_like(data) if mask is None \
@@ -198,15 +214,27 @@ class Data:
             raise ConfigError(
                 f"the data and the error must have one shape; their shapes "
                 f"are {data.shape} and {error.shape}")
+        if footprint is not None:
+            footprint = _as_float(footprint, data.dtype)
+            if data.shape != footprint.shape:
+                raise ConfigError(
+                    f"the data and the footprint must have one shape; their "
+                    f"shapes are {data.shape} and {footprint.shape}")
+            if not np.all(np.isin(footprint, (0, 1))):
+                raise ConfigError(
+                    "the footprint must be 1 where the instrument looked and "
+                    "0 elsewhere")
         if error is not None and np.any(error < 0):
             raise ConfigError(
                 f"errors cannot be negative; {np.count_nonzero(error < 0)} "
                 f"are, down to {np.nanmin(error):g}")
         # The total mask: the values that are finite, not masked, and
-        # with a finite, positive error
+        # with a finite, positive error, where the instrument looked
         total_mask = np.isfinite(data) & (mask != 0)
         if error is not None:
             total_mask &= np.isfinite(error) & (error > 0)
+        if footprint is not None:
+            total_mask &= footprint != 0
         data[~total_mask] = np.nan
         if error is not None:
             error[~total_mask] = np.nan
@@ -224,6 +252,7 @@ class Data:
                     f"the {kind} correlation of the noise must not vary")
         self._spatial_correlation = spatial_correlation
         self._spectral_correlation = spectral_correlation
+        self._footprint = footprint
 
     @classmethod
     def from_files(
@@ -241,7 +270,8 @@ class Data:
             spatial_correlation: PSF | None = None,
             spectral_correlation: LSF | None = None,
             velocity: str | None = None,
-            error_kind: datafiles.ErrorKind = 'sigma'
+            error_kind: datafiles.ErrorKind = 'sigma',
+            footprint: DataFile | None = None
     ) -> tuple['Data', gridutils.Coords]:
         """
         Read a data item from files, with the unit and the beam of the
@@ -249,9 +279,9 @@ class Data:
         header that is not a unit is left out), and the correlation of its
         noise, if any.
 
-        The values, their mask and errors are read in the orientation of
-        the model (see datafiles.read_arrays), and the world coordinates
-        of the values are those of the model (see
+        The values, their mask, errors and footprint are read in the
+        orientation of the model (see datafiles.read_arrays), and the
+        world coordinates of the values are those of the model (see
         fitsutils.coords_from_header).
 
         Parameters
@@ -284,6 +314,8 @@ class Data:
         error_kind : str, optional
             What the file of the errors holds (see
             datafiles.read_arrays).
+        footprint : str or tuple, optional
+            The file of where the instrument looked (see Data).
 
         Returns
         -------
@@ -315,7 +347,7 @@ class Data:
             error_file = error
         arrays = datafiles.read_arrays(
             data, error_file, mask, error_kind=error_kind, unit=unit,
-            rest=rest, velocity=velocity)
+            rest=rest, velocity=velocity, footprint=footprint)
         filename = data if isinstance(data, str) else data[0]
         coords = fitsutils.coords_from_header(
             filename, arrays.header, rpix, rval, spectral_axis, medium, rest)
@@ -326,7 +358,8 @@ class Data:
             beam = arrays.beam
         return cls(
             arrays.data, arrays.mask, errors, arrays.unit, beam,
-            spatial_correlation, spectral_correlation), coords
+            spatial_correlation, spectral_correlation,
+            arrays.footprint), coords
 
     def ndim(self) -> int:
         """Return the number of axes of the arrays."""
@@ -347,6 +380,13 @@ class Data:
     def mask(self) -> np.ndarray:
         """Return the mask: 1 for the values used, 0 for the others."""
         return self._mask
+
+    def footprint(self) -> np.ndarray | None:
+        """
+        Return where the instrument looked (1 inside, 0 outside), if
+        given.
+        """
+        return self._footprint
 
     def error(self) -> np.ndarray | None:
         """Return the errors, if any (NaN where left out)."""
@@ -378,8 +418,8 @@ class Data:
     def to_unit(self, unit: astropy.units.UnitBase) -> 'Data':
         """
         Return a copy in another unit of the same kind (e.g. km/s of m/s):
-        its values and errors converted, its mask, beam and correlations
-        of the noise.
+        its values and errors converted, its mask, beam, correlations of
+        the noise and footprint.
 
         Raises
         ------
@@ -394,13 +434,14 @@ class Data:
         return Data(
             self._data * factor, self._mask,
             None if self._error is None else self._error * factor, unit,
-            self._beam, self._spatial_correlation, self._spectral_correlation)
+            self._beam, self._spatial_correlation, self._spectral_correlation,
+            self._footprint)
 
     def with_data(self, data: np.ndarray) -> 'Data':
         """
         Return a copy with other values (e.g. those of a bootstrap), of its
-        dtype, and its mask, error, unit, beam and correlations of the
-        noise: the values it masks stay masked.
+        dtype, and its mask, error, unit, beam, correlations of the noise
+        and footprint: the values it masks stay masked.
 
         Raises
         ------
@@ -410,7 +451,7 @@ class Data:
         return Data(
             np.asarray(data, self.dtype()), self._mask, self._error,
             self._unit, self._beam, self._spatial_correlation,
-            self._spectral_correlation)
+            self._spectral_correlation, self._footprint)
 
 
 def _make_beam(beam: Beam | Mapping[str, Any] | None) -> Beam | None:
@@ -450,7 +491,8 @@ def dump_data(
     data : Data
         The data item.
     filenames : Mapping
-        The file of each array to write ('data', 'mask', 'error').
+        The file of each array to write ('data', 'mask', 'error',
+        'footprint').
     write : Callable
         Writes an array to a file, as write(filename, array) (e.g. with
         the world coordinates of the dataset).
@@ -468,7 +510,9 @@ def dump_data(
     dict
         The configuration.
     """
-    arrays = dict(data=data.data(), mask=data.mask(), error=data.error())
+    arrays = dict(
+        data=data.data(), mask=data.mask(), error=data.error(),
+        footprint=data.footprint())
     info = {}
     for key, filename in filenames.items():
         if arrays[key] is not None:

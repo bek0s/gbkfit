@@ -197,10 +197,7 @@ def _in_kms(data: Data, order: int) -> Data:
             f"moment {order} is in {unitutils.format_unit(unit)!r}, which is "
             f"not a unit of velocity^{power} (e.g. "
             f"{unitutils.format_unit(kms)!r}){hermite}")
-    factor = unit.to(kms)
-    if factor == 1:
-        return data
-    return _scaled(data, factor, kms)
+    return data if unit.to(kms) == 1 else data.to_unit(kms)
 
 
 def _dimensionless(data: Data, order: int) -> Data:
@@ -216,19 +213,9 @@ def _dimensionless(data: Data, order: int) -> Data:
         raise ConfigError(
             f"h{order} is in {unitutils.format_unit(unit)!r}; it is "
             f"dimensionless (a central moment is the item moment{order})")
-    factor = unit.to(astropy.units.dimensionless_unscaled)
-    if factor == 1:
-        return data
-    return _scaled(data, factor, astropy.units.dimensionless_unscaled)
-
-
-def _scaled(data: Data, factor: float, unit: astropy.units.UnitBase) -> Data:
-    """Return data times a factor, in the given unit."""
-    error = data.error()
-    return Data(
-        data.data() * factor, data.mask(),
-        None if error is None else error * factor, unit, data.beam(),
-        data.spatial_correlation(), data.spectral_correlation())
+    dimensionless = astropy.units.dimensionless_unscaled
+    return data if unit.to(dimensionless) == 1 \
+        else data.to_unit(dimensionless)
 
 
 def table_item(table: Table, columns: DataColumns) -> Data:
@@ -295,7 +282,7 @@ def read_moments(
             item.data, item.mask, item.error, rpix, rval, unit=item.unit,
             beam=item.beam, spatial_correlation=item.spatial_correlation,
             spectral_correlation=item.spectral_correlation,
-            error_kind=item.error_kind)
+            error_kind=item.error_kind, footprint=item.footprint)
     if not coords:
         raise ConfigError("a dataset needs at least one moment")
     first = next(iter(coords.values()))
@@ -542,7 +529,8 @@ def item_filenames(prefix: str, key: str) -> dict[str, str]:
     return dict(
         data=f'{prefix}{key}_d.fits',
         mask=f'{prefix}{key}_m.fits',
-        error=f'{prefix}{key}_e.fits')
+        error=f'{prefix}{key}_e.fits',
+        footprint=f'{prefix}{key}_f.fits')
 
 
 def flatten_single_item(

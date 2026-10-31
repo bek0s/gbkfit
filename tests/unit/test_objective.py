@@ -212,30 +212,26 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
         np.sum(-2 * scipy.special.log_ndtr(z)), rel=1e-5)
 
 
-def test_upper_limits_count_within_their_footprint(driver, tmp_path):
-    # The masked values outside it (e.g. the corners of the field of an
-    # IFU, never observed) count nothing; data there are refused
-    from gbkfit.utils import fitsutils, gridutils
+def test_upper_limits_count_within_their_footprint(driver):
+    # The masked values outside the footprint of their data (e.g. the
+    # corners of the field of an IFU, never observed) count nothing
     mask = np.ones((24, 32))
     mask[:, :8] = 0
     footprint = np.ones((24, 32))
     footprint[:, :4] = 0
-    file = str(tmp_path / 'field.fits')
-    fitsutils.write_data(
-        file, footprint, gridutils.Coords((1, 1), (15.5, 11.5), (0, 0), 0))
-    limits = dict(brightness=UpperLimit(limit=0.01, error=0.2, footprint=file))
+    limits = dict(brightness=UpperLimit(limit=0.01, error=0.2))
     data = Data(
-        np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5))
+        np.full((24, 32), 0.1), mask=mask, error=np.full((24, 32), 0.5),
+        footprint=footprint)
     objective, params = make_objective(
         driver, data, LikelihoodGaussian(upper_limits=limits))
     residuals = objective.residuals(params).reshape(24, 32)
     np.testing.assert_array_equal(residuals[:, :4], 0)
     assert np.all(residuals[:, 4:8] > 0)
     assert objective.nresiduals() == 24 * 28
-    with pytest.raises(ConfigError, match="96 values outside the footprint"):
-        make_objective(
-            driver, Data(np.full((24, 32), 0.1), mask=mask[:, ::-1]),
-            LikelihoodGaussian(upper_limits=limits))
+    # (values outside it are masked: nothing was observed there)
+    outside = Data(np.ones((2, 2)), footprint=[[1, 0], [1, 1]])
+    np.testing.assert_array_equal(outside.mask(), [[1, 0], [1, 1]])
 
 
 def test_a_fitted_noise_is_exact_to_a_constant(driver):

@@ -449,7 +449,7 @@ class ComparisonGaussian(Comparison):
     the weight of the item): a model must not lower the chi-square by
     having no values. A data item with an upper limit gives its masked
     values the residual of a non-detection instead (within its footprint,
-    if any).
+    if it has one; see Data).
 
     With a fitted noise, the residuals of its data items are over their
     noise in place of their errors, and each such item has a noise
@@ -464,12 +464,6 @@ class ComparisonGaussian(Comparison):
         The observation, with data, of a Gaussian likelihood.
     driver : Driver
         The driver of its model.
-
-    Raises
-    ------
-    ConfigError
-        If the footprint of an upper limit is not of the shape of its item
-        or of its last axes, or the item has values outside it.
     """
 
     def __init__(self, observation: Observation, driver: Driver):
@@ -492,13 +486,14 @@ class ComparisonGaussian(Comparison):
             if missing is not None and observation.model_can_lack_values() \
             else np.nan
         # The upper limit of each data item where it is masked, and its
-        # noise (NaN for none), and the footprints of those that have one
+        # noise (NaN for none), and the footprints of those that have both
         self._upper_limits = {
             key: likelihood.upper_limit(key) or (np.nan, np.nan)
             for key in keys}
         self._footprints = {
-            key: _footprint(key, likelihood.footprint(key), self._dataset)
-            for key in keys if likelihood.footprint(key) is not None}
+            key: self._dataset[key].footprint() for key in keys
+            if likelihood.upper_limit(key) is not None
+            and self._dataset[key].footprint() is not None}
         # The data items whose noise is fitted, by name, and their noise
         # residuals, in float64 (each sums a term of every value of its
         # item: float32 would round it off)
@@ -1012,32 +1007,3 @@ def _copied(
     """
     driver.mem_copy_h2d(values.ravel().astype(out.dtype), out)
     return out.reshape(shape)
-
-
-def _footprint(
-        key: str, footprint: np.ndarray, dataset: Dataset
-) -> np.ndarray:
-    """
-    Return the footprint of the upper limit of a data item, of the shape
-    of the item (see LikelihoodGaussian).
-
-    Raises
-    ------
-    ConfigError
-        If it is not of the shape of the item or of its last axes, or the
-        item has values outside it.
-    """
-    data = dataset[key]
-    try:
-        footprint = np.broadcast_to(footprint, data.shape())
-    except ValueError:
-        raise ConfigError(
-            f"the footprint of the upper limit of '{key}' is of the "
-            f"shape {footprint.shape}, not of its data, {data.shape()}, "
-            f"or of their last axes") from None
-    if outside := int(np.count_nonzero(
-            (data.mask() != 0) & (footprint == 0))):
-        raise ConfigError(
-            f"the data of '{key}' have {outside} values outside the "
-            f"footprint of their upper limit; mask them")
-    return footprint

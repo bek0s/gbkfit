@@ -219,7 +219,10 @@ class NoiseGauss(Noise):
             spectral_correlation: LSF | None = None
     ) -> 'NoiseGauss':
         """
-        Make a noise of an error map read from a FITS file.
+        Make a noise of an error map read from a FITS file, in the
+        orientation of the model (see fitsutils.read_data): by its world
+        coordinates, or without them as the file has it, which must then
+        be that of the model (e.g. as gbkfit.prep writes data).
 
         Parameters
         ----------

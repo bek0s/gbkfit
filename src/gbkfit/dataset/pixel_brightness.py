@@ -71,7 +71,8 @@ class DatasetPixelBrightness(Dataset):
             rota: float | None = None,
             spatial_correlation: PSF | None = None,
             outliers: Mapping[str, Any] | None = None,
-            error_kind: ErrorKind = 'sigma'
+            error_kind: ErrorKind = 'sigma',
+            footprint: DataFile | None = None
     ) -> 'DatasetPixelBrightness':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -107,6 +108,8 @@ class DatasetPixelBrightness(Dataset):
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
             datafiles.read_arrays).
+        footprint : str or tuple, optional
+            The file of where the instrument looked (see Data).
 
         Returns
         -------
@@ -116,7 +119,8 @@ class DatasetPixelBrightness(Dataset):
         check_options(DatasetPixelBrightness.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
-            spatial_correlation=spatial_correlation, error_kind=error_kind)
+            spatial_correlation=spatial_correlation, error_kind=error_kind,
+            footprint=footprint)
         dataset = cls(item, **_detail.grid_coords(coords, step, rota))
         return _detail.cleaned(dataset, outliers)
 

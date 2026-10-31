@@ -78,7 +78,8 @@ class DatasetPixelSpectra(Dataset):
             spectral_correlation: LSF | None = None,
             outliers: Mapping[str, Any] | None = None,
             mask_whole_spectra: bool = False,
-            error_kind: ErrorKind = 'sigma'
+            error_kind: ErrorKind = 'sigma',
+            footprint: DataFile | None = None
     ) -> 'DatasetPixelSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -126,6 +127,8 @@ class DatasetPixelSpectra(Dataset):
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
             datafiles.read_arrays).
+        footprint : str or tuple, optional
+            The file of where the instrument looked (see Data).
 
         Returns
         -------
@@ -138,7 +141,7 @@ class DatasetPixelSpectra(Dataset):
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spatial_correlation, spectral_correlation,
-            references['velocity'], error_kind)
+            references['velocity'], error_kind, footprint)
         dataset = cls(
             item, **_detail.cube_coords(coords, step, rota, spectral))
         return _detail.cleaned(dataset, outliers, mask_whole_spectra)

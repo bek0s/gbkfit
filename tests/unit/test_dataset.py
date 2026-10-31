@@ -138,6 +138,15 @@ def test_dataset_reference_pixel_survives_fits_round_trip(tmp_path):
     np.testing.assert_allclose(loaded.grid().coords.step, (2, 3), rtol=1e-12)
 
 
+def test_dataset_round_trip_keeps_the_footprint(tmp_path):
+    footprint = np.ones((8, 20))
+    footprint[:, :3] = 0
+    dataset = DatasetPixelBrightness(
+        Data(np.zeros((8, 20)), footprint=footprint))
+    loaded = dataset_parser.load(dataset.dump(prefix=str(tmp_path / '')))
+    np.testing.assert_array_equal(loaded['brightness'].footprint(), footprint)
+
+
 def test_dataset_round_trip_keeps_the_rotation_and_the_velocities(tmp_path):
     dataset = DatasetPixelSpectra(
         Data(np.zeros((6, 8, 20))), step=(2, 2), rpix=(3, 4), rval=(150, 2),
