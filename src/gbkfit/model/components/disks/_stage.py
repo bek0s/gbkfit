@@ -8,13 +8,14 @@ density waves.
 """
 
 import dataclasses
+from collections.abc import Callable, Sequence
 
 import astropy.units as u
 import numpy as np
 from astropy.table import Table
 
 from gbkfit.driver import Driver
-from gbkfit.params import ParamValues
+from gbkfit.params import ModelEvaluationError, ParamValues
 from ...extras import Extras
 from ...mass import MassContext, MassModel
 from ...mass.units import G
@@ -28,7 +29,7 @@ from ..traits import PressureSupport
 from ._disk import NodalDisk, DiskPlan
 from ._profiles import (
     NodalDiskDensity, density_waves, jeans_dispersions, pressure_support,
-    rms_heights, rotation)
+    rms_heights, rotation, surface_density)
 
 
 __all__ = [
@@ -306,7 +307,8 @@ class DiskStage(ComponentStage):
                 disk, self._plan, values, radii, support.mode, density,
                 equilibrium)
             v2 = v2 + pressure
-        result = _rotation(v2)
+        result = _rotation(
+            v2, radii, self._lit(values, radii), f"the rotation of '{name}'")
         if out_extra is not None:
             parts = mass.model.vcirc2_components(R, mass.params, mass.context)
             out_extra.add(
@@ -347,10 +349,27 @@ class DiskStage(ComponentStage):
             v2 = v2 + pressure_support(
                 disk, self._plan, values, r, support.mode, density,
                 equilibrium, z, kpc_per_arcsec)
-        v = _rotation(v2)
+        v = _rotation(
+            v2, r, self._lit(values, r),
+            "the rotation at the heights of 'mass'")
         factors = np.divide(
             v, v[:, :1], out=np.ones_like(v), where=v[:, :1] != 0)
         return dict(zip(heights, factors.T))
+
+    def _lit(
+            self, values: ParamValues, radii: Sequence[float] | np.ndarray
+    ) -> Callable[[], np.ndarray]:
+        """
+        Return a function that returns where its disk has light at the
+        radii (arcsec), from the values of its parameters (see
+        _check_solved): everywhere if it has no plan (one that samples its
+        profiles, made for what takes them).
+        """
+        def lit() -> np.ndarray:
+            if self._plan is None:
+                return np.ones(len(radii), dtype=bool)
+            return surface_density(self._disk, self._plan, values, radii) > 0
+        return lit
 
     def _equilibrium(
             self,
@@ -371,10 +390,11 @@ class DiskStage(ComponentStage):
         plan = self._plan
         radii = np.asarray(disk.subrnodes())
         heights = rms_heights(disk, plan, values, radii)
+        lit = self._lit(values, radii)
         if isinstance(equilibrium, CentralEquilibrium):
             vcirc2 = rotation(disk, plan, values, radii) ** 2 if mass is None \
                 else mass.field.vcirc2(radii * mass.kpc_per_arcsec)
-            sigma = _central_dispersion(radii, heights, vcirc2)
+            sigma = _central_dispersion(radii, lit, heights, vcirc2)
             taken = dict(vcirc=_signed_sqrt(vcirc2) * u.km / u.s)
         elif isinstance(equilibrium, JeansEquilibrium):
             sigma = _jeans_dispersion(disk, plan, values, radii, mass)
@@ -385,7 +405,7 @@ class DiskStage(ComponentStage):
                 radii * mass.kpc_per_arcsec,
                 mass.model.component_params(name, mass.params), mass.context)
             sigma = _self_gravitating_dispersion(
-                heights * mass.kpc_per_arcsec, surface)
+                radii, lit, heights * mass.kpc_per_arcsec, surface)
             taken = dict(surface_density=surface * u.solMass / u.kpc ** 2)
         if out_extra is not None:
             out_extra.add(
@@ -421,21 +441,34 @@ def _pressure_density(
 
 
 def _central_dispersion(
-        radii: np.ndarray, heights: np.ndarray, vcirc2: np.ndarray
+        radii: np.ndarray,
+        lit: Callable[[], np.ndarray],
+        heights: np.ndarray,
+        vcirc2: np.ndarray
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the central equilibrium (see
-    parts.CentralEquilibrium) at the radii (arcsec) of the given rms
-    heights (arcsec) and squared circular velocities ((km/s)^2): h Omega,
-    Omega^2 = vcirc2 / R^2; at the centre, where it is 0 / 0, Omega at the
-    next radius; NaN where vcirc2 is negative or infinite.
+    parts.CentralEquilibrium) at the radii (arcsec), where the disk has
+    light or not (see _check_solved), of the given rms heights (arcsec)
+    and squared circular velocities ((km/s)^2): h Omega, Omega^2 = vcirc2
+    / R^2; at the centre, where it is 0 / 0, Omega at the next radius; 0
+    where it has no solution and no light.
+
+    Raises
+    ------
+    ModelEvaluationError
+        If vcirc2 is negative or not finite at a radius with light.
     """
     omega2 = np.divide(
         vcirc2, radii ** 2, out=np.zeros_like(vcirc2), where=radii > 0)
     if radii[0] == 0:
         omega2[0] = omega2[1]
-    return heights * np.sqrt(
-        np.where(np.isfinite(omega2) & (omega2 >= 0), omega2, np.nan))
+    solved = np.isfinite(omega2) & (omega2 >= 0)
+    _check_solved(
+        solved, lit, radii, "the central equilibrium",
+        "the squared circular velocity of the mass is negative or not "
+        "finite")
+    return heights * np.sqrt(np.where(solved, omega2, 0))
 
 
 def _jeans_dispersion(
@@ -465,27 +498,89 @@ def _jeans_dispersion(
 
 
 def _self_gravitating_dispersion(
-        heights: np.ndarray, surface: np.ndarray
+        radii: np.ndarray,
+        lit: Callable[[], np.ndarray],
+        heights: np.ndarray,
+        surface: np.ndarray
 ) -> np.ndarray:
     """
     Return the dispersion (km/s) of the self-gravitating equilibrium (see
-    parts.SelfGravitatingEquilibrium) of the given rms heights (kpc) and
-    surface densities (Msun/kpc^2): sqrt(2 sqrt(3) G Sigma h); NaN where
-    Sigma is negative.
+    parts.SelfGravitatingEquilibrium) at the radii (arcsec), where the
+    disk has light or not (see _check_solved), of the given rms heights
+    (kpc) and surface densities (Msun/kpc^2): sqrt(2 sqrt(3) G Sigma h);
+    0 where it has no solution and no light.
+
+    Raises
+    ------
+    ModelEvaluationError
+        If Sigma is negative at a radius with light.
     """
     sigma2 = 2 * np.sqrt(3) * G * surface * heights
-    return np.sqrt(np.where(sigma2 >= 0, sigma2, np.nan))
+    solved = sigma2 >= 0
+    _check_solved(
+        solved, lit, radii, "the self-gravitating equilibrium",
+        "the surface density of the mass is negative")
+    return np.sqrt(np.where(solved, sigma2, 0))
 
 
-def _rotation(v2: np.ndarray) -> np.ndarray:
+def _rotation(
+        v2: np.ndarray,
+        radii: Sequence[float] | np.ndarray,
+        lit: Callable[[], np.ndarray],
+        what: str
+) -> np.ndarray:
     """
-    Return the rotation (km/s) of the given squared rotation ((km/s)^2):
-    0 where it is negative (the mass pulls outwards, or the pressure
-    exceeds the gravity: no rotation, as DysmalPy takes it), NaN where it
-    is infinite (there is no circular orbit, e.g. at a jump of the surface
-    density of a thin disk).
+    Return the rotation (km/s) of the given squared rotation ((km/s)^2)
+    at the radii (arcsec, along its first axis), where the disk has light
+    or not (see _check_solved), what (for the error): 0 where it is
+    negative (the mass pulls outwards, or the pressure exceeds the
+    gravity: no rotation, as DysmalPy takes it), and where it is not
+    finite and the disk has no light (e.g. beyond the end of its density,
+    by which the pressure support divides).
+
+    Raises
+    ------
+    ModelEvaluationError
+        If it is not finite at a radius with light (there is no circular
+        orbit, e.g. at a jump of the surface density of a thin disk).
     """
-    return np.sqrt(np.where(np.isfinite(v2), np.maximum(v2, 0), np.nan))
+    finite = np.isfinite(v2)
+    _check_solved(
+        finite, lit, radii, what,
+        "it is not finite (no circular orbit, e.g. at a jump of the "
+        "surface density of a thin disk)")
+    return np.sqrt(np.where(finite, np.maximum(v2, 0), 0))
+
+
+def _check_solved(
+        solved: np.ndarray,
+        lit: Callable[[], np.ndarray],
+        radii: Sequence[float] | np.ndarray,
+        what: str,
+        why: str
+) -> None:
+    """
+    Check that what (e.g. "the central equilibrium") has a solution at
+    each of the radii (arcsec, along the first axis of solved) where the
+    disk has light (the mask that lit returns, one value per radius,
+    asked only if it has none somewhere): elsewhere, no model sees it.
+
+    Raises
+    ------
+    ModelEvaluationError
+        If it has none at a radius with light, with the first and why.
+    """
+    # (an error, not NaN tables: a comparison would score a model of NaN
+    # as one without values there, a flat chi-square that can beat a real
+    # fit; a fitter takes the error as a point it cannot evaluate: audit
+    # 2026-10-31 #8)
+    unsolved = ~solved.reshape(len(solved), -1).all(axis=1)
+    if unsolved.any():
+        unsolved &= lit()
+    if unsolved.any():
+        radius = float(np.asarray(radii)[unsolved][0])
+        raise ModelEvaluationError(
+            f"{what} has no solution at R = {radius:g} arcsec: {why}")
 
 
 def _signed_sqrt(v2: np.ndarray) -> np.ndarray:

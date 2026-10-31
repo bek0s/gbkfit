@@ -5,7 +5,7 @@ which the galaxy checks when it is made (see check_needs), and which can
 be asked before (see galaxy_gives).
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from typing import NamedTuple
 
 from gbkfit.utils.parseutils import ConfigError
@@ -15,6 +15,7 @@ from ..mass import MassModel
 
 __all__ = [
     'Need',
+    'check_densities',
     'check_needs',
     'density_needs',
     'galaxy_gives'
@@ -40,10 +41,13 @@ class Need(NamedTuple):
     densities : tuple of str
         The names of the mass components whose densities it takes (e.g.
         the pressure support of a disk; see density_needs).
+    surface : bool
+        Whether it takes their surface densities, not their densities.
     """
     capability: Capability
     what: str
     densities: tuple[str, ...] = ()
+    surface: bool = False
 
 
 def density_needs(
@@ -59,7 +63,8 @@ def density_needs(
     support of the component 'gas'").
     """
     kind = 'surface density' if surface else 'density'
-    needs = [Need(Capability.MASS, f"{what} takes the {kind}", tuple(names))] \
+    needs = [Need(
+        Capability.MASS, f"{what} takes the {kind}", tuple(names), surface)] \
         if names else []
     if surface:
         needs.append(Need(
@@ -114,3 +119,35 @@ def check_needs(
         if (reason := gives[need.capability]) is not None:
             raise ConfigError(
                 f"{need.what}, which it does not give: {reason}")
+
+
+def check_densities(
+        needs: Iterable[Need],
+        mass_model: MassModel,
+        thick: Collection[str]
+) -> None:
+    """
+    Check that the mass components whose densities (or surface densities)
+    needs take give them (see MassComponent.gives_density and
+    gives_surface_density), in a galaxy whose thick components have the
+    given names.
+
+    Raises
+    ------
+    ConfigError
+        If one does not, saying what takes it.
+    """
+    # (at load, not as an error of the first evaluation, which would end a
+    # fit: audit 2026-10-31 #30a)
+    for need in needs:
+        kind = 'surface density' if need.surface else 'density'
+        for name in need.densities:
+            component = mass_model.component(name)
+            gives = component.gives_surface_density() if need.surface \
+                else component.gives_density(thick)
+            if not gives:
+                raise ConfigError(
+                    f"{need.what} of the mass component {name!r}, which "
+                    f"does not give its {kind} (e.g. a halo of a profile "
+                    f"without a projection, a thin disk, a table or a user "
+                    f"component)")

@@ -22,7 +22,7 @@ from . import _units
 from ._component_plans import ComponentPlans
 from ._detail import geometry_desc, shared_params
 from ._functions import GalaxyFunctions
-from ._needs import Need, check_needs
+from ._needs import Need, check_densities, check_needs
 from ._stage import GalaxyStage
 from ._transfer import LineResolution
 from ._units import DataUnit
@@ -94,6 +94,9 @@ def _with_mass_params(
     thick = [cmp.name() for cmp in components
              if isinstance(cmp, Disk) and cmp.density_disk().traits('rht')]
     gravity.check_mass_model(mass_model, thick)
+    check_densities(
+        [need for cmp in components for need in cmp.needs()], mass_model,
+        thick)
     check_needs([
         Need(Capability.SHARES,
              f"the mass component {mass_component.name()!r} takes the "

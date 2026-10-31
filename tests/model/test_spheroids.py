@@ -19,6 +19,7 @@ from gbkfit.model import (
     MassSpheroid, ProfileSersic, ShapeFlattened, Spheroid, component_parser,
     galaxy_parser)
 from gbkfit.model.mass import G, _numerics
+from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
@@ -237,17 +238,20 @@ def test_a_warning_says_when_rmax_cuts_the_light(
     (dict(type='sersic'), dict(ie=1, re=0, n=2, q=0.5)),
     (dict(type='mge', ngauss=2), dict(i0=[1, 2], sigma=[1, 2], q=[0, 0.9])),
 ])
-def test_a_term_at_a_bound_of_zero_is_seen(
+def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
         driver, evaluate_cases, profile, properties):
-    # A scale or an axis ratio of 0 (the bound of its parameter) makes the
-    # light NaN, rather than an error or a term that vanishes
+    # Out of the valid ranges of their parameters, and an error of the
+    # light if a tie gives one (audit 2026-10-31 #8: its NaN light was
+    # scored as a model without values)
+    from gbkfit.model.components.spheroids.spheroid import _checked_terms
     shape = dict(shape=dict(type='flattened')) \
         if profile['type'] == 'sersic' else {}
     spheroid = dict(
         type='spheroid', profile=profile, rmax=8, emission=BAND) | shape
-    data, _ = evaluate_cases(
-        [image(driver, spheroid)], GEOMETRY | properties)
-    assert np.isnan(data[0]['brightness']['d']).any()
+    with pytest.raises(ConfigError, match="invalid parameter properties"):
+        evaluate_cases([image(driver, spheroid)], GEOMETRY | properties)
+    with pytest.raises(ModelEvaluationError, match="above 0"):
+        _checked_terms(np.array([[1.0, 2.0, 0.5], [1.0, 0.0, 0.5]]))
 
 
 def test_a_sphere_has_no_axis():
@@ -496,12 +500,15 @@ def test_the_jeans_tables_of_a_gaussian_around_a_point_mass_are_exact():
 def test_the_jeans_tables_take_a_mass_disk_far_from_it():
     # The Jeans integrals reach 100 rmax from the plane (here 480 kpc),
     # beyond the tables of the forces of a mass disk (5 outer radii: 200
-    # kpc for rd = 1 kpc), where its far field pulls: before, they raised
+    # kpc for rd = 1 kpc), where its far field pulls: before, they raised.
+    # (A disk of 1e8 Msun: from 1e8.5 on, the round isotropic stars have
+    # no Jeans solution near its plane, <v_phi^2> < 0 where they are
+    # bright, an error since audit 2026-10-31 #8.)
     disk = dict(
         type='disk', name='disk', surface=dict(type='exponential'),
         vertical=dict(type='thin'))
     spheroid = JEANS_SPHEROID | dict(rmax=100)
-    properties = JEANS_PROPERTIES | dict(mass_disk_log_m=10, mass_disk_rd=1)
+    properties = JEANS_PROPERTIES | dict(mass_disk_log_m=8, mass_disk_rd=1)
     with_disk = galaxy_parser.load(dict(
         components=[spheroid], mass=[dict(type='point', name='bh'), disk],
         distance=DISTANCE)).plan_stage().evaluate(properties).states[0]
@@ -509,6 +516,22 @@ def test_the_jeans_tables_take_a_mass_disk_far_from_it():
         JEANS_PROPERTIES).states[0]
     assert np.all(with_disk.sigma_z > alone.sigma_z)
 
+
+
+def test_jeans_stars_without_a_solution_where_they_are_bright_raise():
+    # (round isotropic stars over a thin disk of 1e10 Msun: <v_phi^2> < 0
+    # at a fifth of their peak; their NaN tables were scored as a model
+    # without values: audit 2026-10-31 #8)
+    from gbkfit.params import ModelEvaluationError
+    disk = dict(
+        type='disk', name='disk', surface=dict(type='exponential'),
+        vertical=dict(type='thin'))
+    galaxy = galaxy_parser.load(dict(
+        components=[JEANS_SPHEROID],
+        mass=[dict(type='point', name='bh'), disk], distance=DISTANCE))
+    with pytest.raises(ModelEvaluationError, match="negative at"):
+        galaxy.plan_stage().evaluate(
+            JEANS_PROPERTIES | dict(mass_disk_log_m=10, mass_disk_rd=1))
 
 def test_the_jeans_equations_have_no_solution_at_beta_z_1():
     # (sigma_R^2 = sigma_z^2 / (1 - beta_z): no model there, a point that

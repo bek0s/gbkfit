@@ -15,8 +15,8 @@ import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import (
-    ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc,
-    pdescs_with_units)
+    ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues,
+    ParamVectorDesc, pdescs_with_units)
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from ...mass._numerics import (
@@ -203,7 +203,8 @@ class LightSersic(LightProfile):
                 desc="the surface brightness at the effective radius, "
                      "face-on", default=1),
             re=ParamScalarDesc(
-                desc="the effective radius", min=0, unit='arcsec', default=1),
+                desc="the effective radius", min=0, min_exclusive=True,
+                unit='arcsec', default=1),
             n=ParamScalarDesc(
                 desc="the Sersic index", min=0.3, max=12, unit='', default=4))
 
@@ -339,10 +340,11 @@ class LightMGE(LightProfile):
                         "face-on", default=1),
             sigma=ParamVectorDesc(
                 n, desc="the dispersion of each Gaussian", min=0,
-                unit='arcsec', default=1),
+                min_exclusive=True, unit='arcsec', default=1),
             q=ParamVectorDesc(
                 n, desc="the intrinsic axis ratio of each Gaussian "
-                        "(height over width)", min=0, unit='', default=0.8))
+                        "(height over width)", min=0, min_exclusive=True,
+                unit='', default=0.8))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('i0',)
@@ -427,13 +429,25 @@ def _projected_ratio(q: npt.ArrayLike, incl: float) -> np.ndarray:
 
 def _checked_terms(terms: np.ndarray) -> np.ndarray:
     """
-    Return the terms of a light profile (see LightProfile.terms), with
-    those of a scale or an axis ratio that is not greater than zero (e.g.
-    at the bound 0 of its parameter) all NaN: they make the density NaN,
-    so that they are seen.
+    Return the terms of a light profile (see LightProfile.terms), checked:
+    a scale or an axis ratio that is not greater than zero (e.g. of a tie,
+    since their parameters are) gives no light.
+
+    Raises
+    ------
+    ModelEvaluationError
+        If a scale or an axis ratio is not greater than zero.
     """
+    # (an error, not NaN light: a comparison would score a model of NaN
+    # as one without values there, a flat chi-square that can beat a real
+    # fit; a fitter takes the error as a point it cannot evaluate: audit
+    # 2026-10-31 #8)
     invalid = ~((terms[:, 1] > 0) & (terms[:, 2] > 0))
-    terms[invalid] = np.nan
+    if invalid.any():
+        scale, ratio = terms[invalid][0, 1:]
+        raise ModelEvaluationError(
+            f"the light of the spheroid needs scales and axis ratios above "
+            f"0; one is {scale:g} with the axis ratio {ratio:g}")
     return terms
 
 

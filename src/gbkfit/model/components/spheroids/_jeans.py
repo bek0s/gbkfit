@@ -67,13 +67,13 @@ class JeansKinematics(SpheroidKinematics):
     below sigma_R^2 the stars cannot rotate so: <v_phi> is 0 there (as
     JamPy), and sigma_phi^2 = <v_phi^2>. Where kappa (above 1) asks for
     a rotation above <v_phi^2>^(1/2), it is that, and sigma_phi is 0 (a
-    cold rotation). NaN where <v_phi^2> is negative; 0 where it has no
-    light (beyond the floats). Each point of the spheroid moves with a
-    Gaussian distribution of velocities of that mean and those
-    dispersions (the velocity ellipsoid seen along the line of sight):
-    the Jeans equations give the mean and the dispersion of the stars,
-    not the shape of their distribution, so fit those (see
-    SpheroidKinematics).
+    cold rotation). No model (a ModelEvaluationError) where <v_phi^2> is
+    negative and there is light; 0 where there is none (beyond the
+    floats, or below the float32 round-off of the brightest point). Each point of the spheroid moves with a Gaussian distribution
+    of velocities of that mean and those dispersions (the velocity
+    ellipsoid seen along the line of sight): the Jeans equations give the
+    mean and the dispersion of the stars, not the shape of their
+    distribution, so fit those (see SpheroidKinematics).
     """
 
     @staticmethod
@@ -327,14 +327,27 @@ def jeans_tables(
         speed = np.sqrt(np.maximum(vphi2, 0))
         vphi = np.sign(kappa) * np.minimum(
             abs(kappa) * np.sqrt(np.maximum(rotation, 0)), speed)
-        # (NaN only where <v_phi^2> is negative: no motion solves the
-        # Jeans equations there. The maximum takes the round-off of the
-        # cap, which can leave sigma_phi^2 a hair below 0.)
-        sphi2 = np.where(
-            vphi2 >= 0, np.maximum(vphi2 - vphi ** 2, 0), np.nan)
-        # (0 where there is no light, of no weight: the kernels interpolate
-        # the tables, so they must be numbers there)
-        sphi = np.sqrt(sphi2)
+        # Where <v_phi^2> is negative (or not a number) no motion solves
+        # the Jeans equations: an error, not NaN tables, where there is
+        # light (a comparison would score a model of NaN as one without
+        # values there, a flat chi-square that can beat a real fit; a
+        # fitter takes the error as a point it cannot evaluate: audit
+        # 2026-10-31 #8). Light that no model sees (below the round-off
+        # of the brightest point in float32, far below the range of any
+        # data; e.g. of a Gaussian profile far within a large rmax, whose
+        # steep fall outweighs the gravity there) moves with neither
+        # rotation nor dispersion there (see the maximums).
+        lit = nu > np.finfo(np.float32).eps * np.max(nu, initial=0)
+        unsolved = lit & ~(vphi2 >= 0)
+        if unsolved.any():
+            raise ModelEvaluationError(
+                f"the Jeans equations of the spheroid have no solution at "
+                f"beta_z = {beta_z}: <v_phi^2> is negative at "
+                f"{np.count_nonzero(unsolved)} of the points of its tables "
+                f"with light (the pressure outweighs the gravity there)")
+        # (the maximum takes the round-off of the cap, which can leave
+        # sigma_phi^2 a hair below 0)
+        sphi = np.sqrt(np.maximum(vphi2 - vphi ** 2, 0))
         values = [
             np.where(nu > 0, value, 0.0)
             for value in (vphi, np.sqrt(sr2), sphi, np.sqrt(sz2))]

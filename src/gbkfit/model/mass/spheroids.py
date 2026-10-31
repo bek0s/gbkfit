@@ -306,6 +306,10 @@ class MassSpheroid(MassComponent):
     def gives_density(self, thick: Collection[str]) -> bool:
         return self._response is None
 
+    def gives_surface_density(self) -> bool:
+        return self._response is None \
+            and self._profile.gives_surface_density()
+
     def cell_masses(
             self,
             r_edges: np.ndarray,
@@ -527,6 +531,9 @@ class MassLightSpheroid(MassComponent):
                 R, z, profile, values, context), params, context)
 
     def gives_density(self, thick: Collection[str]) -> bool:
+        return True
+
+    def gives_surface_density(self) -> bool:
         return True
 
     def surface_density(

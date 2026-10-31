@@ -430,6 +430,13 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
             f"the mass component '{self.type()}' does not give its surface "
             f"density")
 
+    def gives_surface_density(self) -> bool:
+        """
+        Check whether it gives its surface density (see surface_density);
+        here, it does not.
+        """
+        return False
+
     def forces(
             self,
             R: npt.ArrayLike,

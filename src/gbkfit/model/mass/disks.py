@@ -163,6 +163,9 @@ class MassDisk(MassComponent):
         # (a thin disk has a surface density only)
         return not self._vertical.thin_given(thick)
 
+    def gives_surface_density(self) -> bool:
+        return True
+
     def surface_density(
             self,
             R: npt.ArrayLike,

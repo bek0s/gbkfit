@@ -2016,11 +2016,12 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
         type='mass', pressure_support='jeans', pressure_density='dust')
     with pytest.raises(ConfigError, match="which its galaxy does not have"):
         disk_galaxy('smooth', vptraits, MASS, DISTANCE)
-    # (a thin disk has no density at its midplane)
-    galaxy = disk_galaxy(
-        'smooth', vptraits | dict(pressure_density='stars'), MASS, DISTANCE)
-    with pytest.raises(NotImplementedError, match="a thin disk"):
-        galaxy.plan_stage().evaluate(DISK_PROPERTIES | MASS_PROPERTIES)
+    # (a thin disk has no density at its midplane: refused at load, not at
+    # the first evaluation of a fit, audit 2026-10-31 #30a)
+    with pytest.raises(ConfigError, match="does not give its density"):
+        disk_galaxy(
+            'smooth', vptraits | dict(pressure_density='stars'), MASS,
+            DISTANCE)
 
 
 def rotation_at_heights(vptraits, mass, params):
@@ -2038,6 +2039,20 @@ def rotation_at_heights(vptraits, mass, params):
         distance=copy.deepcopy(DISTANCE)))
     return galaxy, galaxy.plan_stage().evaluate(params).states[0]
 
+
+
+def test_a_self_gravitating_density_needs_a_projection():
+    # (an NFW halo has no surface density: refused at load, not at the
+    # first evaluation of a fit: audit 2026-10-31 #30a)
+    disk = with_traits(
+        DISK, vptraits=dict(
+            type='mass', pressure_support='self_gravitating',
+            pressure_density='halo')) | dict(type='disk', name='gas')
+    with pytest.raises(ConfigError, match="does not give its surface"):
+        galaxy_parser.load(dict(
+            components=[disk], mass=[dict(
+                type='spheroid', name='halo', profile=dict(type='nfw'))],
+            distance=copy.deepcopy(DISTANCE)))
 
 def test_the_table_of_rotation_at_heights_stays_within_the_density():
     # (above the zmax of the density height traits, pressure support

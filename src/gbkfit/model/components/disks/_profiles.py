@@ -31,7 +31,8 @@ __all__ = [
     'jeans_dispersions',
     'pressure_support',
     'rms_heights',
-    'rotation'
+    'rotation',
+    'surface_density'
 ]
 
 
@@ -318,6 +319,19 @@ def _surface_densities(
     return _azimuthal_mean(
         values, _axisymmetric(disk, kinds),
         _edges(disk, params, kinds, r[:, 0]))
+
+
+def surface_density(
+        disk: NodalDisk, plan: DiskPlan, params: ParamValues, r: np.ndarray
+) -> np.ndarray:
+    """
+    Return the azimuthal mean of the surface density of a disk (the sum of
+    its density polar traits, where its selection traits keep it) at the
+    radii r (arcsec, on the disk).
+    """
+    return _surface_densities(
+        disk, plan, _with_inputs(disk, params),
+        np.asarray(r, dtype=float)).sum(axis=0)
 
 
 @dataclasses.dataclass(frozen=True)

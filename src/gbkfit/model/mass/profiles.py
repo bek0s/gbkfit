@@ -12,7 +12,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
-from gbkfit.params import ParamDesc, ParamValues
+from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
@@ -89,6 +89,13 @@ class SpheroidProfile(parseutils.TypedSerializable, abc.ABC):
             f"the profile '{self.type()}' does not give its projected "
             f"density")
 
+    def gives_surface_density(self) -> bool:
+        """
+        Check whether it gives its projected density (see
+        surface_density); here, it does not.
+        """
+        return False
+
     def potential(
             self,
             r: np.ndarray,
@@ -150,6 +157,9 @@ class ProfileSersic(SpheroidProfile):
     ) -> np.ndarray:
         mass, re, tables = self._scales(params)
         return mass * tables.mass(np.asarray(r, dtype=float) / re)
+
+    def gives_surface_density(self) -> bool:
+        return True
 
     def surface_density(
             self,
@@ -228,6 +238,9 @@ class ProfileGaussian(SpheroidProfile):
         return mass * (scipy.special.erf(x / np.sqrt(2))
                        - np.sqrt(2 / np.pi) * x * np.exp(-x ** 2 / 2))
 
+    def gives_surface_density(self) -> bool:
+        return True
+
     def surface_density(
             self,
             R: npt.ArrayLike,
@@ -271,7 +284,9 @@ class ProfileNodewise(SpheroidProfile):
     falls), M(<r) = -4 int
     S'(R) I(R, r) dR with I = int_0^min(r, R) s^2 / sqrt(R^2 - s^2) ds,
     and 4 pi int_r^inf rho s ds = -4 int_r^inf S'(R) sqrt(R^2 - r^2) dR,
-    each in closed form on each segment.
+    each in closed form on each segment. A projected density that rises
+    outward (too steeply for its falls beyond) has a negative density
+    and mass, of no model: an error (ModelEvaluationError).
 
     Parameters
     ----------
@@ -324,7 +339,7 @@ class ProfileNodewise(SpheroidProfile):
         span, beyond = _segment_spans(a, b, r)
         with np.errstate(invalid='ignore'):
             terms = np.where(beyond & (k != 0), k * span, 0)
-        return -terms.sum(axis=-1) / np.pi
+        return _non_negative(-terms.sum(axis=-1) / np.pi, 'density', params)
 
     def enclosed_mass(
             self,
@@ -336,7 +351,11 @@ class ProfileNodewise(SpheroidProfile):
         a, b, k = self._segments(params)
         moments = _deprojected_mass_moment(b, r) \
             - _deprojected_mass_moment(a, r)
-        return -4 * np.sum(k * moments, axis=-1)
+        return _non_negative(
+            -4 * np.sum(k * moments, axis=-1), 'enclosed mass', params)
+
+    def gives_surface_density(self) -> bool:
+        return True
 
     def surface_density(
             self,
@@ -381,6 +400,30 @@ class ProfileNodewise(SpheroidProfile):
         sigma = np.append(10 ** np.asarray(params['log_sigma']), 0)
         return (self._nodes[:-1], self._nodes[1:],
                 np.diff(sigma) / np.diff(self._nodes))
+
+
+def _non_negative(
+        values: np.ndarray, what: str, params: ParamValues
+) -> np.ndarray:
+    """
+    Return values of what (the density or the enclosed mass) of a
+    nodewise profile of the given parameters, checked: negative where its
+    projected density rises outward (only there: on falling segments,
+    each term is not negative).
+
+    Raises
+    ------
+    ModelEvaluationError
+        If one is negative.
+    """
+    # (an error, not a negative mass, which the model would take silently:
+    # audit 2026-10-31 #8, #30c)
+    if np.any(values < 0):
+        log_sigma = np.round(np.asarray(params['log_sigma']), 3).tolist()
+        raise ModelEvaluationError(
+            f"the nodewise profile has a negative {what}: its projected "
+            f"density (log_sigma {log_sigma}) rises outward too steeply")
+    return values
 
 
 def _segment_spans(
