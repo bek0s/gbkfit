@@ -539,8 +539,6 @@ def parse_component_rnode_args(
         raise ConfigError(
             "rstep must be greater than zero and less than half the "
             "smallest difference between two consecutive rnodes")
-    interpolations = dict(
-        linear=interpolation.InterpolatorLinear,
-        akima=interpolation.InterpolatorAkima,
-        pchip=interpolation.InterpolatorPCHIP)
-    return dict(rnodes=nodes, rstep=step, interp=interpolations[interp])
+    return dict(
+        rnodes=nodes, rstep=step,
+        interp=interpolation.INTERPOLATORS[interp])

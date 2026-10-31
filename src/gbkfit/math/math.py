@@ -1,41 +1,59 @@
 
 
 import numpy as np
+import numpy.typing as npt
 
 
-def is_odd(x):
-    return int(x) % 2 != 0
-
-def is_even(x):
-    return int(x) % 2 == 0
+def is_odd(x: npt.ArrayLike) -> np.ndarray:
+    """Return whether each value of x, truncated to an integer, is odd."""
+    return np.trunc(np.asarray(x)).astype(int) % 2 != 0
 
 
-is_even = np.vectorize(is_even)
-is_odd = np.vectorize(is_odd)
+def is_even(x: npt.ArrayLike) -> np.ndarray:
+    """Return whether each value of x, truncated to an integer, is even."""
+    return np.trunc(np.asarray(x)).astype(int) % 2 == 0
 
 
-def roundu_even(x):
-    return 2 * np.ceil(0.5 * x)
+def roundu_even(x: npt.ArrayLike) -> np.ndarray:
+    """Return each value of x rounded up to an even number."""
+    return 2 * np.ceil(0.5 * np.asarray(x))
 
 
-def roundu_odd(x):
+def roundu_odd(x: float) -> float:
+    """Return x rounded up to an odd number."""
     x_even = roundu_even(x)
     return x_even + 1 if x_even - 1 < x else x_even - 1
 
 
-def roundu_multiple(x, multiple):
-    assert multiple > 0
-    return x - np.mod(x, multiple) + multiple if np.mod(x, multiple) != 0 else x
+def roundu_multiple(x: float, multiple: float) -> float:
+    """
+    Return x rounded up to a multiple of multiple.
+
+    Raises
+    ------
+    ValueError
+        If multiple is not positive.
+    """
+    if not multiple > 0:
+        raise ValueError(f"multiple must be positive; it is {multiple}")
+    remainder = np.mod(x, multiple)
+    return x - remainder + multiple if remainder != 0 else x
 
 
-def roundu_po2(x):
+def _roundu_po2(x: float) -> int:
+    """Return the smallest power of 2 at or above x (at least 1)."""
     power = 1
     while power < x:
         power *= 2
     return power
 
 
-roundu_po2 = np.vectorize(roundu_po2)
+def roundu_po2(x: npt.ArrayLike) -> np.ndarray:
+    """
+    Return the smallest power of 2 at or above each value of x (at least
+    1).
+    """
+    return np.vectorize(_roundu_po2)(x)
 
 
 def transform_lh_rotate_z(x, y, theta):

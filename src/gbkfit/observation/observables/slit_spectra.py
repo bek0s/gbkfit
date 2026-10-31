@@ -59,7 +59,9 @@ class SlitSpectra(Observable):
         The world coordinates of the positions along the slit (see
         gridutils.Coords; one value each); rpix is the centre by default.
     rota : float, optional
-        The angle of the slit on the sky.
+        The rotation of the frame of the slit (see gridutils.Coords): the
+        position angle (degrees) of its +y axis, across the slit, which
+        lies along its x axis.
     slit_width : float, optional
         The width of the slit; by default, the step along it.
     sky_rval : Sequence of float, optional
