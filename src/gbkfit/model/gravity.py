@@ -24,7 +24,7 @@ from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
-from ._scalar_field import FieldGradient, solve_field
+from ._scalar_field import solve_field
 from .mass import MassContext, MassModel
 from .mass.units import G
 
@@ -526,7 +526,7 @@ class GravityHuSawicki(Gravity):
 
         rmax = max(_FR_RMAX_COMPTON * compton, _FR_RMAX_MIN)
         grid, w, w_out = solve_field(rmax, masses, a, b, n)
-        return _HuSawickiField(
+        return _GradientField(
             _NewtonField(mass_model, params, context),
             grid.gradient(w, w_out), _C2 * background / 2)
 
@@ -563,16 +563,23 @@ class GravityHuSawicki(Gravity):
                 "components"}
 
 
-class _HuSawickiField(GravityField):
+# The gradient of a field w at the points (R, z): (dw/dR, dw/dz)
+_Gradient = Callable[
+    [npt.ArrayLike, npt.ArrayLike], tuple[np.ndarray, np.ndarray]]
+
+
+class _GradientField(GravityField):
     """
-    The field of a mass model in f(R) gravity (see GravityHuSawicki): its
-    Newtonian field, plus the fifth force -scale grad(w) of the field w =
-    f_R / fbar_R (scale = c^2 |fbar_R| / 2, (km/s)^2), of the gradient of
-    w (kpc^-1) at any points (R, z).
+    The field of a mass model in f(R) gravity: its Newtonian field, plus
+    the fifth force -scale grad(w) of a field w, of the gradient of w at
+    any points (R, z): in GravityHuSawicki, w = f_R / fbar_R (scale = c^2
+    |fbar_R| / 2, (km/s)^2, a FieldGradient, kpc^-1); in GravityPalatini,
+    the density of the mass (scale = 8 pi G alpha, see
+    _density_gradient).
     """
 
     def __init__(
-            self, newton: GravityField, gradient: FieldGradient, scale: float
+            self, newton: GravityField, gradient: _Gradient, scale: float
     ):
         self._newton = newton
         self._gradient = gradient
@@ -652,9 +659,13 @@ class GravityPalatini(Gravity):
                     f"Palatini f(R) gravity takes the density of the mass "
                     f"components: {e}") from e
 
-        return _PalatiniField(
-            _NewtonField(mass_model, params, context), density,
-            8 * np.pi * G * float(params['gravity_alpha']))
+        alpha = float(params['gravity_alpha'])
+        # (none without a correction: the density is not evaluated)
+        gradient = _density_gradient(density) if alpha != 0 \
+            else _no_gradient
+        return _GradientField(
+            _NewtonField(mass_model, params, context), gradient,
+            8 * np.pi * G * alpha)
 
     def check_mass_model(
             self, mass_model: MassModel, thick: Collection[str]
@@ -683,59 +694,35 @@ class GravityPalatini(Gravity):
                 "are Newtonian, not those of Palatini f(R) gravity"}
 
 
-class _PalatiniField(GravityField):
+def _density_gradient(
+        density: Callable[[np.ndarray, np.ndarray], np.ndarray]
+) -> _Gradient:
     """
-    The field of a mass model in Palatini f(R) gravity (see
-    GravityPalatini): its Newtonian field, plus -scale grad(rho) of its
-    density rho, a function of (R, z) (scale = 8 pi G alpha).
+    Return the gradient of a density, (drho/dR, drho/dz) at the points (R,
+    z), by central differences.
     """
-
-    def __init__(
-            self,
-            newton: GravityField,
-            density: Callable[[np.ndarray, np.ndarray], np.ndarray],
-            scale: float
-    ):
-        self._newton = newton
-        self._density = density
-        self._scale = scale
-
-    def vcirc2(self, R: npt.ArrayLike) -> np.ndarray:
-        R = np.asarray(R, dtype=float)
-        grad_R, _ = self._gradient(R, np.zeros_like(R))
-        return self._newton.vcirc2(R) + self._scale * R * grad_R
-
-    def forces(
-            self, R: npt.ArrayLike, z: npt.ArrayLike
+    def gradient(
+            R: npt.ArrayLike, z: npt.ArrayLike
     ) -> tuple[np.ndarray, np.ndarray]:
-        force_R, force_z = self._newton.forces(R, z)
-        grad_R, grad_z = self._gradient(R, z)
-        return (force_R - self._scale * grad_R,
-                force_z - self._scale * grad_z)
-
-    def vertical_force(
-            self, R: npt.ArrayLike, z: npt.ArrayLike
-    ) -> np.ndarray:
-        return self.forces(R, z)[1]
-
-    def _gradient(
-            self, R: npt.ArrayLike, z: npt.ArrayLike
-    ) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Return the gradient of the density, (drho/dR, drho/dz), at the
-        points (R, z), by central differences (none without a correction).
-        """
         R, z = np.broadcast_arrays(
             np.asarray(R, dtype=float), np.asarray(z, dtype=float))
-        if self._scale == 0:
-            return np.zeros_like(R), np.zeros_like(R)
         step_R = _PALATINI_STEP * np.maximum(R, _PALATINI_MIN_STEP)
         step_z = _PALATINI_STEP * np.maximum(np.abs(z), _PALATINI_MIN_STEP)
-        grad_R = (self._density(R + step_R, z)
-                  - self._density(R - step_R, z)) / (2 * step_R)
-        grad_z = (self._density(R, z + step_z)
-                  - self._density(R, z - step_z)) / (2 * step_z)
+        grad_R = (density(R + step_R, z)
+                  - density(R - step_R, z)) / (2 * step_R)
+        grad_z = (density(R, z + step_z)
+                  - density(R, z - step_z)) / (2 * step_z)
         return grad_R, grad_z
+    return gradient
+
+
+def _no_gradient(
+        R: npt.ArrayLike, z: npt.ArrayLike
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the gradient of a field of 0: zeros at the points (R, z)."""
+    R, _ = np.broadcast_arrays(
+        np.asarray(R, dtype=float), np.asarray(z, dtype=float))
+    return np.zeros_like(R), np.zeros_like(R)
 
 
 def _forces_of_components(mass_model: MassModel) -> str | None:
