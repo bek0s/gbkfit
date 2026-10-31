@@ -211,6 +211,11 @@ class RegionMoments(Observable):
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
+        if regions.valid() is not None:
+            raise ConfigError(
+                "the moments of regions are of whole spectra: their regions "
+                "take no valid pixels of each channel (those of the spectra "
+                "of regions)")
 
     def regions(self) -> Regions:
         """Return the regions."""

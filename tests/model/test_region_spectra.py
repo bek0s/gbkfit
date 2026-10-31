@@ -10,6 +10,7 @@ import gbkfit.region
 import gbkfit.params
 import numpy as np
 import pytest
+from astropy.io import fits
 from modelutils import group_plan
 
 from gbkfit.dataset import Data
@@ -108,6 +109,35 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
     expected = np.stack(
         [scube[:, index == i].sum(axis=1) for i in range(3)], axis=1)
     np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
+
+
+def test_region_spectra_of_bins_sum_their_valid_pixels(driver):
+    # Bins whose pixels are valid in some channels only (e.g. of a cube of
+    # data with masked voxels): each channel of a spectrum of the model is
+    # the sum of the pixels valid there; the bins dump and load them
+    index = np.full((41, 32), -1)
+    index[10:20, 5:15] = 0
+    index[20:30, 10:25] = 1
+    valid = np.ones((51, 41, 32), np.uint8)
+    valid[20:30, 12, 5:10] = 0
+    valid[:, 25, 20] = 0
+    scube = evaluate(driver, SCUBE)
+    fitsutils.write_data('bins.fits', index, gridutils.Coords(
+        (1, 1), (15.5, 20), (0, 0), 0))
+    fits.writeto('valid.fits', valid, overwrite=True)
+    observable = dict(
+        type='region_spectra',
+        spectral=dict(size=51, step=10, convention='relativistic'),
+        **INSTRUMENT,
+        regions=dict(type='bins', file='bins.fits', valid='valid.fits'))
+    aspec = evaluate(driver, observable)
+    expected = np.stack(
+        [(scube * valid)[:, index == i].sum(axis=1) for i in range(2)],
+        axis=1)
+    np.testing.assert_allclose(aspec, expected, rtol=1e-5, atol=1e-6)
+    regions = gbkfit.region.regions_parser.load(observable['regions'])
+    info = gbkfit.region.regions_parser.dump(regions, prefix='copy_')
+    assert gbkfit.region.regions_parser.load(info) == regions
 
 
 @pytest.mark.parametrize('step', [1.0, 0.5])

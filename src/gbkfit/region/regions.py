@@ -6,6 +6,7 @@ from typing import Annotated, Any, TypeAlias
 import numpy as np
 import numpy.typing as npt
 import scipy.sparse
+from astropy.io import fits
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import check_options
@@ -72,12 +73,24 @@ class Regions(parseutils.TypedSerializable, abc.ABC):
         """
         pass
 
+    def valid(self) -> np.ndarray | None:
+        """
+        Which pixels of its grid count in each channel of spectra: 1 or
+        0, of shape (channels, ny, nx), e.g. of a spectrum of a bin that
+        sums the valid pixels of each channel of a cube (see RegionsBins);
+        None (here) if all do.
+        """
+        return None
+
 
 class RegionsBins(Regions):
     """
     Bins of the pixels of a spatial grid (e.g. Voronoi bins), given by the
     bin of each pixel (index): 0 to n - 1, or negative for the pixels in no
-    bin. Each bin is the sum of its pixels.
+    bin. Each bin is the sum of its pixels; of spectra, optionally of
+    those valid in each channel (valid: 1 or 0, of shape (channels, ny,
+    nx), e.g. those of a cube of which some spaxels are masked in some
+    channels; see prep_region_spectra), which the model sums too.
     """
 
     @staticmethod
@@ -93,11 +106,13 @@ class RegionsBins(Regions):
             step: _PerAxis = None,
             rpix: _PerAxis = None,
             rval: _PerAxis = None,
-            rota: _Angle | None = None
+            rota: _Angle | None = None,
+            valid: FitsFile | None = None
     ) -> 'RegionsBins':
         """
         Read the bins from a FITS file, with the world coordinates of its
-        header unless given.
+        header unless given, and which pixels are valid in each channel
+        from another, if given.
 
         Parameters
         ----------
@@ -111,6 +126,9 @@ class RegionsBins(Regions):
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
+        valid : str or tuple, optional
+            The file of which pixels are valid in each channel (see the
+            class; e.g. prep_<cube>_valid.fits of prep_region_spectra).
 
         Returns
         -------
@@ -120,22 +138,31 @@ class RegionsBins(Regions):
         check_options(RegionsBins.from_file, locals())
         index, coords = fitsutils.read_data(
             *split_fits_file(file), _per_axis(rpix), _per_axis(rval))
+        if valid is not None:
+            valid, _ = fitsutils.read_data(*split_fits_file(valid))
         return cls(
             index, coords.step if step is None else step, coords.rpix,
-            coords.rval, coords.rota if rota is None else rota)
+            coords.rval, coords.rota if rota is None else rota, valid)
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         filename = f'{prefix}bins.fits'
         coords = self._grid.coords
         fitsutils.write_data(
             filename, self._index.astype(np.int32), coords, None, overwrite)
-        return dict(
+        info = dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
             step=coords.step,
             rpix=coords.rpix,
             rval=coords.rval,
             rota=coords.rota)
+        if self._valid is not None:
+            # (an array without world coordinates, in the orientation of
+            # the model: the bins give them)
+            valid = f'{prefix}bins_valid.fits'
+            fits.writeto(valid, self._valid, overwrite=overwrite)
+            info['valid'] = valid if dump_path else os.path.basename(valid)
+        return info
 
     def __init__(
             self,
@@ -143,7 +170,8 @@ class RegionsBins(Regions):
             step: _PerAxis = None,
             rpix: _PerAxis = None,
             rval: _PerAxis = None,
-            rota: _Angle | None = None
+            rota: _Angle | None = None,
+            valid: npt.ArrayLike | None = None
     ):
         """
         The world coordinates of the grid of the bins (see
@@ -166,19 +194,32 @@ class RegionsBins(Regions):
             raise RuntimeError(
                 f"the bins are numbered from 0 to {nbins - 1}, but these "
                 f"have no pixels: {empty}")
+        if valid is not None:
+            valid = np.asarray(valid)
+            if valid.ndim != 3 or valid.shape[1:] != index.shape:
+                raise RuntimeError(
+                    f"the valid pixels of the bins must be a cube (channels, "
+                    f"{index.shape[0]}, {index.shape[1]}), of the pixels of "
+                    f"the bins; they have the shape {valid.shape}")
+            valid = (np.nan_to_num(valid) != 0).astype(np.uint8)
         self._index = index
         self._nbins = nbins
+        self._valid = valid
         self._grid = gridutils.make_grid(
             index.shape[::-1], step, rpix, rval, rota)
 
     def __eq__(self, other):
         return (isinstance(other, RegionsBins)
                 and self._grid == other._grid
-                and np.array_equal(self._index, other._index))
+                and np.array_equal(self._index, other._index)
+                and np.array_equal(self._valid, other._valid))
 
     def index(self) -> np.ndarray:
         """The bin of each pixel (negative for none)."""
         return self._index
+
+    def valid(self):
+        return self._valid
 
     def nregions(self):
         return self._nbins

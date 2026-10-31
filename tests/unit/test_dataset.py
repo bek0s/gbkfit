@@ -1,4 +1,6 @@
 
+import logging
+
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -314,6 +316,24 @@ def test_datasets_read_ambiguous_velocities_by_their_convention(tmp_path):
     dataset = dataset_parser.load(
         info | dict(spectral=dict(convention='radio')))
     assert dataset.grid().coords.convention == 'radio'
+
+
+def test_a_convention_other_than_that_of_the_data_warns(tmp_path, caplog):
+    # VRAD states radio velocities: optical ones given relabel them (for
+    # a header that is wrong), and a warning says so (a convention copied
+    # by mistake would put the lines 3.4% off at 5000 km/s)
+    header = fits.Header(dict(
+        CTYPE1='RA---SIN', CDELT1=-1 / 3600, CTYPE2='DEC--SIN',
+        CDELT2=1 / 3600, CTYPE3='VRAD', CRVAL3=5e6, CDELT3=1e4,
+        CRPIX3=1, CUNIT3='m/s'))
+    fits.writeto(
+        tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
+    info = dict(type='pixel_spectra', data=str(tmp_path / 'cube.fits'))
+    with caplog.at_level(logging.WARNING):
+        dataset = dataset_parser.load(
+            info | dict(spectral=dict(convention='optical')))
+    assert dataset.grid().coords.convention == 'optical'
+    assert "states velocities of the convention 'radio'" in caplog.text
 
 
 def test_observable_grid_comes_from_the_data(tmp_path):

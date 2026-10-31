@@ -746,6 +746,10 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
         errors[:, 1], 0.1 * per_beam * np.sqrt(left.sum()))
     np.testing.assert_allclose(spectra[:, 0], cube[:, bins == 3].sum(axis=1))
     assert fits.getheader('prep_cube.fits')['BUNIT'] == 'Jy'
+    # (the pixels valid in each channel, which the model then sums alike)
+    valid = fits.getdata('prep_cube_valid.fits')
+    assert valid.shape == cube.shape and valid[:, 2, 5].sum() == 0
+    assert valid.sum() == valid.size - len(cube)
 
     _, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(

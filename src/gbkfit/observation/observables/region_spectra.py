@@ -167,6 +167,12 @@ class RegionSpectra(Observable):
         # The area of each pixel in the regions, so that their sums are
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
+        valid = regions.valid()
+        if valid is not None and len(valid) != self.spectral_grid().size[0]:
+            raise ConfigError(
+                f"the valid pixels of the regions are of {len(valid)} "
+                f"channels; the spectral axis has "
+                f"{self.spectral_grid().size[0]}")
 
     def regions(self) -> Regions:
         """Return the regions."""
@@ -264,15 +270,21 @@ class RegionSpectra(Observable):
             dtype=dtype,
             fft_dtype=fft_dtype)
         return RegionSpectraPlan(
-            self._weights, dcube, driver, scene, line_of_sight, foreground,
-            dtype, flux_scale)
+            self._weights, self._regions.valid(), dcube, driver, scene,
+            line_of_sight, foreground, dtype, flux_scale)
 
 
 class RegionSpectraPlan(_detail.DCubePlanBase):
+    """
+    The evaluation of a RegionSpectra: the sums of the pixels of the
+    regions in each channel of the cube, of those valid there if the
+    regions say which (see Regions.valid; the cube times them first).
+    """
 
     def __init__(
             self,
             weights: 'scipy.sparse.csr_array',
+            valid: np.ndarray | None,
             dcube: _dcube.DCube,
             driver: Driver,
             scene: 'Scene',
@@ -287,7 +299,16 @@ class RegionSpectraPlan(_detail.DCubePlanBase):
         self._sums = RegionSumsPlan(weights, driver, dtype)
         self._spectra = driver.mem_alloc_d(
             (dcube.size()[2], self._sums.nregions()), dtype)
+        self._valid = self._valid_cube = None
+        if valid is not None:
+            self._valid = driver.mem_copy_h2d(valid.astype(dtype))
+            self._valid_cube = driver.mem_alloc_d(valid.shape, dtype)
 
     def _measure(self) -> ModelData:
-        self._sums.evaluate(self._dcube_plan.dcube(), self._spectra)
+        cube = self._dcube_plan.dcube()
+        if self._valid is not None:
+            # (on any driver: its arrays take the ufuncs of numpy)
+            np.multiply(cube, self._valid, out=self._valid_cube)
+            cube = self._valid_cube
+        self._sums.evaluate(cube, self._spectra)
         return dict(spectra=dict(d=self._spectra, m=None, w=None))

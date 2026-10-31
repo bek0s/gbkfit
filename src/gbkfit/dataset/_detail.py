@@ -308,10 +308,21 @@ def cube_coords(
     """
     Return the world coordinates of the grid of a dataset of axes on the
     sky and a spectral axis after them (see cube_grid), from those of its
-    files, with the steps, rota and the convention, if given, instead (see
-    file_references for the others).
+    files, with the steps, rota and the convention of its velocities, if
+    given, instead (see file_references for the others). A convention
+    given for files that state another (e.g. optical for VRAD, radio
+    velocities) relabels their velocities, without converting them: for
+    a header that states the wrong one; a warning says so (see
+    parseutils.warn), as a convention copied by mistake puts the lines
+    off (by 3.4% at 5000 km/s).
     """
     spectral = spectral or gridutils.SpectralAxis()
+    given, stated = spectral.convention(), coords.convention
+    if given is not None and stated is not None and given != stated:
+        parseutils.warn(
+            f"the spectral axis of the data states velocities of the "
+            f"convention {stated!r}; they are taken as given, of the "
+            f"convention {given!r}, without converting them")
     nspatial = len(coords.step) - 1
     return dict(
         step=coords.step[:nspatial] if step is None else step,
@@ -321,7 +332,7 @@ def cube_coords(
         spectral=gridutils.SpectralAxis(
             step=spectral.step() or coords.step[nspatial],
             rpix=coords.rpix[nspatial], rval=coords.rval[nspatial],
-            convention=spectral.convention() or coords.convention,
+            convention=given or stated,
             rest=coords.rest, medium=coords.medium))
 
 

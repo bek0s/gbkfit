@@ -516,9 +516,12 @@ def prep_region_spectra(
     convention of the velocities of an axis that does not state it, and
     error_kind what the file of the errors holds (see FitsArrays.read).
     Write the bins, numbered from 0 in the order of their numbers in the
-    map (prep_<bins>.fits), and the sum of the valid spectra of the pixels
-    of each bin (prep_<cube>.fits: the bins along x, the channels along
-    y), with its errors added in quadrature (prep_<cube>_error.fits). With
+    map (prep_<bins>.fits), the sum of the valid spectra of the pixels of
+    each bin (prep_<cube>.fits: the bins along x, the channels along y),
+    with its errors added in quadrature (prep_<cube>_error.fits), and
+    which pixels are valid in each channel (prep_<cube>_valid.fits: 1 or
+    0, on the pixels of the cube), with which the model sums the same
+    pixels (the option valid of the bins, see region.RegionsBins). With
     a unit (BUNIT), the sums are fluxes, in their unit: the values of
     pixels per solid angle or per beam become the fluxes of the pixels
     (see prep.pixel_fluxes).
@@ -555,6 +558,12 @@ def prep_region_spectra(
             _output(output_dir, file_d),
             None if file_e is None else _output(output_dir, file_d, 'error'),
             dtype=dtype)
+    valid = cube.header.copy()
+    for key in ('BUNIT', 'EXTNAME'):
+        valid.remove(key, ignore_missing=True)
+    fits.writeto(
+        _output(output_dir, file_d, 'valid'),
+        (cube.mask != 0).astype(np.uint8), valid, overwrite=True)
 
 
 def _write_table(
