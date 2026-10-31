@@ -47,7 +47,12 @@ class DriverCuda(Driver):
 
     def __init__(self, device: Annotated[int, Ge(0)] = 0):
         check_options(DriverCuda.__init__, locals())
-        import cupy as cp
+        try:
+            import cupy as cp
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f"the cuda driver needs CuPy: {self.requires['cupy']}",
+                name='cupy') from e
         ndevices = cp.cuda.runtime.getDeviceCount()
         if not 0 <= device < ndevices:
             raise ConfigError(

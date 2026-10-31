@@ -51,12 +51,12 @@ class Clouds(parseutils.Serializable):
     cflux : float
         The flux (density) of each cloud.
     seed : int, optional
-        The seed of the random numbers of the clouds.
+        The seed of the random numbers of the clouds, from 0 to 2^32 - 1.
 
     Raises
     ------
     ConfigError
-        If cflux is not positive, or the seed is negative.
+        If cflux is not positive, or the seed is not in its range.
     """
 
     @classmethod
@@ -70,8 +70,11 @@ class Clouds(parseutils.Serializable):
         check_options(Clouds.__init__, locals())
         if not cflux > 0:
             raise ConfigError(f"cflux must be greater than 0; it is {cflux}")
-        if seed < 0:
-            raise ConfigError(f"seed must be >= 0; it is {seed}")
+        # (the kernels take an unsigned 32-bit seed: a larger one failed
+        # at the first evaluation, with a TypeError that ends a fit)
+        if not 0 <= seed < 2 ** 32:
+            raise ConfigError(
+                f"seed must be from 0 to {2 ** 32 - 1}; it is {seed}")
         self._cflux = float(cflux)
         self._seed = seed
 
@@ -185,6 +188,11 @@ class CloudDiskPlan(_disk.DiskPlan):
             pool_flux.extend(np.atleast_1d(
                 trait.cloud_flux(trait_params, subrnodes)))
         pool_flux = np.asarray(pool_flux, np.float64)
+        if not np.all(np.isfinite(pool_flux)):
+            raise ModelEvaluationError(
+                "the flux of the density traits of the disk of clouds is not "
+                "a finite number (e.g. of a profile at a bound of its "
+                "parameters)")
 
         # Each pool has as many clouds as its flux needs at cflux each
         # (and at least one), which share its flux exactly: a negative
