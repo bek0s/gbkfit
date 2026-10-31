@@ -236,7 +236,9 @@ class ConfigError(Exception):
     """
     An error in a configuration: of what is given, not of a run (not a
     RuntimeError, which code that goes on past failed runs catches, e.g.
-    the refits of a bootstrap).
+    the refits of a bootstrap). The rule: invalid input of a user
+    (options, files, arguments of the library's tools) raises it; other
+    exceptions are bugs or failed runs.
 
     Parameters
     ----------

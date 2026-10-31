@@ -818,7 +818,7 @@ def test_grown_masks_keep_faint_values_next_to_bright_ones():
     snr[0, 8] = 3
     mask = gbkfit.prep.grown_mask(snr, 5, 2)
     assert mask[3, 2:6].all() and mask.sum() == 4
-    with pytest.raises(ValueError, match="at least the threshold"):
+    with pytest.raises(ConfigError, match="at least the threshold"):
         gbkfit.prep.grown_mask(snr, 1, 2)
 
 
@@ -861,7 +861,7 @@ def test_voronoi_bins_are_of_the_target_sn(tessellation):
           / np.sqrt(np.bincount(bins[binned], noise[binned] ** 2)))
     assert np.median(sn) == pytest.approx(20, rel=0.1)
     assert sn.min() > 0.6 * 20
-    with pytest.raises(ValueError, match="below the target"):
+    with pytest.raises(ConfigError, match="below the target"):
         gbkfit.prep.voronoi_bins(signal, noise, 1e6)
 
 

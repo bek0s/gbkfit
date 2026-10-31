@@ -203,11 +203,11 @@ class AperturePolygon(Aperture):
         vertices = np.array(vertices, dtype=float)
         if vertices.ndim != 2 or vertices.shape[1] != 2 \
                 or vertices.shape[0] < 3:
-            raise RuntimeError(
+            raise ConfigError(
                 f"a polygon needs at least three vertices, each with x and "
                 f"y; its vertices have the shape {vertices.shape}")
         if overlap.polygon_area(vertices) == 0:
-            raise RuntimeError("the polygon has no area")
+            raise ConfigError("the polygon has no area")
         self._vertices = vertices
 
     def centre(self):

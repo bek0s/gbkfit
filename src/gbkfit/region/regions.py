@@ -9,7 +9,7 @@ import scipy.sparse
 from astropy.io import fits
 
 from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
 from .apertures import Aperture, aperture_parser
 
@@ -180,24 +180,24 @@ class RegionsBins(Regions):
         check_options(RegionsBins.__init__, locals())
         index = np.asarray(index)
         if index.ndim != 2:
-            raise RuntimeError(
+            raise ConfigError(
                 f"the bins of the pixels must be an image; they have "
                 f"{index.ndim} axes")
         if not np.all(np.isfinite(index)) or np.any(index != np.round(index)):
-            raise RuntimeError("the bins of the pixels must be integers")
+            raise ConfigError("the bins of the pixels must be integers")
         index = index.astype(np.int64)
         nbins = int(index.max()) + 1
         if nbins < 1:
-            raise RuntimeError("no pixel is in a bin")
+            raise ConfigError("no pixel is in a bin")
         counts = np.bincount(index[index >= 0], minlength=nbins)
         if empty := np.flatnonzero(counts == 0).tolist():
-            raise RuntimeError(
+            raise ConfigError(
                 f"the bins are numbered from 0 to {nbins - 1}, but these "
                 f"have no pixels: {empty}")
         if valid is not None:
             valid = np.asarray(valid)
             if valid.ndim != 3 or valid.shape[1:] != index.shape:
-                raise RuntimeError(
+                raise ConfigError(
                     f"the valid pixels of the bins must be a cube (channels, "
                     f"{index.shape[0]}, {index.shape[1]}), of the pixels of "
                     f"the bins; they have the shape {valid.shape}")
@@ -267,7 +267,7 @@ class RegionsApertures(Regions):
     def __init__(self, apertures: Sequence[Aperture]):
         check_options(RegionsApertures.__init__, locals())
         if not apertures:
-            raise RuntimeError("at least one aperture is required")
+            raise ConfigError("at least one aperture is required")
         self._apertures = tuple(apertures)
 
     def __eq__(self, other):

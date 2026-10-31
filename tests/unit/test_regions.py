@@ -6,6 +6,7 @@ from gbkfit.region import (
     ApertureRectangle, RegionsApertures, RegionsBins, regions_parser)
 from gbkfit.math import overlap
 from gbkfit.utils import gridutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 def _pixels(size):
@@ -158,7 +159,7 @@ def test_regions_of_bins(tmp_path):
     (np.full((2, 2), -1), "no pixel is in a bin"),
     (np.zeros((2, 2, 2)), "must be an image")])
 def test_bins_are_checked(index, message):
-    with pytest.raises(RuntimeError, match=message):
+    with pytest.raises(ConfigError, match=message):
         RegionsBins(index)
 
 

@@ -358,11 +358,11 @@ def grown_mask(
 
     Raises
     ------
-    ValueError
+    ConfigError
         If seed is below grow.
     """
     if seed < grow:
-        raise ValueError(
+        raise ConfigError(
             f"the seed threshold ({seed}) must be at least the threshold "
             f"of growth ({grow})")
     with np.errstate(invalid='ignore'):
@@ -403,7 +403,7 @@ def signal_mask(
 
     Raises
     ------
-    ValueError
+    ConfigError
         If seed is below grow.
     """
     noise = noise_errors(cube, np.isfinite(cube))
@@ -442,12 +442,12 @@ def subtract_continuum(
 
     Raises
     ------
-    ValueError
+    ConfigError
         If line is not one value per channel, or the degree is negative.
     """
     line = np.asarray(line, dtype=bool)
     if line.shape != data.shape[:1] or degree < 0:
-        raise ValueError(
+        raise ConfigError(
             "line must have one value per channel, and the degree be at "
             "least 0")
     nz = data.shape[0]
@@ -558,30 +558,30 @@ def voronoi_bins(
 
     Raises
     ------
-    ValueError
+    ConfigError
         If the signal and the noise are not maps of the same shape, the
         tessellation is unknown, or no bin reaches the target.
     """
     signal = np.asarray(signal, dtype=float)
     noise = np.asarray(noise, dtype=float)
     if signal.ndim != 2 or signal.shape != noise.shape:
-        raise ValueError(
+        raise ConfigError(
             f"the signal and the noise must be maps of the same shape; "
             f"they have shapes {signal.shape} and {noise.shape}")
     if tessellation not in ('wvt', 'cvt', None):
-        raise ValueError(
+        raise ConfigError(
             f"the tessellation must be 'wvt', 'cvt' or None, not "
             f"{tessellation!r}")
     with np.errstate(invalid='ignore'):
         valid = np.isfinite(signal) & np.isfinite(noise) & (noise > 0)
     total = signal[valid].sum() / np.sqrt(np.sum(noise[valid] ** 2))
     if not total >= target:
-        raise ValueError(
+        raise ConfigError(
             f"all the pixels together have a S/N of {total:.3g}, below the "
             f"target ({target})")
     labels, kept = _voronoi_accretion(signal, noise, valid, target)
     if not kept.any():
-        raise ValueError(
+        raise ConfigError(
             f"no bin of the accretion reaches "
             f"{_VORONOI_KEPT_FRACTION:.0%} of the target ({target})")
     # (np.argwhere goes through the pixels in the order of labels[valid])
