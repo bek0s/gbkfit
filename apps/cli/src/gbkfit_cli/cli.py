@@ -662,6 +662,18 @@ def _run_fit(args: argparse.Namespace) -> None:
         raise ConfigError(
             "give a configuration, or the output directory of a fit to "
             "resume (--resume), not both")
+    # (a resumed or bootstrapped fit writes into its own directory, with
+    # its own log: these options were taken and ignored)
+    ignored = [
+        option for option, given in (
+            ('--output-dir', args.output_dir is not None),
+            ('--output-dir-mode', args.output_dir_mode != 'unique'),
+            ('--no-evaluation-log', args.no_evaluation_log))
+        if given]
+    if (args.resume is not None or args.bootstrap is not None) and ignored:
+        raise ConfigError(
+            f"a fit resumed (--resume) or bootstrapped (--bootstrap) writes "
+            f"into its own output directory; {ignored} do not apply")
     with parseutils.strict_mode(not args.lenient):
         if args.resume is not None:
             gbkfit.tasks.fit.resume(args.resume)
@@ -691,8 +703,8 @@ def _run_migrate(args: argparse.Namespace) -> None:
 def main() -> None:
     """
     Run gbkfit-cli: parse the command line, and run its task. Errors in
-    configurations are reported without a traceback (with one if
-    --verbose), and exit with status 1.
+    configurations, and of files and folders, are reported without a
+    traceback (with one if --verbose), and exit with status 1.
     """
     parser = _make_parser()
     args = parser.parse_args()
@@ -708,9 +720,12 @@ def main() -> None:
     tasks = dict(
         eval=_run_eval, prep=_run_prep, fit=_run_fit, plot=_run_plot,
         migrate=_run_migrate)
+    # (errors a user fixes, without a traceback: of configurations, and
+    # of files and folders, e.g. one not found, or an output directory
+    # that exists)
     try:
         tasks[args.task](args)
-    except ConfigError as e:
+    except (ConfigError, OSError) as e:
         if args.verbose:
             raise
         _log.error(f"error: {e}")

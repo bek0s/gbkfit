@@ -110,10 +110,11 @@ def main() -> None:
     task = _bind(parser, args.task, args.options)
     _configure_logging(logging.DEBUG if args.verbose else logging.INFO)
     _log.debug(f"running task {args.task} with options {args.options}")
+    # (errors a user fixes, without a traceback, as gbkfit-cli)
     try:
         with parseutils.strict_mode(not args.lenient):
             task()
-    except ConfigError as e:
+    except (ConfigError, OSError) as e:
         if args.verbose:
             raise
         _log.error(f"error: {e}")

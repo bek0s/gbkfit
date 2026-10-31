@@ -70,9 +70,9 @@ def make_output_dir(
     except FileExistsError:
         pass
     if not path_obj.is_dir():
-        raise RuntimeError(f"path '{str(path_obj)}' exists as a file")
+        raise FileExistsError(f"path '{str(path_obj)}' exists as a file")
     if mode == 'terminate':
-        raise RuntimeError(f"path '{str(path_obj)}' already exists")
+        raise FileExistsError(f"path '{str(path_obj)}' already exists")
     if mode == 'overwrite':
         return str(path_obj)
     while True:
