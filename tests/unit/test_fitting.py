@@ -1689,3 +1689,25 @@ def test_the_information_criteria_take_solved_values_by_their_likelihood():
     assert profiled.aic == pytest.approx(profiled.aicp)
     assert profiled.bic == pytest.approx(
         profiled.aicp + profiled.nfitted * (ln_n - 2))
+
+
+def test_periodic_elements_are_summarised_on_the_circle():
+    # (a posa near 0: samples near 0 and 360 had a median near 180 and a
+    # 68% range over the circle, refits at 1 and 359 a std of ~180; audit
+    # 2026-10-31 #40)
+    from gbkfit.fitting.result import Bootstrap, Posterior
+    rng = np.random.default_rng(1)
+    posa = np.mod(rng.normal(2, 3, 4000), 360)
+    samples = np.column_stack([posa, posa])
+    posterior = Posterior(
+        ('posa', 'x'), samples, None, False, periods=dict(posa=360))
+    low, median, high = posterior.summary()['posa']
+    assert median == pytest.approx(362, abs=0.3)
+    assert high - low == pytest.approx(6, abs=0.5)
+    # (the same samples taken as linear: a range over the circle)
+    low, _, high = posterior.summary()['x']
+    assert high - low > 300
+    refits = Bootstrap(
+        ('posa',), np.array([[1.0], [359.0]]), np.ones(2, bool), (), {},
+        periods=dict(posa=360))
+    assert refits.std()['posa'] == pytest.approx(1, rel=1e-3)

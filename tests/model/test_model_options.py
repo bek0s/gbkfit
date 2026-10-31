@@ -293,3 +293,11 @@ def test_discouraged_traits_are_warnings_with_the_path(caplog):
     with parseutils.config_path('galaxies'):
         galaxy_parser.load([dict(components=component)])
     assert "galaxies[0].components [disk]: the use of" in caplog.text
+
+
+def test_the_azimuths_of_patterns_of_m_arms_repeat_every_360_over_m():
+    # (an m = 2 harmonic declared 360: p and p + 180 are the same pattern,
+    # audit 2026-10-31 #40)
+    from gbkfit.model.components.traits.options import Harmonic, Spiral
+    assert Harmonic(order=2).params(3, 'km/s')['p'].period() == 180
+    assert Spiral(order=3).params_sm(False)['p'].period() == 120

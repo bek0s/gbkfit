@@ -701,6 +701,18 @@ class ParamSpace(parseutils.Serializable):
         """
         return {element_name(*e): self._solves[e] for e in self._solved}
 
+    def periods(self) -> dict[str, float]:
+        """
+        Return the period of each element whose values repeat (see
+        ParamDesc.period; e.g. 360 for an azimuth in degrees), by element
+        name: of all but those of the parameters with a mode, whose values
+        are coded.
+        """
+        return {
+            element: period for element in self.kinds()
+            if (name := element.split('[', 1)[0]) not in self._modes
+            and (period := self._pdescs[name].period()) is not None}
+
     def free_valid_ranges(self) -> dict[str, ValidRange]:
         """
         Return the valid range of each free element whose value is that of

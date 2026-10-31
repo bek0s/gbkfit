@@ -24,6 +24,7 @@ __all__ = [
     'FitResult',
     'FitSolution',
     'Posterior',
+    'periodic_quantiles',
     'weighted_quantiles'
 ]
 
@@ -70,6 +71,59 @@ def weighted_quantiles(
         cdf /= cdf[-1]
         result[:, j] = np.interp(q, cdf, samples[kept, j][order])
     return result
+
+
+def periodic_quantiles(
+        samples: np.ndarray,
+        q: npt.ArrayLike,
+        period: float,
+        weights: np.ndarray | None = None
+) -> np.ndarray:
+    """
+    Return quantiles of weighted samples of one periodic value (e.g. an
+    azimuth; see weighted_quantiles): of the samples unwrapped from the
+    largest gap between them on the circle, so that a posterior across
+    the ends of a period (e.g. near 0 and 360 degrees) is one interval,
+    not one over the whole circle.
+
+    Parameters
+    ----------
+    samples : np.ndarray
+        The samples (1d), NaN where they have no value.
+    q : ArrayLike
+        The quantiles, in [0, 1].
+    period : float
+        The period of the value.
+    weights : np.ndarray, optional
+        The weight of each sample (by default, equal).
+
+    Returns
+    -------
+    np.ndarray
+        The quantiles: from the start of the largest gap on, so within a
+        period of each other (they may leave the range of the samples by
+        up to a period, e.g. 359 to 361).
+    """
+    samples = np.asarray(samples, dtype=float)
+    values = samples[~np.isnan(samples)]
+    if len(values) == 0:
+        return np.full(len(np.atleast_1d(q)), np.nan)
+    phases = np.sort(np.mod(values, period))
+    gaps = np.diff(np.append(phases, phases[0] + period))
+    start = phases[(np.argmax(gaps) + 1) % len(phases)]
+    unwrapped = start + np.mod(samples - start, period)
+    return weighted_quantiles(unwrapped, q, weights)[:, 0]
+
+
+def periodic_std(samples: np.ndarray, period: float) -> float:
+    """
+    Return the circular standard deviation of samples of a periodic
+    value, sqrt(-2 ln R) of the mean resultant length R, in its units
+    (the standard deviation of samples close together).
+    """
+    angles = 2 * np.pi * np.asarray(samples, dtype=float) / period
+    length = np.hypot(np.mean(np.cos(angles)), np.mean(np.sin(angles)))
+    return float(np.sqrt(-2 * np.log(length)) * period / (2 * np.pi))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -154,15 +208,20 @@ class Posterior:
     approximate : bool
         Whether it is the Gaussian (Laplace) approximation at a solution,
         from its covariance.
+    periods : dict
+        The period of each periodic element (e.g. 360 for an azimuth in
+        degrees; see ParamSpace.period), by name.
     """
     names: tuple[str, ...]
     samples: np.ndarray
     weights: np.ndarray | None
     approximate: bool
+    periods: dict[str, float] = dataclasses.field(default_factory=dict)
 
     def quantiles(self, q: Sequence[float]) -> dict[str, np.ndarray]:
         """
-        Return quantiles of each element.
+        Return quantiles of each element: of the periodic ones, on the
+        circle (see periodic_quantiles).
 
         Parameters
         ----------
@@ -175,7 +234,11 @@ class Posterior:
             The quantiles of each element.
         """
         values = weighted_quantiles(self.samples, q, self.weights)
-        return {name: values[:, i] for i, name in enumerate(self.names)}
+        return {
+            name: values[:, i] if name not in self.periods
+            else periodic_quantiles(
+                self.samples[:, i], q, self.periods[name], self.weights)
+            for i, name in enumerate(self.names)}
 
     def summary(self) -> dict[str, tuple[float, float, float]]:
         """
@@ -220,31 +283,45 @@ class Bootstrap:
         Why each of the other refits failed.
     options : dict
         The configuration of the bootstrap (see BootstrapOptions).
+    periods : dict
+        The period of each periodic element (see Posterior), by name.
     """
     names: tuple[str, ...]
     samples: np.ndarray
     converged: np.ndarray
     failures: tuple[str, ...]
     options: dict[str, Any]
+    periods: dict[str, float] = dataclasses.field(default_factory=dict)
 
     def std(self) -> dict[str, float]:
         """
         Return the standard deviation of each element over the refits
-        (NaN with fewer than two).
+        (NaN with fewer than two): of the periodic ones, on the circle
+        (see periodic_std; refits at 1 and 359 degrees are 2 apart).
         """
-        std = np.std(self.samples, axis=0, ddof=1) \
-            if len(self.samples) >= 2 else np.full(len(self.names), np.nan)
-        return dict(zip(self.names, std.tolist()))
+        if len(self.samples) < 2:
+            return dict.fromkeys(self.names, np.nan)
+        std = np.std(self.samples, axis=0, ddof=1)
+        return {
+            name: float(std[i]) if name not in self.periods
+            else periodic_std(self.samples[:, i], self.periods[name])
+            for i, name in enumerate(self.names)}
 
     def summary(self) -> dict[str, tuple[float, float, float]]:
         """
         Return the 16th, 50th and 84th percentiles of each element over the
-        refits (the median and a 68% interval).
+        refits (the median and a 68% interval): of the periodic ones, on
+        the circle (see periodic_quantiles).
         """
-        values = weighted_quantiles(self.samples, [0.16, 0.5, 0.84])
+        q = [0.16, 0.5, 0.84]
+        values = weighted_quantiles(self.samples, q)
+        quantiles = {
+            name: values[:, i] if name not in self.periods
+            else periodic_quantiles(self.samples[:, i], q, self.periods[name])
+            for i, name in enumerate(self.names)}
         return {
             name: (float(v[0]), float(v[1]), float(v[2]))
-            for name, v in zip(self.names, values.T)}
+            for name, v in quantiles.items()}
 
     def info(self) -> dict[str, Any]:
         """

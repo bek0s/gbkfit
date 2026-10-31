@@ -340,8 +340,10 @@ class Harmonic(TraitOption):
         """
         params = dict(a=ParamVectorDesc(nnodes, unit=unit, default=0))
         if self.order > 0:
+            # (the pattern repeats every 360 / m degrees: of a bisymmetric
+            # flow (m = 2), p and p + 180 are the same)
             params.update(p=ParamVectorDesc(
-                nnodes, unit='deg', default=0, period=360))
+                nnodes, unit='deg', default=0, period=360 / self.order))
         return params
 
 
@@ -435,7 +437,9 @@ class Spiral(TraitOption):
         and o with it or if pattern_speed.
         """
         dispersion = self.wavenumber == 'dispersion'
-        params = dict(p=ParamScalarDesc(unit='deg', default=0, period=360))
+        # (m arms: the pattern repeats every 360 / m degrees)
+        params = dict(p=ParamScalarDesc(
+            unit='deg', default=0, period=360 / self.order))
         if dispersion:
             params['c'] = ParamScalarDesc(min=0, unit='km/s', default=10)
         params['e'] = ParamScalarDesc(unit='', default=0.1)

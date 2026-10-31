@@ -460,7 +460,8 @@ def bootstrap(
         names=names, samples=np.array(rows, dtype=float).reshape(
             -1, len(names)),
         converged=np.array(converged, dtype=bool),
-        failures=tuple(failures), options=options.dump())
+        failures=tuple(failures), options=options.dump(),
+        periods=params.periods())
 
 
 class _Refit(NamedTuple):

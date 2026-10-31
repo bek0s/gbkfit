@@ -685,7 +685,7 @@ def _posterior(
     return Posterior(
         names=names, samples=np.array(rows).reshape(-1, len(names)),
         weights=None if weights is None else weights[kept],
-        approximate=False)
+        approximate=False, periods=params.periods())
 
 
 def _dump_params(params: ParamSpace) -> dict[str, Any] | None:

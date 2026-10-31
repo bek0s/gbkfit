@@ -493,4 +493,4 @@ def laplace_posterior(
     names = tuple(params.kinds()) + tuple(derived)
     return Posterior(
         names=names, samples=np.array(rows).reshape(-1, len(names)),
-        weights=None, approximate=True)
+        weights=None, approximate=True, periods=params.periods())
