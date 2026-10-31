@@ -421,3 +421,24 @@ def test_nonlinear_velocity_axes_are_rejected():
     header = _spectral_header('VOPT-F2W', RESTWAV=6.5628e-7)
     with pytest.raises(ConfigError, match="not linear in velocity"):
         write(header, shape=(6, 20, 24))
+
+
+def test_read_array_of_maps_cubes_and_stale_axes(tmp_path):
+    # (a map whose header keeps the keywords of a third axis, as tools
+    # write moment maps; audit 2026-10-31 #86, of item 18)
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CTYPE2='DEC--TAN', CRVAL1=10.0, CRVAL2=-20.0,
+        CRPIX1=1.0, CRPIX2=1.0, CDELT1=-1 / 3600, CDELT2=1 / 3600,
+        CUNIT1='deg', CUNIT2='deg'))
+    image = np.arange(12.0).reshape(3, 4)
+    fits.writeto(tmp_path / 'map.fits', image, header)
+    data, wcs = fitsutils.read_array(str(tmp_path / 'map.fits'))
+    assert data.shape == (3, 4) and wcs.naxis == 2
+    stale = header.copy()
+    stale.update(CTYPE3='VRAD', CRVAL3=0.0, CRPIX3=1.0, CDELT3=1e3)
+    fits.writeto(tmp_path / 'stale.fits', image, stale)
+    data, _ = fitsutils.read_array(str(tmp_path / 'stale.fits'))
+    assert data.shape == (3, 4)
+    fits.writeto(tmp_path / 'cube.fits', np.ones((5, 3, 4)), stale)
+    data, wcs = fitsutils.read_array(str(tmp_path / 'cube.fits'))
+    assert data.shape == (5, 3, 4) and wcs.naxis == 3

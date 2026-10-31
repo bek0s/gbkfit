@@ -209,6 +209,22 @@ def test_the_fits_of_faint_lines_in_float32_are_those_of_bright_ones(
             atol=0.01)
 
 
+
+def test_the_skewness_and_kurtosis_of_lines():
+    # (of a skew-normal line, and 0 of a Gaussian one; audit 2026-10-31
+    # #86)
+    import scipy.stats
+    velocities = np.arange(-600, 601, 5.0)
+    skewed = scipy.stats.skewnorm(4, scale=60).pdf(velocities)
+    gaussian = scipy.stats.norm(scale=60).pdf(velocities)
+    cube = np.stack([skewed, gaussian], axis=-1)[:, None, :]
+    maps = moment_maps(cube, velocities, (0, 1, 2, 3, 4))
+    skewness, kurtosis = scipy.stats.skewnorm(4).stats(moments='sk')
+    np.testing.assert_allclose(
+        maps.skewness()[0], [skewness, 0], atol=1e-3)
+    np.testing.assert_allclose(
+        maps.kurtosis()[0], [kurtosis, 0], atol=1e-3)
+
 def test_structure_functions_are_the_mean_over_pairs_of_pixels():
     # Against every pair of the pixels with values of a small map, and 2
     # sigma^2 at every separation for white noise
