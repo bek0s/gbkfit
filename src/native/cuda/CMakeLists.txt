@@ -9,6 +9,13 @@ nanobind_add_module(
   NOMINSIZE
   src/bindings.cpp
   src/wrapper.cu
+  # (the kernels of each family on their own: they compile at once)
+  src/dmodel.cu
+  src/gmodel.cu
+  src/gmodel_mcdisk.cu
+  src/gmodel_smdisk.cu
+  src/objective.cu
+  src/orbits.cu
 )
 
 target_include_directories(
