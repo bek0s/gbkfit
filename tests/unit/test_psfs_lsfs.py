@@ -206,6 +206,27 @@ def test_lsf_image_round_trip_and_channel_width_in_km_s():
     np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
 
 
+def test_images_without_their_pixel_size_need_it(tmp_path):
+    # A header without celestial (spectral) axes does not give the size
+    # of the pixels: it is not taken as 1 arcsec (km/s)
+    from astropy.io import fits
+    from gbkfit.utils.parseutils import ConfigError
+    fits.writeto(tmp_path / 'psf.fits', np.ones((9, 9)), fits.Header(dict(
+        PIXELSCL=0.025)))
+    fits.writeto(tmp_path / 'cdelt.fits', np.ones((9, 9)), fits.Header(dict(
+        CDELT1=-0.025 / 3600, CDELT2=0.025 / 3600)))
+    fits.writeto(tmp_path / 'lsf.fits', np.ones(11))
+    for file in ('psf.fits', 'cdelt.fits'):
+        with pytest.raises(ConfigError, match="give the size of its pixels"):
+            PSFImage.from_file(str(tmp_path / file))
+    psf = PSFImage.from_file(str(tmp_path / 'psf.fits'), step=(0.025, 0.025))
+    np.testing.assert_allclose(psf._step, (0.025, 0.025))
+    with pytest.raises(ConfigError, match="give the width of its channels"):
+        LSFImage.from_file(str(tmp_path / 'lsf.fits'))
+    with pytest.raises(ConfigError, match="two positive numbers"):
+        PSFImage(np.ones((9, 9)), step=(-0.1, 0.1))
+
+
 def major_axis_position_angle(image):
     """
     The position angle (degrees, from +y towards -x, i.e. north through

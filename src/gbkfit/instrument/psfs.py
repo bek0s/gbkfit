@@ -623,16 +623,30 @@ class PSFImage(PSF):
             The file: a filename, or a filename and the HDU of the image.
         step : Sequence of float, optional
             The size of the pixels of the image along x and y (arcsec); by
-            default, that of the header.
+            default, that of the celestial axes of the header.
 
         Returns
         -------
         PSFImage
             The PSF.
+
+        Raises
+        ------
+        ConfigError
+            If step is not given and the header has no celestial axes.
         """
         check_options(PSFImage.from_file, locals())
-        data, coords = fitsutils.read_data(*split_fits_file(file))
-        return cls(data, coords.step if step is None else step)
+        filename, hdu = split_fits_file(file)
+        data, coords = fitsutils.read_data(filename, hdu)
+        if step is None:
+            header = astropy.io.fits.getheader(filename, hdu)
+            if not (fitsutils.has_wcs(header)
+                    and astropy.wcs.WCS(header).has_celestial):
+                raise ConfigError(
+                    f"{filename}: the image has no celestial axes; give the "
+                    f"size of its pixels (step)")
+            step = coords.step
+        return cls(data, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -660,8 +674,13 @@ class PSFImage(PSF):
         if not np.all(np.isfinite(data)):
             raise ConfigError(
                 "non-finite pixels found in the supplied PSF image")
+        step = tuple(float(x) for x in step)
+        if len(step) != 2 or not all(x > 0 for x in step):
+            raise ConfigError(
+                f"the size of the pixels of a PSF image (step) must be two "
+                f"positive numbers; it is {step}")
         self._data = data
-        self._step = tuple(step)
+        self._step = step
 
     def _beam_area_impl(self) -> float:
         # (the sum of its pixels times their area, over its peak)

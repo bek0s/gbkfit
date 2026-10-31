@@ -581,16 +581,30 @@ class LSFImage(LSF):
             The file: a filename, or a filename and the HDU of the image.
         step : float, optional
             The width of the channels of the image (km/s of the light); by
-            default, that of the header.
+            default, that of the spectral axis of the header.
 
         Returns
         -------
         LSFImage
             The LSF.
+
+        Raises
+        ------
+        ConfigError
+            If step is not given and the header has no spectral axis.
         """
         check_options(LSFImage.from_file, locals())
-        data, coords = fitsutils.read_data(*split_fits_file(file))
-        return cls(data, coords.step[0] if step is None else step)
+        filename, hdu = split_fits_file(file)
+        data, coords = fitsutils.read_data(filename, hdu)
+        if step is None:
+            header = astropy.io.fits.getheader(filename, hdu)
+            if not (fitsutils.has_wcs(header)
+                    and astropy.wcs.WCS(header).wcs.spec >= 0):
+                raise ConfigError(
+                    f"{filename}: the image has no spectral axis; give the "
+                    f"width of its channels (step)")
+            step = coords.step[0]
+        return cls(data, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
