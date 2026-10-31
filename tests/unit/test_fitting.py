@@ -1115,6 +1115,29 @@ def test_workers_stop_their_sub_fits(kind):
         assert time.perf_counter() - begin < 30
 
 
+
+def _failing_at_zero(copy, item, control):
+    """A sub-fit of a bug at item 0 (for test_a_bug_in_an_item_...)."""
+    if item == 0:
+        raise ValueError("a bug")
+    time.sleep(0.05)
+    return item
+
+
+def test_a_bug_in_an_item_stops_the_other_workers():
+    # (the other feeders went on with the rest of the items, e.g. ~150
+    # refits of a bootstrap of 200: audit 2026-10-31 #80)
+    driver = DriverHost()
+    made = []
+
+    def make(i):
+        made.append(i)
+        return i
+    with two_workers('threads', driver).start(mock_objective(driver)) as pool:
+        with pytest.raises(ValueError, match="a bug"):
+            pool.map_lazily(_failing_at_zero, make, 40)
+    assert len(made) < 5
+
 def test_a_gaussian_bootstrap_draws_the_noise_anew():
     # Refits of the model plus Gaussian noise of the errors: of white
     # noise, they scatter about as the covariance says

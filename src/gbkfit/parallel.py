@@ -289,20 +289,31 @@ class WorkerPool:
         def stopped() -> bool:
             return control is not None and control.stopped()
 
+        # (set by the first feeder that raises, e.g. of a bug in an item:
+        # the others take no new items, so that the error comes at once,
+        # not after the rest of the items)
+        failed = threading.Event()
+
         def run(k: int) -> list[_Result]:
             results = []
-            for i in range(k, count, n):
-                if stopped():
-                    raise FitStopped("the work was asked to stop")
-                future = workers[k].submit_controlled(function, make(i))
-                while not concurrent.futures.wait(
-                        [future], timeout=_POLL_INTERVAL).done:
+            try:
+                for i in range(k, count, n):
+                    if failed.is_set():
+                        break
                     if stopped():
-                        workers[k].interrupt()
-                result = future.result()
-                if on_result is not None:
-                    on_result(i, result)
-                results.append(result)
+                        raise FitStopped("the work was asked to stop")
+                    future = workers[k].submit_controlled(function, make(i))
+                    while not concurrent.futures.wait(
+                            [future], timeout=_POLL_INTERVAL).done:
+                        if stopped():
+                            workers[k].interrupt()
+                    result = future.result()
+                    if on_result is not None:
+                        on_result(i, result)
+                    results.append(result)
+            except BaseException:
+                failed.set()
+                raise
             return results
         with concurrent.futures.ThreadPoolExecutor(
                 max(1, n), thread_name_prefix='gbkfit-feeder') as feeders:
