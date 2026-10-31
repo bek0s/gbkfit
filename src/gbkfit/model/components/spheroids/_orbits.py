@@ -33,6 +33,13 @@ __all__ = [
 # take more (the integration of a chunk lasts as long as its longest
 # orbit)
 _SAMPLES_MEMORY = 2 ** 30
+# How close a potential and the velocities of the starts must be to those
+# of the last integration times a factor (and its root) for its orbits to
+# serve, faster (see OrbitIntegrator.integrate), relative to the largest
+# of each quantity of the table: its accuracy (its derivatives along b come
+# from quadratures of the forces off the plane, linear in the mass to
+# 1e-8), far below what changes an orbit
+_SCALE_TOLERANCE = 1e-7
 
 
 @dataclasses.dataclass(frozen=True)
@@ -154,17 +161,28 @@ class OrbitIntegrator:
     """
     The integration of orbits in the potential of a galaxy and their
     records (see the native OrbitArgs), on the device of a driver: each
-    orbit for some turns of the circular orbit of its energy, in
-    time-symmetric leapfrog steps of the given accuracy (each the radians
-    of the circular orbit of its radius, and of its crossing time), at
-    most max_steps of them, recorded at nsamples times, on the sky in 2
+    orbit for some turns of the circular orbit of its energy, in steps of
+    DOP853 (the 8th-order Runge-Kutta method of Dormand and Prince, as
+    FORSTAND) of errors at most the given tolerance (relative to the
+    length of the position and of the velocity), at most max_steps of them
+    (taken or taken again), recorded at nsamples times, on the sky in 2
     nphi copies (turned about the axis and mirrored about the plane), and
     with twins reversed in time too. It records the time of each orbit in
     cells (and, of the light of all, its moments there), and in the
     targets of the sky its moments in their series (with an order) or the
-    spectrum of all their light (with channels), or both. It keeps the samples of the orbits from their integration to
-    their recording: 6 values each, at most 1 GiB (e.g. 480 MB for
-    10000 orbits of 2000 samples in float32).
+    spectrum of all their light (with channels), or both. It keeps the
+    samples of the orbits from their integration to their recording: 6
+    values each, at most 1 GiB (e.g. 480 MB for 10000 orbits of 2000
+    samples in float32).
+
+    The orbits of a potential s Phi from starts of velocities sqrt(s) v
+    are those of Phi from v, faster by sqrt(s) (for the same turns): when
+    the potential and the starts are those of its last integration so
+    (e.g. a mass-to-light ratio that scales all the mass, or a new
+    geometry, s = 1), and it keeps the samples of all the orbits, it
+    records those again with their velocities times sqrt(s), without
+    integrating them: exact, and without the noise of chaotic orbits
+    integrated anew (audit 2026-10-31 #9).
 
     Parameters
     ----------
@@ -174,8 +192,8 @@ class OrbitIntegrator:
         The precision of its arrays and of the integration.
     norbits : int
         The number of the orbits integrated.
-    accuracy : float
-        The accuracy of the steps (radians).
+    tolerance : float
+        The tolerance of the error of each step (relative).
     max_steps : int
         The most steps of an orbit.
     nsamples : int
@@ -212,7 +230,7 @@ class OrbitIntegrator:
             dtype: npt.DTypeLike,
             norbits: int,
             *,
-            accuracy: float,
+            tolerance: float,
             max_steps: int,
             nsamples: int,
             nphi: int,
@@ -233,7 +251,7 @@ class OrbitIntegrator:
         self._orbits = driver.native_class('Orbits', dtype)
         self._norbits = norbits
         self._options = dict(
-            accuracy=accuracy, max_steps=max_steps, nsamples=nsamples,
+            tolerance=tolerance, max_steps=max_steps, nsamples=nsamples,
             nphi=nphi, twins=twins)
         self._order = order
         recorded = norbits * (2 if twins else 1)
@@ -285,6 +303,9 @@ class OrbitIntegrator:
                 self._spectra = driver.mem_alloc_d(
                     (nchannels, ntargets), dtype)
 
+        # (the potential, the starts and the turns of the last integration,
+        # on the host, see _velocity_scale)
+        self._last: tuple[PotentialTable, np.ndarray, float] | None = None
         self._steps = driver.mem_alloc_d((norbits,), np.int32)
         self._energies = driver.mem_alloc_d((norbits, 2), dtype)
         # (the samples of the orbits, from their integration to their
@@ -392,10 +413,12 @@ class OrbitIntegrator:
                 driver.mem_fill(added, 0)
         cell_r, cell_b = (None, None) if cell_edges is None else (
             device(edges) for edges in cell_edges)
+        scale = self._velocity_scale(table, starts, turns)
         self._orbits.integrate(
             table=device(table.values),
             range=device([table.lnr_zero, table.lnr_step]),
             starts=device(starts), turns=turns,
+            record_only=scale is not None, velocity_scale=scale or 1.0,
             **self._options, posa=geometry[0], incl=geometry[1],
             cell_r=cell_r, cell_b=cell_b, cells=self._cells,
             **sky, order=self._order or 0, moments=self._moments,
@@ -405,13 +428,53 @@ class OrbitIntegrator:
             steps=self._steps, energies=self._energies,
             samples=self._samples)
 
+        if scale is None:
+            self._last = (table, np.array(starts, dtype=float), turns)
+
         def host(array: DeviceArray | None) -> np.ndarray | None:
             return None if array is None else driver.mem_copy_d2h(array)
+        # (the energies of the orbits recorded again: those of their
+        # integration times the factor of the potential)
         return OrbitRecords(
             cells=host(self._cells), moments=host(self._moments),
             spectra=host(self._spectra), steps=host(self._steps),
-            energies=host(self._energies),
+            energies=host(self._energies) * (scale or 1.0) ** 2,
             cell_moments=host(self._cell_moments))
+
+    def _velocity_scale(
+            self, table: PotentialTable, starts: np.ndarray, turns: float
+    ) -> float | None:
+        """
+        Return the factor of the velocities of the orbits of its last
+        integration that makes them the orbits of the given potential,
+        starts and turns, if it keeps the samples of all of them: sqrt(s),
+        if the potential is that of the last integration times s, and the
+        starts are its starts with their velocities times sqrt(s) (see
+        the class); else None (the orbits are integrated).
+        """
+        if self._last is None or len(self._samples) < self._norbits:
+            return None
+        last_table, last_starts, last_turns = self._last
+        starts = np.asarray(starts, dtype=float)
+        if (turns != last_turns or table.lnr_zero != last_table.lnr_zero
+                or table.lnr_step != last_table.lnr_step
+                or table.values.shape != last_table.values.shape
+                or not np.array_equal(starts[:, :3], last_starts[:, :3])):
+            return None
+        # (the factor of least squares of the tables; each of their four
+        # quantities within the tolerance of its largest value: some are
+        # rounding about 0, e.g. the derivatives along b of a sphere)
+        last = last_table.values.ravel()
+        s = float(np.dot(table.values.ravel(), last) / np.dot(last, last))
+        expected = s * last_table.values
+        largest = np.max(np.abs(expected), axis=(0, 1))
+        if not (s > 0 and np.all(
+                np.abs(table.values - expected)
+                <= _SCALE_TOLERANCE * largest) and np.allclose(
+                starts[:, 3:], np.sqrt(s) * last_starts[:, 3:],
+                rtol=_SCALE_TOLERANCE, atol=0)):
+            return None
+        return float(np.sqrt(s))
 
 
 def potential_at(

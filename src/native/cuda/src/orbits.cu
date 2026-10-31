@@ -6,6 +6,9 @@
 
 namespace gbkfit::cuda {
 
+// The stack of a thread of the orbit kernels (bytes)
+constexpr size_t ORBITS_STACK = 4096;
+
 template<typename T> void
 OrbitsWrapper<T>::orbits_potential(
         const PotentialArgs<T>& p, int n, const T* points,
@@ -23,6 +26,14 @@ OrbitsWrapper<T>::orbits_potential(
 template<typename T> void
 OrbitsWrapper<T>::orbits_integrate(const OrbitArgs<T>& a)
 {
+    // (the stages of a step of DOP853 of each thread, 13 of 6 values, need
+    // more than the 1 KiB of stack of a thread by default)
+    size_t stack;
+    check(cudaDeviceGetLimit(&stack, cudaLimitStackSize),
+            "cudaDeviceGetLimit");
+    if (stack < ORBITS_STACK)
+        check(cudaDeviceSetLimit(cudaLimitStackSize, ORBITS_STACK),
+                "cudaDeviceSetLimit");
     int device, max_shared;
     check(cudaGetDevice(&device), "cudaGetDevice");
     check(cudaDeviceGetAttribute(
@@ -45,8 +56,11 @@ OrbitsWrapper<T>::orbits_integrate(const OrbitArgs<T>& a)
     const size_t shared = 8 * twins * (ntile * width + ncells);
     for (int first = 0; first < a.norbits; first += a.nchunk) {
         const int count = std::min(a.nchunk, a.norbits - first);
-        launch_blocks("orbits_trajectories", count, 32,
-                kernels::orbits_trajectories<T>, a, first, count);
+        // (none if the samples are those of the last integration)
+        if (!a.record_only) {
+            launch_blocks("orbits_trajectories", count, 32,
+                    kernels::orbits_trajectories<T>, a, first, count);
+        }
         launch_grid("orbits_record", count, BLOCK_SIZE, shared,
                 kernels::orbits_record<T>, a, first, ntile);
     }

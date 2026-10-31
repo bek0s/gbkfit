@@ -8,7 +8,6 @@ the share of each in the light, and the light the orbits must hold.
 """
 
 import dataclasses
-import math
 from collections.abc import Callable, Sequence
 from typing import Annotated, Any
 
@@ -62,13 +61,16 @@ _CELL_ANGLES = 5
 _CELL_NODES = 8
 _CELL_INNER = 1e-6
 # How the orbits are integrated and recorded (see OrbitIntegrator): the
-# accuracy of the steps (radians), the records of each orbit in time, and
-# its turned copies on the sky
-_ACCURACY = 0.02
+# tolerance of the error of the steps (relative; at 1e-10, 2 of 3000 orbits
+# of a black hole of 2e8 Msun drift by more than 1% of their energy, 1.5%
+# at most, against 21 and 9.7% at 1e-8), the records of each orbit in
+# time, and its turned copies on the sky
+_TOLERANCE = 1e-10
 _SAMPLES = 2000
 _COPIES = 4
-# The most steps of an orbit, times those of its turns on a circle
-_STEPS_FACTOR = 100
+# The most steps of an orbit, per turn (taken or taken again; an orbit
+# takes some hundreds per turn, and more close to a black hole)
+_STEPS_PER_TURN = 10 ** 5
 
 
 class SchwarzschildKinematics(SpheroidKinematics):
@@ -176,7 +178,7 @@ class OrbitLibraryState(ComponentState):
     both sides of the plane; an array of shape (ncell_r, ncell_b)), how
     long the orbits are integrated (see SchwarzschildKinematics), the kpc
     of an arcsec at the galaxy, and how (see OrbitIntegrator): the
-    accuracy of the steps, the records of each orbit in time and its
+    tolerance of the steps, the records of each orbit in time and its
     turned copies on the sky.
     """
     potential: PotentialTable
@@ -186,16 +188,15 @@ class OrbitLibraryState(ComponentState):
     cell_light: np.ndarray
     turns: float
     kpc_per_arcsec: float
-    accuracy: float = _ACCURACY
+    tolerance: float = _TOLERANCE
     samples: int = _SAMPLES
     copies: int = _COPIES
 
     def max_steps(self) -> int:
         """
-        Return the most steps of an orbit: 100 times those of its turns on
-        a circle.
+        Return the most steps of an orbit: _STEPS_PER_TURN per turn.
         """
-        return int(_STEPS_FACTOR * self.turns * 2 * math.pi / self.accuracy)
+        return int(_STEPS_PER_TURN * self.turns)
 
     def orbit_light(self, factors: npt.ArrayLike) -> np.ndarray:
         """

@@ -538,8 +538,9 @@ orbits_integrate(const OrbitArgs<T>& a)
     for (int first = 0; first < a.norbits; first += a.nchunk) {
         const int last = std::min(first + a.nchunk, a.norbits);
 
+        // (none if the samples are those of the last integration)
         #pragma omp parallel for schedule(dynamic)
-        for (int k = first; k < last; ++k) {
+        for (int k = first; k < (a.record_only ? first : last); ++k) {
             gbkfit::orbits_trajectory(
                     k, a, a.samples + 6LL * a.nsamples * (k - first));
         }

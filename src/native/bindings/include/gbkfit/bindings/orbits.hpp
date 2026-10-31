@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include "gbkfit/bindings/arrays.hpp"
 #include "gbkfit/bindings/gil.hpp"
 #include "gbkfit/orbits/orbit.hpp"
@@ -81,7 +83,8 @@ struct Orbits
     static void
     integrate(
             Table table, Range range,
-            Rows starts, T turns, T accuracy, int max_steps,
+            Rows starts, T turns, bool record_only, T velocity_scale,
+            T tolerance, int max_steps,
             int nsamples, int nphi, bool twins, T posa, T incl,
             Values cell_r, Values cell_b, Out3 cells,
             Array<Device, const int, nb::ndim<2>> grid_sizes, Rows grids,
@@ -98,13 +101,13 @@ struct Orbits
         a.norbits = int(starts.shape(0));
         require(starts.shape(1) == 6,
                 "starts must have rows of x, y, z, vx, vy, vz");
-        require(turns > 0 && accuracy > 0 && max_steps > 0 && nsamples > 0
-                && nphi > 0,
-                "turns, accuracy, max_steps, nsamples and nphi must be "
-                "positive");
+        require(turns > 0 && max_steps > 0 && nsamples > 0 && nphi > 0,
+                "turns, max_steps, nsamples and nphi must be positive");
+        require(tolerance >= 100 * std::numeric_limits<T>::epsilon(),
+                "tolerance must be above the rounding of the precision");
         a.starts = starts.data();
         a.turns = turns;
-        a.accuracy = accuracy;
+        a.tolerance = tolerance;
         a.max_steps = max_steps;
         a.nsamples = nsamples;
         a.nphi = nphi;
@@ -220,6 +223,11 @@ struct Orbits
                 && samples.shape(2) == 6,
                 "samples must have the shape (nchunk, nsamples, 6)");
         a.nchunk = int(samples.shape(0));
+        require(!record_only || a.nchunk >= a.norbits,
+                "record_only takes the samples of all the orbits");
+        require(velocity_scale > 0, "velocity_scale must be positive");
+        a.record_only = record_only;
+        a.velocity_scale = velocity_scale;
         a.samples = samples.data();
 
         Kernels::orbits_integrate(a);
@@ -243,7 +251,9 @@ struct Orbits
                         nb::arg("range").noconvert(),
                         nb::arg("starts").noconvert(),
                         nb::arg("turns"),
-                        nb::arg("accuracy"),
+                        nb::arg("record_only"),
+                        nb::arg("velocity_scale"),
+                        nb::arg("tolerance"),
                         nb::arg("max_steps"),
                         nb::arg("nsamples"),
                         nb::arg("nphi"),

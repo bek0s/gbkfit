@@ -43,12 +43,11 @@ struct OrbitArgs
     // The orbits: the start of each (starts[6k] to starts[6k + 5]: x, y, z
     // (arcsec) and vx, vy, vz (km/s), in the frame of the spheroid), each
     // integrated for turns periods of the circular orbit of its energy in
-    // the plane (see orbits_circular_period), in time-symmetric
-    // kick-drift-kick leapfrog steps (Hut,
-    // Makino & McMillan 1995), each step the mean of accuracy / f at its
-    // start and its end, f^2 = (|Phi_u| + v^2) / r^2 (the frequencies of
-    // the circular orbit of its radius and of its crossing), and at most
-    // max_steps of them. Each orbit is recorded at nsamples times evenly
+    // the plane (see orbits_circular_period), in steps of DOP853 (the
+    // 8th-order Runge-Kutta method of Dormand and Prince, as FORSTAND),
+    // each of an error at most tolerance relative to the length of the
+    // position and of the velocity, and at most max_steps of them (taken
+    // or taken again). Each orbit is recorded at nsamples times evenly
     // spaced in its time (each at the time of its fraction 1 / nsamples)
     // and, on the sky, each time in 2 nphi copies (each a share of it):
     // turned about the axis by nphi angles evenly spaced (by a fraction
@@ -59,11 +58,18 @@ struct OrbitArgs
     int norbits = 0;
     const T* starts = nullptr;
     T turns = 0;
-    T accuracy = 0;
+    T tolerance = 0;
     int max_steps = 0;
     int nsamples = 0;
     int nphi = 0;
     bool twins = false;
+
+    // The factor of the velocities of the samples when they are recorded,
+    // and whether to record the samples of the last integration (of all
+    // the orbits, in one chunk) without integrating them: the orbits of a
+    // potential s Phi are those of Phi, with velocities times sqrt(s)
+    T velocity_scale = 1;
+    bool record_only = false;
 
     // The geometry of the spheroid: its position angle and its
     // inclination (degrees; see transform_cpos_posa_incl)

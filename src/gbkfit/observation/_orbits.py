@@ -29,6 +29,10 @@ if TYPE_CHECKING:
 
 _log = logging.getLogger(__name__)
 
+# The most drift of the energy of an orbit in its integration, as a
+# fraction of it, before a warning (the target of the design, step 9)
+_ENERGY_DRIFT = 1e-3
+
 
 __all__ = [
     'LinearMoment',
@@ -183,8 +187,10 @@ class OrbitRecording:
             name for observation in observed
             for name in observation.offset_params() if name is not None))))
         self._integrator: OrbitIntegrator | None = None
-        # (whether it warned of orbits cut by the most steps: once)
+        # (whether it warned of orbits cut by the most steps, and of those
+        # whose energy drifted: once each)
         self._cut_warned = False
+        self._drift_warned = False
 
     def spheroid(self) -> Spheroid:
         """Return the spheroid."""
@@ -248,9 +254,12 @@ class OrbitRecording:
         shifts = [
             self._group.frame_shifts(i, params) for i in self._observations]
         if self._integrator is None:
+            # (in float64 whatever the dtype of the observations: chaotic
+            # orbits turn float32 rounding into noise of the chi-square,
+            # audit 2026-10-31 #10)
             self._integrator = OrbitIntegrator(
-                self._galaxy_driver, self._dtypes[0], len(state.starts),
-                accuracy=state.accuracy, max_steps=state.max_steps(),
+                self._galaxy_driver, np.float64, len(state.starts),
+                tolerance=state.tolerance, max_steps=state.max_steps(),
                 nsamples=state.samples, nphi=state.copies, twins=True,
                 cells=state.cell_light.shape, sky=self._grids,
                 order=self._order)
@@ -276,6 +285,19 @@ class OrbitRecording:
                 f"({state.max_steps()}) before the end of their time: the "
                 f"light of the rest of it is left out")
             self._cut_warned = True
+        if not self._drift_warned:
+            # (an orbit whose energy drifts is recorded as other orbits:
+            # audit 2026-10-31 #11)
+            start, end = records.energies.astype(np.float64).T
+            drift = np.abs(end - start) / np.abs(start)
+            if drifted := int(np.sum(drift > _ENERGY_DRIFT)):
+                _log.warning(
+                    f"{drifted} orbits of the spheroid "
+                    f"{self._spheroid.name()!r} changed their energy by "
+                    f"more than {_ENERGY_DRIFT:g} of it (at most "
+                    f"{np.max(drift):.2g}) in their integration: their "
+                    f"records are of other orbits")
+                self._drift_warned = True
 
         # The moments of each observation, linear in the weights, and the
         # constraints of the light of the bins and the cells

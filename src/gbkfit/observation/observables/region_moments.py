@@ -592,9 +592,10 @@ class OrbitMomentsPlan(ObservablePlan):
                 channels=channels)
             return records, weights, light
         if self._integrator is None:
+            # (in float64, see _orbits.OrbitRecording)
             self._integrator = OrbitIntegrator(
-                self._driver, self._dtype, len(state.starts),
-                accuracy=state.accuracy, max_steps=state.max_steps(),
+                self._driver, np.float64, len(state.starts),
+                tolerance=state.tolerance, max_steps=state.max_steps(),
                 nsamples=state.samples, nphi=state.copies, twins=True,
                 sky=[self._grid], nchannels=self._nchannels)
         records = self._integrator.integrate(
@@ -627,8 +628,8 @@ class OrbitMomentsPlan(ObservablePlan):
         """
         if self._outputs is None:
             integrator = OrbitIntegrator(
-                self._driver, self._dtype, len(state.starts),
-                accuracy=state.accuracy, max_steps=state.max_steps(),
+                self._driver, np.float64, len(state.starts),
+                tolerance=state.tolerance, max_steps=state.max_steps(),
                 nsamples=state.samples, nphi=state.copies, twins=True,
                 cells=state.cell_light.shape,
                 sky=[self._grid, self._pixels.grid],

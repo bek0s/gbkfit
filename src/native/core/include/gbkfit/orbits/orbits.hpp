@@ -6,6 +6,7 @@
 
 #include "gbkfit/gmodel/gmodels.hpp"
 #include "gbkfit/math/math.hpp"
+#include "gbkfit/orbits/dop853.hpp"
 #include "gbkfit/orbits/orbit.hpp"
 
 namespace gbkfit {
@@ -203,23 +204,96 @@ orbits_point_gravity(const PotentialArgs<T>& p, OrbitPoint<T>& point)
     point.rate = orbits_rate(point, omega2);
 }
 
-// A kick-drift-kick leapfrog step of an orbit of dt, from start to end
-template<typename T> constexpr void
-orbits_step(
+// A step of an orbit of dt from start to end by DOP853 (see dop853.hpp),
+// the 8th-order Runge-Kutta method of Dormand and Prince that FORSTAND
+// (AGAMA) integrates orbits with; return the norm of its error relative
+// to the tolerance (Hairer's, of the estimators of order 5 and 3; at most
+// 1 for a step to keep): of the positions relative to their length, and
+// of the velocities relative to theirs, so that it follows the passes
+// close to a point mass, and is the same in any frame
+template<typename T> constexpr T
+orbits_dop853_step(
         const PotentialArgs<T>& p, const OrbitPoint<T>& start, T dt,
-        OrbitPoint<T>& end)
+        T tolerance, OrbitPoint<T>& end)
 {
-    T half[3];
-    for (int k = 0; k < 3; ++k)
+    constexpr int S = DOP853_STAGES;
+    // (the derivatives of the stages: of the positions, the velocities,
+    // and of the velocities, the forces; the last at the end. The loops
+    // over the stages are unrolled, and each coefficient is a constexpr
+    // copy: a device cannot read the tables from the memory of the host)
+    T kx[S + 1][3], kv[S + 1][3];
+    for (int c = 0; c < 3; ++c)
     {
-        half[k] = start.v[k] + start.force[k] * dt / 2;
-        end.x[k] = start.x[k] + half[k] * dt;
+        kx[0][c] = start.v[c];
+        kv[0][c] = start.force[c];
+    }
+    dop853_unroll<S - 1>([&](auto stage) {
+        constexpr int s = decltype(stage)::value + 1;
+        T x[3], v[3];
+        for (int c = 0; c < 3; ++c)
+        {
+            T dx = 0, dv = 0;
+            dop853_unroll<s>([&](auto previous) {
+                constexpr int j = decltype(previous)::value;
+                constexpr T aij = DOP853_A[s][j];
+                dx += aij * kx[j][c];
+                dv += aij * kv[j][c];
+            });
+            x[c] = start.x[c] + dt * dx;
+            v[c] = start.v[c] + dt * dv;
+        }
+        T omega2;
+        orbits_gravity(p, x, kv[s], omega2);
+        for (int c = 0; c < 3; ++c)
+            kx[s][c] = v[c];
+    });
+    for (int c = 0; c < 3; ++c)
+    {
+        T dx = 0, dv = 0;
+        dop853_unroll<S>([&](auto stage) {
+            constexpr int s = decltype(stage)::value;
+            constexpr T bs = DOP853_B[s];
+            dx += bs * kx[s][c];
+            dv += bs * kv[s][c];
+        });
+        end.x[c] = start.x[c] + dt * dx;
+        end.v[c] = start.v[c] + dt * dv;
     }
     T omega2;
     end.phi = orbits_gravity(p, end.x, end.force, omega2);
-    for (int k = 0; k < 3; ++k)
-        end.v[k] = half[k] + end.force[k] * dt / 2;
     end.rate = orbits_rate(end, omega2);
+    for (int c = 0; c < 3; ++c)
+    {
+        kx[S][c] = end.v[c];
+        kv[S][c] = end.force[c];
+    }
+
+    // The error, of the estimators of order 5 and 3
+    const auto norm = [](const T* a) {
+        return std::sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]);
+    };
+    const T scale_x = tolerance * std::max(norm(start.x), norm(end.x));
+    const T scale_v = tolerance * std::max(norm(start.v), norm(end.v));
+    T err5 = 0, err3 = 0;
+    for (int c = 0; c < 3; ++c)
+    {
+        T e5x = 0, e5v = 0, e3x = 0, e3v = 0;
+        dop853_unroll<S + 1>([&](auto stage) {
+            constexpr int s = decltype(stage)::value;
+            constexpr T e5 = DOP853_E5[s], e3 = DOP853_E3[s];
+            e5x += e5 * kx[s][c];
+            e5v += e5 * kv[s][c];
+            e3x += e3 * kx[s][c];
+            e3v += e3 * kv[s][c];
+        });
+        err5 += (e5x / scale_x) * (e5x / scale_x)
+                + (e5v / scale_v) * (e5v / scale_v);
+        err3 += (e3x / scale_x) * (e3x / scale_x)
+                + (e3v / scale_v) * (e3v / scale_v);
+    }
+    if (err5 == 0 && err3 == 0)
+        return 0;
+    return std::abs(dt) * err5 / std::sqrt((err5 + T{0.01} * err3) * 6);
 }
 
 // The position and the velocity of an orbit at the fraction tau of a step
@@ -461,15 +535,18 @@ orbits_record_cell(
         return;
     // (the velocity along R, phi and z, and along r and theta, theta from
     // the axis; at R = 0, along x and y)
+    // (the velocities times their scale, see OrbitArgs)
+    const T s = a.velocity_scale;
     const T cos = R > 0 ? x[0] / R : 1;
     const T sin = R > 0 ? x[1] / R : 0;
-    const T vR = cos * v[0] + sin * v[1];
-    const T vphi = cos * v[1] - sin * v[0];
-    const T vr = r > 0 ? (R * vR + x[2] * v[2]) / r : 0;
-    const T vtheta = r > 0 ? (x[2] * vR - R * v[2]) / r : 0;
+    const T vR = s * (cos * v[0] + sin * v[1]);
+    const T vphi = s * (cos * v[1] - sin * v[0]);
+    const T vz = s * v[2];
+    const T vr = r > 0 ? (R * vR + x[2] * vz) / r : 0;
+    const T vtheta = r > 0 ? (x[2] * vR - R * vz) / r : 0;
     const T moments[ORBITS_CELL_MOMENTS] = {
         1, vr, vR, vphi, vr * vr, vtheta * vtheta, vphi * vphi, vR * vR,
-        v[2] * v[2]};
+        vz * vz};
     const long long orbit = a.twins ? 2 * k : k;
     T* out = a.cell_moments
             + (long long)(i * a.ncell_b + j) * ORBITS_CELL_MOMENTS;
@@ -511,7 +588,9 @@ orbits_record_copy(
     const T pvz = mirror * v[2];
     const T sx = sky[0][0] * px + sky[0][1] * py + sky[0][2] * pz;
     const T sy = sky[1][0] * px + sky[1][1] * py + sky[1][2] * pz;
-    const T sv = sky[2][0] * pvx + sky[2][1] * pvy + sky[2][2] * pvz;
+    // (the velocity times its scale, see OrbitArgs)
+    const T sv = a.velocity_scale
+            * (sky[2][0] * pvx + sky[2][1] * pvy + sky[2][2] * pvz);
     orbits_record_sky<AddFunT, AddRowFunT>(
             k, sx, sy, sv, T{1} / (2 * a.nphi * a.nsamples), a, rows);
 }
@@ -537,19 +616,30 @@ orbits_trajectory(int k, const OrbitArgs<T>& a, T* samples)
 
     const T duration = a.turns * orbits_circular_period(
             a.potential, start_energy);
-    const T accuracy = a.accuracy;
     T t = 0;
     int n = 0;
     int steps = 0;
+    // (the first step a hundredth of the time of the rate of the start;
+    // then as the error of each says, as Hairer's control: a step of an
+    // error above 1 is taken again, shorter; steps, of both kinds)
+    T step = T{0.01} / start.rate;
+    bool rejected = false;
     while (n < a.nsamples && steps < a.max_steps)
     {
-        // (a trial step for the rate at its end, then the step)
-        const T left = duration - t;
-        orbits_step(a.potential, start,
-                    std::min(accuracy / start.rate, left), end);
-        const T dt = std::min(
-                accuracy * (1 / start.rate + 1 / end.rate) / 2, left);
-        orbits_step(a.potential, start, dt, end);
+        const T dt = std::min(step, duration - t);
+        const T error = orbits_dop853_step(
+                a.potential, start, dt, a.tolerance, end);
+        ++steps;
+        const T factor = error == 0
+                ? T{10} : T{0.9} * std::pow(error, T{-1} / 8);
+        if (error > 1)
+        {
+            step = dt * std::max(T{0.2}, factor);
+            rejected = true;
+            continue;
+        }
+        step = dt * std::min(rejected ? T{1} : T{10}, factor);
+        rejected = false;
         for (; n < a.nsamples; ++n)
         {
             const T time = (n + T{0.5}) * duration / a.nsamples;
@@ -561,7 +651,6 @@ orbits_trajectory(int k, const OrbitArgs<T>& a, T* samples)
         }
         t += dt;
         start = end;
-        ++steps;
     }
     for (; n < a.nsamples; ++n)
         samples[6LL * n] = std::numeric_limits<T>::quiet_NaN();

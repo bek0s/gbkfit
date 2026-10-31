@@ -10,7 +10,7 @@ import pytest
 import scipy.sparse
 
 from gbkfit.model.components.spheroids._orbits import (
-    OrbitIntegrator, SkyGrid, potential_at, potential_table)
+    OrbitIntegrator, PotentialTable, SkyGrid, potential_at, potential_table)
 from gbkfit.model.gravity import GravityNewton
 from gbkfit.model.mass import (
     G, MassContext, MassModel, MassPoint, MassSpheroid, ProfileZhao,
@@ -104,7 +104,7 @@ def test_orbits_conserve_their_energy(driver, q):
     v = random_points(rng, 300, (1, 1)) \
         * (speed * rng.uniform(0.2, 1.2, 300))[:, None]
     integrator = OrbitIntegrator(
-        driver, np.float64, 300, accuracy=0.02, max_steps=10 ** 6,
+        driver, np.float64, 300, tolerance=1e-8, max_steps=10 ** 6,
         nsamples=100, nphi=1, twins=False, cells=(2, 2))
     records = integrator.integrate(
         table, np.hstack((x, v)), 20, (GEOMETRY['posa'], GEOMETRY['incl']),
@@ -114,6 +114,49 @@ def test_orbits_conserve_their_energy(driver, q):
     assert errors.max() < 1e-2
     np.testing.assert_allclose(records.cells.sum(axis=(1, 2)), 1, rtol=1e-9)
 
+
+
+def test_the_orbits_of_a_scaled_potential_are_recorded_again(driver):
+    # The orbits of s Phi from the velocities sqrt(s) v are those of Phi
+    # from v, faster: recorded again with their velocities times sqrt(s),
+    # without integrating them, they are those integrated anew (audit
+    # 2026-10-31 #9)
+    rng = np.random.default_rng(3)
+    x = random_points(rng, 50, (0.5, 5))
+    table = potential_of()
+    _, forces = potential_at(driver, np.float64, table, x)
+    speed = np.sqrt(np.linalg.norm(x, axis=1) * np.linalg.norm(forces, axis=1))
+    v = random_points(rng, 50, (1, 1)) \
+        * (speed * rng.uniform(0.5, 1, 50))[:, None]
+    scaled = PotentialTable(
+        table.lnr_zero, table.lnr_step, 1.44 * table.values)
+    edges = (np.array([0, 1, 2, 4, 1e5]), np.array([0, 0.3, 0.8, np.pi / 2]))
+    light = np.ones(50)
+
+    def integrator():
+        return OrbitIntegrator(
+            driver, np.float64, 50, tolerance=1e-8, max_steps=10 ** 6,
+            nsamples=200, nphi=1, twins=False, cells=(4, 3),
+            cell_moments=True)
+    kept = integrator()
+    first = kept.integrate(
+        table, np.hstack((x, v)), 3, (30, 60), edges, light=light)
+    again = kept.integrate(
+        scaled, np.hstack((x, 1.2 * v)), 3, (30, 60), edges, light=light)
+    anew = integrator().integrate(
+        scaled, np.hstack((x, 1.2 * v)), 3, (30, 60), edges, light=light)
+    # (the moments of the cells: the light, 3 means of velocities and 5 of
+    # their squares)
+    powers = 1.2 ** np.array([0, 1, 1, 1, 2, 2, 2, 2, 2])
+    np.testing.assert_allclose(
+        again.cell_moments, first.cell_moments * powers, rtol=1e-12)
+    np.testing.assert_allclose(
+        again.energies, first.energies * 1.44, rtol=1e-12)
+    # (integrated anew: the same to the tolerance of the steps, but for
+    # samples within it of the edge of a cell, which change cells)
+    np.testing.assert_allclose(
+        again.cell_moments.sum(axis=(0, 1)),
+        anew.cell_moments.sum(axis=(0, 1)), rtol=1e-4)
 
 def test_an_orbit_is_seen_in_the_geometry_of_its_spheroid(driver):
     # A circular orbit of the radius R in the plane of the spheroid, seen
@@ -146,7 +189,7 @@ def test_an_orbit_is_seen_in_the_geometry_of_its_spheroid(driver):
     theta = np.arctan2(far, major).ravel()
     velocity = vc * np.cos(theta) * np.sin(i)
     integrator = OrbitIntegrator(
-        driver, np.float64, 1, accuracy=0.01, max_steps=10 ** 6,
+        driver, np.float64, 1, tolerance=1e-8, max_steps=10 ** 6,
         nsamples=4000, nphi=4, twins=True, sky=[grid], order=1)
     records = integrator.integrate(
         table, np.array([[R, 0, 0, 0, vc, 0]]), 1,
