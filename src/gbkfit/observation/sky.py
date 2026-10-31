@@ -64,7 +64,7 @@ class ObservationSky(Observation):
     ('per_spectrum'), or one for each line of the image of slitless
     spectra along the dispersion ('per_row', the row amplitudes of geko).
     Its values can be fixed, tied, free or solved (see ParamSpace): e.g.
-    {solve: {type: gaussian, mean: 1, sigma: 0.5, minimum: 0}} (see
+    {solve: {type: gaussian, mean: 1, sigma: 0.5, min: 0}} (see
     SolveGaussian). Scales per spectrum make a fit take the shape of each
     spectrum from the model (where its lines are, how wide; with beam
     smearing, also how the light of the model weighs its velocities), and

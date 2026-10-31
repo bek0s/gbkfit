@@ -295,16 +295,20 @@ class Bootstrap:
 
     def std(self) -> dict[str, float]:
         """
-        Return the standard deviation of each element over the refits
-        (NaN with fewer than two): of the periodic ones, on the circle
+        Return the standard deviation of each element over the refits that
+        have it (e.g. not a derived value that cannot be evaluated in
+        one), NaN with fewer than two: of the periodic ones, on the circle
         (see periodic_std; refits at 1 and 359 degrees are 2 apart).
         """
-        if len(self.samples) < 2:
-            return dict.fromkeys(self.names, np.nan)
-        std = np.std(self.samples, axis=0, ddof=1)
+        def std(name: str, values: np.ndarray) -> float:
+            values = values[~np.isnan(values)]
+            if len(values) < 2:
+                return np.nan
+            if name in self.periods:
+                return periodic_std(values, self.periods[name])
+            return float(np.std(values, ddof=1))
         return {
-            name: float(std[i]) if name not in self.periods
-            else periodic_std(self.samples[:, i], self.periods[name])
+            name: std(name, self.samples[:, i])
             for i, name in enumerate(self.names)}
 
     def summary(self) -> dict[str, tuple[float, float, float]]:
@@ -415,10 +419,9 @@ class FitSolution:
         residuals of their prior: the conditional AIC (see aicp).
     bic : float
         The Bayesian information criterion, -2 ln L + k ln n, of the L and
-        k of aic and the n residuals. Like the likelihood, it takes the
-        values as independent (of correlated values, e.g. the pixels
-        within a beam, n is more than the independent ones, and k ln n
-        penalises too much).
+        k of aic and the number n of independent values (see
+        Objective.nindependent: of correlated noise, e.g. the pixels
+        within a beam, fewer than the residuals), as the dof takes them.
     aicp : float
         The AICp (Lipka & Thomas 2021): the chi-square of the data (see
         Objective.aicp) plus twice the number of fitted quantities (see

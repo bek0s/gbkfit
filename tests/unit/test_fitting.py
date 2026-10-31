@@ -1711,3 +1711,12 @@ def test_periodic_elements_are_summarised_on_the_circle():
         ('posa',), np.array([[1.0], [359.0]]), np.ones(2, bool), (), {},
         periods=dict(posa=360))
     assert refits.std()['posa'] == pytest.approx(1, rel=1e-3)
+
+
+def test_the_bootstrap_std_of_a_value_missing_in_a_refit():
+    # (of the refits that have it; it was NaN: audit 2026-10-31 #78)
+    from gbkfit.fitting.result import Bootstrap
+    refits = Bootstrap(
+        ('a', 'v'), np.array([[1.0, 2.0], [2.0, np.nan], [3.0, 4.0]]),
+        np.ones(3, bool), (), {})
+    assert refits.std() == pytest.approx(dict(a=1.0, v=np.sqrt(2)))

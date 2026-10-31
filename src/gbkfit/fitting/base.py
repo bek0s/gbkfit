@@ -579,7 +579,8 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             log_likelihood=merits.log_likelihood,
             log_prior=log_prior,
             aic=deviance + 2 * ncounted,
-            bic=deviance + ncounted * float(np.log(nresiduals)),
+            bic=deviance + ncounted * float(
+                np.log(objective.nindependent())),
             aicp=merits.aicp + 2 * problem.ndim(),
             covariance=cov,
             laplace=laplace), nevals, problems

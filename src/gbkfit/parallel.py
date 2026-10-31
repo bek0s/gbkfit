@@ -344,9 +344,11 @@ class WorkersThreads(Workers):
     the objective has the objective itself; the others have copies of it
     that share its data, with memory of their own (see GroupPlan).
 
-    The threads overlap while they wait for their devices (GPUs); the host
-    driver gains nothing from them (its kernels use every core), nor do
-    the parts of the models that run in Python (see WorkersProcesses).
+    The threads overlap while they wait for their devices: one copy per
+    GPU (copies on one GPU do not overlap: each evaluation waits for its
+    device to finish); the host driver gains nothing from them (its
+    kernels use every core), nor do the parts of the models that run in
+    Python (see WorkersProcesses).
 
     Its sub-fits (see WorkerPool.map_lazily; e.g. the refits of a
     bootstrap) run one after the other: fitters and their libraries keep
@@ -357,8 +359,7 @@ class WorkersThreads(Workers):
     Parameters
     ----------
     drivers : Sequence of Placement
-        The placement of the copy of each worker; a placement can be
-        listed more than once (e.g. two copies on one GPU).
+        The placement of the copy of each worker (e.g. one per GPU).
 
     Raises
     ------

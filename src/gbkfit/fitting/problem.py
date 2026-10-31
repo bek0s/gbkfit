@@ -258,8 +258,8 @@ class FitProblem:
 
     def failed_nevals(self) -> int:
         """
-        Return the number of model evaluations so far where the model or a
-        solve failed (see ModelEvaluationError).
+        Return the number of evaluations so far where the parameters, the
+        model or a solve failed (see EvaluationError).
         """
         return self._failed_nevals
 
@@ -415,8 +415,7 @@ class FitProblem:
         """
         if self._nresiduals is None:
             raise failure
-        if isinstance(failure, ModelEvaluationError):
-            self._count_failed(x, failure)
+        self._count_failed(x, failure)
         if self._log is not None:
             self._log.append(x, _UNEVALUATED)
         return np.full(self._nresiduals, np.inf)
@@ -501,7 +500,8 @@ class FitProblem:
             return log_prior
         try:
             joint = self._joint_residuals(x)
-        except ParamEvaluationError:
+        except ParamEvaluationError as e:
+            self._count_failed(x, e)
             return -math.inf
         return log_prior - 0.5 * float(joint @ joint)
 
@@ -565,7 +565,8 @@ class FitProblem:
                 continue
             try:
                 cost = getattr(merits, self._merit) + self.prior_chi2(x)
-            except ParamEvaluationError:
+            except ParamEvaluationError as e:
+                self._count_failed(x, e)
                 cost = math.inf
             self._record(x, cost)
             costs.append(cost)
@@ -658,7 +659,8 @@ class FitProblem:
         for x in _points(xs):
             try:
                 joint = self._joint_residuals(x)
-            except ParamEvaluationError:
+            except ParamEvaluationError as e:
+                self._count_failed(x, e)
                 log_density.append(-math.inf)
                 continue
             log_density.append(-0.5 * float(joint @ joint))
@@ -785,7 +787,8 @@ class FitProblem:
                 continue
             try:
                 new.append((x, self.evaluate(x)))
-            except ParamEvaluationError:
+            except ParamEvaluationError as e:
+                self._count_failed(x, e)
                 new.append((x, None))
         evaluated = self.map_objective(
             _merits_or_failure,
@@ -823,19 +826,17 @@ class FitProblem:
                 dict(zip(self._names, np.asarray(x).tolist())))
         self._nan_nevals += 1
 
-    def _count_failed(
-            self, x: np.ndarray, failure: ModelEvaluationError
-    ) -> None:
+    def _count_failed(self, x: np.ndarray, failure: EvaluationError) -> None:
         """
-        Count a model evaluation where the model or a solve failed, and log
-        the first.
+        Count an evaluation where the parameters (e.g. a tie, a transform or
+        a joint prior), the model or a solve failed, and log the first,
+        with its message (which says what is wrong).
         """
         if not self._failed_nevals:
             _log.warning(
-                "the model cannot be evaluated at the free values %s (%s): "
-                "such points count as ones whose parameters cannot be "
-                "evaluated; see the diagnostics 'failed_nevals' of the "
-                "result",
+                "the parameters or the model cannot be evaluated at the free "
+                "values %s (%s): such points count as ones the fitter cannot "
+                "evaluate; see the diagnostics 'failed_nevals' of the result",
                 dict(zip(self._names, np.asarray(x).tolist())), failure)
         self._failed_nevals += 1
 

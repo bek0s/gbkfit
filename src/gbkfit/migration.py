@@ -195,11 +195,11 @@ class _FluxScales(Rule):
             changes.append(Change(
                 path, f"by hand: add to the parameters {param}: {{solve: "
                       f"{{type: gaussian, mean: 1, sigma: {sigma}, "
-                      f"minimum: 0}}}}"))
+                      f"min: 0}}}}"))
             return changes
         params_path, params = params[0]
         params.setdefault('properties', {})[param] = dict(solve=dict(
-            type='gaussian', mean=1, sigma=sigma, minimum=0))
+            type='gaussian', mean=1, sigma=sigma, min=0))
         changes.append(Change(
             params_path + ['properties'], f"{param} added (solved)"))
         return changes

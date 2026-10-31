@@ -331,7 +331,7 @@ class ParamSpace(parseutils.Serializable):
       {'*value': [1, 2, 3], 'min': 0})
     - a dict of 'solve' alone: the elements are solved at each evaluation
       of an objective, from the data, by the solve (e.g. {'solve': {'type':
-      'gaussian', 'mean': 1, 'sigma': 0.5, 'minimum': 0}}; see Solve), in
+      'gaussian', 'mean': 1, 'sigma': 0.5, 'min': 0}}; see Solve), in
       the valid range of the parameter; only parameters that the model is
       linear in can be (the objective says which)
     - None: the transforms function sets the elements

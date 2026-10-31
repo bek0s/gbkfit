@@ -72,7 +72,7 @@ _FOLDERS = dict(
 
 _yaml = ruamel.yaml.YAML(typ='safe')
 # (pieces written with their content: lists and dictionaries of plain
-# values on one line, e.g. data: [data/cube.fits, SCI])
+# values on one line, e.g. data: {file: data/cube.fits, hdu: SCI})
 _yaml_out = ruamel.yaml.YAML(typ='safe')
 _yaml_out.default_flow_style = None
 _yaml_out.sort_base_mapping_type_on_output = False
