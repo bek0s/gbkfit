@@ -10,12 +10,13 @@ pixels_on).
 
 import numbers
 from collections.abc import Sequence
-from typing import Any, NamedTuple, TypeVar
+from typing import Annotated, Any, Literal, NamedTuple, TypeVar
 
 import astropy.constants
 import astropy.units
 import numpy as np
 import numpy.typing as npt
+from annotated_types import Gt
 
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
@@ -387,9 +388,10 @@ def make_convention(
         allowed, default = ('radio',), 'radio'
     convention = default if convention is None else convention
     if convention not in allowed:
+        of = 'without a rest' if rest is None else f"of the rest {rest}"
         raise ConfigError(
-            f"the convention of the velocities of the rest {rest} must be "
-            f"one of {list(allowed)}; it is {convention!r}")
+            f"the convention of the velocities {of} must be one of "
+            f"{[c for c in allowed if c is not None]}; it is {convention!r}")
     return convention
 
 
@@ -934,23 +936,16 @@ class SpectralAxis(parseutils.Serializable):
 
     def __init__(
             self,
-            size: int | None = None,
-            step: float | None = None,
+            size: Annotated[int, Gt(0)] | None = None,
+            step: Annotated[float, Gt(0)] | None = None,
             rpix: float | None = None,
             rval: float | None = None,
-            convention: str | None = None,
+            convention: Literal[
+                'optical', 'log', 'radio', 'relativistic'] | None = None,
             rest: str | astropy.units.Quantity | None = None,
-            medium: str | None = None
+            medium: Literal['vacuum', 'air'] | None = None
     ):
-        if size is not None and not (
-                isinstance(size, numbers.Integral)
-                and not isinstance(size, bool) and size > 0):
-            raise ConfigError(
-                f"the size of a spectral axis must be a positive integer; "
-                f"it is {size!r}")
-        if step is not None and not step > 0:
-            raise ConfigError(
-                f"the step of a spectral axis must be positive; it is {step}")
+        parseutils.check_options(SpectralAxis.__init__, locals())
         self._rest = make_rest(rest)
         make_medium(medium, self._rest)
         make_convention(convention, self._rest)

@@ -40,7 +40,8 @@ CLASSES = [
     gbkfit.observation.Exposure,
     gbkfit.observation.Foreground,
     gbkfit.observation.Lens,
-    gbkfit.observation.Weights]
+    gbkfit.observation.Weights,
+    gbkfit.utils.gridutils.SpectralAxis]
 
 
 def constructors():
