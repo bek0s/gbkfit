@@ -271,8 +271,9 @@ def file_references(
     Return the options of the reading of the files of a dataset of
     nspatial axes on the sky and a spectral axis after them (see
     Data.from_files): the reference pixels and values given, for each
-    axis (None where not given), and the rest and the medium of the
-    spectral axis.
+    axis (None where not given), and the rest, the medium and the
+    convention of the spectral axis (velocity: how an ambiguous header is
+    read, see fitsutils.read_data).
 
     Raises
     ------
@@ -293,7 +294,8 @@ def file_references(
     return dict(
         rpix=per_axis(rpix, spectral.rpix()),
         rval=per_axis(rval, spectral.rval()),
-        rest=spectral.rest(), medium=spectral.medium())
+        rest=spectral.rest(), medium=spectral.medium(),
+        velocity=spectral.convention())
 
 
 def cube_coords(

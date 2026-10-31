@@ -121,7 +121,7 @@ class DatasetSlitSpectra(Dataset):
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
-            unit, beam)
+            unit, beam, velocity=references['velocity'])
         dataset = cls(
             item, **_detail.cube_coords(coords, step, rota, spectral))
         return _detail.cleaned(dataset, outliers)

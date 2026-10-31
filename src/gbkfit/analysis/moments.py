@@ -38,6 +38,41 @@ class MomentMaps:
     data: dict[str, np.ndarray]
     mask: np.ndarray
 
+    def skewness(self) -> np.ndarray:
+        """
+        Return the map of the skewness of the spectra: moment 3 over the
+        dispersion (moment 2) cubed; NaN where the dispersion is 0. Of
+        maps measured as moments (those of a Gauss-Hermite series are its
+        h3 and h4).
+
+        Raises
+        ------
+        KeyError
+            If the maps have no moment 2 or 3.
+        """
+        return self._standardized(3)
+
+    def kurtosis(self) -> np.ndarray:
+        """
+        Return the map of the excess kurtosis of the spectra: moment 4 over
+        the dispersion (moment 2) to the power 4, less 3 (0 for a
+        Gaussian); NaN where the dispersion is 0. Of maps measured as
+        moments, as skewness.
+
+        Raises
+        ------
+        KeyError
+            If the maps have no moment 2 or 4.
+        """
+        return self._standardized(4) - 3
+
+    def _standardized(self, order: int) -> np.ndarray:
+        """Return a central moment over the dispersion to its order."""
+        with np.errstate(divide='ignore', invalid='ignore'):
+            ratio = self.data[f'moment{order}'] \
+                / self.data['moment2'] ** order
+        return np.where(np.isfinite(ratio), ratio, np.nan)
+
 
 def moment_maps(
         cube: npt.ArrayLike,

@@ -131,7 +131,8 @@ class DatasetPixelSpectra(Dataset):
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
-            unit, beam, spatial_correlation, spectral_correlation)
+            unit, beam, spatial_correlation, spectral_correlation,
+            references['velocity'])
         dataset = cls(
             item, **_detail.cube_coords(coords, step, rota, spectral))
         return _detail.cleaned(dataset, outliers, mask_whole_spectra)

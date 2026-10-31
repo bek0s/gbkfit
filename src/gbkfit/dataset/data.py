@@ -106,18 +106,20 @@ def _read(
         rval: float | Sequence[float] | None = None,
         rest: str | astropy.units.Quantity | None = None,
         spectral_axis: int | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        velocity: str | None = None
 ) -> tuple[np.ndarray, gridutils.Coords]:
     """Read a FITS file and its world coordinates (see fitsutils.read_data)."""
     filename, hdu = (file, 0) if isinstance(file, str) else file
     return fitsutils.read_data(
-        filename, hdu, rpix, rval, rest, spectral_axis, medium)
+        filename, hdu, rpix, rval, rest, spectral_axis, medium, velocity)
 
 
 def _read_companion(
         file: FitsFile,
         data: FitsFile,
-        rest: str | astropy.units.Quantity | None
+        rest: str | astropy.units.Quantity | None,
+        velocity: str | None
 ) -> np.ndarray:
     """
     Read a FITS file of the errors or the mask of the data of another, in
@@ -125,7 +127,7 @@ def _read_companion(
     """
     filename, hdu = (file, 0) if isinstance(file, str) else file
     data_file = (data, 0) if isinstance(data, str) else data
-    return fitsutils.read_companion(filename, hdu, data_file, rest)
+    return fitsutils.read_companion(filename, hdu, data_file, rest, velocity)
 
 
 def _as_float(x: np.ndarray, dtype: np.dtype | None = None) -> np.ndarray:
@@ -258,7 +260,8 @@ class Data:
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
             spatial_correlation: PSF | None = None,
-            spectral_correlation: LSF | None = None
+            spectral_correlation: LSF | None = None,
+            velocity: str | None = None
     ) -> tuple['Data', gridutils.Coords]:
         """
         Read a data item from FITS files, with the unit and the beam of the
@@ -284,6 +287,9 @@ class Data:
             The correlation of their noise on the sky (see Data).
         spectral_correlation : LSF, optional
             The correlation of their noise along the spectral axis.
+        velocity : str, optional
+            The convention of the velocities of a spectral axis that the
+            headers leave ambiguous (see fitsutils.read_data).
 
         Returns
         -------
@@ -297,8 +303,10 @@ class Data:
             If the error is not positive, or the arrays are invalid (see
             Data).
         """
-        values, coords = _read(data, rpix, rval, rest, spectral_axis, medium)
-        masks = None if mask is None else _read_companion(mask, data, rest)
+        values, coords = _read(
+            data, rpix, rval, rest, spectral_axis, medium, velocity)
+        masks = None if mask is None \
+            else _read_companion(mask, data, rest, velocity)
         if error is None:
             errors = None
         elif isinstance(error, bool):
@@ -310,7 +318,7 @@ class Data:
                 raise ConfigError(f"the error must be positive; it is {error}")
             errors = np.full(values.shape, error, dtype=float)
         else:
-            errors = _read_companion(error, data, rest)
+            errors = _read_companion(error, data, rest, velocity)
         filename, hdu = (data, 0) if isinstance(data, str) else data
         if unit is None:
             unit = _header_unit(filename, hdu)

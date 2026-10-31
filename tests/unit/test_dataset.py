@@ -279,10 +279,10 @@ def test_dataset_steps_must_be_positive():
 
 @pytest.mark.parametrize('dataset_type, shape', [
     ('pixel_brightness', (3, 8, 20)), ('pixel_moments', (3, 8, 20)),
-    ('pixel_spectra', (8, 20)), ('pixel_spectra', (1, 3, 8, 20)),
-    ('slit_spectra', (3, 8, 20)), ('slitless_spectra', (3, 8, 20))])
+    ('pixel_spectra', (8, 20)), ('slit_spectra', (3, 8, 20)),
+    ('slitless_spectra', (3, 8, 20))])
 def test_datasets_check_the_number_of_axes(tmp_path, dataset_type, shape):
-    # e.g. a cube loaded as an image, or a radio cube with a Stokes axis
+    # e.g. a cube loaded as an image
     fits.writeto(tmp_path / 'data.fits', np.ones(shape, np.float32))
     # Datasets of one data item take its options flat
     data = dict(data=str(tmp_path / 'data.fits'))
@@ -290,6 +290,30 @@ def test_datasets_check_the_number_of_axes(tmp_path, dataset_type, shape):
         data = dict(moment0=data)
     with pytest.raises(Exception, match="axes"):
         dataset_parser.load(dict(type=dataset_type) | data)
+
+
+def test_files_are_read_without_their_axes_of_length_1(tmp_path):
+    # e.g. a radio cube with an axis of Stokes
+    fits.writeto(tmp_path / 'data.fits', np.ones((1, 3, 8, 20), np.float32))
+    dataset = dataset_parser.load(
+        dict(type='pixel_spectra', data=str(tmp_path / 'data.fits')))
+    assert dataset.shape() == (3, 8, 20)
+
+
+def test_datasets_read_ambiguous_velocities_by_their_convention(tmp_path):
+    # A cube of MIRIAD (e.g. of LVHIS): VELO-HEL without VELREF
+    header = fits.Header(dict(
+        CTYPE1='RA---SIN', CDELT1=-1 / 3600, CTYPE2='DEC--SIN',
+        CDELT2=1 / 3600, CTYPE3='VELO-HEL', CRVAL3=1e6, CDELT3=1e4,
+        CRPIX3=1, CUNIT3='m/s'))
+    fits.writeto(
+        tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
+    info = dict(type='pixel_spectra', data=str(tmp_path / 'cube.fits'))
+    with pytest.raises(ConfigError, match="may be radio or optical"):
+        dataset_parser.load(info)
+    dataset = dataset_parser.load(
+        info | dict(spectral=dict(convention='radio')))
+    assert dataset.grid().coords.convention == 'radio'
 
 
 def test_observable_grid_comes_from_the_data(tmp_path):
@@ -568,7 +592,21 @@ def test_fits_files_are_described_from_their_headers(tmp_path):
     assert (second.shape, second.unit, second.rms, second.problems) == (
         (7, 6), 'km/s', None, ())
     assert third.shape == (7, 6, 1, 5) and third.coords is None
-    for problem, words in zip(third.problems, [
-            'axes of length 1 (STOKES)', 'may be radio or optical',
-            'is per beam, but the header has no beam'], strict=True):
-        assert words in problem
+    assert (first.ambiguous_velocity, third.ambiguous_velocity) \
+        == (False, True)
+    (problem,) = third.problems
+    assert 'is per beam, but the header has no beam' in problem
+    # (its convention given, its velocities are read)
+    third = describe_fits(str(tmp_path / 'f.fits'), velocity='radio')[2]
+    assert third.coords.convention == 'radio'
+    assert third.problems == (problem,)
+
+
+def test_the_mask_of_signal_keeps_a_line_and_leaves_the_noise():
+    from gbkfit import prep
+    rng = np.random.default_rng(1)
+    cube = rng.normal(0, 1, (20, 30, 30))
+    cube[8:12, 10:20, 10:20] += 10
+    mask = prep.signal_mask(cube, 5, 2.5, 0.1)
+    assert mask[8:12, 10:20, 10:20].all()
+    assert mask.sum() < 1.1 * 400

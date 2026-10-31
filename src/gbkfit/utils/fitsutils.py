@@ -9,6 +9,7 @@ coordinates become those of the model (see coords_from_wcs).
 """
 
 import typing
+import warnings
 
 import astropy.constants
 import astropy.coordinates
@@ -34,6 +35,7 @@ __all__ = [
     'header_shape',
     'model_axis_flips',
     'model_axis_order',
+    'read_array',
     'read_beam',
     'read_companion',
     'read_coords',
@@ -42,6 +44,7 @@ __all__ = [
     'reorder_data',
     'reorder_wcs',
     'to_model_axes',
+    'velocity_is_ambiguous',
     'with_velocity_convention',
     'write_data',
     'write_spectra'
@@ -158,16 +161,19 @@ def read_data(
         rval: typing.Sequence[float] | None = None,
         rest: typing.Any = None,
         spectral_axis: int | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        velocity: str | None = None
 ) -> tuple[np.ndarray, Coords]:
     """
     Read the data of a FITS file and its world coordinates.
 
-    The data are in the orientation of the model (see to_model_axes), and
-    their world coordinates in its units (see coords_from_wcs). The
-    wavelengths of a spectral axis of optical velocities are in vacuum
-    (FITS), or in the medium of the keyword AIRORVAC ('air' or 'vac') of
-    the header, or in the given medium.
+    The data are in the orientation of the model (see to_model_axes),
+    without their axes of length 1 (e.g. an axis of Stokes, or the
+    spectral axis of a moment map), and their world coordinates in its
+    units (see coords_from_wcs). The wavelengths of a spectral axis of
+    optical velocities are in vacuum (FITS), or in the medium of the
+    keyword AIRORVAC ('air' or 'vac') of the header, or in the given
+    medium.
 
     Parameters
     ----------
@@ -184,6 +190,10 @@ def read_data(
     medium : str, optional
         The medium of the wavelengths of the spectral axis, instead of
         that of the header (see gridutils.make_medium).
+    velocity : str, optional
+        The convention of the velocities of a spectral axis that the
+        header leaves ambiguous (see velocity_is_ambiguous): 'radio' or
+        'optical'; it is not used for others.
 
     Returns
     -------
@@ -197,13 +207,14 @@ def read_data(
     ConfigError
         If the HDU has no data, the header has invalid world coordinates,
         or coordinates the model cannot represent (see coords_from_wcs),
-        or does not say whether its velocities are radio or optical (see
-        with_velocity_convention), or the medium is not valid.
+        or does not say whether its velocities are radio or optical and
+        velocity is not given (see with_velocity_convention), or the
+        medium is not valid.
     """
     data, header = _read_hdu(filename, hdu)
     wcs, coords = _header_coords(
-        filename, header, data.shape, rpix, rval, rest, medium)
-    data, wcs = to_model_axes(data, wcs)
+        filename, header, data.shape, rpix, rval, rest, medium, velocity)
+    data, wcs = to_model_axes(data.reshape(_without_flat(data.shape)), wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
         raise ConfigError(
@@ -212,7 +223,55 @@ def read_data(
     return np.ascontiguousarray(data), coords
 
 
-def read_coords(filename: str, hdu: int | str = 0) -> Coords:
+def read_array(
+        filename: str, hdu: int | str = 0
+) -> tuple[np.ndarray, astropy.wcs.WCS | None]:
+    """
+    Read the array of a FITS file in the orientation of the model (see
+    to_model_axes), without its axes of length 1, with its world
+    coordinates in that orientation, to look at it: unlike read_data, its
+    coordinates need not be ones the model can represent (e.g. of
+    wavelengths, or of velocities whose convention the header does not
+    state).
+
+    Parameters
+    ----------
+    filename : str
+        The name of the file.
+    hdu : int or str
+        The HDU with the array; by default the first.
+
+    Returns
+    -------
+    np.ndarray
+        The array; as it is in the file (without its axes of length 1) if
+        its header has no world coordinates that astropy reads.
+    astropy.wcs.WCS or None
+        Its world coordinates, if any.
+
+    Raises
+    ------
+    ConfigError
+        If the HDU has no array.
+    """
+    data, header = _read_hdu(filename, hdu)
+    flat = data.reshape(_without_flat(data.shape))
+    try:
+        # (the fixes of astropy to the header are not of the orientation)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
+            wcs = astropy.wcs.WCS(centre_missing_crpix(header, data.shape))
+    except Exception:
+        # (any error of astropy: the array as it is)
+        return flat, None
+    return to_model_axes(flat, _without_flat_axes(wcs, data.shape))
+
+
+def read_coords(
+        filename: str,
+        hdu: int | str = 0,
+        velocity: str | None = None
+) -> Coords:
     """
     Read the world coordinates of the data of a FITS file, as read_data
     does, from its header alone (the data are not read).
@@ -223,6 +282,9 @@ def read_coords(filename: str, hdu: int | str = 0) -> Coords:
         The name of the file.
     hdu : int or str
         The HDU with the data; by default the first.
+    velocity : str, optional
+        The convention of the velocities of an ambiguous spectral axis
+        (see read_data).
 
     Returns
     -------
@@ -236,7 +298,8 @@ def read_coords(filename: str, hdu: int | str = 0) -> Coords:
     """
     header = astropy.io.fits.getheader(filename, hdu)
     return _header_coords(
-        filename, header, header_shape(header), None, None, None, None)[1]
+        filename, header, header_shape(header), None, None, None, None,
+        velocity)[1]
 
 
 def header_shape(header: astropy.io.fits.Header) -> tuple[int, ...]:
@@ -255,18 +318,24 @@ def _header_coords(
         rpix: typing.Sequence[float] | None,
         rval: typing.Sequence[float] | None,
         rest: typing.Any,
-        medium: str | None
+        medium: str | None,
+        velocity: str | None = None
 ) -> tuple[astropy.wcs.WCS, Coords]:
     """
     Return the world coordinates of the header of a FITS file of data of
-    the given shape, in the axes of the file (see _file_wcs), and those of
-    the model that they give (see read_data).
+    the given shape, in the axes of the file without those of length 1
+    (see _file_wcs and _without_flat_axes), and those of the model that
+    they give (see read_data).
     """
-    header = with_velocity_convention(header, None, filename)
+    header = with_velocity_convention(
+        header, velocity if velocity_is_ambiguous(header) else None,
+        filename)
     wcs, log = _file_wcs(filename, header, shape, rest)
+    wcs = _without_flat_axes(wcs, shape)
     # (in the orientation of the model, by a stand-in of the data without
     # memory)
-    _, model_wcs = to_model_axes(np.broadcast_to(0.0, shape), wcs)
+    _, model_wcs = to_model_axes(
+        np.broadcast_to(0.0, _without_flat(shape)), wcs)
     coords = coords_from_wcs(filename, model_wcs, rpix, rval, rest, medium)
     if medium is None and coords.medium is not None:
         coords = coords._replace(
@@ -280,7 +349,8 @@ def read_companion(
         filename: str,
         hdu: int | str,
         data_file: tuple[str, int | str],
-        rest: typing.Any = None
+        rest: typing.Any = None,
+        velocity: str | None = None
 ) -> np.ndarray:
     """
     Read a companion of the data of a FITS file (e.g. their errors or
@@ -302,6 +372,9 @@ def read_companion(
     rest : optional
         The rest that replaces that of the header of the data (see
         read_data).
+    velocity : str, optional
+        The convention of the velocities of an ambiguous spectral axis
+        (see read_data).
 
     Raises
     ------
@@ -311,7 +384,7 @@ def read_companion(
     """
     values, header = _read_hdu(filename, hdu)
     if any(f'CTYPE{i}' in header for i in range(1, values.ndim + 1)):
-        return read_data(filename, hdu, rest=rest)[0]
+        return read_data(filename, hdu, rest=rest, velocity=velocity)[0]
     data_name, data_hdu = data_file
     with astropy.io.fits.open(data_name) as hdulist:
         data_header = hdulist[data_hdu].header
@@ -321,8 +394,12 @@ def read_companion(
             f"{filename}: without world coordinates, its values must be of "
             f"the shape of the data, {shape}, in the axes of their file; "
             f"they are of {values.shape}")
-    header = with_velocity_convention(data_header, None, data_name)
+    header = with_velocity_convention(
+        data_header, velocity if velocity_is_ambiguous(data_header) else None,
+        data_name)
     wcs, _ = _file_wcs(data_name, header, shape, rest)
+    wcs = _without_flat_axes(wcs, shape)
+    values = values.reshape(_without_flat(shape))
     return np.ascontiguousarray(to_model_axes(values, wcs)[0])
 
 
@@ -341,6 +418,28 @@ def _read_hdu(
             f"{filename}: HDU {hdu} has no data; choose the HDU with the "
             f"data (e.g. hdu: SCI)")
     return data, header
+
+
+def _without_flat(shape: tuple[int, ...]) -> tuple[int, ...]:
+    """
+    Return the shape of data (numpy order) without its axes of length 1,
+    or as it is if all are.
+    """
+    return tuple(size for size in shape if size > 1) or shape
+
+
+def _without_flat_axes(
+        wcs: astropy.wcs.WCS, shape: tuple[int, ...]
+) -> astropy.wcs.WCS:
+    """
+    Return world coordinates without the axes of length 1 of the data of
+    the given shape (numpy order), as _without_flat leaves them.
+    """
+    kept = [
+        axis for axis in range(wcs.naxis) if shape[wcs.naxis - 1 - axis] > 1]
+    if not kept or len(kept) == wcs.naxis:
+        return wcs
+    return wcs.sub([axis + 1 for axis in kept])
 
 
 def _file_wcs(
@@ -985,16 +1084,8 @@ def with_velocity_convention(
         raise ConfigError(
             f"the convention of velocities must be one of "
             f"{list(_VELOCITY_CONVENTIONS)}; it is {velocity!r}")
-    # (an axis of one pixel, e.g. that left in a moment map, has no
-    # velocities to read)
-    ctypes = [
-        str(header.get(f'CTYPE{n}', ''))
-        for n in range(1, header.get('NAXIS', 0) + 1)
-        if header.get(f'NAXIS{n}', 1) > 1]
-    frame = next((
-        ctype[5:].strip() for ctype in ctypes
-        if ctype[:5] == 'VELO-' and ctype[5:].strip() in _AIPS_FRAMES), None)
-    ambiguous = frame is not None and 'VELREF' not in header
+    frame = _aips_frame(header)
+    ambiguous = velocity_is_ambiguous(header)
     if velocity is None:
         if ambiguous:
             raise ConfigError(
@@ -1014,6 +1105,32 @@ def with_velocity_convention(
     header = header.copy()
     header['VELREF'] = _AIPS_FRAMES[frame] + (256 if velocity == 'radio' else 0)
     return header
+
+
+def velocity_is_ambiguous(header: astropy.io.fits.Header) -> bool:
+    """
+    Return whether the velocities of the spectral axis of a header may be
+    radio or optical: an axis of the AIPS convention (VELO-LSR, VELO-HEL
+    or VELO-OBS) without the keyword VELREF that states which (see
+    with_velocity_convention).
+    """
+    return _aips_frame(header) is not None and 'VELREF' not in header
+
+
+def _aips_frame(header: astropy.io.fits.Header) -> str | None:
+    """
+    Return the frame of the spectral axis of the AIPS convention of a
+    header (e.g. 'HEL'), if it has one.
+    """
+    # (an axis of one pixel, e.g. that left in a moment map, has no
+    # velocities to read)
+    ctypes = [
+        str(header.get(f'CTYPE{n}', ''))
+        for n in range(1, header.get('NAXIS', 0) + 1)
+        if header.get(f'NAXIS{n}', 1) > 1]
+    return next((
+        ctype[5:].strip() for ctype in ctypes
+        if ctype[:5] == 'VELO-' and ctype[5:].strip() in _AIPS_FRAMES), None)
 
 
 def _spectral_convention(wcs):

@@ -42,7 +42,8 @@ class HDUDescription:
     shape : tuple of int
         The number of pixels along each axis, in the orientation of the
         model (x, y, then the spectral axis; see fitsutils.to_model_axes),
-        or in that of the file if its world coordinates are invalid.
+        or in that of the file if its world coordinates are invalid; with
+        its axes of length 1, which reading leaves out.
     axes : tuple of str
         The type of each axis (CTYPE, e.g. 'RA---SIN' or 'FREQ'; '' if
         none), in the order of shape.
@@ -52,11 +53,18 @@ class HDUDescription:
         Its beam (see fitsutils.read_beam).
     coords : Coords or None
         The world coordinates of its data in the model (see
-        fitsutils.read_coords); None if they cannot be read.
+        fitsutils.read_coords); None if they cannot be read, or if its
+        velocities are ambiguous and their convention is not given.
     rms : float or None
         The noise of its values that the header states (keyword RMS or
         NOISE, in the unit of the values; e.g. that of the cubes of
         LVHIS), if any.
+    ambiguous_velocity : bool
+        Whether the header leaves it open whether the velocities of its
+        spectral axis are radio or optical (see
+        fitsutils.velocity_is_ambiguous): a dataset of it gives their
+        convention, and so does a description of it (see describe_fits);
+        until then, this is not one of its problems.
     problems : tuple of str
         What a dataset of it refuses or needs given (e.g. the convention
         of velocities that the header does not state, or the beam of a
@@ -70,10 +78,13 @@ class HDUDescription:
     beam: Beam | None
     coords: gridutils.Coords | None
     rms: float | None
+    ambiguous_velocity: bool
     problems: tuple[str, ...]
 
 
-def describe_fits(filename: str) -> list[HDUDescription]:
+def describe_fits(
+        filename: str, velocity: str | None = None
+) -> list[HDUDescription]:
     """
     Describe the HDUs of a FITS file that hold an array (e.g. data, their
     errors and their mask), from their headers alone: their arrays are
@@ -83,6 +94,9 @@ def describe_fits(filename: str) -> list[HDUDescription]:
     ----------
     filename : str
         The name of the file.
+    velocity : str, optional
+        The convention of the velocities of spectral axes that the headers
+        leave ambiguous (see fitsutils.read_data): 'radio' or 'optical'.
 
     Returns
     -------
@@ -100,14 +114,15 @@ def describe_fits(filename: str) -> list[HDUDescription]:
             (index, hdu.name, hdu.header.copy())
             for index, hdu in enumerate(hdus)
             if hdu.is_image and hdu.header.get('NAXIS', 0) > 0]
-    return [_describe(filename, *header) for header in headers]
+    return [_describe(filename, *header, velocity) for header in headers]
 
 
 def _describe(
         filename: str,
         index: int,
         name: str,
-        header: astropy.io.fits.Header
+        header: astropy.io.fits.Header,
+        velocity: str | None
 ) -> HDUDescription:
     """Return the description of an HDU of a FITS file with an array."""
     problems = []
@@ -116,16 +131,13 @@ def _describe(
     shape = tuple(sizes[axis] for axis in order)
     axes = tuple(
         str(header.get(f'CTYPE{axis + 1}', '')).strip() for axis in order)
-    if flat := [axes[i] or f'axis {i + 1}'
-                for i, size in enumerate(shape) if size == 1]:
-        problems.append(
-            f"axes of length 1 ({', '.join(flat)}): remove them with "
-            f"gbkfit-cli prep")
+    ambiguous = fitsutils.velocity_is_ambiguous(header)
     coords = None
-    try:
-        coords = fitsutils.read_coords(filename, index)
-    except ConfigError as e:
-        problems.append(str(e))
+    if not ambiguous or velocity is not None:
+        try:
+            coords = fitsutils.read_coords(filename, index, velocity)
+        except ConfigError as e:
+            problems.append(str(e))
     unit = fitsutils.read_unit(filename, index)
     beam = None
     try:
@@ -151,7 +163,9 @@ def _describe(
          and not isinstance(header.get(key), bool)), None)
     return HDUDescription(
         index=index, name=name, shape=shape, axes=axes, unit=unit,
-        beam=beam, coords=coords, rms=rms, problems=tuple(problems))
+        beam=beam, coords=coords, rms=rms,
+        ambiguous_velocity=ambiguous,
+        problems=tuple(problems))
 
 
 def _model_order(header: astropy.io.fits.Header) -> tuple[int, ...]:

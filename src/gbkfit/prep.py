@@ -55,6 +55,7 @@ __all__ = [
     'pixel_fluxes',
     'range_mask',
     'sigma_clip_mask',
+    'signal_mask',
     'subtract_continuum',
     'voronoi_bins'
 ]
@@ -580,6 +581,50 @@ def grown_mask(
     with np.errstate(invalid='ignore'):
         seeds, allowed = snr >= seed, snr >= grow
     return scipy.ndimage.binary_propagation(seeds, mask=allowed)
+
+
+def signal_mask(
+        cube: np.ndarray,
+        seed: float,
+        grow: float,
+        min_ratio: float | None = None
+) -> np.ndarray:
+    """
+    Return the mask (True where kept) of the signal of a cube: the values
+    whose signal-to-noise ratio reaches grow, connected to one that
+    reaches seed (see grown_mask), the noise of each channel from its
+    negative values (see noise_errors), in the regions at least min_ratio
+    times the largest, if given (see largest_regions_mask). NaN values are
+    not kept.
+
+    Parameters
+    ----------
+    cube : np.ndarray
+        The cube, of shape (nz, ny, nx), of noise of mean 0 (e.g. without
+        continuum).
+    seed, grow : float
+        The signal-to-noise ratios of the seeds and of their growth (seed
+        >= grow).
+    min_ratio : float, optional
+        The size of the smallest region kept, as a fraction of the size
+        of the largest.
+
+    Returns
+    -------
+    np.ndarray
+        The mask, of the shape of the cube.
+
+    Raises
+    ------
+    ValueError
+        If seed is below grow.
+    """
+    noise = noise_errors(cube, np.isfinite(cube))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        mask = grown_mask(cube / noise, seed, grow)
+    if min_ratio is not None:
+        mask = largest_regions_mask(mask, min_ratio=min_ratio)
+    return mask
 
 
 def subtract_continuum(

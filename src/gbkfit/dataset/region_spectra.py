@@ -119,7 +119,7 @@ class DatasetRegionSpectra(Dataset):
         spectra, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
-            unit, beam)
+            unit, beam, velocity=references['velocity'])
         dataset = cls(
             spectra, regions,
             _detail.cube_coords(coords, None, None, spectral)['spectral'])
