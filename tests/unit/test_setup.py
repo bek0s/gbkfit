@@ -313,3 +313,10 @@ def test_a_configuration_is_described_without_devices(tmp_path):
     (problem,) = described.problems
     assert problem.severity == 'error' and problem.path == ['observations', 0]
     assert described.params is None
+
+
+def test_the_front_door_lists_its_names():
+    # (ConfigError was only at gbkfit.utils.parseutils, and dir(gbkfit)
+    # did not list load: audit 2026-10-31 #60)
+    assert gbkfit.ConfigError is ConfigError
+    assert {'load', 'describe', 'ConfigError'} <= set(dir(gbkfit))
