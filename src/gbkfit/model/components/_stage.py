@@ -193,9 +193,10 @@ class GalaxyStage:
             for i, stage in self._stages.items()}
         self._scale_cache: StageCache[GalaxyScale] | None = None
         self._mass_cache: StageCache[GalaxyMass] | None = None
-        if mass_model is not None:
+        if component_set.distance() is not None:
             self._scale_cache = StageCache(
                 component_set.distance().pdescs())
+        if mass_model is not None:
             self._mass_cache = StageCache(
                 (*mass_model.pdescs(), *component_set.gravity().pdescs()),
                 (self._scale_cache, *(lights[i] for i in self._followed)))
@@ -304,6 +305,15 @@ class GalaxyStage:
         return self._mass(
             self._mass_cache.view(params),
             self._scale(self._scale_cache.view(params)), lights)
+
+    def kpc_per_arcsec(self, params: ParamValues) -> float | None:
+        """
+        Return the length of an arcsec in the galaxy (kpc) at the values of
+        its parameters, computed anew; None without a distance.
+        """
+        if self._scale_cache is None:
+            return None
+        return self._scale(self._scale_cache.view(params)).kpc_per_arcsec
 
     def state(
             self,

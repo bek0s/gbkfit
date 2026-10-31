@@ -1478,7 +1478,7 @@ def test_mass_trait_parameters_and_round_trip():
         == dumped
 
 
-def test_mass_trait_mass_and_distance_need_each_other():
+def test_mass_trait_mass_and_distance():
     # (mass that no component uses is for profiles or derived values: see
     # ObservationGroup, which warns of it unused)
     with pytest.raises(ConfigError, match="need the mass of their galaxy"):
@@ -1488,8 +1488,13 @@ def test_mass_trait_mass_and_distance_need_each_other():
     ).components_use_mass()
     with pytest.raises(ConfigError, match="needs its distance"):
         disk_galaxy('smooth', dict(type='mass'), MASS)
-    with pytest.raises(ConfigError, match="used by its mass only"):
-        disk_galaxy('smooth', dict(type='arctan', direction='tan'), distance=DISTANCE)
+    # (a distance without mass gives the length of an arcsec to the
+    # derived values, e.g. of an arctan disk at z ~ 1.5: audit 2026-10-31
+    # #49)
+    galaxy = disk_galaxy(
+        'smooth', dict(type='arctan', direction='tan'), distance=DISTANCE)
+    functions = galaxy.plan_functions((0.0, 0.0)).bind(dict(distance=10))
+    assert functions['kpc_per_arcsec'] == pytest.approx(0.048481, rel=1e-4)
 
 
 def test_tables_of_thick_disks_are_their_integrals():

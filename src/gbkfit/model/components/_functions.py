@@ -79,7 +79,8 @@ class GalaxyFunctions:
       none (e.g. about a point mass alone)
     - slope_{name}(r): that of its mass component of the name, if it
       gives its enclosed mass
-    - kpc_per_arcsec: the length of an arcsec in it (kpc)
+    - kpc_per_arcsec: the length of an arcsec in it (kpc), if it has a
+      distance (with or without mass)
 
     For each of its disks with velocity or dispersion traits, named
     after its component ('rotation_gas'; 'rotation' for one without a
@@ -159,6 +160,7 @@ class GalaxyFunctions:
             names += [
                 f'slope_{cmp.name()}' for cmp in mass_model.components()
                 if cmp.gives_enclosed_mass()]
+        if component_set.distance() is not None:
             names += ['kpc_per_arcsec']
         for suffix in _disk_suffixes(component_set).values():
             names += [f'rotation{suffix}', f'dispersion{suffix}']
@@ -286,7 +288,8 @@ class GalaxyFunctions:
             for suffix, enclosed in masses.items():
                 functions[f'slope{suffix}'] = functools.partial(
                     _density_slope, f'slope{suffix}', enclosed)
-            functions['kpc_per_arcsec'] = mass.kpc_per_arcsec
+        if (kpc_per_arcsec := self._stage.kpc_per_arcsec(params)) is not None:
+            functions['kpc_per_arcsec'] = kpc_per_arcsec
         for i, suffix in self._suffixes.items():
             functions[f'rotation{suffix}'] = functools.partial(
                 self._rotation, i, params, state_of)

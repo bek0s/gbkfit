@@ -82,8 +82,10 @@ class Galaxy(parseutils.Serializable):
         Its mass: the components of its mass (disks, spheroids, point
         masses, ...; a disk can follow the density of one of its disks).
     distance : Distance, optional
-        Its distance, which converts arcsec to kpc for its mass (required
-        with mass, and used by it only).
+        Its distance, which converts arcsec to kpc: for its mass (required
+        with mass), and for the derived values (the function
+        kpc_per_arcsec, see plan_functions; e.g. radii in kpc of a disk of
+        an arctan curve, without mass).
     gravity : Gravity, optional
         How its mass pulls (with mass only): Newtonian by default (see
         GravityNewton).

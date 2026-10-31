@@ -57,18 +57,14 @@ def _with_mass_params(
     the mass per unit of the density of a component (see
     MassModel.mass_ratios) in the unit that the emission of the component
     gives it (see _units.mass_ratio_unit).
-    Raise ConfigError if the distance or the gravity is given without mass
-    (their only user), the mass has no distance, a component needs what
+    Raise ConfigError if the gravity is given without mass (its only
+    user), the mass has no distance, a component needs what
     the galaxy does not give (see Component.needs: e.g. the mass), a mass
     component follows a component whose density it cannot follow (see
     Component.density_kind), the gravity does not take the mass model (see
     Gravity.check_mass_model) or does not give the shares of a dark
     fraction, or the names of the parameters repeat.
     """
-    if distance is not None and mass_model is None:
-        raise ConfigError(
-            "the distance of a galaxy is used by its mass only; give the "
-            "galaxy mass, or no distance")
     if gravity is not None and mass_model is None:
         raise ConfigError(
             "the gravity of a galaxy is that of its mass; give the galaxy "
@@ -78,7 +74,10 @@ def _with_mass_params(
         [need for cmp in components for need in cmp.needs()], mass_model,
         gravity)
     if mass_model is None:
-        return params
+        # (a distance without mass gives the length of an arcsec to the
+        # derived values, e.g. radii in kpc of a disk of an arctan curve)
+        return params if distance is None \
+            else _with_params(params, distance.pdescs())
     if distance is None:
         raise ConfigError(
             "the mass of a galaxy needs its distance (e.g. distance: "
@@ -108,7 +107,18 @@ def _with_mass_params(
     mass = pdescs_with_units(mass_model.pdescs(), {
         name: _units.mass_ratio_unit(emissions[followed])
         for name, followed in mass_model.mass_ratios().items()})
-    taken = distance.pdescs() | mass | gravity.pdescs()
+    return _with_params(
+        params, distance.pdescs() | mass | gravity.pdescs())
+
+
+def _with_params(
+        params: dict[str, ParamDesc], taken: dict[str, ParamDesc]
+) -> dict[str, ParamDesc]:
+    """
+    Return the parameters of the components of a galaxy with those of its
+    distance, its mass and its gravity (taken), or raise ConfigError if
+    their names repeat.
+    """
     if repeated := sorted(params.keys() & taken.keys()):
         raise ConfigError(
             f"the parameters of the distance, the mass and the gravity have "
