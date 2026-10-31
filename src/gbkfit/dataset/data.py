@@ -13,7 +13,7 @@ import numpy as np
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.utils import datafiles, fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.typeutils import DataFile, is_asdf_file
 
 
 __all__ = [
@@ -73,9 +73,9 @@ class DataFiles(NamedTuple):
         datafiles.read_arrays).
     """
 
-    data: FitsFile
-    mask: FitsFile | None = None
-    error: FitsFile | float | None = None
+    data: DataFile
+    mask: DataFile | None = None
+    error: DataFile | float | None = None
     unit: str | None = None
     beam: Mapping[str, Any] | None = None
     spatial_correlation: PSF | None = None
@@ -228,9 +228,9 @@ class Data:
     @classmethod
     def from_files(
             cls,
-            data: FitsFile,
-            mask: FitsFile | None = None,
-            error: FitsFile | float | None = None,
+            data: DataFile,
+            mask: DataFile | None = None,
+            error: DataFile | float | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rest: str | astropy.units.Quantity | None = None,
@@ -322,7 +322,8 @@ class Data:
         if isinstance(error, (int, float)):
             errors = np.full(arrays.data.shape, error, dtype=float)
         if beam is None:
-            beam = fitsutils.header_beam(arrays.header, filename)
+            beam = fitsutils.header_beam(
+                arrays.header, None if is_asdf_file(filename) else filename)
         return cls(
             arrays.data, arrays.mask, errors, arrays.unit, beam,
             spatial_correlation, spectral_correlation), coords

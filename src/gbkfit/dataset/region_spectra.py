@@ -7,7 +7,7 @@ from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.datafiles import ErrorKind
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.typeutils import DataFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, dump_data
@@ -70,10 +70,10 @@ class DatasetRegionSpectra(Dataset):
     @classmethod
     def from_files(
             cls,
-            data: FitsFile,
+            data: DataFile,
             regions: Regions,
-            mask: FitsFile | None = None,
-            error: FitsFile | float | None = None,
+            mask: DataFile | None = None,
+            error: DataFile | float | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
             spectral: gridutils.SpectralAxis | None = None,

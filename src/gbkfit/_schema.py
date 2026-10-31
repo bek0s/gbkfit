@@ -148,6 +148,15 @@ class SchemaWriter:
                 _object(
                     {'file': {'type': 'string', 'format': 'path'},
                      'hdu': {'type': ['integer', 'string']}}, ['file'])]}
+        if type_ == typeutils.DataFile:
+            return {'anyOf': [
+                {'type': 'string', 'format': 'path'},
+                _object(
+                    {'file': {'type': 'string', 'format': 'path'},
+                     'hdu': {'type': ['integer', 'string']}}, ['file']),
+                _object(
+                    {'file': {'type': 'string', 'format': 'path'},
+                     'path': {'type': 'string'}}, ['file', 'path'])]}
         if type_ == npt.ArrayLike:
             return {'type': ['number', 'array']}
         if type_ is np.ndarray:

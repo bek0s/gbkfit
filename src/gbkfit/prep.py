@@ -27,7 +27,7 @@ import scipy.spatial
 
 from gbkfit.utils import datafiles, fitsutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.typeutils import DataFile, is_asdf_file
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra
@@ -121,9 +121,9 @@ class FitsArrays:
     @classmethod
     def read(
             cls,
-            data: FitsFile,
-            error: FitsFile | None = None,
-            mask: FitsFile | None = None,
+            data: DataFile,
+            error: DataFile | None = None,
+            mask: DataFile | None = None,
             velocity: str | None = None,
             *,
             rest: str | astropy.units.Quantity | None = None,
@@ -137,10 +137,10 @@ class FitsArrays:
 
         Parameters
         ----------
-        data : FitsFile
+        data : DataFile
             The file of the data (with the world coordinates): a filename
             (its first HDU with data), or a filename and the HDU.
-        error, mask : FitsFile, optional
+        error, mask : DataFile, optional
             The files of the errors and the mask.
         velocity : str, optional
             The convention of the velocities of the spectral axis, 'radio'
@@ -952,7 +952,8 @@ def pixel_fluxes(
             bmaj=float(header['BMAJ']) * 3600,
             bmin=float(header['BMIN']) * 3600)
     else:
-        beam = fitsutils.read_beam(filename)
+        beam = None if is_asdf_file(filename) \
+            else fitsutils.read_beam(filename)
     if beam is None:
         raise ConfigError(
             f"{filename}: the data are per beam, but have no beam (BMAJ and "

@@ -490,6 +490,32 @@ def resolve_path(path: str) -> str:
     return os.path.join(base, path)
 
 
+def _data_file(x: str | Mapping[str, Any]) -> str | tuple[str, int | str]:
+    """
+    Parse a file of data (see typeutils.DataFile): a filename, or a dict
+    with the filename ('file') and the HDU of a FITS file ('hdu') or the
+    path of the array in the tree of an ASDF file ('path').
+
+    Raises
+    ------
+    ConfigError
+        If the dict has no filename, or the key of the array is not that
+        of the kind of the file.
+    """
+    if isinstance(x, str):
+        return resolve_path(x)
+    options = parse_options(
+        dict(x), required={'file'}, optional={'hdu', 'path'})
+    file = resolve_path(options['file'])
+    asdf = typeutils.is_asdf_file(file)
+    key, wrong = ('path', 'hdu') if asdf else ('hdu', 'path')
+    if wrong in options:
+        raise ConfigError(
+            f"{file}: the array of {'an ASDF' if asdf else 'a FITS'} file is "
+            f"given by its {key}, not by its {wrong}")
+    return (file, options[key]) if key in options else file
+
+
 def parse_file(x: str | dict[str, Any]) -> tuple[str, int | str]:
     """
     Parse a file option (a relative filename is resolved by resolve_path).
@@ -623,6 +649,8 @@ def from_config(value: Any, type_: Any) -> Any:
             file, hdu = parse_file(value)
             return (file, hdu) \
                 if isinstance(value, Mapping) and 'hdu' in value else file
+        if member == typeutils.DataFile and isinstance(value, str | Mapping):
+            return _data_file(value)
         if is_record(member) and isinstance(value, Mapping):
             return member(**parse_options_for_callable(dict(value), member))
         if typing.get_origin(member) is Mapping \

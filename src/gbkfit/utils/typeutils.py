@@ -26,9 +26,11 @@ import pydantic.warnings
 
 __all__ = [
     'Column',
+    'DataFile',
     'FilePath',
     'FitsFile',
     'Unit',
+    'is_asdf_file',
     'describe_type',
     'matches_type',
     'option_types',
@@ -77,6 +79,14 @@ FilePath: TypeAlias = Annotated[str, _ConfigForm('path')]
 FitsFile: TypeAlias = Annotated[
     str | tuple[str, int | str], _ConfigForm('fits_file')]
 
+# A file of data (see datafiles.read_arrays): a FITS file, as FitsFile
+# (by default its first HDU with data), or an ASDF file and the path of
+# its array in its tree (e.g. 'roman/data'); in a configuration, a
+# filename, or a dict with the filename (file) and the HDU (hdu) or the
+# path (path)
+DataFile: TypeAlias = Annotated[
+    str | tuple[str, int | str], _ConfigForm('data_file')]
+
 
 class Column(NamedTuple):
     """
@@ -94,6 +104,11 @@ class Column(NamedTuple):
 
     column: str
     unit: str | None = None
+
+
+def is_asdf_file(filename: str) -> bool:
+    """Return whether a file of data is an ASDF file (see DataFile)."""
+    return filename.lower().endswith('.asdf')
 
 
 def split_fits_file(file: FitsFile) -> tuple[str, int | str]:

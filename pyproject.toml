@@ -55,6 +55,8 @@ cmaes = ['cma']
 ultranest = ['ultranest']
 # (the datamodels of JWST files, and their transforms; not the pipeline)
 jwst = ['stdatamodels']
+# (data in ASDF files, with their world coordinates)
+asdf = ['asdf', 'gwcs']
 # (workers of clusters, see gbkfit.parallel)
 mpi = ['mpi4py']
 ray = ['ray']
@@ -70,7 +72,9 @@ test = [
     # (the plot task)
     'corner', 'matplotlib',
     # (the schema of configurations, see gbkfit.schema)
-    'jsonschema']
+    'jsonschema',
+    # (data in ASDF files)
+    'asdf', 'gwcs']
 dev = [{ include-group = 'test' }]
 
 [tool.scikit-build]

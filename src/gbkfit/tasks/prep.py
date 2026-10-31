@@ -26,7 +26,7 @@ from gbkfit import prep
 from gbkfit.prep import FitsArrays
 from gbkfit.utils import datafiles, fitsutils, tableutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.typeutils import DataFile
 from . import _detail
 
 
@@ -64,15 +64,16 @@ def _output_dir(output_dir: str, mode: _Exists) -> str:
     return output_dir
 
 
-def _output(output_dir: str, file: FitsFile, role: str = '') -> str:
+def _output(output_dir: str, file: DataFile, role: str = '') -> str:
     """
-    Return the name of a prepared file of an input file (with its HDU, if
-    given): prep_<name>.fits, or prep_<name>_<role>.fits for a role.
+    Return the name of a prepared file of an input file (with its HDU, or
+    the path of its array in an ASDF file, if given): prep_<name>.fits, or
+    prep_<name>_<role>.fits for a role.
     """
-    filename, hdu = (file, None) if isinstance(file, str) else file
+    filename, key = (file, None) if isinstance(file, str) else file
     name = os.path.splitext(os.path.basename(filename))[0]
-    if hdu is not None:
-        name += f'_{hdu}'
+    if key is not None:
+        name += '_' + str(key).replace('/', '_')
     if role:
         name += f'_{role}'
     return os.path.join(output_dir, f'prep_{name}.fits')
@@ -91,9 +92,9 @@ def _check_distinct(outputs: Sequence[str]) -> None:
 
 def output_files(
         output_dir: str,
-        file_d: FitsFile,
-        file_e: FitsFile | None,
-        file_m: FitsFile | None,
+        file_d: DataFile,
+        file_e: DataFile | None,
+        file_m: DataFile | None,
         noise_error: bool = False
 ) -> tuple[str, str | None, str | None]:
     """
@@ -108,7 +109,7 @@ def output_files(
     ----------
     output_dir : str
         The output directory.
-    file_d, file_e, file_m : FitsFile
+    file_d, file_e, file_m : DataFile
         The files of the data, errors and mask.
     noise_error : bool, optional
         Whether the errors are estimated from the noise of the data.
@@ -169,9 +170,9 @@ def _write(
 
 
 def prep_pixel_brightness(
-        file_d: FitsFile,
-        file_e: FitsFile | None,
-        file_m: FitsFile | None,
+        file_d: DataFile,
+        file_e: DataFile | None,
+        file_m: DataFile | None,
         roi_spat: _Range | None,
         clip_min: float | None,
         clip_max: float | None,
@@ -207,9 +208,9 @@ def prep_pixel_brightness(
 
 
 def prep_slit_spectra(
-        file_d: FitsFile,
-        file_e: FitsFile | None,
-        file_m: FitsFile | None,
+        file_d: DataFile,
+        file_e: DataFile | None,
+        file_m: DataFile | None,
         roi_spat: _Range | None,
         roi_spec: _Range | None,
         clip_min: float | None,
@@ -255,9 +256,9 @@ def prep_slit_spectra(
 
 
 def prep_pixel_spectra(
-        file_d: FitsFile,
-        file_e: FitsFile | None,
-        file_m: FitsFile | None,
+        file_d: DataFile,
+        file_e: DataFile | None,
+        file_m: DataFile | None,
         roi_spat: _Range | None,
         roi_spec: _Range | None,
         clip_min: float | None,

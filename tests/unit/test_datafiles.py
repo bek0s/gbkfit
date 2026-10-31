@@ -2,6 +2,7 @@
 Tests for the reading of data with their errors and mask (datafiles).
 """
 
+import astropy.wcs
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -105,3 +106,115 @@ def test_world_axes_beyond_the_array_are_flat(tmp_path):
     assert fitsutils.read_array(filename)[0].shape == SHAPE[1:]
     description, = describe_fits(filename)
     assert description.problems == ()
+
+
+# A cube of the sky (0.1 arcsec pixels, rotated by 30 degrees) and of
+# wavelengths about Halpha at z = 1.5 (micron)
+TWIN_SHAPE = (6, 5, 7)
+TWIN_CD = 0.1 / 3600 * np.array([
+    [-np.cos(np.radians(30)), np.sin(np.radians(30))],
+    [np.sin(np.radians(30)), np.cos(np.radians(30))]])
+
+
+def twin_files(tmp_path, kind):
+    """
+    Write a cube in a FITS file and in an ASDF file, whose world
+    coordinates are a gwcs: the wavelengths linear (WAVE) or exponential
+    (WAVE-LOG) in the pixels; or, of the ASDF file only, quadratic
+    ('curved').
+    """
+    import asdf
+    import astropy.units as u
+    from astropy.coordinates import ICRS
+    from astropy.modeling import models
+    from gwcs import WCS, coordinate_frames as cf
+    cube = np.random.default_rng(1).random(TWIN_SHAPE)
+    header = dict(
+        CTYPE1='RA---TAN', CUNIT1='deg', CRVAL1=150.0, CRPIX1=4.0,
+        CTYPE2='DEC--TAN', CUNIT2='deg', CRVAL2=2.0, CRPIX2=3.0,
+        CD1_1=TWIN_CD[0, 0], CD1_2=TWIN_CD[0, 1],
+        CD2_1=TWIN_CD[1, 0], CD2_2=TWIN_CD[1, 1],
+        CTYPE3='WAVE-LOG' if kind == 'WAVE-LOG' else 'WAVE', CUNIT3='um',
+        CRVAL3=1.641, CRPIX3=3.0, CD3_3=2e-4,
+        BUNIT='Jy')
+    fits.writeto(tmp_path / 'cube.fits', cube, fits.Header(header))
+    sky = ((models.Shift(-3) & models.Shift(-2))
+           | models.AffineTransformation2D(matrix=TWIN_CD * 1.0)
+           | models.Pix2Sky_TAN()
+           | models.RotateNative2Celestial(150, 2, 180))
+    spectral = models.Shift(-2) | dict(
+        WAVE=models.Scale(2e-4) | models.Shift(1.641),
+        curved=models.Polynomial1D(2, c0=1.641, c1=2e-4, c2=2e-5),
+        **{'WAVE-LOG': models.Scale(2e-4) | models.Exponential1D(
+            amplitude=1.641, tau=1.641)})[kind]
+    wcs = WCS([
+        (cf.CoordinateFrame(
+            naxes=3, axes_type=('SPATIAL', 'SPATIAL', 'SPECTRAL'),
+            axes_order=(0, 1, 2), name='detector', unit=(u.pix,) * 3),
+         sky & spectral),
+        (cf.CompositeFrame([
+            cf.CelestialFrame(
+                reference_frame=ICRS(), axes_order=(0, 1),
+                unit=(u.deg, u.deg)),
+            cf.SpectralFrame(
+                axes_order=(2,), unit=(u.um,),
+                axes_names=('wavelength',))]), None)])
+    asdf.AsdfFile(dict(roman=dict(
+        data=cube * u.Jy, err=np.full(TWIN_SHAPE, 0.1) * u.Jy,
+        meta=dict(wcs=wcs)))).write_to(tmp_path / 'cube.asdf')
+    return str(tmp_path / 'cube.fits'), str(tmp_path / 'cube.asdf')
+
+
+@pytest.mark.parametrize('kind', ['WAVE', 'WAVE-LOG'])
+def test_asdf_files_read_as_their_fits_twins(tmp_path, kind):
+    # One reader past the file: the same values, unit and world
+    # coordinates (here as the velocities of the rest of Halpha)
+    pytest.importorskip('asdf')
+    pytest.importorskip('gwcs')
+    fits_file, asdf_file = twin_files(tmp_path, kind)
+    rest = '6564.61 Angstrom'
+    from_fits = datafiles.read_arrays(fits_file, rest=rest)
+    from_asdf = datafiles.read_arrays(
+        (asdf_file, 'roman/data'), (asdf_file, 'roman/err'), rest=rest)
+    np.testing.assert_array_equal(from_asdf.data, from_fits.data)
+    np.testing.assert_allclose(from_asdf.error, 0.1)
+    assert from_asdf.unit == from_fits.unit
+    pixels = np.array(np.meshgrid(
+        [0, 6], [0, 4], [0, 5])).reshape(3, -1)
+    world = [
+        fits_wcs.pixel_to_world_values(*pixels)
+        for fits_wcs in (
+            astropy.wcs.WCS(from_fits.header),
+            astropy.wcs.WCS(from_asdf.header))]
+    np.testing.assert_allclose(world[1], world[0], rtol=1e-9)
+    coords = [
+        fitsutils.coords_from_header('cube', arrays.header)
+        for arrays in (from_fits, from_asdf)]
+    np.testing.assert_allclose(coords[1].step, coords[0].step, rtol=1e-6)
+    assert coords[1].rota == pytest.approx(coords[0].rota)
+    assert coords[1].convention == coords[0].convention
+
+
+def test_asdf_files_off_a_grid_are_refused(tmp_path):
+    # Wavelengths of a curved axis: no linear header stands for them
+    pytest.importorskip('asdf')
+    pytest.importorskip('gwcs')
+    _, asdf_file = twin_files(tmp_path, 'curved')
+    with pytest.raises(ConfigError, match="resample"):
+        datafiles.read_arrays((asdf_file, 'roman/data'))
+
+
+def test_datasets_read_asdf_files(tmp_path):
+    pytest.importorskip('asdf')
+    pytest.importorskip('gwcs')
+    from gbkfit.dataset import dataset_parser
+    _, asdf_file = twin_files(tmp_path, 'WAVE')
+    dataset = dataset_parser.load(dict(
+        type='pixel_spectra',
+        data=dict(file=asdf_file, path='roman/data'),
+        error=dict(file=asdf_file, path='roman/err'),
+        spectral=dict(rest='6564.61 Angstrom')))
+    assert dataset['spectra'].shape() == TWIN_SHAPE
+    with pytest.raises(ConfigError, match="by its path"):
+        dataset_parser.load(dict(
+            type='pixel_spectra', data=dict(file=asdf_file, hdu=1)))

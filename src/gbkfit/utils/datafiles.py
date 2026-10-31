@@ -2,6 +2,10 @@
 Reading data from files with their errors and mask, in the orientation of
 the model: the one reader of the datasets (see dataset.Data.from_files)
 and of prep (see prep.FitsArrays).
+
+The files are FITS files, or ASDF files (with the packages asdf and gwcs),
+whose world coordinates (a gwcs) become those of a FITS header (see
+fitsutils.linear_header): past that, both are read alike.
 """
 
 import dataclasses
@@ -14,7 +18,7 @@ import numpy as np
 
 from gbkfit.utils import fitsutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.typeutils import DataFile, is_asdf_file
 
 
 __all__ = [
@@ -66,9 +70,9 @@ class Arrays:
 
 
 def read_arrays(
-        data: FitsFile,
-        error: FitsFile | None = None,
-        mask: FitsFile | None = None,
+        data: DataFile,
+        error: DataFile | None = None,
+        mask: DataFile | None = None,
         *,
         error_kind: ErrorKind = 'sigma',
         unit: str | astropy.units.UnitBase | None = None,
@@ -80,7 +84,10 @@ def read_arrays(
     the model.
 
     A file is a FITS file and its HDU, or, by default, its first HDU with
-    data (see fitsutils.read_hdu). Each is put in the orientation of the
+    data (see fitsutils.read_hdu); or an ASDF file and the path of its
+    array in its tree (e.g. 'roman/data'), whose unit is that of a
+    Quantity, and world coordinates those of the WCS of the file, if it
+    has one (see _read_asdf). Each is put in the orientation of the
     model by its own world coordinates (see fitsutils.model_header). The
     errors and the mask follow the axes of the file of the data, whose
     shape they must have, if they or the data have no world coordinates;
@@ -99,9 +106,9 @@ def read_arrays(
 
     Parameters
     ----------
-    data : FitsFile
+    data : DataFile
         The file of the values.
-    error, mask : FitsFile, optional
+    error, mask : DataFile, optional
         The files of the errors and of the mask.
     error_kind : str, optional
         What the errors are: 'sigma' (standard deviations), 'variance'
@@ -159,13 +166,13 @@ def read_arrays(
         valid.astype(float), header, unit)
 
 
-def _filename(file: FitsFile) -> str:
+def _filename(file: DataFile) -> str:
     """Return the filename of a file."""
     return file if isinstance(file, str) else file[0]
 
 
 def _read(
-        file: FitsFile,
+        file: DataFile,
         rest: typing.Any,
         velocity: str | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header, fitsutils.Orientation]:
@@ -173,15 +180,87 @@ def _read(
     Return the values of a file in the orientation of the model, their
     header in it, and how they were put in it (see fitsutils.model_header).
     """
-    filename, hdu = (file, None) if isinstance(file, str) else file
-    values, header = fitsutils.read_hdu(filename, hdu)
+    filename = _filename(file)
+    values, header = _read_file(file)
     header, orientation = fitsutils.model_header(
         filename, header, values.shape, rest, velocity)
     return _floats(orientation.apply(values)), header, orientation
 
 
+def _read_file(file: DataFile) -> tuple[np.ndarray, astropy.io.fits.Header]:
+    """
+    Return the array of a file and its header: of a FITS file, or a FITS
+    header of an ASDF file (see _read_asdf).
+    """
+    filename, key = (file, None) if isinstance(file, str) else file
+    if is_asdf_file(filename):
+        return _read_asdf(filename, key)
+    return fitsutils.read_hdu(filename, key)
+
+
+def _read_asdf(
+        filename: str, path: str | None
+) -> tuple[np.ndarray, astropy.io.fits.Header]:
+    """
+    Return the array of an ASDF file at a path of its tree (e.g.
+    'roman/data'), and a FITS header of its unit (BUNIT, of a Quantity)
+    and of the world coordinates of the only WCS of the file (a gwcs), if
+    it has one (see fitsutils.linear_header).
+
+    Raises
+    ------
+    ConfigError
+        If the packages asdf and gwcs are missing, the path is not given or
+        not in the tree, or the file has more than one WCS.
+    """
+    try:
+        import asdf
+        import gwcs
+    except ImportError as e:
+        raise ConfigError(
+            f"{filename}: ASDF files need the packages asdf and gwcs (pip "
+            f"install gbkfit[asdf])") from e
+    if path is None:
+        raise ConfigError(
+            f"{filename}: give the path of the array in the tree of the "
+            f"file (path, e.g. roman/data)")
+    with asdf.open(filename) as file:
+        node = file.tree
+        for key in str(path).split('/'):
+            try:
+                node = node[key]
+            except (KeyError, IndexError, TypeError) as e:
+                raise ConfigError(
+                    f"{filename}: its tree has no {path!r}") from e
+        unit = getattr(node, 'unit', None)
+        values = np.array(getattr(node, 'value', node))
+        wcss = list(_instances(file.tree, gwcs.WCS))
+    header = astropy.io.fits.Header()
+    if unit is not None:
+        header['BUNIT'] = unitutils.format_unit(unit)
+    if len(wcss) > 1:
+        raise ConfigError(
+            f"{filename}: its tree has {len(wcss)} WCSs; files of one are "
+            f"read")
+    if wcss:
+        header.update(fitsutils.linear_header(filename, wcss[0], values.shape))
+    return values, header
+
+
+def _instances(node: typing.Any, cls: type) -> typing.Iterator[typing.Any]:
+    """Return the objects of a class in a tree of dicts and lists."""
+    if isinstance(node, cls):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from _instances(value, cls)
+    elif isinstance(node, list | tuple):
+        for value in node:
+            yield from _instances(value, cls)
+
+
 def _read_companion(
-        file: FitsFile,
+        file: DataFile,
         data_header: astropy.io.fits.Header,
         data_orientation: fitsutils.Orientation,
         rest: typing.Any,
@@ -191,8 +270,8 @@ def _read_companion(
     Return the values of the errors or the mask of data in the orientation
     of the model, and their header (see read_arrays).
     """
-    filename, hdu = (file, None) if isinstance(file, str) else file
-    values, header = fitsutils.read_hdu(filename, hdu)
+    filename = _filename(file)
+    values, header = _read_file(file)
     if fitsutils.has_wcs(header) and fitsutils.has_wcs(data_header):
         header, orientation = fitsutils.model_header(
             filename, header, values.shape, rest, velocity)

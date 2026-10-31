@@ -7,7 +7,7 @@ from gbkfit.instrument import PSF
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.datafiles import ErrorKind
-from gbkfit.utils.typeutils import FitsFile
+from gbkfit.utils.typeutils import DataFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
 from .data import Data
@@ -60,9 +60,9 @@ class DatasetPixelBrightness(Dataset):
     @classmethod
     def from_files(
             cls,
-            data: FitsFile,
-            mask: FitsFile | None = None,
-            error: FitsFile | float | None = None,
+            data: DataFile,
+            mask: DataFile | None = None,
+            error: DataFile | float | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
             step: float | Sequence[float] | None = None,
