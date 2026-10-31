@@ -193,9 +193,10 @@ class MomentsPlan:
     (ny, nx) for each order, one mask shared by them (the spectra whose
     moment 0 is not above flux_floor times the largest of the map, in
     absolute value, and those whose fit fails), and one weight map shared
-    by them (with the method moments). A cube whose moment 0 is not a
-    number (NaN) somewhere is a model that failed there, not one without
-    flux there.
+    by them (with the method moments). To evaluate, a cube whose moment
+    0 is not a number (NaN) somewhere is a model that failed there, not
+    one without flux there; measure takes cubes of data, with channels
+    without a value (see measure).
     """
 
     def __init__(
@@ -264,6 +265,23 @@ class MomentsPlan:
                 f"cannot be evaluated there (e.g. a rotation or a dispersion "
                 f"without a solution)")
         cutoff = self._flux_floor * float(np.max(np.abs(flux), initial=0))
+        return self.measure(step, zero, cube, wcube, cutoff)
+
+    def measure(
+            self,
+            step: Sequence[float],
+            zero: Sequence[float],
+            cube: DeviceArray,
+            wcube: DeviceArray | None,
+            cutoff: float
+    ) -> ModelData:
+        """
+        Return the moments of cube, as evaluate, but with the spectra
+        whose moment 0 is not above cutoff (in absolute value) masked.
+        The fits of the methods gaussian_fit and gauss_hermite leave the
+        channels without a value (NaN) out; the moments of a spectrum
+        with one are not numbers.
+        """
         if self._method in ('gaussian_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
                 step, zero, cube, cutoff, self._mmaps_o,

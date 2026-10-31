@@ -33,7 +33,8 @@ class MomentMaps:
     mask : np.ndarray
         Where the moments are measured (ny, nx): False where the spectrum
         is masked, whose moments from order 1 are NaN (moment 0 keeps its
-        value, but is NaN where the spectrum has no value at all).
+        value, but is NaN where the spectrum has no value at all, and
+        with the method moments, where a channel has none).
     """
     data: dict[str, np.ndarray]
     mask: np.ndarray
@@ -87,8 +88,9 @@ def moment_maps(
     of moments (PixelMoments) measures those of its models: the moments
     of each spectrum (its flux, mean velocity, dispersion, and central
     moments above 2), or those of a Gaussian or a Gauss-Hermite series
-    fitted to it. A channel without a value (NaN) counts as one without
-    flux.
+    fitted to it. A channel without a value (NaN) is missing, not one
+    without flux: the fits leave it out, and the moments of a spectrum
+    with one are masked (NaN, moment 0 too).
 
     Parameters
     ----------
@@ -145,17 +147,19 @@ def moment_maps(
     if steps[0] < 0:
         cube, velocities = cube[::-1], velocities[::-1]
     dtype = np.float32 if cube.dtype == np.float32 else np.float64
+    cube = cube.astype(dtype)
     blank = np.isnan(cube).all(axis=0)
-    cube = np.nan_to_num(cube.astype(dtype), nan=0.0)
+    step = (velocities[-1] - velocities[0]) / (len(velocities) - 1)
+    flux = np.nansum(cube, axis=0) * step
+    cutoff = flux_floor * float(np.max(np.abs(flux), initial=0))
     if driver is None:
         driver = DriverHost()
     _, ny, nx = cube.shape
     plan = _moments.MomentsPlan(
         driver, (nx, ny), orders, flux_floor, method, dtype)
-    step = (velocities[-1] - velocities[0]) / (len(velocities) - 1)
-    maps = plan.evaluate(
+    maps = plan.measure(
         (1, 1, step), (0, 0, velocities[0]), driver.mem_copy_h2d(cube),
-        None)
+        None, cutoff)
     data = {key: driver.mem_copy_d2h(value['d'])
             for key, value in maps.items()}
     mask = driver.mem_copy_d2h(maps[f'moment{orders[0]}']['m']) == 1

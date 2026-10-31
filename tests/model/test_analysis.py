@@ -134,20 +134,23 @@ def test_a_terminal_velocity_next_to_a_masked_channel_is_a_number():
     assert _terminal_velocity(velocities, spectrum, 0.5, True) == 35.0
 
 
+def lines(velocities, flux, centre, sigma):
+    """A cube of Gaussian lines of the given maps of moments 0 to 2."""
+    return flux / (sigma * np.sqrt(2 * np.pi)) * np.exp(
+        -0.5 * ((velocities[:, None, None] - centre) / sigma) ** 2)
+
+
 @pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])
 def test_the_moment_maps_of_a_cube_are_its_lines(driver, method):
     # Gaussian lines, on channels of decreasing velocity (as those of many
-    # radio cubes), with a channel blanked (NaN) far from them: the maps
-    # are their flux, centre and dispersion; a spectrum without flux is
-    # masked, and one blanked whole has no value
+    # radio cubes): the maps are their flux, centre and dispersion; a
+    # spectrum without flux is masked, and one blanked whole has no value
     rng = np.random.default_rng(5)
     flux = rng.uniform(1, 10, (3, 4))
     centre = rng.uniform(-100, 100, (3, 4))
     sigma = rng.uniform(10, 40, (3, 4))
     velocities = np.arange(300, -301, -5.0)
-    cube = flux / (sigma * np.sqrt(2 * np.pi)) * np.exp(
-        -0.5 * ((velocities[:, None, None] - centre) / sigma) ** 2)
-    cube[0] = np.nan
+    cube = lines(velocities, flux, centre, sigma)
     cube[:, 0, 0] = 0
     cube[:, 0, 1] = np.nan
     maps = moment_maps(
@@ -161,6 +164,49 @@ def test_the_moment_maps_of_a_cube_are_its_lines(driver, method):
         maps.data['moment1'][good], centre[good], atol=0.05)
     np.testing.assert_allclose(
         maps.data['moment2'][good], sigma[good], rtol=1e-3)
+
+
+@pytest.mark.parametrize('method', ['gaussian_fit', 'gauss_hermite'])
+def test_the_fits_leave_missing_channels_out(driver, method):
+    # (audit 2026-10-31 #20: zeroed, two missing channels at the peak
+    # moved the centre by 4.5 km/s and the dispersion by 34)
+    velocities = np.arange(-300, 301, 30.0)
+    cube = lines(velocities, np.full((1, 2), 5.0), 40.0, 90.0)
+    cube[[11, 12], 0, 1] = np.nan
+    maps = moment_maps(cube, velocities, (0, 1, 2), method, driver=driver)
+    assert maps.mask.all()
+    for order, value in enumerate((5, 40, 90)):
+        np.testing.assert_allclose(
+            maps.data[f'moment{order}'], value, rtol=1e-4)
+
+
+def test_the_moments_of_a_spectrum_with_a_missing_channel_are_masked(
+        driver):
+    velocities = np.arange(-300, 301, 30.0)
+    cube = lines(velocities, np.full((1, 2), 5.0), 40.0, 90.0)
+    cube[0, 0, 1] = np.nan
+    maps = moment_maps(cube, velocities, driver=driver)
+    assert maps.mask.tolist() == [[True, False]]
+    assert np.isnan([maps.data[f'moment{i}'][0, 1] for i in range(3)]).all()
+
+
+@pytest.mark.parametrize('method', ['gaussian_fit', 'gauss_hermite'])
+def test_the_fits_of_faint_lines_in_float32_are_those_of_bright_ones(
+        driver, method):
+    # (audit 2026-10-31 #21: in float32, the Gaussian fit of a line of
+    # 1e-20, as in flux-calibrated cubes, returned its start)
+    velocities = np.arange(-600, 601, 30.0)
+    cube = lines(velocities, np.ones((1, 1)), 40.0, 90.0)
+    cube += 0.1 * np.exp(-0.5 * ((velocities[:, None, None] - 200) / 60) ** 2)
+    maps = [moment_maps(
+        (scale * cube).astype(np.float32), velocities, (0, 1, 2), method,
+        driver=driver) for scale in (1, 1e-20)]
+    np.testing.assert_allclose(
+        maps[1].data['moment0'], 1e-20 * maps[0].data['moment0'], rtol=1e-4)
+    for order in (1, 2):
+        np.testing.assert_allclose(
+            maps[1].data[f'moment{order}'], maps[0].data[f'moment{order}'],
+            atol=0.01)
 
 
 def test_structure_functions_are_the_mean_over_pairs_of_pixels():

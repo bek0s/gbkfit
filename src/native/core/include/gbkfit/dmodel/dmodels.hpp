@@ -210,18 +210,42 @@ dmodel_mmaps_moments(
     }
 }
 
+// A spectrum of size channels, stride values apart, read in units of
+// scale: the fits below are made in units of its largest value, so that
+// they do not depend on those of the cube (in float32, the normal
+// equations of a line of 1e-20 underflow). A channel without a value
+// (NaN) is missing: the fits leave it out.
+template<typename T>
+struct dmodel_spectrum
+{
+    int size;
+    const T* values;
+    int stride;
+    T scale;
+
+    constexpr T
+    operator()(int z) const {
+        return values[z * stride] / scale;
+    }
+
+    constexpr bool
+    missing(int z) const {
+        return std::isnan(values[z * stride]);
+    }
+};
+
 // The sum of the squared residuals of the Gaussian a exp(-(k - c)^2 / (2
-// s^2)) (channel units) and a spectrum of size_z channels, stride values
-// apart
+// s^2)) (channel units) and a spectrum
 template<typename T> constexpr T
-dmodel_gaussian_sse(
-        int size_z, const T* spectrum, int stride, T a, T c, T s)
+dmodel_gaussian_sse(const dmodel_spectrum<T>& spectrum, T a, T c, T s)
 {
     T sse = 0;
-    for (int z = 0; z < size_z; ++z)
+    for (int z = 0; z < spectrum.size; ++z)
     {
+        if (spectrum.missing(z))
+            continue;
         const T u = (z - c) / s;
-        const T r = a * std::exp(T{-0.5} * u * u) - spectrum[z * stride];
+        const T r = a * std::exp(T{-0.5} * u * u) - spectrum(z);
         sse += r * r;
     }
     return sse;
@@ -238,28 +262,67 @@ dmodel_gaussian_in_band(int size_z, T a, T c, T s)
         && s > 0 && s <= size_z;
 }
 
+// The solution x of the N by N symmetric positive definite system m x =
+// b, by Cholesky; false if m is not positive definite
+template<int N, typename T> constexpr bool
+solve_spd(const T (&m)[N][N], const T (&b)[N], T (&x)[N])
+{
+    T l[N][N] = {};
+    for (int i = 0; i < N; ++i)
+    {
+        for (int k = 0; k <= i; ++k)
+        {
+            T sum = m[i][k];
+            for (int q = 0; q < k; ++q)
+                sum -= l[i][q] * l[k][q];
+            if (i != k) {
+                l[i][k] = sum / l[k][k];
+            } else if (sum > 0) {
+                l[i][i] = std::sqrt(sum);
+            } else {
+                return false;
+            }
+        }
+    }
+    T y[N] = {};
+    for (int i = 0; i < N; ++i)
+    {
+        T sum = b[i];
+        for (int q = 0; q < i; ++q)
+            sum -= l[i][q] * y[q];
+        y[i] = sum / l[i][i];
+    }
+    for (int i = N - 1; i >= 0; --i)
+    {
+        T sum = y[i];
+        for (int q = i + 1; q < N; ++q)
+            sum -= l[q][i] * x[q];
+        x[i] = sum / l[i][i];
+    }
+    return true;
+}
+
 // The Gaussian a exp(-(k - c)^2 / (2 s^2)) (channel units) fitted to a
-// spectrum of size_z channels, stride values apart, by least squares
-// (Levenberg-Marquardt) from (a, c, s), which it updates. The steps that
-// leave the Gaussians of a line of the spectrum (see
-// dmodel_gaussian_in_band) are rejected, as those that do not lower the
-// residuals. Return the sum of the squared residuals of the fit, or
-// infinity if the start is not one of those Gaussians.
+// spectrum by least squares (Levenberg-Marquardt) from (a, c, s), which
+// it updates. The steps that leave the Gaussians of a line of the
+// spectrum (see dmodel_gaussian_in_band) are rejected, as those that do
+// not lower the residuals. Return the sum of the squared residuals of the
+// fit, or infinity if there is no fit: the start is not one of those
+// Gaussians, or no step can be made from it.
 template<typename T> constexpr T
-dmodel_gaussian_fit(
-        int size_z, const T* spectrum, int stride, T& a, T& c, T& s)
+dmodel_gaussian_fit(const dmodel_spectrum<T>& spectrum, T& a, T& c, T& s)
 {
     constexpr int MAX_ITERATIONS = 100;
     constexpr T TOLERANCE = T{1e-6};
-    if (!dmodel_gaussian_in_band(size_z, a, c, s)) {
+    if (!dmodel_gaussian_in_band(spectrum.size, a, c, s)) {
         return INFINITY;
     }
-    T sse = dmodel_gaussian_sse(size_z, spectrum, stride, a, c, s);
+    T sse = dmodel_gaussian_sse(spectrum, a, c, s);
     T lambda = T{1e-3};
-    // The normal equations J^T J and J^T r of the residuals, made again
+    // The normal equations J^T J and -J^T r of the residuals, made again
     // only when the fit moves (a rejected step only raises the damping)
-    T jj[3][3], jr[3];
-    bool moved = true;
+    T jj[3][3] = {}, jr[3] = {};
+    bool moved = true, stepped = false;
     for (int iteration = 0; iteration < MAX_ITERATIONS; ++iteration)
     {
         if (moved)
@@ -269,49 +332,39 @@ dmodel_gaussian_fit(
                 for (int q = 0; q < 3; ++q)
                     jj[p][q] = 0;
             }
-            for (int z = 0; z < size_z; ++z)
+            for (int z = 0; z < spectrum.size; ++z)
             {
+                if (spectrum.missing(z))
+                    continue;
                 const T u = (z - c) / s;
                 const T g = std::exp(T{-0.5} * u * u);
-                const T r = a * g - spectrum[z * stride];
+                const T r = a * g - spectrum(z);
                 const T j[3] = {g, a * g * u / s, a * g * u * u / s};
                 for (int p = 0; p < 3; ++p) {
-                    jr[p] += j[p] * r;
+                    jr[p] -= j[p] * r;
                     for (int q = 0; q < 3; ++q)
                         jj[p][q] += j[p] * j[q];
                 }
             }
             moved = false;
         }
-        // The damped step, by Cramer's rule
         T m[3][3];
         for (int p = 0; p < 3; ++p)
             for (int q = 0; q < 3; ++q)
                 m[p][q] = jj[p][q] * (p == q ? 1 + lambda : 1);
-        const T det =
-                m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-              - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-              + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-        if (!(std::abs(det) > 0)) {
-            break;
-        }
         T delta[3];
-        for (int p = 0; p < 3; ++p) {
-            T n[3][3];
-            for (int i = 0; i < 3; ++i)
-                for (int k = 0; k < 3; ++k)
-                    n[i][k] = k == p ? -jr[i] : m[i][k];
-            delta[p] = (
-                    n[0][0] * (n[1][1] * n[2][2] - n[1][2] * n[2][1])
-                  - n[0][1] * (n[1][0] * n[2][2] - n[1][2] * n[2][0])
-                  + n[0][2] * (n[1][0] * n[2][1] - n[1][1] * n[2][0])) / det;
+        if (!solve_spd(m, jr, delta)) {
+            if (!stepped) {
+                return INFINITY;
+            }
+            break;
         }
         const T a_new = a + delta[0];
         const T c_new = c + delta[1];
         const T s_new = s + delta[2];
-        const T sse_new = dmodel_gaussian_in_band(size_z, a_new, c_new, s_new)
-                ? dmodel_gaussian_sse(size_z, spectrum, stride,
-                                      a_new, c_new, s_new)
+        const T sse_new = dmodel_gaussian_in_band(
+                spectrum.size, a_new, c_new, s_new)
+                ? dmodel_gaussian_sse(spectrum, a_new, c_new, s_new)
                 : NAN;
         if (sse_new < sse) {
             const bool converged = sse - sse_new <= TOLERANCE * sse;
@@ -321,6 +374,7 @@ dmodel_gaussian_fit(
             sse = sse_new;
             lambda /= 10;
             moved = true;
+            stepped = true;
             if (converged) {
                 break;
             }
@@ -372,76 +426,35 @@ dmodel_gauss_hermite(int z, const T (&p)[5], T* j = nullptr)
 }
 
 // The sum of the squared residuals of the Gauss-Hermite series of p (see
-// dmodel_gauss_hermite) and a spectrum of size_z channels, stride values
-// apart
+// dmodel_gauss_hermite) and a spectrum
 template<typename T> constexpr T
-dmodel_gauss_hermite_sse(
-        int size_z, const T* spectrum, int stride, const T (&p)[5])
+dmodel_gauss_hermite_sse(const dmodel_spectrum<T>& spectrum, const T (&p)[5])
 {
     T sse = 0;
-    for (int z = 0; z < size_z; ++z)
+    for (int z = 0; z < spectrum.size; ++z)
     {
-        const T r = dmodel_gauss_hermite(z, p) - spectrum[z * stride];
+        if (spectrum.missing(z))
+            continue;
+        const T r = dmodel_gauss_hermite(z, p) - spectrum(z);
         sse += r * r;
     }
     return sse;
 }
 
-// The solution x of the N by N symmetric positive definite system m x =
-// b, by Cholesky; false if m is not positive definite
-template<int N, typename T> constexpr bool
-solve_spd(const T (&m)[N][N], const T (&b)[N], T (&x)[N])
-{
-    T l[N][N] = {};
-    for (int i = 0; i < N; ++i)
-    {
-        for (int k = 0; k <= i; ++k)
-        {
-            T sum = m[i][k];
-            for (int q = 0; q < k; ++q)
-                sum -= l[i][q] * l[k][q];
-            if (i != k) {
-                l[i][k] = sum / l[k][k];
-            } else if (sum > 0) {
-                l[i][i] = std::sqrt(sum);
-            } else {
-                return false;
-            }
-        }
-    }
-    T y[N] = {};
-    for (int i = 0; i < N; ++i)
-    {
-        T sum = b[i];
-        for (int q = 0; q < i; ++q)
-            sum -= l[i][q] * y[q];
-        y[i] = sum / l[i][i];
-    }
-    for (int i = N - 1; i >= 0; --i)
-    {
-        T sum = y[i];
-        for (int q = i + 1; q < N; ++q)
-            sum -= l[q][i] * x[q];
-        x[i] = sum / l[i][i];
-    }
-    return true;
-}
-
 // The Gauss-Hermite series of p = (a, c, s, h3, h4) (see
-// dmodel_gauss_hermite) fitted to a spectrum of size_z channels, stride
-// values apart, by least squares (Levenberg-Marquardt) from p, which it
-// updates: as dmodel_gaussian_fit, the steps whose Gaussian (a, c, s) is
-// not one of a line of the spectrum (see dmodel_gaussian_in_band) are
-// rejected, as those that do not lower the residuals. Return the sum of
-// the squared residuals of the fit.
+// dmodel_gauss_hermite) fitted to a spectrum by least squares
+// (Levenberg-Marquardt) from p, which it updates: as dmodel_gaussian_fit,
+// the steps whose Gaussian (a, c, s) is not one of a line of the spectrum
+// (see dmodel_gaussian_in_band) are rejected, as those that do not lower
+// the residuals. Return the sum of the squared residuals of the fit.
 template<typename T> constexpr T
-dmodel_gauss_hermite_fit(int size_z, const T* spectrum, int stride, T (&p)[5])
+dmodel_gauss_hermite_fit(const dmodel_spectrum<T>& spectrum, T (&p)[5])
 {
     constexpr int MAX_ITERATIONS = 100;
     constexpr T TOLERANCE = T{1e-6};
-    T sse = dmodel_gauss_hermite_sse(size_z, spectrum, stride, p);
+    T sse = dmodel_gauss_hermite_sse(spectrum, p);
     T lambda = T{1e-3};
-    // The normal equations J^T J and J^T r of the residuals, made again
+    // The normal equations J^T J and -J^T r of the residuals, made again
     // only when the fit moves (a rejected step only raises the damping)
     T jj[5][5] = {}, jr[5] = {};
     bool moved = true;
@@ -454,11 +467,12 @@ dmodel_gauss_hermite_fit(int size_z, const T* spectrum, int stride, T (&p)[5])
                 for (int k = 0; k < 5; ++k)
                     jj[i][k] = 0;
             }
-            for (int z = 0; z < size_z; ++z)
+            for (int z = 0; z < spectrum.size; ++z)
             {
+                if (spectrum.missing(z))
+                    continue;
                 T j[5];
-                const T r = dmodel_gauss_hermite(z, p, j)
-                        - spectrum[z * stride];
+                const T r = dmodel_gauss_hermite(z, p, j) - spectrum(z);
                 for (int i = 0; i < 5; ++i) {
                     jr[i] -= j[i] * r;
                     for (int k = 0; k < 5; ++k)
@@ -478,8 +492,9 @@ dmodel_gauss_hermite_fit(int size_z, const T* spectrum, int stride, T (&p)[5])
         T q[5];
         for (int i = 0; i < 5; ++i)
             q[i] = p[i] + delta[i];
-        const T sse_new = dmodel_gaussian_in_band(size_z, q[0], q[1], q[2])
-                ? dmodel_gauss_hermite_sse(size_z, spectrum, stride, q)
+        const T sse_new = dmodel_gaussian_in_band(
+                spectrum.size, q[0], q[1], q[2])
+                ? dmodel_gauss_hermite_sse(spectrum, q)
                 : NAN;
         if (sse_new < sse) {
             const bool converged = sse - sse_new <= TOLERANCE * sse;
@@ -502,36 +517,41 @@ dmodel_gauss_hermite_fit(int size_z, const T* spectrum, int stride, T (&p)[5])
 }
 
 // The start of a Gaussian fit (channel units) at the brightest channel of
-// a spectrum of size_z channels, stride values apart: its value (a), the
-// channel (c), and the dispersion of the width at half the value (s; the
-// crossings of half the value interpolated between the channels, or the
-// ends of the spectrum, and at least half a channel)
+// a spectrum with a value: its value (a), the channel (c), and the
+// dispersion of the width at half the value (s; the crossings of half the
+// value interpolated between the channels with a value, or the ends of
+// the spectrum, and at least half a channel)
 template<typename T> constexpr void
-dmodel_gaussian_peak(
-        int size_z, const T* spectrum, int stride, T& a, T& c, T& s)
+dmodel_gaussian_peak(const dmodel_spectrum<T>& spectrum, T& a, T& c, T& s)
 {
-    int peak = 0;
-    for (int z = 1; z < size_z; ++z)
-        if (spectrum[z * stride] > spectrum[peak * stride])
+    int peak = -1;
+    for (int z = 0; z < spectrum.size; ++z)
+        if (!spectrum.missing(z) && (peak < 0 || spectrum(z) > spectrum(peak)))
             peak = z;
-    a = spectrum[peak * stride];
+    a = spectrum(peak);
     const T half = a / 2;
-    T lo = 0, hi = size_z - 1;
-    for (int z = peak - 1; z >= 0; --z)
+    T lo = 0, hi = spectrum.size - 1;
+    for (int z = peak - 1, inner = peak; z >= 0; --z)
     {
-        const T i = spectrum[z * stride];
+        if (spectrum.missing(z))
+            continue;
+        const T i = spectrum(z);
         if (i < half) {
-            lo = z + (half - i) / (spectrum[(z + 1) * stride] - i);
+            lo = z + (half - i) / (spectrum(inner) - i) * (inner - z);
             break;
         }
+        inner = z;
     }
-    for (int z = peak + 1; z < size_z; ++z)
+    for (int z = peak + 1, inner = peak; z < spectrum.size; ++z)
     {
-        const T i = spectrum[z * stride];
+        if (spectrum.missing(z))
+            continue;
+        const T i = spectrum(z);
         if (i < half) {
-            hi = z - (half - i) / (spectrum[(z - 1) * stride] - i);
+            hi = z - (half - i) / (spectrum(inner) - i) * (z - inner);
             break;
         }
+        inner = z;
     }
     // (the FWHM of a Gaussian is 2 sqrt(2 ln 2) = 2.3548 dispersions)
     c = peak;
@@ -547,11 +567,12 @@ dmodel_gaussian_peak(
 // kept, that from the moments if they are equal. (In noise, the moments
 // of the whole spectrum can start the fit far from the line, where it
 // falls on a spike of noise or on the wing of a Gaussian beyond the
-// spectrum.) The spectra whose moment 0 is not above the cutoff, and
-// those that no Gaussian of a line fits (see dmodel_gaussian_in_band),
-// are masked as with the moments (moment 0 is then their flux). The
-// channels of the spectrum are stride values apart, as in
-// dmodel_mmaps_moments.
+// spectrum.) The channels without a value (NaN) are left out of the
+// moments and the fits. The spectra whose moment 0 is not above the
+// cutoff, those with fewer than three channels with a value, and those
+// that no Gaussian of a line fits (see dmodel_gaussian_in_band), are
+// masked as with the moments (moment 0 is then their flux). The channels
+// of the spectrum are stride values apart, as in dmodel_mmaps_moments.
 //
 // With Hermite, the Gaussian is the start of a fit of a Gauss-Hermite
 // series (see dmodel_gauss_hermite_fit, from h3 = h4 = 0), whose terms
@@ -562,24 +583,42 @@ dmodel_mmaps_gaussian(
         int x, int y,
         int size_x, int size_y, int size_z,
         T step_z, T zero_z,
-        const T* spectrum, int stride,
+        const T* spectrum_d, int stride,
         T cutoff, int norders, const int* orders,
         T* mmaps_d, T* mmaps_m)
 {
     const int idx_2d = index_2d_to_1d(x, y, size_x);
 
-    // The moments, in channel units
+    // The spectrum in units of its largest absolute value
+    dmodel_spectrum<T> spectrum{size_z, spectrum_d, stride, 1};
+    T scale = 0;
+    int present = 0;
+    for (int z = 0; z < size_z; ++z)
+    {
+        if (spectrum.missing(z))
+            continue;
+        scale = std::max(scale, std::abs(spectrum(z)));
+        present += 1;
+    }
+    if (scale > 0)
+        spectrum.scale = scale;
+
+    // The moments, in channel units (moment 0 in those of the cube)
     T m0 = 0, m1 = 0, m2 = 0;
     for (int z = 0; z < size_z; ++z)
     {
-        const T i = spectrum[z * stride];
+        if (spectrum.missing(z))
+            continue;
+        const T i = spectrum(z);
         m0 += i;
         m1 += i * z;
     }
     m1 /= m0;
     for (int z = 0; z < size_z; ++z)
     {
-        const T i = spectrum[z * stride];
+        if (spectrum.missing(z))
+            continue;
+        const T i = spectrum(z);
         m2 += i * (z - m1) * (z - m1);
     }
     m2 = std::sqrt(std::max(m2 / m0, T{0.25}));
@@ -588,15 +627,15 @@ dmodel_mmaps_gaussian(
     T a = m0 / (m2 * std::sqrt(2 * PI<T>));
     T c = m1;
     T s = m2;
-    bool valid = std::abs(m0 * step_z) > cutoff;
+    m0 *= spectrum.scale;
+    bool valid = present >= 3 && std::abs(m0 * step_z) > cutoff;
     if (valid)
     {
-        const T sse = dmodel_gaussian_fit(size_z, spectrum, stride, a, c, s);
+        const T sse = dmodel_gaussian_fit(spectrum, a, c, s);
         T a_peak = 0, c_peak = 0, s_peak = 0;
-        dmodel_gaussian_peak(
-                size_z, spectrum, stride, a_peak, c_peak, s_peak);
+        dmodel_gaussian_peak(spectrum, a_peak, c_peak, s_peak);
         const T sse_peak = dmodel_gaussian_fit(
-                size_z, spectrum, stride, a_peak, c_peak, s_peak);
+                spectrum, a_peak, c_peak, s_peak);
         if (sse_peak < sse) {
             a = a_peak;
             c = c_peak;
@@ -613,7 +652,7 @@ dmodel_mmaps_gaussian(
         if (valid)
         {
             T p[5] = {a, c, s, 0, 0};
-            dmodel_gauss_hermite_fit(size_z, spectrum, stride, p);
+            dmodel_gauss_hermite_fit(spectrum, p);
             a = p[0];
             c = p[1];
             s = p[2];
@@ -629,7 +668,7 @@ dmodel_mmaps_gaussian(
     for (int m = 0; m < norders; ++m)
     {
         T value = NAN;
-        T flux = a * s * std::sqrt(2 * PI<T>);
+        T flux = a * spectrum.scale * s * std::sqrt(2 * PI<T>);
         if constexpr (Hermite)
             flux *= 1 + h4 * std::sqrt(T{6}) / 4;
         if (orders[m] == 0)
