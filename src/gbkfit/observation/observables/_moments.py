@@ -2,6 +2,7 @@
 Helpers shared by the observables of moments.
 """
 
+import logging
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
@@ -21,6 +22,9 @@ from .base import ModelData
 if TYPE_CHECKING:
     from .pixel_moments import PixelMoments
     from .region_moments import RegionMoments
+
+
+_log = logging.getLogger(__name__)
 
 
 # The default channel width (km/s) of the spectral axis of the cube that
@@ -46,6 +50,11 @@ _MAX_ORDERS = dict(moments=7, gaussian_fit=2, gauss_hermite=4)
 # leaves room for (see spectral_axis)
 _MIN_DISPERSION = 100
 
+# The percentiles of the moments of the data that a spectral axis derived
+# from them takes (see spectral_axis): of moment1, the values within three
+# dispersions of the range between them; of moment2, the upper one
+_PERCENTILES = (0.5, 99.5)
+
 
 def spectral_axis(
         spectral: gridutils.SpectralAxis,
@@ -58,11 +67,17 @@ def spectral_axis(
     centre by default), that cover the velocities of the moments of the
     data, if they have moment 1, or else SPEC_RANGE and 0. The velocities
     of the data are the range of moment1, and three times the largest
-    dispersion on each side: that is the largest value of moment2, but at
-    least _MIN_DISPERSION (also without moment2), so that the lines of a
-    model with a larger dispersion than the data's are not cut. A given
-    size or rval is kept: rval is that of the centre of the range, and the
-    size covers the range around rval.
+    dispersion on each side: that of moment2, but at least
+    _MIN_DISPERSION (also without moment2), so that the lines of a model
+    with a larger dispersion than the data's are not cut. So that a few
+    bad values (e.g. at noisy edges) do not make the axis long, the
+    largest dispersion is the upper percentile of _PERCENTILES of
+    moment2, and the range that of the values of moment1 within three of
+    it of the range between its percentiles; a warning tells how many
+    are not (the velocities of the model there are its own, but such
+    data are likely bad: mask them, e.g. by the sigma clipping of
+    gbkfit.prep). A given size or rval is kept: rval is that of the
+    centre of the range, and the size covers the range around rval.
 
     Raises
     ------
@@ -77,10 +92,20 @@ def spectral_axis(
         velocity = dataset['moment1'].data()
         dispersion = _MIN_DISPERSION
         if 'moment2' in dataset:
-            dispersion = max(dispersion, np.nanmax(dataset['moment2'].data()))
+            dispersion = max(dispersion, np.nanpercentile(
+                dataset['moment2'].data(), _PERCENTILES[1]))
         margin = 3 * dispersion
-        vmin = np.nanmin(velocity) - margin
-        vmax = np.nanmax(velocity) + margin
+        low, high = np.nanpercentile(velocity, _PERCENTILES)
+        kept = (velocity >= low - margin) & (velocity <= high + margin)
+        if beyond := int(np.count_nonzero(np.isfinite(velocity) & ~kept)):
+            _log.warning(
+                f"{beyond} values of moment1 are beyond {low - margin:.0f} "
+                f"to {high + margin:.0f} km/s (its {_PERCENTILES} "
+                f"percentiles, and three times the dispersion beyond), "
+                f"which the cube of the model covers: they are likely bad; "
+                f"mask them (e.g. by sigma clipping, see gbkfit.prep)")
+        vmin = np.min(velocity[kept]) - margin
+        vmax = np.max(velocity[kept]) + margin
         if rval is None:
             rval = float((vmin + vmax) / 2)
         if size is None:

@@ -159,6 +159,13 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         """
         return None, None, None
 
+    def velocity_frame(self) -> str | None:
+        """
+        Return the frame of rest of its velocities (FITS SPECSYS, see
+        gridutils.FRAMES), if known; here, it is not.
+        """
+        return None
+
     def centre_params(self) -> tuple[tuple[str, str], ...]:
         """
         Return the names of the parameters of the centres (x and y) of what

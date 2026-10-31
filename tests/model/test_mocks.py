@@ -10,6 +10,7 @@ import pytest
 
 from gbkfit.model import Extras
 from gbkfit.observation import NoiseGauss, NoisePoisson
+from gbkfit.utils.parseutils import ConfigError
 from modelutils import group_plan
 
 
@@ -114,6 +115,20 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
         == observation.instrument().psf()
     with Objective(plan.with_data([mock])) as objective:
         assert objective.nindependent() < objective.nresiduals()
+
+
+def test_mocks_refuse_noise_of_a_varying_correlation(driver):
+    # Noise correlated by a PSF that varies along the spectral axis can be
+    # drawn, but the errors of data take one correlation for all the
+    # channels: refused before any draw
+    plan = plan_of(driver, dict(
+        type='pixel_spectra', psf=dict(type='gauss', sigma=dict(
+            points=dict(value=[-500, 500], unit='km/s'), values=[1, 2])))
+        | RECORDED['pixel_spectra'])
+    _, _, params = evaluate(plan)
+    with pytest.raises(ConfigError, match="varies along the spectral axis"):
+        plan.mock(params, NoiseGauss(
+            rms=0.01, spatial_correlation='instrument'), seed=1)
 
 
 @pytest.mark.parametrize('method', ['moments', 'gaussian_fit'])

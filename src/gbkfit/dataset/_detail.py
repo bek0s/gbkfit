@@ -241,7 +241,15 @@ def table_item(table: Table, columns: DataColumns) -> Data:
     unit = None if values.unit is astropy.units.dimensionless_unscaled \
         else values.unit
     error = columns.error
+    if isinstance(error, bool):
+        raise ConfigError(
+            f"the error must be a column, or one error for all the values; "
+            f"it is {error}")
     if isinstance(error, int | float):
+        if not error > 0:
+            raise ConfigError(
+                f"one error for all the values must be positive; it is "
+                f"{error}")
         error = np.full(values.shape, float(error))
     elif error is not None:
         with parseutils.config_path('error'):
@@ -361,13 +369,14 @@ def cube_coords(
     """
     Return the world coordinates of the grid of a dataset of axes on the
     sky and a spectral axis after them (see cube_grid), from those of its
-    files, with the steps, rota and the convention of its velocities, if
-    given, instead (see file_references for the others). A convention
-    given for files that state another (e.g. optical for VRAD, radio
-    velocities) relabels their velocities, without converting them: for
-    a header that states the wrong one; a warning says so (see
-    parseutils.warn), as a convention copied by mistake puts the lines
-    off (by 3.4% at 5000 km/s).
+    files, with the steps, rota, and the convention and the frame of its
+    velocities, if given, instead (see file_references for the others).
+    A convention or a frame given for files that state another (e.g.
+    optical for VRAD, radio velocities) relabels their velocities,
+    without converting them: for a header that states the wrong one; a
+    warning says so (see parseutils.warn), as a convention copied by
+    mistake puts the lines off (by 3.4% at 5000 km/s), and a frame the
+    velocities (by up to some 30 km/s).
     """
     spectral = spectral or gridutils.SpectralAxis()
     given, stated = spectral.convention(), coords.convention
@@ -376,6 +385,13 @@ def cube_coords(
             f"the spectral axis of the data states velocities of the "
             f"convention {stated!r}; they are taken as given, of the "
             f"convention {given!r}, without converting them")
+    frame = spectral.frame()
+    if frame is not None and coords.frame is not None \
+            and frame != coords.frame:
+        parseutils.warn(
+            f"the spectral axis of the data states velocities in the frame "
+            f"{coords.frame!r}; they are taken as given, in the frame "
+            f"{frame!r}, without converting them")
     nspatial = len(coords.step) - 1
     return dict(
         step=coords.step[:nspatial] if step is None else step,
@@ -386,7 +402,8 @@ def cube_coords(
             step=spectral.step() or coords.step[nspatial],
             rpix=coords.rpix[nspatial], rval=coords.rval[nspatial],
             convention=given or stated,
-            rest=coords.rest, medium=coords.medium))
+            rest=coords.rest, medium=coords.medium,
+            frame=frame or coords.frame))
 
 
 def make_grid(

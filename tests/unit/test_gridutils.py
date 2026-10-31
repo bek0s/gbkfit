@@ -131,5 +131,12 @@ def test_logarithmic_wavelengths_are_log_velocities(tmp_path):
     fitsutils.write_data(str(tmp_path / 'out.fits'), data, coords, 2)
     out = fits.getheader(tmp_path / 'out.fits')
     assert out['CTYPE3'] == 'WAVE-LOG'
+    # (in air, AWAV-LOG, as FITS has it)
+    fitsutils.write_data(
+        str(tmp_path / 'air.fits'), data, coords._replace(medium='air'), 2)
+    assert fits.getheader(tmp_path / 'air.fits')['CTYPE3'] == 'AWAV-LOG'
+    _, air = fitsutils.read_data(str(tmp_path / 'air.fits'))
+    assert (air.convention, air.medium) == ('log', 'air')
+    assert air.rval[2] == pytest.approx(coords.rval[2], rel=1e-12)
     assert out['CRVAL3'] == pytest.approx(crval, rel=1e-12)
     assert out['CDELT3'] == pytest.approx(cdelt, rel=1e-12)

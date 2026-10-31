@@ -24,6 +24,7 @@ from gbkfit.utils.parseutils import ConfigError
 
 __all__ = [
     'CONVENTIONS',
+    'FRAMES',
     'Coords',
     'Grid',
     'GridData',
@@ -88,6 +89,9 @@ class Coords(NamedTuple):
         (VRAD) or 'relativistic' (VELO); None: the default of the rest
         (optical of a rest wavelength, radio of a rest frequency, or
         relativistic without a rest).
+    frame : str or None
+        The frame of rest of the velocities (FITS SPECSYS, see FRAMES; e.g.
+        'BARYCENT' or 'LSRK'), if known.
     """
     step: tuple[float, ...]
     rpix: tuple[float, ...]
@@ -96,6 +100,7 @@ class Coords(NamedTuple):
     rest: astropy.units.Quantity | None = None
     medium: str | None = None
     convention: str | None = None
+    frame: str | None = None
 
     def axes(self, *indices: int) -> 'Coords':
         """
@@ -189,7 +194,8 @@ def make_grid(
         spectral_axis: int | None = None,
         rest: str | astropy.units.Quantity | None = None,
         medium: str | None = None,
-        convention: str | None = None
+        convention: str | None = None,
+        frame: str | None = None
 ) -> Grid:
     """
     Make a grid.
@@ -214,6 +220,8 @@ def make_grid(
     convention : str, optional
         The convention of the velocities of the rest (see
         make_convention).
+    frame : str, optional
+        The frame of rest of the velocities (see Coords).
 
     Returns
     -------
@@ -263,13 +271,22 @@ def make_grid(
     return Grid(
         tuple(size),
         Coords(step, rpix, rval, rota, rest, make_medium(medium, rest),
-               make_convention(convention, rest)),
+               make_convention(convention, rest), frame),
         spectral_axis)
 
 
 # The conventions of the velocities of spectral axes (see
 # VelocityConvention)
 CONVENTIONS = ('optical', 'log', 'radio', 'relativistic')
+
+# The frames of rest of velocities (FITS WCS Paper III, SPECSYS): of the
+# observer, the centre of the Earth, the barycentre of the solar system,
+# the centre of the Sun, the kinematic and the dynamical local standard of
+# rest, the centre of the Galaxy, the local group, the CMB dipole, and the
+# source
+FRAMES = (
+    'TOPOCENT', 'GEOCENTR', 'BARYCENT', 'HELIOCEN', 'LSRK', 'LSRD',
+    'GALACTOC', 'LOCALGRP', 'CMBDIPOL', 'SOURCE')
 
 
 def make_cube_grid(
@@ -305,7 +322,7 @@ def make_cube_grid(
             else spectral.rpix(),),
         coords.rval + (0.0 if spectral.rval() is None else spectral.rval(),),
         coords.rota, len(size), spectral.rest(), spectral.medium(),
-        spectral.convention())
+        spectral.convention(), spectral.frame())
 
 
 def check_convention(spectral: 'SpectralAxis') -> None:
@@ -908,12 +925,17 @@ class SpectralAxis(parseutils.Serializable):
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
         make_medium).
+    frame : str, optional
+        The frame of rest of the velocities (FITS SPECSYS, see FRAMES):
+        velocities of one galaxy in two frames differ (by up to some 30
+        km/s), which a joint fit of them must know (see
+        ObservationGroup).
 
     Raises
     ------
     ConfigError
         If size is not a positive integer, step is not positive, or the
-        rest, the medium or the convention is not valid.
+        rest, the medium, the convention or the frame is not valid.
     """
 
     @classmethod
@@ -924,14 +946,14 @@ class SpectralAxis(parseutils.Serializable):
         return cls(
             grid.size[axis], coords.step[axis], coords.rpix[axis],
             coords.rval[axis], coords.convention, coords.rest,
-            coords.medium)
+            coords.medium, coords.frame)
 
     def dump(self) -> dict[str, Any]:
         options = dict(
             size=self._size, step=self._step, rpix=self._rpix,
             rval=self._rval, convention=self._convention,
             rest=None if self._rest is None else str(self._rest),
-            medium=self._medium)
+            medium=self._medium, frame=self._frame)
         return {k: v for k, v in options.items() if v is not None}
 
     def __init__(
@@ -943,7 +965,8 @@ class SpectralAxis(parseutils.Serializable):
             convention: Literal[
                 'optical', 'log', 'radio', 'relativistic'] | None = None,
             rest: str | astropy.units.Quantity | None = None,
-            medium: Literal['vacuum', 'air'] | None = None
+            medium: Literal['vacuum', 'air'] | None = None,
+            frame: Literal[FRAMES] | None = None
     ):
         parseutils.check_options(SpectralAxis.__init__, locals())
         self._rest = make_rest(rest)
@@ -955,6 +978,7 @@ class SpectralAxis(parseutils.Serializable):
         self._rval = None if rval is None else float(rval)
         self._convention = convention
         self._medium = medium
+        self._frame = frame
 
     def size(self) -> int | None:
         """Return the number of channels, if given."""
@@ -983,6 +1007,10 @@ class SpectralAxis(parseutils.Serializable):
     def medium(self) -> str | None:
         """Return the medium of the wavelengths, if given."""
         return self._medium
+
+    def frame(self) -> str | None:
+        """Return the frame of rest of the velocities, if given."""
+        return self._frame
 
     def given(self) -> tuple[str, ...]:
         """Return the names of its options that are given."""

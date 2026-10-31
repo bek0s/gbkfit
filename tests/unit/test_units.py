@@ -42,6 +42,9 @@ def test_units_are_read_as_they_are_meant(text, unit):
 def test_what_is_not_a_unit_is_an_error():
     with pytest.raises(ConfigError, match="is not a unit"):
         parse_unit('banana')
+    # (A is the ampere, not the angstrom)
+    with pytest.raises(ConfigError, match="write the angstrom as Angstrom"):
+        parse_unit('1E-20 erg/s/cm2/A')
 
 
 def emission(info):

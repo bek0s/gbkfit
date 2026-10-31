@@ -121,6 +121,11 @@ def test_profile_of_a_table_file(tmp_path):
     np.testing.assert_array_equal(
         again.data()['vcirc'].data(), data['vcirc'].data())
     assert again.distance() == observation.distance()
+    # (one error for all the values must be positive, not a bool)
+    for error, message in ((0, "must be positive"), (True, "is True")):
+        info['data']['vcirc']['error'] = error
+        with pytest.raises(ConfigError, match=message):
+            observation_parser.load(copy.deepcopy(info))
 
 
 def test_profile_beside_a_sky_observation():
@@ -193,9 +198,20 @@ def test_profiles_refuse_what_they_cannot_measure():
     with pytest.raises(ConfigError, match="physical lengths"):
         ObservationGroup(
             galaxy, ObservationProfile(['rotation_gas'], radii)).plan()
-    with pytest.raises(ConfigError, match="give them in km / s"):
+    with pytest.raises(ConfigError, match="in a unit of km / s"):
         ObservationProfile(data=DatasetProfile(
-            {'vcirc': Data(np.ones(2), unit='m/s')}, radii))
+            {'vcirc': Data(np.ones(2), unit='kpc')}, radii))
+
+
+def test_profile_data_in_another_unit_are_converted():
+    # (to the unit of the function: m/s to km/s, values and errors)
+    radii = [1.0, 3.0] * u.kpc
+    observation = ObservationProfile(data=DatasetProfile({'vcirc': Data(
+        [1e5, 2e5], error=[5e3, 5e3], unit='m/s')}, radii))
+    vcirc = observation.data()['vcirc']
+    assert vcirc.unit() == u.km / u.s
+    np.testing.assert_allclose(vcirc.data(), [100, 200])
+    np.testing.assert_allclose(vcirc.error(), [5, 5])
 
 
 def test_outputs_of_profiles_are_tables():

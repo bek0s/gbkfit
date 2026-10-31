@@ -375,6 +375,27 @@ class Data:
         """
         return self._spectral_correlation
 
+    def to_unit(self, unit: astropy.units.UnitBase) -> 'Data':
+        """
+        Return a copy in another unit of the same kind (e.g. km/s of m/s):
+        its values and errors converted, its mask, beam and correlations
+        of the noise.
+
+        Raises
+        ------
+        ConfigError
+            If it has no unit, or its unit is not of the kind of the
+            other.
+        """
+        if self._unit is None or not self._unit.is_equivalent(unit):
+            raise ConfigError(
+                f"data in {self._unit} cannot be given in {unit}")
+        factor = self._unit.to(unit)
+        return Data(
+            self._data * factor, self._mask,
+            None if self._error is None else self._error * factor, unit,
+            self._beam, self._spatial_correlation, self._spectral_correlation)
+
     def with_data(self, data: np.ndarray) -> 'Data':
         """
         Return a copy with other values (e.g. those of a bootstrap), of its

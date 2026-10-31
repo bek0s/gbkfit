@@ -500,6 +500,14 @@ class ObservationSky(Observation):
         """Return the observable."""
         return self._observable
 
+    def velocity_frame(self) -> str | None:
+        """
+        Return the frame of rest of the velocities of its spectral axis
+        (see gridutils.SpectralAxis), if it has one that gives it.
+        """
+        spectral = self._observable.spectral()
+        return None if spectral is None else spectral.frame()
+
     def foreground(self) -> Foreground:
         """Return the foreground."""
         return self._foreground

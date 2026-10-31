@@ -94,8 +94,9 @@ class ObservationProfile(Observation):
     ConfigError
         If it has data and functions, radii or a distance (which the data
         give), or neither data nor functions and radii, an item is not a
-        function of radii, or its data are not in its unit, the radii or
-        the distance are invalid (see check_profile_radii), a slope has a
+        function of radii, or its data are not in a unit of the kind of
+        its own (they are converted to it), the radii or the distance are
+        invalid (see check_profile_radii), a slope has a
         radius of 0, it sees more than one galaxy, the inclination is not
         above 0 and at most 90, or it has no name or no rotation
         velocities, or see Observation.
@@ -238,7 +239,7 @@ class ObservationProfile(Observation):
                     "an inclination scales rotation velocities (e.g. vcirc, "
                     "rotation_gas); the profile has none")
         if data is not None:
-            _check_data(data, keys, radii, distance)
+            data = _checked_data(data, keys, radii, distance)
         self._radii = radii
         self._distance = distance
         self._inclination = None if inclination is None \
@@ -308,7 +309,6 @@ class ObservationProfile(Observation):
     def with_data(
             self, data: Dataset, likelihood: Likelihood | None = None
     ) -> Self:
-        _check_data(data, self.keys(), self._radii, self._distance)
         return type(self)(
             inclination=self._inclination, galaxies=self._galaxies, data=data,
             likelihood=likelihood if likelihood is not None
@@ -406,17 +406,24 @@ class ObservationProfile(Observation):
             functions, mapping, self.keys(), arcsec, kpc, inclination, driver)
 
 
-def _check_data(
+def _checked_data(
         dataset: Dataset,
         keys: Sequence[str],
         radii: u.Quantity,
         distance: u.Quantity | None
-) -> None:
+) -> DatasetProfile:
     """
-    Raise ConfigError unless a dataset holds the data of a profile of the
-    given functions, radii and distance: a table of it (see
-    DatasetProfile), of those functions, at those radii and distance, each
-    in the unit of its function (or none).
+    Return a dataset of the data of a profile of the given functions,
+    radii and distance (a table of it, see DatasetProfile, of those
+    functions, at those radii and distance), each in the unit of its
+    function: converted from another unit of its kind (e.g. m/s), or taken
+    to be in it without a unit.
+
+    Raises
+    ------
+    ConfigError
+        If it is not, or the unit of a data item is not of the kind of
+        that of its function.
     """
     if not isinstance(dataset, DatasetProfile):
         raise ConfigError(
@@ -435,13 +442,22 @@ def _check_data(
         raise ConfigError(
             "the data are not at the radii of the profile, or of their "
             "distance")
+    items = {}
     for key in keys:
-        unit = dataset[key].unit()
+        item = dataset[key]
+        unit = item.unit()
         expected = GalaxyFunctions.radial_units(key)[0]
-        if unit is not None and unit != expected:
+        if unit is not None and not unit.is_equivalent(expected):
             raise ConfigError(
-                f"the data of {key} are in {unit}; give them in {expected}, "
-                f"the unit of the function")
+                f"the data of {key} are in {unit}; give them in a unit of "
+                f"{expected}, the unit of the function")
+        items[key] = item if unit is None or unit == expected \
+            else item.to_unit(expected)
+    if all(items[key] is dataset[key] for key in keys):
+        return dataset
+    return DatasetProfile(
+        items, dataset.radii(),
+        None if distance is None else distance.to_value(u.Mpc))
 
 
 class _ProfilePlan(ObservablePlan):

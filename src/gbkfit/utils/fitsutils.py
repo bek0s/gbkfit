@@ -21,8 +21,9 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 
+from gbkfit.utils import parseutils
 from gbkfit.utils.gridutils import (
-    Coords, make_convention, make_medium, make_rest)
+    FRAMES, Coords, make_convention, make_medium, make_rest)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -64,12 +65,16 @@ VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
 
 # The conventions of the velocities of each type of spectral axis, and
 # the types of the conventions (as written; log velocities are written as
-# WAVE-LOG, or without a rest wavelength as a linear axis of the type
-# VLOG, which FITS does not define)
+# logarithmic wavelengths, or without a rest wavelength as a linear axis
+# of the type VLOG, which FITS does not define)
 _CONVENTIONS_OF_TYPES = dict(
     VRAD='radio', VOPT='optical', VELO='relativistic', VLOG='log')
 _TYPES_OF_CONVENTIONS = {
     convention: type_ for type_, convention in _CONVENTIONS_OF_TYPES.items()}
+
+# The types of spectral axes of logarithmic wavelengths (FITS WCS Paper
+# III), by the medium of the wavelengths
+_LOG_TYPES = dict(vacuum='WAVE-LOG', air='AWAV-LOG')
 
 _KM_S = astropy.units.km / astropy.units.s
 
@@ -462,8 +467,8 @@ def model_header(
     spectral axis (see model_axis_flips). Axes of length 1 are dropped,
     and world axes beyond those of the array (e.g. the spectral axis of a
     moment map written with the header of its cube) are taken as axes of
-    length 1. A missing reference pixel is at the centre of its axis (see
-    centre_missing_crpix).
+    length 1. A missing reference pixel of an axis without a world
+    position is at the centre of its axis (see centre_missing_crpix).
 
     A rest turns the spectral axis into velocities of it first (before
     the orientation, which then reverses velocities that decrease),
@@ -611,8 +616,10 @@ def coords_from_header(
             f"{spectral_axis + 1}; it is the axis {spec + 1}")
     coords = coords_from_wcs(source, wcs, rpix, rval, rest, medium)
     if medium is None and coords.medium is not None:
+        # (of an axis of logarithmic wavelengths in air, AWAV-LOG, air)
         coords = coords._replace(
-            medium=_header_medium(source, header) or coords.medium)
+            medium='air' if log == 'air'
+            else _header_medium(source, header) or coords.medium)
     if log:
         coords = coords._replace(convention='log')
     return coords
@@ -670,7 +677,8 @@ def _file_wcs(
     """
     Return the world coordinates of the header of an array of the given
     shape (numpy order), in the axes of the file, with a missing reference
-    pixel at the centre (see centre_missing_crpix); and the shape of the
+    pixel of an axis without a world position at its centre (see
+    centre_missing_crpix); and the shape of the
     array with an axis of length 1 for each world axis beyond its axes.
 
     Raises
@@ -704,11 +712,11 @@ def _velocity_axis(
     kind = ctype[:4]
     rest_wavelength = rest.to_value(u.m, u.spectral())
     rest_frequency = rest.to_value(u.Hz, u.spectral())
-    if ctype == 'WAVE-LOG':
+    if ctype in _LOG_TYPES.values():
         # (read as the log velocities of the rest, see coords_from_header)
         wcs.wcs.restwav, wcs.wcs.restfrq = rest_wavelength, 0
         wcs.wcs.set()
-        return wcs, 'vac'
+        return wcs, 'air' if ctype == _LOG_TYPES['air'] else 'vac'
     if ctype[4:].strip('-').strip():
         raise ConfigError(
             f"{source}: the spectral axis ({ctype}) is not linear in its "
@@ -792,14 +800,15 @@ def _log_velocity_axis(
         source: str,
         wcs: astropy.wcs.WCS,
         rest: str | astropy.units.Quantity | None = None
-) -> tuple[astropy.wcs.WCS, bool]:
+) -> tuple[astropy.wcs.WCS, str | None]:
     """
     Return the world coordinates with a spectral axis of logarithmic
-    wavelengths (WAVE-LOG, in vacuum: w = S exp(x / S) of the intermediate
-    coordinate x, S at the reference pixel) as the linear axis of their
-    log velocities c ln(w / rest) (km/s; as VOPT, of the rest), exactly,
-    and whether it was; others unchanged. The rest is that given, or that
-    of the WCS (RESTWAV).
+    wavelengths (WAVE-LOG in vacuum, AWAV-LOG in air: w = S exp(x / S) of
+    the intermediate coordinate x, S at the reference pixel) as the
+    linear axis of their log velocities c ln(w / rest) (km/s; as VOPT, of
+    the rest), exactly, and the medium of its wavelengths if it was one
+    ('vacuum' or 'air'), or else None; others unchanged. The rest is that
+    given, or that of the WCS (RESTWAV).
 
     Raises
     ------
@@ -807,8 +816,10 @@ def _log_velocity_axis(
         If an axis of logarithmic wavelengths has no rest wavelength.
     """
     s = wcs.wcs.spec
-    if s < 0 or wcs.wcs.ctype[s] != 'WAVE-LOG':
-        return wcs, False
+    log_mediums = {type_: medium for medium, type_ in _LOG_TYPES.items()}
+    if s < 0 or wcs.wcs.ctype[s] not in log_mediums:
+        return wcs, None
+    log_medium = log_mediums[wcs.wcs.ctype[s]]
     rest = make_rest(rest)
     if rest is None and wcs.wcs.restwav > 0:
         rest = wcs.wcs.restwav * astropy.units.m
@@ -832,7 +843,7 @@ def _log_velocity_axis(
     wcs.wcs.cunit[s] = 'km/s'
     wcs.wcs.restwav, wcs.wcs.restfrq = rest.to_value(astropy.units.m), 0
     wcs.wcs.set()
-    return wcs, True
+    return wcs, log_medium
 
 
 def coords_from_wcs(
@@ -932,7 +943,22 @@ def coords_from_wcs(
         tuple(float(x) for x in rpix),
         tuple(float(x) for x in rval),
         float(rota),
-        rest, make_medium(medium, rest), _spectral_convention(wcs))
+        rest, make_medium(medium, rest), _spectral_convention(wcs),
+        _frame(source, wcs))
+
+
+def _frame(source: str, wcs: astropy.wcs.WCS) -> str | None:
+    """
+    Return the frame of rest of the velocities of a WCS (SPECSYS, see
+    gridutils.FRAMES), if it gives one of FITS; a warning says when it
+    gives another (see parseutils.warn), which is left out.
+    """
+    frame = wcs.wcs.specsys.strip().upper()
+    if frame and frame not in FRAMES:
+        parseutils.warn(
+            f"{source}: SPECSYS is {frame!r}, not a frame of FITS "
+            f"({', '.join(FRAMES)}); it is left out")
+    return frame if frame in FRAMES else None
 
 
 def model_axis_order(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
@@ -984,7 +1010,7 @@ def model_axis_flips(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
         flips.append(lng)
     is_velocity = spec >= 0 and (
         wcs.wcs.ctype[spec][:4] in VELOCITY_TYPES
-        or wcs.wcs.ctype[spec] == 'WAVE-LOG')
+        or wcs.wcs.ctype[spec] in _LOG_TYPES.values())
     if is_velocity and linear[spec, spec] < 0:
         flips.append(spec)
     return tuple(flips)
@@ -1139,9 +1165,10 @@ def centre_missing_crpix(
 ) -> astropy.io.fits.Header:
     """
     Return a header with the reference pixel of each axis that has none
-    at its centre.
-
-    This is the convention of the model; FITS would put it at 0.
+    and no world position (neither CTYPEn nor CRVALn; e.g. only the size
+    of its pixels) at its centre: the convention of the model for data
+    without world coordinates. An axis with a world position keeps the
+    reference pixel of FITS, 0, as other tools read it.
 
     Parameters
     ----------
@@ -1157,7 +1184,8 @@ def centre_missing_crpix(
     """
     header = header.copy()
     for n, size in enumerate(shape[::-1], start=1):
-        if f'CRPIX{n}' not in header:
+        placed = f'CTYPE{n}' in header or f'CRVAL{n}' in header
+        if f'CRPIX{n}' not in header and not placed:
             header[f'CRPIX{n}'] = size / 2 + 0.5
     return header
 
@@ -1425,6 +1453,8 @@ def write_data(
         raise ValueError(
             f"unsupported data: {data.ndim} axes, of which the spectral "
             f"axis is {spectral_axis}")
+    if coords.frame is not None:
+        header['SPECSYS'] = coords.frame
     if unit is not None:
         header['BUNIT'] = unit
     header.update(cards or {})
@@ -1463,6 +1493,8 @@ def write_spectra(
         Further header cards, by keyword (e.g. provenance).
     """
     header = astropy.io.fits.Header(_velocity_header(coords, 2, 0))
+    if coords.frame is not None:
+        header['SPECSYS'] = coords.frame
     if unit is not None:
         header['BUNIT'] = unit
     header.update(cards or {})
@@ -1515,8 +1547,9 @@ def _velocity_header(coords, n, index=None):
     world coordinates are those of axis index of coords (by default
     n - 1): velocities of the type of their convention (VOPT, VRAD or
     VELO; that of the rest by default), with the rest, if any, and the
-    logarithmic wavelengths (WAVE-LOG) of log velocities of a rest
-    wavelength (without one, VLOG, see _CONVENTIONS_OF_TYPES).
+    logarithmic wavelengths (WAVE-LOG, or AWAV-LOG in air) of log
+    velocities of a rest wavelength (without one, VLOG, see
+    _CONVENTIONS_OF_TYPES).
     """
     index = n - 1 if index is None else index
     rest = coords.rest
@@ -1524,7 +1557,7 @@ def _velocity_header(coords, n, index=None):
     if convention == 'log' and rest is not None:
         crval = rest.value * np.exp(coords.rval[index] / _C)
         return {
-            f'CTYPE{n}': 'WAVE-LOG', f'CUNIT{n}': 'm',
+            f'CTYPE{n}': _LOG_TYPES[coords.medium], f'CUNIT{n}': 'm',
             f'CDELT{n}': coords.step[index] * crval / _C,
             f'CRPIX{n}': coords.rpix[index] + 1, f'CRVAL{n}': crval,
             'RESTWAV': rest.value, 'AIRORVAC': _HEADER_MEDIUMS[coords.medium]}

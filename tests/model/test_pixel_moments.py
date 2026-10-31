@@ -143,6 +143,26 @@ def test_spectral_axis_from_the_data(dispersion, size):
         type='pixel_moments', spectral=dict(step=2, convention='relativistic'))
 
 
+def test_spectral_axis_leaves_out_bad_moments(caplog):
+    # A value of moment1 far beyond the others, or of moment2, does not
+    # make the axis long (here 1 km/s channels): as without them, and a
+    # warning
+    from gbkfit.dataset import Data
+    from gbkfit.dataset import DatasetPixelMoments
+    from gbkfit.observation import observable_parser
+    velocity = np.linspace(1400, 1600, 32 * 32).reshape(32, 32)
+    dispersion = np.full((32, 32), 50.0)
+    velocity[5, 5], dispersion[0, 1] = 90000, 3000
+    dataset = DatasetPixelMoments(
+        {0: Data(np.ones((32, 32))), 1: Data(velocity), 2: Data(dispersion)})
+    observable = observable_parser.load(dict(
+        type='pixel_moments', spectral=dict(convention='relativistic')),
+        dataset=dataset)
+    spectral = observable.spectral()
+    assert (spectral.rval(), spectral.size()) == (1500, 801)
+    assert "1 values of moment1 are beyond" in caplog.text
+
+
 @pytest.mark.parametrize('given, size, rval', [
     # The centre of the data's range (1100 to 1900) with a given size
     (dict(size=401), 401, 1500),

@@ -158,8 +158,10 @@ def test_velocity_axes_are_in_km_s(cunit, cdelt, step):
 
 
 def test_axes_without_a_type_are_as_given():
+    # (the world position of the second axis at the reference pixel of
+    # FITS, 0, 1-based)
     coords = write(dict(CDELT1=2.0, CDELT2=3.0, CRPIX1=4.0, CRVAL2=7.0))
-    assert coords == gridutils.Coords((2.0, 3.0), (3.0, 9.5), (0.0, 7.0), 0.0)
+    assert coords == gridutils.Coords((2.0, 3.0), (3.0, -1.0), (0.0, 7.0), 0.0)
 
 
 def test_rpix_or_rval_can_be_given():
@@ -298,6 +300,25 @@ def test_grid_zero_and_spatial_axes():
     assert spatial.size == (8, 10) and spatial.spectral_axis is None
     assert spatial.coords == gridutils.Coords(
         (2.0, 3.0), (4.0, 5.0), (150.0, 2.0), 30.0)
+
+
+def test_a_missing_reference_pixel():
+    # Of an axis without a world position (e.g. only the size of its
+    # pixels), the centre (the convention of the model); of one with one,
+    # 0 (that of FITS, as other tools read it)
+    header = fitsutils.centre_missing_crpix(
+        fits.Header(dict(CTYPE1='RA---TAN', CRVAL1=150.0, CDELT2=1.0)),
+        (20, 24))
+    assert 'CRPIX1' not in header
+    assert header['CRPIX2'] == 10.5
+
+
+def test_the_frame_of_rest_of_the_velocities():
+    # (SPECSYS, read and written back)
+    coords = write(_spectral_header('VRAD', SPECSYS='LSRK'), shape=(6, 20, 24))
+    assert coords.frame == 'LSRK'
+    fitsutils.write_data('out.fits', np.zeros((6, 20, 24)), coords, 2)
+    assert fits.getheader('out.fits')['SPECSYS'] == 'LSRK'
 
 
 def _spectral_header(ctype, **rest):

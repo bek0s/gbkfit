@@ -102,6 +102,26 @@ def test_a_galaxy_needs_an_observation_without_offsets():
         ObservationGroup([galaxy_parser.load(GALAXY)], observations)
 
 
+def test_observations_in_two_frames_of_rest_are_warned_of(caplog):
+    # (their velocities differ by up to some 30 km/s: all but one need an
+    # offset of velocity)
+    def observations(offsets):
+        return [
+            ObservationSky(
+                PixelMoments(
+                    size=(8, 8), spectral=SpectralAxis(
+                        size=11, convention='relativistic', frame=frame),
+                    orders=(0,)),
+                Flat(), name=name, offsets=offsets if name == 'b' else None)
+            for name, frame in (('a', 'LSRK'), ('b', 'BARYCENT'))]
+    ObservationGroup([galaxy_parser.load(GALAXY)], observations(None))
+    assert "different frames of rest" in caplog.text
+    caplog.clear()
+    ObservationGroup(
+        [galaxy_parser.load(GALAXY)], observations(dict(velocity=True)))
+    assert "different frames of rest" not in caplog.text
+
+
 def test_observations_are_aligned_by_their_coordinates(driver):
     # A cube whose reference pixel is 2 arcsec west of that of the first
     # sees the galaxy 2 arcsec further east of it: at x - 2 in its frame

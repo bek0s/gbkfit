@@ -56,21 +56,37 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Raises
     ------
     ConfigError
-        If the text is not a unit.
+        If the text is not a unit, or is one of electric current, which no
+        data are in (e.g. 'erg/s/cm2/A': A is the ampere, the angstrom is
+        Angstrom).
     """
     for candidate in (text, _uncapitalised(text)):
         try:
-            return _product(candidate)
+            return _not_electric(text, _product(candidate))
         except ValueError:
             pass
     for candidate in (text, _uncapitalised(text)):
         try:
-            return astropy.units.Unit(candidate)
+            return _not_electric(text, astropy.units.Unit(candidate))
         except ValueError:
             pass
     raise ConfigError(
         f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
         f"'1e-17 erg/s/cm2/arcsec2')")
+
+
+def _not_electric(
+        text: str, unit: astropy.units.UnitBase
+) -> astropy.units.UnitBase:
+    """
+    Return the unit of a text, or raise ConfigError if it is one of
+    electric current (see parse_unit).
+    """
+    if astropy.units.A in unit.decompose().bases:
+        raise ConfigError(
+            f"{text!r} is a unit of electric current (A is the ampere): "
+            f"write the angstrom as Angstrom (e.g. 'erg/s/cm2/Angstrom')")
+    return unit
 
 
 def format_unit(unit: astropy.units.UnitBase) -> str:

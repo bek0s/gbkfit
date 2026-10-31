@@ -231,6 +231,7 @@ class ObservationGroup:
             for seen, observation, alignment in zip(
                 seen, self._observations, _alignments(self._observations)))
         _check_offsets(self._galaxies, self._observations, seen)
+        _warn_frames(self._galaxies, self._observations, seen)
         _warn_unused_masses(self._galaxies, self._observations, seen)
         # (every rule about what each sees, here, without devices: the
         # plans fail only for resources)
@@ -678,6 +679,32 @@ def _check_offsets(
                     f"every observation of galaxy {galaxy.name() or g} has "
                     f"offsets of {kind}; one needs none, whose frame places "
                     f"the galaxy")
+
+
+def _warn_frames(
+        galaxies: Sequence[Galaxy],
+        observations: Sequence[Observation],
+        seen: Sequence[Sequence[int]]
+) -> None:
+    """
+    Warn (see parseutils.warn) if the observations that see a galaxy
+    without offsets of velocity have velocities in different frames of
+    rest (see Observation.velocity_frame): their systemic velocities
+    differ (by up to some 30 km/s).
+    """
+    for g, galaxy in enumerate(galaxies):
+        frames = {
+            i: obs.velocity_frame()
+            for i, (obs, indices) in enumerate(zip(observations, seen))
+            if g in indices and obs.velocity_frame() is not None
+            and obs.offset_params()[2] is None}
+        if len(set(frames.values())) > 1:
+            parseutils.warn(
+                f"the observations of galaxy {galaxy.name() or g} have "
+                f"velocities in different frames of rest (by observation: "
+                f"{frames}), whose systemic velocities differ by up to some "
+                f"30 km/s: give all but one offsets of velocity (offsets: "
+                f"{{velocity: true}}), or data in one frame")
 
 
 def _depth_order(

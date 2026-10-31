@@ -810,6 +810,7 @@ class GroupPlan:
                 raise ConfigError(
                     f"the errors of measured data are the scatter of "
                     f"nsamples draws, at least 2; nsamples is {nsamples}")
+            options = _mock_options(observation, noise, exact)
             draws, errors = plan.mock(
                 group.moved(index, params),
                 [states[g] for g in group.seen_galaxies(index)],
@@ -817,7 +818,6 @@ class GroupPlan:
                 nmocks + (0 if exact else nsamples))
         if errors is None:
             errors = _scatter(draws[nmocks:])
-        options = _mock_options(observation, noise, exact)
         return [
             observation.dataset({
                 key: Data(item['d'], error=errors[key], **options[key])
@@ -899,12 +899,26 @@ def _mock_options(
     observation (see GroupPlan.mock): the unit and the beam of its
     data, if any, and the correlation of the noise of those that are what
     the instrument records plus the noise (exact errors).
+
+    Raises
+    ------
+    ConfigError
+        If the spatial correlation of their noise varies along the
+        spectral axis (e.g. the PSF of the instrument), which their errors
+        cannot take (see Data).
     """
     spatial, spectral = noise.correlations() if exact else (None, None)
     if spatial == 'instrument':
         # (only observations on the sky draw noise correlated by their
         # instrument; see Noise.draw)
         spatial = observation.instrument().psf()
+    if spatial is not None and spatial.varies():
+        raise ConfigError(
+            "the noise of the mock data is correlated on the sky by a PSF "
+            "that varies along the spectral axis (e.g. that of the "
+            "instrument), but the errors of data take one correlation for "
+            "all the channels: give the noise a correlation that does not "
+            "vary")
     data = observation.data()
     return {
         key: dict(
