@@ -28,6 +28,7 @@ import scipy.spatial
 
 from gbkfit.utils import fitsutils, gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import FitsFile
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra
@@ -233,17 +234,25 @@ def _spectral_to_velocity(
     return header
 
 
-def _first_hdu(filename: str) -> tuple[np.ndarray, fits.Header]:
+def _read_hdu(file: FitsFile) -> tuple[np.ndarray, fits.Header]:
     """
-    Return the data and the header of the first HDU of a file with data
-    (e.g. the extension after an empty primary HDU, as in MUSE and JWST
-    cubes). Integer data become floats, which can hold the NaN of invalid
-    pixels.
+    Return the data and the header of an HDU of a FITS file: the one
+    given, or else the first with data (e.g. the extension after an empty
+    primary HDU, as in MUSE and JWST cubes). Integer data become floats,
+    which can hold the NaN of invalid pixels.
     """
+    filename, index = (file, None) if isinstance(file, str) else file
     with fits.open(filename) as hdus:
-        hdu = next((hdu for hdu in hdus if hdu.data is not None), None)
-        if hdu is None:
-            raise ConfigError(f"{filename}: the file has no data")
+        if index is None:
+            hdu = next((h for h in hdus if h.data is not None), None)
+        else:
+            try:
+                hdu = hdus[index]
+            except (IndexError, KeyError) as e:
+                raise ConfigError(f"{filename}: it has no HDU {index!r}") \
+                    from e
+        if hdu is None or hdu.data is None:
+            raise ConfigError(f"{filename}: no data to read")
         data = np.array(hdu.data)
         header = hdu.header.copy()
     if not np.issubdtype(data.dtype, np.floating):
@@ -251,26 +260,27 @@ def _first_hdu(filename: str) -> tuple[np.ndarray, fits.Header]:
     return data, header
 
 
-def _read_array(filename: str) -> np.ndarray:
+def _read_array(file: FitsFile) -> np.ndarray:
     """
     Return the data of a file without the axes of length 1 (see
     _read_fits), without its header: those of errors and masks, which
     follow the axes of the data.
     """
-    return np.squeeze(_first_hdu(filename)[0])
+    return np.squeeze(_read_hdu(file)[0])
 
 
 def _read_fits(
-        filename: str, velocity: str | None = None
+        file: FitsFile, velocity: str | None = None
 ) -> tuple[np.ndarray, fits.Header]:
     """
     Return the data and the header of a file, without the axes of length
-    1 (see _first_hdu), with the convention of the velocities of its
+    1 (see _read_hdu), with the convention of the velocities of its
     spectral axis, if its header does not state it (velocity, see
     fitsutils.with_velocity_convention).
     """
-    data, header = _first_hdu(filename)
-    header = fitsutils.with_velocity_convention(header, velocity, filename)
+    data, header = _read_hdu(file)
+    header = fitsutils.with_velocity_convention(
+        header, velocity, file if isinstance(file, str) else file[0])
     # Astropy writes the FITS default for a missing reference pixel, so
     # write the one of the model (see fitsutils.read_data)
     if _has_wcs(header):
@@ -314,26 +324,28 @@ class FitsArrays:
     @classmethod
     def read(
             cls,
-            data: str,
-            error: str | None = None,
-            mask: str | None = None,
+            data: FitsFile,
+            error: FitsFile | None = None,
+            mask: FitsFile | None = None,
             velocity: str | None = None
     ) -> 'FitsArrays':
         """
-        Read the data, errors and mask from FITS files (their first HDU
-        with data), without their axes of length 1, in the axis order of
-        the model. Values that are not finite, errors that are not finite
-        or are 0 (e.g. blank pixels of an error map), and pixels the mask
-        file marks with 0 are invalid; negative errors are an error. A
+        Read the data, errors and mask from FITS files (an HDU given, or
+        else the first with data), without their axes of length 1, in the
+        orientation of the model (see oriented), as the model reads them:
+        ranges of pixels (see crop) are those of the data it sees. Values
+        that are not finite, errors that are not finite or are 0 (e.g.
+        blank pixels of an error map), and pixels the mask file marks
+        with 0 are invalid; negative errors are an error. A
         spectral axis of velocities of the AIPS convention without VELREF
         (e.g. VELO-HEL) needs the convention of its velocities (see
         fitsutils.with_velocity_convention).
 
         Parameters
         ----------
-        data : str
+        data : FitsFile
             The file of the data (with the world coordinates).
-        error, mask : str, optional
+        error, mask : FitsFile, optional
             The files of the errors and the mask, of the shape of the data.
         velocity : str, optional
             The convention of the velocities of the spectral axis, 'radio'
@@ -347,9 +359,9 @@ class FitsArrays:
         Raises
         ------
         ConfigError
-            If a file has no data, the shapes differ, an error is
-            negative, or the convention of the velocities is ambiguous and
-            not given, or given and stated by the header.
+            If a file has no data (or no HDU given), the shapes differ,
+            an error is negative, or the convention of the velocities is
+            ambiguous and not given, or given and stated by the header.
         """
         data_d, header = _read_fits(data, velocity)
         data_e = _read_array(error) if error else None
@@ -385,7 +397,7 @@ class FitsArrays:
         return cls(
             np.ascontiguousarray(data_d),
             None if data_e is None else np.ascontiguousarray(data_e),
-            np.ones(data_d.shape), header).masked(valid)
+            np.ones(data_d.shape), header).masked(valid).oriented()
 
     def masked(self, mask: npt.ArrayLike) -> 'FitsArrays':
         """
@@ -458,9 +470,9 @@ class FitsArrays:
     ) -> None:
         """
         Write the data, errors and mask (if given filenames) as FITS
-        files, with the header of the data. The axes that the model needs
-        reversed (see fitsutils.model_axis_flips: that of a mirrored
-        image, and a spectral axis of decreasing velocities) are reversed.
+        files, with the header of the data, in the orientation of the
+        model (see oriented; e.g. a spectral axis converted to radio
+        velocities, which decrease along it, is reversed).
 
         Parameters
         ----------
@@ -470,6 +482,25 @@ class FitsArrays:
             The files of the errors and the mask.
         dtype : DTypeLike, optional
             The type of the values.
+        """
+        arrays = self.oriented()
+        # (each file is of one array, which an HDU name of the input, e.g.
+        # SCI, would misname)
+        header = arrays.header.copy()
+        header.remove('EXTNAME', ignore_missing=True)
+        for filename, array in zip(
+                (data, error, mask),
+                (arrays.data, arrays.error, arrays.mask)):
+            if filename is not None and array is not None:
+                fits.writeto(
+                    filename, array.astype(dtype), header, overwrite=True)
+
+    def oriented(self) -> 'FitsArrays':
+        """
+        Return the arrays in the orientation of the model: with the axes
+        that it needs reversed reversed (see fitsutils.model_axis_flips:
+        that of a mirrored image, and a spectral axis of velocities that
+        decrease along it), and their world coordinates.
         """
         arrays = [self.data, self.error, self.mask]
         header = self.header
@@ -485,10 +516,7 @@ class FitsArrays:
             arrays = [
                 None if a is None else fitsutils.flip_data(a, axis)
                 for a in arrays]
-        for filename, array in zip((data, error, mask), arrays):
-            if filename is not None and array is not None:
-                fits.writeto(
-                    filename, array.astype(dtype), header, overwrite=True)
+        return FitsArrays(*arrays, header)
 
 
 def range_mask(

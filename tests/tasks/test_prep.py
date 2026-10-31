@@ -286,6 +286,15 @@ def test_crops_keep_the_pixels_of_the_ranges():
     np.testing.assert_array_equal(prepared, data[0, 2:10, 3:17, 4:20])
 
 
+def test_crops_are_of_the_pixels_that_the_model_sees():
+    # (the channels of decreasing velocities are reversed first, as the
+    # model reads them)
+    data = np.arange(np.prod(SHAPE), dtype=np.float32).reshape(SHAPE)
+    fits.writeto('cube.fits', data, fits.Header(dict(HEADER, CDELT3=-10.0)))
+    prepared, _ = prep_pixel_spectra('cube.fits', roi_spec=[2, 10])
+    np.testing.assert_array_equal(prepared, data[0, ::-1][2:10])
+
+
 @pytest.mark.parametrize('cd', [False, True], ids=['pc', 'cd'])
 def test_wavelength_axis_to_optical_velocities(cd):
     # Each channel of a linear wavelength axis gets the optical velocity
@@ -373,6 +382,23 @@ def test_data_in_an_extension_keep_their_world_coordinates():
     prep_pixel_spectra('cube.fits', roi_spat=[2, 22, 2, 18])
     _, coords = fitsutils.read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.step, (1, 1, 10))
+
+def test_data_and_errors_can_be_hdus_of_one_file():
+    # (as in MUSE cubes: the data and their variances, in extensions)
+    header = {k: v for k, v in HEADER.items() if not k.endswith('4')}
+    data = np.ones(SHAPE[1:], np.float32)
+    fits.HDUList([
+        fits.PrimaryHDU(),
+        fits.ImageHDU(data, fits.Header(header), name='DATA'),
+        fits.ImageHDU(2 * data, name='STAT')]).writeto('cube.fits')
+    files = ('cube.fits', 'DATA'), ('cube.fits', 'STAT'), None
+    prep.prep_pixel_spectra(*files, *[None] * 9, False, None, 'float32')
+    data_out, error_out, _ = prep.output_files('.', *files)
+    assert (data_out, error_out) == (
+        './prep_cube_DATA.fits', './prep_cube_STAT.fits')
+    np.testing.assert_array_equal(fits.getdata(data_out), 1)
+    np.testing.assert_array_equal(fits.getdata(error_out), 2)
+
 
 def test_velocity_axis_gets_the_rest():
     write_cube('cube.fits')

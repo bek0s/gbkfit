@@ -4,7 +4,8 @@ gbkfit.prep), and write the tables of the PSFs and LSFs of instruments.
 Each prepared file is written as prep_<name of the input>, in the output
 directory (output_dir; if it exists: an error with output_dir_mode
 'terminate', written into with 'overwrite', the default, or a new one
-with a numeric suffix with 'unique', e.g. output_2).
+with a numeric suffix with 'unique', e.g. output_2). The input of a FITS
+file and an HDU is named with its HDU (e.g. prep_cube_STAT.fits).
 """
 
 import logging
@@ -22,10 +23,12 @@ from gbkfit import prep
 from gbkfit.prep import FitsArrays
 from gbkfit.utils import fitsutils, tableutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import FitsFile
 from . import _detail
 
 
 __all__ = [
+    'output_files',
     'prep_gauss_hermite_moments',
     'prep_lsf_muse',
     'prep_pixel_brightness',
@@ -58,12 +61,53 @@ def _output_dir(output_dir: str, mode: _Exists) -> str:
     return output_dir
 
 
-def _output(output_dir: str, filename: str | None) -> str | None:
-    """Return the name of the prepared file of an input file, if any."""
-    if filename is None:
+def _output(
+        output_dir: str, file: FitsFile | None, suffix: str = ''
+) -> str | None:
+    """
+    Return the name of the prepared file of an input file (with its HDU,
+    if given, and a suffix), if any.
+    """
+    if file is None:
         return None
+    filename, hdu = (file, None) if isinstance(file, str) else file
     name = os.path.splitext(os.path.basename(filename))[0]
-    return os.path.join(output_dir, f'prep_{name}.fits')
+    if hdu is not None:
+        name += f'_{hdu}'
+    return os.path.join(output_dir, f'prep_{name}{suffix}.fits')
+
+
+def output_files(
+        output_dir: str,
+        file_d: FitsFile,
+        file_e: FitsFile | None,
+        file_m: FitsFile | None,
+        noise_error: bool = False
+) -> tuple[str, str | None, str | None]:
+    """
+    Return the prepared files of the data, errors and mask (None for
+    those not given) that prep_pixel_brightness, prep_slit_spectra,
+    prep_pixel_spectra and prep_pixel_moments (of each map) write in an
+    output directory; with noise_error (prep_pixel_spectra), the errors
+    are prep_<name of the data>_noise.
+
+    Parameters
+    ----------
+    output_dir : str
+        The output directory.
+    file_d, file_e, file_m : FitsFile
+        The files of the data, errors and mask.
+    noise_error : bool, optional
+        Whether the errors are estimated from the noise of the data.
+
+    Returns
+    -------
+    tuple of str and (str or None)
+        The prepared files of the data, errors and mask.
+    """
+    error = _output(output_dir, file_d, '_noise') if noise_error \
+        else _output(output_dir, file_e)
+    return _output(output_dir, file_d), error, _output(output_dir, file_m)
 
 
 def _clip(
@@ -96,14 +140,13 @@ def _write(
         minify: bool,
         nanpad: int | None,
         velocity_rest: str | None,
-        files: tuple[str, str | None, str | None],
-        dtype: npt.DTypeLike,
-        output_dir: str
+        outputs: tuple[str, str | None, str | None],
+        dtype: npt.DTypeLike
 ) -> None:
     """
     Crop the arrays to their valid pixels (minify), pad them (nanpad),
-    convert their spectral axis (velocity_rest), and write the prepared
-    files of the data, errors and mask files.
+    convert their spectral axis (velocity_rest), and write them in the
+    prepared files of the data, errors and mask (see output_files).
     """
     if minify:
         arrays = arrays.minified()
@@ -111,13 +154,13 @@ def _write(
         arrays = arrays.padded(nanpad)
     if velocity_rest is not None:
         arrays = arrays.with_velocity_axis(velocity_rest)
-    arrays.write(*(_output(output_dir, f) for f in files), dtype=dtype)
+    arrays.write(*outputs, dtype=dtype)
 
 
 def prep_pixel_brightness(
-        file_d: str,
-        file_e: str | None,
-        file_m: str | None,
+        file_d: FitsFile,
+        file_e: FitsFile | None,
+        file_m: FitsFile | None,
         roi_spat: _Range | None,
         clip_min: float | None,
         clip_max: float | None,
@@ -145,14 +188,14 @@ def prep_pixel_brightness(
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
-    _write(arrays, minify, nanpad, None, (file_d, file_e, file_m), dtype,
-           output_dir)
+    _write(arrays, minify, nanpad, None,
+           output_files(output_dir, file_d, file_e, file_m), dtype)
 
 
 def prep_slit_spectra(
-        file_d: str,
-        file_e: str | None,
-        file_m: str | None,
+        file_d: FitsFile,
+        file_e: FitsFile | None,
+        file_m: FitsFile | None,
         roi_spat: _Range | None,
         roi_spec: _Range | None,
         clip_min: float | None,
@@ -188,14 +231,14 @@ def prep_slit_spectra(
     arrays = _clip(
         arrays.crop((rows, columns)), clip_min, clip_max, sclip_sigma,
         sclip_iters, ccl_lcount, ccl_pcount, ccl_lratio)
-    _write(arrays, minify, nanpad, velocity_rest, (file_d, file_e, file_m),
-           dtype, output_dir)
+    _write(arrays, minify, nanpad, velocity_rest,
+           output_files(output_dir, file_d, file_e, file_m), dtype)
 
 
 def prep_pixel_spectra(
-        file_d: str,
-        file_e: str | None,
-        file_m: str | None,
+        file_d: FitsFile,
+        file_e: FitsFile | None,
+        file_m: FitsFile | None,
         roi_spat: _Range | None,
         roi_spec: _Range | None,
         clip_min: float | None,
@@ -221,8 +264,8 @@ def prep_pixel_spectra(
     to velocities (velocity_rest). velocity is the convention of the
     velocities of an axis that does not state it (see FitsArrays.read).
     With noise_error, the errors are the noise of each channel of the
-    cropped cube, from its negative values (see prep.noise_errors),
-    written as prep_<name of the cube>_noise.fits.
+    cropped cube, from its negative values (see prep.noise_errors; see
+    output_files for the names of the prepared files).
 
     Raises
     ------
@@ -246,12 +289,12 @@ def prep_pixel_spectra(
         arrays = FitsArrays(
             arrays.data, prep.noise_errors(arrays.data, arrays.mask),
             arrays.mask, arrays.header)
-        file_e = os.path.splitext(file_d)[0] + '_noise.fits'
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
-    _write(arrays, minify, nanpad, velocity_rest, (file_d, file_e, file_m),
-           dtype, output_dir)
+    _write(arrays, minify, nanpad, velocity_rest,
+           output_files(output_dir, file_d, file_e, file_m, noise_error),
+           dtype)
 
 
 def prep_pixel_moments(
@@ -310,8 +353,9 @@ def prep_pixel_moments(
         arrays = arrays.masked(mask)
         if box is not None:
             arrays = arrays.crop(box)
-        _write(arrays, False, nanpad, None, (file_d[i], file_e[i], file_m[i]),
-               dtype, output_dir)
+        _write(arrays, False, nanpad, None,
+               output_files(output_dir, file_d[i], file_e[i], file_m[i]),
+               dtype)
 
 
 def _read_bins(filename: str) -> tuple[FitsArrays, np.ndarray, int]:
