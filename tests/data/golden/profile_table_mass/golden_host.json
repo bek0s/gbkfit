@@ -20,7 +20,7 @@
   "noise_chi2": 0.0,
   "nresiduals": 8,
   "nindependent": 8.0,
-  "nnuisance": 0,
+  "nnuisance": 0.0,
   "residuals": [
    {
     "size": 8,

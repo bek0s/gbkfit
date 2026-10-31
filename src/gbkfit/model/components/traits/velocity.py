@@ -16,8 +16,8 @@ from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
 from .options import (
-    Direction, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Spiral,
-    VPT_DIRECTIONS)
+    Direction, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, SAMPLING_TAIL,
+    Sampling, Spiral, VPT_DIRECTIONS)
 
 
 __all__ = [
@@ -63,6 +63,7 @@ VPT_UID_NW_UNIFORM = 101
 VPT_UID_NW_HARMONIC = 102
 VPT_UID_NW_BAR = 103
 VPT_UID_SPIRAL = 104
+VPT_UID_TABLE = 105
 
 
 def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
@@ -966,7 +967,9 @@ class VPTraitSpiral(VPTraitPlanar):
 class VPTraitMass(VPTrait):
     """
     The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
-    the circular velocity at the rings it is evaluated on, which its
+    the circular velocity at the rings it is evaluated on, and beyond its
+    last ring, at the radii of its tail (see SAMPLING_TAIL; linear between
+    them, and beyond the last, its value there), which its
     galaxy computes from the parameters of its distance and its mass at
     each evaluation, and with pressure support, the
     rotation of the gas of its disk in that gravity; 0 where its square is
@@ -1036,7 +1039,7 @@ class VPTraitMass(VPTrait):
 
     @staticmethod
     def uid() -> int:
-        return VPT_UID_NW_UNIFORM
+        return VPT_UID_TABLE
 
     def dump(self) -> dict[str, Any]:
         info = {}
@@ -1081,7 +1084,7 @@ class VPTraitMass(VPTrait):
         return 'tan'
 
     def sampling(self) -> str:
-        return 'subrings'
+        return SAMPLING_TAIL
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(vt=ParamVectorDesc(nnodes, unit='km/s', default=200))

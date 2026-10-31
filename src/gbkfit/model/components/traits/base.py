@@ -240,7 +240,9 @@ class RPTrait(PTrait, abc.ABC):
     """
     A density polar trait: the density per unit area of the surface of
     its component (of a disk, seen face-on): light, or the optical depth
-    of dust. The Monte Carlo disks draw their
+    of dust. Its component does not end at its last node: beyond it, the
+    trait goes on as its tail (see tail_scale), but for those whole as
+    they are (see has_tail). The Monte Carlo disks draw their
     clouds from it (see has_analytical_integral and cloud_flux).
     """
 
@@ -257,14 +259,52 @@ class RPTrait(PTrait, abc.ABC):
     ) -> np.ndarray:
         """
         Return the flux the Monte Carlo disk shares among the clouds of
-        the trait: for the whole disk (one value, with an analytical
-        integral) or for each of its rings (around its subnodes subrnodes
-        but the first and the last, its edges; params has the values of
-        the node-wise parameters at all of them). It is the integral of |B|
-        (B is the trait) over the disk or the ring, of the sign of its
-        amplitude where that is one number; else the kernel gives each
-        cloud the sign of B where it draws it (e.g. a harmonic).
+        the trait: for the whole disk within its last subnode (one value,
+        with an analytical integral) or for each of its rings (around its
+        subnodes subrnodes but the first and the last, its edges; params
+        has the values of the node-wise parameters at all of them), and
+        last, for its tail beyond its last subnode, if it has one (see
+        has_tail). It is the integral of |B| (B is the trait) over each,
+        of the sign of its amplitude where that is one number; else the
+        kernel gives each cloud the sign of B where it draws it (e.g. a
+        harmonic).
         """
+
+    def has_tail(self) -> bool:
+        """
+        Check whether it has a tail beyond the last node of its component
+        (see tail_scale): all do but those whole as they are, as the
+        kernels take them (see the native rp_trait_has_tail; e.g. the
+        mixtures of blobs and the maps). Here, True.
+        """
+        return True
+
+    def tail_scale(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        """
+        Return the scale h (arcsec) of its tail: beyond the last subnode
+        rl of its component, it is its value at rl (of its radial profile;
+        or at the radius, of its node-wise parameters at rl) times exp(-(r
+        - rl) / h). The scale follows the log-slope g = d ln|a| / dr of its
+        amplitude a at rl (see _log_slope): -1 / g where it falls (exact
+        for an exponential profile), at most rl, and rl where it does not
+        (flat or rising, which does not say where it ends), as the kernels
+        take it (see the native rp_trait_tail). params has the values of
+        its node-wise parameters at the subnodes subrnodes.
+        """
+        rl = float(subrnodes[-1])
+        g = self._log_slope(params, subrnodes)
+        return min(-1 / g, rl) if g < 0 else rl
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        """
+        Return the log-slope of its amplitude at the last subnode (see
+        tail_scale); 0 here (flat).
+        """
+        return 0.0
 
     @abc.abstractmethod
     def axisymmetric(self) -> bool:

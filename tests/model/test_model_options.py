@@ -200,8 +200,9 @@ def test_invalid_depths_are_rejected(options, message):
     # As many voxels as cover the extent, centred on 0
     (Depth(extent=21, step=1.5), (14, 1.5, -9.75)),
     (Depth(extent=20, step=1.5), (14, 1.5, -9.75)),
-    # By default, the diameter of the disks (radius 5), in voxels of the
-    # step of the longer of the x and y axes
+    # By default, the diagonal of the x and y axes (of 8 and 6 arcsec: 10),
+    # or the diameter of the bounded components (radius 5: 10), if longer,
+    # in voxels of the step of the longer of the axes
     (Depth(), (20, 0.5, -4.75)),
     # Legacy: those of the longer of the x and y axes
     (Depth(extent='legacy'), (12, 0.5, -2.75)),
@@ -254,22 +255,29 @@ def test_trait_names_are_all_or_none_and_unique(vptraits, dptraits, message):
     assert re.search(message, galaxy_error(info))
 
 
-@pytest.mark.parametrize('rnmin, rnmax, rnsep, nodes', [
+@pytest.mark.parametrize('rnmax, rnsep, nodes', [
     # (0.2 * 11 rounds above 2.2: np.arange to 2.4 added a node)
-    (0, 2.2, 0.2, 12), (0, 9.0, 0.3, 31), (1, 2, 0.25, 5),
+    (2.2, 0.2, 12), (9.0, 0.3, 31), (2, 0.25, 9),
     # Not a multiple: to the first node beyond rnmax
-    (0, 10, 3, 5)])
-def test_radial_nodes_from_a_range(rnmin, rnmax, rnsep, nodes):
+    (10, 3, 5)])
+def test_radial_nodes_from_a_range(rnmax, rnsep, nodes):
     args = parse_component_rnode_args(
-        rnmin, rnmax, rnsep, None, None, None, 'linear')
+        rnmax, rnsep, None, None, None, 'linear')
     assert len(args['rnodes']) == nodes
-    assert args['rnodes'][-1] == pytest.approx(rnmin + (nodes - 1) * rnsep)
+    assert args['rnodes'][0] == 0
+    assert args['rnodes'][-1] == pytest.approx((nodes - 1) * rnsep)
+
+
+def test_radial_nodes_start_at_the_centre():
+    with pytest.raises(parseutils.ConfigError, match="must start at 0"):
+        parse_component_rnode_args(
+            None, None, None, [1, 2, 3], None, 'linear')
 
 
 def test_radial_step_can_be_half_the_node_separation():
     # (half of 0.19999999999999996, the separation as it rounds)
     args = parse_component_rnode_args(
-        None, None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
+        None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
 
 

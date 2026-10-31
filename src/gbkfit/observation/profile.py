@@ -332,13 +332,14 @@ class ObservationProfile(Observation):
     def check(self, seen: SeenGalaxies) -> None:
         """
         Check that the galaxy it sees has its functions, and those of a
-        disk at radii on the disk, in angles (see Observation.check).
+        disk at radii in angles, in their range (see
+        Galaxy.function_radius_range and Observation.check).
 
         Raises
         ------
         ConfigError
             If the galaxy does not have a function, or a function of a
-            disk is at radii of physical lengths, or outside the disk.
+            disk is at radii of physical lengths, or out of its range.
         """
         galaxy, label = seen.galaxies[0], seen.labels[0]
         names = galaxy.function_names()
@@ -357,9 +358,8 @@ class ObservationProfile(Observation):
                     f"radii are physical lengths (they have no distance)")
             if not np.all((bounds[0] <= arcsec) & (arcsec <= bounds[1])):
                 raise ConfigError(
-                    f"the radii of {key} must be on its disk, from "
-                    f"{bounds[0]:g} to {bounds[1]:g} arcsec; they are "
-                    f"{arcsec} arcsec")
+                    f"the radii of {key} must be from {bounds[0]:g} to "
+                    f"{bounds[1]:g} arcsec; they are {arcsec} arcsec")
 
     def _radii_of(self) -> tuple[np.ndarray | None, np.ndarray | None]:
         """

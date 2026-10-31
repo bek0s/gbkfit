@@ -302,6 +302,16 @@ def test_parallel_evaluations_are_migrated_to_workers_of_threads():
     assert config['workers'] == dict(type='threads', drivers=['a'])
 
 
+def test_rings_from_the_centre_lose_rnmin():
+    disk = dict(type='disk', rnmin=0, rnmax=4, rnsep=1)
+    migration.migrate(dict(galaxies=[dict(components=[disk])]), 2)
+    assert disk == dict(type='disk', rnmax=4, rnsep=1)
+    hole = dict(type='disk', rnmin=1, rnmax=4, rnsep=1)
+    changes = migration.migrate(
+        dict(galaxies=[dict(components=[hole])]), 2)
+    assert any(c.message.startswith('by hand') for c in changes)
+
+
 def test_datasets_have_the_types_of_their_observables():
     # (on which the migration of the data of observations relies)
     for type_, cls in observable_parser.registered_classes().items():

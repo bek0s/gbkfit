@@ -657,7 +657,8 @@ def test_disk_traits_are_those_the_disk_kernels_evaluate(driver):
     # The image of a face-on thin disk is, at each pixel, the sum of its
     # density traits at the radius and azimuth of the pixel: the traits
     # evaluated apart are those of the kernels (the rings, the node-wise
-    # values interpolated linearly, the azimuth in degrees)
+    # values interpolated linearly, the tails beyond the last node, the
+    # azimuth in degrees)
     memory = Memory(driver)
     rnodes = np.linspace(0, 20, 11)
     nodes = 1 + np.sin(rnodes / 3)
@@ -689,12 +690,9 @@ def test_disk_traits_are_those_the_disk_kernels_evaluate(driver):
         disk, 'rpt', memory.to_device(r.ravel().astype(DTYPE)),
         memory.to_device(theta.ravel().astype(DTYPE)), out)
     values = memory.to_host(out).reshape(3, 48, 48)
-    # (away from the last node, which float32 radii can put either side)
-    on, off = r < 19.9, r > 20.1
+    # (beyond the last node too, with the tails of the traits)
     np.testing.assert_allclose(
-        values.sum(axis=0)[on], memory.to_host(image)[on],
-        rtol=1e-5, atol=1e-5)
-    assert np.isnan(values[:, off]).all()
+        values.sum(axis=0), memory.to_host(image), rtol=1e-5, atol=1e-5)
 
 
 def thick_disk(driver, memory):

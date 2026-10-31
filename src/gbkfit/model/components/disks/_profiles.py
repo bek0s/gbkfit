@@ -16,7 +16,7 @@ import numpy as np
 
 from gbkfit.params import ParamValues
 from ...mass.units import G
-from .._nodal import subring_radii
+from .._nodal import subring_radii, tail_radii
 from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._disk import NodalDisk, DiskPlan
@@ -865,11 +865,12 @@ class NodalDiskDensity:
     def knots(self, rstep: float | None) -> np.ndarray:
         """
         Return the radii (kpc) of its subnodes, or of the subnodes of rings
-        of width at most rstep (arcsec, see _nodal.subring_radii).
+        of width at most rstep (arcsec, see _nodal.subring_radii), and
+        beyond the last, of its tail (see _nodal.tail_radii).
         """
         radii = self._disk.subrnodes() if rstep is None \
             else subring_radii(self._disk.rnodes(), rstep)
-        return np.array(radii) * self._kpc_per_arcsec
+        return np.array(radii + tail_radii(radii)) * self._kpc_per_arcsec
 
     def thick(self) -> bool:
         """Check whether it has density height traits."""
@@ -903,10 +904,5 @@ class NodalDiskDensity:
         return np.asarray(pdfs, dtype=float) / self._kpc_per_arcsec
 
     def _radii(self, R: np.ndarray) -> np.ndarray:
-        """
-        Return the radii R (kpc, on the disk) in arcsec, on the disk
-        despite their rounding.
-        """
-        rnodes = self._disk.rnodes()
-        return np.clip(
-            np.asarray(R) / self._kpc_per_arcsec, rnodes[0], rnodes[-1])
+        """Return the radii R (kpc, on the disk) in arcsec."""
+        return np.asarray(R) / self._kpc_per_arcsec

@@ -166,7 +166,7 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     # its values
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     component = config['galaxies'][0]['components'][0]
-    for option in ('rnmin', 'rnmax', 'rnsep'):
+    for option in ('rnmax', 'rnsep'):
         component.pop(option, None)
     rnodes = list(range(0, 21, 2))
     component['rnodes'] = rnodes

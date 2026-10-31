@@ -185,7 +185,9 @@ def test_solved_scales_take_the_brightness_of_each_spectrum(driver):
     found = solved(obj, params)
     np.testing.assert_allclose(
         found, best_scales(spectra, spectra * scales, error), rtol=1e-5)
-    lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
+    # (where the data decide the scales: the prior pulls them by less
+    # than 1e-3, 1 / (a SIGMA^2) of a = sum m^2 / e^2)
+    lit = (spectra ** 2).sum(axis=0) / error ** 2 * SIGMA ** 2 > 1e3
     np.testing.assert_allclose(found[lit], scales[lit], rtol=1e-3)
     assert chi2 == pytest.approx(
         np.sum(((found - 1) / SIGMA) ** 2), rel=1e-3)
@@ -328,7 +330,9 @@ def test_the_outputs_have_the_solved_scales(driver):
         outputs['model'].data, spectra * scales, rtol=1e-5,
         atol=1e-6 * spectra.max())
     np.testing.assert_allclose(outputs['flux_scale'], scales, rtol=1e-6)
-    lit = spectra.sum(axis=0) > 1e-3 * spectra.sum(axis=0).max()
+    # (where the data decide the scales: the prior pulls them by less
+    # than 1e-3, 1 / (a SIGMA^2) of a = sum m^2 / e^2)
+    lit = (spectra ** 2).sum(axis=0) / error ** 2 * SIGMA ** 2 > 1e3
     np.testing.assert_allclose(outputs['flux_scale'][lit], 2, rtol=1e-3)
 
 

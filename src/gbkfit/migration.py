@@ -767,6 +767,44 @@ class _Workers(Rule):
         return [Change(['parallel'], "parallel -> workers {type: threads}")]
 
 
+class _RingsFromZero(Rule):
+    """
+    Rings and shells start at the centre (2026-10-31): the option rnmin
+    is gone. That of 0 goes; another is a hole (a sharp inner edge) that
+    the nodes must now give by hand, as 0 density at the inner nodes.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, galaxy in _items(config, 'galaxies'):
+            changes += self._walk(galaxy, path)
+        return changes
+
+    def _walk(self, value: Any, path: list[str | int]) -> list[Change]:
+        """Rewrite rnmin in a value and its items, in place."""
+        changes = []
+        if isinstance(value, MutableMapping):
+            if 'rnmin' in value:
+                if value['rnmin'] == 0:
+                    del value['rnmin']
+                    changes.append(Change(path, "rnmin: 0 removed"))
+                else:
+                    changes.append(Change(path, (
+                        "by hand: the rings start at 0 (rnmin is gone); "
+                        "give rnodes from 0, with 0 density at the nodes "
+                        "inside the old rnmin")))
+            for key, item in value.items():
+                changes += self._walk(item, path + [key])
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                changes += self._walk(item, path + [i])
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _ObservationTypes(),
@@ -785,6 +823,7 @@ RULES: tuple[Rule, ...] = (
     _CoverageFiles(),
     _DataTypes(),
     _Workers(),
+    _RingsFromZero(),
 )
 
 

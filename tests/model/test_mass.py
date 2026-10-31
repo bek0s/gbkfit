@@ -1439,7 +1439,9 @@ def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
         driver, line_of_sight, disk_type):
     # A disk with the trait 'mass' is the disk whose node-wise tangential
     # velocity at its subnodes is the circular velocity of the mass of its
-    # galaxy, at the radii of the subnodes in kpc
+    # galaxy, at the radii of the subnodes in kpc (a disk of no light that
+    # matters beyond its last ring, where the one given at the subnodes
+    # keeps its last value, and the one of the mass goes on)
     thick = line_of_sight == 'grid'
     massive = disk_galaxy(
         disk_type, dict(type='mass'), MASS, DISTANCE, thick=thick)
@@ -1450,7 +1452,7 @@ def test_mass_trait_is_the_circular_velocity_at_the_subnodes(
     vcirc = np.sqrt(mass_model(MASS).vcirc2(
         subrnodes * 10 * 0.0048481368, MASS_PROPERTIES, CONTEXT))
     assert vcirc.max() > 100
-    properties = dict(DISK_PROPERTIES)
+    properties = DISK_PROPERTIES | dict(pt_s=1.2)
     if thick:
         properties |= dict(ht_s=1)
     np.testing.assert_allclose(
@@ -1746,8 +1748,10 @@ def test_disk_follows_a_component_without_light():
             type='nodewise', nodes=(subrnodes * KPC_PER_ARCSEC).tolist()),
         vertical=dict(type='thin'))])
     sigma = upsilon * np.interp(subrnodes[:-1], rnodes, opacity)
+    # (at the subnodes; then at the radii of the tail)
+    rotation = galaxy.plan_stage().evaluate(params).states[0].rotation
     np.testing.assert_allclose(
-        galaxy.plan_stage().evaluate(params).states[0].rotation['vpt_vt'],
+        rotation['vpt_vt'][:len(subrnodes)],
         np.sqrt(nodewise.vcirc2(
             subrnodes * KPC_PER_ARCSEC,
             dict(mass_gas_log_sigma=np.log10(sigma)), CONTEXT)),
@@ -1837,9 +1841,11 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
         DISK, dptraits=dict(type='exponential'),
         vptraits=dict(type='mass', pressure_support='jeans'))
     disk |= dict(type='disk')
-    properties = DISK_PROPERTIES | dict(dpt_a=30, dpt_s=10)
+    # (a disk of no light that matters beyond its last ring, where the one
+    # given at the subnodes keeps its last value)
+    properties = DISK_PROPERTIES | dict(pt_s=1.2, dpt_a=30, dpt_s=10)
     subrnodes = np.array(subring_radii(rnodes, DISK['rstep']))
-    density = np.exp(-subrnodes / 4)
+    density = np.exp(-subrnodes / 1.2)
     if line_of_sight == 'grid':
         disk = with_traits(
             disk, htraits=dict(type='sech2', zmax=8, rnodes=True))
@@ -2051,7 +2057,7 @@ def test_rotation_at_each_height_of_a_point_mass(driver):
     v = np.sqrt(np.maximum(v2, 0))
     assert np.any(v2[:, 0] < 0) and np.any((v2[:, 0] > 0) & (v2[:, -1] < 0))
     np.testing.assert_allclose(
-        state.rotation['vpt_vt'][1:], v[:, 0], rtol=1e-8)
+        state.rotation['vpt_vt'][1:len(r)], v[:, 0], rtol=1e-8)
     factors = np.array(
         [state.rotation_factors[f'vht_f{k}'] for k in range(33)]).T
     np.testing.assert_allclose(
@@ -2214,6 +2220,7 @@ def test_the_gravity_writes_the_rotation_it_gives():
     # the circular velocity of each mass component and of all (signed;
     # in Newtonian gravity, vnewton and vcirc are the same), the pressure
     # support, and the rotation: sqrt(vcirc^2 + pressure)
+    from gbkfit.model.components._nodal import tail_radii
     galaxy = disk_galaxy(
         'smooth', dict(type='mass', pressure_support='jeans'), MASS,
         DISTANCE)
@@ -2224,8 +2231,10 @@ def test_the_gravity_writes_the_rotation_it_gives():
     assert table.colnames == [
         'radius', 'radius_kpc', 'vcirc_stars', 'vcirc_gas', 'vcirc_halo',
         'vnewton', 'vcirc', 'pressure', 'vrot']
+    # (at the subnodes, and beyond, at the radii of the tail)
+    subrnodes = galaxy.components()[0].density_disk().subrnodes()
     np.testing.assert_allclose(
-        table['radius'], galaxy.components()[0].density_disk().subrnodes())
+        table['radius'], subrnodes + tail_radii(subrnodes))
     np.testing.assert_allclose(
         table['radius_kpc'], table['radius'] * KPC_PER_ARCSEC)
     vcirc2 = sum(np.sign(table[f'vcirc_{name}']) * table[f'vcirc_{name}'] ** 2
@@ -2234,8 +2243,11 @@ def test_the_gravity_writes_the_rotation_it_gives():
         np.sign(table['vcirc']) * table['vcirc'] ** 2, vcirc2, rtol=1e-12)
     np.testing.assert_array_equal(table['vnewton'], table['vcirc'])
     np.testing.assert_allclose(table['vrot'], states[0].rotation['vpt_vt'])
+    # (0 where the pressure exceeds the gravity: far in the tail, where the
+    # density falls and the dispersion keeps its value at the last ring)
     np.testing.assert_allclose(
-        table['vrot'] ** 2, vcirc2 + table['pressure'], rtol=1e-9)
+        table['vrot'] ** 2, np.maximum(vcirc2 + table['pressure'], 0),
+        rtol=1e-9)
 
 
 @pytest.mark.parametrize('vertical', [None, 'thin', 'sech2'])

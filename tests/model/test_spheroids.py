@@ -287,7 +287,7 @@ def test_a_spheroid_round_trips():
     (dict(kinematics=dict(
         type='traits', vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform'), rnodes=[0, 5])),
-     "go from 0 to its rmax"),
+     "go to its rmax"),
 ])
 def test_invalid_spheroids_are_refused(options, message):
     info = dict(profile=dict(type='sersic'), rmax=10, emission=BAND) \

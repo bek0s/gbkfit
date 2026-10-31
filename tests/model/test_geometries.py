@@ -118,7 +118,7 @@ def test_geometry_errors(geometries, components, message):
 # A gas disk, a biconical outflow along its axis and a nuclear point
 GAS = dict(type='disk', name='gas', rnodes=RNODES, **PARTS)
 OUTFLOW = dict(
-    type='cone', name='outflow', rnodes=[1, 3, 6],
+    type='cone', name='outflow', rnodes=[0, 1, 3, 6],
     density=dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=1)),

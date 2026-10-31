@@ -59,10 +59,11 @@ class Cone(Component):
         Its sides: 'both', 'positive' (along the positive side of its axis,
         away from the viewer for inclinations below 90 degrees) or
         'negative'.
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its shells (arcsec), from its apex: rnodes; or rnmin,
-        rnmax and rnsep (every rnsep); or rnmin, rnmax and rnlen (rnlen
-        shells).
+    rnmax, rnsep, rnlen, rnodes : optional
+        The radii of its shells (arcsec), from its apex (0): rnodes; or
+        rnmax and rnsep (every rnsep); or rnmax and rnlen (rnlen shells).
+        Beyond its last radius, it goes on as a disk does beyond its last
+        ring (see Disk).
     rstep : float, optional
         The width of the shells it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
@@ -109,7 +110,6 @@ class Cone(Component):
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             sides: Literal[_cone.SIDES] = 'both',
-            rnmin: Annotated[float, Unit('arcsec')] | None = None,
             rnmax: Annotated[float, Unit('arcsec')] | None = None,
             rnsep: Annotated[float, Unit('arcsec')] | None = None,
             rnlen: int | None = None,
@@ -131,8 +131,8 @@ class Cone(Component):
         self._kinematics = kinematics
         self._cone = _detail.make_cone(
             _cone.SmoothCone, density, kinematics, emission, opacity,
-            sptraits, sides, rnmin=rnmin, rnmax=rnmax, rnsep=rnsep,
-            rnlen=rnlen, rnodes=rnodes, rstep=rstep, interp=interp)
+            sptraits, sides, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
+            rnodes=rnodes, rstep=rstep, interp=interp)
         self._lines = make_lines(self._cone.pdescs(), emission)
         self._bands = make_bands(self._cone.pdescs(), emission)
 
@@ -168,9 +168,6 @@ class Cone(Component):
     def constants(self) -> dict[str, Any]:
         return dict(
             rnodes=self._cone.rnodes(), subrnodes=self._cone.subrnodes())
-
-    def bounding_radius(self) -> float:
-        return self._cone.bounding_radius()
 
     def plan(
             self,

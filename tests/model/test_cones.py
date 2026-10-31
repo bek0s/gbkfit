@@ -16,11 +16,16 @@ LINES = dict(type='lines')
 
 # A hollow cone: its walls (smooth, within 1.5 arcsec of their mid-surface
 # at 30 degrees from the axis) touch neither its axis nor the plane of its
-# apex
+# apex. Its density is 1 between the shells 4 and 10, linear to 0 at 3.5
+# and 10.5, and 0 within 3.5 and beyond 10.5 (its tail is that of 0).
+HOLLOW_RNODES = [0, 3.5, 4, 10, 10.5]
+HOLLOW_A = [0, 0, 1, 1, 0]
 HOLLOW = dict(
-    type='cone', rnodes=[4, 10],
-    density=dict(ptraits=UNIFORM, htraits=dict(type='gauss', zmax=1.5)))
-HOLLOW_PROPERTIES = dict(wall=30, pt_a=1, ht_s=0.5)
+    type='cone', rnodes=HOLLOW_RNODES,
+    density=dict(
+        ptraits=dict(type='nw_uniform'),
+        htraits=dict(type='gauss', zmax=1.5)))
+HOLLOW_PROPERTIES = dict(wall=30, pt_a=HOLLOW_A, ht_s=0.5)
 
 GEOMETRY = dict(xpos=1.5, ypos=-1, posa=30, incl=60)
 
@@ -72,16 +77,19 @@ def cone_frame(grid_data, xpos, ypos, posa, incl):
 def test_a_cone_has_the_light_of_its_walls_on_its_sides(
         driver, evaluate_cases, sides, nsides):
     # The density is the light per unit area of the mid-surface, and the
-    # height trait its profile across the walls: a side between the
-    # shells r0 and r1 has the light pi (r1^2 - r0^2) sin(wall) of the
-    # area of its mid-surface, exactly for walls that touch neither the
-    # axis nor the plane of the apex (up to the sampling of the voxels).
-    # The positive side is along +z of the frame of the cone.
+    # height trait its profile across the walls: a side has the light 2
+    # pi sin(wall) times the integral of r a(r) (a its density at the
+    # shell r) of the area of its mid-surface, exactly for walls that
+    # touch neither the axis nor the plane of the apex (up to the
+    # sampling of the voxels). The positive side is along +z of the frame
+    # of the cone.
     cone = HOLLOW | dict(sides=sides, emission=BAND)
     data, extra = evaluate_cases(
         [image(driver, cone)], GEOMETRY | HOLLOW_PROPERTIES)
     flux = data[0]['brightness']['d'].sum() * 0.5 ** 2
-    expected = nsides * np.pi * (10 ** 2 - 4 ** 2) * np.sin(np.radians(30))
+    r = np.linspace(0, 11, 110001)
+    moment = np.trapezoid(r * np.interp(r, HOLLOW_RNODES, HOLLOW_A), r)
+    expected = nsides * 2 * np.pi * moment * np.sin(np.radians(30))
     assert flux == pytest.approx(expected, rel=5e-3)
     bdata = extra.get('bdata', component='component0')
     z = cone_frame(bdata, **GEOMETRY)[2]
@@ -131,23 +139,23 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     # point from the mid-surface at wall = 30 degrees is r sin(theta -
     # wall), so the walls are within r sin(10 degrees) of it: a uniform
     # height trait of that half-width at each node, which is linear in r
-    # between them as the cone interpolates it.
-    rnodes = [4, 6, 8, 10]
-    cone = dict(
-        type='cone', rnodes=rnodes, emission=BAND,
-        density=dict(ptraits=UNIFORM, htraits=dict(
-            type='uniform', zmax=2, rnodes=True)))
+    # between them as the cone interpolates it (of the hollow cone, whose
+    # density is 0 within 3.5: the half-width there is that at 3.5).
+    cone = HOLLOW | dict(emission=BAND, density=HOLLOW['density'] | dict(
+        htraits=dict(type='uniform', zmax=2, rnodes=True)))
     _, extra = evaluate_cases([image(driver, cone)], GEOMETRY | dict(
-        wall=30, pt_a=1,
-        ht_s=list(np.multiply(rnodes, np.sin(np.radians(10))))))
+        wall=30, pt_a=HOLLOW_A, ht_s=list(np.multiply(
+            np.maximum(HOLLOW_RNODES, 3.5), np.sin(np.radians(10))))))
     bdata = extra.get('bdata', component='component0')
     x, y, z = cone_frame(bdata, **GEOMETRY)
     r = np.sqrt(x ** 2 + y ** 2 + z ** 2)
     theta = np.degrees(np.arctan2(np.hypot(x, y), np.abs(z)))
-    inside = (r >= 4) & (r < 10) & (theta > 20) & (theta < 40)
-    # (but where the voxels are on the edges, to rounding)
+    inside = (r > 3.5) & (r < 10.5) & (theta > 20) & (theta < 40)
+    # (but where the voxels are on the edges, to rounding, and within a
+    # subring, 0.25 arcsec, of the shells 3.5 and 10.5, where the density,
+    # linear between the subnodes, is not quite 0)
     clear = (np.abs(theta - 20) > 0.1) & (np.abs(theta - 40) > 0.1) \
-        & (np.abs(r - 4) > 1e-3) & (np.abs(r - 10) > 1e-3)
+        & (np.abs(r - 3.5) > 0.25) & (np.abs(r - 10.5) > 0.25)
     assert inside.sum() > 1000
     np.testing.assert_array_equal((bdata.data > 0)[clear], inside[clear])
 
@@ -166,7 +174,8 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
             htraits=dict(type='sech2', zmax=1)))
     properties = dict(
         cone_xpos=0, cone_ypos=0, cone_posa=0, cone_incl=0, cone_wall=30,
-        cone_pt_a=1, cone_ht_s=0.5, dust_xpos=0, dust_ypos=0, dust_posa=0,
+        cone_pt_a=HOLLOW_A, cone_ht_s=0.5, dust_xpos=0, dust_ypos=0,
+        dust_posa=0,
         dust_incl=0, dust_pt_a=0.5, dust_pt_s=4, dust_ht_s=0.2)
     for sides, fraction in (('positive', 1), ('negative', 0)):
         cone = HOLLOW | dict(name='cone', sides=sides, emission=BAND)

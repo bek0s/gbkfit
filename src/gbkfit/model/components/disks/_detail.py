@@ -142,7 +142,6 @@ def make_disk(
         geometry: Geometry | None,
         loose: bool | None,
         tilted: bool | None,
-        rnmin: float | None,
         rnmax: float | None,
         rnsep: float | None,
         rnlen: int | None,
@@ -166,8 +165,7 @@ def make_disk(
         parts and roles do not go together (e.g. lines without
         kinematics, or what only a thick disk can have on a thin one).
     """
-    rings = dict(rnmin=rnmin, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
-                 rnodes=rnodes)
+    rings = dict(rnmax=rnmax, rnsep=rnsep, rnlen=rnlen, rnodes=rnodes)
     if geometry is not None:
         warps = dict(loose=geometry.loose(), tilted=geometry.tilted())
         if differ := [k for k, v in dict(loose=loose, tilted=tilted).items()

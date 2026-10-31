@@ -193,9 +193,6 @@ def test_profiles_refuse_what_they_cannot_measure():
     with pytest.raises(ConfigError, match="physical lengths"):
         ObservationGroup(
             galaxy, ObservationProfile(['rotation_gas'], radii)).plan()
-    with pytest.raises(ConfigError, match="must be on its disk"):
-        ObservationGroup(galaxy, ObservationProfile(
-            ['rotation_gas'], [1.0, 30.0] * u.arcsec)).plan()
     with pytest.raises(ConfigError, match="give them in km / s"):
         ObservationProfile(data=DatasetProfile(
             {'vcirc': Data(np.ones(2), unit='m/s')}, radii))

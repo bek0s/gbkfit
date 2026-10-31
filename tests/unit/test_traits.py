@@ -85,18 +85,43 @@ def test_harmonic_orders_are_integers():
 SUBRNODES = np.array([0, 0.75, 2.25, 3.75, 5.25, 6])
 
 
-def ring_integrals(azimuthal, knots=()):
+def ring_integrals(azimuthal, knots=(), tail=None):
     """
     The integral of a density over each ring of SUBRNODES, of the
     integral of its |value| over the azimuths at each radius
-    (azimuthal(r)), split at the radii of its kinks (knots).
+    (azimuthal(r)), split at the radii of its kinks (knots), and over
+    its tail beyond the last subnode, of tail(r) (see tail_scale).
     """
     middles = SUBRNODES[1:-1]
-    return np.array([scipy.integrate.quad(
+    rings = [scipy.integrate.quad(
         lambda r: r * azimuthal(r), middle - 0.75, middle + 0.75,
         points=[k for k in (middle, *knots)
                 if middle - 0.75 < k < middle + 0.75],
-        epsabs=1e-13, epsrel=1e-12)[0] for middle in middles])
+        epsabs=1e-13, epsrel=1e-12)[0] for middle in middles]
+    beyond = scipy.integrate.quad(
+        lambda r: r * tail(r), SUBRNODES[-1], np.inf,
+        epsabs=1e-13, epsrel=1e-12)[0]
+    return np.array(rings + [beyond])
+
+
+def tail_scale(log_slope):
+    """
+    The scale of the tail of a density of the given log-slope at the last
+    subnode rl: -1 / log_slope where it falls, at most rl, else rl.
+    """
+    rl = SUBRNODES[-1]
+    return min(-1 / log_slope, rl) if log_slope < 0 else rl
+
+
+def with_tail(profile):
+    """
+    A radial profile up to the last subnode rl, and beyond, its value at
+    rl times exp(-(r - rl) / h), of its log-slope there (numerically).
+    """
+    rl, eps = SUBRNODES[-1], 1e-6
+    scale = tail_scale(
+        (np.log(profile(rl + eps)) - np.log(profile(rl - eps))) / (2 * eps))
+    return lambda r: profile(min(r, rl)) * np.exp(-max(r - rl, 0) / scale)
 
 
 @pytest.mark.parametrize('trait, params, profile', [
@@ -114,9 +139,13 @@ def ring_integrals(azimuthal, knots=()):
      lambda r: 2 / np.cosh(r / 1.5) ** 2)])
 def test_the_rings_of_clouds_have_the_flux_of_the_profile_over_them(
         trait, params, profile):
+    tailed = with_tail(profile)
     np.testing.assert_allclose(
         trait.cloud_flux(params, SUBRNODES),
-        ring_integrals(lambda r: 2 * np.pi * profile(r)), rtol=1e-8)
+        ring_integrals(
+            lambda r: 2 * np.pi * profile(r),
+            tail=lambda r: 2 * np.pi * tailed(r)),
+        rtol=1e-8)
 
 
 def test_the_rings_of_clouds_of_node_wise_traits_have_their_flux():
@@ -129,14 +158,26 @@ def test_the_rings_of_clouds_of_node_wise_traits_have_their_flux():
 
     def at(values, r):
         return np.interp(r, SUBRNODES, values)
+
+    # (beyond the last subnode: a times its tail, of the log-slope of its
+    # last interval)
+    scale = tail_scale(
+        (a[-1] - a[-2]) / ((SUBRNODES[-1] - SUBRNODES[-2]) * a[-1]))
+
+    def amplitude(r):
+        return np.abs(at(a, r)) * np.exp(-max(r - SUBRNODES[-1], 0) / scale)
+
+    def distortion_mean(r):
+        return amplitude(r) * scipy.integrate.quad(
+            lambda t: np.exp(-(t * r) ** 2 / (2 * at(s, r) ** 2)),
+            -np.pi, np.pi, epsabs=1e-14, epsrel=1e-13)[0]
     harmonic = traits.RPTraitNWHarmonic(2)
     np.testing.assert_allclose(
         harmonic.cloud_flux(dict(a=a, p=p), SUBRNODES),
-        ring_integrals(lambda r: 4 * np.abs(at(a, r)), zeros), rtol=1e-8)
+        ring_integrals(
+            lambda r: 4 * amplitude(r), zeros, lambda r: 4 * amplitude(r)),
+        rtol=1e-8)
     distortion = traits.RPTraitNWDistortion()
     np.testing.assert_allclose(
         distortion.cloud_flux(dict(a=a, p=p, s=s), SUBRNODES),
-        ring_integrals(lambda r: np.abs(at(a, r)) * scipy.integrate.quad(
-            lambda t: np.exp(-(t * r) ** 2 / (2 * at(s, r) ** 2)),
-            -np.pi, np.pi, epsabs=1e-14, epsrel=1e-13)[0], zeros),
-        rtol=1e-8)
+        ring_integrals(distortion_mean, zeros, distortion_mean), rtol=1e-8)

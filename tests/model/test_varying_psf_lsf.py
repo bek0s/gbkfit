@@ -92,12 +92,15 @@ def test_each_channel_has_its_psf(driver):
     sigma = np.interp(VELOCITIES, [-500, 500], [1, 2])
     varying = spectra(driver, psf=dict(type='gauss', sigma=table(1, 2)))
     plain = spectra(driver)
-    expected = [
+    expected = np.array([
         scipy.signal.fftconvolve(
             image, PSFGauss(s).asarray((1, 1)), mode='same')
-        for image, s in zip(plain, sigma)]
+        for image, s in zip(plain, sigma)])
+    # (but within the reach of the PSF from the edges, where the light of
+    # the tail of the disk beyond the image spreads in)
+    inner = (slice(None), slice(6, -6), slice(6, -6))
     np.testing.assert_allclose(
-        varying, expected, atol=2e-6 * np.abs(varying).max())
+        varying[inner], expected[inner], atol=2e-6 * np.abs(varying).max())
 
 
 def test_each_channel_has_its_lsf(driver):

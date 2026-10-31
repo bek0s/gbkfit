@@ -226,14 +226,15 @@ def test_the_default_step_samples_the_longest_baseline_five_times():
 
 
 @pytest.mark.parametrize('options, message', [
-    (dict(fov=40), None),
+    (dict(fov=60), None),
     (dict(fov=40, step=1.25), "change by"),
     (dict(fov=12), "edges of the field")])
 def test_the_first_evaluation_checks_the_sampling(
         driver, caplog, options, message):
     # At half the step, the visibilities of the Nyquist step of the longest
     # baseline change by 5%; a field that cuts the disk has flux at its
-    # edges
+    # edges (of 40 arcsec, 0.18% of the tail of its exponential of scale 4
+    # beyond its last ring)
     COVERAGE.write('coverage.npz', overwrite=True)
     with caplog.at_level(logging.WARNING):
         evaluate(driver, DISK, dict(

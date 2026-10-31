@@ -114,7 +114,7 @@ def test_dispersion_directions_are_checked(options, message):
 
 def test_a_cone_has_isotropic_dispersion_only():
     cone = dict(
-        type='cone', rnodes=[4, 10],
+        type='cone', rnodes=[0, 4, 10],
         density=dict(
             ptraits=dict(type='uniform'),
             htraits=dict(type='gauss', zmax=1.5)),

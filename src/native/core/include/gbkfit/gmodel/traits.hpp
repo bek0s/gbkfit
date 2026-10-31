@@ -50,6 +50,7 @@ constexpr int VPT_UID_NW_UNIFORM = 101;
 constexpr int VPT_UID_NW_HARMONIC = 102;
 constexpr int VPT_UID_NW_BAR = 103;
 constexpr int VPT_UID_SPIRAL = 104;
+constexpr int VPT_UID_TABLE = 105;
 
 // Velocity polar traits: the directions of their speeds
 constexpr int VPT_DIRECTION_TAN = 1;
@@ -105,10 +106,21 @@ constexpr int SPT_UID_AZRANGE = 1;
 constexpr int SPT_UID_RRANGE = 2;
 constexpr int SPT_UID_NW_AZRANGE = 101;
 
+// The node-wise value (of the values ydata[offset + i * stride] at the
+// nodes xdata) at x, in the interval of the nodes that ends at the node
+// idx (see ring_index): linear in it, and beyond the last node, that at
+// the last node (a component keeps its node-wise values beyond its last
+// node; its density traits have tails, see rp_trait_tail)
 template<typename T> constexpr T
 nodewise(T x, int idx, const T* xdata, const T* ydata, int offset, int stride)
 {
-    return lerp(x, idx, xdata, ydata, offset, stride);
+    return lerp(std::min(x, xdata[idx]), idx, xdata, ydata, offset, stride);
+}
+
+template<typename T> constexpr T
+nodewise(T x, int idx, const T* xdata, const T* ydata)
+{
+    return nodewise(x, idx, xdata, ydata, 0, 1);
 }
 
 template<typename T> constexpr void
@@ -788,14 +800,33 @@ rp_trait_nw_distortion(
     p_trait_nw_distortion(out, rnidx, rnodes, nrnodes, r, theta, params);
 }
 
+// The azimuth out_t of a cloud of a distortion of the phase p (radians)
+// and the width w (radians, the arc length s over the radius): p + d, d
+// drawn from a Gaussian of the width truncated to a turn, by rejection, of
+// Gaussian draws for narrow ones, and of uniform draws for wide ones (both
+// accept most draws)
+template<typename T> constexpr void
+distortion_azimuth_rnd(T& out_t, RNG<T>& rng, T p, T w)
+{
+    T d = 0;
+    if (w < PI<T>) {
+        do {
+            d = w * normal_rnd(rng);
+        } while (std::abs(d) > PI<T>);
+    } else {
+        do {
+            d = PI<T> * (2 * rng() - 1);
+        } while (rng() > std::exp(-d * d / (2 * w * w)));
+    }
+    out_t = wrap_angle(p + d);
+}
+
 // A point of the ring of the node rnidx of a distortion a exp(-(t r)^2 / (2
 // s^2)) (t, the azimuth from p, within half a turn), of the node-wise a, p
 // and s (params): of the radius drawn from its azimuthal mean, |a| (|s| /
 // r) erf(pi r / (sqrt(2) |s|)) (times 1 / sqrt(2 pi)), which is at most |a|
-// sqrt(2 pi) and |a| |s| / r; at the azimuth p + d, where d is drawn from a
-// Gaussian of the arc length s at the radius, truncated to a turn: by
-// rejection, of Gaussian draws for narrow ones, and of uniform draws for
-// wide ones (both accept most draws); out_s is the sign of a there.
+// sqrt(2 pi) and |a| |s| / r; at the azimuth from p of the width s / r
+// (see distortion_azimuth_rnd); out_s is the sign of a there.
 template<typename T> constexpr void
 rp_trait_nw_distortion_rnd(
         T& out_s, T& out_r, T& out_t, RNG<T>& rng,
@@ -822,20 +853,9 @@ rp_trait_nw_distortion_rnd(
                         : T(0);
             });
     out_s = at(out_r, 0) < 0 ? -1 : 1;
-    const T p = at(out_r, 1) * DEG_TO_RAD<T>;
-    const T s = at(out_r, 2);
-    const T width = std::abs(s / out_r);
-    T d = 0;
-    if (width < PI<T>) {
-        do {
-            d = width * normal_rnd(rng);
-        } while (std::abs(d) > PI<T>);
-    } else {
-        do {
-            d = PI<T> * (2 * rng() - 1);
-        } while (rng() > std::exp(-d * d / (2 * width * width)));
-    }
-    out_t = wrap_angle(p + d);
+    distortion_azimuth_rnd(
+            out_t, rng, at(out_r, 1) * DEG_TO_RAD<T>,
+            std::abs(at(out_r, 2) / out_r));
 }
 
 // A free map: nx by ny square cells of side step (consts) in the plane of
@@ -1244,6 +1264,37 @@ vp_trait_nw_uniform(
     p_trait_nw_uniform(out, rnidx, rnodes, r, params);
 }
 
+// A speed given at the subnodes and beyond the last, at the radii
+// consts[1 ... consts[0]] of the tail of the component (params: its
+// values at the subnodes, then at those radii; e.g. the rotation of the
+// mass of its galaxy, see traits.VPTraitMass): linear between them, and
+// beyond the last radius, its value there
+template<typename T> constexpr void
+vp_trait_table(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r,
+        const T* consts, const T* params)
+{
+    const int n = nrnodes - 1;
+    if (!(r > rnodes[n])) {
+        out = nodewise(r, rnidx, rnodes, params, 0, 1);
+        return;
+    }
+    const int ntail = std::rint(consts[0]);
+    const T* radii = consts + 1;
+    const T* values = params + nrnodes;
+    T r0 = rnodes[n], v0 = params[n];
+    for (int i = 0; i < ntail; ++i) {
+        if (r < radii[i]) {
+            out = v0 + (r - r0) * (values[i] - v0) / (radii[i] - r0);
+            return;
+        }
+        r0 = radii[i];
+        v0 = values[i];
+    }
+    out = v0;
+}
+
 template<typename T> constexpr void
 vp_trait_nw_harmonic(
         T& out,
@@ -1300,8 +1351,8 @@ vp_trait_bar(T& out, T r, T theta, const T* params)
 
 // A flow along a bar (see bar_flow) of the speed v(|x|) at the distance
 // |x| along its axis, of the values params[2 + i] at the distances
-// rnodes[i] (interpolated linearly), 0 within the first or beyond the
-// last: its parts v_x and v_y
+// rnodes[i] (interpolated linearly), and beyond the last, that there (see
+// nodewise): its parts v_x and v_y
 template<typename T> constexpr void
 vp_trait_nw_bar_plane(
         T& vx, T& vy,
@@ -1311,10 +1362,8 @@ vp_trait_nw_bar_plane(
     T s = params[1];
     T d = std::abs(r * std::cos(theta - p));
     vx = vy = 0;
-    if (d < rnodes[0] || d >= rnodes[nrnodes - 1])
-        return;
     int index = 1;
-    while (d >= rnodes[index])
+    while (index < nrnodes - 1 && d >= rnodes[index])
         ++index;
     T v = nodewise(d, index, rnodes, params, 2, 1);
     bar_flow(vx, vy, v, p, s, r, theta);
@@ -1515,8 +1564,174 @@ sp_trait_nw_azrange(
     azrange(out, theta, p, s);
 }
 
+// The tails of the density polar traits. A component does not end at
+// its last node rl (the nodes say where its node-wise parameters are
+// given): beyond it, its density polar traits (but the mixtures of blobs
+// and the maps, whole as they are) go on as their value there times the
+// exponential exp(-(r - rl) / h). Its scale h follows the log-slope g =
+// d ln|a| / dr of their amplitude a at rl: -1 / g where they fall (exact
+// for an exponential profile), at most rl, and rl where they do not (flat
+// or rising, which does not say where they end). The radial profiles are
+// taken at rl, and the node-wise traits at the radius, of their node-wise
+// values at rl (see nodewise; e.g. the phase of a harmonic). See
+// traits.RPTrait.tail_scale, which gives the same scales.
+
+// Whether a density polar trait has a tail
+constexpr bool
+rp_trait_has_tail(int uid)
+{
+    return uid != RPT_UID_MIXTURE_EXP && uid != RPT_UID_MIXTURE_GAUSS
+            && uid != RPT_UID_MIXTURE_GGAUSS && uid != RPT_UID_MIXTURE_MOFFAT
+            && uid != RPT_UID_MAP;
+}
+
+// The scale of a tail of the log-slope g at the last node rl
+template<typename T> constexpr T
+tail_scale(T g, T rl)
+{
+    return g < 0 ? std::min(-1 / g, rl) : rl;
+}
+
+// The log-slope at the last node of a node-wise amplitude (of the values
+// params[offset + i] at the nodes): that of its last interval
+template<typename T> constexpr T
+nodewise_log_slope(const T* rnodes, int nrnodes, const T* params, int offset)
+{
+    const int n = nrnodes - 1;
+    const T a = params[offset + n];
+    return (a - params[offset + n - 1]) / ((rnodes[n] - rnodes[n - 1]) * a);
+}
+
+// The log-slope of a density polar trait with a tail at the last node:
+// of its radial profile, or of its node-wise amplitude
+template<typename T> constexpr T
+rp_trait_log_slope(
+        int uid, const T* consts, const T* params,
+        const T* rnodes, int nrnodes)
+{
+    const T rl = rnodes[nrnodes - 1];
+    const T s = params[1];
+    switch (uid)
+    {
+    case RPT_UID_EXP:
+        return -1 / s;
+    case RPT_UID_GAUSS:
+        return -rl / (s * s);
+    case RPT_UID_GGAUSS:
+        return -params[2] / s * std::pow(rl / s, params[2] - 1);
+    case RPT_UID_LORENTZ:
+        return -2 * rl / (rl * rl + s * s);
+    case RPT_UID_MOFFAT:
+        return -2 * params[2] * rl / (rl * rl + s * s);
+    case RPT_UID_SECH2:
+        return -2 * std::tanh(rl / s) / s;
+    case RPT_UID_NW_UNIFORM:
+    case RPT_UID_NW_HARMONIC:
+    case RPT_UID_NW_DISTORTION:
+        return nodewise_log_slope(rnodes, nrnodes, params, 0);
+    case RPT_UID_SPIRAL:
+        return nodewise_log_slope(
+                rnodes, nrnodes, params, int(std::rint(consts[1])));
+    default:
+        // (the uniform one: flat)
+        return 0;
+    }
+}
+
+// The tail of a density polar trait at the radius r beyond the last node
+// rl: exp(-(r - rl) / h)
+template<typename T> constexpr T
+rp_trait_tail(
+        int uid, const T* consts, const T* params,
+        const T* rnodes, int nrnodes, T r)
+{
+    const T rl = rnodes[nrnodes - 1];
+    const T g = rp_trait_log_slope(uid, consts, params, rnodes, nrnodes);
+    return std::exp(-(r - rl) / tail_scale(g, rl));
+}
+
+// A cloud of the tail of a density polar trait (see rp_trait_tail): of
+// the radius r = rl + x drawn from r exp(-x / h) (x from an exponential of
+// scale h, or with the probability h / (rl + h), from a gamma of shape 2
+// and scale h), at which it is drawn as in its rings (the azimuth and
+// out_s, the sign of the trait there, for the node-wise traits); that of
+// a distortion, whose azimuthal mean falls faster still, by rejection.
 template<typename T> constexpr void
-rp_trait(T& out,
+rp_trait_tail_rnd(
+        T& out_s, T& out_r, T& out_t, RNG<T>& rng,
+        int uid, const T* consts, const T* params,
+        const T* rnodes, int nrnodes)
+{
+    const int n = nrnodes - 1;
+    const T rl = rnodes[n];
+    const T h = tail_scale(
+            rp_trait_log_slope(uid, consts, params, rnodes, nrnodes), rl);
+    auto radius = [&]() {
+        // (in this order on every driver)
+        const T u = rng();
+        T x = -h * std::log(rng());
+        if (u * (rl + h) < h)
+            x -= h * std::log(rng());
+        return rl + x;
+    };
+    out_r = radius();
+    out_t = 2 * PI<T> * rng();
+    switch (uid)
+    {
+    case RPT_UID_NW_UNIFORM:
+        out_s = params[n] < 0 ? -1 : 1;
+        break;
+    case RPT_UID_NW_HARMONIC: {
+        out_s = params[n] < 0 ? -1 : 1;
+        const int k = std::rint(consts[0]);
+        if (k == 0)
+            break;
+        T lobe = 1;
+        harmonic_azimuth_rnd(
+                lobe, out_t, rng, k, params[nrnodes + n] * DEG_TO_RAD<T>);
+        out_s *= lobe;
+        break;
+    }
+    case RPT_UID_SPIRAL: {
+        const int m = std::rint(consts[0]);
+        const int offset = std::rint(consts[1]);
+        out_s = params[offset + n] < 0 ? -1 : 1;
+        const T p = params[0] * DEG_TO_RAD<T>
+                + params[offset + nrnodes + n] / m;
+        T lobe = 1;
+        harmonic_azimuth_rnd(lobe, out_t, rng, m, p);
+        out_s *= lobe;
+        break;
+    }
+    case RPT_UID_NW_DISTORTION: {
+        // (its azimuthal mean over that of its amplitude, (s / r) erf(pi
+        // r / (sqrt(2) s)), falls with r)
+        const T s = std::abs(params[2 * nrnodes + n]);
+        auto mean = [&](T r) {
+            return s * std::erf(PI<T> * r / (std::sqrt(T(2)) * s)) / r;
+        };
+        const T mean_max = s > 0 ? mean(rl) : T(0);
+        while (rng() * mean_max > mean(out_r))
+            out_r = radius();
+        out_s = params[n] < 0 ? -1 : 1;
+        distortion_azimuth_rnd(
+                out_t, rng, params[nrnodes + n] * DEG_TO_RAD<T>,
+                std::abs(s / out_r));
+        break;
+    }
+    default:
+        // (a radial profile: the sign is that of the flux of its pool)
+        break;
+    }
+}
+
+// A polar trait of the shapes of the density polar traits at the point
+// (x, y, r, theta) of the plane of a component, in the ring rnidx: of a
+// coefficient of line opacity (which keeps its node-wise values beyond
+// the last node, see nodewise), or of a density polar trait within the
+// last node (see rp_trait)
+template<typename T> constexpr void
+op_trait(T& out,
          int uid, const T* consts, const T* params,
          int rnidx, const T* rnodes, int nrnodes,
          T x, T y, T r, T theta)
@@ -1592,6 +1807,29 @@ rp_trait(T& out,
         assert(false);
         break;
     }
+}
+
+// A density polar trait at the point (x, y, r, theta) of the plane of a
+// component, in the ring rnidx; beyond the last node, with its tail (see
+// rp_trait_tail): of a radial profile, its value at the last node, and of
+// a node-wise trait, its value at the radius (of its node-wise values at
+// the last node), times the tail
+template<typename T> constexpr void
+rp_trait(T& out,
+         int uid, const T* consts, const T* params,
+         int rnidx, const T* rnodes, int nrnodes,
+         T x, T y, T r, T theta)
+{
+    const T rl = rnodes[nrnodes - 1];
+    if (!(r > rl) || !rp_trait_has_tail(uid)) {
+        op_trait(out, uid, consts, params, rnidx, rnodes, nrnodes,
+                 x, y, r, theta);
+        return;
+    }
+    const bool profile = uid <= RPT_UID_SECH2;
+    op_trait(out, uid, consts, params, rnidx, rnodes, nrnodes,
+             x, y, profile ? rl : r, theta);
+    out *= rp_trait_tail(uid, consts, params, rnodes, nrnodes, r);
 }
 
 template<typename T> constexpr void
@@ -1848,6 +2086,10 @@ vp_trait(
     case VPT_UID_NW_UNIFORM:
         vp_trait_nw_uniform(
                 out, rnidx, rnodes, r, params);
+        break;
+    case VPT_UID_TABLE:
+        vp_trait_table(
+                out, rnidx, rnodes, nrnodes, r, consts, params);
         break;
     case VPT_UID_NW_HARMONIC:
         vp_trait_nw_harmonic(

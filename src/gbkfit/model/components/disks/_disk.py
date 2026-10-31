@@ -109,20 +109,6 @@ class NodalDisk(abc.ABC):
     def rnodes(self) -> tuple[float, ...]:
         return self._rnodes
 
-    def bounding_radius(self) -> float:
-        """
-        Return the radius (arcsec) of the sphere around its centre that
-        holds all its density, at any inclination: that of its last ring,
-        R, or with density height traits, sqrt(R^2 + Z^2), where Z is the
-        largest zmax of its density height traits (above its midplane) plus
-        those of its vertical distortion traits (the largest displacement
-        of its midplane; see RHTrait and ZPTrait).
-        """
-        height = max(
-            (trait.zmax() for trait in self.traits('rht')), default=0.0)
-        displacement = sum(trait.zmax() for trait in self.traits('zpt'))
-        return float(np.hypot(self._rnodes[-1], height + displacement))
-
     def rstep(self) -> float:
         return self._rstep
 
@@ -433,9 +419,9 @@ class DiskPlan(NativePlan):
         """
         Evaluate each polar trait of one kind at points of the plane of the
         disk, as the disk is evaluated: with the node-wise parameters at
-        the subnodes, and NaN off the disk (radii below the first or above
-        the last node; at the last node, the values that the disk tends to
-        there).
+        the subnodes, and beyond the last, with the tails of the density
+        traits (see traits.RPTrait.tail_scale) and the node-wise values of
+        the last subnode.
 
         Parameters
         ----------
@@ -479,9 +465,7 @@ class DiskPlan(NativePlan):
         """
         Evaluate each height trait of one kind at points of the plane of
         the disk, as the disk is evaluated: with the node-wise parameters
-        at the subnodes, and NaN off the disk (radii below the first or
-        above the last node; at the last node, the values that the disk
-        tends to there).
+        at the subnodes, and beyond the last, their values there.
 
         Parameters
         ----------

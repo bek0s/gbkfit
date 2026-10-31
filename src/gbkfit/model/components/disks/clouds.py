@@ -41,8 +41,10 @@ class Clouds(parseutils.Serializable):
     ring (subrings of width rstep): each ring has the flux of the trait
     over it (its integral, see RPTrait.cloud_flux), and its clouds are at
     radii drawn from the trait across it, and at azimuths drawn from the
-    trait at their radii. A disk of clouds converges to the smooth disk
-    as its clouds get more (smaller cflux).
+    trait at their radii. The tail of a trait beyond the last ring (see
+    RPTrait.tail_scale) has its clouds too, drawn from it exactly. A disk
+    of clouds converges to the smooth disk as its clouds get more
+    (smaller cflux).
 
     Parameters
     ----------
@@ -133,13 +135,14 @@ class CloudDiskPlan(_disk.DiskPlan):
             opacity_rows: Sequence[int] | None = None
     ):
         super().__init__(disk, driver, nlines, dtype, opacity_rows)
-        # The clouds are made in pools: one for each density trait with
-        # an analytical integral, and one for each ring of the others
-        # (the rings are centred on the subnodes between the first and
-        # the last, which are the edges of the disk). For each pool: the
-        # cumulative number of clouds, and the (signed) flux of each of
-        # its clouds. Also, for each density trait, whether it has an
-        # analytical integral.
+        # The clouds are made in pools, of each density trait: one for the
+        # disk within its last ring with an analytical integral, or else
+        # one for each ring (the rings are centred on the subnodes between
+        # the first and the last, the centre and the last node), and one
+        # for its tail beyond, if it has one. For each pool: the cumulative
+        # number of clouds, and the (signed) flux of each of its clouds.
+        # Also, for each density trait, whether it has an analytical
+        # integral.
         rptraits = disk.traits('rpt')
         analytical = [t.has_analytical_integral() for t in rptraits]
         self._s_has_analytical_integral = driver.mem_alloc_s(
@@ -148,7 +151,9 @@ class CloudDiskPlan(_disk.DiskPlan):
         host[:] = analytical
         driver.mem_copy_h2d(host, device)
         nrings = len(disk.subrnodes()) - 2
-        npools = sum([1 if h else nrings for h in analytical])
+        npools = sum(
+            (1 if h else nrings) + t.has_tail()
+            for h, t in zip(analytical, rptraits))
         self._s_ncloudscsum = driver.mem_alloc_s(npools, np.int32)
         self._s_cloud_flux = driver.mem_alloc_s(npools, dtype)
 
@@ -168,9 +173,9 @@ class CloudDiskPlan(_disk.DiskPlan):
         disk = self._disk
         driver = self._driver
 
-        # The flux of each pool: of each trait (one value if it has an
-        # analytical integral), or of each of its rings, of its parameters
-        # by their names in it (the node-wise ones at the subnodes)
+        # The flux of each pool: of each trait (see RPTrait.cloud_flux), of
+        # its parameters by their names in it (the node-wise ones at the
+        # subnodes)
         pool_flux = []
         subrnodes = np.asarray(disk.subrnodes(), dtype=float)
         for trait, pnames in zip(

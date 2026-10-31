@@ -384,9 +384,8 @@ class Galaxy(parseutils.Serializable):
     ) -> tuple[float, float] | None:
         """
         Return the range of the radii (arcsec) of the function of a disk of
-        the name (e.g. rotation_gas), from its first radial node to its
-        last, without planning it; None for its other functions, of any
-        radius.
+        the name (e.g. rotation_gas), from its centre on, without planning
+        it; None for its other functions, of any radius.
         """
         return self._component_set.function_radius_range(name)
 

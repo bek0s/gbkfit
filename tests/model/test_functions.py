@@ -138,9 +138,11 @@ def test_rotation_and_dispersion_as_the_gravity_gives_them():
         bound['rotation_gas'](middle),
         (rotation['vrot'].value[1:] + rotation['vrot'].value[:-1]) / 2,
         rtol=1e-12)
+    # (the equilibrium at the subnodes, the first radii of the rotation)
     sigma = extra.get('equilibrium', component='gas')['sigma'].value
+    subrnodes, middle = radii[:len(sigma)], middle[:len(sigma) - 1]
     np.testing.assert_allclose(
-        bound['dispersion_gas'](radii), np.hypot(10, sigma), rtol=1e-12)
+        bound['dispersion_gas'](subrnodes), np.hypot(10, sigma), rtol=1e-12)
     np.testing.assert_allclose(
         bound['dispersion_gas'](middle),
         np.hypot(10, (sigma[1:] + sigma[:-1]) / 2), rtol=1e-12)
@@ -177,9 +179,10 @@ def test_pressure_support_of_the_velocity_ellipsoid():
     np.testing.assert_allclose(
         ellipsoid['pressure'].value, expected + 30 ** 2 - 20 ** 2,
         rtol=1e-12)
-    # Its dispersion along each direction
-    radii = isotropic['radius'].value
+    # Its dispersion along each direction (at the subnodes, where the
+    # equilibrium is)
     sigma = extra.get('equilibrium', component='gas')['sigma'].value
+    radii = isotropic['radius'].value[:len(sigma)]
     bound = with_dispersion(directions).plan_functions().bind(values)
     for direction, value in dict(rad=30, tan=20, ver=10).items():
         np.testing.assert_allclose(
@@ -230,8 +233,8 @@ def test_functions_of_a_galaxy_of_mass_alone():
 
 def test_radii_outside_refused():
     bound = gas_galaxy().plan_functions().bind(PARAMS)
-    with pytest.raises(ValueError, match='rotation_gas: the radii must be'):
-        bound['rotation_gas'](21)
+    with pytest.raises(ValueError, match='rotation_gas: the radii must not'):
+        bound['rotation_gas'](-1)
     with pytest.raises(ValueError, match='vcirc_halo: the radii must be'):
         bound['vcirc_halo'](-1)
 

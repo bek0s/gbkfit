@@ -163,6 +163,9 @@ class RPTraitMap(RPTrait):
     def has_analytical_integral(self) -> bool:
         return True
 
+    def has_tail(self) -> bool:
+        return False
+
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
@@ -395,6 +398,9 @@ class RPTraitImage(RPTrait):
 
     def has_analytical_integral(self) -> bool:
         return True
+
+    def has_tail(self) -> bool:
+        return False
 
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray

@@ -80,15 +80,17 @@ class DiskDensity(ComponentDensity, Protocol):
     The density of a disk of a galaxy, which mass disks follow (see
     surfaces.SurfaceComponent and vertical.VerticalComponent): its
     azimuthal mean, a sum of terms (e.g. one for each density polar
-    trait), each a surface density times the pdf of the height, between
-    the inner and the outer edge of the component; in kpc.
+    trait), each a surface density times the pdf of the height, from the
+    centre of the component, with its tail (see knots); in kpc.
     """
 
     def knots(self, rstep: float | None) -> np.ndarray:
         """
         Return the radii (kpc) of the rings of the component, from its
-        inner to its outer edge: those it is evaluated on, or rings of
-        width at most rstep (in the units of its rings, e.g. arcsec).
+        centre on: those it is evaluated on, or rings of width at most
+        rstep (in the units of its rings, e.g. arcsec), and beyond, those
+        of its tail, to where it holds no mass that matters (see
+        _nodal.tail_radii; its density is 0 beyond).
         """
         ...
 

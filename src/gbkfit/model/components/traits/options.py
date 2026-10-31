@@ -27,6 +27,7 @@ __all__ = [
     'Nodes',
     'SAMPLINGS',
     'SAMPLING_DEFAULT',
+    'SAMPLING_TAIL',
     'Sampling',
     'Spiral',
     'TraitOption',
@@ -58,6 +59,11 @@ DPT_DIRECTION_VER = 3
 # or at the subnodes themselves (see _disk.NodalDisk)
 SAMPLINGS = ('rnodes', 'subrings')
 SAMPLING_DEFAULT = 'rnodes'
+# Where the values that the galaxy of a disk gives beyond its last ring
+# too are given (e.g. the rotation of its mass, see VPTraitMass; not an
+# option of the traits): at the subnodes, and beyond the last, at the
+# radii of its tail (see _nodal.tail_radii)
+SAMPLING_TAIL = 'subrings_tail'
 
 
 @dataclasses.dataclass(frozen=True)

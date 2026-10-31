@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from gbkfit.params import ParamValues
-from gbkfit.utils import iterutils, numutils, parseutils
+from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from ._units import BandFactors, LineFactors
 
@@ -113,57 +113,57 @@ def geometry_desc(geometry: 'Geometry') -> str:
 
 def parse_nodes(
         prefix: str,
-        nmin: float | None,
         nmax: float | None,
         nsep: float | None,
         nlen: int | None,
         nodes: Any
 ) -> tuple[float, ...]:
     """
-    Return the nodes given by one of: nodes; nmin, nmax and nsep (from
-    nmin every nsep, to the first node at or beyond nmax); nmin, nmax and
-    nlen (nlen nodes from nmin to nmax). The prefix names the options in
-    messages (e.g. 'r' for rnodes). Raise ConfigError unless exactly one
-    of them is given, or the nodes are not at least two, ascending, unique
-    and not negative.
+    Return the nodes given by one of: nodes; nmax and nsep (from 0 every
+    nsep, to the first node at or beyond nmax); nmax and nlen (nlen nodes
+    from 0 to nmax). The prefix names the options in messages (e.g. 'r'
+    for rnodes). Raise ConfigError unless exactly one of them is given,
+    or the nodes are not at least two, from 0, ascending and unique.
     """
     nodes_list = nodes is not None
-    nodes_arange = [nmin, nmax, nsep].count(None) == 0
-    nodes_linspace = [nmin, nmax, nlen].count(None) == 0
+    nodes_arange = [nmax, nsep].count(None) == 0
+    nodes_linspace = [nmax, nlen].count(None) == 0
     if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
         raise ConfigError(
             f"only one of the following sets of options "
             f"must be defined: "
             f"(1) {prefix}nodes; "
-            f"(2) {prefix}nmin, {prefix}nmax, {prefix}nsep; "
-            f"(3) {prefix}nmin, {prefix}nmax, {prefix}nlen")
-    if (nodes_arange or nodes_linspace) and not (0 <= nmin < nmax):
+            f"(2) {prefix}nmax, {prefix}nsep; "
+            f"(3) {prefix}nmax, {prefix}nlen")
+    if (nodes_arange or nodes_linspace) and not 0 < nmax:
+        raise ConfigError(
+            f"the following expression must be true: 0 < {prefix}nmax")
+    if nodes_arange and not (0 < nsep <= nmax):
         raise ConfigError(
             f"the following expression must be true: "
-            f"0 <= {prefix}nmin < {prefix}nmax")
-    if nodes_arange and not (0 < nsep <= nmax - nmin):
-        raise ConfigError(
-            f"the following expression must be true: "
-            f"0 < {prefix}nsep <= {prefix}nmax - {prefix}nmin")
+            f"0 < {prefix}nsep <= {prefix}nmax")
     if nlen is not None and not 2 <= nlen:
         raise ConfigError(
             f"the following expression must be true: "
             f"2 =< {prefix}nlen")
     if nodes_arange:
-        # From nmin every nsep, to the first node at or beyond nmax; the
-        # count tolerates the rounding of (nmax - nmin) / nsep, which made
+        # From 0 every nsep, to the first node at or beyond nmax; the
+        # count tolerates the rounding of nmax / nsep, which made
         # np.arange to nmax + nsep add a node (e.g. 2.4 for 2.2 in 0.2s)
-        count = int(np.ceil((nmax - nmin) / nsep - 1e-9)) + 1
-        nodes = (nmin + nsep * np.arange(count)).tolist()
+        count = int(np.ceil(nmax / nsep - 1e-9)) + 1
+        nodes = (nsep * np.arange(count)).tolist()
     elif nodes_linspace:
-        nodes = np.linspace(nmin, nmax, nlen).tolist()
+        nodes = np.linspace(0, nmax, nlen).tolist()
     nodes = tuple(nodes)
     if len(nodes) < 2:
         raise ConfigError(f"at least two {prefix}nodes must be provided")
+    # (from the centre: a component has no hole of nothing at all, which
+    # was a sharp inner edge; one of little density has 0 at its nodes)
+    if nodes[0] != 0:
+        raise ConfigError(
+            f"{prefix}nodes must start at 0; they start at {nodes[0]}")
     if not iterutils.is_ascending(nodes):
         raise ConfigError(f"{prefix}nodes must be ascending")
-    if not numutils.all_positive(nodes, include_zero=True):
-        raise ConfigError(f"{prefix}nodes must not be negative")
     if not iterutils.all_unique(nodes):
         raise ConfigError(f"{prefix}nodes must be unique")
     return nodes

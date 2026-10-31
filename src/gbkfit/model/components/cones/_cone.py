@@ -116,13 +116,6 @@ class NodalCone(abc.ABC):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
 
-    def bounding_radius(self) -> float:
-        """
-        Return the radius (arcsec) of the sphere around its apex that holds
-        all its density: that of its last shell.
-        """
-        return float(self._rnodes[-1])
-
     @abc.abstractmethod
     def plan(self, driver: Driver, nlines: int, dtype: np.dtype) -> NativePlan:
         """

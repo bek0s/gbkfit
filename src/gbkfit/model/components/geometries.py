@@ -63,10 +63,10 @@ class Geometry(parseutils.Serializable):
         Whether the centre and the systemic velocity are node-wise.
     tilted : bool, optional
         Whether the position angle and the inclination are node-wise.
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of the rings of a warped geometry (one of: rnodes;
-        rnmin, rnmax and rnsep; rnmin, rnmax and rnlen); none without
-        warps, when each component has its own rings.
+    rnmax, rnsep, rnlen, rnodes : optional
+        The radii of the rings of a warped geometry, from 0 (one of:
+        rnodes; rnmax and rnsep; rnmax and rnlen); none without warps,
+        when each component has its own rings.
 
     Raises
     ------
@@ -91,7 +91,6 @@ class Geometry(parseutils.Serializable):
             params: Sequence[Literal[tuple(GEOMETRY_PARAMS)]] | None = None,
             loose: bool = False,
             tilted: bool = False,
-            rnmin: Annotated[float, Unit('arcsec')] | None = None,
             rnmax: Annotated[float, Unit('arcsec')] | None = None,
             rnsep: Annotated[float, Unit('arcsec')] | None = None,
             rnlen: int | None = None,
@@ -106,10 +105,9 @@ class Geometry(parseutils.Serializable):
             if len(set(params)) != len(params):
                 raise ConfigError(
                     f"the parameters of a geometry repeat: {list(params)}")
-        given = [rnmin, rnmax, rnsep, rnlen, rnodes]
+        given = [rnmax, rnsep, rnlen, rnodes]
         if loose or tilted:
-            rnodes = _detail.parse_nodes(
-                'r', rnmin, rnmax, rnsep, rnlen, rnodes)
+            rnodes = _detail.parse_nodes('r', rnmax, rnsep, rnlen, rnodes)
         elif any(value is not None for value in given):
             raise ConfigError(
                 "the rings of a geometry are those of its warps; without "

@@ -34,11 +34,10 @@ from gbkfit.params import (
 from gbkfit.utils.parseutils import ConfigError
 
 
-# A disk that extends beyond the image: a disk that ends inside the data
-# makes the chi-square jump as its edge crosses pixels
+# A disk of rings out to beyond the image
 GALAXY = dict(components=[dict(
     type='disk', loose=False, tilted=False,
-    rnodes=list(np.arange(0.5, 30)),
+    rnodes=list(range(0, 30)),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))])
 

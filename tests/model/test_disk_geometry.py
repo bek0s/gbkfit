@@ -155,29 +155,38 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
     assert difference < 1e-3
 
 
-def uniform_disk_flux(driver, evaluate_cases, rnodes, loose):
-    """The flux of a face-on uniform disk of brightness 1 per arcsec^2."""
+def edge_disk_flux(driver, evaluate_cases, rnodes, loose):
+    """
+    The flux of a face-on disk of brightness 1 per arcsec^2 to its second
+    last node, and linear to 0 at its last (and so of no tail).
+    """
     nodes = len(rnodes)
     case = image_case(
         driver,
         dict(type='pixel_brightness', size=[80, 80], step=[0.2, 0.2]),
         loose=loose, tilted=False, rnodes=rnodes, rstep=1,
-        density=dict(ptraits=dict(type='uniform')))
+        density=dict(ptraits=dict(type='nw_uniform')))
     centre = [0] * nodes if loose else 0
-    properties = dict(xpos=centre, ypos=centre, posa=0, incl=0, pt_a=1)
+    properties = dict(
+        xpos=centre, ypos=centre, posa=0, incl=0,
+        pt_a=[1] * (nodes - 1) + [0])
     data, _ = evaluate_cases([case], properties)
     return data[0]['brightness']['d'].sum() * 0.2 * 0.2
 
 
 @pytest.mark.parametrize('loose', [False, True])
-@pytest.mark.parametrize('rnodes', [[0, 3, 6.7], [0.5, 3, 6]])
-def test_disk_ends_at_its_last_node(driver, evaluate_cases, rnodes, loose):
+@pytest.mark.parametrize('rnodes', [[0, 3, 6.7], [0, 3.5, 6]])
+def test_rings_cover_the_radii_up_to_the_last_node(
+        driver, evaluate_cases, rnodes, loose):
     # The rings of the disk (of width up to rstep = 1) cover exactly the
-    # radii from the first node to the last one, even when that range is
-    # not a whole number of rsteps
-    flux = uniform_disk_flux(driver, evaluate_cases, rnodes, loose)
-    area = np.pi * (rnodes[-1] ** 2 - rnodes[0] ** 2)
-    assert flux == pytest.approx(area, rel=0.01)
+    # radii up to the last node, even when they are not a whole number of
+    # rsteps: the flux is 2 pi times the integral of r times the
+    # brightness, (a^2 / 2 + a l / 2 + l^2 / 6) from a = rnodes[-2] and l
+    # = rnodes[-1] - a
+    flux = edge_disk_flux(driver, evaluate_cases, rnodes, loose)
+    a, length = rnodes[-2], rnodes[-1] - rnodes[-2]
+    expected = 2 * np.pi * (a * a / 2 + a * length / 2 + length ** 2 / 6)
+    assert flux == pytest.approx(expected, rel=0.01)
 
 
 @pytest.mark.parametrize('incl', [90, 120])

@@ -67,17 +67,14 @@ class Disk(Component):
     tilted : bool, optional
         Whether its position angle and inclination are node-wise; by
         default, not, or those of its geometry.
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its rings (arcsec): rnodes; or rnmin, rnmax and rnsep
-        (every rnsep); or rnmin, rnmax and rnlen (rnlen rings). Those of
-        its geometry if it is warped. The disk ends at its first and last
-        radii, and is evaluated at the centres of the pixels: at an edge
-        inside the data where its density is not about 0 (e.g. an
-        exponential cut at three scale lengths), pixels switch on and off
-        as its geometry changes, so that the chi-square jumps and the
-        covariance errors come out too small (5 times, in a test of
-        visibilities); place its edges beyond the data, or where its
-        density is about 0.
+    rnmax, rnsep, rnlen, rnodes : optional
+        The radii of its rings (arcsec), from 0: rnodes; or rnmax and rnsep
+        (every rnsep); or rnmax and rnlen (rnlen rings). Those of its
+        geometry if it is warped. They say where its node-wise parameters
+        are given, not where it ends: beyond its last radius, its density
+        goes on as an exponential of the density and its slope there (see
+        traits.RPTrait.tail_scale), and its other node-wise parameters
+        keep their values there.
     rstep : float, optional
         The width of the rings it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
@@ -135,7 +132,6 @@ class Disk(Component):
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool | None = None,
             tilted: bool | None = None,
-            rnmin: Annotated[float, Unit('arcsec')] | None = None,
             rnmax: Annotated[float, Unit('arcsec')] | None = None,
             rnsep: Annotated[float, Unit('arcsec')] | None = None,
             rnlen: int | None = None,
@@ -158,9 +154,9 @@ class Disk(Component):
         self._disk = _detail.make_disk(
             density, kinematics, emission, opacity, zptraits, sptraits,
             geometry=geometry if isinstance(geometry, Geometry) else None,
-            loose=loose, tilted=tilted, rnmin=rnmin,
-            rnmax=rnmax, rnsep=rnsep, rnlen=rnlen, rnodes=rnodes,
-            rstep=rstep, interp=interp, clouds=clouds)
+            loose=loose, tilted=tilted, rnmax=rnmax, rnsep=rnsep,
+            rnlen=rnlen, rnodes=rnodes, rstep=rstep, interp=interp,
+            clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
         self._bands = make_bands(self._disk.pdescs(), emission)
 
@@ -202,9 +198,6 @@ class Disk(Component):
 
     def uses_mass(self) -> bool:
         return self._disk.uses_mass()
-
-    def bounding_radius(self) -> float:
-        return self._disk.bounding_radius()
 
     def density_disk(self) -> _disk.NodalDisk:
         """

@@ -251,7 +251,7 @@ _BLOBS_MAPS_SELECTION = dict(
 # --- A5: a disk and an outflow cone, in two lines ----------------------------
 
 _CONE = dict(
-    type='cone', name='cone', geometry='own', rnodes=[0.5, 2, 4],
+    type='cone', name='cone', geometry='own', rnodes=[0, 2, 4],
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(

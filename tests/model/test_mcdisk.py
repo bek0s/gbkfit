@@ -35,6 +35,12 @@ def with_options(component, options):
     return component | options | parts
 
 
+# The parameters of a disk whose tail holds no flux that matters, for the
+# tests of the flux of all its clouds in the cube: its rings go to 16.7
+# scale lengths (the few clouds of a tail could land off the grid)
+NO_TAIL = dict(pt_s=1.2)
+
+
 def clouds(cflux, seed=0):
     """The option clouds of a disk of clouds of the given cflux and seed."""
     return dict(clouds=dict(cflux=cflux, seed=seed))
@@ -157,8 +163,8 @@ def test_mcdisk_flux_does_not_depend_on_height_profile(driver, height):
     # all land inside the cube, so the total flux must be the same.
     sech2 = dict(density=dict(htraits=dict(type='sech2', zmax=8)))
     other = dict(density=dict(htraits=dict(type=height, zmax=8)))
-    reference = evaluate_disk('mcdisk', driver.type(), sech2)
-    total = evaluate_disk('mcdisk', driver.type(), other)
+    reference = evaluate_disk('mcdisk', driver.type(), sech2, NO_TAIL)
+    total = evaluate_disk('mcdisk', driver.type(), other, NO_TAIL)
     assert total.sum() == pytest.approx(reference.sum(), rel=1e-5)
 
 
@@ -246,9 +252,11 @@ def test_mcdisk_without_clouds(driver):
 
 def test_mcdisk_seed(driver):
     # The seed (0 by default) selects the random realisation of the clouds
-    default = evaluate_disk('mcdisk', driver.type())
-    seed0 = evaluate_disk('mcdisk', driver.type(), clouds(1e-4, seed=0))
-    seed1 = evaluate_disk('mcdisk', driver.type(), clouds(1e-4, seed=1))
+    default = evaluate_disk('mcdisk', driver.type(), properties=NO_TAIL)
+    seed0 = evaluate_disk(
+        'mcdisk', driver.type(), clouds(1e-4, seed=0), NO_TAIL)
+    seed1 = evaluate_disk(
+        'mcdisk', driver.type(), clouds(1e-4, seed=1), NO_TAIL)
     assert relative_difference(seed0, default) < SAME_REALISATION
     assert relative_difference(seed1, default) > 1e-3
     # Different realisations of the same disk
@@ -325,7 +333,7 @@ def test_mcdisk_flux_does_not_depend_on_cloud_flux(driver):
     # The clouds of each ring share its flux exactly, also when a cloud
     # (cflux) holds more than the flux of a ring
     totals = [
-        evaluate_disk('mcdisk', driver.type(), clouds(cflux)).sum()
+        evaluate_disk('mcdisk', driver.type(), clouds(cflux), NO_TAIL).sum()
         for cflux in (1e-4, 0.3, 5)]
     np.testing.assert_allclose(totals[1:], totals[0], rtol=1e-4)
 

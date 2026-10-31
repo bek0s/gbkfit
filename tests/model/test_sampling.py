@@ -94,7 +94,7 @@ def test_node_wise_parameters_have_a_value_for_each_subnode():
 def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     # Node-wise values given at the nodes are interpolated to the subnodes
     # with the interpolation of the disk, and linearly between them, up to
-    # its last node (the disk is closed); off the disk, the traits are NaN
+    # its last node; beyond, the density traits go on as their tails
     from gbkfit.model import BandEmission, Density, Disk
     from gbkfit.model.components import traits
     rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
@@ -109,7 +109,11 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     at = interpolation.InterpolatorAkima(rnodes, curve)(subrnodes)
     r = np.concatenate(
         (subrnodes, (subrnodes[1:] + subrnodes[:-1]) / 2, [20.5]))
-    expected = np.concatenate((at, (at[1:] + at[:-1]) / 2, [np.nan]))
+    # (beyond, of the log-slope of the last subring, at most its radius)
+    scale = min(at[-1] * (subrnodes[-1] - subrnodes[-2]) / (at[-2] - at[-1]),
+                subrnodes[-1])
+    tail = at[-1] * np.exp(-0.5 / scale)
+    expected = np.concatenate((at, (at[1:] + at[:-1]) / 2, [tail]))
     # (r and theta broadcast together)
     values = plan.evaluate_polar_traits(params, 'rpt', r[:, None], [0, 90])
     assert values.shape == (1, r.size, 2)
@@ -159,7 +163,16 @@ def test_an_expression_of_the_subnodes_follows_the_curve(
         [case(analytical)], PROPERTIES | dict(vpt_vt=vmax, vpt_rt=rt))
     expected = extra.get('vdata', component='component0').data
     actual = evaluate_curve(at_subnodes, dict(vmax=vmax, rt=rt))
-    np.testing.assert_allclose(actual, expected, atol=0.1, equal_nan=True)
+    # (within the last node: beyond it, the curve at the subnodes keeps its
+    # value there, and the analytical one goes on)
+    y, x = np.indices(expected.shape) - 15.5
+    p, i = np.radians(PROPERTIES['posa']), np.radians(PROPERTIES['incl'])
+    radius = np.hypot(
+        -x * np.sin(p) + y * np.cos(p),
+        (-x * np.cos(p) - y * np.sin(p)) / np.cos(i))
+    within = radius < 19.9
+    np.testing.assert_allclose(
+        actual[within], expected[within], atol=0.1, equal_nan=True)
 
 
 def test_sampling_is_dumped():

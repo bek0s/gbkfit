@@ -24,7 +24,7 @@ galaxies:
   - type: cone
     name: cone
     geometry: own
-    rnodes: [0.5, 2, 4]
+    rnodes: [0, 2, 4]
     density:
       ptraits: {type: uniform}
       htraits: {type: gauss, zmax: 1}
@@ -47,9 +47,10 @@ observations:
     rpix: [11.5, 11.5]
     rval: [0, 0]
     rota: 0
+    spectral: {step: 50.0, rpix: 19.5, rval: 450.0, rest: 6.562800000000002e-07
+        m, medium: vacuum}
     data: cube_spectra_d.fits
     error: 0.00015
-    spectral: {step: 50, rpix: 19.5, rval: 450, rest: 6.562800000000002e-07 m, medium: vacuum}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: grid

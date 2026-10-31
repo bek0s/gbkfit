@@ -130,7 +130,6 @@ def make_cone(
         opacity: Opacity | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         sides: str,
-        rnmin: float | None,
         rnmax: float | None,
         rnsep: float | None,
         rnlen: int | None,
@@ -175,7 +174,7 @@ def make_cone(
                 traits.DHTraitOne))
     CONE_TRAITS.check(traits_)
     node_args = parse_component_rnode_args(
-        rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp)
+        rnmax, rnsep, rnlen, rnodes, rstep, interp)
     return cone_class(
         sides=sides, **node_args, traits_=traits_, prefixes=TRAIT_PREFIXES,
         density_units=dict(rpt=_units.density_unit(emission)))

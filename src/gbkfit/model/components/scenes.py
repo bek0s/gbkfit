@@ -442,8 +442,9 @@ def _bounding_radius(galaxy: 'Galaxy', emitters: Sequence[int]) -> float:
     """
     Return the radius (arcsec) of the sphere around the centre of a galaxy
     that holds all the density of the components that an observation
-    evaluates (of the given emitters, and the components with dust), at
-    any inclination (see Component.bounding_radius); 0 without extent.
+    evaluates (of the given emitters, and the components with dust) that
+    have one, at any inclination (see Component.bounding_radius); 0
+    without.
     """
     radii = [
         cmp.bounding_radius()

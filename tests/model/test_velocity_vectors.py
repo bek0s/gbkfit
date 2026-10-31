@@ -47,7 +47,7 @@ COMPONENTS = dict(
         dict(pt_a=1, pt_s=3, ht_s=1, dpt_a=10) | SPEED_VALUES),
     cone=(
         dict(
-            type='cone', rnodes=[1, 6], emission=LINES,
+            type='cone', rnodes=[0, 1, 6], emission=LINES,
             density=dict(
                 ptraits=UNIFORM, htraits=dict(type='gauss', zmax=1.5)),
             kinematics=dict(

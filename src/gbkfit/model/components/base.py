@@ -279,8 +279,10 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     def bounding_radius(self) -> float:
         """
         Return the radius (arcsec) of the sphere around its centre that
-        holds all its density, at any inclination: the depth axis of a
-        grid holds it (see Depth.axis); 0 here.
+        holds all its density, at any inclination, if it has one: the
+        depth axis of a grid holds it (see Depth.axis); 0 here, and for
+        disks and cones, which do not end (see Disk; the depth axis holds
+        what the field sees of them).
         """
         return 0.0
 

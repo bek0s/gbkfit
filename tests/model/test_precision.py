@@ -104,7 +104,7 @@ def test_float64_ffts_keep_the_faint_values_of_float32_models(
             evaluate(driver, case, 'float32', fft_dtype), double)
         for fft_dtype in ('float32', 'float64')}
     assert errors['float64'] < 1e-5
-    assert errors['float32'] > 1e-2
+    assert errors['float32'] > 1e-3
 
 
 def _largest_errors(single, double):

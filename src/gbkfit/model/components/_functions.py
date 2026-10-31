@@ -6,6 +6,7 @@ dispersion of its disks, at any radius.
 """
 
 import functools
+import math
 import typing
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -82,8 +83,7 @@ class GalaxyFunctions:
 
     For each of its disks with velocity or dispersion traits, named
     after its component ('rotation_gas'; 'rotation' for one without a
-    name), at the radii R (arcsec, on the disk, from its first radial
-    node to its last):
+    name), at the radii R (arcsec, on the disk, from its centre on):
 
     - rotation_{component}(R): its rotation at its midplane (km/s), as
       its gravity moves it: the azimuthal mean of its tangential velocity
@@ -217,15 +217,12 @@ class GalaxyFunctions:
         """
         Return the range of the radii (arcsec) of the function of a disk
         of the name (e.g. rotation_gas) of a galaxy of the given components,
-        without planning it: from the first radial node of the disk to its
-        last; None for its other functions, of any radius.
+        without planning it: from its centre on (a disk does not end at its
+        last node); None for its other functions, of any radius.
         """
-        components = component_set.components()
-        for index, suffix in _disk_suffixes(component_set).items():
+        for suffix in _disk_suffixes(component_set).values():
             if name in (f'rotation{suffix}', f'dispersion{suffix}'):
-                rnodes = typing.cast(
-                    Disk, components[index]).density_disk().rnodes()
-                return float(rnodes[0]), float(rnodes[-1])
+                return 0.0, math.inf
         return None
 
     def bind(
@@ -356,16 +353,13 @@ class GalaxyFunctions:
         Raises
         ------
         ValueError
-            If a radius is outside the disk: below its first radial node,
-            or above its last.
+            If a radius is negative.
         """
-        rnodes = self._disks[index].rnodes()
         radii = np.asarray(R, dtype=float)
-        if not np.all((rnodes[0] <= radii) & (radii <= rnodes[-1])):
+        if np.any(radii < 0):
             name = f'{what}{self._suffixes[index]}'
             raise ValueError(
-                f"{name}: the radii must be on the disk, from {rnodes[0]:g} "
-                f"to {rnodes[-1]:g} arcsec; they are {radii}")
+                f"{name}: the radii must not be negative; they are {radii}")
         return radii
 
 

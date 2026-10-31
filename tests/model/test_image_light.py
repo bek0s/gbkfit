@@ -74,10 +74,11 @@ def test_a_thin_disk_of_an_image_is_the_image(tmp_path, incl):
     # At its own inclination, and at any other (seen from below beyond 90
     # degrees: its light was negative there): the light is the image
     # (to the cells of 0.1 arcsec, finer than the pixels, at the centre of
-    # the exponential)
+    # the exponential; the cells cover the image deprojected, to which the
+    # tail of the exponential goes on beyond its last ring)
     truth = write_truth(tmp_path / 'truth.fits')
     trait = dict(
-        type='image', file=str(tmp_path / 'truth.fits'), size=[120, 120],
+        type='image', file=str(tmp_path / 'truth.fits'), size=[260, 260],
         step=0.1)
     _, model = image_of(disk(trait), GEOMETRY | dict(incl=incl, pt_a=1))
     assert model.sum() == pytest.approx(truth.sum(), rel=2e-3)

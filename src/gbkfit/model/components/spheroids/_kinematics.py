@@ -253,10 +253,10 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     dhtraits : DHTrait or Sequence of DHTrait, optional
         The dispersion height traits, one for each dispersion polar trait
         (parameters 'dht_*'; as vhtraits).
-    rnmin, rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its nodes, of R (arcsec): rnodes; or rnmin, rnmax and
-        rnsep (every rnsep); or rnmin, rnmax and rnlen (rnlen nodes); by
-        default 0 and the rmax of the spheroid.
+    rnmax, rnsep, rnlen, rnodes : optional
+        The radii of its nodes, of R (arcsec), from 0: rnodes; or rnmax and
+        rnsep (every rnsep); or rnmax and rnlen (rnlen nodes); by default
+        0 and the rmax of the spheroid.
     rstep : float, optional
         The width of the rings it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
@@ -299,7 +299,6 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
-            rnmin: float | None = None,
             rnmax: float | None = None,
             rnsep: float | None = None,
             rnlen: int | None = None,
@@ -310,9 +309,9 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
         check_options(SpheroidTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
         SPHEROID_TRAITS.check(self.traits())
-        given = (rnmin, rnmax, rnsep, rnlen, rnodes) != (None,) * 5
+        given = (rnmax, rnsep, rnlen, rnodes) != (None,) * 4
         self._nodes = parse_component_rnode_args(
-            rnmin, rnmax, rnsep, rnlen, rnodes, rstep, interp) \
+            rnmax, rnsep, rnlen, rnodes, rstep, interp) \
             if given else None
         self._rstep = rstep
         self._interp = interp
@@ -338,14 +337,14 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     def motion(self, rmax: float) -> 'TraitsMotion':
         nodes = self._nodes if self._nodes is not None \
             else parse_component_rnode_args(
-                None, None, None, None, (0.0, rmax), self._rstep,
+                None, None, None, (0.0, rmax), self._rstep,
                 self._interp)
         rnodes = nodes['rnodes']
-        if rnodes[0] != 0 or rnodes[-1] < rmax:
+        if rnodes[-1] < rmax:
             raise ConfigError(
-                f"the nodes of the traits of a spheroid go from 0 to its "
-                f"rmax ({rmax}) at least, where its light is; they go from "
-                f"{rnodes[0]} to {rnodes[-1]}")
+                f"the nodes of the traits of a spheroid go to its rmax "
+                f"({rmax}) at least, where its light is; they go to "
+                f"{rnodes[-1]}")
         return TraitsMotion(self.traits(), **nodes)
 
 

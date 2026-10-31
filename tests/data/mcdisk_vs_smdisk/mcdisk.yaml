@@ -6,7 +6,6 @@ galaxies:
     clouds: {cflux: 0.0001}
     loose: false
     tilted: false
-    rnmin: 0
     rnmax: 20
     rnsep: 2
     density:

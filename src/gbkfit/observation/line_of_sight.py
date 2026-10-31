@@ -46,19 +46,19 @@ class Depth(parseutils.Serializable):
     Parameters
     ----------
     extent : str or float, optional
-        Its length (arcsec); 'galaxy' (the default): that which holds all
-        the density of the disks the observation evaluates, at any
-        inclination: twice the bounding radius of the largest (that of
-        its last ring, R, or of a thick disk, sqrt(R^2 + Z^2) of the
-        largest height of its density above the plane of the galaxy, Z;
-        see Disk.bounding_radius); through radiative
-        transfer, where each galaxy has a depth axis of its own, that of
-        each galaxy; or 'legacy': that of the longer of the x and y axes
-        of the grid the galaxies are evaluated on (the grid of the data,
-        oversampled and padded for the convolutions), as the 3d models of
-        earlier versions took it. A shorter axis than that of 'galaxy'
-        (of 'legacy' or a length) loses the density beyond its ends: a
-        warning says so (see parseutils.warn).
+        Its length (arcsec); 'galaxy' (the default): that which holds the
+        galaxies the observation evaluates, at any inclination: the
+        diagonal of the x and y axes of the grid they are evaluated on
+        (the grid of the data, oversampled and padded for the
+        convolutions), the longest line across the field, for disks, which
+        do not end at their last ring (see Disk), or twice the bounding
+        radius of the largest of the components that have one (e.g. a
+        spheroid, see Component.bounding_radius), if longer; through
+        radiative transfer, where each galaxy has a depth axis of its own,
+        that of each galaxy; or 'legacy': the longer of those x and y axes,
+        as the 3d models of earlier versions took it. A shorter axis than
+        that of 'galaxy' (of 'legacy' or a length) loses the density
+        beyond its ends: a warning says so (see parseutils.warn).
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
@@ -89,25 +89,28 @@ class Depth(parseutils.Serializable):
             self, grid: gridutils.Grid, bounding_radius: float
     ) -> DepthAxis:
         """
-        Return the axis on the given grid of the x and y axes, for disks
-        of the given bounding radius (arcsec; see Disk.bounding_radius):
-        as many voxels as cover the extent, centred on 0.
+        Return the axis on the given grid of the x and y axes, for
+        galaxies of the given bounding radius (arcsec, of those of their
+        components that have one; see Component.bounding_radius): as many
+        voxels as cover the extent, centred on 0.
         """
         longest = int(grid.size[0] < grid.size[1])
         step = self._step if self._step is not None \
             else grid.coords.step[longest]
+        diagonal = float(np.hypot(*(
+            n * abs(d) for n, d in zip(grid.size, grid.coords.step))))
+        galaxy = max(diagonal, 2 * bounding_radius)
         if self._extent == 'legacy':
             size = grid.size[longest]
         else:
-            extent = 2 * bounding_radius if self._extent == 'galaxy' \
-                else self._extent
+            extent = galaxy if self._extent == 'galaxy' else self._extent
             size = max(1, int(np.ceil(extent / step - 1e-9)))
-        if size * step < 2 * bounding_radius * (1 - 1e-9):
+        if size * step < galaxy * (1 - 1e-9):
             parseutils.warn(
                 f"the depth axis ({size * step:g} arcsec) is shorter than "
-                f"the disks need ({2 * bounding_radius:g} arcsec, twice "
-                f"their bounding radius): their density beyond its ends is "
-                f"lost; its extent 'galaxy' holds it")
+                f"the galaxies need ({galaxy:g} arcsec, the diagonal of the "
+                f"grid or twice their bounding radius): their density "
+                f"beyond its ends is lost; its extent 'galaxy' holds it")
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
 
 
@@ -198,7 +201,7 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
         the given dispersion (km/s; None for an image), against which the
         resolution of the light is checked: here, each galaxy adds its
         light to the image or the spectral cube, dimmed by its own opacity,
-        on the depth axis of the largest disk of the scene (see
+        on the depth axis of the scene (see Depth.axis and
         AdditiveScenePlan).
         """
         depth = self.depth_axis(grid.spatial(), max(scene.bounding_radii()))
@@ -403,7 +406,7 @@ class Transfer(LineOfSight):
             dtype: np.dtype,
             smoothing: float | None
     ) -> TransferScenePlan:
-        # (each galaxy on the depth axis of its largest disk)
+        # (each galaxy on a depth axis of its own)
         depths = [
             self.depth_axis(grid.spatial(), radius)
             for radius in scene.bounding_radii()]

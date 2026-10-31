@@ -221,20 +221,18 @@ def flux(plan, properties, out_extra=None):
     return evaluate_with(plan, properties, out_extra).sum()
 
 
-def test_the_depth_axis_holds_the_density_up_to_zmax(driver, caplog):
-    # A fat disk at an inclination of 45 degrees: its rim, up to zmax (8)
-    # above its plane, reaches sqrt(R^2 + zmax^2) along the line of sight,
-    # beyond R (13). The default depth axis holds it all: the flux of a
-    # longer one (of voxels at the same depths); a shorter one loses some,
-    # and a warning says so
+def test_a_depth_axis_shorter_than_the_diagonal_warns(driver, caplog):
+    # A disk does not end at its last ring: the default depth axis is the
+    # diagonal of the grid (the longest line across the field, 52 arcsec
+    # here). A shorter one loses some of the light of a fat disk at an
+    # inclination of 45 degrees, and a warning says so
     properties = PROPERTIES | dict(incl=45, ht_s=3, pt_s=8)
-    default = flux(observe_depth(driver, DISK, {}), properties)
-    longer = flux(observe_depth(driver, DISK, dict(extent=61)), properties)
-    np.testing.assert_allclose(longer, default, rtol=1e-5)
     caplog.set_level(logging.WARNING)
+    default = flux(observe_depth(driver, DISK, {}), properties)
+    assert 'shorter than the galaxies need' not in caplog.text
     shorter = flux(observe_depth(driver, DISK, dict(extent=25)), properties)
     assert shorter < (1 - 1e-4) * default
-    assert 'shorter than the disks need' in caplog.text
+    assert 'shorter than the galaxies need' in caplog.text
 
 
 @pytest.mark.parametrize('scale, warns', [(1, False), (4, True)])

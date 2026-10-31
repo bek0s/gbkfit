@@ -30,7 +30,7 @@ def disk(kind='smooth', thick=True):
         density.update(htraits=dict(type='sech2', zmax=8))
     clouds = dict(clouds=dict(cflux=1e-3)) if kind == 'clouds' else {}
     return dict(
-        type='disk', loose=False, tilted=False, rnmin=0, rnmax=10, rnsep=1,
+        type='disk', loose=False, tilted=False, rnmax=10, rnsep=1,
         density=density,
         kinematics=dict(
             type='traits',
@@ -142,14 +142,14 @@ THICK = dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
 THIN = dict(ptraits=dict(type='exponential'))
 GAS = dict(
-    type='disk', name='gas', loose=False, tilted=False, rnmin=0, rnmax=10,
+    type='disk', name='gas', loose=False, tilted=False, rnmax=10,
     rnsep=1, density=THICK, kinematics=KINEMATICS, emission=LINES)
 DUST = dict(
-    type='disk', name='dust', loose=False, tilted=False, rnmin=0,
-    rnmax=10, rnsep=1, density=THICK, opacity=dict(type='dust'))
+    type='disk', name='dust', loose=False, tilted=False, rnmax=10,
+    rnsep=1, density=THICK, opacity=dict(type='dust'))
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
 OUTFLOW = dict(
-    type='cone', name='outflow', rnodes=[1, 3, 6],
+    type='cone', name='outflow', rnodes=[0, 1, 3, 6],
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
@@ -457,7 +457,11 @@ def galaxies_model(
     radiative transfer (a spectral cube by default), front to back in the
     given order (that of the galaxies if None), and its extras (none
     without with_extras: the evaluation of fits). The galaxies take those
-    of the properties that they have (see of_model).
+    of the properties that they have (see of_model). Its depth axis holds
+    the tails of the disks (beyond their last ring) on every line of
+    sight: on the default one, the diagonal of the grid, a group of
+    galaxies, on an axis as long as theirs together, would hold more of
+    them than its galaxies alone.
     """
     import gbkfit.params
     from gbkfit.observation import ObservationGroup, observation_parser
@@ -466,7 +470,7 @@ def galaxies_model(
         observable=dict(
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=31, step=10, convention='relativistic')),
-        line_of_sight=dict(type='transfer'),
+        line_of_sight=dict(type='transfer', depth=dict(extent=120)),
         galaxies=[galaxy['name'] for galaxy in galaxies]) | observation
     if depth_order is None:
         depth_order = [galaxy['name'] for galaxy in galaxies]

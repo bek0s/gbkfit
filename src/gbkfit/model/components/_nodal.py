@@ -25,8 +25,8 @@ from ._detail import parse_nodes
 from ._native import ParamBuffer
 from .traits import (
     DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, ImageInput,
-    PressureSupport, RPTrait, RotationFactorsInput, RotationInput, Trait,
-    VPTrait, WaveInput, trait_desc)
+    PressureSupport, RPTrait, RotationFactorsInput, RotationInput,
+    SAMPLING_TAIL, Trait, VPTrait, WaveInput, trait_desc)
 
 
 # The most traits of one kind that the native kernels take (TRAIT_NUM_MAX
@@ -133,20 +133,23 @@ def _trait_params(
         prefix: str | Sequence[str] | None,
         nrnodes: int,
         nsubrnodes: int,
+        ntail: int,
         density_unit: astropy.units.UnitBase | None
 ) -> TraitParams:
     """
     Return the parameters of the traits of one kind, of the given prefix
     (followed by the index of each trait after the first), or of the given
     prefix of each trait. A node-wise parameter has a value for each node,
-    or for each subnode if its trait samples it at the subnodes. The
-    amplitudes of density polar traits are in the given unit of their
+    or for each subnode if its trait samples it at the subnodes, and also
+    for each of the ntail radii of the tail if beyond (see SAMPLING_TAIL).
+    The amplitudes of density polar traits are in the given unit of their
     density (None if not known).
     """
     params_list = []
     for trait in traits_:
         sampling = trait.sampling()
-        nnodes = nsubrnodes if sampling == 'subrings' else nrnodes
+        nnodes = {'subrings': nsubrnodes, SAMPLING_TAIL: nsubrnodes + ntail}
+        nnodes = nnodes.get(sampling, nrnodes)
         units = dict.fromkeys(trait.amplitudes(), density_unit) \
             if isinstance(trait, RPTrait) else {}
         params_sm = pdescs_with_units(trait.params_sm(), units)
@@ -186,18 +189,28 @@ def _trait_params(
 
 
 def _trait_constants(
-        traits_: Sequence[Trait], nnodes: int, nsubnodes: int
+        traits_: Sequence[Trait],
+        nnodes: int,
+        nsubnodes: int,
+        tail: Sequence[float]
 ) -> tuple[list[int], list[float], list[int], list[int]]:
     """
     Return the uids, constant values and their counts, and the parameter
     value counts of a set of traits. Each node-wise parameter has one
-    value for each subnode, because the node values are interpolated.
+    value for each subnode, because the node values are interpolated,
+    and those of the sampling SAMPLING_TAIL also one for each of the
+    radii of the tail, which follow the constants of their trait (their
+    number, then the radii).
     """
     uids, cvalues, ccounts, pcounts = [], [], [], []
     for trait in traits_:
-        consts = trait.consts()
+        consts = list(trait.consts())
+        nvalues = nsubnodes
+        if trait.sampling() == SAMPLING_TAIL:
+            consts += [len(tail), *tail]
+            nvalues += len(tail)
         npvalues_sm = sum(p.size() for p in trait.params_sm().values())
-        npvalues_nw = len(trait.params_rnw(nnodes)) * nsubnodes
+        npvalues_nw = len(trait.params_rnw(nnodes)) * nvalues
         uids.append(trait.uid())
         cvalues += consts
         ccounts.append(len(consts))
@@ -245,6 +258,36 @@ def subring_radii(
     return tuple(typing.cast(list, subrnodes.tolist()))
 
 
+# The radii beyond the last node rl of a component that its mass takes
+# its density at (see tail_radii), where it goes on as its tail (see
+# RPTrait.tail_scale, whose scale is at most rl): to (1 + _TAIL_REACH)
+# rl, where the tail is below exp(-_TAIL_REACH) of its value at rl (the
+# mass beyond, below 3e-4 of that of the tail, is far below the error of
+# any data), in steps that grow by _TAIL_GROWTH from the width of the
+# last ring (the tail of the scale of a ring is then as finely sampled as
+# the rings, and those of larger scales finely enough)
+_TAIL_REACH = 10.0
+_TAIL_GROWTH = 1.2
+
+
+def tail_radii(subrnodes: Sequence[float]) -> tuple[float, ...]:
+    """
+    Return the radii beyond the last of the given subnodes of a component
+    that its mass takes its tail at (see _TAIL_REACH): from the step of
+    its last ring (half its width), growing by _TAIL_GROWTH, to (1 +
+    _TAIL_REACH) times the last subnode.
+    """
+    rl = subrnodes[-1]
+    step = rl - subrnodes[-2]
+    radii = []
+    r = rl
+    while r < (1 + _TAIL_REACH) * rl:
+        r = min(r + step, (1 + _TAIL_REACH) * rl)
+        radii.append(r)
+        step *= _TAIL_GROWTH
+    return tuple(radii)
+
+
 class NodalTraits:
     """
     The traits of a component on radial nodes, by kind, and their
@@ -270,17 +313,20 @@ class NodalTraits:
     ):
         self._rnodes = rnodes
         self._subrnodes = subrnodes
+        self._tail = tail_radii(subrnodes)
         self._interp = interp
         self._traits = {kind: traits_.get(kind, ()) for kind in kinds}
         self._params = {
             kind: _trait_params(
                 traits_of_kind, prefixes.get(kind), len(rnodes),
-                len(subrnodes), density_units.get(kind))
+                len(subrnodes), len(self._tail), density_units.get(kind))
             for kind, traits_of_kind in self._traits.items()}
         # The parameters whose values are the circular velocity of the
         # mass of their galaxy, and the radii of their values
+        radii = {'subrings': tuple(subrnodes),
+                 SAMPLING_TAIL: tuple(subrnodes) + self._tail}
         self._circular_velocity_params = {
-            name: subrnodes if params.sampling[name] == 'subrings' else rnodes
+            name: radii.get(params.sampling[name], tuple(rnodes))
             for params in self._params.values()
             for name in params.circular_velocity}
         self._pressure_supported_params = {
@@ -394,7 +440,8 @@ class NodalTraits:
         kernels take them: with each node-wise parameter at the subnodes.
         """
         return _trait_constants(
-            self._traits[kind], len(self._rnodes), len(self._subrnodes))
+            self._traits[kind], len(self._rnodes), len(self._subrnodes),
+            self._tail)
 
     def sizes(self) -> dict[str, int]:
         """
@@ -461,7 +508,6 @@ def native_traits(
 
 
 def parse_component_rnode_args(
-        rnmin: float | None,
         rnmax: float | None,
         rnsep: float | None,
         rnlen: int | None,
@@ -476,7 +522,7 @@ def parse_component_rnode_args(
     interpolation class of its node-wise parameters. Raise ConfigError for
     invalid options.
     """
-    nodes = parse_nodes('r', rnmin, rnmax, rnsep, rnlen, rnodes)
+    nodes = parse_nodes('r', rnmax, rnsep, rnlen, rnodes)
     step = rstep
     if step is None:
         # (a float, as configurations take it)

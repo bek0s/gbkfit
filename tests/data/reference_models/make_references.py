@@ -30,6 +30,13 @@ the moments where moment 0 is above 1% of its peak: up to 2.6e-3 km/s
 in moment 2 against a float64 model (now 2.2e-5), reshuffled by any
 change of the model's values.
 
+They were made again (2026-10-31) when disks stopped ending at their last
+ring: beyond it, their density goes on as its tail (see
+traits.RPTrait.tail_scale), and their other node-wise values keep those
+of the last ring. Within the last ring the disks are the same (the
+kernels were checked to change only beyond it); the PSF spreads the
+light of the tails into the pixels near the last ring.
+
 Usage:
 
     python make_references.py PYTHON

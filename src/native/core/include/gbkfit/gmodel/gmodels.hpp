@@ -565,7 +565,7 @@ gmodel_disk_dispersion(
         const T dvalue = std::abs(gmodel_traits_sum<dp_trait<T>, dh_trait<T>>(
                 a.dpt, a.dht, rnidx, a.rnodes, a.nrnodes,
                 x, y, r, theta, h, Unprojected{}));
-        return a.deq ? std::hypot(dvalue, lerp(r, rnidx, a.rnodes, a.deq))
+        return a.deq ? std::hypot(dvalue, nodewise(r, rnidx, a.rnodes, a.deq))
                      : dvalue;
     }
     else
@@ -585,7 +585,7 @@ gmodel_disk_dispersion(
         T sver = std::abs(iso + sums[DPT_DIRECTION_VER]);
         if (a.deq)
         {
-            const T deq = lerp(r, rnidx, a.rnodes, a.deq);
+            const T deq = nodewise(r, rnidx, a.rnodes, a.deq);
             sver = std::hypot(sver, deq);
             if (!a.deq_vertical) {
                 srad = std::hypot(srad, deq);
@@ -706,35 +706,23 @@ rnode_radius(
     return std::sqrt(xr * xr + yr * yr);
 }
 
-template<typename T> constexpr bool
-disk_info(int& index, T radius, int nnodes, const T* nodes)
+// The ring of a radius (not negative) of a component of the nodes (from
+// 0): the index of the node that ends it, the last beyond the last node
+// (a component does not end there, see nodewise and rp_trait_tail). A
+// radius that is not a number (e.g. of parameters out of their range) is
+// in the first ring: its light is NaN, so that it is seen.
+template<typename T> constexpr int
+ring_index(T radius, int nnodes, const T* nodes)
 {
-    // A radius that is not a number (e.g. of parameters out of their
-    // range) is in the first ring: its light is NaN, so that it is seen
-    if (std::isnan(radius))
-    {
-        index = 1;
-        return true;
-    }
-
-    // Ignore anything smaller than the first node
-    if (radius < nodes[0])
-        return false;
-
-    // Ignore anything larger than the last node
-    if (radius >= nodes[nnodes-1])
-        return false;
-
     // Linear search for the first node beyond the radius: the outer node
-    // of its ring (the radius is not below nodes[0], checked above)
-    for(index = 1; index < nnodes; ++index)
-        if (radius < nodes[index])
-            break;
-
-    return true;
+    // of its ring
+    int index = 1;
+    while (index < nnodes - 1 && radius >= nodes[index])
+        ++index;
+    return index;
 }
 
-template<typename T> constexpr bool
+template<typename T> constexpr void
 ring_info(
         int& index, T& radius,
         T x, T y,
@@ -752,12 +740,17 @@ ring_info(
     {
         index = 1;
         radius = radius_min + radius_max;
-        return true;
+        return;
     }
 
-    // Ignore anything smaller than the first node, or larger than the last
-    if (radius_min < nodes[0] || radius_max >= nodes[nnodes-1])
-        return false;
+    // Beyond the last ring, in its plane (a component keeps its geometry
+    // there, see nodewise)
+    if (radius_max >= nodes[nnodes-1])
+    {
+        index = nnodes - 1;
+        radius = radius_max;
+        return;
+    }
 
     // Linear search for the first node beyond the radius: the outer node
     // of its ring (the last, if no other is: the radius is below it,
@@ -775,11 +768,9 @@ ring_info(
     T d2 = nodes[index] - rnode_radius(
             x, y, loose, tilted, index, xpos, ypos, sincos);
     radius = (nodes[index] * d1 - nodes[index - 1] * d2) / (d1 - d2);
-
-    return true;
 }
 
-template<typename T> constexpr bool
+template<typename T> constexpr void
 ring_info(
         int& index, T& radius,
         T x, T y, T z,
@@ -797,12 +788,17 @@ ring_info(
     {
         index = 1;
         radius = radius_min + radius_max;
-        return true;
+        return;
     }
 
-    // Ignore anything smaller than the first node, or larger than the last
-    if (radius_min < nodes[0] || radius_max >= nodes[nnodes-1])
-        return false;
+    // Beyond the last ring, in its plane (a component keeps its geometry
+    // there, see nodewise)
+    if (radius_max >= nodes[nnodes-1])
+    {
+        index = nnodes - 1;
+        radius = radius_max;
+        return;
+    }
 
     // Linear search for the first node beyond the radius: the outer node
     // of its ring (the last, if no other is: the radius is below it,
@@ -820,8 +816,6 @@ ring_info(
     T d2 = nodes[index] - rnode_radius(
             x, y, z, loose, tilted, index, xpos, ypos, sincos);
     radius = (nodes[index] * d1 - nodes[index - 1] * d2) / (d1 - d2);
-
-    return true;
 }
 
 // The number of planes of line opacity in the fields of a thick disk (see
@@ -848,7 +842,7 @@ gmodel_line_opacity(
     for (int i = 0; i < a.opt.n; ++i)
     {
         T value = 0;
-        rp_trait<T>(
+        op_trait<T>(
                 value, a.opt.uids[i], cvalues, pvalues, rnidx, a.rnodes,
                 a.nrnodes, x, y, r, theta);
         if (a.opt_rows[i] >= 0)
@@ -906,12 +900,15 @@ gmodel_mcdisk_evaluate_cloud(
     const int first = rnidx > 0 ? mc.ncloudscsum[rnidx - 1] : 0;
     RNG<T> rng(mc.seed, ci - first, rnidx);
 
-    // Find which trait and subring the cloud belongs to.
+    // Find which trait and pool the cloud belongs to: of each trait, one
+    // pool for the disk within its last node, or one for each of its rings
+    // (centred on the subnodes between the first and the last), and one
+    // for its tail beyond the last node, if it has one (see rp_trait_tail)
+    int rings = 0;
     for(tidx = 0; tidx < a.rpt.n; ++tidx)
     {
-        // One pool of clouds for the whole disk, or one for each ring (the
-        // nodes are the ring centres between the edges of the disk)
-        int size = mc.has_analytical_integral[tidx] ? 1 : a.nrnodes - 2;
+        rings = mc.has_analytical_integral[tidx] ? 1 : a.nrnodes - 2;
+        const int size = rings + rp_trait_has_tail(a.rpt.uids[tidx]);
         if (rnidx < size)
             break;
         rnidx -= size;
@@ -922,11 +919,16 @@ gmodel_mcdisk_evaluate_cloud(
     }
 
     // Density polar trait
-    // The first and last radial nodes must be ignored.
-    rp_trait_rnd<T>(
-            sign, rd, theta, rng,
-            a.rpt.uids[tidx], rpt_cptr, rpt_pptr,
-            rnidx, a.rnodes, a.nrnodes);
+    if (rnidx < rings)
+        rp_trait_rnd<T>(
+                sign, rd, theta, rng,
+                a.rpt.uids[tidx], rpt_cptr, rpt_pptr,
+                rnidx, a.rnodes, a.nrnodes);
+    else
+        rp_trait_tail_rnd<T>(
+                sign, rd, theta, rng,
+                a.rpt.uids[tidx], rpt_cptr, rpt_pptr,
+                a.rnodes, a.nrnodes);
 
     // The sign of the trait at the cloud, relative to that of the flux of
     // its pool (e.g. of a harmonic)
@@ -939,13 +941,10 @@ gmodel_mcdisk_evaluate_cloud(
     xd = rd * std::cos(theta);
     yd = rd * std::sin(theta);
 
-    // Recalculate radial node index.
-    // This is done in order to account for:
-    //  - rptraits with an analytical integral (no subrings).
-    //  - pixels in the first and last half subrings.
-    if (!disk_info(rnidx, rd, a.nrnodes, a.rnodes)) {
-        return;
-    }
+    // The ring of the cloud (that of its pool is not: e.g. a trait with an
+    // analytical integral has one pool, and a pool of a ring is half a
+    // ring off its interval of nodes)
+    rnidx = ring_index(rd, a.nrnodes, a.rnodes);
 
     // Selection traits
     if (!gmodel_selected(a.spt, rnidx, a.rnodes, a.nrnodes, xd, yd, rd, theta))
@@ -969,11 +968,11 @@ gmodel_mcdisk_evaluate_cloud(
     }
 
     vsysi = !a.vsys ? 0
-            : a.loose ? lerp(rd, rnidx, a.rnodes, a.vsys) : a.vsys[0];
-    xposi = a.loose ? lerp(rd, rnidx, a.rnodes, a.xpos) : a.xpos[0];
-    yposi = a.loose ? lerp(rd, rnidx, a.rnodes, a.ypos) : a.ypos[0];
-    posai = a.tilted ? lerp(rd, rnidx, a.rnodes, a.posa) : a.posa[0];
-    incli = a.tilted ? lerp(rd, rnidx, a.rnodes, a.incl) : a.incl[0];
+            : a.loose ? nodewise(rd, rnidx, a.rnodes, a.vsys) : a.vsys[0];
+    xposi = a.loose ? nodewise(rd, rnidx, a.rnodes, a.xpos) : a.xpos[0];
+    yposi = a.loose ? nodewise(rd, rnidx, a.rnodes, a.ypos) : a.ypos[0];
+    posai = a.tilted ? nodewise(rd, rnidx, a.rnodes, a.posa) : a.posa[0];
+    incli = a.tilted ? nodewise(rd, rnidx, a.rnodes, a.incl) : a.incl[0];
     posai *= DEG_TO_RAD<T>;
     incli *= DEG_TO_RAD<T>;
 
@@ -1170,24 +1169,23 @@ gmodel_smdisk_evaluate_spaxel(
     // radial node index and radius now.
     if (a.loose || a.tilted)
     {
-        bool is_on_disk = is_thin
-                ? ring_info(
-                    rnidx, rn, xn, yn, a.loose, a.tilted,
-                    a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa_incl_sincos)
-                : ring_info(
-                    rnidx, rn, xn, yn, zn, a.loose, a.tilted,
-                    a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa_incl_sincos);
-        if (!is_on_disk)
-            return;
+        if (is_thin)
+            ring_info(
+                rnidx, rn, xn, yn, a.loose, a.tilted,
+                a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa_incl_sincos);
+        else
+            ring_info(
+                rnidx, rn, xn, yn, zn, a.loose, a.tilted,
+                a.nrnodes, a.rnodes, a.xpos, a.ypos, a.posa_incl_sincos);
     }
 
     // Calculate systemic velocity and geometrical parameters
     vsysi = !a.vsys ? 0
-            : a.loose ? lerp(rn, rnidx, a.rnodes, a.vsys) : a.vsys[0];
-    xposi = a.loose ? lerp(rn, rnidx, a.rnodes, a.xpos) : a.xpos[0];
-    yposi = a.loose ? lerp(rn, rnidx, a.rnodes, a.ypos) : a.ypos[0];
-    posai = a.tilted ? lerp(rn, rnidx, a.rnodes, a.posa) : a.posa[0];
-    incli = a.tilted ? lerp(rn, rnidx, a.rnodes, a.incl) : a.incl[0];
+            : a.loose ? nodewise(rn, rnidx, a.rnodes, a.vsys) : a.vsys[0];
+    xposi = a.loose ? nodewise(rn, rnidx, a.rnodes, a.xpos) : a.xpos[0];
+    yposi = a.loose ? nodewise(rn, rnidx, a.rnodes, a.ypos) : a.ypos[0];
+    posai = a.tilted ? nodewise(rn, rnidx, a.rnodes, a.posa) : a.posa[0];
+    incli = a.tilted ? nodewise(rn, rnidx, a.rnodes, a.incl) : a.incl[0];
     posai *= DEG_TO_RAD<T>;
     incli *= DEG_TO_RAD<T>;
 
@@ -1210,10 +1208,7 @@ gmodel_smdisk_evaluate_spaxel(
     // radial node index and radius now.
     if (!(a.loose || a.tilted)) {
         rn = std::sqrt(xn * xn + yn * yn);
-        bool is_on_disk = disk_info(rnidx, rn, a.nrnodes, a.rnodes);
-        if (!is_on_disk) {
-            return;
-        }
+        rnidx = ring_index(rn, a.nrnodes, a.rnodes);
     }
     theta = std::atan2(yn, xn);
 
@@ -1375,9 +1370,7 @@ gmodel_smcone_evaluate_voxel(
     if (!((zn >= 0 && a.positive) || (zn <= 0 && a.negative)))
         return;
     const T rn = std::sqrt(xn * xn + yn * yn + zn * zn);
-    int rnidx = -1;
-    if (!disk_info(rnidx, rn, a.nrnodes, a.rnodes))
-        return;
+    const int rnidx = ring_index(rn, a.nrnodes, a.rnodes);
     const T theta = std::atan2(yn, xn);
     const T wall = a.wall[0] * DEG_TO_RAD<T>;
     const T dn = std::sqrt(xn * xn + yn * yn) * std::cos(wall)
@@ -1634,22 +1627,15 @@ gmodel_spheroid_jeans_kinematics(
 // The mean velocity and the dispersion on the line of sight of the stars
 // of a spheroid at the point (x, y, z) of its frame, at the distance R
 // from its axis and the azimuth theta, seen at the inclination incl
-// (radians), of its traits (see SpheroidArgs::vpt); NaN beyond its nodes
-// (where it has no light); and the mean velocity as a vector of its
-// frame, if wanted (vector)
+// (radians), of its traits (see SpheroidArgs::vpt; beyond its nodes,
+// those of its last node, see nodewise); and the mean velocity as a
+// vector of its frame, if wanted (vector)
 template<typename T> constexpr void
 gmodel_spheroid_traits_kinematics(
         T x, T y, T z, T R, T theta, T incl, const SpheroidArgs<T>& a,
         T& velocity, T& dispersion, T* vector)
 {
-    int rnidx = -1;
-    if (!disk_info(rnidx, R, a.nrnodes, a.rnodes))
-    {
-        velocity = dispersion = T(NAN);
-        if (vector)
-            vector[0] = vector[1] = vector[2] = T(NAN);
-        return;
-    }
+    const int rnidx = ring_index(R, a.nrnodes, a.rnodes);
     if (vector)
         gmodel_disk_velocity(
                 vector, a.vpt, a.vht, a.vpt_directions, rnidx, a.rnodes,
@@ -1913,23 +1899,15 @@ gmodel_disk_htraits_point(
 // node-wise parameters interpolated linearly between the (sub)nodes. The
 // values are those of the traits before the kernels combine them (e.g.
 // a velocity trait projected, if asked, without the systemic velocity;
-// a dispersion trait without the equilibrium of the disk). The disk
-// is closed: at the radius of its last node, the values are those its
-// last ring tends to there. Off the disk (a radius outside [rnodes[0],
-// rnodes[nrnodes - 1]]), where the kernels evaluate nothing, the values
-// are NaN.
+// a dispersion trait without the equilibrium of the disk); beyond the
+// last node, with the tails of the density traits (see rp_trait_tail)
+// and the node-wise values of the last node (see nodewise).
 template<typename T> constexpr void
 gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
 {
     // (the value of trait i goes to row i of the output)
     auto write = [&](int i, T value) { a.out[i * a.npoints + j] = value; };
-    int rnidx = a.nrnodes - 1;
-    if (a.r[j] != a.rnodes[rnidx]
-            && !disk_info(rnidx, a.r[j], a.nrnodes, a.rnodes)) {
-        for (int i = 0; i < a.traits.n; ++i)
-            write(i, NAN);
-        return;
-    }
+    const int rnidx = ring_index(a.r[j], a.nrnodes, a.rnodes);
     switch (a.kind)
     {
     case TraitKind::RPT:
@@ -1961,7 +1939,7 @@ gmodel_disk_traits_point(int j, const DiskTraitsArgs<T>& a)
         gmodel_disk_ptraits_point<sp_trait<T>>(write, j, rnidx, a);
         break;
     case TraitKind::OPT:
-        gmodel_disk_ptraits_point<rp_trait<T>>(write, j, rnidx, a);
+        gmodel_disk_ptraits_point<op_trait<T>>(write, j, rnidx, a);
         break;
     case TraitKind::RHT:
         gmodel_disk_htraits_point<rh_trait<T>>(write, j, rnidx, a);

@@ -7,7 +7,6 @@ galaxies:
     name: disk
     loose: false
     tilted: false
-    rnmin: 0
     rnmax: 10
     rnsep: 1
     density:
@@ -21,7 +20,7 @@ galaxies:
   - type: cone
     geometry: own
     name: outflow
-    rnodes: [0.5, 2, 4, 6]
+    rnodes: [0, 2, 4, 6]
     density:
       ptraits: {type: exponential}
       htraits: {type: uniform, zmax: 1.5, rnodes: true}

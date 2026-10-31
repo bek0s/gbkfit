@@ -83,6 +83,39 @@ def _ring_flux(
     return cumulative(outer, *params) - cumulative(inner, *params)
 
 
+def _with_tail(
+        fluxes: np.ndarray,
+        trait: RPTrait,
+        params: dict[str, np.ndarray],
+        subrnodes: np.ndarray,
+        mean: np.ndarray
+) -> np.ndarray:
+    """
+    Return the fluxes of the pools of the clouds of a trait within its
+    last subnode rl, with that of its tail beyond (see RPTrait.cloud_flux
+    and tail_scale) appended: of its azimuthal mean at rl (signed, or of
+    |B|; see cloud_flux), the integral of 2 pi r mean exp(-(r - rl) / h)
+    beyond rl, 2 pi mean h (rl + h).
+    """
+    rl = float(subrnodes[-1])
+    h = trait.tail_scale(params, subrnodes)
+    return np.append(fluxes, 2 * np.pi * mean * h * (rl + h))
+
+
+def _nodewise_log_slope(
+        values: np.ndarray, subrnodes: np.ndarray
+) -> float:
+    """
+    Return the log-slope of a node-wise value (its values at the subnodes)
+    at the last subnode: that of its last interval, as the native
+    nodewise_log_slope (infinite or NaN for a value of 0 there).
+    """
+    v = np.asarray(values, dtype=float)
+    r = np.asarray(subrnodes, dtype=float)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return float((v[-1] - v[-2]) / ((r[-1] - r[-2]) * v[-1]))
+
+
 def _cumulative_exponential(r, a, s):
     x = r / s
     return 2 * np.pi * a * s * s * (1 - (1 + x) * np.exp(-x))
@@ -121,9 +154,8 @@ def _cumulative_sech2(r, a, s):
 def _ptrait_integrate_uniform(
         params: dict[str, np.ndarray], subrnodes: np.ndarray
 ) -> np.ndarray:
-    a = params['a']
-    rmin, rmax = subrnodes[0], subrnodes[-1]
-    return np.pi * a * (rmax * rmax - rmin * rmin)
+    rl = subrnodes[-1]
+    return np.pi * params['a'] * rl * rl
 
 
 def _linear_moment(
@@ -206,36 +238,47 @@ def _ptrait_integrate_mixture_moffat(
 
 
 def _ptrait_cloud_flux_nw_uniform(
-        params: dict[str, np.ndarray], subrnodes: np.ndarray
+        trait: RPTrait, params: dict[str, np.ndarray], subrnodes: np.ndarray
 ) -> np.ndarray:
-    # (|a| over each ring; the kernel gives each cloud the sign of a)
-    return 2 * np.pi * _nodewise_moments(params['a'], subrnodes)
+    # (|a| over each ring and the tail; the kernel gives each cloud the
+    # sign of a)
+    a = np.asarray(params['a'], dtype=float)
+    return _with_tail(
+        2 * np.pi * _nodewise_moments(a, subrnodes), trait, params,
+        subrnodes, np.abs(a[-1]))
 
 
 def _ptrait_cloud_flux_nw_harmonic(
-        a: np.ndarray, subrnodes: np.ndarray, order: int
+        trait: RPTrait, params: dict[str, np.ndarray], subrnodes: np.ndarray,
+        order: int
 ) -> np.ndarray:
     # The integral of |a cos(k (t - p))| around a ring is 4 |a| for k > 0,
     # whatever p (the kernel gives each cloud the sign of the harmonic)
+    a = np.asarray(params['a'], dtype=float)
     factor = 4 if order else 2 * np.pi
-    return factor * _nodewise_moments(a, subrnodes)
+    return _with_tail(
+        factor * _nodewise_moments(a, subrnodes), trait, params, subrnodes,
+        factor / (2 * np.pi) * np.abs(a[-1]))
 
 
 # The points of the Gauss-Legendre quadrature of the flux of the rings of a
-# distortion (the integrand is smooth between its subnodes, and where a is
-# not 0: far below the error of any data)
+# distortion, and of the Gauss-Laguerre one of its tail (the integrands
+# are smooth between its subnodes, and where a is not 0, and beyond the
+# last: far below the error of any data)
 _DISTORTION_NODES, _DISTORTION_WEIGHTS = np.polynomial.legendre.leggauss(32)
+_TAIL_NODES, _TAIL_WEIGHTS = np.polynomial.laguerre.laggauss(32)
 
 
 def _ptrait_integrate_nw_distortion(
-        params: dict[str, np.ndarray], subrnodes: np.ndarray
+        trait: RPTrait, params: dict[str, np.ndarray], subrnodes: np.ndarray
 ) -> np.ndarray:
     """
-    Return the flux of each ring (see _rings) of a distortion: the
-    integral of r |a| exp(-(t r)^2 / (2 s^2)) over the azimuths t within
-    half a turn of its centre and the radii of the ring, sqrt(2 pi) |a|
-    |s| erf(pi r / (sqrt(2) |s|)), of a and s linear between the
-    subnodes (the kernel gives each cloud the sign of a).
+    Return the flux of each ring (see _rings) of a distortion and of its
+    tail: the integral of r |a| exp(-(t r)^2 / (2 s^2)) over the azimuths
+    t within half a turn of its centre and the radii of the ring,
+    sqrt(2 pi) |a| |s| erf(pi r / (sqrt(2) |s|)), of a and s linear
+    between the subnodes, and beyond the last, of s there and a there
+    times its tail (the kernel gives each cloud the sign of a).
     """
     subrnodes = np.asarray(subrnodes, dtype=float)
     a = np.asarray(params['a'], dtype=float)
@@ -263,13 +306,22 @@ def _ptrait_integrate_nw_distortion(
             total = total + (hi - lo) / 2 * (
                 integrand(r) @ _DISTORTION_WEIGHTS)
         return total
-    return integral(inner, middles) + integral(middles, outer)
+    rl = subrnodes[-1]
+    h = trait.tail_scale(params, subrnodes)
+    # (of x = h y beyond rl: h times the integral of exp(-y) integrand(rl
+    # + h y))
+    tail = h * _TAIL_WEIGHTS @ integrand(rl + h * _TAIL_NODES) \
+        if h > 0 else 0.0
+    return np.append(
+        integral(inner, middles) + integral(middles, outer), tail)
 
 
 class RPTraitUniform(RPTrait):
     """
-    A uniform surface density: a. Its parameter: a, the density.
-    Mainly for tests: its use is discouraged (a warning says so).
+    A uniform surface density: a, within the last node of its component
+    (and beyond, its tail of the scale of that radius: it is flat there,
+    see RPTrait.tail_scale). Its parameter: a, the density. Mainly for
+    tests: its use is discouraged (a warning says so).
 
     Parameters
     ----------
@@ -297,7 +349,9 @@ class RPTraitUniform(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_uniform(params, subrnodes)
+        return _with_tail(
+            _ptrait_integrate_uniform(params, subrnodes), self, params,
+            subrnodes, params['a'])
 
 
 class RPTraitExponential(RPTrait):
@@ -333,8 +387,16 @@ class RPTraitExponential(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ring_flux(
-            _cumulative_exponential, subrnodes, params['a'], params['s'])
+        a, s = params['a'], params['s']
+        rl = subrnodes[-1]
+        return _with_tail(
+            _ring_flux(_cumulative_exponential, subrnodes, a, s), self, params,
+            subrnodes, a * np.exp(-rl / s))
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        return float(-1 / params['s'])
 
 
 class RPTraitGauss(RPTrait):
@@ -371,8 +433,18 @@ class RPTraitGauss(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ring_flux(
-            _cumulative_gauss, subrnodes, params['a'], params['s'])
+        a, s = params['a'], params['s']
+        rl = subrnodes[-1]
+        return _with_tail(
+            _ring_flux(_cumulative_gauss, subrnodes, a, s), self, params,
+            subrnodes, a * np.exp(-rl * rl / (2 * s * s)))
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        s = params['s']
+        rl = subrnodes[-1]
+        return float(-rl / (s * s))
 
 
 class RPTraitGGauss(RPTrait):
@@ -411,9 +483,18 @@ class RPTraitGGauss(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ring_flux(
-            _cumulative_ggauss, subrnodes, params['a'], params['s'],
-            params['b'])
+        a, s, b = params['a'], params['s'], params['b']
+        rl = subrnodes[-1]
+        return _with_tail(
+            _ring_flux(_cumulative_ggauss, subrnodes, a, s, b), self, params,
+            subrnodes, a * np.exp(-(rl / s) ** b))
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        s, b = params['s'], params['b']
+        rl = subrnodes[-1]
+        return float(-b / s * (rl / s) ** (b - 1))
 
 
 class RPTraitLorentz(RPTrait):
@@ -450,8 +531,18 @@ class RPTraitLorentz(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ring_flux(
-            _cumulative_lorentz, subrnodes, params['a'], params['s'])
+        a, s = params['a'], params['s']
+        rl = subrnodes[-1]
+        return _with_tail(
+            _ring_flux(_cumulative_lorentz, subrnodes, a, s), self, params,
+            subrnodes, a * s * s / (rl * rl + s * s))
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        s = params['s']
+        rl = subrnodes[-1]
+        return float(-2 * rl / (rl * rl + s * s))
 
 
 class RPTraitMoffat(RPTrait):
@@ -489,9 +580,18 @@ class RPTraitMoffat(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ring_flux(
-            _cumulative_moffat, subrnodes, params['a'], params['s'],
-            params['b'])
+        a, s, b = params['a'], params['s'], params['b']
+        rl = subrnodes[-1]
+        return _with_tail(
+            _ring_flux(_cumulative_moffat, subrnodes, a, s, b), self, params,
+            subrnodes, a / (1 + (rl / s) ** 2) ** b)
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        s, b = params['s'], params['b']
+        rl = subrnodes[-1]
+        return float(-2 * b * rl / (rl * rl + s * s))
 
 
 class RPTraitSech2(RPTrait):
@@ -527,8 +627,18 @@ class RPTraitSech2(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ring_flux(
-            _cumulative_sech2, subrnodes, params['a'], params['s'])
+        a, s = params['a'], params['s']
+        rl = subrnodes[-1]
+        return _with_tail(
+            _ring_flux(_cumulative_sech2, subrnodes, a, s), self, params,
+            subrnodes, a / np.cosh(rl / s) ** 2)
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        s = params['s']
+        rl = subrnodes[-1]
+        return float(-2 * np.tanh(rl / s) / s)
 
 
 class RPTraitMixtureExponential(RPTrait):
@@ -573,6 +683,9 @@ class RPTraitMixtureExponential(RPTrait):
 
     def has_analytical_integral(self) -> bool:
         return True
+
+    def has_tail(self) -> bool:
+        return False
 
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
@@ -623,6 +736,9 @@ class RPTraitMixtureGauss(RPTrait):
     def has_analytical_integral(self) -> bool:
         return True
 
+    def has_tail(self) -> bool:
+        return False
+
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
@@ -672,6 +788,9 @@ class RPTraitMixtureGGauss(RPTrait):
 
     def has_analytical_integral(self) -> bool:
         return True
+
+    def has_tail(self) -> bool:
+        return False
 
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
@@ -724,6 +843,9 @@ class RPTraitMixtureMoffat(RPTrait):
 
     def has_analytical_integral(self) -> bool:
         return True
+
+    def has_tail(self) -> bool:
+        return False
 
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
@@ -779,7 +901,12 @@ class RPTraitNWUniform(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_cloud_flux_nw_uniform(params, subrnodes)
+        return _ptrait_cloud_flux_nw_uniform(self, params, subrnodes)
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        return _nodewise_log_slope(params['a'], subrnodes)
 
 
 class RPTraitNWHarmonic(RPTrait):
@@ -838,7 +965,12 @@ class RPTraitNWHarmonic(RPTrait):
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         return _ptrait_cloud_flux_nw_harmonic(
-            params['a'], subrnodes, self._option(Harmonic).order)
+            self, params, subrnodes, self._option(Harmonic).order)
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        return _nodewise_log_slope(params['a'], subrnodes)
 
 
 class RPTraitNWDistortion(RPTrait):
@@ -900,7 +1032,12 @@ class RPTraitNWDistortion(RPTrait):
     def cloud_flux(
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
-        return _ptrait_integrate_nw_distortion(params, subrnodes)
+        return _ptrait_integrate_nw_distortion(self, params, subrnodes)
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        return _nodewise_log_slope(params['a'], subrnodes)
 
 
 class RPTraitSpiral(RPTrait):
@@ -1003,4 +1140,9 @@ class RPTraitSpiral(RPTrait):
             self, params: dict[str, np.ndarray], subrnodes: np.ndarray
     ) -> np.ndarray:
         return _ptrait_cloud_flux_nw_harmonic(
-            params['a'], subrnodes, self._option(Spiral).order)
+            self, params, subrnodes, self._option(Spiral).order)
+
+    def _log_slope(
+            self, params: dict[str, np.ndarray], subrnodes: np.ndarray
+    ) -> float:
+        return _nodewise_log_slope(params['a'], subrnodes)
