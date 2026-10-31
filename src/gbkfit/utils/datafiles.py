@@ -61,12 +61,17 @@ class Arrays:
         fitsutils.model_header).
     unit : astropy.units.UnitBase or None
         The unit of the values, if known.
+    beam : dict or None
+        The beam of the values, if they have one (see
+        fitsutils.header_beam): of a cube of CASA, that of each of its
+        channels, in the order of the channels of the values.
     """
     data: np.ndarray
     error: np.ndarray | None
     mask: np.ndarray
     header: astropy.io.fits.Header
     unit: astropy.units.UnitBase | None
+    beam: dict[str, typing.Any] | None = None
 
 
 def read_arrays(
@@ -104,6 +109,11 @@ def read_arrays(
     (inverse variances of 0: no data), and values that the mask marks
     with 0 are invalid: NaN, with the mask 0.
 
+    The beam of the values is that of the header of their file, or of
+    each channel of a cube of CASA (see fitsutils.header_beam), in the
+    order of the channels of the values (reversed with the spectral axis,
+    e.g. of decreasing frequency).
+
     Parameters
     ----------
     data : DataFile
@@ -134,14 +144,14 @@ def read_arrays(
         If a file cannot be read, or has world coordinates the model
         cannot take (see fitsutils.model_header); error_kind is not one of
         ERROR_KINDS, the errors are negative, or their unit is not that of
-        their kind; or the errors or the mask are not on the pixels of
-        the data.
+        their kind; the errors or the mask are not on the pixels of the
+        data; or the beams of a cube are not one for each channel.
     """
     if error_kind not in ERROR_KINDS:
         raise ConfigError(
             f"the kind of the errors must be one of {list(ERROR_KINDS)}; "
             f"it is {error_kind!r}")
-    values, header, orientation = _read(data, rest, velocity)
+    values, header, orientation, beam = _read(data, rest, velocity)
     if isinstance(unit, str):
         unit = unitutils.parse_unit(unit)
     unit = unit or _header_unit(header)
@@ -163,7 +173,7 @@ def read_arrays(
     return Arrays(
         np.where(valid, values, np.nan),
         None if errors is None else np.where(valid, errors, np.nan),
-        valid.astype(float), header, unit)
+        valid.astype(float), header, unit, beam)
 
 
 def _filename(file: DataFile) -> str:
@@ -175,16 +185,52 @@ def _read(
         file: DataFile,
         rest: typing.Any,
         velocity: str | None
-) -> tuple[np.ndarray, astropy.io.fits.Header, fitsutils.Orientation]:
+) -> tuple[
+        np.ndarray, astropy.io.fits.Header, fitsutils.Orientation,
+        dict[str, typing.Any] | None]:
     """
     Return the values of a file in the orientation of the model, their
-    header in it, and how they were put in it (see fitsutils.model_header).
+    header in it, how they were put in it (see fitsutils.model_header),
+    and their beam (see _beam).
     """
     filename = _filename(file)
     values, header = _read_file(file)
-    header, orientation = fitsutils.model_header(
+    model, orientation = fitsutils.model_header(
         filename, header, values.shape, rest, velocity)
-    return _floats(orientation.apply(values)), header, orientation
+    return (_floats(orientation.apply(values)), model, orientation,
+            _beam(filename, header, orientation))
+
+
+def _beam(
+        filename: str,
+        header: astropy.io.fits.Header,
+        orientation: fitsutils.Orientation
+) -> dict[str, typing.Any] | None:
+    """
+    Return the beam of the values of a file of the given header (see
+    fitsutils.header_beam; the header of an ASDF file has none), the
+    beams of the channels of a cube of CASA in the order of its channels
+    in the orientation of the model.
+
+    Raises
+    ------
+    ConfigError
+        If the beams of a cube are not one for each channel.
+    """
+    beam = fitsutils.header_beam(
+        header, None if is_asdf_file(filename) else filename)
+    if beam is None or 'spectral' not in beam:
+        return beam
+    # (the table BEAMS of a cube has a spectral axis, see casa_beam_table)
+    axis = astropy.wcs.WCS(header).wcs.spec
+    nchannels = int(header[f'NAXIS{axis + 1}'])
+    if len(beam['bmaj']) != nchannels:
+        raise ConfigError(
+            f"{filename}: the cube has {nchannels} channels, but its table "
+            f"BEAMS has beams for {len(beam['bmaj'])}")
+    order = slice(None, None, -1) if axis in orientation.flips \
+        else slice(None)
+    return {key: value[order] for key, value in beam.items()}
 
 
 def _read_file(file: DataFile) -> tuple[np.ndarray, astropy.io.fits.Header]:

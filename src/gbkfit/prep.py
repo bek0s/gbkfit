@@ -27,7 +27,7 @@ import scipy.spatial
 
 from gbkfit.utils import datafiles, fitsutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import DataFile, is_asdf_file
+from gbkfit.utils.typeutils import DataFile
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra
@@ -112,11 +112,15 @@ class FitsArrays:
         The mask: 1 where valid, 0 elsewhere.
     header : fits.Header
         The header of the data.
+    beam : dict or None
+        The beam of the data, if any (see datafiles.Arrays): of a cube of
+        CASA, that of each of its channels, in their order.
     """
     data: np.ndarray
     error: np.ndarray | None
     mask: np.ndarray
     header: fits.Header
+    beam: dict[str, Any] | None = None
 
     @classmethod
     def read(
@@ -172,7 +176,8 @@ class FitsArrays:
                 and astropy.wcs.WCS(header).wcs.spec >= 0):
             raise ConfigError(
                 f"the data have no spectral axis to give the rest {rest}")
-        return cls(arrays.data, arrays.error, arrays.mask, header)
+        return cls(
+            arrays.data, arrays.error, arrays.mask, header, arrays.beam)
 
     def masked(self, mask: npt.ArrayLike) -> 'FitsArrays':
         """
@@ -183,7 +188,8 @@ class FitsArrays:
         data = np.where(valid, self.data, np.nan)
         error = None if self.error is None \
             else np.where(valid, self.error, np.nan)
-        return FitsArrays(data, error, valid.astype(float), self.header)
+        return dataclasses.replace(
+            self, data=data, error=error, mask=valid.astype(float))
 
     def crop(self, slices: Sequence[slice]) -> 'FitsArrays':
         """
@@ -195,7 +201,8 @@ class FitsArrays:
         return FitsArrays(
             self.data[slices],
             None if self.error is None else self.error[slices],
-            self.mask[slices], _shift_axes(self.header, offset))
+            self.mask[slices], _shift_axes(self.header, offset),
+            self._channels(lambda values: values[slices[0]]))
 
     def minified(self) -> 'FitsArrays':
         """
@@ -213,11 +220,27 @@ class FitsArrays:
         """Return the arrays padded with invalid pixels on every side."""
         def pad(array: np.ndarray, value: float) -> np.ndarray:
             return np.pad(array, size, 'constant', constant_values=value)
+        # (the beams of the channels padded with those of the end channels,
+        # of the invalid pixels)
         return FitsArrays(
             pad(self.data, np.nan),
             None if self.error is None else pad(self.error, np.nan),
             pad(self.mask, 0),
-            _shift_axes(self.header, [-size] * self.data.ndim))
+            _shift_axes(self.header, [-size] * self.data.ndim),
+            self._channels(lambda values: np.pad(values, size, 'edge')))
+
+    def _channels(
+            self, change: Callable[[np.ndarray], np.ndarray]
+    ) -> dict[str, Any] | None:
+        """
+        Return its beam, its beams of the channels of a cube (if it has
+        those) changed as its channels (by change, of an array along the
+        channels, its first axis).
+        """
+        if self.beam is None or 'spectral' not in self.beam \
+                or self.data.ndim != 3:
+            return self.beam
+        return {key: change(value) for key, value in self.beam.items()}
 
     def write(
             self,
@@ -890,27 +913,26 @@ def gauss_hermite_moments(
 
 
 def pixel_fluxes(
-        header: fits.Header, filename: str, nchannels: int
+        header: fits.Header, beam: dict[str, Any] | None, filename: str
 ) -> tuple[float | np.ndarray, astropy.units.UnitBase] | None:
     """
     Return how the values of the pixels of data of a header (e.g. that of
-    FitsArrays, of the file of the given name; in its unit, BUNIT) become
-    their fluxes: a factor, and the unit of the fluxes. Values per pixel
-    (e.g. of a spaxel, or per pix) are fluxes (factor 1); per solid
-    angle, they are times that of a pixel; per beam (e.g. Jy/beam), times
-    that of a pixel over that of the Gaussian beam, pi / (4 ln 2) bmaj
-    bmin, of the header (BMAJ and BMIN), or of each channel of a cube of
-    CASA (the table BEAMS of the file; a factor for each of its nchannels
-    channels).
+    FitsArrays; in its unit, BUNIT) become their fluxes: a factor, and
+    the unit of the fluxes. Values per pixel (e.g. of a spaxel, or per
+    pix) are fluxes (factor 1); per solid angle, they are times that of a
+    pixel; per beam (e.g. Jy/beam), times that of a pixel over that of
+    the Gaussian beam of the data, pi / (4 ln 2) bmaj bmin: of their
+    header, or of each channel of a cube of CASA (a factor for each of
+    its channels, in their order; see datafiles.Arrays).
 
     Parameters
     ----------
     header : fits.Header
         The header of the data.
+    beam : dict or None
+        The beam of the data, if any (e.g. that of FitsArrays).
     filename : str
-        The file of the data (for its table BEAMS, if any).
-    nchannels : int
-        The number of channels of the data (of a cube).
+        The file of the data (for messages).
 
     Returns
     -------
@@ -923,7 +945,7 @@ def pixel_fluxes(
     ConfigError
         If the unit is not a unit, is a brightness temperature (whose
         sums over pixels are not fluxes), or is per beam and the data
-        have no beam, or a beam for another number of channels.
+        have no beam.
     """
     u = astropy.units
     text = str(header.get('BUNIT', '')).strip()
@@ -947,22 +969,11 @@ def pixel_fluxes(
             if base.physical_type in ('solid angle', 'angle'):
                 angles = angles * base ** power
         return float((pixel * angles).decompose()), unit / angles
-    if 'BMAJ' in header and 'BMIN' in header:
-        beam = dict(
-            bmaj=float(header['BMAJ']) * 3600,
-            bmin=float(header['BMIN']) * 3600)
-    else:
-        beam = None if is_asdf_file(filename) \
-            else fitsutils.read_beam(filename)
     if beam is None:
         raise ConfigError(
             f"{filename}: the data are per beam, but have no beam (BMAJ and "
             f"BMIN in the header, or a table BEAMS)")
     area = np.pi / (4 * np.log(2)) * np.multiply(beam['bmaj'], beam['bmin'])
-    if np.ndim(area) and len(area) != nchannels:
-        raise ConfigError(
-            f"{filename}: the data have {nchannels} channels, but beams for "
-            f"{len(area)}")
     return pixel.to_value(u.arcsec ** 2) / area, unit * u.beam
 
 

@@ -201,7 +201,7 @@ def header_beam(
     and bpa (degrees): of the header (BMAJ, BMIN and BPA, in degrees), or
     for each channel of a cube of CASA (the table BEAMS of its FITS file,
     if given; see casa_beam_table), as arrays with its spectral points
-    ('spectral', a Quantity).
+    ('spectral', a Quantity), in the order of the channels of the file.
     """
     if 'BMAJ' in header and 'BMIN' in header:
         return dict(
@@ -214,20 +214,24 @@ def header_beam(
         has_table = 'BEAMS' in hdus
     if not has_table:
         return None
-    table = casa_beam_table(filename)
+    table = casa_beam_table(filename, header)
     return dict(
         bmaj=table['bmaj'].to_value('arcsec'),
         bmin=table['bmin'].to_value('arcsec'),
         bpa=table['bpa'].to_value('deg'),
-        spectral=table.columns[0].quantity)
+        spectral=table.columns[0])
 
 
-def casa_beam_table(filename: str) -> astropy.table.QTable:
+def casa_beam_table(
+        filename: str, header: astropy.io.fits.Header | None = None
+) -> astropy.table.QTable:
     """
     Return the beams of the channels of a cube of CASA (its table BEAMS)
     as a table of the options of a Gaussian beam PSF (bmaj, bmin, bpa)
     against the points of its spectral axis (frequency, wavelength or
-    velocity). Only the first polarisation is used.
+    velocity), in the order of its channels: of the world coordinates of
+    the header of the cube, if given, or else of its first HDU. Only the
+    first polarisation is used.
 
     Raises
     ------
@@ -238,7 +242,10 @@ def casa_beam_table(filename: str) -> astropy.table.QTable:
     beams = astropy.table.Table.read(filename, hdu='BEAMS')
     if 'POL' in beams.colnames:
         beams = beams[beams['POL'] == 0]
-    wcs = astropy.wcs.WCS(astropy.io.fits.getheader(filename, 0))
+    beams.sort('CHAN')
+    if header is None:
+        header = astropy.io.fits.getheader(filename, 0)
+    wcs = astropy.wcs.WCS(header)
     if wcs.wcs.spec < 0:
         raise ConfigError(f"{filename}: the cube has no spectral axis")
     spectral = wcs.sub([wcs.wcs.spec + 1])

@@ -11,6 +11,7 @@ HDU is named with its HDU (e.g. prep_cube_SCI.fits). Two inputs of one
 name (e.g. in two directories) are an error.
 """
 
+import dataclasses
 import logging
 import os
 from collections.abc import Sequence
@@ -312,9 +313,8 @@ def prep_pixel_spectra(
     arrays = arrays.crop((channels, ys, xs))
     if noise_error:
         # (of the noise before the clipping, which masks some of it)
-        arrays = FitsArrays(
-            arrays.data, prep.noise_errors(arrays.data, arrays.mask),
-            arrays.mask, arrays.header)
+        arrays = dataclasses.replace(
+            arrays, error=prep.noise_errors(arrays.data, arrays.mask))
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
@@ -530,7 +530,7 @@ def prep_region_spectra(
     cube = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         error_kind=error_kind)
-    fluxes = prep.pixel_fluxes(cube.header, file_d, cube.data.shape[0])
+    fluxes = prep.pixel_fluxes(cube.header, cube.beam, file_d)
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))
         if fluxes is not None and np.ndim(fluxes[0]):

@@ -96,6 +96,44 @@ def test_errors_on_other_pixels_are_an_error(tmp_path):
             str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'))
 
 
+def test_the_beams_of_the_channels_follow_them(tmp_path):
+    # A cube of CASA with a beam for each channel (its table BEAMS, and no
+    # BMAJ), whose velocities decrease along the file: read with its
+    # channels reversed, its beams are in the order of its channels, as a
+    # dataset, and for the fluxes of its pixels (of 1 arcsec^2, over the
+    # area of the beam of their channel); it is described
+    from gbkfit.dataset import Data
+    from gbkfit.prep import FitsArrays, pixel_fluxes
+    bmaj = np.array([10.0, 11, 12, 13, 14])
+    beams = fits.BinTableHDU.from_columns([
+        fits.Column(name='BMAJ', format='E', unit='arcsec', array=bmaj),
+        fits.Column(name='BMIN', format='E', unit='arcsec', array=[5] * 5),
+        fits.Column(name='BPA', format='E', unit='deg', array=[0] * 5),
+        fits.Column(name='CHAN', format='J', array=range(5)),
+        fits.Column(name='POL', format='J', array=[0] * 5)], name='BEAMS')
+    path = str(tmp_path / 'cube.fits')
+    fits.HDUList([
+        fits.PrimaryHDU(
+            (np.arange(5.0)[:, None, None] * np.ones(SHAPE)).astype(
+                np.float32), fits.Header(CUBE | dict(CASAMBM=True))),
+        beams]).writeto(path)
+    arrays = datafiles.read_arrays(path)
+    np.testing.assert_array_equal(arrays.data[:, 0, 0], [4, 3, 2, 1, 0])
+    np.testing.assert_allclose(arrays.beam['bmaj'], bmaj[::-1])
+    np.testing.assert_allclose(
+        arrays.beam['spectral'].to_value('km/s'), [960, 970, 980, 990, 1000])
+    data, _ = Data.from_files(path)
+    np.testing.assert_allclose(data.beam().bmaj, bmaj[::-1])
+    cube = FitsArrays.read(path).crop(
+        (slice(1, 4), slice(None), slice(None)))
+    np.testing.assert_allclose(cube.beam['bmaj'], [13, 12, 11])
+    factors, _ = pixel_fluxes(cube.header, cube.beam, path)
+    np.testing.assert_allclose(
+        factors, 1 / (np.pi / (4 * np.log(2)) * np.array([13, 12, 11]) * 5),
+        rtol=1e-6)
+    assert describe_fits(path)[0].beam is not None
+
+
 def test_world_axes_beyond_the_array_are_flat(tmp_path):
     # A moment map written with the header of its cube (astropy keeps its
     # spectral axis) reads as a map

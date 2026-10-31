@@ -769,8 +769,7 @@ def test_the_flux_of_a_pixel(unit, factor, flux):
         fits.getdata('one.fits'), fits.getheader('one.fits'))]).writeto(
         'cube.fits')
     cube = FitsArrays.read('cube.fits')
-    scale, flux_unit = pixel_fluxes(
-        cube.header, 'cube.fits', cube.data.shape[0])
+    scale, flux_unit = pixel_fluxes(cube.header, cube.beam, 'cube.fits')
     assert scale == pytest.approx(factor, rel=1e-9)
     assert (1 * flux_unit).to_value(parse_unit(flux)) == pytest.approx(1)
 

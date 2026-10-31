@@ -13,7 +13,7 @@ import numpy as np
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.utils import datafiles, fitsutils, gridutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import DataFile, is_asdf_file
+from gbkfit.utils.typeutils import DataFile
 
 
 __all__ = [
@@ -272,7 +272,8 @@ class Data:
         unit : str, optional
             The unit of the values (see Data).
         beam : Mapping, optional
-            The options of their beam (see Beam).
+            The options of their beam (see Beam); by default, that of the
+            file of the values, if any (see datafiles.read_arrays).
         spatial_correlation : PSF, optional
             The correlation of their noise on the sky (see Data).
         spectral_correlation : LSF, optional
@@ -322,8 +323,7 @@ class Data:
         if isinstance(error, (int, float)):
             errors = np.full(arrays.data.shape, error, dtype=float)
         if beam is None:
-            beam = fitsutils.header_beam(
-                arrays.header, None if is_asdf_file(filename) else filename)
+            beam = arrays.beam
         return cls(
             arrays.data, arrays.mask, errors, arrays.unit, beam,
             spatial_correlation, spectral_correlation), coords
