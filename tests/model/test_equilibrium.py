@@ -222,8 +222,10 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
 
 
 def test_jeans_equilibrium_in_a_point_mass():
-    # sigma^2 = int_0^zmax rho(z) G M z / (R^2 + z^2)^(3/2) dz / rho(0)
-    # (kpc), rho the Gaussian of the disk; at the centre, the next subnode
+    # sigma^2 = int_0^zmax z rho(z) G M z / (R^2 + z^2)^(3/2) dz /
+    # int_0^zmax rho(z) dz (kpc), the dispersion of the column weighted by
+    # its density, rho the Gaussian of the disk; at the centre, the next
+    # subnode
     balanced = galaxy(
         with_kinematics(DISK, equilibrium=dict(type='jeans')),
         mass=[dict(type='point', name='bh')],
@@ -234,14 +236,17 @@ def test_jeans_equilibrium_in_a_point_mass():
     sigma = extra.get('equilibrium', component='component0')['sigma']
     radii = np.array(balanced.constants()['subrnodes'])
 
+    column = scipy.integrate.quad(
+        lambda z: np.exp(-z ** 2 / 2), 0, 10, epsabs=0, epsrel=1e-12)[0]
+
     def weight(R):
         R = R * KPC_PER_ARCSEC
         return scipy.integrate.quad(
-            lambda z: np.exp(-z ** 2 / 2) * G * 1e10 * z * KPC_PER_ARCSEC
+            lambda z: z * np.exp(-z ** 2 / 2) * G * 1e10 * z * KPC_PER_ARCSEC
             / (R ** 2 + (z * KPC_PER_ARCSEC) ** 2) ** 1.5 * KPC_PER_ARCSEC,
             0, 10, epsabs=0, epsrel=1e-12, limit=200)[0]
     np.testing.assert_allclose(
-        sigma[1:] ** 2, [weight(R) for R in radii[1:]], rtol=1e-8)
+        sigma[1:] ** 2, [weight(R) / column for R in radii[1:]], rtol=1e-8)
     assert sigma[0] == sigma[1]
 
 

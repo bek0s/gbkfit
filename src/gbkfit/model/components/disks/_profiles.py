@@ -461,11 +461,10 @@ def jeans_dispersions(
     """
     Return the dispersion (km/s) of the jeans equilibrium of a thick disk
     (see parts.JeansEquilibrium) at radii (arcsec, on the disk): sigma^2 =
-    int_0^inf
-    rho(z) (-F_z(R, z)) dz / rho(0), the weight of the column of the disk
-    above its midplane over its density there, with its density of
+    int_0^inf z rho(z) (-F_z(R, z)) dz / int_0^inf rho(z) dz, the
+    dispersion of the column weighted by its density, with its density of
     rms_heights (on its heights) and the vertical force F_z of the mass
-    of its galaxy. 0 where it has no density at its midplane.
+    of its galaxy. 0 where it has no density.
 
     Parameters
     ----------
@@ -488,13 +487,12 @@ def jeans_dispersions(
     """
     profile = _VerticalProfile.of(disk, plan, params, radii)
     r = np.asarray(radii, dtype=float)[:, None]
-    midplane = np.sum(
-        profile.surfaces * _at_midplane(
-            disk, plan, _with_inputs(disk, params), 'rht', r)[..., 0], axis=0)
-    weight = (profile.density() * -vertical_force(r, profile.z[None, :])) \
-        @ profile.weights
+    z = profile.z[None, :]
+    density = profile.density()
+    column = density @ profile.weights
+    weight = (z * density * -vertical_force(r, z)) @ profile.weights
     return np.sqrt(np.divide(
-        weight, midplane, out=np.zeros_like(midplane), where=midplane > 0))
+        weight, column, out=np.zeros_like(column), where=column > 0))
 
 
 def rotation(

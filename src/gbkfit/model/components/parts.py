@@ -412,15 +412,20 @@ class SelfGravitatingEquilibrium(Equilibrium):
 class JeansEquilibrium(Equilibrium):
     """
     The vertical equilibrium in the pull of all the mass of its galaxy
-    (the vertical Jeans equation, isothermal in z): sigma_eq^2 = int_0^inf
-    rho(z) (-F_z(R, z)) dz / rho(0), the weight of the column of the disk
-    above its midplane over its density there (rho of its density traits
-    and density height traits), with F_z the vertical force of every mass
-    component (see mass.MassComponent.vertical_force: user components give
-    it by their function of the forces); exact for any mass and profile of
-    the height, given the isothermal dispersion. At the centre, the value
-    at the next subnode, as for 'central' (a point mass there makes it
-    infinite). See Equilibrium.
+    (the vertical Jeans equation): sigma_eq^2 = int_0^inf z rho(z) (-F_z(R,
+    z)) dz / int_0^inf rho(z) dz, the dispersion of the column weighted by
+    its density (the vertical virial theorem, Binney & Tremaine 2008, eq.
+    4.222; rho of its density traits and density height traits), with F_z
+    the vertical force of every mass component (see
+    mass.MassComponent.vertical_force: user components give it by their
+    function of the forces); exact for any mass and profile of the height,
+    as the dispersion a face-on column shows. As 'central' and
+    'self_gravitating' in their limits (a harmonic potential, the sheet
+    alone): the dispersion of the midplane (int rho (-F_z) dz / rho(0)) is
+    that of a profile isothermal in its own potential only, 1 / sqrt(2) of
+    this for an exponential one (audit 2026-10-31 #13). At the centre, the
+    value at the next subnode, as for 'central' (a point mass there makes
+    it infinite). See Equilibrium.
     """
 
     @staticmethod
