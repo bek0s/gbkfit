@@ -79,19 +79,21 @@ def test_gravity_without_mass_refused():
 
 
 @pytest.mark.parametrize('interpolation', ['simple', 'standard', 'rar'])
-def test_mond_circular_velocity(interpolation):
-    # Of a point mass, v^2 = nu(y) G M / R, y = G M / (R^2 a0): in the
-    # functions of the galaxy (vnewton: Newtonian), the rotation it gives
-    # its disk, and the central equilibrium, h v / R
+@pytest.mark.parametrize('form, rtol', [('qumond', 1e-3), ('algebraic', 1e-6)])
+def test_mond_circular_velocity(interpolation, form, rtol):
+    # Of a point mass, v^2 = nu(y) G M / R, y = G M / (R^2 a0), in either
+    # form (QUMOND to the precision of its grid): in the functions of the
+    # galaxy (vnewton: Newtonian), the rotation it gives its disk, and the
+    # central equilibrium, h v / R
     mond = galaxy(
         mass=POINT, distance=DISTANCE,
-        gravity=dict(type='mond', interpolation=interpolation))
+        gravity=dict(type='mond', interpolation=interpolation, form=form))
     R = np.array([0.1, 2.0, 10.0, 50.0])
     a0 = 1.2e-10 * KPC / 1e6
     vnewton2 = G * 1e10 / R
     vcirc = np.sqrt(NU[interpolation](vnewton2 / (R * a0)) * vnewton2)
     bound = mond.plan_functions().bind(PARAMS)
-    np.testing.assert_allclose(bound['vcirc'](R), vcirc, rtol=1e-6)
+    np.testing.assert_allclose(bound['vcirc'](R), vcirc, rtol=rtol)
     for name in ('vnewton', 'vcirc_bh'):
         np.testing.assert_allclose(
             bound[name](R), np.sqrt(vnewton2), rtol=1e-6)
@@ -109,32 +111,116 @@ def test_mond_circular_velocity(interpolation):
         bound['vcirc'](equilibrium['radius'].value[1:] * kpc_per_arcsec),
         rtol=1e-12)
     assert galaxy_parser.dump(mond)['gravity'] == dict(
-        type='mond', interpolation=interpolation)
+        type='mond', interpolation=interpolation, form=form)
 
 
 def test_mond_forces_anywhere():
-    # Of a point mass, nu(y) g_N, y = |g_N| / a0, g_N = -G M (R, z) / r^3;
-    # in the plane, those of its circular velocity
+    # Of a point mass in QUMOND, nu(y) g_N, y = |g_N| / a0, g_N = -G M (R,
+    # z) / r^3 (to the precision of its grid, near the pole some 1e-3;
+    # beyond it, at 1000 kpc, exactly); in the plane,
+    # those of its circular velocity. The algebraic form gives them in
+    # the plane only
     mond = galaxy(
         mass=POINT, distance=DISTANCE,
         gravity=dict(type='mond', interpolation='simple'))
     field = mond.plan_stage().mass(PARAMS).field
-    R, z = np.array([0.1, 2.0, 10.0, 5.0]), np.array([0.5, -1.0, 20.0, 0])
+    R = np.array([0.1, 2.0, 10.0, 5.0, 2000.0])
+    z = np.array([0.5, -1.0, 20.0, 0, 500.0])
     a0 = 1.2e-10 * KPC / 1e6
     r = np.hypot(R, z)
     nu = NU['simple'](G * 1e10 / (r ** 2 * a0))
     force_R, force_z = field.forces(R, z)
-    np.testing.assert_allclose(force_R, -nu * G * 1e10 * R / r ** 3, rtol=1e-6)
-    np.testing.assert_allclose(force_z, -nu * G * 1e10 * z / r ** 3, rtol=1e-6)
+    np.testing.assert_allclose(force_R, -nu * G * 1e10 * R / r ** 3, rtol=2e-3)
+    np.testing.assert_allclose(force_z, -nu * G * 1e10 * z / r ** 3, rtol=2e-3)
     np.testing.assert_array_equal(field.vertical_force(R, z), force_z)
     np.testing.assert_allclose(
-        -R[3] * force_R[3], field.vcirc2(R[3:]), rtol=1e-12)
+        -R[3] * force_R[3], field.vcirc2(R[3:4]), rtol=1e-12)
+    algebraic = galaxy(
+        mass=POINT, distance=DISTANCE,
+        gravity=dict(type='mond', interpolation='simple', form='algebraic'))
+    field = algebraic.plan_stage().mass(PARAMS).field
+    with pytest.raises(NotImplementedError, match='plane'):
+        field.forces(R, z)
 
 
-def test_mond_without_a0_is_newtonian_gravity():
+class Kuzmin:
+    """
+    A Kuzmin disk of mass M and scale a (kpc): above its plane, the
+    Newtonian field of a point of its mass at a below it.
+    """
+
+    def __init__(self, M, a):
+        self.M, self.a = M, a
+
+    def forces(self, R, z):
+        R, z = np.broadcast_arrays(np.asarray(R, float), np.asarray(z, float))
+        d3 = (R ** 2 + (self.a + np.abs(z)) ** 2) ** 1.5
+        return (-G * self.M * R / d3,
+                -G * self.M * (self.a + np.abs(z)) * np.sign(z) / d3)
+
+    def cell_masses(self, r_edges, b_edges):
+        masses = np.zeros((len(r_edges) - 1, len(b_edges) - 1))
+        masses[:, 0] = -np.diff(self.M * self.a / np.hypot(r_edges, self.a))
+        return masses
+
+
+@pytest.mark.parametrize('M, a', [(1e9, 2.0), (1e11, 3.0)])
+def test_qumond_of_a_kuzmin_disk(M, a):
+    # Exactly, nu(|g_N| / a0) g_N above its plane (Brada & Milgrom 1995),
+    # of the field of a point; in its plane, of |g_N| just above it, of its
+    # vertical pull 2 pi G Sigma too: some 60% less than nu(|F_R| / a0) F_R
+    # at 0.25 kpc of the light one
+    from gbkfit.model._qumond import phantom_gradient
+    disk = Kuzmin(M, a)
+    a0 = 1.2e-10 * KPC / 1e6
+
+    def boost(size):
+        return NU['simple'](size / a0) - 1
+
+    gradient = phantom_gradient(disk.cell_masses, disk.forces, boost)
+    R = np.array([0.25, 0.5, 1, 2, 4, 8, 16, 32])
+    z = 0.5 * R
+    force_R, force_z = disk.forces(R, z)
+    grad_R, grad_z = gradient(R, z)
+    nu = NU['simple'](np.hypot(force_R, force_z) / a0)
+    np.testing.assert_allclose(force_R - grad_R, nu * force_R, rtol=6e-3)
+    np.testing.assert_allclose(force_z - grad_z, nu * force_z, rtol=1e-3)
+    force_R, _ = disk.forces(R, 0)
+    grad_R, _ = gradient(R, 0)
+    nu = NU['simple'](G * M / (R ** 2 + a ** 2) / a0)
+    np.testing.assert_allclose(force_R - grad_R, nu * force_R, rtol=4e-3)
+
+
+@pytest.mark.parametrize('vertical', [
+    dict(type='thin'), dict(type='exponential')])
+def test_qumond_solves_newtonian_gravity(vertical):
+    # The Newtonian gravity on its grid, of the masses of its cells, is
+    # that of the mass: of a boost of 1, the phantom is the mass
+    from gbkfit.model._qumond import phantom_gradient
+    model = MassModel.load(dict(components=[dict(
+        type='disk', name='stars', surface=dict(type='exponential'),
+        vertical=vertical)]))
+    params = dict(mass_stars_log_m=10, mass_stars_rd=3, mass_stars_hz=0.3)
+    context = MassContext(1.0, 0.308)
+
+    def masses(r_edges, b_edges):
+        return model.cell_masses(r_edges, b_edges, params, context)
+
+    def forces(R, z):
+        return model.forces(R, z, params, context)
+
+    gradient = phantom_gradient(masses, forces, np.ones_like)
+    R = np.array([0.5, 1, 2, 4, 8, 16, 32])
+    for z in (0 * R, 0.3 * R):
+        np.testing.assert_allclose(
+            np.negative(gradient(R, z)), forces(R, z), rtol=5e-3, atol=1e-9)
+
+
+@pytest.mark.parametrize('form', ['qumond', 'algebraic'])
+def test_mond_without_a0_is_newtonian_gravity(form):
     mond = galaxy(
         mass=POINT, distance=DISTANCE,
-        gravity=dict(type='mond', interpolation='simple'))
+        gravity=dict(type='mond', interpolation='simple', form=form))
     bound = mond.plan_functions().bind(PARAMS | dict(gravity_a0=0))
     R = np.array([0.5, 5.0, 50.0])
     np.testing.assert_array_equal(bound['vcirc'](R), bound['vnewton'](R))
@@ -152,6 +238,10 @@ def test_mond_without_a0_is_newtonian_gravity():
         baryons=['stars'],
         dark_fraction=dict(solve='log_m', bounds=[9.0, 15.0]))],
      "the mass component 'halo' takes the shares"),
+    (DISK, MASS + [dict(
+        type='table', name='gas', radii=dict(value=[1, 2, 4], unit='kpc'),
+        velocities=[20, 30, 40])],
+     r"the mass components \['gas'\] do not give it"),
 ])
 def test_what_mond_does_not_give_refused(disk, mass, message):
     with pytest.raises(ConfigError, match=message):
@@ -161,12 +251,28 @@ def test_what_mond_does_not_give_refused(disk, mass, message):
     galaxy(disk, mass=mass, distance=DISTANCE)
 
 
+def test_algebraic_mond_gives_the_plane_only():
+    # It takes tables of the circular velocity, but not the forces off the
+    # plane that the jeans equilibrium takes
+    table = dict(type='table', name='gas',
+                 radii=dict(value=[1, 2, 4], unit='kpc'),
+                 velocities=[20, 30, 40])
+    gravity = dict(type='mond', interpolation='simple', form='algebraic')
+    galaxy(mass=MASS + [table], distance=DISTANCE, gravity=gravity)
+    with pytest.raises(ConfigError, match="in the plane only"):
+        galaxy(with_kinematics(equilibrium=dict(type='jeans')), mass=MASS,
+               distance=DISTANCE, gravity=gravity)
+
+
 def test_mond_needs_an_interpolation_function():
     with pytest.raises(ConfigError, match='interpolation'):
         galaxy(mass=POINT, distance=DISTANCE, gravity=dict(type='mond'))
     with pytest.raises(ConfigError, match="must be one of"):
         galaxy(mass=POINT, distance=DISTANCE,
                gravity=dict(type='mond', interpolation='best'))
+    with pytest.raises(ConfigError, match="must be one of"):
+        galaxy(mass=POINT, distance=DISTANCE,
+               gravity=dict(type='mond', interpolation='simple', form='aqual'))
 
 
 # A halo and a thick disk of stars, for f(R) gravity

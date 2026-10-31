@@ -38,9 +38,9 @@ observations:
     rpix: [9.5, 9.5]
     rval: [0, 0]
     rota: 0
+    spectral: {step: 15.0, rpix: 14.5, rval: 0.0}
     data: observation0_spectra_d.fits
     error: 0.0002
-    spectral: {step: 15, rpix: 14.5, rval: 0}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: null, white_floor: 0.01}
   line_of_sight:
     type: grid

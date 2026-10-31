@@ -24,8 +24,10 @@ from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
+from ._field_grid import FieldGradient
+from ._qumond import phantom_gradient
 from ._scalar_field import solve_field
-from .mass import MassContext, MassModel
+from .mass import MassContext, MassModel, forces_in_plane
 from .mass.units import G
 
 
@@ -38,6 +40,7 @@ __all__ = [
     'GravityMOND',
     'GravityNewton',
     'GravityPalatini',
+    'MOND_FORMS',
     'MOND_INTERPOLATIONS',
     'gravity_parser'
 ]
@@ -55,6 +58,9 @@ _MOND_NU: dict[str, Callable[[np.ndarray], np.ndarray]] = dict(
 
 # The names of the interpolation functions of MOND
 MOND_INTERPOLATIONS = tuple(_MOND_NU)
+
+# The forms of MOND (see GravityMOND)
+MOND_FORMS = ('qumond', 'algebraic')
 
 # The square of the speed of light ((km/s)^2)
 _C2 = astropy.constants.c.to_value('km/s') ** 2
@@ -80,7 +86,8 @@ class Capability(enum.Enum):
 
     # The mass (e.g. the circular velocity in its gravity)
     MASS = 'mass'
-    # The forces of the mass anywhere (off the plane too)
+    # The forces of the mass anywhere (off the plane too), those of a field
+    # (they have no curl)
     FORCES = 'forces'
     # Forces that are the gradient of a potential, in which orbits keep
     # their energy
@@ -254,13 +261,11 @@ class _NewtonField(GravityField):
 
 class GravityMOND(Gravity):
     """
-    MOND (Milgrom 1983) in its algebraic form: the acceleration in the
-    plane is nu(|g_N| / a0) g_N, of the Newtonian acceleration g_N =
-    v_N^2 / R of all the mass (see GravityNewton) and the acceleration
-    a0, so that its squared circular velocity is v^2 = nu(|g_N| / a0)
-    v_N^2, signed as v_N^2. Its parameter: 'gravity_a0', a0 in units of
-    1e-10 m/s^2 (a0 = 0 is Newtonian gravity). Its interpolation
-    function nu, of y = |g_N| / a0:
+    MOND (Milgrom 1983): about spherical mass, the gravity nu(|g_N| / a0)
+    g_N of the Newtonian gravity g_N of all the mass (see GravityNewton)
+    and the acceleration a0. Its parameter: 'gravity_a0', a0 in units of
+    1e-10 m/s^2 (a0 = 0 is Newtonian gravity). Its interpolation function
+    nu, of y = |g_N| / a0:
 
     - 'simple': nu(y) = 1/2 + sqrt(1/4 + 1/y)
     - 'standard': nu(y) = sqrt(1/2 + sqrt(1/4 + 1/y^2)) (that of GIPSY
@@ -268,29 +273,47 @@ class GravityMOND(Gravity):
     - 'rar': nu(y) = 1 / (1 - exp(-sqrt(y))) (McGaugh, Lelli & Schombert
       2016, the radial acceleration relation)
 
-    Its forces anywhere follow the same rule, nu(|g_N| / a0) g_N, of the
-    Newtonian acceleration g_N = (F_R, F_z) of all the mass (in the
-    plane, those of v^2). The algebraic form is exact for spherical mass
-    and for a Kuzmin disk, and an approximation for other disks, which
-    rotation-curve fits take: very good for exponential disks in their
-    plane, worse for disks with holes or sharp edges (Brada & Milgrom
-    1995); off the plane, its field is not that of a potential (nu g_N
-    curls). It does not give the vertical structure of self-gravitating
-    sheets, or the shares of the components (the squared circular
-    velocities of MOND do not add up); and there is no external field
-    effect. The Newtonian circular velocities of the components remain
-    in the rotation tables and the functions of the galaxy (see
-    DiskStage.state and GalaxyFunctions).
+    Its form, about any mass:
+
+    - 'qumond' (by default): QUMOND (Milgrom 2010), a theory of a field:
+      its gravity is -grad(Phi), of laplacian(Phi) = -div[nu(|g_N| / a0)
+      g_N], solved in each evaluation (some 10 ms). Its forces anywhere
+      are those of a potential, in which orbits keep their energy. It is
+      sourced by where the mass is: it takes the mass components that
+      give their mass in cells (see MassComponent.gives_cell_masses), not
+      tables of the circular velocity or user components (give their
+      density instead: e.g. disks of 'nodewise' surfaces, of the
+      photometry). In the plane of a disk, it differs from the algebraic
+      form most near the centre of thin disks, where just above the disk
+      |g_N| holds its vertical pull 2 pi G Sigma (e.g. 10% lower circular
+      velocity at one scale length of a thin exponential disk of 1e9
+      Msun, 2% at 4 of a thick one of 5e10 Msun).
+    - 'algebraic': the circular velocity in the plane of nu(|g_N| / a0)
+      g_N, of the radial Newtonian acceleration g_N = v_N^2 / R there, so
+      that v^2 = nu v_N^2, signed as v_N^2: the radial acceleration
+      relation of rotation curve fits (e.g. of SPARC), exact about
+      spherical mass only. It takes any mass component (e.g. tables of
+      the circular velocity), but gives the circular velocity in the
+      plane only: off it, nu g_N has curl, unlike the gravity of a field.
+
+    Neither gives the vertical structure of self-gravitating sheets, or
+    the shares of the components (the squared circular velocities of MOND
+    do not add up); and there is no external field effect. The Newtonian
+    circular velocities of the components remain in the rotation tables
+    and the functions of the galaxy (see DiskStage.state and
+    GalaxyFunctions).
 
     Parameters
     ----------
     interpolation : {'simple', 'standard', 'rar'}
         The interpolation function.
+    form : {'qumond', 'algebraic'}, optional
+        The form ('qumond' by default).
 
     Raises
     ------
     ConfigError
-        If the interpolation function is not one of them.
+        If the interpolation function or the form is not one of them.
     """
 
     @staticmethod
@@ -298,15 +321,26 @@ class GravityMOND(Gravity):
         return 'mond'
 
     def dump(self) -> dict[str, Any]:
-        return dict(type=self.type(), interpolation=self._interpolation)
+        return dict(
+            type=self.type(), interpolation=self._interpolation,
+            form=self._form)
 
-    def __init__(self, interpolation: Literal[MOND_INTERPOLATIONS]):
+    def __init__(
+            self,
+            interpolation: Literal[MOND_INTERPOLATIONS],
+            form: Literal[MOND_FORMS] = 'qumond'
+    ):
         check_options(GravityMOND.__init__, locals())
         self._interpolation = interpolation
+        self._form = form
 
     def interpolation(self) -> str:
         """Return the name of its interpolation function."""
         return self._interpolation
+
+    def form(self) -> str:
+        """Return the name of its form."""
+        return self._form
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(gravity_a0=ParamScalarDesc(
@@ -319,20 +353,53 @@ class GravityMOND(Gravity):
             params: ParamValues,
             context: MassContext
     ) -> GravityField:
-        return _MONDField(
-            _NewtonField(mass_model, params, context),
-            _MOND_NU[self._interpolation],
-            float(params['gravity_a0']) * A0_UNIT)
+        newton = _NewtonField(mass_model, params, context)
+        nu = _MOND_NU[self._interpolation]
+        a0 = float(params['gravity_a0']) * A0_UNIT
+        if self._form == 'algebraic':
+            return _MONDField(newton, nu, a0)
+        if a0 == 0:
+            return newton
+
+        def boost(size: np.ndarray) -> np.ndarray:
+            # (nu - 1, 0 where g_N = 0, where (nu - 1) g_N is 0)
+            with np.errstate(divide='ignore'):
+                return np.where(size > 0, nu(size / a0) - 1, 0.0)
+
+        def masses(r_edges: np.ndarray, b_edges: np.ndarray) -> np.ndarray:
+            return mass_model.cell_masses(r_edges, b_edges, params, context)
+
+        return _GradientField(
+            newton, phantom_gradient(masses, newton.forces, boost), 1.0)
+
+    def check_mass_model(
+            self, mass_model: MassModel, thick: Collection[str]
+    ) -> None:
+        if self._form != 'qumond':
+            return
+        if cellless := [
+                component.name() for component in mass_model.components()
+                if not component.gives_cell_masses(thick)]:
+            raise ConfigError(
+                f"the field of QUMOND (the form 'qumond' of MOND) is "
+                f"sourced by where the mass is; the mass components "
+                f"{cellless} do not give it (e.g. tables of the circular "
+                f"velocity, or user components): give them by their "
+                f"density (e.g. disks of 'nodewise' surfaces), or take the "
+                f"form 'algebraic' of MOND")
 
     def gives(self, mass_model: MassModel) -> dict[Capability, str | None]:
-        # (the forces of the Newtonian forces of all the mass)
+        if self._form == 'qumond':
+            # (the forces of the Newtonian forces of all the mass)
+            forces = _forces_of_components(mass_model)
+        else:
+            forces = (
+                "the algebraic form of MOND gives the circular velocity in "
+                "the plane only (off it, nu g_N has curl, unlike the "
+                "gravity of a field): take the form 'qumond' of MOND")
         return {
-            Capability.FORCES: _forces_of_components(mass_model),
-            Capability.POTENTIAL:
-                "the forces of MOND here (the Newtonian forces times the "
-                "interpolation function) are not the gradient of a "
-                "potential off the plane: orbits do not keep their energy "
-                "in them",
+            Capability.FORCES: forces,
+            Capability.POTENTIAL: forces,
             Capability.SHEETS:
                 "the self-gravitating sheets of MOND are not those of "
                 "Newtonian gravity",
@@ -343,8 +410,9 @@ class GravityMOND(Gravity):
 
 class _MONDField(GravityField):
     """
-    The field of a mass model in MOND (see GravityMOND): its Newtonian
-    field, its interpolation function nu and a0 ((km/s)^2/kpc).
+    The field of a mass model in the algebraic form of MOND (see
+    GravityMOND), in its plane: its Newtonian field, its interpolation
+    function nu and a0 ((km/s)^2/kpc).
     """
 
     def __init__(
@@ -372,14 +440,8 @@ class _MONDField(GravityField):
     def forces(
             self, R: npt.ArrayLike, z: npt.ArrayLike
     ) -> tuple[np.ndarray, np.ndarray]:
-        force_R, force_z = self._newton.forces(R, z)
-        # (y = |g_N| / a0 is infinite with a0 = 0, where nu is 1; where g_N
-        # = 0, nu g_N is 0)
-        size = np.hypot(force_R, force_z)
-        y = size / self._a0 if self._a0 > 0 else np.full_like(size, np.inf)
-        with np.errstate(divide='ignore'):
-            nu = np.where(size == 0, 0.0, self._nu(y))
-        return nu * force_R, nu * force_z
+        return forces_in_plane(
+            R, z, self.vcirc2, "the algebraic form of MOND")
 
     def vertical_force(
             self, R: npt.ArrayLike, z: npt.ArrayLike
@@ -563,23 +625,19 @@ class GravityHuSawicki(Gravity):
                 "components"}
 
 
-# The gradient of a field w at the points (R, z): (dw/dR, dw/dz)
-_Gradient = Callable[
-    [npt.ArrayLike, npt.ArrayLike], tuple[np.ndarray, np.ndarray]]
-
-
 class _GradientField(GravityField):
     """
-    The field of a mass model in f(R) gravity: its Newtonian field, plus
-    the fifth force -scale grad(w) of a field w, of the gradient of w at
-    any points (R, z): in GravityHuSawicki, w = f_R / fbar_R (scale = c^2
-    |fbar_R| / 2, (km/s)^2, a FieldGradient, kpc^-1); in GravityPalatini,
-    the density of the mass (scale = 8 pi G alpha, see
-    _density_gradient).
+    The field of a mass model of its Newtonian field, plus the force
+    -scale grad(w) of a field w, of the gradient of w at any points (R,
+    z): in GravityHuSawicki, the fifth force of w = f_R / fbar_R (scale =
+    c^2 |fbar_R| / 2, (km/s)^2, kpc^-1); in GravityPalatini, of the
+    density of the mass (scale = 8 pi G alpha, see _density_gradient); in
+    GravityMOND, the gravity of the phantom of QUMOND, of its potential
+    (scale = 1, see _qumond).
     """
 
     def __init__(
-            self, newton: GravityField, gradient: _Gradient, scale: float
+            self, newton: GravityField, gradient: FieldGradient, scale: float
     ):
         self._newton = newton
         self._gradient = gradient
@@ -696,7 +754,7 @@ class GravityPalatini(Gravity):
 
 def _density_gradient(
         density: Callable[[np.ndarray, np.ndarray], np.ndarray]
-) -> _Gradient:
+) -> FieldGradient:
     """
     Return the gradient of a density, (drho/dR, drho/dz) at the points (R,
     z), by central differences.

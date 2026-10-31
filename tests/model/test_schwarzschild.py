@@ -136,9 +136,12 @@ def test_invalid_schwarzschild_kinematics_are_refused(options, message):
 
 
 def test_orbits_take_the_forces_of_a_potential():
-    # (MOND here is the Newtonian forces times its function: it has curl)
-    with pytest.raises(ConfigError, match="gradient of a potential"):
-        galaxy(gravity=dict(type='mond', interpolation='simple'))
+    # (the algebraic form of MOND gives the plane only: off it, the
+    # Newtonian forces times its function have curl; QUMOND is a field)
+    with pytest.raises(ConfigError, match="in the plane only"):
+        galaxy(gravity=dict(
+            type='mond', interpolation='simple', form='algebraic'))
+    galaxy(gravity=dict(type='mond', interpolation='simple'))
 
 
 def test_what_orbits_need_and_gravities_give_can_be_asked():
@@ -151,7 +154,9 @@ def test_what_orbits_need_and_gravities_give_can_be_asked():
         Capability.MASS, Capability.POTENTIAL]
     mass_model = loaded.mass_model()
     assert GravityNewton().gives(mass_model)[Capability.POTENTIAL] is None
-    assert "not the gradient of a potential" in GravityMOND('simple').gives(
+    assert GravityMOND('simple').gives(
+        mass_model)[Capability.POTENTIAL] is None
+    assert "in the plane only" in GravityMOND('simple', 'algebraic').gives(
         mass_model)[Capability.POTENTIAL]
 
 
