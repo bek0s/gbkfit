@@ -1,25 +1,27 @@
 """
 Views of the cubes of files of data of the workspace, to look at them: a
-channel, the spectrum of a pixel, and their quick moment maps. A cube is
-read once, in the orientation of the model, and kept for the next views
-(the latest few cubes). Its spectral axis is that of its header, in a
-unit to read (km/s, GHz or micron), whatever the model makes of it: a
-cube of wavelengths is seen before it is made one of velocities.
+channel, the spectrum of a pixel, and their quick moment maps, by the
+tools of the library (fitsutils.read_array, prep.signal_mask,
+analysis.moment_maps). A cube is read once, in the orientation of the
+model, and kept for the next views (the latest few cubes). Its spectral
+axis is that of its header, in a unit to read (km/s, GHz or micron),
+whatever the model makes of it: a cube of wavelengths is seen before it
+is made one of velocities.
 """
 
 import collections
 import dataclasses
 import os
 import threading
-import warnings
 
 import astropy.units as u
 import astropy.wcs
 import numpy as np
-from astropy.io import fits
 
 import gbkfit.analysis
+from gbkfit import prep
 from gbkfit.utils import fitsutils
+from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid
 from .workspace import Workspace
@@ -39,6 +41,12 @@ _KEPT = 2
 _SPECTRAL_UNITS = dict(
     VELO='km/s', VRAD='km/s', VOPT='km/s', FELO='km/s', FREQ='GHz',
     WAVE='micron', AWAV='micron')
+
+# The signal-to-noise ratio to which the mask of the moments grows from
+# its seeds, as a fraction of that of the seeds, and the smallest region
+# of the mask kept, as a fraction of the largest (see prep.signal_mask)
+_GROW = 0.5
+_REGIONS = 0.1
 
 # The values sampled for the range of the colours of a cube, and the
 # percentiles of the range
@@ -79,7 +87,9 @@ class Views:
         self._workspace = workspace
         self._cubes: collections.OrderedDict[tuple, Cube] = \
             collections.OrderedDict()
-        self._moments: dict[tuple, gbkfit.analysis.MomentMaps] = {}
+        # (the moment maps of the cubes kept, by their signal-to-noise
+        # ratios)
+        self._moments: dict[tuple, dict[float, dict[str, np.ndarray]]] = {}
         self._lock = threading.Lock()
 
     def cube(self, path: str, hdu: int) -> Cube:
@@ -136,31 +146,45 @@ class Views:
             raise Invalid(f"the cube has {nx} x {ny} pixels; not ({x}, {y})")
         return values[:, y, x]
 
-    def moments(self, path: str, hdu: int) -> gbkfit.analysis.MomentMaps:
+    def moments(
+            self, path: str, hdu: int, snr: float
+    ) -> dict[str, np.ndarray]:
         """
-        Return the quick moment maps of a cube: its flux, velocity and
-        dispersion (see gbkfit.analysis.moment_maps).
+        Return the quick moment maps of a cube, by name: its flux,
+        velocity, dispersion, skewness and kurtosis (see
+        gbkfit.analysis.moment_maps), of the voxels of the mask of its
+        signal grown from seeds of a signal-to-noise ratio (see
+        prep.signal_mask; 0: of all of them).
 
         Raises
         ------
         Invalid
-            If the header does not give the velocities of its channels (or
-            as cube).
+            If its channels are not of velocities (or as cube).
         """
         cube = self.cube(path, hdu)
         key = self._key(path, hdu)
         with self._lock:
-            if key in self._moments:
-                return self._moments[key]
+            if snr in self._moments.get(key, {}):
+                return self._moments[key][snr]
         if (velocities := cube.velocities()) is None:
             raise Invalid(
                 f"the channels of '{path}' are not of velocities: its "
                 f"moments need them")
-        maps = gbkfit.analysis.moment_maps(cube.values, velocities)
+        if snr == 0:
+            values = cube.values
+        else:
+            mask = prep.signal_mask(cube.values, snr, _GROW * snr, _REGIONS)
+            values = np.where(mask, cube.values, np.nan)
+        maps = gbkfit.analysis.moment_maps(
+            values, velocities, orders=(0, 1, 2, 3, 4))
+        result = dict(
+            flux=maps.data['moment0'], velocity=maps.data['moment1'],
+            dispersion=maps.data['moment2'], skewness=maps.skewness(),
+            kurtosis=maps.kurtosis())
         with self._lock:
             if key in self._cubes:
-                self._moments[key] = maps
-        return maps
+                self._moments.setdefault(key, {})[snr] = result
+        return result
 
     def _key(self, path: str, hdu: int) -> tuple:
         """
@@ -173,10 +197,8 @@ class Views:
 
 def _read(filename: str, hdu: int) -> Cube:
     """
-    Read a cube: an array of a FITS file, in the orientation of the model
-    if its header allows (see fitsutils.to_model_axes), without its axes
-    of length 1 (e.g. Stokes), with the coordinates of its channels if
-    its header gives them.
+    Read a cube: an array of a FITS file, as fitsutils.read_array reads
+    it, with the coordinates of its channels if its header gives them.
 
     Raises
     ------
@@ -184,43 +206,17 @@ def _read(filename: str, hdu: int) -> Cube:
         If the file cannot be read, or the array is not a cube.
     """
     try:
-        with fits.open(filename, memmap=True) as hdus:
-            header = hdus[hdu].header
-            values = hdus[hdu].data
-            if values is not None:
-                values, wcs = _model_axes(values, header)
-                values = np.array(values, dtype=np.float32)
-    except (OSError, IndexError) as e:
+        values, wcs = fitsutils.read_array(filename, hdu)
+    except (OSError, IndexError, ConfigError) as e:
         raise Invalid(f"cannot read the array {hdu} of {filename}: {e}") \
             from e
-    if values is None or values.squeeze().ndim != 3:
+    if values.ndim != 3:
         raise Invalid(
             f"the array {hdu} of {filename} is not a cube: its shape is "
-            f"{None if values is None else values.shape}")
-    keep = tuple(i for i, size in enumerate(values.shape) if size > 1)
-    values = values.reshape([values.shape[i] for i in keep])
+            f"{values.shape}")
+    values = np.asarray(values, dtype=np.float32)
     spectral, unit = _spectral(wcs, values.shape[0])
     return Cube(values, spectral, unit, _range(values))
-
-
-def _model_axes(
-        values: np.ndarray, header: fits.Header
-) -> tuple[np.ndarray, astropy.wcs.WCS | None]:
-    """
-    Return an array and its world coordinates in the orientation of the
-    model; the array as it is, and no coordinates, if they cannot be
-    read.
-    """
-    try:
-        # (the fixes of astropy to the header are not of the orientation)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
-            wcs = astropy.wcs.WCS(
-                fitsutils.centre_missing_crpix(header, values.shape))
-        return fitsutils.to_model_axes(values, wcs)
-    except Exception:
-        # (any error of astropy: the array is shown as it is)
-        return values, None
 
 
 def _spectral(

@@ -230,7 +230,7 @@
     "/api/v1/describe/{path}": {
       "get": {
         "summary": "Describe",
-        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given.",
+        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given;\nvelocity is the convention of velocities that its headers leave\nambiguous (see ArrayInfo).",
         "operationId": "describe_api_v1_describe__path__get",
         "parameters": [
           {
@@ -240,6 +240,26 @@
             "schema": {
               "type": "string",
               "title": "Path"
+            }
+          },
+          {
+            "name": "velocity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "radio",
+                    "optical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Velocity"
             }
           }
         ],
@@ -395,7 +415,7 @@
     "/api/v1/views/moments/{path}": {
       "get": {
         "summary": "View Moments",
-        "description": "Return the quick moment maps of a cube (its flux, velocity and\ndispersion, NaN where they are not defined) as a frame of three\narrays (ny, nx), named moment0, moment1 and moment2.",
+        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of five arrays (ny, nx): its flux, velocity,\ndispersion, skewness and kurtosis (named so), of the voxels of the\nmask of its signal grown from seeds of signal-to-noise ratio snr (0:\nof all of them; see Views.moments).",
         "operationId": "view_moments_api_v1_views_moments__path__get",
         "parameters": [
           {
@@ -414,6 +434,16 @@
             "schema": {
               "type": "integer",
               "title": "Hdu"
+            }
+          },
+          {
+            "name": "snr",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 5,
+              "title": "Snr"
             }
           }
         ],
@@ -1172,6 +1202,10 @@
             ],
             "title": "Rms"
           },
+          "ambiguous_velocity": {
+            "type": "boolean",
+            "title": "Ambiguous Velocity"
+          },
           "problems": {
             "items": {
               "type": "string"
@@ -1190,10 +1224,11 @@
           "step",
           "beam",
           "rms",
+          "ambiguous_velocity",
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; none if its coordinates cannot be\nread), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for\na beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), and what a dataset of it refuses or\nneeds given."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; none if its coordinates cannot be\nread), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for\na beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), and what a dataset of it refuses or needs given."
       },
       "CheckRequest": {
         "properties": {

@@ -8,7 +8,7 @@ the event loop of their services.
 
 import asyncio
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import numpy as np
 from fastapi import (
@@ -88,14 +88,20 @@ def folder(server: ServerDep, path: str) -> FolderInfo:
 
 
 @router.get('/describe/{path:path}')
-def describe(server: ServerDep, path: str) -> list[ArrayInfo]:
+def describe(
+        server: ServerDep,
+        path: str,
+        velocity: Literal['radio', 'optical'] | None = None
+) -> list[ArrayInfo]:
     """
     Describe a file of data from its headers, without reading its data:
-    each of its arrays, and what a dataset of it refuses or needs given.
+    each of its arrays, and what a dataset of it refuses or needs given;
+    velocity is the convention of velocities that its headers leave
+    ambiguous (see ArrayInfo).
     """
     return [
         ArrayInfo.model_validate(array)
-        for array in server.workspace.describe(path)]
+        for array in server.workspace.describe(path, velocity)]
 
 
 # (the responses of frames of arrays)
@@ -141,14 +147,18 @@ def view_spectrum(
 
 @router.get(
     '/views/moments/{path:path}', response_class=Response, responses=_FRAME)
-def view_moments(server: ServerDep, path: str, hdu: int) -> Response:
+def view_moments(
+        server: ServerDep, path: str, hdu: int, snr: float = 5
+) -> Response:
     """
-    Return the quick moment maps of a cube (its flux, velocity and
-    dispersion, NaN where they are not defined) as a frame of three
-    arrays (ny, nx), named moment0, moment1 and moment2.
+    Return the quick moment maps of a cube (NaN where they are not
+    defined) as a frame of five arrays (ny, nx): its flux, velocity,
+    dispersion, skewness and kurtosis (named so), of the voxels of the
+    mask of its signal grown from seeds of signal-to-noise ratio snr (0:
+    of all of them; see Views.moments).
     """
-    maps = server.views.moments(path, hdu)
-    arrays = [(dict(name=name), data) for name, data in maps.data.items()]
+    maps = server.views.moments(path, hdu, snr)
+    arrays = [(dict(name=name), data) for name, data in maps.items()]
     return Response(
         frames.array_frame(dict(path=path, hdu=hdu), arrays),
         media_type='application/octet-stream')

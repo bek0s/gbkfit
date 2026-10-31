@@ -119,7 +119,9 @@ export interface paths {
         /**
          * Describe
          * @description Describe a file of data from its headers, without reading its data:
-         *     each of its arrays, and what a dataset of it refuses or needs given.
+         *     each of its arrays, and what a dataset of it refuses or needs given;
+         *     velocity is the convention of velocities that its headers leave
+         *     ambiguous (see ArrayInfo).
          */
         get: operations["describe_api_v1_describe__path__get"];
         put?: never;
@@ -183,9 +185,11 @@ export interface paths {
         };
         /**
          * View Moments
-         * @description Return the quick moment maps of a cube (its flux, velocity and
-         *     dispersion, NaN where they are not defined) as a frame of three
-         *     arrays (ny, nx), named moment0, moment1 and moment2.
+         * @description Return the quick moment maps of a cube (NaN where they are not
+         *     defined) as a frame of five arrays (ny, nx): its flux, velocity,
+         *     dispersion, skewness and kurtosis (named so), of the voxels of the
+         *     mask of its signal grown from seeds of signal-to-noise ratio snr (0:
+         *     of all of them; see Views.moments).
          */
         get: operations["view_moments_api_v1_views_moments__path__get"];
         put?: never;
@@ -513,8 +517,9 @@ export interface components {
          *     and km/s along a velocity axis; none if its coordinates cannot be
          *     read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
          *     a beam of each channel), the noise of its values that its header
-         *     states (keyword RMS or NOISE), and what a dataset of it refuses or
-         *     needs given.
+         *     states (keyword RMS or NOISE), whether its header leaves it open
+         *     whether its velocities are radio or optical (a dataset of it gives
+         *     their convention), and what a dataset of it refuses or needs given.
          */
         ArrayInfo: {
             /** Index */
@@ -535,6 +540,8 @@ export interface components {
             } | null;
             /** Rms */
             rms: number | null;
+            /** Ambiguous Velocity */
+            ambiguous_velocity: boolean;
             /** Problems */
             problems: string[];
         };
@@ -996,7 +1003,9 @@ export interface operations {
     };
     describe_api_v1_describe__path__get: {
         parameters: {
-            query?: never;
+            query?: {
+                velocity?: ("radio" | "optical") | null;
+            };
             header?: never;
             path: {
                 path: string;
@@ -1098,6 +1107,7 @@ export interface operations {
         parameters: {
             query: {
                 hdu: number;
+                snr?: number;
             };
             header?: never;
             path: {

@@ -131,10 +131,15 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .why { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg); }
 .why::before { content: '!'; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 11px var(--sans); }
 .screen-error { padding: 8px 18px 0; }
-.dataset { grid-template-columns: minmax(0, 1fr) 360px; }
-.slots { display: grid; gap: 8px; }
-.slot-row { display: grid; grid-template-columns: 60px minmax(0, 1fr); align-items: center; gap: 4px 10px; }
-.slot-label { font: 11.5px var(--mono); color: var(--faint); }
+.dataset { grid-template-columns: minmax(0, 1fr) 440px; align-items: start; }
+.viewer-empty { display: grid; place-items: center; min-height: 320px; }
+.files { display: grid; gap: 6px; }
+.file-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 4px 10px; }
+.file-label { font: 11.5px var(--mono); color: var(--faint); }
+.file-error { grid-column: 2; }
+.fixes { display: grid; gap: 6px; margin-top: 12px; padding: 8px 10px; border: 1px solid var(--line2); border-left: 3px solid var(--accent); border-radius: 6px; font-size: 12px; }
+.fixed { color: var(--ok); }
+.fixes .seg { justify-self: start; }
 .slot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; min-height: 32px; padding: 3px 6px 3px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }
 .slot.empty { border-style: dashed; background: transparent; }
 .slot-file { min-width: 0; font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -142,30 +147,31 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .slot-value { width: 120px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); padding: 2px 6px; font: 12px var(--mono); color: var(--fg); text-align: right; }
 .slot-clear { margin-left: auto; border: 0; background: transparent; color: var(--faint); padding: 0 4px; }
 .slot-clear:hover { color: var(--err); }
-.slot-error { grid-column: 2; }
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font-size: 12.5px; }
 .facts dt { padding-top: 1px; font: 11px var(--mono); color: var(--faint); }
 .facts dd { margin: 0; min-width: 0; }
 .problems { margin: 0; padding-left: 16px; color: var(--accent); }
 
-/* a cube: a channel or its moments, and the spectrum of a pixel */
+/* a cube: one map at a time with its colour bar, the controls under it,
+   and the spectrum of a pixel; the map as large as the screen allows */
 .col { min-width: 0; display: grid; gap: 14px; align-content: start; }
-.viewer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.viewer-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px; }
 .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 8px; padding: 2px; gap: 2px; }
 .seg button { border: 0; background: transparent; color: var(--muted); border-radius: 6px; padding: 2px 10px; font-size: 12px; }
 .seg button[aria-pressed="true"] { background: var(--sel); color: var(--fg); }
-.map { position: relative; width: 100%; max-width: 520px; margin: 0 auto; }
+.viewer-map, .viewer-controls { width: min(100%, calc(100vh - 340px)); margin: 0 auto; }
+.viewer-map { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 10px; }
+.map { position: relative; width: 100%; }
 .map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; }
 .map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .map rect { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.channel-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) 90px; align-items: center; gap: 10px; max-width: 520px; margin: 10px auto 0; font: 11.5px var(--mono); color: var(--muted); }
-.channel-controls input { accent-color: var(--accent); }
-.channel-controls span:last-child { text-align: right; }
-.moments { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.moments figure { margin: 0; display: grid; gap: 4px; }
-.moments figcaption { display: flex; justify-content: space-between; gap: 6px; font: 11px var(--mono); color: var(--faint); }
-.moments figcaption b { color: var(--fg); font: 600 12px var(--display); }
-.spectrum-head { margin-top: 14px; font: 11.5px var(--mono); color: var(--faint); }
+.colour-bar { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; justify-items: center; gap: 4px; font: 10.5px var(--mono); color: var(--faint); }
+.colour-bar i { width: 12px; border-radius: 3px; }
+.colour-unit { text-align: center; }
+.viewer-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) 120px; align-items: center; gap: 10px; margin-top: 10px; font: 11.5px var(--mono); color: var(--muted); }
+.viewer-controls input { accent-color: var(--accent); }
+.viewer-controls span:last-child { text-align: right; }
+.spectrum-head { margin-top: 12px; font: 11.5px var(--mono); color: var(--faint); }
 .spectrum { margin: 4px 0 0; }
 .spectrum svg { display: block; width: 100%; height: auto; background: var(--panel2); border-radius: 4px; cursor: crosshair; }
 .spectrum polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }

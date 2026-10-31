@@ -3,8 +3,8 @@
 // channel shown; a click picks the nearest channel.
 import { significant } from './format';
 
-const WIDTH = 600;
-const HEIGHT = 160;
+const WIDTH = 800;
+const HEIGHT = 130;
 const PAD = { left: 8, right: 8, top: 10, bottom: 10 };
 
 export function SpectrumPlot({

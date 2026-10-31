@@ -1,11 +1,20 @@
-// A dataset: its files (its data, their errors and their mask: an array
-// of a file each; the errors can be one value for all the data instead)
-// and what GBKFIT reads from their headers. A new one is
-// named, given its files and added to the project, once nothing stops
-// it; one of the project is shown as it is.
+// A dataset: its cube, to look at (see CubeViewer), and at the side its
+// files (its data, their errors and their mask: an array of a file each;
+// the errors can be one value for all the data instead) and what GBKFIT
+// reads from their headers, with the fixes it takes (axes of length 1 left
+// out; the convention of velocities that a header leaves ambiguous). A
+// new one is named, given its files and added to the project, once
+// nothing stops it; one of the project is shown as it is.
 import { useRef, useState } from 'react';
 import { upload, type ArrayInfo } from '../api/client';
-import { useCreateBlock, useDescription, useImportData, usePiece, useProject } from '../api/queries';
+import {
+  useCreateBlock,
+  useDescription,
+  useImportData,
+  usePiece,
+  useProject,
+  type Velocity,
+} from '../api/queries';
 import { CubeViewer } from '../components/CubeViewer';
 import { FilePicker, joinPath } from '../components/FilePicker';
 import { significant } from '../components/format';
@@ -30,12 +39,16 @@ interface FileArray {
 
 type Files = Partial<Record<Role, FileArray>>;
 
-// What a dataset is made of: the arrays of files of its roles, and for its
-// errors, one value for all the data instead (as typed; null: none)
+// What a dataset is made of: the arrays of files of its roles; for its
+// errors, one value for all the data instead (as typed; null: none); and
+// the convention of its velocities, if its header leaves it ambiguous
 interface Sources {
   files: Files;
   errorValue: string | null;
+  velocity: Velocity | null;
 }
+
+const NO_SOURCES: Sources = { files: {}, errorValue: null, velocity: null };
 
 export function NewDataset({ data }: { data: string }) {
   const { project, go } = useStudio();
@@ -43,12 +56,12 @@ export function NewDataset({ data }: { data: string }) {
   const create = useCreateBlock(project ?? '.');
   const kind = dataKind(data);
   const [name, setName] = useState('');
-  const [sources, setSources] = useState<Sources>({ files: {}, errorValue: null });
-  const arrays = useArrays(sources.files);
+  const [sources, setSources] = useState<Sources>(NO_SOURCES);
+  const arrays = useArrays(sources);
   if (kind === undefined || project === null) return null;
   const taken = info.data?.pieces.datasets.includes(name.trim()) ?? false;
   const reason =
-    blocker(kind, arrays, sources.errorValue) ??
+    blocker(kind, arrays, sources) ??
     (name.trim() === '' ? 'Name the dataset' : taken ? 'The project has a dataset of that name' : null);
   const add = () =>
     create.mutate(
@@ -89,7 +102,7 @@ export function Dataset({ name }: { name: string }) {
   const { project } = useStudio();
   const piece = usePiece(project === null ? null : joinPath(project, `datasets/${name}.yaml`));
   const sources = piece.data === undefined || project === null ? NO_SOURCES : fromBlock(piece.data, project);
-  const arrays = useArrays(sources.files);
+  const arrays = useArrays(sources);
   const kind = dataKindOfType(piece.data?.type);
   return (
     <section className="screen">
@@ -105,8 +118,6 @@ export function Dataset({ name }: { name: string }) {
   );
 }
 
-const NO_SOURCES: Sources = { files: {}, errorValue: null };
-
 // The arrays of the files of a dataset, by role, from their descriptions
 // (undefined until described, or if the file cannot be)
 interface Arrays {
@@ -116,11 +127,11 @@ interface Arrays {
   errors: Partial<Record<Role, string>>;
 }
 
-function useArrays(files: Files): Arrays {
+function useArrays({ files, velocity }: Sources): Arrays {
   const described = {
-    data: useDescription(files.data?.file ?? null),
-    error: useDescription(files.error?.file ?? null),
-    mask: useDescription(files.mask?.file ?? null),
+    data: useDescription(files.data?.file ?? null, velocity),
+    error: useDescription(files.error?.file ?? null, velocity),
+    mask: useDescription(files.mask?.file ?? null, velocity),
   };
   const arrays: Arrays = { found: {}, inFile: {}, errors: {} };
   for (const { role } of ROLES) {
@@ -136,14 +147,19 @@ function useArrays(files: Files): Arrays {
   return arrays;
 }
 
+// The shape of an array without its axes of length 1, as GBKFIT reads it
+function kept(array: ArrayInfo): number[] {
+  return array.shape.filter((size) => size > 1);
+}
+
 // The likeliest array of a file for a role: for the data, the first with
 // three axes (a cube); for their errors and mask, the first of the shape
 // of the data
 function likeliest(role: Role, arrays: ArrayInfo[], data: ArrayInfo | undefined): ArrayInfo | undefined {
   const fits =
     role === 'data'
-      ? (a: ArrayInfo) => a.shape.length === 3
-      : (a: ArrayInfo) => data !== undefined && a.shape.join() === data.shape.join();
+      ? (a: ArrayInfo) => kept(a).length === 3
+      : (a: ArrayInfo) => data !== undefined && kept(a).join() === kept(data).join();
   return arrays.find(fits) ?? arrays[0];
 }
 
@@ -157,27 +173,28 @@ function arrayRef(arrays: ArrayInfo[], array: ArrayInfo): string | number {
   return array.name && arrays.filter((a) => a.name === array.name).length === 1 ? array.name : array.index;
 }
 
-// Why a dataset of these arrays (and error value) cannot be added yet
-// (null: it can)
-function blocker(kind: DataKind, arrays: Arrays, errorValue: string | null): string | null {
+// Why a dataset of these arrays cannot be added yet (null: it can)
+function blocker(kind: DataKind, arrays: Arrays, sources: Sources): string | null {
   const data = arrays.found.data;
   if (arrays.errors.data) return 'The data cannot be read';
-  if (data === undefined) return `Choose the ${kind.title.toLowerCase()}`;
-  if (data.shape.length !== 3) return `The data are not a cube: they have ${data.shape.length} axes`;
+  if (data === undefined) return `Import or upload the ${kind.title.toLowerCase()}`;
+  if (kept(data).length !== 3) return `The data are not a cube: they have ${kept(data).length} axes`;
+  if (data.ambiguous_velocity && sources.velocity === null) return 'Say whether the velocities are radio or optical';
   if (data.problems.length > 0) return 'The data need a fix (see What GBKFIT reads)';
   for (const role of ['error', 'mask'] as const) {
     const array = arrays.found[role];
     if (arrays.errors[role]) return `The ${role === 'error' ? 'errors' : 'mask'} cannot be read`;
-    if (array !== undefined && array.shape.join() !== data.shape.join()) {
+    if (array !== undefined && kept(array).join() !== kept(data).join()) {
       return `The ${role === 'error' ? 'errors are' : 'mask is'} not of the shape of the data`;
     }
   }
-  if (errorValue !== null && !(Number(errorValue) > 0)) return 'Give the error a value above 0';
+  if (sources.errorValue !== null && !(Number(sources.errorValue) > 0)) return 'Give the error a value above 0';
   return null;
 }
 
-// The options of a dataset of the arrays of files (their paths relative
-// to the project), and of its error value
+// The options of a dataset of the arrays of files (each {file, hdu}, its
+// path relative to the project), its error value and the convention of
+// its velocities
 function toBlock(kind: DataKind, arrays: Arrays, sources: Sources, project: string): Record<string, unknown> {
   const prefix = project === '.' ? '' : `${project}/`;
   const options: Record<string, unknown> = { type: kind.type };
@@ -189,30 +206,75 @@ function toBlock(kind: DataKind, arrays: Arrays, sources: Sources, project: stri
     const chosen = sources.files[role];
     const array = arrays.found[role];
     if (chosen !== undefined && array !== undefined) {
-      options[role] = [chosen.file.slice(prefix.length), arrayRef(arrays.inFile[role] ?? [], array)];
+      options[role] = { file: chosen.file.slice(prefix.length), hdu: arrayRef(arrays.inFile[role] ?? [], array) };
     }
   }
+  if (sources.velocity !== null) options.spectral = { convention: sources.velocity };
   return options;
 }
 
 // The sources of the options of a dataset: a file, or a file and its
-// array, or for the errors a number
+// array ({file, hdu}), or for the errors a number; and the convention of
+// its velocities
 function fromBlock(options: Record<string, unknown>, project: string): Sources {
   const files: Files = {};
-  const errorValue = typeof options.error === 'number' ? String(options.error) : null;
   for (const { role } of ROLES) {
     const value = options[role];
-    const [file, array] = typeof value === 'string' ? [value, 0] : Array.isArray(value) ? value : [];
-    if (typeof file === 'string' && (typeof array === 'string' || typeof array === 'number')) {
-      files[role] = { file: joinPath(project, file), array };
+    const { file, hdu = 0 } = (typeof value === 'string' ? { file: value } : (value ?? {})) as {
+      file?: unknown;
+      hdu?: unknown;
+    };
+    if (typeof file === 'string' && (typeof hdu === 'string' || typeof hdu === 'number')) {
+      files[role] = { file: joinPath(project, file), array: hdu };
     }
   }
-  return { files, errorValue };
+  const errorValue = typeof options.error === 'number' ? String(options.error) : null;
+  const convention = (options.spectral as { convention?: unknown } | undefined)?.convention;
+  const velocity = convention === 'radio' || convention === 'optical' ? convention : null;
+  return { files, errorValue, velocity };
 }
 
-// The files of a dataset (editable when it changes them), and what GBKFIT
-// reads from them
+// The cube of a dataset, and at the side its files (editable when it
+// changes them) and what GBKFIT reads from them
 function DatasetBody({
+  project,
+  sources,
+  arrays,
+  onChange,
+}: {
+  project: string;
+  sources: Sources;
+  arrays: Arrays;
+  onChange?: (sources: Sources) => void;
+}) {
+  const data = arrays.found.data;
+  const cube = data && kept(data);
+  return (
+    <div className="screen-body dataset">
+      {sources.files.data !== undefined && data !== undefined && cube?.length === 3 ? (
+        <CubeViewer
+          key={`${sources.files.data.file}:${data.index}`}
+          path={sources.files.data.file}
+          hdu={data.index}
+          shape={cube}
+          unit={data.unit}
+        />
+      ) : (
+        <div className="card viewer-empty">
+          <p className="note">Import or upload the data (at the side) to see them here.</p>
+        </div>
+      )}
+      <div className="col">
+        <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
+        <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
+      </div>
+    </div>
+  );
+}
+
+// The files of a dataset: a line for each of its data, their errors and
+// their mask
+function FilesCard({
   project,
   sources,
   arrays,
@@ -230,116 +292,114 @@ function DatasetBody({
   // The other arrays of the file of the data of its shape (e.g. its
   // errors), offered for the errors
   const siblings = (arrays.inFile.data ?? []).filter(
-    (a) => data !== undefined && a.index !== data.index && a.shape.join() === data.shape.join(),
+    (a) => data !== undefined && a.index !== data.index && kept(a).join() === kept(data).join(),
   );
-  // (the shape of a cube of the data, without its axes of length 1)
-  const cube = data?.shape.filter((size) => size > 1);
   return (
-    <div className="screen-body dataset">
-      <div className="col">
-        <div className="card">
-          <h2 className="card-head">Files</h2>
-          <div className="card-body slots">
-            {ROLES.map(({ role, title }) => {
-              const chosen = files[role];
-              const inFile = arrays.inFile[role] ?? [];
-              return (
-                <div className="slot-row" key={role}>
-                  <span className="slot-label">{title}</span>
-                  {role === 'error' && errorValue !== null ? (
-                    <div className="slot">
-                      {onChange ? (
-                        <input
-                          className="slot-value"
-                          type="number"
-                          step="any"
-                          min="0"
-                          autoFocus
-                          value={errorValue}
-                          aria-label="The error of every value"
-                          onChange={(event) => setErrorValue(event.target.value)}
-                        />
-                      ) : (
-                        <span className="slot-file">{errorValue}</span>
-                      )}
-                      <span className="note">{data?.unit ?? 'in the unit of the data'} · for every value</span>
-                      {onChange && (
-                        <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
-                          ×
-                        </button>
-                      )}
-                    </div>
-                  ) : chosen === undefined ? (
-                    <div className="slot empty">
-                      {onChange ? (
-                        <>
-                          <FileSources project={project} onFile={(file) => set(role, { file })} />
-                          {role === 'error' && (
-                            <button
-                              className="link"
-                              title="One error for every value of the data (e.g. the rms of a radio cube)"
-                              onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
-                            >
-                              One value
-                            </button>
-                          )}
-                          {role === 'error' &&
-                            files.data !== undefined &&
-                            siblings.map((a) => (
-                              <button
-                                key={a.index}
-                                className="link"
-                                onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
-                              >
-                                use {a.name || `array ${a.index}`} of the same file
-                              </button>
-                            ))}
-                        </>
-                      ) : (
-                        <span className="note">none</span>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="slot">
-                      <span className="slot-file" title={chosen.file}>
-                        {chosen.file.split('/').pop()}
-                      </span>
-                      {inFile.length > 1 && onChange ? (
-                        <select
-                          aria-label={`The array of the ${title.toLowerCase()}`}
-                          value={arrays.found[role]?.index ?? ''}
-                          onChange={(event) => {
-                            const array = inFile.find((a) => a.index === Number(event.target.value));
-                            if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
-                          }}
+    <div className="card">
+      <h2 className="card-head">Files</h2>
+      <div className="card-body files">
+        {ROLES.map(({ role, title }) => {
+          const chosen = files[role];
+          const inFile = arrays.inFile[role] ?? [];
+          let slot;
+          if (role === 'error' && errorValue !== null) {
+            slot = (
+              <div className="slot">
+                {onChange ? (
+                  <input
+                    className="slot-value"
+                    type="number"
+                    step="any"
+                    min="0"
+                    autoFocus
+                    value={errorValue}
+                    aria-label="The error of every value"
+                    onChange={(event) => setErrorValue(event.target.value)}
+                  />
+                ) : (
+                  <span className="slot-file">{errorValue}</span>
+                )}
+                <span className="note">{data?.unit ?? 'in the unit of the data'} · every value</span>
+                {onChange && (
+                  <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          } else if (chosen === undefined) {
+            slot = (
+              <div className="slot empty">
+                {onChange ? (
+                  <>
+                    <FileSources project={project} onFile={(file) => set(role, { file })} />
+                    {role === 'error' && (
+                      <button
+                        className="link"
+                        title="One error for every value of the data (e.g. the rms of a radio cube)"
+                        onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
+                      >
+                        One value
+                      </button>
+                    )}
+                    {role === 'error' &&
+                      files.data !== undefined &&
+                      siblings.map((a) => (
+                        <button
+                          key={a.index}
+                          className="link"
+                          onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
                         >
-                          {inFile.map((a) => (
-                            <option key={a.index} value={a.index}>
-                              {a.name || `array ${a.index}`}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
-                      )}
-                      {onChange && (
-                        <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
-                          ×
+                          use {a.name || `array ${a.index}`}
                         </button>
-                      )}
-                    </div>
-                  )}
-                  {arrays.errors[role] && <p className="error slot-error">{arrays.errors[role]}</p>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        {files.data !== undefined && data !== undefined && cube?.length === 3 && (
-          <CubeViewer key={`${files.data.file}:${data.index}`} path={files.data.file} hdu={data.index} shape={cube} />
-        )}
+                      ))}
+                  </>
+                ) : (
+                  <span className="note">none</span>
+                )}
+              </div>
+            );
+          } else {
+            slot = (
+              <div className="slot">
+                <span className="slot-file" title={chosen.file}>
+                  {chosen.file.split('/').pop()}
+                </span>
+                {inFile.length > 1 && onChange ? (
+                  <select
+                    aria-label={`The array of the ${title.toLowerCase()}`}
+                    value={arrays.found[role]?.index ?? ''}
+                    onChange={(event) => {
+                      const array = inFile.find((a) => a.index === Number(event.target.value));
+                      if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
+                    }}
+                  >
+                    {inFile.map((a) => (
+                      <option key={a.index} value={a.index}>
+                        {a.name || `array ${a.index}`}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
+                )}
+                {onChange && (
+                  <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
+                    ×
+                  </button>
+                )}
+              </div>
+            );
+          }
+          return (
+            <div className="file-row" key={role}>
+              <span className="file-label">{title}</span>
+              {slot}
+              {arrays.errors[role] && <p className="error file-error">{arrays.errors[role]}</p>}
+            </div>
+          );
+        })}
       </div>
-      <Facts array={data} />
     </div>
   );
 }
@@ -401,60 +461,103 @@ function FileSources({ project, onFile }: { project: string; onFile: (path: stri
   );
 }
 
-// What GBKFIT reads from the header of the data, and what stops it
-function Facts({ array }: { array: ArrayInfo | undefined }) {
+// What GBKFIT reads from the header of the data, the fixes it takes, and
+// what still stops it
+function Facts({
+  array,
+  velocity,
+  onVelocity,
+}: {
+  array: ArrayInfo | undefined;
+  velocity: Velocity | null;
+  // How the convention of ambiguous velocities is chosen (none: shown)
+  onVelocity?: (velocity: Velocity) => void;
+}) {
+  if (array === undefined) {
+    return (
+      <div className="card">
+        <h2 className="card-head">What GBKFIT reads</h2>
+        <p className="card-body note">The facts of the data come from their header, once they are given.</p>
+      </div>
+    );
+  }
+  const flat = array.shape.map((size, i) => [size, array.axes[i]] as const).filter(([size]) => size === 1);
+  const [x, y, z] = kept(array);
   return (
     <div className="card">
       <h2 className="card-head">What GBKFIT reads</h2>
       <div className="card-body">
-        {array === undefined ? (
-          <p className="note">Choose the data to see what GBKFIT reads from their header.</p>
-        ) : (
-          <dl className="facts">
-            <dt>shape</dt>
-            <dd>{shapeText(array.shape)}</dd>
-            <dt>pixel</dt>
-            <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'unknown'}</dd>
-            {array.shape.length === 3 && (
+        <dl className="facts">
+          <dt>shape</dt>
+          <dd>{z === undefined ? kept(array).join(' × ') : `${x} × ${y} pixels × ${z} channels`}</dd>
+          <dt>pixel</dt>
+          <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'unknown'}</dd>
+          {z !== undefined && (
+            <>
+              <dt>spectral</dt>
+              <dd>
+                {array.axes[array.axes.length - 1] || 'no type'}
+                {array.step && array.step.length === 3 && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
+              </dd>
+            </>
+          )}
+          <dt>unit</dt>
+          <dd>{array.unit ?? 'none in the header'}</dd>
+          <dt>beam</dt>
+          <dd>{beamText(array.beam)}</dd>
+          {array.rms !== null && (
+            <>
+              <dt>noise</dt>
+              <dd>{significant(array.rms, 3)} (the header)</dd>
+            </>
+          )}
+        </dl>
+        {(flat.length > 0 || array.ambiguous_velocity) && (
+          <div className="fixes">
+            {flat.length > 0 && (
+              <div className="fixed">
+                ✓ Left out: the {flat.length > 1 ? 'axes' : 'axis'} of length 1 ({flat.map(([, axis]) => axis || 'no type').join(', ')})
+              </div>
+            )}
+            {array.ambiguous_velocity && (
               <>
-                <dt>spectral</dt>
-                <dd>
-                  {array.axes[2] || 'no type'}
-                  {array.step && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
-                </dd>
+                <div>
+                  The header does not say whether the velocities are radio or optical (
+                  {array.axes[array.axes.length - 1]} without VELREF; MIRIAD writes radio ones).
+                </div>
+                <div className="seg" role="group" aria-label="The convention of the velocities">
+                  {(['radio', 'optical'] as const).map((convention) => (
+                    <button
+                      key={convention}
+                      aria-pressed={velocity === convention}
+                      disabled={onVelocity === undefined}
+                      onClick={() => onVelocity?.(convention)}
+                    >
+                      {convention === 'radio' ? 'Radio' : 'Optical'}
+                    </button>
+                  ))}
+                </div>
               </>
             )}
-            <dt>unit</dt>
-            <dd>{array.unit ?? 'none in the header'}</dd>
-            <dt>beam</dt>
-            <dd>{beamText(array.beam)}</dd>
-            {array.problems.length > 0 && (
-              <>
-                <dt>needs</dt>
-                <dd>
-                  <ul className="problems">
-                    {array.problems.map((problem) => (
-                      <li key={problem}>{problem}</li>
-                    ))}
-                  </ul>
-                </dd>
-              </>
-            )}
-          </dl>
+          </div>
+        )}
+        {array.problems.length > 0 && (
+          <ul className="problems">
+            {array.problems.map((problem) => (
+              <li key={problem}>{problem}</li>
+            ))}
+          </ul>
         )}
       </div>
     </div>
   );
 }
 
-function shapeText(shape: number[]): string {
-  const [x, y, z] = shape;
-  return shape.length === 3 ? `${x} × ${y} pixels × ${z} channels` : shape.join(' × ');
-}
-
 function beamText(beam: ArrayInfo['beam']): string {
   if (!beam) return 'none in the header';
   const { bmaj, bmin, bpa } = beam;
-  if (Array.isArray(bmaj)) return `one for each channel: ${significant(Math.min(...bmaj), 3)}″ to ${significant(Math.max(...bmaj), 3)}″`;
+  if (Array.isArray(bmaj)) {
+    return `one for each channel: ${significant(Math.min(...bmaj), 3)}″ to ${significant(Math.max(...bmaj), 3)}″`;
+  }
   return `${significant(bmaj, 3)}″ × ${significant(Number(bmin), 3)}″ at ${significant(Number(bpa), 3)}°`;
 }

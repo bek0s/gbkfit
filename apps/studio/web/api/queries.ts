@@ -9,7 +9,7 @@ export const keys = {
   project: (path: string) => ['project', path],
   piece: (path: string) => ['piece', path],
   folder: (path: string) => ['folder', path],
-  description: (path: string) => ['description', path],
+  description: (path: string, velocity: string | null) => ['description', path, velocity],
   view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
 };
@@ -45,12 +45,25 @@ export function useFolder(path: string) {
   });
 }
 
-// The arrays of a file of data, from its headers
-export function useDescription(path: string | null) {
+// The convention of velocities that a header leaves ambiguous (see the
+// server's ArrayInfo)
+export type Velocity = 'radio' | 'optical';
+
+// The arrays of a file of data, from its headers, its ambiguous velocities
+// read by a convention, if given
+export function useDescription(path: string | null, velocity: Velocity | null = null) {
   return useQuery({
-    queryKey: keys.description(path ?? ''),
+    queryKey: keys.description(path ?? '', velocity),
     enabled: path !== null,
-    queryFn: () => data(api.GET('/api/v1/describe/{path}', { params: { path: { path: path ?? '' } } })),
+    // (the description of the same file stays while another convention is
+    // read; never that of another file)
+    placeholderData: (previous, query) => (query?.queryKey[1] === path ? previous : undefined),
+    queryFn: () =>
+      data(
+        api.GET('/api/v1/describe/{path}', {
+          params: { path: { path: path ?? '' }, query: velocity ? { velocity } : {} },
+        }),
+      ),
   });
 }
 
@@ -94,16 +107,19 @@ export function useSpectrum(path: string, hdu: number, x: number, y: number) {
   });
 }
 
-// The quick moment maps of a cube (flux, velocity and dispersion), by name
-export function useMoments(path: string, hdu: number, enabled: boolean) {
+// The quick moment maps of a cube (its flux, velocity, dispersion,
+// skewness and kurtosis, by name), of the voxels where the cube, smoothed,
+// is above a signal-to-noise ratio (0: all of them)
+export function useMoments(path: string, hdu: number, snr: number, enabled: boolean) {
   return useQuery({
-    queryKey: keys.view('moments', path, hdu),
+    queryKey: keys.view('moments', path, hdu, snr),
     enabled,
+    placeholderData: keepPreviousData,
     queryFn: async () =>
       decodeFrame(
         await data(
           api.GET('/api/v1/views/moments/{path}', {
-            params: { path: { path }, query: { hdu } },
+            params: { path: { path }, query: { hdu, snr } },
             parseAs: 'arrayBuffer',
           }),
         ),

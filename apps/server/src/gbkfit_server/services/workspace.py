@@ -254,13 +254,16 @@ class Workspace:
             [dict(name=entry.name, size=entry.stat().st_size)
              for entry in entries if entry.is_file()])
 
-    def describe(self, relative: str) -> list[dict[str, Any]]:
+    def describe(
+            self, relative: str, velocity: str | None = None
+    ) -> list[dict[str, Any]]:
         """
         Describe a file of data from its headers (see
-        gbkfit.dataset.describe_fits): each of its arrays (its index,
-        name, shape and axes, in the order of the model, unit, the size of
-        its pixels in that order, beam, the noise its header states, and
-        problems).
+        gbkfit.dataset.describe_fits), with the convention of velocities
+        that its headers leave ambiguous, if given: each of its arrays (its
+        index, name, shape and axes, in the order of the model, unit, the
+        size of its pixels in that order, beam, the noise its header
+        states, whether its velocities are ambiguous, and problems).
 
         Raises
         ------
@@ -275,7 +278,7 @@ class Workspace:
                 f"'{relative}' is not a file of data that GBKFIT reads: "
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
-            hdus = gbkfit.dataset.describe_fits(path)
+            hdus = gbkfit.dataset.describe_fits(path, velocity)
         except OSError as e:
             raise Invalid(f"cannot read '{relative}': {e}") from e
         return [
@@ -287,7 +290,7 @@ class Workspace:
                      bmaj=np.asarray(hdu.beam.bmaj).tolist(),
                      bmin=np.asarray(hdu.beam.bmin).tolist(),
                      bpa=np.asarray(hdu.beam.bpa).tolist()),
-                 rms=hdu.rms,
+                 rms=hdu.rms, ambiguous_velocity=hdu.ambiguous_velocity,
                  # (the paths of the problems in the workspace)
                  problems=[p.replace(path, relative) for p in hdu.problems])
             for hdu in hdus]
