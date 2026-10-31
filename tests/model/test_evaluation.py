@@ -361,19 +361,19 @@ def test_observations_on_two_drivers_evaluate_at_once(driver):
         == [(x.name, x.ids) for x in extras['alone']]
 
 
-def test_an_error_on_one_of_two_drivers_is_raised(driver):
+def test_an_error_on_one_of_two_drivers_is_raised(driver, monkeypatch):
     from gbkfit.driver.drivers.host import DriverHost
     plan = two_observations(driver).group().plan(
         driver, dict(b=DriverHost()))
     counts = counted(plan)
-    evaluate = plan._plans[1].evaluate
 
     def failing(*args):
         raise RuntimeError("b failed")
-    plan._plans[1].evaluate = failing
-    with pytest.raises(RuntimeError, match="b failed"):
-        plan.model_h(TWO_PARAMS)
+    # (undone at the end of the block, also if it fails)
+    with monkeypatch.context() as patch:
+        patch.setattr(plan._plans[1], 'evaluate', failing)
+        with pytest.raises(RuntimeError, match="b failed"):
+            plan.model_h(TWO_PARAMS)
     assert counts['a'] == 1
-    plan._plans[1].evaluate = evaluate
     plan.model_h(TWO_PARAMS)
     assert counts == dict(a=1, b=1)
