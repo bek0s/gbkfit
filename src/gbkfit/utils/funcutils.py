@@ -6,7 +6,6 @@ import functools
 import importlib.util
 import inspect
 import pathlib
-import textwrap
 import typing
 from collections.abc import Callable
 from typing import Any
@@ -14,7 +13,6 @@ from typing import Any
 
 __all__ = [
     'ParameterNames',
-    'function_source',
     'load_function_from_file',
     'parameter_names'
 ]
@@ -69,29 +67,6 @@ def parameter_names(func: Callable) -> ParameterNames:
         else:
             optional.append(parameter.name)
     return ParameterNames(tuple(required), tuple(optional))
-
-
-def function_source(func: Callable) -> str:
-    """
-    Return the source code of a function.
-
-    Parameters
-    ----------
-    func : Callable
-        A function defined in a file.
-
-    Returns
-    -------
-    str
-        Its source code, without the indentation of its definition.
-
-    Raises
-    ------
-    OSError
-        If its source code is not available (e.g. it was defined in an
-        interactive session).
-    """
-    return textwrap.dedent(inspect.getsource(func))
 
 
 def load_function_from_file(file_path: str, name: str) -> Callable:

@@ -26,7 +26,7 @@ from .geometries import Geometry, geometry_pdesc
 from .lines import Band, LineCatalogue, LinePlacement
 from .points import band_light, line_light
 from .roles import (
-    STARS, BandEmission, Emission, LineEmission, emission_parser)
+    STARS, Emission, LineEmission, emission_parser)
 
 
 __all__ = [

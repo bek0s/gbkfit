@@ -9,7 +9,6 @@ import numpy as np
 
 
 __all__ = [
-    'all_negative',
     'all_positive',
     'cumsum_from',
     'nativify'
@@ -89,25 +88,6 @@ def all_positive(x: Iterable[Any], include_zero: bool = False) -> bool:
         Whether all the items are positive.
     """
     return all(i >= 0 if include_zero else i > 0 for i in x)
-
-
-def all_negative(x: Iterable[Any], include_zero: bool = False) -> bool:
-    """
-    Check whether all the items of an iterable are negative.
-
-    Parameters
-    ----------
-    x : Iterable
-        An iterable of numbers.
-    include_zero : bool
-        Whether 0 counts as negative (i.e. check that none is positive).
-
-    Returns
-    -------
-    bool
-        Whether all the items are negative.
-    """
-    return all(i <= 0 if include_zero else i < 0 for i in x)
 
 
 def nativify(x: Any) -> Any:

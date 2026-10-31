@@ -9,7 +9,7 @@ import collections
 import copy
 import itertools
 from collections.abc import (
-    Callable, Iterable, Mapping, MutableMapping, MutableSequence, Sequence)
+    Callable, Iterable, MutableMapping, MutableSequence, Sequence)
 from typing import Any, Literal
 
 import numpy as np
@@ -18,31 +18,19 @@ import numpy as np
 __all__ = [
     'all_unique',
     'duplicates',
-    'extract_subdict',
-    'extract_sublist',
     'is_ascending',
-    'is_descending',
     'is_mapping',
     'is_sequence',
-    'is_sequence_of_type',
     'is_sequence_or_mapping',
     'is_sorted',
     'listify',
-    'make_list',
-    'make_tuple',
     'merge_with_prefixes',
     'normalize_index',
     'normalize_indices',
-    'remove_from_list',
     'remove_from_list_if',
-    'remove_from_mapping_by_key',
-    'remove_from_mapping_by_value',
     'remove_from_mapping_if',
-    'rename_key',
-    'replace_in_sequence',
     'setify',
     'sorted_by_order',
-    'split_valid_indices',
     'traverse_and_replace',
     'tuplify'
 ]
@@ -99,26 +87,6 @@ def is_sequence_or_mapping(x: Any) -> bool:
         is_mapping).
     """
     return is_sequence(x) or is_mapping(x)
-
-
-def is_sequence_of_type(x: Any, type_: type) -> bool:
-    """
-    Check whether an object is a sequence of items of a type.
-
-    Parameters
-    ----------
-    x : Any
-        An object.
-    type_ : type
-        The type of the items.
-
-    Returns
-    -------
-    bool
-        Whether it is a sequence (see is_sequence) whose items are all
-        instances of the type.
-    """
-    return is_sequence(x) and all(isinstance(item, type_) for item in x)
 
 
 def listify(x: Any) -> list[Any]:
@@ -191,112 +159,6 @@ def _make_sequence(
         for _ in range(shape[0]))
 
 
-def make_list(
-        shape: int | Sequence[int],
-        value: Any,
-        deepcopy: bool = True
-) -> list[Any]:
-    """
-    Return a list, nested for several dimensions, filled with a value.
-
-    Parameters
-    ----------
-    shape : int or Sequence[int]
-        The length of the list, or of each level of the nested lists.
-    value : Any
-        The value of the items.
-    deepcopy : bool
-        Whether each item is a deep copy of the value (e.g. a dict of its
-        own), or the value itself.
-
-    Returns
-    -------
-    list
-        The list.
-    """
-    return _make_sequence(tuplify(shape), value, list, deepcopy)
-
-
-def make_tuple(
-        shape: int | Sequence[int],
-        value: Any,
-        deepcopy: bool = True
-) -> tuple[Any, ...]:
-    """
-    Return a tuple, nested for several dimensions, filled with a value.
-
-    Parameters
-    ----------
-    shape : int or Sequence[int]
-        The length of the tuple, or of each level of the nested tuples.
-    value : Any
-        The value of the items.
-    deepcopy : bool
-        Whether each item is a deep copy of the value, or the value
-        itself.
-
-    Returns
-    -------
-    tuple
-        The tuple.
-    """
-    return _make_sequence(tuplify(shape), value, tuple, deepcopy)
-
-
-def replace_in_sequence(
-        x: MutableSequence[Any],
-        old_value: Any,
-        new_value: Any
-) -> MutableSequence[Any]:
-    """
-    Replace every item of a sequence equal to a value, in place.
-
-    Parameters
-    ----------
-    x : MutableSequence
-        A sequence.
-    old_value : Any
-        The value to replace.
-    new_value : Any
-        The value to replace it with.
-
-    Returns
-    -------
-    MutableSequence
-        The sequence.
-    """
-    for i, value in enumerate(x):
-        if value == old_value:
-            x[i] = new_value
-    return x
-
-
-def rename_key(
-        x: MutableMapping[Any, Any],
-        old_key: Any,
-        new_key: Any
-) -> MutableMapping[Any, Any]:
-    """
-    Rename a key of a mapping, in place.
-
-    Parameters
-    ----------
-    x : MutableMapping
-        A mapping.
-    old_key : Any
-        The key to rename (it must exist).
-    new_key : Any
-        Its new name.
-
-    Returns
-    -------
-    MutableMapping
-        The mapping.
-    """
-    x[new_key] = x.pop(old_key)
-    return x
-
-
 def remove_from_list_if(
         x: MutableSequence[Any],
         predicate: Callable[[Any], bool]
@@ -318,28 +180,6 @@ def remove_from_list_if(
     """
     x[:] = [item for item in x if not predicate(item)]
     return x
-
-
-def remove_from_list(
-        x: MutableSequence[Any],
-        value: Any
-) -> MutableSequence[Any]:
-    """
-    Remove the items of a sequence equal to a value, in place.
-
-    Parameters
-    ----------
-    x : MutableSequence
-        A sequence.
-    value : Any
-        The value to remove.
-
-    Returns
-    -------
-    MutableSequence
-        The sequence.
-    """
-    return remove_from_list_if(x, lambda item: item == value)
 
 
 def remove_from_mapping_if(
@@ -365,52 +205,6 @@ def remove_from_mapping_if(
         if predicate(key, x[key]):
             del x[key]
     return x
-
-
-def remove_from_mapping_by_key(
-        x: MutableMapping[Any, Any],
-        key: Any
-) -> MutableMapping[Any, Any]:
-    """
-    Remove a key of a mapping, if it has it, in place.
-
-    Parameters
-    ----------
-    x : MutableMapping
-        A mapping.
-    key : Any
-        The key to remove.
-
-    Returns
-    -------
-    MutableMapping
-        The mapping.
-    """
-    x.pop(key, None)
-    return x
-
-
-def remove_from_mapping_by_value(
-        x: MutableMapping[Any, Any],
-        value: Any
-) -> MutableMapping[Any, Any]:
-    """
-    Remove the items of a mapping whose value is equal to a value, in
-    place.
-
-    Parameters
-    ----------
-    x : MutableMapping
-        A mapping.
-    value : Any
-        The value to remove.
-
-    Returns
-    -------
-    MutableMapping
-        The mapping.
-    """
-    return remove_from_mapping_if(x, lambda k, v: v == value)
 
 
 def merge_with_prefixes(
@@ -490,25 +284,6 @@ def is_ascending(x: Sequence[Any]) -> bool:
     return is_sorted(x, ascending=True)
 
 
-def is_descending(x: Sequence[Any]) -> bool:
-    """
-    Check whether a sequence is in descending order (see is_sorted).
-
-    Parameters
-    ----------
-    x : Sequence
-        A sequence.
-
-    Returns
-    -------
-    bool
-        Whether it is in descending order.
-    """
-    return is_sorted(x, ascending=False)
-
-
-
-
 def duplicates(x: Iterable[Any]) -> set[Any]:
     """
     Return the items that appear more than once in an iterable.
@@ -542,92 +317,6 @@ def all_unique(x: Iterable[Any]) -> bool:
         Whether all the items are unique.
     """
     return not duplicates(x)
-
-
-def extract_sublist(
-        x: Sequence[Any],
-        items: Sequence[Any]
-) -> tuple[list[Any], list[Any]]:
-    """
-    Split items into those in a sequence and those not in it.
-
-    Parameters
-    ----------
-    x : Sequence
-        A sequence.
-    items : Sequence
-        The items to look for.
-
-    Returns
-    -------
-    list
-        The items in the sequence, in their order.
-    list
-        The items not in the sequence, in their order.
-    """
-    found = [item for item in items if item in x]
-    missing = [item for item in items if item not in x]
-    return found, missing
-
-
-def extract_subdict(
-        x: Mapping[Any, Any],
-        keys: Iterable[Any]
-) -> tuple[dict[Any, Any], list[Any]]:
-    """
-    Return the items of a mapping with the given keys.
-
-    Parameters
-    ----------
-    x : Mapping
-        A mapping.
-    keys : Iterable
-        The keys to look for.
-
-    Returns
-    -------
-    dict
-        The keys found and their values, in the order of keys.
-    list
-        The keys not found, in their order.
-    """
-    keys = list(keys)
-    found = {key: x[key] for key in keys if key in x}
-    missing = [key for key in keys if key not in x]
-    return found, missing
-
-
-def split_valid_indices(
-        indices: Sequence[int],
-        length: int
-) -> tuple[list[int], list[int]]:
-    """
-    Split indices into those valid for a sequence and the others.
-
-    Parameters
-    ----------
-    indices : Sequence[int]
-        The indices (negative indices count from the end).
-    length : int
-        The length of the sequence.
-
-    Returns
-    -------
-    list[int]
-        The valid indices, in their order.
-    list[int]
-        The invalid indices, in their order.
-
-    Raises
-    ------
-    ValueError
-        If the length is negative.
-    """
-    if length < 0:
-        raise ValueError(f"the length must not be negative; it is {length}")
-    valid = [i for i in indices if -length <= i < length]
-    invalid = [i for i in indices if not -length <= i < length]
-    return valid, invalid
 
 
 def normalize_index(index: int, length: int) -> int:

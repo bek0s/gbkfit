@@ -1403,9 +1403,7 @@ def _slitlet_spectra(
     those of the geometries of slitlets.
     """
     from gbkfit.dataset import Data, DatasetSlitlessSpectra
-    from gbkfit.observation.observables.apertures import ApertureShutters
     from gbkfit.observation.observables.slitless_spectra import Exposure
-    from gbkfit.observation.observables.traces import TraceTable
     slitlet = slitlets[index]
     data, error = exposure.data.copy(), exposure.err.copy()
     if undo_corrections:

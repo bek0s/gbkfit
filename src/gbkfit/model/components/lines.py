@@ -198,10 +198,6 @@ class LineCatalogue:
         """Return the names of its lines."""
         return tuple(self._lines)
 
-    def band_names(self) -> tuple[str, ...]:
-        """Return the names of its bands."""
-        return tuple(self._bands)
-
     def band(self, name: str) -> Band:
         """
         Return its band of the given name.

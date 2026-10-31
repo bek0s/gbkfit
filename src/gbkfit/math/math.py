@@ -1,6 +1,4 @@
 
-import functools
-import operator
 
 import numpy as np
 
@@ -38,10 +36,6 @@ def roundu_po2(x):
 
 
 roundu_po2 = np.vectorize(roundu_po2)
-
-
-def prod(x):
-    return functools.reduce(operator.mul, x, 1)
 
 
 def transform_lh_rotate_z(x, y, theta):

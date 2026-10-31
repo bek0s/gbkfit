@@ -170,7 +170,7 @@ def test_copies_with_other_data_evaluate_in_two_threads_at_once(driver):
 def test_a_copy_on_another_driver_gives_the_same_values(driver):
     data = Data(np.random.default_rng(3).normal(0.1, 1, (24, 32)))
     objective, params = make_objective(DriverHost(), data)
-    copy = objective.with_driver(driver)
+    copy = Objective(objective.group().plan(driver), objective.solves())
     assert copy.group_plan().observation_drivers() == (driver,)
     assert copy.datasets()[0] is objective.datasets()[0]
     assert copy.chi2(params) == pytest.approx(

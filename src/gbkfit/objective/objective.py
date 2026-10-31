@@ -239,20 +239,6 @@ class Objective:
         """Return the plan of the observations."""
         return self._group_plan
 
-    def with_driver(
-            self,
-            driver: Driver,
-            drivers: Mapping[str, Driver] | None = None
-    ) -> 'Objective':
-        """
-        Return a copy of it with its work on other drivers: its models
-        (see ObservationGroup.plan, which takes the drivers) and their
-        residuals. The copy shares the data; its memory is its own.
-        Copies on several devices evaluate several points at once (see
-        WorkersThreads).
-        """
-        return Objective(self._group.plan(driver, drivers), self._solves)
-
     def with_data(self, datasets: Sequence[Dataset]) -> 'Objective':
         """
         Return a copy of it with other data of its observations (e.g. those

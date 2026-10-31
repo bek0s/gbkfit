@@ -18,7 +18,7 @@ class InterpolatorLinear(Interpolator):
         return 'linear'
 
     def __init__(self, x, y):
-        self._interp = scipy.interpolate.interp1d(x, y, 'linear')  # noqa
+        self._interp = scipy.interpolate.interp1d(x, y, 'linear')
 
     def __call__(self, x):
         return self._interp(x)
@@ -31,7 +31,7 @@ class InterpolatorAkima(Interpolator):
         return 'akima'
 
     def __init__(self, x, y):
-        self._interp = scipy.interpolate.Akima1DInterpolator(x, y)  # noqa
+        self._interp = scipy.interpolate.Akima1DInterpolator(x, y)
 
     def __call__(self, x):
         return self._interp(x)
@@ -44,7 +44,7 @@ class InterpolatorPCHIP(Interpolator):
         return 'pchip'
 
     def __init__(self, x, y):
-        self._interp = scipy.interpolate.PchipInterpolator(x, y)  # noqa
+        self._interp = scipy.interpolate.PchipInterpolator(x, y)
 
     def __call__(self, x):
         return self._interp(x)

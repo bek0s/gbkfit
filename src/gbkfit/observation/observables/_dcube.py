@@ -90,7 +90,7 @@ def cube_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
     return gridutils.GridData(data, grid.coords, grid.spectral_axis)
 
 
-def plain_extra(data: np.ndarray, grid: gridutils.Grid) -> np.ndarray:  # noqa
+def plain_extra(data: np.ndarray, grid: gridutils.Grid) -> np.ndarray:
     """Make an extra output on a grid of DCube a plain array."""
     return data
 

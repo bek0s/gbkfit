@@ -205,13 +205,6 @@ class GalaxyFunctions:
         """Return the names of its functions (see the class)."""
         return self._names
 
-    def radius_range(self, name: str) -> tuple[float, float] | None:
-        """
-        Return the range of the radii (arcsec) of its function of a disk
-        of the name (see radius_range_of).
-        """
-        return self.radius_range_of(self._component_set, name)
-
     @staticmethod
     def radius_range_of(
             component_set: 'ComponentSet', name: str
