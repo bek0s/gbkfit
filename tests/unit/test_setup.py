@@ -118,11 +118,17 @@ def test_a_configuration_without_data_cannot_fit():
     assert model['brightness']['d'].sum() > 0
     with pytest.raises(ConfigError, match="a fit needs a fitter"):
         loaded.fit()
-    # (a configuration of a fit needs data)
-    with pytest.raises(ConfigError, match="needs data; these have none"):
-        gbkfit.load(dict(
-            version=VERSION, galaxies=[GALAXY], observations=[observation()],
-            params=PARAMS, fitter=dict(type='scipy.least_squares')))
+    # (a configuration of a fit, with workers even of MPI outside a job,
+    # loads without data, e.g. to draw mocks, but does not fit: audit
+    # 2026-10-31 #27, #28)
+    loaded = gbkfit.load(dict(
+        version=VERSION, galaxies=[GALAXY], observations=[observation()],
+        params=PARAMS, fitter=dict(type='scipy.least_squares'),
+        workers=dict(type='mpi')))
+    assert loaded.objective is None and loaded.pool is None
+    loaded.evaluate()
+    with pytest.raises(ConfigError, match="a fit needs data"):
+        loaded.fit()
 
 
 def test_the_drivers_given_replace_those_of_the_configuration():

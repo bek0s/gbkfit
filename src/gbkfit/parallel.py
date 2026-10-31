@@ -102,6 +102,19 @@ class Workers(parseutils.TypedSerializable, abc.ABC):
         """
         return WorkerPool(objective, self)
 
+    def check(self, objective: Objective) -> None:
+        """
+        Check the placements of the workers of an objective, as far as
+        that needs no running job: by default, by making them (see
+        placements).
+
+        Raises
+        ------
+        ConfigError
+            If a placement names unknown galaxies or observations.
+        """
+        self.placements(objective)
+
     @abc.abstractmethod
     def placements(self, objective: Objective) -> list[_Drivers]:
         """
@@ -110,7 +123,8 @@ class Workers(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         ConfigError
-            If a placement names unknown galaxies or observations.
+            If a placement names unknown galaxies or observations, or the
+            job of the workers is not running (see WorkersMPI).
         """
 
     @abc.abstractmethod
@@ -186,10 +200,11 @@ class WorkerPool:
     it runs (to the rounding of the sums that its kernels make in
     parallel), also with workers on different devices.
 
-    The placements are checked when it is made; the workers start on first
-    use (e.g. the first batch of a fit), so that workers that are not used
-    (e.g. those of the configuration of a fit that is only evaluated or
-    checked) take no memory.
+    The placements are checked when it is made, as far as that needs no
+    running job (see Workers.check); they are made, and the workers start,
+    on first use (e.g. the first batch of a fit), so that workers that are
+    not used (e.g. those of the configuration of a fit that is only
+    evaluated or checked, also outside its MPI job) take no memory.
 
     Parameters
     ----------
@@ -206,9 +221,10 @@ class WorkerPool:
     """
 
     def __init__(self, objective: Objective, workers: Workers):
+        workers.check(objective)
         self._objective = objective
         self._workers = workers
-        self._placements = workers.placements(objective)
+        self._placements: list[_Drivers] | None = None
         self._started: list[_Worker] | None = None
 
     def objective(self) -> Objective:
@@ -217,7 +233,7 @@ class WorkerPool:
 
     def size(self) -> int:
         """Return the number of workers."""
-        return len(self._placements)
+        return len(self._placed())
 
     def map(
             self,
@@ -295,11 +311,17 @@ class WorkerPool:
             chunks = [future.result() for future in futures]
         return [chunks[i % n][i // n] for i in range(count)]
 
+    def _placed(self) -> list[_Drivers]:
+        """Return the placements, made on the first call."""
+        if self._placements is None:
+            self._placements = self._workers.placements(self._objective)
+        return self._placements
+
     def _start(self) -> list['_Worker']:
         """Return the workers, and start them on the first call."""
         if self._started is None:
             self._started = self._workers.launch(
-                self._objective, self._placements)
+                self._objective, self._placed())
         return self._started
 
     def close(self) -> None:
@@ -635,6 +657,13 @@ class WorkersMPI(Workers):
         if self._threads is not None:
             info['threads'] = self._threads
         return info
+
+    def check(self, objective: Objective) -> None:
+        # (the number of workers is that of the job, known only under its
+        # launcher: the configuration of a cluster fit loads anywhere,
+        # e.g. to be evaluated on a login node)
+        for placement in self._drivers or ():
+            _placement(objective, placement)
 
     def placements(self, objective: Objective) -> list[_Drivers]:
         nworkers = _mpi_size() - 1

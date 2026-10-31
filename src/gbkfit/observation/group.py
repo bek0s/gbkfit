@@ -282,6 +282,15 @@ class ObservationGroup:
             tuple(names['x']), tuple(names['y']), tuple(names['v']),
             alignment, observation.offset_params())
 
+    def has_data(self) -> bool:
+        """
+        Check whether every observation has data (as those of an
+        objective, see Objective).
+        """
+        return all(
+            observation.data() is not None
+            for observation in self._observations)
+
     def require_data(self) -> None:
         """
         Raise ConfigError unless every observation has data (e.g. those of

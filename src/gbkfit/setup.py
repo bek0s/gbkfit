@@ -229,8 +229,10 @@ class Setup:
     Galaxies, their observations and their parameters, set up on drivers:
     the plan of the group (see ObservationGroup.plan), the parameters, the
     objective if every observation has data, the fitter if given, and
-    workers of copies of the objective if given (see WorkerPool). load sets
-    up a configuration as one.
+    workers of copies of the objective if given and it has one (see
+    WorkerPool). load sets up a configuration as one. A fitter or workers
+    need no data until a fit (e.g. a configuration of a fit evaluated to
+    draw mocks).
 
     It holds the memory of its objective and its workers until it is
     closed (see close; e.g. at the end of a with block).
@@ -260,9 +262,8 @@ class Setup:
     ConfigError
         If the parameters are not of the group, the fitter does not take
         their free elements (see Fitter.load_fit_params), a prior on
-        several parameters is invalid, a fitter or workers are given and
-        an observation has no data, or the group cannot be
-        planned (see ObservationGroup.plan).
+        several parameters is invalid, or the group cannot be planned
+        (see ObservationGroup.plan).
 
     Examples
     --------
@@ -301,12 +302,11 @@ class Setup:
         self._group_plan = group.plan(driver, drivers)
         self._params = params
         self._objective = None
-        if fitter is not None or workers is not None or all(
-                obs.data() is not None for obs in group.observations()):
+        if group.has_data():
             _log.info("setting up objective...")
             self._objective = Objective(self._group_plan, params.solves())
         self._fitter = fitter
-        self._pool = None if workers is None \
+        self._pool = None if workers is None or self._objective is None \
             else workers.start(self._objective)
 
     @property
@@ -331,7 +331,9 @@ class Setup:
 
     @property
     def pool(self) -> WorkerPool | None:
-        """The workers of copies of the objective, if given."""
+        """
+        The workers of copies of the objective, if given and it has one.
+        """
         return self._pool
 
     def evaluate(
@@ -609,8 +611,12 @@ def describe(
                 cfg, group.pdescs(), group.constants(),
                 group.function_names())
             fitter = _load_fitter(cfg)
-            if fitter is not None:
-                group.require_data()
+            if fitter is not None and not group.has_data():
+                with parseutils.config_path('fitter'):
+                    parseutils.warn(
+                        "a fit needs data for every observation, and some "
+                        "have none: the configuration can only be "
+                        "evaluated")
             # (the names of drivers, checked against the configurations of
             # those declared)
             declared = {None: cfg['driver']} if 'driver' in cfg \
@@ -633,8 +639,8 @@ def load(
     Set up a configuration: the plan of the observations of its galaxies
     on its drivers, its parameters, its objective if every observation
     has data, its fitter if it has one, and its workers if it has them
-    (see Setup). A configuration with a fitter or workers is of a fit: its
-    observations need data.
+    (see Setup). Its fitter and workers need data only to fit (see
+    Setup.fit).
 
     Parameters
     ----------
@@ -657,8 +663,7 @@ def load(
     Raises
     ------
     ConfigError
-        If the configuration is invalid, or it has a fitter or workers and
-        an observation has no data.
+        If the configuration is invalid.
 
     Examples
     --------
