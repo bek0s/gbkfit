@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.params import ParamValues
+from gbkfit.params import ModelEvaluationError, ParamValues
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
@@ -593,7 +593,7 @@ def _placement(
     first = placed[0] + lows[0]
     zero = first - math.ceil((first - start) / step - 1e-9) * step
     if zero + (size - 1) * step < end - 1e-9 * step:
-        raise RuntimeError(
+        raise ModelEvaluationError(
             f"the galaxies take {(end - zero) / step + 1:g} voxels of a "
             f"depth axis of {size}")
     return zero, placed

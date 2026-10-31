@@ -205,6 +205,11 @@ def test_masked_values_with_an_upper_limit_are_non_detections(driver):
         residuals[:, :8], np.sqrt(-2 * scipy.special.log_ndtr(z)),
         rtol=1e-5, atol=1e-7)
     assert objective.nresiduals() == 24 * 32
+    # (they are censored: apart in the reduced chi-square of a fit)
+    objective.evaluate(params)
+    assert objective.ncensored() == 24 * 8
+    assert objective.censored_chi2() == pytest.approx(
+        np.sum(-2 * scipy.special.log_ndtr(z)), rel=1e-5)
 
 
 def test_upper_limits_count_within_their_footprint(driver, tmp_path):
@@ -364,10 +369,12 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     assert objective.chi2(compact) > objective.chi2(truth)
 
 
-def test_values_the_model_lacks_take_no_noise(driver):
+def test_values_the_model_lacks_take_the_noise_of_their_error(driver):
     # Their residual, missing_residual, does not take the fitted noise:
-    # they add nothing to its normalisation (the noise residual), sum
-    # log((f e)^2 / (f_min e)^2) over the values the model has
+    # they add to its normalisation (the noise residual, sum log((f e)^2 /
+    # (f_min e)^2) over the values the model has) that of their error,
+    # log(1 / f_min^2), which the scale does not change; the chi-square
+    # and -2 log L differ by one constant, however many it lacks
     def group(observable, dataset=None):
         likelihood = None if dataset is None else LikelihoodGaussian(
             missing_residual=3, noise=dict(
@@ -391,10 +398,19 @@ def test_values_the_model_lacks_take_no_noise(driver):
     compact = ParamSpace(objective.pdescs(), DISK | dict(
         pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
     moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
-    has = ~np.isnan(moment1) & (dataset['moment1'].mask() != 0)
-    assert np.any(np.isnan(moment1) & (dataset['moment1'].mask() != 0))
-    assert objective.evaluate(compact).noise_chi2 == pytest.approx(
-        np.count_nonzero(has) * np.log((2 / 0.1) ** 2), rel=1e-6)
+    unmasked = dataset['moment1'].mask() != 0
+    has = ~np.isnan(moment1) & unmasked
+    lacks = np.isnan(moment1) & unmasked
+    assert np.any(lacks)
+    evaluation = objective.evaluate(compact)
+    assert evaluation.noise_chi2 == pytest.approx(
+        np.count_nonzero(has) * np.log((2 / 0.1) ** 2)
+        + np.count_nonzero(lacks) * np.log(1 / 0.1 ** 2), rel=1e-6)
+    full = objective.evaluate(ParamSpace(objective.pdescs(), DISK | dict(
+        obs_noise_scale_moment1=2.0)).evaluate())
+    assert evaluation.merits.chi2 + 2 * evaluation.merits.log_likelihood \
+        == pytest.approx(
+            full.merits.chi2 + 2 * full.merits.log_likelihood, rel=1e-9)
 
 
 def correlated_data(rng, correlation):

@@ -20,7 +20,8 @@ from gbkfit.params.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
 from gbkfit.objective import Merits, Objective
 from gbkfit.params import (
-    ModelEvaluationError, ParamEvaluationError, ParamSpace, ParamValues)
+    EvaluationError, ModelEvaluationError, ParamEvaluationError, ParamSpace,
+    ParamValues)
 from gbkfit.utils import threadutils
 
 if TYPE_CHECKING:
@@ -191,6 +192,9 @@ class FitProblem:
         self._nevals = 0
         self._nan_nevals = 0
         self._failed_nevals = 0
+        # (the number of residuals, once a point was evaluated: see
+        # residuals_batch)
+        self._nresiduals: int | None = None
         self._best_x: np.ndarray | None = None
         self._best_chi2 = math.inf
         self._observers = tuple(observers)
@@ -353,13 +357,38 @@ class FitProblem:
 
     def residuals_batch(self, xs: npt.ArrayLike) -> list[np.ndarray]:
         """
-        Return the residuals at each point (one per row; see residuals).
+        Return the residuals at each point (one per row; see residuals):
+        infinities at a point where the parameters cannot be evaluated or
+        the model or a solve fails (counted as by the other fitters, see
+        failed_nevals), so that least squares take it as a bad step (e.g.
+        scipy's trust region shrinks), once they had a point they could
+        evaluate (the start).
+
+        Raises
+        ------
+        EvaluationError
+            If the parameters, the model or a solve fail at a point before
+            any point was evaluated.
         """
         xs = _points(xs)
-        values = [self.evaluate(x) for x in xs]
-        evaluated = self.map_objective(Objective.residuals_and_merits, values)
+        values = []
+        for x in xs:
+            try:
+                values.append(self.evaluate(x))
+            except ParamEvaluationError as e:
+                values.append(e)
+        evaluated = self.map_objective(_residuals_or_failure, [
+            value for value in values
+            if not isinstance(value, ParamEvaluationError)])
         batch = []
-        for x, (residuals, merits) in zip(xs, evaluated):
+        for x, value in zip(xs, values):
+            result = value if isinstance(value, ParamEvaluationError) \
+                else next(evaluated)
+            if isinstance(result, EvaluationError):
+                batch.append(self._unevaluated_residuals(x, result))
+                continue
+            residuals, merits = result
+            self._nresiduals = residuals.size
             if self._log is not None:
                 self._log.append(x, merits)
             if self._priors is not None or self._joint:
@@ -374,6 +403,23 @@ class FitProblem:
             self._record(x, cost)
             batch.append(residuals)
         return batch
+
+    def _unevaluated_residuals(
+            self, x: np.ndarray, failure: EvaluationError
+    ) -> np.ndarray:
+        """
+        Return the residuals of a point that cannot be evaluated (see
+        residuals_batch): infinities, of the number of those of the points
+        evaluated before, counted and logged as by the other fitters (see
+        _merits); or raise the failure if there were none.
+        """
+        if self._nresiduals is None:
+            raise failure
+        if isinstance(failure, ModelEvaluationError):
+            self._count_failed(x, failure)
+        if self._log is not None:
+            self._log.append(x, _UNEVALUATED)
+        return np.full(self._nresiduals, np.inf)
 
     def chi2(self, x: npt.ArrayLike) -> float:
         """Return the chi-square at the given free values."""
@@ -852,6 +898,20 @@ def _merits_or_failure(
     """
     try:
         return objective.merits(values)
+    except ModelEvaluationError as e:
+        return e
+
+
+def _residuals_or_failure(
+        objective: Objective, values: ParamValues
+) -> tuple[np.ndarray, Merits] | ModelEvaluationError:
+    """
+    Return the residuals and merits of an objective at the values of the
+    parameters, or the failure of its model or a solve there (see
+    _merits_or_failure).
+    """
+    try:
+        return objective.residuals_and_merits(values)
     except ModelEvaluationError as e:
         return e
 

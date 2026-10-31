@@ -191,7 +191,8 @@ class FitterScipyLeastSquares(Fitter):
             functions = LeastSquaresFunctions(
                 lambda ps: problem.residuals_batch(
                     [transform.to_bounded(p) for p in ps]),
-                -np.inf * ones, np.inf * ones, ones, scheme, step)
+                -np.inf * ones, np.inf * ones, ones, scheme, step,
+                takes_bad_points=False)
             result = scipy.optimize.least_squares(
                 functions.residuals, transform.to_internal(x0),
                 jac=functions.jacobian, **options)

@@ -13,7 +13,8 @@ from annotated_types import Ge
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
 from gbkfit.objective import Objective
-from gbkfit.params import ParamEvaluationError, ParamKind
+from gbkfit.params import (
+    ModelEvaluationError, ParamEvaluationError, ParamKind)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import check_options
 
@@ -141,8 +142,10 @@ def jacobian(
 ) -> np.ndarray:
     """
     Return the Jacobian of a function by finite differences: central or
-    forward, and one-sided where a step would cross a bound. The function
-    is evaluated at all the steps at once (in one batch).
+    forward, and one-sided where a step would cross a bound, or where the
+    function cannot take a point of the difference (its values are not
+    finite: see FitProblem.residuals_batch): then on the other side. The
+    function is evaluated at all the steps at once (in one batch).
 
     Parameters
     ----------
@@ -166,6 +169,12 @@ def jacobian(
     np.ndarray
         The Jacobian: one row per value of the function, one column per
         variable (a new array).
+
+    Raises
+    ------
+    ModelEvaluationError
+        If the function cannot take the points of a variable on either
+        side of x.
     """
     # Each column is (f(a) - f(b)) / d: the two points a and b of its
     # difference (None for x itself, whose value is f0), and d
@@ -193,12 +202,78 @@ def jacobian(
     values = iter(func_batch(np.array(([x] if needs_f0 else []) + points)))
     if needs_f0:
         f0 = next(values)
-    columns = []
+    columns, sides = [], []
     for a, b, d in differences:
         fa = f0 if a is None else next(values)
         fb = f0 if b is None else next(values)
         columns.append((fa - fb) / d)
+        sides.append((fa, fb))
+    bad = [i for i, column in enumerate(columns)
+           if not np.all(np.isfinite(column))]
+    if bad:
+        _other_sides(
+            func_batch, x, lower, upper, f0, differences, sides, columns, bad)
     return np.stack(columns, axis=1)
+
+
+def _other_sides(
+        func_batch: Callable[[np.ndarray], Sequence[np.ndarray]],
+        x: np.ndarray,
+        lower: np.ndarray,
+        upper: np.ndarray,
+        f0: np.ndarray | None,
+        differences: list[tuple[np.ndarray | None, np.ndarray | None, float]],
+        sides: list[tuple[np.ndarray, np.ndarray]],
+        columns: list[np.ndarray],
+        bad: list[int]
+) -> None:
+    """
+    Replace the columns of a Jacobian (see jacobian) that are not finite by
+    the one-sided difference on the side of x whose point the function
+    takes: of the central difference, its other point; of a one-sided
+    one, the point on the other side, if within the bounds.
+
+    Raises
+    ------
+    ModelEvaluationError
+        If the function takes the points on neither side.
+    """
+    def failure(i: int) -> ModelEvaluationError:
+        return ModelEvaluationError(
+            f"the Jacobian cannot be evaluated: the function cannot be "
+            f"evaluated on either side of the free values {x.tolist()} "
+            f"along the free value {i}")
+    # Each column becomes sign (f(point) - f0) / h, f(point) known or
+    # evaluated (None)
+    plans = []
+    for i in bad:
+        a, b, d = differences[i]
+        fa, fb = sides[i]
+        if a is not None and b is not None:
+            if np.all(np.isfinite(fa)):
+                plans.append((i, None, 1, d / 2, fa))
+            elif np.all(np.isfinite(fb)):
+                plans.append((i, None, -1, d / 2, fb))
+            else:
+                raise failure(i)
+            continue
+        point, sign = x.copy(), 1 if a is None else -1
+        point[i] += sign * d
+        if not lower[i] <= point[i] <= upper[i]:
+            raise failure(i)
+        plans.append((i, point, sign, d, None))
+    points = [point for _, point, _, _, f in plans if f is None]
+    values = iter(func_batch(np.array(
+        ([x] if f0 is None else []) + points))) \
+        if f0 is None or points else iter(())
+    if f0 is None:
+        f0 = next(values)
+    for i, _, sign, h, f in plans:
+        f = next(values) if f is None else f
+        column = sign * (f - f0) / h
+        if not np.all(np.isfinite(column)):
+            raise failure(i)
+        columns[i] = column
 
 
 def sample_values(

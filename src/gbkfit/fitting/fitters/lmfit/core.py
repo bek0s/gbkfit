@@ -121,8 +121,10 @@ class FitterLMFitLeastSquares(Fitter):
         # MINPACK's own steps (sqrt(epsfcn) times the value) are too small
         # for float32 models at small values, and scipy's at 0: GBKFIT
         # computes the Jacobian (see LeastSquaresFunctions)
+        minpack = self._method == 'leastsq'
         functions = LeastSquaresFunctions(
-            problem.residuals_batch, lower, upper, scales, 'forward', step)
+            problem.residuals_batch, lower, upper, scales, 'forward', step,
+            takes_bad_points=not minpack)
         # A start on a bound does not move: lmfit's map of bounded values
         # (leastsq) is flat there, and TRF's first steps are tiny
         x0 = inside_bounds(
@@ -144,7 +146,8 @@ class FitterLMFitLeastSquares(Fitter):
         options[jac_option] = lambda v: functions.jacobian(values(v))
         minimizer = lmfit.Minimizer(
             lambda v: functions.residuals(values(v)), lmfit_params,
-            nan_policy='raise', calc_covar=False, max_nfev=self._max_nfev)
+            nan_policy='raise' if minpack else 'propagate', calc_covar=False,
+            max_nfev=self._max_nfev)
         result = minimizer.minimize(method=self._method, **options)
         # A run stopped by max_nfev ends at its last evaluation (e.g. a
         # rejected step): take its best one instead

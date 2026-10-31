@@ -11,6 +11,7 @@ import scipy.ndimage
 import scipy.special
 from annotated_types import Ge
 
+from gbkfit.params import ModelEvaluationError
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils.parseutils import check_options
 from .base import (
@@ -199,7 +200,7 @@ def _ptrait_integrate_mixture_moffat(
     s = np.asarray(params['s'])
     b = np.asarray(params['b'])
     if np.any(b <= 1):
-        raise RuntimeError(
+        raise ModelEvaluationError(
             "the blobs of mixture_moffat of the Monte Carlo disk need b > 1 "
             "(their flux is infinite otherwise)")
     return _ptrait_cloud_flux_mixture(params, np.pi * s * s / (b - 1))

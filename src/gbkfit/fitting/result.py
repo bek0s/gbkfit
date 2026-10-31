@@ -316,11 +316,12 @@ class FitSolution:
     dof : float
         The degrees of freedom: the number of independent residuals (see
         Objective.nindependent; nresiduals, but fewer for correlated
-        noise) less nfitted.
+        noise), but those of censored values (see
+        Objective.censored_chi2), less nfitted.
     reduced_chi2 : float
         The chi-square of the data alone (without the residuals of the
-        priors of solved values and the noise residuals of a fitted noise)
-        over dof (nan if dof <= 0).
+        priors of solved values, the noise residuals of a fitted noise and
+        the residuals of censored values) over dof (nan if dof <= 0).
     log_likelihood : float
         The log-likelihood (-chi2 / 2, unless the objective has nuisance
         parameters; see Objective.log_likelihood).

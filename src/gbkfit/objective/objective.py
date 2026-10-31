@@ -614,6 +614,20 @@ class Objective:
         self.prepare()
         return sum(c.nindependent() for c in self._comparisons)
 
+    def ncensored(self) -> int:
+        """
+        Return the number of the residuals of censored values (see
+        Comparison.censored_chi2), among nresiduals.
+        """
+        return sum(c.ncensored() for c in self._comparisons)
+
+    def censored_chi2(self) -> float:
+        """
+        Return the part of the chi-square of the data of the last
+        evaluation of censored values (see Comparison.censored_chi2).
+        """
+        return float(sum(c.censored_chi2() for c in self._comparisons))
+
     def _solve_residuals(self) -> list[np.ndarray]:
         """
         Return the residuals of the priors of the solved values of the last

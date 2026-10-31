@@ -25,6 +25,8 @@ import scipy.interpolate
 import scipy.sparse
 import scipy.sparse.linalg
 
+from gbkfit.params import ModelEvaluationError
+
 
 __all__ = [
     'CellMasses',
@@ -254,7 +256,7 @@ def _solve(
                 f"the field on {grid.shape} cells converged in {iteration} "
                 f"iterations")
             return u, w_out
-    raise RuntimeError(
+    raise ModelEvaluationError(
         f"the scalar field of f(R) did not converge in {_MAX_ITERATIONS} "
         f"iterations")
 

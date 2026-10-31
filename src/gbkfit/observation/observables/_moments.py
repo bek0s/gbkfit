@@ -13,6 +13,7 @@ import gbkfit.math
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
+from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _dcube
@@ -192,7 +193,9 @@ class MomentsPlan:
     (ny, nx) for each order, one mask shared by them (the spectra whose
     moment 0 is not above flux_floor times the largest of the map, in
     absolute value, and those whose fit fails), and one weight map shared
-    by them (with the method moments).
+    by them (with the method moments). A cube whose moment 0 is not a
+    number (NaN) somewhere is a model that failed there, not one without
+    flux there.
     """
 
     def __init__(
@@ -238,6 +241,11 @@ class MomentsPlan:
         Return the moments of cube (and its weights, wcube, if any), whose
         world coordinates are step and zero (see gridutils.Grid): for each
         order, its map (d), the mask (m) and its weights (w).
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the moment 0 of a spectrum of the cube is not a number.
         """
         # TODO: unexplained, not investigated. Where the model has almost
         # no flux (moment 0 ~1e-4 of its peak), its moments are noise, and
@@ -248,7 +256,14 @@ class MomentsPlan:
         # the data). A guess: the round-off of the float32 FFT convolution
         # (moment 0 had pixels of -3.5e-8, though the brightness is >= 0).
         # Workaround: a disk bright beyond the data.
-        cutoff = self._flux_floor * self._largest_flux(step, zero, cube)
+        flux = self._flux(step, zero, cube)
+        failed = np.count_nonzero(np.isnan(flux))
+        if failed:
+            raise ModelEvaluationError(
+                f"the model has no flux (NaN) in {failed} of its spectra: it "
+                f"cannot be evaluated there (e.g. a rotation or a dispersion "
+                f"without a solution)")
+        cutoff = self._flux_floor * float(np.max(np.abs(flux), initial=0))
         if self._method in ('gaussian_fit', 'gauss_hermite'):
             self._backend.mmaps_gaussian(
                 step, zero, cube, cutoff, self._mmaps_o,
@@ -263,21 +278,17 @@ class MomentsPlan:
                 d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
             for i, order in enumerate(self._orders)}
 
-    def _largest_flux(
+    def _flux(
             self,
             step: Sequence[float],
             zero: Sequence[float],
             cube: DeviceArray
-    ) -> float:
+    ) -> np.ndarray:
         """
-        Return the largest moment 0 of the spectra of cube, in absolute
-        value (0 without flux): of its map, measured with nothing masked
-        (a cutoff below 0) and copied to the host.
+        Return the map of the moment 0 of the spectra of cube, measured
+        with nothing masked (a cutoff below 0), on the host.
         """
-        if self._flux_floor == 0:
-            return 0.0
         self._backend.mmaps_moments(
             step, zero, cube, None, -1, self._flux_o, self._flux_d,
             self._flux_m, self._flux_w)
-        flux = np.abs(self._driver.mem_copy_d2h(self._flux_d))
-        return float(np.nanmax(flux, initial=0))
+        return self._driver.mem_copy_d2h(self._flux_d)

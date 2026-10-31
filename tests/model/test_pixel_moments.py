@@ -168,3 +168,20 @@ def test_at_least_one_moment_order():
         PixelMoments(
             size=(8, 8), orders=[],
             spectral=SpectralAxis(convention='relativistic'))
+
+
+def test_a_cube_without_flux_somewhere_is_a_failed_model(driver):
+    # A spectrum below the flux floor has no moments (a value the model
+    # lacks); one whose flux is not a number is a model that failed
+    from gbkfit.observation.observables._moments import MomentsPlan
+    from gbkfit.params import ModelEvaluationError
+    plan = MomentsPlan(driver, (3, 2), (0, 1), 0.01, 'moments', np.float64)
+    cube = np.ones((5, 2, 3))
+    cube[:, 0, 0] = 0
+    maps = plan.evaluate((1, 1, 10), (0, 0, -20), driver.mem_copy_h2d(cube),
+                         None)
+    assert driver.mem_copy_d2h(maps['moment0']['m'])[0, 0] == 0
+    cube[2, 1, 1] = np.nan
+    with pytest.raises(ModelEvaluationError, match="1 of its spectra"):
+        plan.evaluate((1, 1, 10), (0, 0, -20), driver.mem_copy_h2d(cube),
+                      None)

@@ -115,15 +115,17 @@ objective_amplitude_terms(
 }
 
 // The term of value i in the noise residual of a data item whose noise is
-// fitted (see LikelihoodGaussian): c^2 log(noise^2 / (scale_minimum
-// error)^2), c the factor of its residual (see objective_residual: the
-// weight, times mdl_w and obs_m), and error that of obs_e (1 without
-// errors). It is the share of the value in the normalisation of the
-// Gaussian, c^2 log(noise^2), less a part that the noise does not change,
-// so that it is never negative (the scale is at least scale_minimum). The
-// values the data mask have none (an upper limit is a probability, which
-// has no normalisation), nor those the model lacks (their residual,
-// 'missing', does not take the noise).
+// fitted (see LikelihoodGaussian): c^2 log(noise^2 / (reference error)^2),
+// c the factor of its residual (see objective_residual: the weight, times
+// mdl_w and obs_m), error that of obs_e (1 without errors), and reference
+// scale_minimum, at most 1. It is the share of the value in the
+// normalisation of the Gaussian, c^2 log(noise^2), less a part that the
+// noise does not change, so that it is never negative (the scale is at
+// least scale_minimum). The values the data mask have none (an upper
+// limit is a probability, which has no normalisation). A value the model
+// lacks has that of the noise of its error, c^2 log(1 / reference^2),
+// which the noise does not change (its residual, 'missing', does not take
+// the noise): without it, lacking a value would save its share.
 template<typename T> constexpr double
 objective_noise_term(
         long long i,
@@ -131,7 +133,7 @@ objective_noise_term(
         const T* mdl_d, const T* mdl_w,
         T weight, T scale, T jitter, T scale_minimum)
 {
-    if ((obs_m && obs_m[i] == 0) || std::isnan(mdl_d[i])) {
+    if (obs_m && obs_m[i] == 0) {
         return 0;
     }
     double c = weight;
@@ -141,10 +143,14 @@ objective_noise_term(
     if (obs_m) {
         c *= obs_m[i];
     }
-    // (noise / (scale_minimum error), in double precision)
+    const double reference = scale_minimum < 1 ? double(scale_minimum) : 1.0;
+    if (std::isnan(mdl_d[i])) {
+        return c * c * 2 * std::log(1 / reference);
+    }
+    // (noise / (reference error), in double precision)
     const double error = obs_e ? double(obs_e[i]) : 1.0;
     const double ratio = std::hypot(double(scale), double(jitter) / error)
-            / double(scale_minimum);
+            / reference;
     return c * c * 2 * std::log(ratio);
 }
 

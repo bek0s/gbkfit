@@ -330,8 +330,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             of the objective, or the pool is of another objective.
         EvaluationError
             If the parameters cannot be evaluated, or the model or a solve
-            fails, where a least-squares fitter evaluates them (e.g. at the
-            start); other fitters take such points as ones they cannot
+            fails, at the start of a least-squares fitter, or anywhere for
+            MINPACK ('lm', 'leastsq'); the other fitters, and least squares
+            past their start, take such points as ones they cannot
             evaluate.
         RuntimeError
             If the fitter finds no point with a finite chi-square (or the
@@ -505,6 +506,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         params = problem.params()
         x = np.asarray(x, dtype=float)
         evaluation = objective.evaluate(params.evaluate(x))
+        censored_chi2 = objective.censored_chi2()
         merits = evaluation.merits
         # (with the values of the solved elements there)
         values = params.evaluate(x, evaluation.solved)
@@ -517,14 +519,18 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         nresiduals = objective.nresiduals()
         nevals = 1
         nfitted = problem.ndim() + evaluation.nnuisance
-        dof = objective.nindependent() - nfitted
+        dof = objective.nindependent() - objective.ncensored() - nfitted
         # (of the data alone: the residuals of the priors of solved values
         # are not of the data, as the degrees of freedom leave out their
         # nnuisance, nor the noise residuals of a fitted noise; with them,
         # it was ~13 for ~2.5 in a Schwarzschild fit, and it scales the
-        # covariance)
-        reduced_chi2 = (evaluation.data_chi2 - evaluation.noise_chi2) / dof \
-            if dof > 0 else np.nan
+        # covariance. Nor of censored values, the probabilities of being
+        # below their limits, ~0 well below them, which with a degree of
+        # freedom each made a fit of a moment map with upper limits look
+        # of errors overestimated, 0.72, for errors underestimated, 1.32)
+        reduced_chi2 = (
+            evaluation.data_chi2 - evaluation.noise_chi2 - censored_chi2) \
+            / dof if dof > 0 else np.nan
         # The information criteria: of values solved 'integrated', the
         # marginal (the log-likelihood holds their Occam factor, so they do
         # not count again); of values solved 'profiled', the conditional

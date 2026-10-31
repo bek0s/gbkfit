@@ -298,6 +298,65 @@ def test_a_point_where_the_model_fails_does_not_end_the_fit(monkeypatch):
     assert result.best().free['incl'] <= 60
 
 
+@pytest.mark.parametrize('fitter', [
+    dict(type='scipy.least_squares', method='trf'),
+    dict(type='lmfit.least_squares', method='least_squares')])
+def test_least_squares_step_around_points_where_the_model_fails(
+        monkeypatch, fitter):
+    # The model fails just above the start: the Jacobian there takes the
+    # difference below it, and the fit goes on, its failures counted
+    if fitter['type'].startswith('lmfit'):
+        pytest.importorskip('lmfit')
+    from gbkfit.fitting import fitter_parser
+    from gbkfit.params import ModelEvaluationError
+    objective = mock_objective(DriverHost())
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    residuals_and_merits = objective.residuals_and_merits
+
+    def failing(values, out_extra=None):
+        if 45 < values['incl'] < 46:
+            raise ModelEvaluationError("no model here")
+        return residuals_and_merits(values, out_extra)
+    monkeypatch.setattr(objective, 'residuals_and_merits', failing)
+    result = fitter_parser.load(fitter).fit(objective, params)
+    best = result.best()
+    assert result.diagnostics['failed_nevals'] > 0
+    assert best.free['incl'] == pytest.approx(
+        TRUE['incl'], abs=5 * best.covariance.std['incl'])
+
+
+def test_the_jacobian_steps_to_the_side_the_function_takes():
+    from gbkfit.fitting.uncertainty import jacobian
+    from gbkfit.params import ModelEvaluationError
+
+    def function(xs):
+        # (not defined above x0 = 1)
+        return [np.array([x[0] ** 2, 3 * x[1]]) if x[0] <= 1
+                else np.full(2, np.inf) for x in xs]
+    x, steps = np.array([1.0, 0.0]), np.array([1e-4, 1e-4])
+    lower, upper = np.full(2, -10.0), np.full(2, 10.0)
+    for scheme in ('central', 'forward'):
+        np.testing.assert_allclose(
+            jacobian(function, x, steps, lower, upper, scheme),
+            [[2, 0], [0, 3]], rtol=1e-3)
+
+    def nowhere(xs):
+        return [np.zeros(2) if x[0] == 1 else np.full(2, np.inf) for x in xs]
+    with pytest.raises(ModelEvaluationError, match="either side"):
+        jacobian(nowhere, x, steps, lower, upper, 'central')
+
+
+def test_minpack_refuses_points_the_objective_cannot_evaluate():
+    # (it cannot take residuals that are not finite)
+    from gbkfit.fitting.fitters._detail import LeastSquaresFunctions
+    from gbkfit.params import ModelEvaluationError
+    functions = LeastSquaresFunctions(
+        lambda xs: [np.full(3, np.inf) for _ in xs], np.full(1, -1.0),
+        np.full(1, 1.0), np.ones(1), 'forward', 1e-3, takes_bad_points=False)
+    with pytest.raises(ModelEvaluationError, match="use 'trf'"):
+        functions.residuals(np.zeros(1))
+
+
 def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
     # (a fit of the chi-square would minimise a mix of both)
     from gbkfit.fitting import fitter_parser

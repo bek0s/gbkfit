@@ -108,6 +108,23 @@ class Comparison(abc.ABC):
         """
         return float(self.nresiduals())
 
+    def ncensored(self) -> int:
+        """
+        Return the number of its residuals of censored values (see
+        censored_chi2): none here.
+        """
+        return 0
+
+    def censored_chi2(self) -> float:
+        """
+        Return the part of its chi-square of censored values, of the last
+        evaluation: values below a limit (e.g. upper limits, see
+        LikelihoodGaussian), whose residuals are of the probability of
+        being below it, about 0 where the model is well below it, rather
+        than of a deviation; none here.
+        """
+        return 0.0
+
     def gives_residuals(self) -> bool:
         """
         Check whether it gives residuals (e.g. for least squares), or only
@@ -460,8 +477,10 @@ class ComparisonGaussian(Comparison):
         likelihood = observation.likelihood()
         keys = observation.keys()
         # The weight of each data item, and the residual of the values the
-        # model does not have (none where the model cannot lack values:
-        # NaN would show one)
+        # model does not have: NaN where the model cannot lack values, so
+        # that one it lacks makes a chi-square that is not a number, of a
+        # point fitters cannot evaluate (a model that failed), even with a
+        # missing_residual
         self._weights = {key: likelihood.weight(key) for key in keys}
         # The number of values of each data item that the data do not mask
         # (over which the weights of the model are normalised)
@@ -469,7 +488,9 @@ class ComparisonGaussian(Comparison):
             key: int(np.count_nonzero(self._dataset[key].mask()))
             for key in keys}
         missing = likelihood.missing_residual()
-        self._missing_residual = np.nan if missing is None else missing
+        self._missing_residual = missing \
+            if missing is not None and observation.model_can_lack_values() \
+            else np.nan
         # The upper limit of each data item where it is masked, and its
         # noise (NaN for none), and the footprints of those that have one
         self._upper_limits = {
@@ -544,6 +565,40 @@ class ComparisonGaussian(Comparison):
             else:
                 counted.append(mask.ravel() != 0)
         return np.concatenate(counted)
+
+    def ncensored(self) -> int:
+        """
+        Return the number of its residuals of censored values: the values
+        the data mask of the data items with upper limits (within their
+        footprints, if any).
+        """
+        return sum(
+            int(np.count_nonzero(censored))
+            for censored in map(self._censored, self._observation.keys())
+            if censored is not None)
+
+    def censored_chi2(self) -> float:
+        total = 0.0
+        for key in self._observation.keys():
+            censored = self._censored(key)
+            if censored is not None:
+                residuals = self._driver.mem_copy_d2h(
+                    self._d_residual_nddata[key])
+                total += float(np.sum(
+                    residuals[censored].astype(np.float64) ** 2))
+        return total
+
+    def _censored(self, key: str) -> np.ndarray | None:
+        """
+        Return which values of data item key are censored (see ncensored),
+        or None if it has no upper limit.
+        """
+        if np.isnan(self._upper_limits[key][0]):
+            return None
+        censored = self._dataset[key].mask() == 0
+        if key in self._footprints:
+            censored &= self._footprints[key] != 0
+        return censored
 
     def nindependent(self) -> float:
         """
@@ -796,14 +851,15 @@ class ComparisonGaussian(Comparison):
 
     def noise_constant(self) -> float:
         # (the noise residual of a fitted scale is sum c^2 ln(sigma^2 /
-        # (f_min e)^2), for least squares never negative: its part sum c^2
-        # ln(f_min^2), with sum c^2 over the values compared (the pixel
-        # weights normalised to their number; fewer independent values of
-        # correlated noise), is a constant of scale_min alone, which
-        # -2 ln L and the AICp must not hold)
+        # (f_ref e)^2), f_ref = min(f_min, 1), for least squares never
+        # negative, and those of the values the model lacks c^2 ln(1 /
+        # f_ref^2): its part sum c^2 ln(f_ref^2), with sum c^2 over the
+        # values compared (the pixel weights normalised to their number;
+        # fewer independent values of correlated noise), is a constant of
+        # scale_min alone, which -2 ln L and the AICp must not hold)
         return float(sum(
             self._weights[key] ** 2 * self._nunmasked[key] * share
-            * 2 * np.log(noise.scale_min)
+            * 2 * np.log(min(noise.scale_min, 1.0))
             for (key, noise), share in zip(
                 self._noise.items(), self._noise_shares)))
 

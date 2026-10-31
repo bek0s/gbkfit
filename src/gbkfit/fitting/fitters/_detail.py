@@ -11,6 +11,7 @@ import numpy as np
 from gbkfit.fitting.fitparams import FitParamWalkers
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import finite_difference_steps, jacobian
+from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import threadutils
 from gbkfit.utils.parseutils import ConfigError
 
@@ -143,6 +144,12 @@ class LeastSquaresFunctions:
         The finite differences.
     relative_step : float
         The relative step (see relative_step).
+    takes_bad_points : bool, optional
+        Whether the library takes residuals that are not finite, at a
+        point that the objective cannot evaluate (see
+        FitProblem.residuals_batch; e.g. scipy's 'trf' and 'dogbox',
+        which shrink their step), or not (MINPACK: scipy's 'lm', lmfit's
+        'leastsq'), which is then an error.
     """
 
     def __init__(
@@ -152,9 +159,11 @@ class LeastSquaresFunctions:
             upper: np.ndarray,
             scales: np.ndarray,
             scheme: Literal['forward', 'central'],
-            relative_step: float
+            relative_step: float,
+            takes_bad_points: bool = True
     ):
         self._func_batch = func_batch
+        self._takes_bad_points = takes_bad_points
         self._lower = lower
         self._upper = upper
         self._scales = scales
@@ -175,8 +184,22 @@ class LeastSquaresFunctions:
         return None if self._best_x is None else self._best_x.copy()
 
     def residuals(self, x: np.ndarray) -> np.ndarray:
-        """Return the residuals at x (a new array)."""
+        """
+        Return the residuals at x (a new array).
+
+        Raises
+        ------
+        ModelEvaluationError
+            If the objective cannot evaluate x, and the library does not
+            take such points (see takes_bad_points).
+        """
         residuals = self._func_batch(np.atleast_2d(x))[0]
+        if not self._takes_bad_points and not np.all(np.isfinite(residuals)):
+            raise ModelEvaluationError(
+                f"the objective cannot be evaluated at the free values "
+                f"{np.asarray(x).tolist()}, which MINPACK (scipy's 'lm', "
+                f"lmfit's 'leastsq') cannot take: use 'trf', which takes "
+                f"them as bad steps")
         self._last_x = np.array(x, dtype=float)
         self._last_residuals = residuals
         # (see FitProblem.residuals)

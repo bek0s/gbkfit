@@ -150,7 +150,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
         return data[0]['spectra']['d'].copy()
 
     expected = evaluate(gauss)
-    actual = evaluate(dict(type='image', file='psf.fits'))
+    actual = evaluate(dict(type='image', file='psf.fits', step=[1, 1]))
     difference = np.linalg.norm(actual - expected) / np.linalg.norm(expected)
     assert difference < 1e-3
 
