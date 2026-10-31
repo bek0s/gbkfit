@@ -1610,8 +1610,9 @@ def with_velocity_convention(
                 f"{source}: the velocities of the spectral axis (VELO-{frame}"
                 f", without VELREF) may be radio or optical: AIPS reads them "
                 f"as optical, but MIRIAD writes radio ones (e.g. LVHIS). Say "
-                f"which: prepare the data with gbkfit-cli prep and the option "
-                f"--velocity radio or optical, or add VELREF to the header "
+                f"which, where the data are read (the spectral convention of "
+                f"a dataset, spectral: {{convention: radio}}; the velocity "
+                f"of prep), or add VELREF to the header "
                 f"({_AIPS_FRAMES[frame]} for optical, "
                 f"{_AIPS_FRAMES[frame] + 256} for radio)")
         return header
