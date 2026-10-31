@@ -142,15 +142,18 @@ def test_one_line_without_a_rest_is_at_the_velocity_of_the_axis(driver):
     # galaxy, each spanning 1 + u / c km/s of the axis (see LinePlacement);
     # an axis without a rest is of relativistic velocities: the line at
     # vsys = u spans 1 - (u / c)^2 km/s of it for each km/s of the galaxy
+    # (without an LSF: in km/s of the light, each axis stretches it at the
+    # middle of its channels, see test_lines)
     beta = PROPERTIES['vsys'] / C
     centre = C * (np.sqrt((1 + beta) / (1 - beta)) - 1)
     stretch = 1 / (1 - centre / C)
     without = evaluate(
-        driver, galaxy_of(COMPONENT), scube(None), PROPERTIES | dict(
+        driver, galaxy_of(COMPONENT), scube(None, lsf=None), PROPERTIES | dict(
             vsys=centre, vpt_vt=stretch * PROPERTIES['vpt_vt'],
             dpt_a=stretch * PROPERTIES['dpt_a']))
     with_rest = evaluate(
-        driver, galaxy_of(COMPONENT), scube('6583.45 Angstrom'), PROPERTIES)
+        driver, galaxy_of(COMPONENT), scube('6583.45 Angstrom', lsf=None),
+        PROPERTIES)
     np.testing.assert_allclose(
         with_rest, without, rtol=1e-4, atol=1e-6 * without.max())
 

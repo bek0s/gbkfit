@@ -31,6 +31,7 @@ optical or log for a rest wavelength, radio for a rest frequency.
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
+import astropy.constants
 import astropy.table
 import astropy.units as u
 import numpy as np
@@ -49,6 +50,7 @@ __all__ = [
 # model
 _AXES = ('wavelength', 'frequency', 'velocity')
 _KMS = u.km / u.s
+_C = astropy.constants.c.to_value(_KMS)
 
 # The things given at points of the spectral axis (see per_point)
 _Thing = TypeVar('_Thing')
@@ -415,7 +417,8 @@ class SpectralTable(parseutils.Serializable):
         unit : str or Unit
             The unit of the option. Values with other units are converted
             to it; for a velocity, a width in wavelength or frequency is
-            converted at each point of the table.
+            converted at each of the points, to km/s of the light (c dw /
+            w: see lsfs).
         convention : VelocityConvention, optional
             The velocity convention of the spectral axis; needed
             between velocities and the other kinds of points.
@@ -433,9 +436,10 @@ class SpectralTable(parseutils.Serializable):
             converted to the unit of the option.
         """
         x = _convert(as_points(points), self._points.unit, convention)
-        values = self._values_in(u.Unit(unit), convention)
         order = np.argsort(self._points.value)
-        return np.interp(x, self._points.value[order], values[order])
+        values = np.interp(x, self._points.value[order], self._values[order])
+        return self._values_in(
+            values, x * self._points.unit, u.Unit(unit), convention)
 
     def velocity_range(
             self, convention: gridutils.VelocityConvention | None = None
@@ -459,23 +463,24 @@ class SpectralTable(parseutils.Serializable):
 
     def _values_in(
             self,
+            values: np.ndarray,
+            points: u.Quantity,
             unit: u.UnitBase,
             convention: gridutils.VelocityConvention | None
     ) -> np.ndarray:
-        """The values in a unit."""
+        """Values of the table at points of the spectral axis in a unit."""
         if self._unit is None:
-            return self._values
-        values = self._values * self._unit
+            return values
+        values = values * self._unit
         if values.unit.is_equivalent(unit):
             return values.to_value(unit)
         if unit.is_equivalent(_KMS) and values.unit.is_equivalent(
                 u.m, u.spectral()):
-            # A width around each point, in wavelength or frequency
-            doppler = _equivalency(convention)
-            centres = self._points.to(values.unit, u.spectral() + doppler)
-            low = (centres - values / 2).to_value(_KMS, doppler)
-            high = (centres + values / 2).to_value(_KMS, doppler)
-            return np.abs(high - low)
+            # A width about each point, in wavelength or frequency, in km/s
+            # of the light: c ln(w_high / w_low), c dw / w for a narrow one
+            centres = _convert(points, values.unit, convention)
+            ratios = (centres + values.value / 2) / (centres - values.value / 2)
+            return (_C * np.abs(np.log(ratios)) * _KMS).to_value(unit)
         raise ConfigError(
             f"the values of a table in '{self._unit}' cannot be converted "
             f"to '{unit}'")

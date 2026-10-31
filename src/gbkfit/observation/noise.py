@@ -169,7 +169,8 @@ class NoiseGauss(Noise):
         The correlation on the sky: a PSF, or 'instrument' (the PSF of the
         instrument).
     spectral_correlation : LSF, optional
-        The correlation along the spectral axis; it must not vary.
+        The correlation along the spectral axis, in km/s of the axis (see
+        Data); it must not vary.
 
     Raises
     ------

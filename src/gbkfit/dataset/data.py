@@ -162,7 +162,10 @@ class Data:
     separation (dx, dy) on the sky and dz along the spectral axis is then
     C_xy(dx, dy) C_z(dz), the shapes of the PSF spatial_correlation and
     of the LSF spectral_correlation divided by their values at their
-    centres (as the noise of mocks; see NoiseGauss). Their likelihood
+    centres (as the noise of mocks; see NoiseGauss). The widths of
+    spectral_correlation are in km/s of the spectral axis, not of the
+    light as those of the LSF of an instrument (see lsfs): the noise is
+    correlated over the channels of the axis. Their likelihood
     takes it (see LikelihoodGaussian); the kinds of data whose noise can
     be correlated say where (see Dataset.noise_correlation).
 

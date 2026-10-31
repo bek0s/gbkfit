@@ -403,6 +403,24 @@ def test_lsf_hanning():
         LSFHanning(10).asarray(3.0)
 
 
+@pytest.mark.parametrize('lsf', [
+    LSFGauss(4.0), LSFGGauss(4.0, 1.5), LSFLorentz(4.0), LSFMoffat(4.0, 2.5),
+    LSFImage(np.array([1.0, 3.0, 4.0, 3.0, 1.0]), 2.0),
+    LSFSum([LSFGauss(4.0), LSFLorentz(6.0)], [1, 2]),
+    LSFConvolution([LSFGauss(4.0), LSFMoffat(3.0, 2.5)])])
+def test_stretched_lsfs_are_drawn_on_the_stretched_channels(lsf):
+    # Stretched by 2.5, an LSF on channels of 5 km/s is the LSF on those
+    # of 2 km/s
+    np.testing.assert_allclose(
+        lsf.stretched(2.5).asarray(5.0), lsf.asarray(2.0), atol=1e-12)
+
+
+def test_hanning_smoothing_is_not_stretched():
+    # Its width is of the channels of the axis
+    hanning = LSFHanning(10)
+    assert hanning.stretched(2.5) is hanning
+
+
 def test_lsf_and_psf_convolutions_of_gaussians():
     from gbkfit.instrument import LSFConvolution, LSFGauss
     from gbkfit.instrument import PSFConvolution, PSFGauss

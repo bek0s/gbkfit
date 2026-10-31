@@ -2,8 +2,18 @@
 Line spread functions (LSFs): how the instrument spreads the light of a
 single velocity along the spectral axis.
 
-Widths are in km/s. The options of the analytic LSFs can vary along the
-spectral axis (see varying).
+Widths are in km/s of the light: c dlambda / lambda at the wavelength of
+the light (c / R for a resolving power R), as instruments give their
+resolution. A spectral axis whose velocities refer to a rest far from
+the light (e.g. the rest wavelength of a line of a galaxy at redshift z)
+spans other km/s of its own per km/s of the light (1 + z on an axis of
+optical velocities; see gridutils.VelocityConvention.stretch), and the
+LSF is stretched to it (see LSF.stretched): once, at the middle of the
+data, or at each channel if it varies; the Hanning smoothing, of the
+channels of the axis, is not (see LSFHanning). The options of the
+analytic LSFs can vary along the spectral axis (see varying): an LSF
+whose width changes across the data (e.g. of a constant resolving power
+over a wide band) is one that varies.
 """
 
 import abc
@@ -121,6 +131,24 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         -------
         dict
             The options.
+        """
+
+    @abc.abstractmethod
+    def stretched(self, factor: float) -> 'LSF':
+        """
+        Return the LSF on a spectral axis that spans factor km/s per km/s
+        of the light (see gridutils.VelocityConvention.stretch): its
+        widths times factor.
+
+        Parameters
+        ----------
+        factor : float
+            The km/s of the axis per km/s of the light.
+
+        Returns
+        -------
+        LSF
+            The LSF on the axis.
         """
 
     def size(self, step: float) -> int:
@@ -275,6 +303,9 @@ class LSFPoint(LSF):
     ) -> dict[str, Any]:
         return dict(type=self.type())
 
+    def stretched(self, factor: float) -> 'LSFPoint':
+        return self
+
     def _size_impl(self, step: float) -> float:
         return 1
 
@@ -293,7 +324,7 @@ class LSFGauss(LSF):
     Parameters
     ----------
     sigma : float
-        The standard deviation (km/s).
+        The standard deviation (km/s of the light).
     """
 
     VARYING_OPTIONS = ('sigma',)
@@ -313,6 +344,9 @@ class LSFGauss(LSF):
     def __init__(self, sigma: Annotated[float, Gt(0), Unit('km/s')]):
         check_options(LSFGauss.__init__, locals())
         self._sigma = sigma
+
+    def stretched(self, factor: float) -> 'LSFGauss':
+        return LSFGauss(self._sigma * factor)
 
     def _extent(self) -> float:
         """
@@ -342,7 +376,7 @@ class LSFGGauss(LSF):
     Parameters
     ----------
     alpha : float
-        The scale (km/s).
+        The scale (km/s of the light).
     beta : float
         The shape, > 0: 2 is a Gaussian, and 1 an exponential.
     """
@@ -370,6 +404,9 @@ class LSFGGauss(LSF):
         check_options(LSFGGauss.__init__, locals())
         self._alpha = alpha
         self._beta = beta
+
+    def stretched(self, factor: float) -> 'LSFGGauss':
+        return LSFGGauss(self._alpha * factor, self._beta)
 
     def _extent(self) -> float:
         """
@@ -401,7 +438,7 @@ class LSFLorentz(LSF):
     Parameters
     ----------
     gamma : float
-        The scale (km/s): the half width at half maximum.
+        The scale (km/s of the light): the half width at half maximum.
     """
 
     VARYING_OPTIONS = ('gamma',)
@@ -421,6 +458,9 @@ class LSFLorentz(LSF):
     def __init__(self, gamma: Annotated[float, Gt(0), Unit('km/s')]):
         check_options(LSFLorentz.__init__, locals())
         self._gamma = gamma
+
+    def stretched(self, factor: float) -> 'LSFLorentz':
+        return LSFLorentz(self._gamma * factor)
 
     def _extent(self) -> float:
         """
@@ -450,7 +490,7 @@ class LSFMoffat(LSF):
     Parameters
     ----------
     alpha : float
-        The scale of the core (km/s).
+        The scale of the core (km/s of the light).
     beta : float
         The slope of the wings, > 0.5 (for a finite flux).
     """
@@ -478,6 +518,9 @@ class LSFMoffat(LSF):
         check_options(LSFMoffat.__init__, locals())
         self._alpha = alpha
         self._beta = beta
+
+    def stretched(self, factor: float) -> 'LSFMoffat':
+        return LSFMoffat(self._alpha * factor, self._beta)
 
     def _extent(self) -> float:
         """
@@ -514,7 +557,7 @@ class LSFImage(LSF):
     data : ndarray
         The image, finite.
     step : float, optional
-        The width of the channels of the image (km/s).
+        The width of the channels of the image (km/s of the light).
     """
 
     config_constructors = ('from_file',)
@@ -537,8 +580,8 @@ class LSFImage(LSF):
         file : str or tuple
             The file: a filename, or a filename and the HDU of the image.
         step : float, optional
-            The width of the channels of the image (km/s); by default, that
-            of the header.
+            The width of the channels of the image (km/s of the light); by
+            default, that of the header.
 
         Returns
         -------
@@ -577,6 +620,9 @@ class LSFImage(LSF):
                 "non-finite pixels found in the supplied LSF image")
         self._data = data
         self._step = step
+
+    def stretched(self, factor: float) -> 'LSFImage':
+        return LSFImage(self._data, self._step * factor)
 
     def _size_impl(self, step: float) -> float:
         return (self._step / step) * self._data.shape[0]
@@ -634,6 +680,10 @@ class LSFSum(LSF):
         self._lsfs = tuple(lsfs)
         self._weights = _detail.sum_weights(
             weights, len(self._lsfs), "a sum of LSFs")
+
+    def stretched(self, factor: float) -> 'LSFSum':
+        return LSFSum(
+            [lsf.stretched(factor) for lsf in self._lsfs], self._weights)
 
     def varies(self) -> bool:
         return any(lsf.varies() for lsf in self._lsfs)
@@ -700,6 +750,9 @@ class LSFConvolution(LSF):
             raise ConfigError("a convolution of LSFs needs at least one LSF")
         self._lsfs = tuple(lsfs)
 
+    def stretched(self, factor: float) -> 'LSFConvolution':
+        return LSFConvolution([lsf.stretched(factor) for lsf in self._lsfs])
+
     def varies(self) -> bool:
         return any(lsf.varies() for lsf in self._lsfs)
 
@@ -741,9 +794,10 @@ class LSFHanning(LSF):
     Parameters
     ----------
     width : float
-        The width of the smoothed channels (km/s); a multiple of the
-        width of the channels it is drawn on (e.g. those of the data,
-        with any oversampling).
+        The width of the smoothed channels (km/s of the spectral axis, not
+        of the light: it is not stretched); a multiple of the width of the
+        channels it is drawn on (e.g. those of the data, with any
+        oversampling).
     """
 
     @staticmethod
@@ -759,6 +813,10 @@ class LSFHanning(LSF):
     def __init__(self, width: Annotated[float, Gt(0), Unit('km/s')]):
         check_options(LSFHanning.__init__, locals())
         self._width = width
+
+    def stretched(self, factor: float) -> 'LSFHanning':
+        # (the channels of the axis are its own)
+        return self
 
     def _steps(self, step: float) -> int:
         """The number of steps in a channel width."""
@@ -822,7 +880,7 @@ class LSFImages(LSF):
     points : Quantity
         The point of each profile: wavelengths, frequencies or velocities.
     step : float
-        The width of the channels of the profiles (km/s).
+        The width of the channels of the profiles (km/s of the light).
     """
 
     config_constructors = ('from_file',)
@@ -849,8 +907,9 @@ class LSFImages(LSF):
             The point of each profile: wavelengths, frequencies or
             velocities; by default, those of the spectral axis of the rows.
         step : float, optional
-            The width of the channels of the profiles (km/s); by default,
-            that of the axis of the columns, if it is in a velocity unit.
+            The width of the channels of the profiles (km/s of the light);
+            by default, that of the axis of the columns, if it is in a
+            velocity unit.
 
         Returns
         -------
@@ -918,6 +977,10 @@ class LSFImages(LSF):
         self._points = points
         self._step = step
 
+    def stretched(self, factor: float) -> 'LSFImages':
+        raise RuntimeError(
+            "LSF profiles are stretched at each channel (see at)")
+
     def varies(self) -> bool:
         return True
 
@@ -978,6 +1041,11 @@ class LSFVarying(LSF):
 
     def __init__(self, options: 'varying._VaryingOptions'):
         self._options = options
+
+    def stretched(self, factor: float) -> 'LSFVarying':
+        raise RuntimeError(
+            "an LSF that varies along the spectral axis is stretched at each "
+            "channel (see at)")
 
     def varies(self) -> bool:
         return True

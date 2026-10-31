@@ -141,8 +141,7 @@ def _varying_padding(
     lsf_size = 1
     if lsf is not None:
         lsf_size = max(
-            x.size(step_hi[2])
-            for x in _distinct(lsf.at(velocities * _KMS, convention)))
+            x.size(step_hi[2]) for x in _distinct(dcube.axis_lsfs(velocities)))
     size, edge = backend_fft.fft_convolution_shape(
         size_hi, psf_size + (lsf_size,))
     return ((int(size[0]), int(size[1]), size_hi[2] + lsf_size - 1),
@@ -181,10 +180,11 @@ def _varying_kernels(
     """
     Return the images of the PSF of a DCube on its high-res grid: one for
     each channel (nz, ny, nx), or one for all if the PSF does not vary;
-    and its LSF of each channel, of size lsf_size (nz, lsf_size). None for
-    no PSF or no LSF. The channels of the padding take the PSF and the
-    LSF of the nearest velocity where they are known, with the arrays of
-    the channels of the data.
+    and its LSF of each channel (on the spectral axis: see
+    DCube.axis_lsfs), of size lsf_size (nz, lsf_size). None for no PSF or
+    no LSF. The channels of the padding take the PSF and the LSF of the
+    nearest velocity where they are known, with the arrays of the
+    channels of the data.
     """
     psf, lsf = dcube.psf(), dcube.lsf()
     convention = gridutils.VelocityConvention.of(grid_hi.coords)
@@ -202,12 +202,10 @@ def _varying_kernels(
             for p in psfs])
     lsf_kernels = None
     if lsf is not None:
-        if lsf.varies():
-            lsf_kernels = np.stack([
-                x.asarray(step[2], lsf_size)
-                for x in lsf.at(velocities * _KMS, convention)])
-        else:
-            lsf_kernels = np.tile(lsf.asarray(step[2], lsf_size), (size[2], 1))
+        lsfs = dcube.axis_lsfs(velocities)
+        kernels = {
+            id(x): x.asarray(step[2], lsf_size) for x in _distinct(lsfs)}
+        lsf_kernels = np.stack([kernels[id(x)] for x in lsfs])
     return psf_images, lsf_kernels
 
 
@@ -242,12 +240,13 @@ def _warn_narrow_psf(
 def _kernel_cube(dcube: 'DCube', grid_hi: gridutils.Grid) -> np.ndarray:
     """
     Return the PSF/LSF cube of a DCube whose PSF and LSF do not vary, on
-    its (padded) high-res grid: the product of the PSF and the LSF (a point
-    for the one not given), with its centre rolled to the first pixel, for
-    the FFT convolution. Kernels of an even size are offset by -1 pixel,
-    since they mostly have a central peak.
+    its (padded) high-res grid: the product of the PSF and the LSF (on the
+    spectral axis: see DCube.axis_lsf; a point for the one not given),
+    with its centre rolled to the first pixel, for the FFT convolution.
+    Kernels of an even size are offset by -1 pixel, since they mostly have
+    a central peak.
     """
-    psf, lsf = dcube.psf(), dcube.lsf()
+    psf, lsf = dcube.psf(), dcube.axis_lsf()
     size, step = grid_hi.size, grid_hi.coords.step
     offset = gbkfit.math.is_odd(size) - 1
     psf_args = (step[:2], size[:2], offset[:2], dcube.rota())
@@ -308,6 +307,12 @@ class DCube:
         self._dtype = dtype
         self._fft_dtype = fft_dtype
         self._median_size = median_size
+        # The LSF on the spectral axis, if it does not vary (see axis_lsf)
+        self._axis_lsf = None
+        if lsf is not None and not lsf.varies():
+            middle = self.zero()[2] + step[2] * (size[2] - 1) / 2
+            self._axis_lsf = lsf.stretched(float(
+                gridutils.VelocityConvention.of(coords).stretch(middle)))
 
     def grid(self) -> gridutils.Grid:
         return self._grid_lo
@@ -340,7 +345,35 @@ class DCube:
         return self._psf
 
     def lsf(self) -> LSF | None:
+        """Return the LSF, in km/s of the light (see axis_lsf)."""
         return self._lsf
+
+    def axis_lsf(self) -> LSF | None:
+        """
+        Return the LSF on the spectral axis, if it does not vary: its
+        widths, in km/s of the light, stretched by the km/s of the axis per
+        km/s of the light at the middle channel of the data (see
+        VelocityConvention.stretch and LSF.stretched). E.g. on an axis of
+        optical velocities of the rest wavelength of a line of a galaxy at
+        redshift 1.5, an LSF of 32 km/s spans 80 km/s of the axis. An LSF
+        that changes across the channels is one that varies (see
+        varying). None without an LSF, or if it varies (see axis_lsfs).
+        """
+        return self._axis_lsf
+
+    def axis_lsfs(self, velocities: np.ndarray) -> list[LSF]:
+        """
+        Return the LSF on the spectral axis at velocities of the axis (km/s;
+        1D), one for each: that of axis_lsf, or, if it varies, the LSF at
+        each, stretched there. The LSF must be given.
+        """
+        if self._axis_lsf is not None:
+            return [self._axis_lsf] * len(velocities)
+        convention = gridutils.VelocityConvention.of(self._grid_lo.coords)
+        lsfs = self._lsf.at(velocities * _KMS, convention)
+        return [
+            x.stretched(float(k))
+            for x, k in zip(lsfs, convention.stretch(velocities))]
 
     def smooth_weights(self) -> bool:
         return self._smooth_weights
@@ -356,21 +389,19 @@ class DCube:
 
     def spectral_smoothing(self) -> float:
         """
-        Return the dispersion (km/s) by which the instrument smooths the
-        spectra of the model: its LSF (the Gaussian of its FWHM; the
-        narrowest of the channels if it varies) and its channels (a box of
-        their width), added in quadrature.
+        Return the dispersion (km/s of the spectral axis) by which the
+        instrument smooths the spectra of the model: its LSF (the Gaussian
+        of its FWHM, on the axis; the narrowest of the channels if it
+        varies) and its channels (a box of their width), added in
+        quadrature.
         """
         channel = self.step()[2]
-        lsf = self._lsf
         dispersion = 0.0
-        if lsf is not None:
-            lsfs = lsf.at(
-                (self.zero()[2] + channel * np.arange(self.size()[2])) * _KMS,
-                gridutils.VelocityConvention.of(self._grid_lo.coords)) \
-                if lsf.varies() else [lsf]
+        if self._lsf is not None:
+            velocities = self.zero()[2] + channel * np.arange(self.size()[2])
             dispersion = min(
-                _equivalent_dispersion(x, channel) for x in _distinct(lsfs))
+                _equivalent_dispersion(x, channel)
+                for x in _distinct(self.axis_lsfs(velocities)))
         return float(np.hypot(dispersion, channel / np.sqrt(12)))
 
     def plan(self, driver: Driver, has_weights: bool) -> 'DCubePlan':
@@ -422,7 +453,8 @@ class DCubePlan:
             edge_hi = (0, 0, 0)
             if psf or lsf:
                 psf_size_hi = psf.size(spat_step_hi) if psf else (1, 1)
-                lsf_size_hi = lsf.size(spec_step_hi) if lsf else 1
+                lsf_size_hi = dcube.axis_lsf().size(spec_step_hi) \
+                    if lsf else 1
                 size_hi, edge_hi = backend_fft.fft_convolution_shape(
                     size_hi, psf_size_hi + (lsf_size_hi,))
 
@@ -632,7 +664,7 @@ class DCubePlan:
         step_lo = dcube.step()
         step_hi = self._grid_hi.coords.step
         psf = dcube.psf()
-        lsf = dcube.lsf()
+        lsf = dcube.axis_lsf()
         dcube_lo = self._dcube_lo
         dcube_hi = self._dcube_hi
         wcube_lo = self._wcube_lo

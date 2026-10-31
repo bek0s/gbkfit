@@ -70,15 +70,24 @@ def test_beams_vary_with_frequency():
         np.interp(frequencies, [1419.0, 1421.0], [3.0, 2.0]), rtol=1e-9)
 
 
-def test_lsf_widths_in_wavelength_are_converted_to_velocities():
-    # With the optical convention, a width of dw is c dw / rest
+def test_lsf_widths_in_wavelength_are_converted_to_km_s_of_the_light():
+    # A width of dw at the wavelength w is c dw / w; on an axis of optical
+    # velocities, stretched by w / rest, it is c dw / rest
     lsf = lsf_parser.load(dict(type='gauss', sigma=dict(
         points=dict(value=[-100, 100], unit='km/s'), values=[1.0, 2.0],
         unit='Angstrom')))
-    rest = 6562.8 * u.AA
-    sigmas = [x.dump()['sigma'] for x in lsf.at(
-        [0, 100] * KMS, gridutils.VelocityConvention(rest))]
-    np.testing.assert_allclose(sigmas, C * np.array([1.5, 2.0]) / 6562.8)
+    convention = gridutils.VelocityConvention(6562.8 * u.AA)
+    velocities = np.array([0.0, 100.0])
+    wavelengths = 6562.8 * (1 + velocities / C)
+    lsfs = lsf.at(velocities * KMS, convention)
+    widths = np.array([1.5, 2.0])
+    np.testing.assert_allclose(
+        [x.dump()['sigma'] for x in lsfs], C * widths / wavelengths,
+        rtol=1e-6)
+    np.testing.assert_allclose(
+        [x.stretched(k).dump()['sigma']
+         for x, k in zip(lsfs, convention.stretch(velocities))],
+        C * widths / 6562.8, rtol=1e-6)
 
 
 def test_sums_of_varying_psfs_vary():

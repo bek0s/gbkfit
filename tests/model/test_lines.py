@@ -233,3 +233,46 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
         return np.sqrt(np.sum(spectrum * (velocity - mean) ** 2)
                        / spectrum.sum())
     assert width(10000) / width(0) == pytest.approx(1 / D, rel=1e-4)
+
+
+def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
+    # A disk of dispersion 30 km/s, without rotation, at z = 1.5, seen
+    # through an LSF of 32 km/s (of the light: c dw / w) on the same
+    # wavelengths, on an axis of optical velocities of the rest of Halpha
+    # as observed (channels of 10 km/s) or in the frame of the galaxy
+    # (where a km/s of the light spans 2.5 km/s, as the channels of 25
+    # km/s): its line is 2.5 times as wide on the second, whose LSF is
+    # stretched as the motions of the galaxy (see LSF.stretched)
+    def width(rest, step):
+        k = step / 10
+        centre = C * (k - 1)
+        case = dict(
+            driver=dict(type=driver.type()),
+            observable=dict(
+                type='pixel_spectra', size=[8, 8], step=[1, 1], rval=[0, 0],
+                spectral=dict(
+                    size=201, step=step, rval=centre,
+                    rest=f'{rest} Angstrom', medium='vacuum'),
+                lsf=dict(type='gauss', sigma=32)),
+            line_of_sight=dict(type='flat'),
+            galaxy=dict(redshift=1.5, components=[dict(
+                type='disk', loose=False, tilted=False,
+                rnodes=list(range(0, 5)),
+                density=dict(ptraits=dict(type='uniform')),
+                kinematics=dict(
+                    type='traits',
+                    vptraits=dict(type='arctan', direction='tan'),
+                    dptraits=dict(type='uniform')),
+                emission=dict(type='lines', lines=['halpha']))]))
+        properties = dict(
+            vsys=0, xpos=0, ypos=0, posa=0, incl=45,
+            pt_a=1, vpt_rt=2, vpt_vt=0, dpt_a=30)
+        data, _ = evaluate_cases([case], properties)
+        spectrum = data[0]['spectra']['d'].sum(axis=(1, 2))
+        velocity = centre + step * (np.arange(201) - 100)
+        mean = np.sum(spectrum * velocity) / spectrum.sum()
+        return np.sqrt(np.sum(spectrum * (velocity - mean) ** 2)
+                       / spectrum.sum())
+    observed = width(6564.61 * 2.5, 10)
+    assert observed == pytest.approx(np.hypot(30, 32), rel=0.01)
+    assert width(6564.61, 25) / 2.5 == pytest.approx(observed, rel=1e-4)
