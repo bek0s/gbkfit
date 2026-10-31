@@ -364,11 +364,35 @@ def test_error_and_mask_are_reversed_with_the_data():
         'cube.fits', 'error.fits', 'mask.fits', **defaults, minify=False,
         dtype='float32', velocity_rest='1420.405752 MHz')
     data_out = fits.getdata('prep_cube.fits')
-    error_out = fits.getdata('prep_error.fits')
-    mask_out = fits.getdata('prep_mask.fits')
+    error_out = fits.getdata('prep_cube_error.fits')
+    mask_out = fits.getdata('prep_cube_mask.fits')
     np.testing.assert_allclose(error_out, data_out + 100, rtol=1e-6)
     np.testing.assert_array_equal(mask_out[-1], 0)
     np.testing.assert_array_equal(mask_out[:-1], 1)
+
+def test_channels_are_those_of_the_axis_in_velocities():
+    # A frequency axis becomes radio velocities before the crop: the
+    # channels (roi_spec) are those of the velocities, increasing, the
+    # last ones of the frequencies
+    header = dict(
+        HEADER, CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.419e9, CRPIX3=1.0,
+        CDELT3=2e4)
+    write_cube('cube.fits', header)
+    data, _ = prep_pixel_spectra(
+        'cube.fits', velocity_rest='1420.405752 MHz', roi_spec=[0, 3])
+    np.testing.assert_array_equal(data, fits.getdata('cube.fits')[0, :-4:-1])
+
+
+def test_inputs_of_one_name_are_an_error():
+    # (their prepared files would overwrite each other)
+    for folder in ('a', 'b'):
+        os.makedirs(folder)
+        fits.writeto(f'{folder}/vel.fits', np.ones((4, 5), np.float32))
+    with pytest.raises(ConfigError, match="two inputs"):
+        prep.prep_pixel_moments(
+            ['a/vel.fits', 'b/vel.fits'], None, None, *[None] * 8, False,
+            None, 'float32')
+
 
 def test_data_in_an_extension_keep_their_world_coordinates():
     # The data and the world coordinates come from the same HDU: here the
@@ -384,20 +408,29 @@ def test_data_in_an_extension_keep_their_world_coordinates():
     np.testing.assert_allclose(coords.step, (1, 1, 10))
 
 def test_data_and_errors_can_be_hdus_of_one_file():
-    # (as in MUSE cubes: the data and their variances, in extensions)
+    # The data and their variances, in extensions (as in MUSE cubes): the
+    # prepared errors are standard deviations, in the unit of the data;
+    # the unit of the variances (BUNIT) is checked against their kind
     header = {k: v for k, v in HEADER.items() if not k.endswith('4')}
     data = np.ones(SHAPE[1:], np.float32)
     fits.HDUList([
         fits.PrimaryHDU(),
         fits.ImageHDU(data, fits.Header(header), name='DATA'),
-        fits.ImageHDU(2 * data, name='STAT')]).writeto('cube.fits')
+        fits.ImageHDU(
+            2 * data, fits.Header(dict(BUNIT='Jy2 / beam2')),
+            name='STAT')]).writeto('cube.fits')
     files = ('cube.fits', 'DATA'), ('cube.fits', 'STAT'), None
-    prep.prep_pixel_spectra(*files, *[None] * 9, False, None, 'float32')
+    options = [None] * 9, False, None, 'float32'
+    prep.prep_pixel_spectra(
+        *files, *options[0], *options[1:], error_kind='variance')
     data_out, error_out, _ = prep.output_files('.', *files)
     assert (data_out, error_out) == (
-        './prep_cube_DATA.fits', './prep_cube_STAT.fits')
+        './prep_cube_DATA.fits', './prep_cube_DATA_error.fits')
     np.testing.assert_array_equal(fits.getdata(data_out), 1)
-    np.testing.assert_array_equal(fits.getdata(error_out), 2)
+    np.testing.assert_allclose(fits.getdata(error_out), np.sqrt(2))
+    assert fits.getheader(error_out)['BUNIT'] == 'Jy/beam'
+    with pytest.raises(ConfigError, match="error_kind: variance"):
+        prep.prep_pixel_spectra(*files, *options[0], *options[1:])
 
 
 def test_velocity_axis_gets_the_rest():
@@ -411,14 +444,27 @@ def test_velocity_axis_gets_the_rest():
 
 
 
-def test_velocity_axis_keeps_its_rest():
-    # A velocity axis with a rest refers to it: giving the same one is
-    # fine, another one an error (relabelling would move every line)
+def test_velocity_axis_takes_another_rest_exactly():
+    # A velocity axis with a rest refers to it: the same one changes
+    # nothing, and another one turns its velocities into those of the new
+    # rest, at the same frequencies (relabelling would move every line)
     write_cube('cube.fits', dict(HEADER, RESTFRQ=1.420405752e9))
-    _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='1420.405752 MHz')
+    channels = np.arange(SHAPE[1])
+
+    def velocities(header):
+        # (km/s; astropy gives m/s)
+        spectral = astropy.wcs.WCS(fits.Header(header)).spectral
+        return spectral.pixel_to_world_values(channels) / 1e3
+    _, header_out = prep_pixel_spectra(
+        'cube.fits', velocity_rest='1420.405752 MHz')
     assert header_out['RESTFRQ'] == pytest.approx(1.420405752e9, rel=1e-9)
-    with pytest.raises(Exception, match="refer to the rest"):
-        prep_pixel_spectra('cube.fits', velocity_rest='115.271 GHz')
+    np.testing.assert_allclose(velocities(header_out), velocities(HEADER))
+    _, header_out = prep_pixel_spectra(
+        'cube.fits', velocity_rest='115.271 GHz')
+    assert header_out['RESTFRQ'] == pytest.approx(115.271e9, rel=1e-9)
+    np.testing.assert_allclose(
+        115.271e9 * (1 - velocities(header_out) / C),
+        1.420405752e9 * (1 - velocities(HEADER) / C), rtol=1e-12)
 
 
 def test_converted_axis_keeps_no_old_rest():
@@ -445,8 +491,8 @@ def test_rest_of_the_convention_of_the_axis_first():
     ('radio', 'VRAD'), ('optical', 'VOPT')])
 def test_aips_velocity_axes_need_their_convention(velocity, ctype):
     # VELO-HEL without VELREF is optical to AIPS (and astropy), radio to
-    # MIRIAD (e.g. LVHIS): reading it is an error, and prep takes it; a
-    # header that states its convention takes none
+    # MIRIAD (e.g. LVHIS): reading it is an error, and prep takes it (a
+    # header that states its convention keeps it)
     header = dict(
         HEADER, CTYPE3='VELO-HEL', CUNIT3='m/s', CRVAL3=1.5e6, CDELT3=1e4,
         RESTFREQ=1.420405752e9)
@@ -458,9 +504,6 @@ def test_aips_velocity_axes_need_their_convention(velocity, ctype):
     assert header_out['CTYPE3'] == ctype
     _, coords = fitsutils.read_data('prep_cube.fits')
     assert coords.step[2] == pytest.approx(10)
-    write_cube('vrad.fits')
-    with pytest.raises(Exception, match="this header states its own"):
-        prep_pixel_spectra('vrad.fits', velocity=velocity)
 
 
 @pytest.mark.parametrize('header, message', [
@@ -538,7 +581,7 @@ def test_binned_maps_to_one_value_per_bin():
     from gbkfit.dataset import dataset_parser
     dataset = dataset_parser.load(dict(
         type='region_moments', regions=dict(type='bins', file='prep_bins.fits'),
-        moment1=dict(data='prep_vel.fits', error='prep_evel.fits')))
+        moment1=dict(data='prep_vel.fits', error='prep_vel_error.fits')))
     assert dataset.regions().nregions() == 3
     np.testing.assert_array_equal(dataset['moment1'].mask(), [1, 1, 0])
     np.testing.assert_array_equal(dataset['moment1'].error()[:2], [3, 2])
@@ -694,7 +737,7 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
     index = fits.getdata('prep_bins.fits')
     assert set(np.unique(index)) == {-1, 0, 1}
     spectra = fits.getdata('prep_cube.fits')
-    errors = fits.getdata('prep_error.fits')
+    errors = fits.getdata('prep_cube_error.fits')
     assert spectra.shape == (SHAPE[1], 2)
     left = (bins == 7)
     left[2, 5] = False
@@ -755,7 +798,7 @@ def test_the_errors_of_a_prepared_cube_can_be_its_noise():
     fits.writeto('cube.fits', noisy.astype(np.float32), overwrite=True)
     prep_pixel_spectra('cube.fits', noise_error=True)
     np.testing.assert_allclose(
-        fits.getdata('prep_cube_noise.fits'), 0.05, rtol=0.3)
+        fits.getdata('prep_cube_error.fits'), 0.05, rtol=0.3)
     with pytest.raises(ConfigError, match="not both"):
         prep.prep_pixel_spectra(
             'cube.fits', 'errors.fits', None, *[None] * 9, False, None,

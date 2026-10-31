@@ -9,7 +9,6 @@ The prep task of gbkfit-cli is a client of this module.
 
 import dataclasses
 import logging
-import re
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -26,7 +25,7 @@ import numpy.typing as npt
 import scipy.ndimage
 import scipy.spatial
 
-from gbkfit.utils import fitsutils, gridutils, unitutils
+from gbkfit.utils import datafiles, fitsutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import FitsFile
 
@@ -64,15 +63,6 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# The keywords of the world coordinates of each axis, or pair of axes
-_WCS_KEYWORDS = re.compile(
-    r'(WCSAXES'
-    r'|(CRPIX|CRVAL|CDELT|CUNIT|CTYPE|CROTA)\d+'
-    r'|(PC|CD|PV|PS)\d+_\d+)$')
-
-# The keywords of the rest of the spectral axis, also in their old forms
-_REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
-
 # The wavelengths (Angstrom) of the tables of MUSE (its range, and more)
 _MUSE_WAVELENGTHS = np.arange(4600.0, 9401.0, 50.0)
 
@@ -86,221 +76,28 @@ _VORONOI_KEPT_FRACTION = 0.8
 _VORONOI_MAX_ITERATIONS = 1000
 
 
-def _has_wcs(header: fits.Header) -> bool:
-    """Return whether a header has world coordinates."""
-    return any(_WCS_KEYWORDS.match(key) for key in header)
-
-
-def _with_wcs(header: fits.Header, wcs: astropy.wcs.WCS) -> fits.Header:
-    """
-    Return a copy of a header with the world coordinates of wcs, and its
-    rest (if any).
-    """
-    header = header.copy()
-    for key in [
-            key for key in header
-            if _WCS_KEYWORDS.match(key) or key in _REST_KEYWORDS]:
-        del header[key]
-    header.update(wcs.to_header())
-    return header
-
-
-def _drop_axes(header: fits.Header, axes: Sequence[int]) -> fits.Header:
-    """
-    Return the header of the data without the given axes (numpy axes, of
-    length 1), without the world coordinates of these axes.
-    """
-    if not _has_wcs(header):
-        return header
-    wcs = astropy.wcs.WCS(header)
-    for axis in sorted(wcs.naxis - 1 - axis for axis in axes)[::-1]:
-        wcs = wcs.dropaxis(axis)
-    return _with_wcs(header, wcs)
-
-
 def _shift_axes(header: fits.Header, offset: npt.ArrayLike) -> fits.Header:
     """
     Return the header of the data whose first pixel is the pixel at the
     given offset (on each numpy axis) of the original data: positive where
     the data were cropped, negative where they were padded.
     """
-    if not _has_wcs(header):
+    if not fitsutils.has_wcs(header):
         return header
     wcs = astropy.wcs.WCS(header)
     wcs.wcs.crpix -= np.asarray(offset)[::-1]
-    return _with_wcs(header, wcs)
-
-
-def _check_same_rest(wcs: astropy.wcs.WCS, rest: astropy.units.Quantity
-                     ) -> None:
-    """
-    Raise ConfigError unless the velocity axis of wcs has no rest, or the
-    given one (they are compared as frequencies).
-    """
-    hz, spectral = astropy.units.Hz, astropy.units.spectral()
-    current = (
-        wcs.wcs.restfrq * hz if wcs.wcs.restfrq > 0
-        else wcs.wcs.restwav * astropy.units.m if wcs.wcs.restwav > 0
-        else None)
-    if current is None:
-        return
-    current = current.to_value(hz, spectral)
-    if not np.isclose(rest.to_value(hz, spectral), current, rtol=1e-9):
-        raise ConfigError(
-            f"the velocities of the spectral axis refer to the rest "
-            f"{current * hz}, not {rest}; give that rest, or convert the "
-            f"velocities to the new rest first")
-
-
-def _spectral_to_velocity(
-        header: fits.Header,
-        rest: str | astropy.units.Quantity
-) -> fits.Header:
-    """
-    Return the header with its spectral axis converted to the velocities
-    of a rest (see gridutils.make_rest), or an axis of logarithmic
-    wavelengths (WAVE-LOG) with the rest, which the reading of the data
-    takes as log velocities: a linear wavelength axis (WAVE, or
-    AWAV with a rest in air too) to the optical velocities c (w / rest -
-    1), a linear frequency axis (FREQ) to the radio velocities c (1 - f /
-    rest). Both are linear in the pixels, so the conversion is exact; the
-    header gets the rest (RESTWAV or RESTFRQ), and for wavelengths their
-    medium, in which the velocities and the rest are (AIRORVAC: 'air' for
-    AWAV, 'vac' for WAVE; see fitsutils.read_data). A velocity axis (VOPT,
-    VRAD) gets the rest only, and if it has one, it must be the same: its
-    velocities refer to it.
-    """
-    rest = gridutils.make_rest(rest)
-    wcs = astropy.wcs.WCS(header)
-    s = wcs.wcs.spec
-    if s < 0:
-        raise ConfigError("the data have no spectral axis to convert")
-    ctype = wcs.wcs.ctype[s]
-    kind = ctype[:4]
-    if ctype == 'WAVE-LOG':
-        # (logarithmic wavelengths stay: they are read as the log
-        # velocities of the rest, linear, see fitsutils.read_data)
-        wcs.wcs.restwav = rest.to_value(
-            astropy.units.m, astropy.units.spectral())
-        wcs.wcs.restfrq = 0
-        _log.info(f"the spectral axis ({ctype}) gets the rest {rest}")
-        header = _with_wcs(header, wcs)
-        header['AIRORVAC'] = 'vac'
-        return header
-    if ctype[4:].strip('-').strip():
-        raise ConfigError(
-            f"the spectral axis ({ctype}) is not linear in its coordinate")
-    c = astropy.constants.c.to_value('km/s')
-    m, hz = astropy.units.m, astropy.units.Hz
-    rest_wavelength = rest.to_value(m, astropy.units.spectral())
-    rest_frequency = rest.to_value(hz, astropy.units.spectral())
-    unit = astropy.units.Unit(str(wcs.wcs.cunit[s]) or '1')
-    if kind in ('WAVE', 'AWAV'):
-        # The wavelength in units of the rest, and the optical velocity
-        ratio = unit.to(m) / rest_wavelength
-        crval, factor = c * (wcs.wcs.crval[s] * ratio - 1), c * ratio
-        velocity = 'VOPT'
-    elif kind == 'FREQ':
-        ratio = unit.to(hz) / rest_frequency
-        crval, factor = c * (1 - wcs.wcs.crval[s] * ratio), -c * ratio
-        velocity = 'VRAD'
-    elif kind in ('VOPT', 'VRAD'):
-        crval, factor, velocity = None, None, kind
-        _check_same_rest(wcs, rest)
-    else:
-        raise ConfigError(
-            f"the spectral axis ({ctype}) is not a wavelength, frequency, "
-            f"or optical or radio velocity")
-    if crval is not None:
-        wcs.wcs.ctype[s] = velocity
-        wcs.wcs.cunit[s] = 'km/s'
-        wcs.wcs.crval[s] = crval
-        if wcs.wcs.has_cd():
-            cd = wcs.wcs.cd.copy()
-            cd[s, :] *= factor
-            wcs.wcs.cd = cd
-        else:
-            wcs.wcs.cdelt[s] *= factor
-    if velocity == 'VOPT':
-        wcs.wcs.restwav, wcs.wcs.restfrq = rest_wavelength, 0
-    else:
-        wcs.wcs.restfrq, wcs.wcs.restwav = rest_frequency, 0
-    _log.info(
-        f"converting the spectral axis ({ctype}) to {velocity} velocities "
-        f"of the rest {rest}")
-    header = _with_wcs(header, wcs)
-    if kind in ('WAVE', 'AWAV'):
-        header['AIRORVAC'] = 'air' if kind == 'AWAV' else 'vac'
-    return header
-
-
-def _read_hdu(file: FitsFile) -> tuple[np.ndarray, fits.Header]:
-    """
-    Return the data and the header of an HDU of a FITS file: the one
-    given, or else the first with data (e.g. the extension after an empty
-    primary HDU, as in MUSE and JWST cubes). Integer data become floats,
-    which can hold the NaN of invalid pixels.
-    """
-    filename, index = (file, None) if isinstance(file, str) else file
-    with fits.open(filename) as hdus:
-        if index is None:
-            hdu = next((h for h in hdus if h.data is not None), None)
-        else:
-            try:
-                hdu = hdus[index]
-            except (IndexError, KeyError) as e:
-                raise ConfigError(f"{filename}: it has no HDU {index!r}") \
-                    from e
-        if hdu is None or hdu.data is None:
-            raise ConfigError(f"{filename}: no data to read")
-        data = np.array(hdu.data)
-        header = hdu.header.copy()
-    if not np.issubdtype(data.dtype, np.floating):
-        data = data.astype(float)
-    return data, header
-
-
-def _read_array(file: FitsFile) -> np.ndarray:
-    """
-    Return the data of a file without the axes of length 1 (see
-    _read_fits), without its header: those of errors and masks, which
-    follow the axes of the data.
-    """
-    return np.squeeze(_read_hdu(file)[0])
-
-
-def _read_fits(
-        file: FitsFile, velocity: str | None = None
-) -> tuple[np.ndarray, fits.Header]:
-    """
-    Return the data and the header of a file, without the axes of length
-    1 (see _read_hdu), with the convention of the velocities of its
-    spectral axis, if its header does not state it (velocity, see
-    fitsutils.with_velocity_convention).
-    """
-    data, header = _read_hdu(file)
-    header = fitsutils.with_velocity_convention(
-        header, velocity, file if isinstance(file, str) else file[0])
-    # Astropy writes the FITS default for a missing reference pixel, so
-    # write the one of the model (see fitsutils.read_data)
-    if _has_wcs(header):
-        header = fitsutils.centre_missing_crpix(header, data.shape)
-    axes = [axis for axis, length in enumerate(data.shape) if length == 1]
-    data = np.squeeze(data)
-    # The header of the squeezed data: its NAXISn, and the world
-    # coordinates of its axes
-    header = fits.PrimaryHDU(data, _drop_axes(header, axes)).header
-    return data, header
+    return fitsutils.with_wcs(header, wcs)
 
 
 @dataclasses.dataclass(frozen=True)
 class FitsArrays:
     """
-    Data read from FITS files, being prepared for a dataset: the data,
-    their errors (if any) and mask (1 where valid), with the header of the
-    data (their world coordinates, if any). The data and errors are NaN
-    where the mask is 0. The axes are in the order of the model (e.g. RA
-    before Dec; see fitsutils.model_axis_order).
+    Data read from files, being prepared for a dataset: the data, their
+    errors (if any: standard deviations) and mask (1 where valid), with
+    the header of the data (their world coordinates, if any), in the
+    orientation of the model (see datafiles.read_arrays; e.g. RA before
+    Dec, and velocities increasing). The data and errors are NaN where the
+    mask is 0.
 
     The methods return new arrays; those that move the first pixel
     (crop, minified, padded) keep the world coordinates of the pixels.
@@ -327,29 +124,32 @@ class FitsArrays:
             data: FitsFile,
             error: FitsFile | None = None,
             mask: FitsFile | None = None,
-            velocity: str | None = None
+            velocity: str | None = None,
+            *,
+            rest: str | astropy.units.Quantity | None = None,
+            error_kind: datafiles.ErrorKind = 'sigma'
     ) -> 'FitsArrays':
         """
-        Read the data, errors and mask from FITS files (an HDU given, or
-        else the first with data), without their axes of length 1, in the
-        orientation of the model (see oriented), as the model reads them:
-        ranges of pixels (see crop) are those of the data it sees. Values
-        that are not finite, errors that are not finite or are 0 (e.g.
-        blank pixels of an error map), and pixels the mask file marks
-        with 0 are invalid; negative errors are an error. A
-        spectral axis of velocities of the AIPS convention without VELREF
-        (e.g. VELO-HEL) needs the convention of its velocities (see
-        fitsutils.with_velocity_convention).
+        Read the data, errors and mask from files in the orientation of
+        the model, as the model reads them (see datafiles.read_arrays):
+        ranges of pixels (see crop) are those of the data it sees, with
+        the spectral axis in velocities of the rest, if given.
 
         Parameters
         ----------
         data : FitsFile
-            The file of the data (with the world coordinates).
+            The file of the data (with the world coordinates): a filename
+            (its first HDU with data), or a filename and the HDU.
         error, mask : FitsFile, optional
-            The files of the errors and the mask, of the shape of the data.
+            The files of the errors and the mask.
         velocity : str, optional
             The convention of the velocities of the spectral axis, 'radio'
             or 'optical', where the header does not state it.
+        rest : str or Quantity, optional
+            The rest that turns a spectral axis of wavelengths or
+            frequencies into velocities (see fitsutils.model_header).
+        error_kind : str, optional
+            What the file of the errors holds (see datafiles.read_arrays).
 
         Returns
         -------
@@ -359,45 +159,20 @@ class FitsArrays:
         Raises
         ------
         ConfigError
-            If a file has no data (or no HDU given), the shapes differ,
-            an error is negative, or the convention of the velocities is
-            ambiguous and not given, or given and stated by the header.
+            If the files cannot be read as data, errors and mask (see
+            datafiles.read_arrays), or the rest is given for data without
+            a spectral axis.
         """
-        data_d, header = _read_fits(data, velocity)
-        data_e = _read_array(error) if error else None
-        data_m = _read_array(mask) if mask else None
-        for name, array in (('error', data_e), ('mask', data_m)):
-            if array is not None and array.shape != data_d.shape:
-                raise ConfigError(
-                    f"the {name} must have the shape of the data "
-                    f"{data_d.shape}; it has {array.shape}")
-        # (the error and the mask follow the axes of the data, whose world
-        # coordinates they may not have)
-        if _has_wcs(header):
-            order = fitsutils.model_axis_order(astropy.wcs.WCS(header))
-            if order != tuple(range(data_d.ndim)):
-                _log.info("reordering the axes in the order of the model")
-                wcs = fitsutils.reorder_wcs(astropy.wcs.WCS(header), order)
-                header = _with_wcs(header, wcs)
-                data_d = fitsutils.reorder_data(data_d, order)
-                if data_e is not None:
-                    data_e = fitsutils.reorder_data(data_e, order)
-                if data_m is not None:
-                    data_m = fitsutils.reorder_data(data_m, order)
-        valid = np.isfinite(data_d)
-        if data_e is not None:
-            if np.any(data_e < 0):
-                raise ConfigError(
-                    f"errors cannot be negative; "
-                    f"{np.count_nonzero(data_e < 0)} are, down to "
-                    f"{np.nanmin(data_e):g}")
-            valid &= np.isfinite(data_e) & (data_e > 0)
-        if data_m is not None:
-            valid &= np.isfinite(data_m) & (data_m != 0)
-        return cls(
-            np.ascontiguousarray(data_d),
-            None if data_e is None else np.ascontiguousarray(data_e),
-            np.ones(data_d.shape), header).masked(valid).oriented()
+        arrays = datafiles.read_arrays(
+            data, error, mask, error_kind=error_kind, rest=rest,
+            velocity=velocity)
+        header = arrays.header
+        if rest is not None and not (
+                fitsutils.has_wcs(header)
+                and astropy.wcs.WCS(header).wcs.spec >= 0):
+            raise ConfigError(
+                f"the data have no spectral axis to give the rest {rest}")
+        return cls(arrays.data, arrays.error, arrays.mask, header)
 
     def masked(self, mask: npt.ArrayLike) -> 'FitsArrays':
         """
@@ -444,23 +219,6 @@ class FitsArrays:
             pad(self.mask, 0),
             _shift_axes(self.header, [-size] * self.data.ndim))
 
-    def with_velocity_axis(
-            self, rest: str | astropy.units.Quantity
-    ) -> 'FitsArrays':
-        """
-        Return the arrays with their spectral axis in velocities of a rest
-        (a wavelength or frequency; see gridutils.make_rest): optical
-        velocities from wavelengths, radio velocities from frequencies.
-
-        Raises
-        ------
-        ConfigError
-            If there is no linear spectral axis, or its velocities refer to
-            another rest.
-        """
-        return dataclasses.replace(
-            self, header=_spectral_to_velocity(self.header, rest))
-
     def write(
             self,
             data: str,
@@ -470,9 +228,7 @@ class FitsArrays:
     ) -> None:
         """
         Write the data, errors and mask (if given filenames) as FITS
-        files, with the header of the data, in the orientation of the
-        model (see oriented; e.g. a spectral axis converted to radio
-        velocities, which decrease along it, is reversed).
+        files, with the header of the data (the mask without its unit).
 
         Parameters
         ----------
@@ -483,40 +239,20 @@ class FitsArrays:
         dtype : DTypeLike, optional
             The type of the values.
         """
-        arrays = self.oriented()
         # (each file is of one array, which an HDU name of the input, e.g.
         # SCI, would misname)
-        header = arrays.header.copy()
+        header = self.header.copy()
         header.remove('EXTNAME', ignore_missing=True)
-        for filename, array in zip(
-                (data, error, mask),
-                (arrays.data, arrays.error, arrays.mask)):
+        mask_header = header.copy()
+        mask_header.remove('BUNIT', ignore_missing=True)
+        for filename, array, array_header in (
+                (data, self.data, header),
+                (error, self.error, header),
+                (mask, self.mask, mask_header)):
             if filename is not None and array is not None:
                 fits.writeto(
-                    filename, array.astype(dtype), header, overwrite=True)
-
-    def oriented(self) -> 'FitsArrays':
-        """
-        Return the arrays in the orientation of the model: with the axes
-        that it needs reversed reversed (see fitsutils.model_axis_flips:
-        that of a mirrored image, and a spectral axis of velocities that
-        decrease along it), and their world coordinates.
-        """
-        arrays = [self.data, self.error, self.mask]
-        header = self.header
-        flips = fitsutils.model_axis_flips(astropy.wcs.WCS(header)) \
-            if _has_wcs(header) else ()
-        for axis in flips:
-            _log.info(
-                f"reversing the axis {axis + 1}: the image is mirrored, or "
-                f"the velocity decreases along it")
-            size = self.data.shape[self.data.ndim - 1 - axis]
-            header = _with_wcs(header, fitsutils.flip_wcs(
-                astropy.wcs.WCS(header), axis, size))
-            arrays = [
-                None if a is None else fitsutils.flip_data(a, axis)
-                for a in arrays]
-        return FitsArrays(*arrays, header)
+                    filename, array.astype(dtype), array_header,
+                    overwrite=True)
 
 
 def range_mask(

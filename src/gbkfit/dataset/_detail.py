@@ -233,7 +233,8 @@ def read_moments(
         items[order], coords[order] = Data.from_files(
             item.data, item.mask, item.error, rpix, rval, unit=item.unit,
             beam=item.beam, spatial_correlation=item.spatial_correlation,
-            spectral_correlation=item.spectral_correlation)
+            spectral_correlation=item.spectral_correlation,
+            error_kind=item.error_kind)
     if not coords:
         raise ConfigError("a dataset needs at least one moment")
     first = next(iter(coords.values()))

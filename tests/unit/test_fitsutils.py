@@ -327,8 +327,9 @@ def test_rest_of_the_spectral_axis(ctype, keywords, rest):
 
 
 def test_rest_can_be_given():
-    # A given rest replaces that of the header, in the convention of the
-    # axis; without a spectral axis type it keeps its kind
+    # A given rest becomes that of the axis, in its convention (its
+    # velocities, of another rest, are of the given one); without a
+    # spectral axis type it keeps its kind
     fits.writeto('data.fits', np.zeros((6, 20, 24), np.float32),
                  fits.Header(_spectral_header('VOPT', RESTWAV=1e-7)))
     coords = fitsutils.read_data('data.fits', rest='1420.405752 MHz')[1]

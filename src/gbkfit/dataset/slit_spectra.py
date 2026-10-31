@@ -5,6 +5,7 @@ import numpy as np
 
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.datafiles import ErrorKind
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
@@ -73,7 +74,8 @@ class DatasetSlitSpectra(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
             spectral: gridutils.SpectralAxis | None = None,
-            outliers: Mapping[str, Any] | None = None
+            outliers: Mapping[str, Any] | None = None,
+            error_kind: ErrorKind = 'sigma'
     ) -> 'DatasetSlitSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -110,6 +112,10 @@ class DatasetSlitSpectra(Dataset):
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
+        error_kind : str, optional
+            What the file of the errors holds: 'sigma' (standard
+            deviations), 'variance' or 'inverse_variance' (see
+            datafiles.read_arrays).
 
         Returns
         -------
@@ -121,7 +127,8 @@ class DatasetSlitSpectra(Dataset):
         item, coords = Data.from_files(
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
-            unit, beam, velocity=references['velocity'])
+            unit, beam, velocity=references['velocity'],
+            error_kind=error_kind)
         dataset = cls(
             item, **_detail.cube_coords(coords, step, rota, spectral))
         return _detail.cleaned(dataset, outliers)

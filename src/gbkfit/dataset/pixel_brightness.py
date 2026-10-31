@@ -6,6 +6,7 @@ import numpy as np
 from gbkfit.instrument import PSF
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.datafiles import ErrorKind
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
@@ -69,7 +70,8 @@ class DatasetPixelBrightness(Dataset):
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
             spatial_correlation: PSF | None = None,
-            outliers: Mapping[str, Any] | None = None
+            outliers: Mapping[str, Any] | None = None,
+            error_kind: ErrorKind = 'sigma'
     ) -> 'DatasetPixelBrightness':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -101,6 +103,10 @@ class DatasetPixelBrightness(Dataset):
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
+        error_kind : str, optional
+            What the file of the errors holds: 'sigma' (standard
+            deviations), 'variance' or 'inverse_variance' (see
+            datafiles.read_arrays).
 
         Returns
         -------
@@ -110,7 +116,7 @@ class DatasetPixelBrightness(Dataset):
         check_options(DatasetPixelBrightness.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
-            spatial_correlation=spatial_correlation)
+            spatial_correlation=spatial_correlation, error_kind=error_kind)
         dataset = cls(item, **_detail.grid_coords(coords, step, rota))
         return _detail.cleaned(dataset, outliers)
 

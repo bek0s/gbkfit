@@ -6,6 +6,7 @@ import numpy as np
 from gbkfit.instrument import LSF, PSF
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import check_options
+from gbkfit.utils.datafiles import ErrorKind
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
@@ -76,7 +77,8 @@ class DatasetPixelSpectra(Dataset):
             spatial_correlation: PSF | None = None,
             spectral_correlation: LSF | None = None,
             outliers: Mapping[str, Any] | None = None,
-            mask_whole_spectra: bool = False
+            mask_whole_spectra: bool = False,
+            error_kind: ErrorKind = 'sigma'
     ) -> 'DatasetPixelSpectra':
         """
         Read the dataset from FITS files, with the world coordinates of the
@@ -120,6 +122,10 @@ class DatasetPixelSpectra(Dataset):
         mask_whole_spectra : bool, optional
             Whether every spectrum with a masked value is masked whole
             (see mask_whole_spectra), after the outliers.
+        error_kind : str, optional
+            What the file of the errors holds: 'sigma' (standard
+            deviations), 'variance' or 'inverse_variance' (see
+            datafiles.read_arrays).
 
         Returns
         -------
@@ -132,7 +138,7 @@ class DatasetPixelSpectra(Dataset):
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, spatial_correlation, spectral_correlation,
-            references['velocity'])
+            references['velocity'], error_kind)
         dataset = cls(
             item, **_detail.cube_coords(coords, step, rota, spectral))
         return _detail.cleaned(dataset, outliers, mask_whole_spectra)

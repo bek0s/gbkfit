@@ -1,11 +1,14 @@
 """
 The prep task: prepare data files for the datasets of gbkfit (see
 gbkfit.prep), and write the tables of the PSFs and LSFs of instruments.
-Each prepared file is written as prep_<name of the input>, in the output
-directory (output_dir; if it exists: an error with output_dir_mode
-'terminate', written into with 'overwrite', the default, or a new one
-with a numeric suffix with 'unique', e.g. output_2). The input of a FITS
-file and an HDU is named with its HDU (e.g. prep_cube_STAT.fits).
+The prepared files of data are named by their role, after the input of
+the data: prep_<name>.fits, prep_<name>_error.fits and
+prep_<name>_mask.fits (see output_files), in the output directory
+(output_dir; if it exists: an error with output_dir_mode 'terminate',
+written into with 'overwrite', the default, or a new one with a numeric
+suffix with 'unique', e.g. output_2). The input of a FITS file and an
+HDU is named with its HDU (e.g. prep_cube_SCI.fits). Two inputs of one
+name (e.g. in two directories) are an error.
 """
 
 import logging
@@ -21,7 +24,7 @@ from astropy.io import fits
 
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
-from gbkfit.utils import fitsutils, tableutils, unitutils
+from gbkfit.utils import datafiles, fitsutils, tableutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import FitsFile
 from . import _detail
@@ -61,20 +64,29 @@ def _output_dir(output_dir: str, mode: _Exists) -> str:
     return output_dir
 
 
-def _output(
-        output_dir: str, file: FitsFile | None, suffix: str = ''
-) -> str | None:
+def _output(output_dir: str, file: FitsFile, role: str = '') -> str:
     """
-    Return the name of the prepared file of an input file (with its HDU,
-    if given, and a suffix), if any.
+    Return the name of a prepared file of an input file (with its HDU, if
+    given): prep_<name>.fits, or prep_<name>_<role>.fits for a role.
     """
-    if file is None:
-        return None
     filename, hdu = (file, None) if isinstance(file, str) else file
     name = os.path.splitext(os.path.basename(filename))[0]
     if hdu is not None:
         name += f'_{hdu}'
-    return os.path.join(output_dir, f'prep_{name}{suffix}.fits')
+    if role:
+        name += f'_{role}'
+    return os.path.join(output_dir, f'prep_{name}.fits')
+
+
+def _check_distinct(outputs: Sequence[str]) -> None:
+    """Raise ConfigError if two inputs have one prepared file."""
+    seen = set()
+    for output in outputs:
+        if output in seen:
+            raise ConfigError(
+                f"two inputs would be prepared into {output}: inputs of one "
+                f"name (e.g. in two directories) must be renamed")
+        seen.add(output)
 
 
 def output_files(
@@ -88,8 +100,9 @@ def output_files(
     Return the prepared files of the data, errors and mask (None for
     those not given) that prep_pixel_brightness, prep_slit_spectra,
     prep_pixel_spectra and prep_pixel_moments (of each map) write in an
-    output directory; with noise_error (prep_pixel_spectra), the errors
-    are prep_<name of the data>_noise.
+    output directory, named after the data (see the module); with
+    noise_error (prep_pixel_spectra), the errors estimated from the noise
+    of the data.
 
     Parameters
     ----------
@@ -105,9 +118,10 @@ def output_files(
     tuple of str and (str or None)
         The prepared files of the data, errors and mask.
     """
-    error = _output(output_dir, file_d, '_noise') if noise_error \
-        else _output(output_dir, file_e)
-    return _output(output_dir, file_d), error, _output(output_dir, file_m)
+    error = _output(output_dir, file_d, 'error') \
+        if file_e is not None or noise_error else None
+    mask = _output(output_dir, file_d, 'mask') if file_m is not None else None
+    return _output(output_dir, file_d), error, mask
 
 
 def _clip(
@@ -139,21 +153,18 @@ def _write(
         arrays: FitsArrays,
         minify: bool,
         nanpad: int | None,
-        velocity_rest: str | None,
         outputs: tuple[str, str | None, str | None],
         dtype: npt.DTypeLike
 ) -> None:
     """
     Crop the arrays to their valid pixels (minify), pad them (nanpad),
-    convert their spectral axis (velocity_rest), and write them in the
-    prepared files of the data, errors and mask (see output_files).
+    and write them in the prepared files of the data, errors and mask
+    (see output_files).
     """
     if minify:
         arrays = arrays.minified()
     if nanpad:
         arrays = arrays.padded(nanpad)
-    if velocity_rest is not None:
-        arrays = arrays.with_velocity_axis(velocity_rest)
     arrays.write(*outputs, dtype=dtype)
 
 
@@ -173,22 +184,25 @@ def prep_pixel_brightness(
         nanpad: int | None,
         dtype: npt.DTypeLike,
         output_dir: str = '.',
-        output_dir_mode: _Exists = 'overwrite'
+        output_dir_mode: _Exists = 'overwrite',
+        error_kind: datafiles.ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare an image (pixel_brightness): crop it to a region (roi_spat:
     x from, x to, y from, y to), clip it, crop it to its valid pixels
-    (minify), and pad it with invalid pixels (nanpad).
+    (minify), and pad it with invalid pixels (nanpad). error_kind is what
+    the file of the errors holds (see datafiles.read_arrays); the
+    prepared errors are standard deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
-    arrays = FitsArrays.read(file_d, file_e, file_m)
+    arrays = FitsArrays.read(file_d, file_e, file_m, error_kind=error_kind)
     if roi_spat is not None:
         x0, x1, y0, y1 = roi_spat
         arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
-    _write(arrays, minify, nanpad, None,
+    _write(arrays, minify, nanpad,
            output_files(output_dir, file_d, file_e, file_m), dtype)
 
 
@@ -211,18 +225,23 @@ def prep_slit_spectra(
         velocity_rest: str | None = None,
         velocity: str | None = None,
         output_dir: str = '.',
-        output_dir_mode: _Exists = 'overwrite'
+        output_dir_mode: _Exists = 'overwrite',
+        error_kind: datafiles.ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare the spectra along a slit (slit_spectra: positions along x,
-    channels along y): crop them to positions (roi_spat) and channels
-    (roi_spec), clip them, crop them to their valid pixels (minify), pad
-    them (nanpad), and convert their spectral axis to velocities
-    (velocity_rest). velocity is the convention of the velocities of an
-    axis that does not state it (see FitsArrays.read).
+    channels along y), with their spectral axis in velocities of a rest
+    (velocity_rest), if given: crop them to positions (roi_spat) and
+    channels (roi_spec, of the axis in velocities, increasing), clip them,
+    crop them to their valid pixels (minify), and pad them (nanpad).
+    velocity is the convention of the velocities of an axis that does not
+    state it, and error_kind what the file of the errors holds (see
+    FitsArrays.read); the prepared errors are standard deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
-    arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
+    arrays = FitsArrays.read(
+        file_d, file_e, file_m, velocity, rest=velocity_rest,
+        error_kind=error_kind)
     rows, columns = slice(None), slice(None)
     if roi_spec is not None:
         rows = slice(*roi_spec)
@@ -231,7 +250,7 @@ def prep_slit_spectra(
     arrays = _clip(
         arrays.crop((rows, columns)), clip_min, clip_max, sclip_sigma,
         sclip_iters, ccl_lcount, ccl_pcount, ccl_lratio)
-    _write(arrays, minify, nanpad, velocity_rest,
+    _write(arrays, minify, nanpad,
            output_files(output_dir, file_d, file_e, file_m), dtype)
 
 
@@ -255,17 +274,21 @@ def prep_pixel_spectra(
         velocity: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        noise_error: bool = False
+        noise_error: bool = False,
+        error_kind: datafiles.ErrorKind = 'sigma'
 ) -> None:
     """
-    Prepare a cube (pixel_spectra): crop it to a region (roi_spat: x from,
-    x to, y from, y to) and channels (roi_spec), clip it, crop it to its
-    valid pixels (minify), pad it (nanpad), and convert its spectral axis
-    to velocities (velocity_rest). velocity is the convention of the
-    velocities of an axis that does not state it (see FitsArrays.read).
-    With noise_error, the errors are the noise of each channel of the
-    cropped cube, from its negative values (see prep.noise_errors; see
-    output_files for the names of the prepared files).
+    Prepare a cube (pixel_spectra), with its spectral axis in velocities
+    of a rest (velocity_rest), if given: crop it to a region (roi_spat: x
+    from, x to, y from, y to) and channels (roi_spec, of the axis in
+    velocities, increasing), clip it, crop it to its valid pixels
+    (minify), and pad it (nanpad). velocity is the convention of the
+    velocities of an axis that does not state it, and error_kind what the
+    file of the errors holds (see FitsArrays.read); the prepared errors
+    are standard deviations. With noise_error, the errors are the noise
+    of each channel of the cropped cube, from its negative values (see
+    prep.noise_errors; see output_files for the names of the prepared
+    files).
 
     Raises
     ------
@@ -277,7 +300,9 @@ def prep_pixel_spectra(
             "give a file of the errors or estimate them from the noise "
             "(noise_error), not both")
     output_dir = _output_dir(output_dir, output_dir_mode)
-    arrays = FitsArrays.read(file_d, file_e, file_m, velocity)
+    arrays = FitsArrays.read(
+        file_d, file_e, file_m, velocity, rest=velocity_rest,
+        error_kind=error_kind)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
         xs, ys = slice(*roi_spat[0:2]), slice(*roi_spat[2:4])
@@ -292,7 +317,7 @@ def prep_pixel_spectra(
     arrays = _clip(
         arrays, clip_min, clip_max, sclip_sigma, sclip_iters, ccl_lcount,
         ccl_pcount, ccl_lratio)
-    _write(arrays, minify, nanpad, velocity_rest,
+    _write(arrays, minify, nanpad,
            output_files(output_dir, file_d, file_e, file_m, noise_error),
            dtype)
 
@@ -313,14 +338,16 @@ def prep_pixel_moments(
         nanpad: int | None,
         dtype: npt.DTypeLike,
         output_dir: str = '.',
-        output_dir_mode: _Exists = 'overwrite'
+        output_dir_mode: _Exists = 'overwrite',
+        error_kind: datafiles.ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare moment maps (pixel_moments), as image (see
     prep_pixel_brightness), but with one mask for all: a pixel invalid in
     one map is invalid in all. The options of the clipping (clip_min,
     clip_max, sclip_sigma and sclip_iters) have one value for each map;
-    sclip_iters can also be one value for all maps.
+    sclip_iters can also be one value for all maps. error_kind is what
+    the files of the errors hold.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
@@ -328,9 +355,14 @@ def prep_pixel_moments(
     file_m = file_m or [None] * nmaps
     if np.ndim(sclip_iters) == 0:
         sclip_iters = [sclip_iters] * nmaps
+    outputs = [
+        output_files(output_dir, file_d[i], file_e[i], file_m[i])
+        for i in range(nmaps)]
+    _check_distinct([output[0] for output in outputs])
     maps = []
     for i in range(nmaps):
-        arrays = FitsArrays.read(file_d[i], file_e[i], file_m[i])
+        arrays = FitsArrays.read(
+            file_d[i], file_e[i], file_m[i], error_kind=error_kind)
         if roi_spat is not None:
             x0, x1, y0, y1 = roi_spat
             arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))
@@ -353,9 +385,7 @@ def prep_pixel_moments(
         arrays = arrays.masked(mask)
         if box is not None:
             arrays = arrays.crop(box)
-        _write(arrays, False, nanpad, None,
-               output_files(output_dir, file_d[i], file_e[i], file_m[i]),
-               dtype)
+        _write(arrays, False, nanpad, outputs[i], dtype)
 
 
 def _read_bins(filename: str) -> tuple[FitsArrays, np.ndarray, int]:
@@ -394,31 +424,39 @@ def prep_region_moments(
         file_m: Sequence[str | None] | None,
         dtype: npt.DTypeLike,
         output_dir: str = '.',
-        output_dir_mode: _Exists = 'overwrite'
+        output_dir_mode: _Exists = 'overwrite',
+        error_kind: datafiles.ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for
     region_moments: a map of the bin of each pixel (file_bins; negative or
-    NaN for no bin), and moment maps (file_d, with optional errors file_e
-    and masks file_m) whose pixels hold the value of their bin. Write the
-    bins, numbered from 0 in the order of their numbers in the map
-    (prep_<bins>.fits), and for each map a vector of the value of each
-    bin (prep_<map>.fits), whose masked or empty bins are NaN.
+    NaN for no bin), and moment maps (file_d, with optional errors file_e,
+    of the kind error_kind, see datafiles.read_arrays, and masks file_m)
+    whose pixels hold the value of their bin. Write the bins, numbered from
+    0 in the order of their numbers in the map (prep_<bins>.fits), and for
+    each map a vector of the value of each bin (prep_<map>.fits), whose
+    masked or empty bins are NaN, and of their errors, standard deviations
+    (prep_<map>_error.fits).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
     file_e = file_e or [None] * nmaps
     file_m = file_m or [None] * nmaps
+    _check_distinct(
+        [_output(output_dir, file_bins)]
+        + [_output(output_dir, file) for file in file_d])
     bins, index, nbins = _read_bins(file_bins)
     _write_bins(bins, index, file_bins, output_dir)
     for i in range(nmaps):
-        arrays = FitsArrays.read(file_d[i], file_e[i], file_m[i])
+        arrays = FitsArrays.read(
+            file_d[i], file_e[i], file_m[i], error_kind=error_kind)
         if arrays.data.shape != index.shape:
             raise ConfigError(
                 f"{file_d[i]}: the maps must have the shape of the bins "
                 f"{index.shape}; they have {arrays.data.shape}")
-        for filename, data in ((file_d[i], arrays.data),
-                               (file_e[i], arrays.error)):
+        for filename, data, role in (
+                (file_d[i], arrays.data, ''),
+                (file_e[i], arrays.error, 'error')):
             if filename is None:
                 continue
             try:
@@ -426,7 +464,7 @@ def prep_region_moments(
             except ConfigError as e:
                 raise ConfigError(f"{filename}: {e}") from e
             fits.writeto(
-                _output(output_dir, filename), values.astype(dtype),
+                _output(output_dir, file_d[i], role), values.astype(dtype),
                 overwrite=True)
 
 
@@ -464,27 +502,33 @@ def prep_region_spectra(
         velocity_rest: str | None = None,
         velocity: str | None = None,
         output_dir: str = '.',
-        output_dir_mode: _Exists = 'overwrite'
+        output_dir_mode: _Exists = 'overwrite',
+        error_kind: datafiles.ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare the spectra of the bins of a cube for region_spectra: a map of
     the bin of each pixel (file_bins; negative or NaN for no bin, on the
     pixels of the cube), and a cube (file_d, with optional errors file_e
-    and mask file_m), optionally cropped to channels (roi_spec) and with
-    its spectral axis converted to velocities (velocity_rest; velocity is
-    the convention of the velocities of an axis that does not state it,
-    see FitsArrays.read). Write the
-    bins, numbered from 0 in the order of their numbers in the map
-    (prep_<bins>.fits), and the sum of the valid spectra of the pixels of
-    each bin (prep_<cube>.fits: the bins along x, the channels along y),
-    with its errors added in quadrature (prep_<errors>.fits). With a unit
-    (BUNIT), the sums are fluxes, in their unit: the values of pixels per
-    solid angle or per beam become the fluxes of the pixels (see
-    prep.pixel_fluxes).
+    and mask file_m), with its spectral axis in velocities of a rest
+    (velocity_rest), if given, and optionally cropped to channels
+    (roi_spec, of the axis in velocities, increasing). velocity is the
+    convention of the velocities of an axis that does not state it, and
+    error_kind what the file of the errors holds (see FitsArrays.read).
+    Write the bins, numbered from 0 in the order of their numbers in the
+    map (prep_<bins>.fits), and the sum of the valid spectra of the pixels
+    of each bin (prep_<cube>.fits: the bins along x, the channels along
+    y), with its errors added in quadrature (prep_<cube>_error.fits). With
+    a unit (BUNIT), the sums are fluxes, in their unit: the values of
+    pixels per solid angle or per beam become the fluxes of the pixels
+    (see prep.pixel_fluxes).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
+    _check_distinct(
+        [_output(output_dir, file_bins), _output(output_dir, file_d)])
     bins, index, nbins = _read_bins(file_bins)
-    cube = FitsArrays.read(file_d, file_e, file_m, velocity)
+    cube = FitsArrays.read(
+        file_d, file_e, file_m, velocity, rest=velocity_rest,
+        error_kind=error_kind)
     fluxes = prep.pixel_fluxes(cube.header, file_d, cube.data.shape[0])
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))
@@ -494,8 +538,6 @@ def prep_region_spectra(
         raise ConfigError(
             f"{file_d}: the cube must have the spatial shape of the bins "
             f"{index.shape}; it has {cube.data.shape[1:]}")
-    if velocity_rest is not None:
-        cube = cube.with_velocity_axis(velocity_rest)
     spectra, errors = prep.bin_spectra(index, nbins, cube)
     header = _spectral_header(cube, nbins)
     # (the sums of the fluxes of the pixels: the values of the pixels per
@@ -509,7 +551,8 @@ def prep_region_spectra(
     FitsArrays(
         spectra, errors, np.isfinite(spectra).astype(float),
         header).write(
-            _output(output_dir, file_d), _output(output_dir, file_e),
+            _output(output_dir, file_d),
+            None if file_e is None else _output(output_dir, file_d, 'error'),
             dtype=dtype)
 
 

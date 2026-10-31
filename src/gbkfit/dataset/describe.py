@@ -127,7 +127,10 @@ def _describe(
     """Return the description of an HDU of a FITS file with an array."""
     problems = []
     order = _model_order(header)
+    # (world axes beyond those of the array are of length 1, see
+    # fitsutils.model_header)
     sizes = fitsutils.header_shape(header)[::-1]
+    sizes += (1,) * (len(order) - len(sizes))
     shape = tuple(sizes[axis] for axis in order)
     axes = tuple(
         str(header.get(f'CTYPE{axis + 1}', '')).strip() for axis in order)

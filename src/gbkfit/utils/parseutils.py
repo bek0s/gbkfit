@@ -618,8 +618,11 @@ def from_config(value: Any, type_: Any) -> Any:
         if member == typeutils.FilePath and isinstance(value, str):
             return resolve_path(value)
         if member == typeutils.FitsFile and isinstance(value, str | Mapping):
+            # (without an HDU, the file alone: its readers take their
+            # first HDU, or the first with data, see datafiles)
             file, hdu = parse_file(value)
-            return (file, hdu) if isinstance(value, Mapping) else file
+            return (file, hdu) \
+                if isinstance(value, Mapping) and 'hdu' in value else file
         if is_record(member) and isinstance(value, Mapping):
             return member(**parse_options_for_callable(dict(value), member))
         if typing.get_origin(member) is Mapping \

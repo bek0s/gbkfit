@@ -242,6 +242,10 @@ def _make_parser() -> argparse.ArgumentParser:
     _DATA_D_HELP = "input data (measurements)"
     _DATA_E_HELP = "input data (uncertainties)"
     _DATA_M_HELP = "input data (mask)"
+    _ERROR_KIND_HELP = (
+        "what the uncertainties are: standard deviations (sigma, the "
+        "default), variances or inverse variances; the prepared ones are "
+        "standard deviations")
     _CLIP_MIN_HELP = "the values below MIN are set to NaN (invalid)"
     _CLIP_MAX_HELP = "the values above MAX are set to NaN (invalid)"
     _SCLIP_SIGMA_HELP = (
@@ -282,6 +286,10 @@ def _make_parser() -> argparse.ArgumentParser:
         '--data-m', type=str,
         metavar='MASK',
         help=_DATA_M_HELP)
+    parser_prep_input_1.add_argument(
+        '--error-kind', type=str, default='sigma',
+        choices=['sigma', 'variance', 'inverse_variance'],
+        help=_ERROR_KIND_HELP)
     # ...
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
@@ -296,6 +304,10 @@ def _make_parser() -> argparse.ArgumentParser:
         '--data-m', type=str, nargs='+',
         metavar='MASK',
         help=_DATA_M_HELP)
+    parser_prep_input_n.add_argument(
+        '--error-kind', type=str, default='sigma',
+        choices=['sigma', 'variance', 'inverse_variance'],
+        help=_ERROR_KIND_HELP)
     # ...
     parser_prep_rest = argparse.ArgumentParser(add_help=False)
     parser_prep_rest.add_argument(
@@ -587,7 +599,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            **output)
+            **output, error_kind=args.error_kind)
     elif args.prep_task == 'slit_spectra':
         gbkfit.tasks.prep.prep_slit_spectra(
             args.data_d, args.data_e, args.data_m,
@@ -595,7 +607,8 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, args.velocity, **output)
+            args.velocity_rest, args.velocity, **output,
+            error_kind=args.error_kind)
     elif args.prep_task == 'pixel_moments':
         gbkfit.tasks.prep.prep_pixel_moments(
             args.data_d, args.data_e, args.data_m,
@@ -603,16 +616,16 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
-            **output)
+            **output, error_kind=args.error_kind)
     elif args.prep_task == 'region_moments':
         gbkfit.tasks.prep.prep_region_moments(
             args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
-            **output)
+            **output, error_kind=args.error_kind)
     elif args.prep_task == 'region_spectra':
         gbkfit.tasks.prep.prep_region_spectra(
             args.bins, args.data_d, args.data_e, args.data_m,
             args.roi_spec, args.dtype, args.velocity_rest, args.velocity,
-            **output)
+            **output, error_kind=args.error_kind)
     elif args.prep_task == 'gauss_hermite_moments':
         gbkfit.tasks.prep.prep_gauss_hermite_moments(
             args.table, args.columns, args.errors, args.format, **output)
@@ -630,7 +643,7 @@ def _run_prep(args: argparse.Namespace) -> None:
             args.sclip_sigma, args.sclip_iters,
             args.minify, args.nanpad, args.dtype,
             args.velocity_rest, args.velocity, **output,
-            noise_error=args.noise_error)
+            noise_error=args.noise_error, error_kind=args.error_kind)
 
 
 def _run_fit(args: argparse.Namespace) -> None:
