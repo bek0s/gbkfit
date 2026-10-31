@@ -18,7 +18,7 @@ import astropy.constants
 import astropy.cosmology
 import astropy.units
 import numpy as np
-from annotated_types import Ge
+from annotated_types import Gt
 
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
@@ -293,7 +293,7 @@ class DistanceRedshift(Distance):
 
     def __init__(
             self,
-            redshift: Annotated[float, Ge(0)] | None = None,
+            redshift: Annotated[float, Gt(0)] | None = None,
             cosmology: Literal[_COSMOLOGIES] = COSMOLOGY_DEFAULT
     ):
         check_options(DistanceRedshift.__init__, locals())
