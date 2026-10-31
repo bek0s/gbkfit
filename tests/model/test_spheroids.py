@@ -567,6 +567,21 @@ def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
     np.testing.assert_allclose(model, expected, rtol=3e-3)
 
 
+
+@pytest.mark.parametrize('kappa', [3.0, -3.0])
+def test_a_jeans_rotation_beyond_the_motion_of_the_stars_is_capped(kappa):
+    # (audit 2026-10-31 #7: from kappa about 1.15 on, sigma_phi^2 was
+    # negative where rotation dominates, and the whole model NaN)
+    properties = JEANS_PROPERTIES | dict(
+        stars_q=[0.6], stars_beta_z=0.3, stars_kappa=kappa)
+    tables = jeans_galaxy().plan_stage().evaluate(properties).states[0]
+    speed = np.hypot(tables.vphi, tables.sigma_phi)
+    assert np.isfinite(speed).all()
+    # (all the motion is rotation where capped, of the sign of kappa)
+    capped = (tables.sigma_phi == 0) & (tables.vphi != 0)
+    assert capped.any()
+    assert (np.sign(tables.vphi[capped]) == np.sign(kappa)).all()
+
 def stars_cube(driver, spheroid, line_of_sight='grid'):
     """
     A case of a spectral cube of the stars of a spheroid (lines: [stars]),

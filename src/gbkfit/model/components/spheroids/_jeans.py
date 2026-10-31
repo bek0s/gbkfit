@@ -62,15 +62,18 @@ class JeansKinematics(SpheroidKinematics):
         sigma_phi^2 = <v_phi^2> - <v_phi>^2
 
     of the anisotropy beta_z = 1 - sigma_z^2 / sigma_R^2 and the rotation
-    kappa (0: none; 1: that of an isotropic rotator where beta_z = 0), two
-    parameters. Where <v_phi^2> is below sigma_R^2 the stars cannot rotate
-    so: <v_phi> is 0 there (as JamPy), and sigma_phi^2 = <v_phi^2>. NaN
-    where <v_phi^2> is negative, or where kappa makes <v_phi>^2 exceed
-    <v_phi^2>; 0 where it has no light (beyond the floats). Each point of the spheroid moves with a Gaussian
-    distribution of velocities of that mean and those dispersions (the
-    velocity ellipsoid seen along the line of sight): the Jeans equations
-    give the mean and the dispersion of the stars, not the shape of their
-    distribution, so fit those (see SpheroidKinematics).
+    kappa (0: none; 1: that of an isotropic rotator where beta_z = 0; of
+    the other sign: counter-rotation), two parameters. Where <v_phi^2> is
+    below sigma_R^2 the stars cannot rotate so: <v_phi> is 0 there (as
+    JamPy), and sigma_phi^2 = <v_phi^2>. Where kappa (above 1) asks for
+    a rotation above <v_phi^2>^(1/2), it is that, and sigma_phi is 0 (a
+    cold rotation). NaN where <v_phi^2> is negative; 0 where it has no
+    light (beyond the floats). Each point of the spheroid moves with a
+    Gaussian distribution of velocities of that mean and those
+    dispersions (the velocity ellipsoid seen along the line of sight):
+    the Jeans equations give the mean and the dispersion of the stars,
+    not the shape of their distribution, so fit those (see
+    SpheroidKinematics).
     """
 
     @staticmethod
@@ -310,11 +313,28 @@ def jeans_tables(
         # into rotation and dispersion (the assumption that kappa scales)
         # gives way. A choice: NaN there would leave ordinary fast rotators
         # (beta_z above about 0.6 (1 - q) at their centres) without a model.
-        vphi = kappa * np.sqrt(np.maximum(rotation, 0))
-        sphi2 = vphi2 - vphi ** 2
+        # Where kappa is above 1 and rotation dominates (<v_phi^2> /
+        # sigma_R^2 above kappa^2 / (kappa^2 - 1): 5.8 for kappa 1.1),
+        # kappa (<v_phi^2> - sigma_R^2)^(1/2) exceeds <v_phi^2>^(1/2), and
+        # sigma_phi^2 = <v_phi^2> - <v_phi>^2 would be negative: more
+        # rotation than the stars have motion. The rotation is capped
+        # there at <v_phi^2>^(1/2): all their motion is rotation, and
+        # sigma_phi is 0 (a cold rotation). The other side of the same
+        # rule: the second moments hold, and only the split of <v_phi^2>
+        # gives way. (NaN there made the whole model NaN from kappa about
+        # 1.15 on, and a fit saw a flat, false minimum of its chi-square:
+        # audit 2026-10-31 #7.) The sign of kappa is that of the rotation.
+        speed = np.sqrt(np.maximum(vphi2, 0))
+        vphi = np.sign(kappa) * np.minimum(
+            abs(kappa) * np.sqrt(np.maximum(rotation, 0)), speed)
+        # (NaN only where <v_phi^2> is negative: no motion solves the
+        # Jeans equations there. The maximum takes the round-off of the
+        # cap, which can leave sigma_phi^2 a hair below 0.)
+        sphi2 = np.where(
+            vphi2 >= 0, np.maximum(vphi2 - vphi ** 2, 0), np.nan)
         # (0 where there is no light, of no weight: the kernels interpolate
         # the tables, so they must be numbers there)
-        sphi = np.sqrt(np.where(sphi2 >= 0, sphi2, np.nan))
+        sphi = np.sqrt(sphi2)
         values = [
             np.where(nu > 0, value, 0.0)
             for value in (vphi, np.sqrt(sr2), sphi, np.sqrt(sz2))]
