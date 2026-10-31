@@ -345,6 +345,10 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             objective.require_residuals()
         _check_valid_ranges(fit_params, params.free_valid_ranges())
         self._check_merit(objective)
+        if pool is not None and pool.size() > 1 and not self.info.batches:
+            _log.warning(
+                f"the fitter {self.type()} evaluates one point at a time: "
+                f"{pool.size() - 1} of its {pool.size()} workers will wait")
         uncertainty = self._fit_uncertainty(objective)
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
