@@ -103,7 +103,7 @@ def test_grid_rotation(driver, evaluate_cases, disk):
     expected = evaluate(posa=30, rota=0)
     # The smooth disk is sampled at the same points; the clouds of the
     # Monte Carlo disk can land in a neighbouring pixel due to rounding
-    tolerance = 1e-5 if disk == 'smdisk' else 2e-3
+    tolerance = 1e-5 if disk == 'smooth' else 2e-3
     difference = np.linalg.norm(rotated - expected) / np.linalg.norm(expected)
     assert difference < tolerance
 
