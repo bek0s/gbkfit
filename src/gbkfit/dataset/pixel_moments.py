@@ -25,16 +25,21 @@ _CORRELATIONS = ('spatial',)
 
 class DatasetPixelMoments(Dataset):
     """
-    Moments of the spectra on a grid of pixels: moment maps of some of the
-    orders 0 to 7, as the data items moment0 to moment7.
+    Moments of the spectra on a grid of pixels: maps of central moments of
+    some of the orders 0 to 7, as the data items moment0 to moment7, and of
+    the coefficients h3 and h4 of a Gauss-Hermite series, as the items h3
+    and h4 (see _detail.moment_items).
 
-    Its configuration has the data items moment0 to moment7 (the files of
-    each: data, mask, error; see from_files) and the world coordinates.
+    Its configuration has those data items (the files of each: data,
+    mask, error; see from_files) and the world coordinates.
 
     Parameters
     ----------
     moments : Mapping
-        The moment map of each order, of shape (ny, nx); at least one.
+        The map of the central moment of each order, of shape (ny, nx).
+    hermite : Mapping, optional
+        The map of the coefficient of each order (3 and 4) of a
+        Gauss-Hermite series; with moments, at least one map.
     step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the grid (see gridutils.Coords); their
         defaults are those of gridutils.make_grid.
@@ -69,6 +74,8 @@ class DatasetPixelMoments(Dataset):
             moment5: DataFiles | None = None,
             moment6: DataFiles | None = None,
             moment7: DataFiles | None = None,
+            h3: DataFiles | None = None,
+            h4: DataFiles | None = None,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
@@ -81,10 +88,10 @@ class DatasetPixelMoments(Dataset):
 
         Parameters
         ----------
-        moment0, ..., moment7 : DataFiles, optional
-            The files of the moment map of each order given (at least
-            one), and their options (e.g. their unit; by default, that of
-            the header).
+        moment0, ..., moment7, h3, h4 : DataFiles, optional
+            The files of the map of each moment given (at least one), and
+            their options (e.g. their unit; by default, that of the
+            header).
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the headers. Either rpix or rval can be
@@ -105,7 +112,9 @@ class DatasetPixelMoments(Dataset):
         check_options(DatasetPixelMoments.from_files, locals())
         items, coords = _detail.read_moments(
             _detail.moment_options(locals()), rpix, rval)
-        dataset = cls(items, **_detail.grid_coords(coords, step, rota))
+        dataset = cls(
+            *_detail.split_moments(items),
+            **_detail.grid_coords(coords, step, rota))
         return _detail.cleaned(dataset, outliers)
 
     def dump(
@@ -117,13 +126,14 @@ class DatasetPixelMoments(Dataset):
     def __init__(
             self,
             moments: Mapping[int, Data],
+            hermite: Mapping[int, Data] | None = None,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None
     ):
         check_options(DatasetPixelMoments.__init__, locals())
-        super().__init__(_detail.moment_items(moments))
+        super().__init__(_detail.moment_items(moments, hermite))
         self._grid = _detail.make_grid(self, step, rpix, rval, rota)
 
     def grid(self) -> gridutils.Grid:

@@ -25,21 +25,25 @@ _BLOCK_AXES = ('the regions',)
 class DatasetRegionMoments(Dataset):
     """
     Moments of the spectra in regions of the sky (see Regions; e.g.
-    Voronoi bins, fibres): some of the orders 0 to 7, as the data items
-    moment0 to moment7 (above 2, central moments or the coefficients of a
-    Gauss-Hermite series, see moment_items of _detail).
+    Voronoi bins, fibres): central moments of some of the orders 0 to 7, as
+    the data items moment0 to moment7, and the coefficients h3 and h4 of a
+    Gauss-Hermite series, as the items h3 and h4 (see
+    _detail.moment_items).
 
     Its configuration has the options of from_files (the regions, and the
-    files of the data items moment0 to moment7), or those of from_table
-    (the regions, a table file, and the columns of the data items).
+    files of the data items), or those of from_table (the regions, a table
+    file, and the columns of the data items).
 
     Parameters
     ----------
     moments : Mapping
-        The moments of each order, a vector of one value for each region;
-        at least one.
+        The central moment of each order, a vector of one value for each
+        region.
     regions : Regions
         The regions.
+    hermite : Mapping, optional
+        The coefficient of each order (3 and 4) of a Gauss-Hermite series,
+        as moments; with moments, at least one.
 
     Raises
     ------
@@ -75,6 +79,8 @@ class DatasetRegionMoments(Dataset):
             moment5: DataFiles | None = None,
             moment6: DataFiles | None = None,
             moment7: DataFiles | None = None,
+            h3: DataFiles | None = None,
+            h4: DataFiles | None = None,
             outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetRegionMoments':
         """
@@ -85,8 +91,8 @@ class DatasetRegionMoments(Dataset):
         ----------
         regions : Regions
             The regions.
-        moment0, ..., moment7 : DataFiles, optional
-            The files of the moments of each order given (at least one),
+        moment0, ..., moment7, h3, h4 : DataFiles, optional
+            The files of each moment given (at least one),
             and their options (e.g. their unit; by default, that of the
             header).
         outliers : Mapping, optional
@@ -100,7 +106,8 @@ class DatasetRegionMoments(Dataset):
         """
         check_options(DatasetRegionMoments.from_files, locals())
         items, _ = _detail.read_moments(_detail.moment_options(locals()))
-        dataset = cls(items, regions)
+        moments, hermite = _detail.split_moments(items)
+        dataset = cls(moments, regions, hermite)
         return _detail.cleaned(dataset, outliers)
 
     @classmethod
@@ -117,6 +124,8 @@ class DatasetRegionMoments(Dataset):
             moment5: DataColumns | None = None,
             moment6: DataColumns | None = None,
             moment7: DataColumns | None = None,
+            h3: DataColumns | None = None,
+            h4: DataColumns | None = None,
             outliers: Mapping[str, Any] | None = None
     ) -> 'DatasetRegionMoments':
         """
@@ -133,8 +142,8 @@ class DatasetRegionMoments(Dataset):
             The regions.
         format : str, optional
             The format of the file, if astropy cannot tell it.
-        moment0, ..., moment7 : DataColumns, optional
-            The columns of the moments of each order given (at least one).
+        moment0, ..., moment7, h3, h4 : DataColumns, optional
+            The columns of each moment given (at least one).
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
             (see screen_outliers), which are masked.
@@ -147,12 +156,13 @@ class DatasetRegionMoments(Dataset):
         check_options(DatasetRegionMoments.from_table, locals())
         table = tableutils.read_table(file, format)
         items = {}
-        for order, columns in _detail.moment_options(locals()).items():
-            with parseutils.config_path(f'moment{order}'):
-                items[order] = _detail.table_item(table, columns)
+        for name, columns in _detail.moment_options(locals()).items():
+            with parseutils.config_path(name):
+                items[name] = _detail.table_item(table, columns)
         if not items:
             raise ConfigError("a dataset needs at least one moment")
-        dataset = cls(items, regions)
+        moments, hermite = _detail.split_moments(items)
+        dataset = cls(moments, regions, hermite)
         return _detail.cleaned(dataset, outliers)
 
     def dump(
@@ -171,9 +181,14 @@ class DatasetRegionMoments(Dataset):
                 item, _detail.item_filenames(prefix, key), write, dump_path)
         return info
 
-    def __init__(self, moments: Mapping[int, Data], regions: Regions):
+    def __init__(
+            self,
+            moments: Mapping[int, Data],
+            regions: Regions,
+            hermite: Mapping[int, Data] | None = None
+    ):
         check_options(DatasetRegionMoments.__init__, locals())
-        super().__init__(_detail.moment_items(moments))
+        super().__init__(_detail.moment_items(moments, hermite))
         if self.shape() != (regions.nregions(),):
             raise ConfigError(
                 f"the moments have {self.shape()[0]} values, but there are "

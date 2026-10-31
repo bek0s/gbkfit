@@ -30,7 +30,8 @@ class PixelMoments(Observable):
     """
     Moments of the spectra on a grid of pixels: the moment maps of some
     orders (0 to 7) of a spectral cube of the model, seen through the
-    instrument, as the data items moment0 to moment7.
+    instrument, as the data items moment0 to moment7, but h3 and h4 of
+    the method gauss_hermite (see _moments.moment_item).
 
     The moments are measured from a spectral cube with the spatial axes
     of the maps, and a spectral axis (spectral; see _moments.spectral_axis
@@ -200,12 +201,14 @@ class PixelMoments(Observable):
         self._method = method
 
     def keys(self) -> tuple[str, ...]:
-        return tuple(f'moment{i}' for i in self._orders)
+        return tuple(
+            _moments.moment_item(i, self._method) for i in self._orders)
 
     def dataset(self, items: Mapping[str, Data]) -> DatasetPixelMoments:
+        moments, hermite = _moments.moment_maps(
+            items, self._orders, self._method)
         return DatasetPixelMoments(
-            {order: items[f'moment{order}'] for order in self.orders()},
-            **_detail.dataset_grid_options(self.grid()))
+            moments, hermite, **_detail.dataset_grid_options(self.grid()))
 
     def data_unit(
             self,
@@ -251,8 +254,8 @@ class PixelMoments(Observable):
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
     def require_matching(self, dataset: Dataset) -> None:
+        _moments.check_moment_items(dataset, self._method)
         super().require_matching(dataset)
-        _moments.check_moment_units(dataset, self._method)
 
     def plan(
             self,

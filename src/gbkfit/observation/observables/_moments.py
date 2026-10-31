@@ -2,15 +2,14 @@
 Helpers shared by the observables of moments.
 """
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 
-import astropy.units
 import numpy as np
 from annotated_types import Ge, Lt
 
 import gbkfit.math
-from gbkfit.dataset import Dataset
+from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.params import ModelEvaluationError
@@ -115,27 +114,54 @@ def check_moment_orders(
     return orders
 
 
-def check_moment_units(dataset: Dataset, method: str) -> None:
+def moment_item(order: int, method: str) -> str:
     """
-    Raise ConfigError unless the moments of the orders above 2 of a
-    dataset are those of the method, by their units, if they have one:
-    the central moments of 'moments', in (km/s)^k, or the coefficients h3
-    and h4 of the Gauss-Hermite series of 'gauss_hermite', dimensionless
-    (see the datasets of moments).
+    Return the name of the data item of the moment of an order measured by
+    a method (see METHODS): moment0 to moment7, the central moments (the
+    flux, the mean velocity, the dispersion, and above in (km/s)^k), but
+    the coefficients h3 and h4 of a Gauss-Hermite series (gauss_hermite;
+    dimensionless, as pPXF names them).
+    """
+    if method == 'gauss_hermite' and order > 2:
+        return f'h{order}'
+    return f'moment{order}'
+
+
+def moment_maps(
+        items: Mapping[str, Data], orders: Sequence[int], method: str
+) -> tuple[dict[int, Data], dict[int, Data]]:
+    """
+    Return the data items of the moments of the orders measured by a method
+    (see moment_item), as datasets of moments take them: the central
+    moments, and the coefficients of a Gauss-Hermite series, by order.
+    """
+    moments, hermite = {}, {}
+    for order in orders:
+        name = moment_item(order, method)
+        (hermite if name.startswith('h') else moments)[order] = items[name]
+    return moments, hermite
+
+
+def check_moment_items(dataset: Dataset, method: str) -> None:
+    """
+    Raise ConfigError if a dataset has moments that a method does not
+    measure: the coefficients h3 and h4 of a Gauss-Hermite series without
+    the method gauss_hermite, or central moments of the orders 3 and 4 with
+    it (see moment_item: of the same order, they are other numbers).
     """
     hermite = method == 'gauss_hermite'
-    for key, item in dataset.items():
-        order = int(key.removeprefix('moment'))
-        unit = item.unit()
-        if order <= 2 or unit is None:
-            continue
-        if unit.is_equivalent(astropy.units.dimensionless_unscaled) \
-                != hermite:
-            kind = f'h{order}, dimensionless' if hermite \
-                else 'a central moment, in velocity^k'
+    for key in dataset:
+        if key.startswith('h') and not hermite:
             raise ConfigError(
-                f"moment {order} of the method {method} is {kind}; the data "
-                f"are in {unit}")
+                f"{key}, a coefficient of a Gauss-Hermite series, is "
+                f"measured by the method gauss_hermite; the method is "
+                f"{method}")
+        if hermite and key in ('moment3', 'moment4'):
+            raise ConfigError(
+                f"{key} is a central moment, in (km/s)^{key[-1]}; the method "
+                f"gauss_hermite measures h{key[-1]}, a coefficient of a "
+                f"Gauss-Hermite series (name the data h{key[-1]}, if they "
+                f"are)")
 
 
 def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
@@ -292,7 +318,7 @@ class MomentsPlan:
                 step, zero, cube, wcube, cutoff, self._mmaps_o,
                 self._mmaps_d, self._mmaps_m, self._mmaps_w)
         return {
-            f'moment{order}': dict(
+            moment_item(order, self._method): dict(
                 d=self._mmaps_d[i], m=self._mmaps_m, w=self._mmaps_w)
             for i, order in enumerate(self._orders)}
 

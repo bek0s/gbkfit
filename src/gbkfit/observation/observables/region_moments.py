@@ -237,12 +237,13 @@ class RegionMoments(Observable):
         return self._spectral
 
     def keys(self) -> tuple[str, ...]:
-        return tuple(f'moment{i}' for i in self._orders)
+        return tuple(
+            _moments.moment_item(i, self._method) for i in self._orders)
 
     def dataset(self, items: Mapping[str, Data]) -> DatasetRegionMoments:
-        return DatasetRegionMoments(
-            {order: items[f'moment{order}'] for order in self.orders()},
-            self.regions())
+        moments, hermite = _moments.moment_maps(
+            items, self._orders, self._method)
+        return DatasetRegionMoments(moments, self.regions(), hermite)
 
     def data_unit(
             self,
@@ -281,8 +282,8 @@ class RegionMoments(Observable):
             self._check_orbits(scene, flux_scale, foreground, instrument)
 
     def require_matching(self, dataset: Dataset) -> None:
+        _moments.check_moment_items(dataset, self._method)
         super().require_matching(dataset)
-        _moments.check_moment_units(dataset, self._method)
 
     def _require_matching_coordinates(
             self, dataset: DatasetRegionMoments

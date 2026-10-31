@@ -52,6 +52,10 @@ SOLVE = dict(solve=dict(
     type='gaussian', mean=1, sigma=1, min=0, likelihood='profiled'))
 
 
+# The data items of the series of the stars, by order (V, sigma, h3, h4)
+KEYS = {1: 'moment1', 2: 'moment2', 3: 'h3', 4: 'h4'}
+
+
 def bins(rota=0.0):
     """12 bins of 2 arcsec pixels: the quadrants of 3 annuli."""
     pixels = (np.arange(32) - 15.5) * 2
@@ -73,9 +77,12 @@ def observation(regions, psf=1.0, oversampling=None, data=None):
     data = data or {1: np.zeros(n), 2: np.full(n, 150.0), 3: np.zeros(n),
                     4: np.zeros(n)}
     errors = {1: 5.0, 2: 5.0, 3: 0.03, 4: 0.03}
-    dataset = DatasetRegionMoments({
-        m: Data(np.asarray(data[m], float), error=np.full(n, errors[m]))
-        for m in range(1, 5)}, regions)
+
+    def item(m):
+        return Data(np.asarray(data[m], float), error=np.full(n, errors[m]))
+    # (V and sigma, and the coefficients h3 and h4)
+    dataset = DatasetRegionMoments(
+        {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
     return ObservationSky(
         RegionMoments.from_data(
             dataset, method='gauss_hermite',
@@ -438,7 +445,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     group = ObservationGroup([galaxy()], [without_data(observation(bins()))])
     model = group.plan(driver).model_h(
         PROPERTIES | dict(stars_weights=np.ones(400)))[0]
-    data = {m: model[f'moment{m}']['d'] for m in range(1, 5)}
+    data = {m: model[KEYS[m]]['d'] for m in range(1, 5)}
     obs = observation(bins(), data=data)
     group = ObservationGroup([galaxy()], [obs])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
@@ -457,9 +464,9 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     assert np.all(
         np.abs(residuals['moment2'] * errors['moment2']) < 0.02 * data[2])
     np.testing.assert_allclose(
-        residuals['moment3'] * errors['moment3'], 0, atol=1e-6)
+        residuals['h3'] * errors['h3'], 0, atol=1e-6)
     np.testing.assert_allclose(
-        residuals['moment4'] * errors['moment4'], 0, atol=0.01)
+        residuals['h4'] * errors['h4'], 0, atol=0.01)
 
 
 def compared_model(objective, params):
@@ -552,9 +559,9 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
     regions = RegionsBins(field.bin_map, step=(0.1, 0.1), rpix=(59.5, 59.5))
     dataset = DatasetRegionMoments({
         1: Data(mock.mean, error=mock.mean_error),
-        2: Data(mock.sigma, error=mock.sigma_error),
+        2: Data(mock.sigma, error=mock.sigma_error)}, regions, {
         3: Data(mock.h[:, 0], error=mock.h_error[:, 0]),
-        4: Data(mock.h[:, 1], error=mock.h_error[:, 1])}, regions)
+        4: Data(mock.h[:, 1], error=mock.h_error[:, 1])})
     obs = ObservationSky(
         RegionMoments.from_data(
             dataset, method='gauss_hermite',
@@ -636,10 +643,11 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
                         dtype='float64')]).plan(driver).model_h(
         truth | dict(stars_beta_z=0.0, stars_kappa=0.6))[0]
     errors = {1: 3.0, 2: 3.0, 3: 0.02, 4: 0.02}
-    dataset = DatasetRegionMoments({
-        m: Data(model[f'moment{m}']['d'],
-                error=np.full(regions.nregions(), errors[m]))
-        for m in range(1, 5)}, regions)
+    def item(m):
+        return Data(
+            model[KEYS[m]]['d'], error=np.full(regions.nregions(), errors[m]))
+    dataset = DatasetRegionMoments(
+        {m: item(m) for m in (1, 2)}, regions, {m: item(m) for m in (3, 4)})
     obs = ObservationSky(
         RegionMoments.from_data(
             dataset, method='gauss_hermite',

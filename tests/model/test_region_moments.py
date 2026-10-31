@@ -228,30 +228,33 @@ def test_region_moments_of_the_columns_of_a_table(tmp_path):
         regions=dict(type='bins', file=str(tmp_path / 'bins.fits')),
         file=str(tmp_path / 'kinematics.fits'),
         moment1=dict(column='V', error='V_ERR'), moment2=dict(column='SIGMA'),
-        moment3=dict(column='H3', error=0.01),
-        moment4=dict(column='H4', error=0.01)))
+        h3=dict(column='H3', error=0.01),
+        h4=dict(column='H4', error=0.01)))
     assert dataset.regions().nregions() == 3
     np.testing.assert_allclose(dataset['moment1'].data(), [1400, 1500, 1600])
     np.testing.assert_allclose(dataset['moment1'].error(), [5, 6, 7])
     np.testing.assert_allclose(dataset['moment2'].data(), [100, 120, 140])
-    np.testing.assert_allclose(dataset['moment4'].data(), [0, 0.05, -0.01])
-    assert dataset['moment3'].unit() is None
+    np.testing.assert_allclose(dataset['h4'].data(), [0, 0.05, -0.01])
+    assert dataset['h3'].unit() is None
 
 
-@pytest.mark.parametrize('method, unit, message', [
-    ('gauss_hermite', 'km3/s3', "is h3, dimensionless"),
-    ('moments', '%', "is a central moment"),
+@pytest.mark.parametrize('method, other, message', [
+    ('gauss_hermite', dict(moments={3: Data(np.zeros(2))}),
+     "moment3 is a central moment"),
+    ('moments', dict(moments={}, hermite={3: Data(np.zeros(2))}),
+     "h3, a coefficient of a Gauss-Hermite series"),
 ])
-def test_the_moments_above_2_are_those_of_the_method(method, unit, message):
-    # h3 of a Gauss-Hermite series has no unit, and the central moment of
-    # order 3 is in (km/s)^3
+def test_the_moments_above_2_are_those_of_the_method(method, other, message):
+    # h3 of a Gauss-Hermite series and the central moment of order 3 are
+    # items of their own: the method that measures the other refuses one
+    # (audit 2026-10-31 #12: they were both moment3, picked by the method)
     from gbkfit.observation import RegionMoments
     regions = RegionsBins(np.array([[0, 1]]))
     observable = RegionMoments(
         regions, orders=[3], method=method,
         spectral=SpectralAxis(convention='relativistic'))
-    observable.require_matching(
-        DatasetRegionMoments({3: Data(np.zeros(2))}, regions))
+    observable.require_matching(observable.dataset(
+        {observable.keys()[0]: Data(np.zeros(2))}))
     with pytest.raises(ConfigError, match=message):
         observable.require_matching(
-            DatasetRegionMoments({3: Data(np.zeros(2), unit=unit)}, regions))
+            DatasetRegionMoments(regions=regions, **other))

@@ -27,10 +27,16 @@ _log = logging.getLogger(__name__)
 _CORRELATION_PARSERS = dict(
     spatial_correlation=psf_parser, spectral_correlation=lsf_parser)
 
-# The orders of the moments that datasets can hold, and the names of their
-# data items (and of the options of their files)
+# The data items of moments (and the options of their files): the central
+# moments of the orders 0 to 7 (moment0, the flux; moment1, the mean
+# velocity; moment2, the dispersion; moment3 and up, in (km/s)^k), and the
+# coefficients h3 and h4 of a Gauss-Hermite series (dimensionless, as pPXF
+# names them: not central moments)
 _ORDERS = range(8)
+_HERMITE_ORDERS = (3, 4)
 MOMENTS = tuple(f'moment{order}' for order in _ORDERS)
+HERMITE = tuple(f'h{order}' for order in _HERMITE_ORDERS)
+MOMENT_ITEMS = MOMENTS + HERMITE
 
 
 def cleaned(
@@ -83,23 +89,40 @@ def load_correlations(info: dict[str, Any]) -> None:
 def load_moment_correlations(info: dict[str, Any]) -> None:
     """
     Load the correlations of the noise of the moments in the options of
-    their files (moment0 to moment7; see load_correlations), in place.
+    their files (see MOMENT_ITEMS and load_correlations), in place.
     """
-    for name in MOMENTS:
+    for name in MOMENT_ITEMS:
         if isinstance(info.get(name), Mapping):
             info[name] = dict(info[name])
             with parseutils.config_path(name):
                 load_correlations(info[name])
 
 
-def moment_options(values: Mapping[str, Any]) -> dict[int, Any]:
+def moment_options(values: Mapping[str, Any]) -> dict[str, Any]:
     """
     Return the options of the moments given among the arguments of a
-    constructor (moment0 to moment7, e.g. its locals()), by order.
+    constructor (see MOMENT_ITEMS; e.g. its locals()), by name.
     """
     return {
-        order: values[name] for order, name in enumerate(MOMENTS)
+        name: values[name] for name in MOMENT_ITEMS
         if values[name] is not None}
+
+
+def split_moments(
+        items: Mapping[str, Any]
+) -> tuple[dict[int, Any], dict[int, Any]]:
+    """
+    Return the central moments and the Gauss-Hermite coefficients among
+    items by name (see MOMENT_ITEMS), by order, as datasets of moments take
+    them.
+    """
+    moments = {
+        int(name.removeprefix('moment')): item
+        for name, item in items.items() if name in MOMENTS}
+    hermite = {
+        int(name.removeprefix('h')): item
+        for name, item in items.items() if name in HERMITE}
+    return moments, hermite
 
 
 def load_with_files(
@@ -124,21 +147,32 @@ def load_with_files(
         **parseutils.parse_options_for_callable(info, cls.from_files))
 
 
-def moment_items(moments: Mapping[int, Data]) -> dict[str, Data]:
+def moment_items(
+        moments: Mapping[int, Data],
+        hermite: Mapping[int, Data] | None = None
+) -> dict[str, Data]:
     """
-    Return the data items of the moments of the given orders: moment0 to
-    moment7, those of the orders of 1 and above in km/s, as the models
-    give them, or above 2 the dimensionless coefficients of a
-    Gauss-Hermite series (see _in_kms). Raise ConfigError for other
-    orders.
+    Return the data items of the central moments of the given orders
+    (moment0 to moment7) and of the given coefficients of a Gauss-Hermite
+    series (h3 and h4; see MOMENT_ITEMS), as the models give them: those of
+    the orders of 1 and above in km/s (see _in_kms), and the coefficients
+    dimensionless. Raise ConfigError for other orders, or units.
     """
+    hermite = hermite or {}
     if invalid := sorted(set(moments) - set(_ORDERS), key=str):
         raise ConfigError(
             f"the orders of the moments are 0 to 7; they include {invalid}")
-    return {
+    if invalid := sorted(set(hermite) - set(_HERMITE_ORDERS), key=str):
+        raise ConfigError(
+            f"the coefficients of a Gauss-Hermite series are h3 and h4; "
+            f"they include the orders {invalid}")
+    items = {
         f'moment{order}':
             moments[order] if order == 0 else _in_kms(moments[order], order)
         for order in sorted(moments)}
+    return items | {
+        f'h{order}': _dimensionless(hermite[order], order)
+        for order in sorted(hermite)}
 
 
 def _in_kms(data: Data, order: int) -> Data:
@@ -146,39 +180,54 @@ def _in_kms(data: Data, order: int) -> Data:
     Return the data of a moment of an order of 1 and above in km/s: the
     mean velocity (1) and the dispersion (2) in km/s, the central moments
     of an order k above 2 in (km/s)^k; converted from their unit (e.g.
-    m/s), if they have one, or taken to be in km/s. A moment of an order k
-    above 2 can be the coefficient h_k of a Gauss-Hermite series instead,
-    dimensionless (e.g. of the method gauss_hermite of the observables of
-    moments, which say which they take). Raise ConfigError if their unit
-    is not one of velocity (to the power k), nor dimensionless for an
-    order above 2.
+    m/s), if they have one, or taken to be in km/s. Raise ConfigError if
+    their unit is not one of velocity (to the power k; a dimensionless one
+    is of h_k of a Gauss-Hermite series, an item of its own).
     """
     unit = data.unit()
     if unit is None:
         return data
     power = 1 if order <= 2 else order
     kms = (astropy.units.km / astropy.units.s) ** power
-    if power > 1 and unit.is_equivalent(astropy.units.dimensionless_unscaled):
-        target = astropy.units.dimensionless_unscaled
-    elif unit.is_equivalent(kms):
-        target = kms
-    else:
-        kind = f"a unit of velocity (e.g. {unitutils.format_unit(kms)!r})"
-        if power > 1:
-            kind = (
-                f"a unit of velocity^{power} (e.g. "
-                f"{unitutils.format_unit(kms)!r}), nor dimensionless (h{order} "
-                f"of a Gauss-Hermite series)")
+    if not unit.is_equivalent(kms):
+        hermite = f" (h{order} of a Gauss-Hermite series is the item " \
+            f"h{order})" if order in _HERMITE_ORDERS and unit.is_equivalent(
+                astropy.units.dimensionless_unscaled) else ""
         raise ConfigError(
             f"moment {order} is in {unitutils.format_unit(unit)!r}, which is "
-            f"not {kind}")
-    factor = unit.to(target)
+            f"not a unit of velocity^{power} (e.g. "
+            f"{unitutils.format_unit(kms)!r}){hermite}")
+    factor = unit.to(kms)
     if factor == 1:
         return data
+    return _scaled(data, factor, kms)
+
+
+def _dimensionless(data: Data, order: int) -> Data:
+    """
+    Return the data of the coefficient h_k of a Gauss-Hermite series,
+    dimensionless (converted from a dimensionless unit, e.g. percent), or
+    taken to be. Raise ConfigError if its unit is not dimensionless.
+    """
+    unit = data.unit()
+    if unit is None:
+        return data
+    if not unit.is_equivalent(astropy.units.dimensionless_unscaled):
+        raise ConfigError(
+            f"h{order} is in {unitutils.format_unit(unit)!r}; it is "
+            f"dimensionless (a central moment is the item moment{order})")
+    factor = unit.to(astropy.units.dimensionless_unscaled)
+    if factor == 1:
+        return data
+    return _scaled(data, factor, astropy.units.dimensionless_unscaled)
+
+
+def _scaled(data: Data, factor: float, unit: astropy.units.UnitBase) -> Data:
+    """Return data times a factor, in the given unit."""
     error = data.error()
     return Data(
         data.data() * factor, data.mask(),
-        None if error is None else error * factor, target, data.beam(),
+        None if error is None else error * factor, unit, data.beam(),
         data.spatial_correlation(), data.spectral_correlation())
 
 
@@ -214,23 +263,27 @@ def table_item(table: Table, columns: DataColumns) -> Data:
 
 
 def moment_orders(dataset: 'Dataset') -> tuple[int, ...]:
-    """Return the orders of the moments of a dataset (see moment_items)."""
-    return tuple(int(key.removeprefix('moment')) for key in dataset)
+    """
+    Return the orders of the moments of a dataset, central moments and
+    coefficients of a Gauss-Hermite series (see moment_items).
+    """
+    return tuple(sorted(
+        int(key.removeprefix('moment').removeprefix('h')) for key in dataset))
 
 
 def read_moments(
-        files: Mapping[int, DataFiles],
+        files: Mapping[str, DataFiles],
         rpix: float | Sequence[float] | None = None,
         rval: float | Sequence[float] | None = None
-) -> tuple[dict[int, Data], gridutils.Coords]:
+) -> tuple[dict[str, Data], gridutils.Coords]:
     """
-    Read the moments of the given orders from their files (see
-    Data.from_files), and return them with the world coordinates of their
-    files, which must agree.
+    Read the moments of the given names from their files (see
+    MOMENT_ITEMS and Data.from_files), and return them with the world
+    coordinates of their files, which must agree.
     """
     items, coords = {}, {}
-    for order, item in files.items():
-        items[order], coords[order] = Data.from_files(
+    for name, item in files.items():
+        items[name], coords[name] = Data.from_files(
             item.data, item.mask, item.error, rpix, rval, unit=item.unit,
             beam=item.beam, spatial_correlation=item.spatial_correlation,
             spectral_correlation=item.spectral_correlation,

@@ -21,6 +21,7 @@ from gbkfit.model.components.spheroids import (
 from gbkfit.params import ModelEvaluationError, ParamValues
 from gbkfit.utils.parseutils import ConfigError
 from .observables import ModelData
+from .observables._moments import moment_item
 
 if TYPE_CHECKING:
     from .group import ObservationGroup
@@ -357,7 +358,8 @@ class _BinsData:
     """
     The moments of the bins of an observation that sees stars on orbits
     (see OrbitRecording): their number, the orders 1 to M, the data of each
-    order (by its key, 'moment{m}'; NaN where masked), the bins whose V
+    order (by its key, see moment_item: moment1, moment2, then h3 to hM;
+    NaN where masked), the bins whose V
     and sigma are not masked (the others have no series: none of their
     moments), and the normalisation N_b of each.
     """
@@ -366,11 +368,13 @@ class _BinsData:
         dataset = observation.data()
         orders = observation.observable().orders()
         self.order = len(orders)
+        # (the Gauss-Hermite series of the stars: V, sigma, h3 ... hM)
+        self.keys = {m: moment_item(m, 'gauss_hermite') for m in orders}
         self.values = {
-            f'moment{m}': np.asarray(dataset[f'moment{m}'].data(), float)
-            for m in orders}
-        masks = [np.asarray(dataset[f'moment{m}'].mask(), bool)
-                 for m in orders]
+            key: np.asarray(dataset[key].data(), float)
+            for key in self.keys.values()}
+        masks = [np.asarray(dataset[key].mask(), bool)
+                 for key in self.keys.values()]
         if not all(np.array_equal(mask, masks[0]) for mask in masks):
             raise ConfigError(
                 f"the bins of observation {index}, of stars on orbits, have "
@@ -389,7 +393,7 @@ class _BinsData:
         self.norms = np.ones(self.nbins)
         for m in range(4, self.order + 1, 2):
             double = math.prod(range(m, 0, -2))
-            self.norms += np.nan_to_num(self.values[f'moment{m}']) \
+            self.norms += np.nan_to_num(self.values[self.keys[m]]) \
                 * math.sqrt(math.factorial(m)) / double
 
     def series(self, vsys: float) -> tuple[np.ndarray, np.ndarray]:
@@ -418,7 +422,7 @@ class _BinsData:
         for m in range(3, self.order + 1):
             parts[m] = (np.zeros(self.nbins), 1 / gamma)
         return {
-            f'moment{m}': LinearMoment(base, slope, moments[:, :, m + 1].T)
+            self.keys[m]: LinearMoment(base, slope, moments[:, :, m + 1].T)
             for m, (base, slope) in parts.items()}
 
 

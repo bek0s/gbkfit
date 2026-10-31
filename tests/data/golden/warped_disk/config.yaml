@@ -33,8 +33,8 @@ observations:
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
     moment1: {data: observation0_moment1_d.fits, error: observation0_moment1_e.fits}
     moment2: {data: observation0_moment2_d.fits, error: observation0_moment2_e.fits}
-    moment3: {data: observation0_moment3_d.fits, error: observation0_moment3_e.fits}
-    moment4: {data: observation0_moment4_d.fits, error: observation0_moment4_e.fits}
+    h3: {data: observation0_h3_d.fits, error: observation0_h3_e.fits}
+    h4: {data: observation0_h4_d.fits, error: observation0_h4_e.fits}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}

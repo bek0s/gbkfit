@@ -29,7 +29,8 @@ class MomentMaps:
     Attributes
     ----------
     data : dict of str to np.ndarray
-        The map (ny, nx) of each order, by name (moment0, moment1, ...).
+        The map (ny, nx) of each order, by name (moment0, moment1, ...;
+        h3 and h4 of a Gauss-Hermite series, see moment_maps).
     mask : np.ndarray
         Where the moments are measured (ny, nx): False where the spectrum
         is masked, whose moments from order 1 are NaN (moment 0 keeps its
@@ -43,8 +44,8 @@ class MomentMaps:
         """
         Return the map of the skewness of the spectra: moment 3 over the
         dispersion (moment 2) cubed; NaN where the dispersion is 0. Of
-        maps measured as moments (those of a Gauss-Hermite series are its
-        h3 and h4).
+        maps measured as moments (a Gauss-Hermite series has h3 and h4,
+        its own measures of the shape, instead).
 
         Raises
         ------
@@ -69,6 +70,10 @@ class MomentMaps:
 
     def _standardized(self, order: int) -> np.ndarray:
         """Return a central moment over the dispersion to its order."""
+        if f'moment{order}' not in self.data:
+            raise KeyError(
+                f"the maps have no moment {order} (those of a Gauss-Hermite "
+                f"series have h3 and h4, not central moments)")
         with np.errstate(divide='ignore', invalid='ignore'):
             ratio = self.data[f'moment{order}'] \
                 / self.data['moment2'] ** order
@@ -162,7 +167,8 @@ def moment_maps(
         None, cutoff)
     data = {key: driver.mem_copy_d2h(value['d'])
             for key, value in maps.items()}
-    mask = driver.mem_copy_d2h(maps[f'moment{orders[0]}']['m']) == 1
+    # (one mask, shared by the maps)
+    mask = driver.mem_copy_d2h(next(iter(maps.values()))['m']) == 1
     mask &= ~blank
     for value in data.values():
         value[blank] = np.nan

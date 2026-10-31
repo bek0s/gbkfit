@@ -505,13 +505,17 @@ def test_moments_of_velocity_are_in_km_s():
     assert dataset['moment1'].unit() == u.km / u.s
     np.testing.assert_allclose(dataset['moment2'].data(), 30)
     np.testing.assert_allclose(dataset['moment3'].data(), 2)
-    hermite = DatasetPixelMoments({3: Data(np.full((4, 4), 5.0), unit='%')})
-    np.testing.assert_allclose(hermite['moment3'].data(), 0.05)
-    assert hermite['moment3'].unit() == u.dimensionless_unscaled
+    hermite = DatasetPixelMoments(
+        {}, {3: Data(np.full((4, 4), 5.0), unit='%')})
+    np.testing.assert_allclose(hermite['h3'].data(), 0.05)
+    assert hermite['h3'].unit() == u.dimensionless_unscaled
     with pytest.raises(ConfigError, match="not a unit of velocity"):
         DatasetPixelMoments({1: Data(np.ones((4, 4)), unit='Jy')})
-    with pytest.raises(ConfigError, match="nor dimensionless"):
-        DatasetPixelMoments({3: Data(np.ones((4, 4)), unit='Jy')})
+    # (h3 has no unit, and the central moment of order 3 one of velocity)
+    with pytest.raises(ConfigError, match="is the item h3"):
+        DatasetPixelMoments({3: Data(np.ones((4, 4)), unit='%')})
+    with pytest.raises(ConfigError, match="it is dimensionless"):
+        DatasetPixelMoments({}, {3: Data(np.ones((4, 4)), unit='Jy')})
 
 
 def test_noise_correlation_is_the_shape_on_the_pixel_separations(tmp_path):

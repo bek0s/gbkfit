@@ -805,6 +805,34 @@ class _RingsFromZero(Rule):
         return changes
 
 
+class _HermiteItems(Rule):
+    """
+    The coefficients of a Gauss-Hermite series are the data items h3 and
+    h4 (2026-11-01), not moment3 and moment4, which are central moments:
+    those of observations of the method gauss_hermite are renamed.
+    """
+
+    @staticmethod
+    def version() -> int:
+        return 3
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, observation in _items(config, 'observations'):
+            observable = observation.get('observable')
+            data = observation.get('data')
+            if not (isinstance(observable, Mapping)
+                    and observable.get('method') == 'gauss_hermite'
+                    and isinstance(data, MutableMapping)):
+                continue
+            for order in (3, 4):
+                if f'moment{order}' in data:
+                    data[f'h{order}'] = data.pop(f'moment{order}')
+                    changes.append(Change(
+                        path + ['data'], f"moment{order} -> h{order}"))
+        return changes
+
+
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     _ObservationTypes(),
@@ -824,6 +852,7 @@ RULES: tuple[Rule, ...] = (
     _DataTypes(),
     _Workers(),
     _RingsFromZero(),
+    _HermiteItems(),
 )
 
 

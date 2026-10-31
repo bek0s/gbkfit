@@ -95,8 +95,8 @@ def test_gauss_hermite_fit_recovers_the_series(driver, step):
     np.testing.assert_allclose(maps['moment0'], flux * np.sign(step), rtol=1e-3)
     np.testing.assert_allclose(maps['moment1'], centre, atol=0.05)
     np.testing.assert_allclose(np.abs(maps['moment2']), sigma, rtol=1e-3)
-    np.testing.assert_allclose(maps['moment3'], h3, atol=2e-3)
-    np.testing.assert_allclose(maps['moment4'], h4, atol=2e-3)
+    np.testing.assert_allclose(maps['h3'], h3, atol=2e-3)
+    np.testing.assert_allclose(maps['h4'], h4, atol=2e-3)
 
 
 def test_gaussian_fit_of_noisy_spectra_stays_on_the_line(driver):

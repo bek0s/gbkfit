@@ -859,8 +859,8 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
         moments['moment1']['d'], c * np.arctanh(1000 / c), atol=0.02)
     np.testing.assert_allclose(
         moments['moment2']['d'], np.sqrt(80 ** 2 + 10 ** 2 / 12), rtol=1e-3)
-    np.testing.assert_allclose(moments['moment3']['d'], 0, atol=1e-3)
-    np.testing.assert_allclose(moments['moment4']['d'], 0, atol=1e-3)
+    np.testing.assert_allclose(moments['h3']['d'], 0, atol=1e-3)
+    np.testing.assert_allclose(moments['h4']['d'], 0, atol=1e-3)
 
 
 # The exact mock of the Schwarzschild proof of concept (orbit_mock): a

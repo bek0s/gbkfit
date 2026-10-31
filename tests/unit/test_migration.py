@@ -316,3 +316,17 @@ def test_datasets_have_the_types_of_their_observables():
     # (on which the migration of the data of observations relies)
     for type_, cls in observable_parser.registered_classes().items():
         assert cls.dataset_class.type() == type_
+
+
+def test_gauss_hermite_moments_are_migrated_to_h3_and_h4():
+    # (they were moment3 and moment4, the names of the central moments)
+    data = dict(type='pixel_moments', moment1='v.fits', moment3='h3.fits',
+                moment4='h4.fits')
+    hermite = dict(observable=dict(type='pixel_moments',
+                                   method='gauss_hermite'), data=data)
+    central = dict(observable=dict(type='pixel_moments'),
+                   data=dict(moment3='m3.fits'))
+    migration.migrate(dict(observations=[hermite, central]), 2)
+    assert data == dict(type='pixel_moments', moment1='v.fits',
+                        h3='h3.fits', h4='h4.fits')
+    assert central['data'] == dict(moment3='m3.fits')
