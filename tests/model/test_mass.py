@@ -1697,6 +1697,29 @@ def test_disk_of_a_component_is_the_nodewise_disk_of_its_density(
         rtol=1e-5, atol=1e-7)
 
 
+def test_a_disk_rotates_in_its_own_thin_mass_disk():
+    # A thin mass disk that follows the density of its disk: the density
+    # goes on as its tail beyond the last ring, to 0 at the end of the
+    # tail, with no jump where a thin disk would pull infinitely: the
+    # rotation is finite at every radius of its table
+    disk = with_traits(DISK, vptraits=dict(type='mass')) \
+        | dict(type='disk', name='gas', geometry='own')
+    galaxy = galaxy_parser.load(dict(
+        components=[disk],
+        mass=[dict(type='disk', name='hi',
+                   surface=dict(type='component', component='gas'),
+                   vertical=dict(type='thin')),
+              dict(type='spheroid', name='halo', profile=dict(
+                  type='pseudo_isothermal', parameters='density_radius'))],
+        distance=copy.deepcopy(DISTANCE)))
+    params = {f'gas_{key}': value
+              for key, value in DISK_PROPERTIES.items()} | dict(
+        distance=10, mass_hi_upsilon=1e8, mass_halo_log_rho=7,
+        mass_halo_rs=3)
+    state = galaxy.plan_stage().evaluate(params).states[0]
+    assert np.all(np.isfinite(state.rotation['vpt_vt']))
+
+
 def test_disks_follow_components_of_their_galaxy():
     mass = [
         dict(type='disk', name='gas',

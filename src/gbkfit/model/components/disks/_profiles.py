@@ -16,7 +16,7 @@ import numpy as np
 
 from gbkfit.params import ParamValues
 from ...mass.units import G
-from .._nodal import subring_radii, tail_radii
+from .._nodal import subring_radii, tail_end, tail_radii
 from ..parts import EQUILIBRIUM_DIRECTION_DEFAULT
 from ..traits import DPT_DIRECTION_DEFAULT, RPTraitSpiral, VPTraitSpiral
 from ._disk import NodalDisk, DiskPlan
@@ -866,11 +866,14 @@ class NodalDiskDensity:
         """
         Return the radii (kpc) of its subnodes, or of the subnodes of rings
         of width at most rstep (arcsec, see _nodal.subring_radii), and
-        beyond the last, of its tail (see _nodal.tail_radii).
+        beyond the last, of its tail, to its end (see _nodal.tail_radii
+        and tail_end).
         """
         radii = self._disk.subrnodes() if rstep is None \
             else subring_radii(self._disk.rnodes(), rstep)
-        return np.array(radii + tail_radii(radii)) * self._kpc_per_arcsec
+        return np.array(
+            radii + tail_radii(radii) + (tail_end(radii),)) \
+            * self._kpc_per_arcsec
 
     def thick(self) -> bool:
         """Check whether it has density height traits."""
@@ -887,10 +890,17 @@ class NodalDiskDensity:
         """
         Return the azimuthal mean of each density polar trait (in the units
         of the density) where the selection traits keep the disk, at the
-        radii R (kpc, on the disk): an array of shape (traits, len(R)).
+        radii R (kpc, on the disk): an array of shape (traits, len(R));
+        0 from the end of its tail on (see knots), to which it goes on
+        linearly from the knot before (a thin disk would pull infinitely at
+        a jump there; the tail is below exp(-10) of its value at the last
+        ring, see _nodal.tail_end).
         """
-        return _surface_densities(
-            self._disk, self._plan, self._params, self._radii(R))
+        r = self._radii(R)
+        end = tail_end(self._disk.subrnodes())
+        return np.where(
+            r < end,
+            _surface_densities(self._disk, self._plan, self._params, r), 0)
 
     def height_pdfs(self, R: np.ndarray, z: np.ndarray) -> np.ndarray:
         """

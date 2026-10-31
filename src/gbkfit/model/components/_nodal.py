@@ -270,21 +270,28 @@ _TAIL_REACH = 10.0
 _TAIL_GROWTH = 1.2
 
 
+def tail_end(subrnodes: Sequence[float]) -> float:
+    """
+    Return the end of the tail of a component of the given subnodes that
+    its mass takes (see _TAIL_REACH): (1 + _TAIL_REACH) times the last.
+    """
+    return (1 + _TAIL_REACH) * subrnodes[-1]
+
+
 def tail_radii(subrnodes: Sequence[float]) -> tuple[float, ...]:
     """
     Return the radii beyond the last of the given subnodes of a component
-    that its mass takes its tail at (see _TAIL_REACH): from the step of
-    its last ring (half its width), growing by _TAIL_GROWTH, to (1 +
-    _TAIL_REACH) times the last subnode.
+    that its mass takes its tail at, before its end (see tail_end): from
+    the step of its last ring (half its width), growing by _TAIL_GROWTH.
     """
-    rl = subrnodes[-1]
-    step = rl - subrnodes[-2]
+    end = tail_end(subrnodes)
+    step = subrnodes[-1] - subrnodes[-2]
     radii = []
-    r = rl
-    while r < (1 + _TAIL_REACH) * rl:
-        r = min(r + step, (1 + _TAIL_REACH) * rl)
+    r = subrnodes[-1] + step
+    while r < end:
         radii.append(r)
         step *= _TAIL_GROWTH
+        r += step
     return tuple(radii)
 
 
