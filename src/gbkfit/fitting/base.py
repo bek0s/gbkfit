@@ -24,12 +24,14 @@ from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, covariance, laplace_posterior, sample_values)
 from gbkfit.objective import Objective
 from gbkfit.params import (
-    EvaluationError, ParamEvaluationError, ParamSpace, ValidRange)
+    EvaluationError, ParamEvaluationError, ParamSpace, ValidRange,
+    joint_prior_residuals)
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
 if TYPE_CHECKING:
     # (the workers import fitting, for its control)
+    from gbkfit.observation import ObservationGroup
     from gbkfit.parallel import WorkerPool
 
 
@@ -321,10 +323,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         Raises
         ------
         ConfigError
-            If the free properties or the options of the fitter do not
-            suit the problem (e.g. too few free elements or walkers), or
-            the fitter may try values of free elements outside the valid
-            ranges of their parameters (see ParamDesc).
+            If the fitter cannot fit the parameters (see check: e.g. too
+            few free elements or walkers, or values of free elements
+            outside the valid ranges of their parameters).
         ValueError
             If no parameter is free, the parameter space lacks parameters
             of the objective, or the pool is of another objective.
@@ -338,18 +339,14 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             If the fitter finds no point with a finite chi-square (or the
             fit was stopped before).
         """
-        fit_params = self.load_fit_params(params)
+        fit_params = self.check(params, objective.group())
         if not fit_params:
             raise ValueError("no parameter is free")
-        if 'residuals' in self.info.needs:
-            objective.require_residuals()
-        _check_valid_ranges(fit_params, params.free_valid_ranges())
-        self._check_merit(objective)
         if pool is not None and pool.size() > 1 and not self.info.batches:
             _log.warning(
                 f"the fitter {self.type()} evaluates one point at a time: "
                 f"{pool.size() - 1} of its {pool.size()} workers will wait")
-        uncertainty = self._fit_uncertainty(objective)
+        uncertainty = self._fit_uncertainty(objective.gives_residuals())
         problem = FitProblem(
             objective, params, [p.prior() for p in fit_params.values()],
             observers, control=control, log=log, pool=pool,
@@ -359,13 +356,65 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         finally:
             problem.close()
 
-    def _check_merit(self, objective: Objective) -> None:
+    def check(
+            self, params: ParamSpace, group: 'ObservationGroup'
+    ) -> dict[str, FitParam]:
+        """
+        Check that it can fit the parameters of the observations of a
+        group, as far as their descriptions tell (without devices): the
+        rules of the start of a fit (see fit), which describe and load
+        check too (see gbkfit.setup).
+
+        Parameters
+        ----------
+        params : ParamSpace
+            The parameters.
+        group : ObservationGroup
+            The galaxies and their observations.
+
+        Returns
+        -------
+        dict
+            The options of each free element (see load_fit_params).
+
+        Raises
+        ------
+        ConfigError
+            If the properties of an element or a joint
+            prior are invalid for it (see load_fit_params and
+            joint_prior_residuals), it needs residuals that an
+            observation does not give (see Likelihood.gives_residuals),
+            it may try values outside the valid ranges of the parameters,
+            the solves need another merit (see Solve.merit), or its
+            uncertainty asks for a covariance without residuals.
+        """
+        with parseutils.config_path('params', 'properties'):
+            fit_params = self.load_fit_params(params)
+        with parseutils.config_path('params'):
+            joint_prior_residuals(params)
+        # (of the observations with data: the others are not fitted)
+        without = [
+            i for i, observation in enumerate(group.observations())
+            if observation.likelihood() is not None
+            and not observation.likelihood().gives_residuals()]
+        if 'residuals' in self.info.needs and without:
+            raise ConfigError(
+                f"the likelihood of observation {without[0]} is a function "
+                f"of the log-likelihood, which has no residuals (e.g. for "
+                f"least squares); give the residuals instead (form "
+                f"'residuals'), or use another fitter")
+        _check_valid_ranges(fit_params, params.free_valid_ranges())
+        self._check_merit(params)
+        self._fit_uncertainty(not without)
+        return fit_params
+
+    def _check_merit(self, params: ParamSpace) -> None:
         """
         Raise ConfigError unless it minimises the merit that the solves of
-        the objective need (see Solve.merit), if any.
+        the parameters need (see Solve.merit), if any.
         """
         needs = {
-            name: solve.merit() for name, solve in objective.solves().items()
+            name: solve.merit() for name, solve in params.solves().items()
             if solve.merit() not in (None, self._merit)}
         if needs:
             raise ConfigError(
@@ -374,21 +423,22 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                 f"optimizers and grids); this fit minimises the "
                 f"{self._merit}")
 
-    def _fit_uncertainty(self, objective: Objective) -> UncertaintyOptions:
+    def _fit_uncertainty(self, gives_residuals: bool) -> UncertaintyOptions:
         """
-        Return the options of the uncertainty of a fit of an objective:
-        those given, or by default a covariance (and Laplace samples; see
-        UncertaintyOptions) if the merit is the chi-square and the
-        objective gives residuals (of which a covariance is made), else
-        none. Raise ConfigError if those given ask for a covariance of an
-        objective without residuals (a user likelihood of the
-        log-likelihood), before the fit rather than after it.
+        Return the options of the uncertainty of a fit of an objective that
+        gives residuals or not: those given, or by default a covariance
+        (and Laplace samples; see UncertaintyOptions) if the merit is the
+        chi-square and the objective gives residuals (of which a
+        covariance is made), else none. Raise ConfigError if those given
+        ask for a covariance of an objective without residuals (a user
+        likelihood of the log-likelihood), before the fit rather than after
+        it.
         """
         if self._uncertainty is None:
             return UncertaintyOptions() \
-                if self._merit == 'chi2' and objective.gives_residuals() \
+                if self._merit == 'chi2' and gives_residuals \
                 else _NO_UNCERTAINTY
-        if self._uncertainty.covariance() and not objective.gives_residuals():
+        if self._uncertainty.covariance() and not gives_residuals:
             raise ConfigError(
                 "a likelihood that is a function of the log-likelihood has "
                 "no residuals, of which the covariance is made; give "

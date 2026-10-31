@@ -117,6 +117,14 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         """
         return {}
 
+    def gives_residuals(self) -> bool:
+        """
+        Check whether it gives residuals (e.g. for least squares and
+        covariances), or only its chi-square (see LikelihoodUser); here, it
+        does.
+        """
+        return True
+
     def check(self, keys: Sequence[str], data: Dataset) -> None:
         """
         Check that it suits an observation of the given data items, of the
@@ -787,6 +795,9 @@ class LikelihoodUser(Likelihood):
     def form(self) -> str:
         """Return what its function returns: its form."""
         return self._form
+
+    def gives_residuals(self) -> bool:
+        return self._form == 'residuals'
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return {f'{self._prefix}{name}': ParamScalarDesc()

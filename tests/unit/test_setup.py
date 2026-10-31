@@ -320,3 +320,15 @@ def test_the_front_door_lists_its_names():
     # did not list load: audit 2026-10-31 #60)
     assert gbkfit.ConfigError is ConfigError
     assert {'load', 'describe', 'ConfigError'} <= set(dir(gbkfit))
+
+
+def test_describe_checks_the_rules_of_a_fit():
+    # (an optimizer without a start passed describe, and failed at load:
+    # audit 2026-10-31 #26)
+    params = dict(properties=PARAMS['properties'] | dict(
+        pt_s=dict(min=1, max=4)))
+    description = gbkfit.describe(dict(
+        version=VERSION, galaxies=[GALAXY], observations=[observation()],
+        params=params, fitter=dict(type='scipy.least_squares')))
+    errors = [p for p in description.problems if p.severity == 'error']
+    assert len(errors) == 1 and "needs option 'value'" in errors[0].message

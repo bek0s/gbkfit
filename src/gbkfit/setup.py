@@ -37,7 +37,7 @@ from gbkfit.observation import (
     DepthGroup, GroupPlan, Likelihood, Noise, ObservationGroup)
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
-    joint_prior_residuals, load_pdescs_dict, param_space_parser)
+    load_pdescs_dict, param_space_parser)
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import FilePath
@@ -260,10 +260,9 @@ class Setup:
     Raises
     ------
     ConfigError
-        If the parameters are not of the group, the fitter does not take
-        their free elements (see Fitter.load_fit_params), a prior on
-        several parameters is invalid, or the group cannot be planned
-        (see ObservationGroup.plan).
+        If the parameters are not of the group, the fitter cannot fit
+        them (see Fitter.check), or the group cannot be planned (see
+        ObservationGroup.plan).
 
     Examples
     --------
@@ -295,10 +294,7 @@ class Setup:
                 f"the galaxies have no functions {unknown}; they have "
                 f"{list(group.function_names())}")
         if fitter is not None:
-            with parseutils.config_path('params', 'properties'):
-                fitter.load_fit_params(params)
-            with parseutils.config_path('params'):
-                joint_prior_residuals(params)
+            fitter.check(params, group)
         self._group_plan = group.plan(driver, drivers)
         self._params = params
         self._objective = None
@@ -616,12 +612,15 @@ def describe(
                 cfg, group.pdescs(), group.constants(),
                 group.function_names())
             fitter = _load_fitter(cfg)
-            if fitter is not None and not group.has_data():
-                with parseutils.config_path('fitter'):
-                    parseutils.warn(
-                        "a fit needs data for every observation, and some "
-                        "have none: the configuration can only be "
-                        "evaluated")
+            if fitter is not None:
+                # (the rules of the start of a fit, as load checks them)
+                fitter.check(params, group)
+                if not group.has_data():
+                    with parseutils.config_path('fitter'):
+                        parseutils.warn(
+                            "a fit needs data for every observation, and "
+                            "some have none: the configuration can only be "
+                            "evaluated")
             # (the names of drivers, checked against the configurations of
             # those declared)
             declared = {None: cfg['driver']} if 'driver' in cfg \

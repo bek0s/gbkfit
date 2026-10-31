@@ -939,7 +939,7 @@ class ComparisonUser(Comparison):
         self._chi2 = 0.0
 
     def gives_residuals(self) -> bool:
-        return self._likelihood.form() == 'residuals'
+        return self._likelihood.gives_residuals()
 
     def evaluate(
             self,
