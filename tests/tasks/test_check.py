@@ -48,6 +48,23 @@ def test_the_sections_of_tasks_are_checked_too(tmp_path):
     assert problem.path == ['mock'] and "'nmock'" in problem.message
 
 
+
+def test_the_files_of_the_sections_of_tasks_are_those_of_the_root(
+        tmp_path, monkeypatch):
+    # (the error map of a mock, next to the configuration, checked from
+    # another directory: it was looked for there, audit 2026-10-31 #33)
+    import astropy.io.fits
+    import numpy as np
+    config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
+    config['mock'] = dict(noise=dict(type='gauss', error='error.fits'))
+    folder = tmp_path / 'project'
+    folder.mkdir()
+    astropy.io.fits.writeto(folder / 'error.fits', np.ones((2, 2, 2)))
+    yaml.dump(config, folder / 'config.yaml')
+    monkeypatch.chdir(tmp_path)
+    problems = check(str(folder / 'config.yaml')).problems
+    assert not [p for p in problems if 'error.fits' in p.message]
+
 def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
     filename = tmp_path / 'config.yaml'
     assert check(str(filename), {str(filename): 'galaxies: [\n'}) \

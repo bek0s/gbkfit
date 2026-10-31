@@ -306,3 +306,24 @@ def test_configurations_call_the_constructor_of_their_options(tmp_path):
 def test_configurations_have_the_options_of_one_constructor(info, message):
     with pytest.raises(parseutils.ConfigError, match=message):
         Beam.load(info)
+
+
+def test_problems_are_collected_per_thread():
+    # (two threads that collect at once: each saw the problems of both,
+    # audit 2026-10-31 #32)
+    import threading
+    barrier = threading.Barrier(2)
+    seen = {}
+
+    def collect(name):
+        with parseutils.collect_problems() as problems:
+            barrier.wait()
+            parseutils.warn(f"warning of {name}")
+            barrier.wait()
+        seen[name] = [problem.message for problem in problems]
+    threads = [threading.Thread(target=collect, args=(n,)) for n in 'ab']
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert seen == {'a': ["warning of a"], 'b': ["warning of b"]}

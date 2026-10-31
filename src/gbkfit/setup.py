@@ -562,6 +562,10 @@ class Description:
     sources : dict
         The files of the pieces of its project that it names (see
         gbkfit.project.Resolved).
+    root : str or None
+        The directory that its relative paths are relative to (see load),
+        if it could be read: that of the sections that tasks load (e.g.
+        'mock').
     """
     problems: tuple[parseutils.Problem, ...]
     config: dict[str, Any] | None
@@ -569,6 +573,7 @@ class Description:
     params: ParamSpace | None
     fitter: Fitter | None
     sources: dict[str, Any]
+    root: str | None = None
 
 
 def describe(
@@ -628,7 +633,8 @@ def describe(
             _load_workers(cfg, declared, DriverHost())
     return Description(
         tuple(problems), None if file is None else file.config, group,
-        params, fitter, {} if file is None else file.sources)
+        params, fitter, {} if file is None else file.sources,
+        None if file is None else file.root)
 
 
 def load(

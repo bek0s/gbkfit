@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from gbkfit.utils.gridutils import SpectralAxis
+from gbkfit.utils.parseutils import ConfigError
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'
@@ -164,7 +165,7 @@ def test_spectral_axis_partly_from_the_data(given, size, rval):
 def test_at_least_one_moment_order():
     # The moments kernel reads past an empty list of orders
     from gbkfit.observation import PixelMoments
-    with pytest.raises(RuntimeError, match="at least one moment order"):
+    with pytest.raises(ConfigError, match="at least one moment order"):
         PixelMoments(
             size=(8, 8), orders=[],
             spectral=SpectralAxis(convention='relativistic'))

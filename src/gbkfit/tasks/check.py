@@ -8,6 +8,7 @@ error, if any, each with its path in the configuration (e.g. to show
 them in place in an editor).
 """
 
+import os
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
@@ -70,8 +71,11 @@ def _check_task_sections(description: gbkfit.setup.Description) -> None:
     """
     from gbkfit.tasks import eval as eval_task, fit as fit_task
     config, group = description.config, description.group
-    if 'mock' in config:
-        with parseutils.config_path('mock'):
-            eval_task._load_mock(config['mock'], group.nobservations())
-    if all(o.data() is not None for o in group.observations()):
-        fit_task._load_bootstrap(config, group, description.params)
+    # (their paths relative to the root of the configuration, as eval
+    # takes them, not to the current directory)
+    with parseutils.paths_relative_to(description.root or os.curdir):
+        if 'mock' in config:
+            with parseutils.config_path('mock'):
+                eval_task._load_mock(config['mock'], group.nobservations())
+        if group.has_data():
+            fit_task._load_bootstrap(config, group, description.params)

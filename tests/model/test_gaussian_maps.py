@@ -12,6 +12,7 @@ from modelutils import group_plan
 
 from gbkfit.observation.observables._moments import MomentsPlan
 from gbkfit.utils.gridutils import SpectralAxis
+from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(
@@ -199,7 +200,7 @@ def test_gaussian_fit_of_bins(driver):
     (dict(method='gauss_hermite', orders=[1, 5]), "between 0 and 4")])
 def test_method_options_are_checked(options, message):
     from gbkfit.observation import PixelMoments
-    with pytest.raises(RuntimeError, match=message):
+    with pytest.raises(ConfigError, match=message):
         PixelMoments(
             size=(8, 8), **options,
             spectral=SpectralAxis(convention='relativistic'))

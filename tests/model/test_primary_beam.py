@@ -15,6 +15,7 @@ from modelutils import group_plan
 from gbkfit.instrument import (
     Instrument, PrimaryBeamAiry, PrimaryBeamGauss, instrument_parser)
 from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(
@@ -152,7 +153,7 @@ def test_the_primary_beam_of_each_channel_attenuates_it(driver):
 
 
 def test_primary_beam_needs_a_positive_fwhm():
-    with pytest.raises(RuntimeError, match="fwhm"):
+    with pytest.raises(ConfigError, match="fwhm"):
         PrimaryBeamGauss(fwhm=0)
 
 
@@ -235,7 +236,6 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
 def test_primary_beam_image_options_are_checked(tmp_path):
     # (an option of a wrong type is an error with its path when loaded)
     from gbkfit.instrument import primary_beam_parser
-    from gbkfit.utils.parseutils import ConfigError
     fitsutils.write_data(
         str(tmp_path / 'pb.fits'), np.ones((4, 4)),
         gridutils.make_grid((4, 4)).coords)

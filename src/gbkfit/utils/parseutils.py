@@ -176,6 +176,10 @@ def _log_problem(error: 'ConfigError', note: str | None = None) -> None:
         _add_location(error, segments, context)
     text = str(error) if note is None else f"{error}; {note}"
     _log.warning(text, extra=dict(config_problem=error))
+    if (problems := _problems.get()) is not None:
+        severity = 'error' if isinstance(error, UnknownNamesError) \
+            else 'warning'
+        problems.append(_problem(severity, error))
 
 
 class Problem(NamedTuple):
@@ -203,33 +207,20 @@ def collect_problems() -> Iterator[list[Problem]]:
         The problems, as they come.
     """
     problems: list[Problem] = []
-    handler = _ProblemHandler(problems)
-    logger = logging.getLogger('gbkfit')
-    logger.addHandler(handler)
+    token = _problems.set(problems)
     try:
         yield problems
     except ConfigError as e:
         problems.append(_problem('error', e))
     finally:
-        logger.removeHandler(handler)
+        _problems.reset(token)
 
 
-class _ProblemHandler(logging.Handler):
-    """
-    The handler of the warnings about a configuration logged (see warn),
-    and its unknown names, as errors (see report_unknown), which adds them
-    to a list of problems.
-    """
-
-    def __init__(self, problems: list[Problem]):
-        super().__init__(logging.WARNING)
-        self._problems = problems
-
-    def emit(self, record: logging.LogRecord) -> None:
-        if (error := getattr(record, 'config_problem', None)) is not None:
-            severity = 'error' if isinstance(error, UnknownNamesError) \
-                else 'warning'
-            self._problems.append(_problem(severity, error))
+# The problems collected in this context (thread or task), if any (see
+# collect_problems): per context, as strict mode, so that configurations
+# loaded at once in two threads do not collect those of each other
+_problems: contextvars.ContextVar[list[Problem] | None] = \
+    contextvars.ContextVar('gbkfit_problems', default=None)
 
 
 def _problem(
@@ -241,9 +232,11 @@ def _problem(
     return Problem(severity, list(error.path), message)
 
 
-class ConfigError(RuntimeError):
+class ConfigError(Exception):
     """
-    An error in a configuration.
+    An error in a configuration: of what is given, not of a run (not a
+    RuntimeError, which code that goes on past failed runs catches, e.g.
+    the refits of a bootstrap).
 
     Parameters
     ----------

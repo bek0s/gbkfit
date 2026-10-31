@@ -275,7 +275,7 @@ def test_observations_have_their_own_dtype(tmp_path):
 
 
 def test_dataset_steps_must_be_positive():
-    with pytest.raises(RuntimeError, match="step must be positive"):
+    with pytest.raises(ConfigError, match="step must be positive"):
         DatasetPixelBrightness(Data(np.ones((8, 20))), step=(1, -1))
 
 
@@ -362,9 +362,9 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
     from gbkfit.observation import Flat, ObservationSky, PixelBrightness
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
-    with pytest.raises(RuntimeError, match="the data are on the grid"):
+    with pytest.raises(ConfigError, match="the data are on the grid"):
         ObservationSky(PixelBrightness(size=(20, 8)), Flat(), data=data)
-    with pytest.raises(RuntimeError, match="cannot be compared"):
+    with pytest.raises(ConfigError, match="cannot be compared"):
         ObservationSky(PixelBrightness(size=(20, 8)), Flat(), data=moments)
     ObservationSky(PixelBrightness(size=(20, 8), rota=30), Flat(), data=data)
 

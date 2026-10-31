@@ -9,6 +9,7 @@ import scipy.special
 
 import gbkfit.math
 from gbkfit.instrument import *
+from gbkfit.utils.parseutils import ConfigError
 
 
 @pytest.mark.parametrize(
@@ -210,7 +211,6 @@ def test_images_without_their_pixel_size_need_it(tmp_path):
     # A header without celestial (spectral) axes does not give the size
     # of the pixels: it is not taken as 1 arcsec (km/s)
     from astropy.io import fits
-    from gbkfit.utils.parseutils import ConfigError
     fits.writeto(tmp_path / 'psf.fits', np.ones((9, 9)), fits.Header(dict(
         PIXELSCL=0.025)))
     fits.writeto(tmp_path / 'cdelt.fits', np.ones((9, 9)), fits.Header(dict(
@@ -350,7 +350,7 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     (lambda: LSFLorentz(-1), "option 'gamma' must be greater than 0"),
     (lambda: LSFMoffat(1, 0.5), "option 'beta' must be greater than 0.5")])
 def test_invalid_profiles_are_rejected(make, message):
-    with pytest.raises(RuntimeError, match=message):
+    with pytest.raises(ConfigError, match=message):
         make()
 
 
@@ -409,7 +409,7 @@ def test_lsf_sum():
 @pytest.mark.parametrize('weights', [[1], [1, 0], [1, -1]])
 def test_sum_weights_are_checked(weights):
     from gbkfit.instrument import PSFGauss, PSFSum
-    with pytest.raises(RuntimeError, match="positive weight"):
+    with pytest.raises(ConfigError, match="positive weight"):
         PSFSum([PSFGauss(1.0), PSFGauss(2.0)], weights)
 
 

@@ -409,5 +409,5 @@ def test_lenses_from_configurations():
 
 
 def test_deflection_maps_must_match():
-    with pytest.raises(RuntimeError, match="one shape"):
+    with pytest.raises(ConfigError, match="one shape"):
         LensDeflectionMap(np.zeros((4, 4)), np.zeros((4, 5)))

@@ -9,6 +9,7 @@ import copy
 import astropy.constants
 import astropy.units as u
 import gbkfit.params
+from gbkfit.utils.parseutils import ConfigError
 import numpy as np
 import pytest
 from modelutils import group_plan, split_case
@@ -160,7 +161,7 @@ def test_one_line_without_a_rest_is_at_the_velocity_of_the_axis(driver):
 
 def test_lines_need_the_rest_of_the_spectral_axis(driver):
     lines = [dict(name='ha', rest='6562.8 Angstrom')]
-    with pytest.raises(RuntimeError, match="need the rest"):
+    with pytest.raises(ConfigError, match="need the rest"):
         evaluate(
             driver, galaxy_of(with_lines(COMPONENT, lines)), scube(None),
             PROPERTIES)

@@ -13,6 +13,8 @@ import pytest
 import ruamel.yaml
 
 from gbkfit.model import Extras
+from gbkfit.params import ModelEvaluationError
+from gbkfit.utils.parseutils import ConfigError
 from modelutils import config_group_plan
 
 
@@ -241,7 +243,7 @@ def test_mcdisk_cflux_must_be_positive():
 def test_mcdisk_of_too_many_clouds_is_an_error(driver):
     # The kernels count the clouds in int32: a disk that needs more (here
     # about 1.6e11) is an error (it was an empty model)
-    with pytest.raises(RuntimeError, match="larger cflux"):
+    with pytest.raises(ModelEvaluationError, match="larger cflux"):
         evaluate_disk('mcdisk', driver.type(), clouds(1e-9))
 
 def test_mcdisk_without_clouds(driver):
@@ -468,7 +470,7 @@ def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
     component = dict(density=dict(
         ptraits=dict(type='mixture_moffat', nblobs=2),
         htraits=dict(type='sech2', zmax=8)))
-    with pytest.raises(RuntimeError, match=r"'pt_b\[1\]' is 0.9, outside"):
+    with pytest.raises(ConfigError, match=r"'pt_b\[1\]' is 0.9, outside"):
         evaluate_disk('mcdisk', driver.type(), component,
                       BLOBS | dict(pt_b=[2.0, 0.9]))
 
