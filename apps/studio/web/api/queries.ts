@@ -3,6 +3,7 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, data } from './client';
 import { decodeFrame } from './frames';
+import type { components } from './schema';
 
 export const keys = {
   projects: ['projects'],
@@ -129,6 +130,24 @@ export function useMoments(path: string, hdu: number, snr: number, enabled: bool
 
 export function useJobs() {
   return useQuery({ queryKey: keys.jobs, queryFn: () => data(api.GET('/api/v1/jobs')) });
+}
+
+// A job (refreshed as its state changes, by the events of the server)
+export function useJob(id: string | null) {
+  return useQuery({
+    queryKey: [...keys.jobs, id ?? ''],
+    enabled: id !== null,
+    queryFn: () => data(api.GET('/api/v1/jobs/{id_}', { params: { path: { id_: id ?? '' } } })),
+  });
+}
+
+// Run a task of the library as a job of the server; resolves to the job
+export function useSubmitJob() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (job: components['schemas']['JobRequest']) => data(api.POST('/api/v1/jobs', { body: job })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.jobs }),
+  });
 }
 
 // Make a project in a folder of the workspace

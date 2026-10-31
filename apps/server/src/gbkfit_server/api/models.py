@@ -123,7 +123,10 @@ class JobRequest(BaseModel):
     gbkfit.tasks), with their paths relative to the workspace. eval and
     fit need a configuration ('config'), and write their run in the runs
     of its setup, unless they give its folder ('output_dir'); resume
-    needs the folder of the run of the fit ('output_dir').
+    needs the folder of the run of the fit ('output_dir'); prep needs the
+    folder of the prepared files ('output_dir'), where they are kept as
+    imported files are (an identical file is reused; a name taken is
+    numbered).
     """
     task: Literal[TASKS]
     options: dict[str, Any] = {}
@@ -131,9 +134,10 @@ class JobRequest(BaseModel):
 
 class JobInfo(BaseModel):
     """
-    A job: its id, task and options, its state, its run, when it was
-    created, started and ended, the exit status of its process, and the
-    end of its log.
+    A job: its id, task and options, its state, its run, the files that
+    a job of prep prepared (by the options of their files, e.g. file_d),
+    when it was created, started and ended, the exit status of its
+    process, and the end of its log.
     """
     id: str
     task: str
@@ -142,6 +146,7 @@ class JobInfo(BaseModel):
     state: Literal[
         'queued', 'running', 'complete', 'failed', 'stopped', 'cancelled']
     run: str | None
+    files: dict[str, str] | None
     started: str | None
     ended: str | None
     status: int | None

@@ -3,8 +3,9 @@
 // the errors can be one value for all the data instead) and what GBKFIT
 // reads from their headers, with the fixes it takes (axes of length 1 left
 // out; the convention of velocities that a header leaves ambiguous). A
-// new one is named, given its files and added to the project, once
-// nothing stops it; one of the project is shown as it is.
+// new one is named, given its files (which prep can prepare, see Prepare)
+// and added to the project, once nothing stops it; one of the project is
+// shown as it is.
 import { useRef, useState } from 'react';
 import { upload, type ArrayInfo } from '../api/client';
 import {
@@ -20,6 +21,7 @@ import { FilePicker, joinPath } from '../components/FilePicker';
 import { significant } from '../components/format';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
 import { useStudio } from '../studio';
+import { Prepare, type PrepFile, type Prepared } from './Prepare';
 
 type Role = 'data' | 'error' | 'mask';
 
@@ -152,6 +154,11 @@ function kept(array: ArrayInfo): number[] {
   return array.shape.filter((size) => size > 1);
 }
 
+// The types of the axes of an array without those of length 1
+function keptAxes(array: ArrayInfo): string[] {
+  return array.axes.filter((_, i) => array.shape[i] > 1);
+}
+
 // The likeliest array of a file for a role: for the data, the first with
 // three axes (a cube); for their errors and mask, the first of the shape
 // of the data
@@ -234,8 +241,30 @@ function fromBlock(options: Record<string, unknown>, project: string): Sources {
   return { files, errorValue, velocity };
 }
 
+// A file of a role as prep takes it: its path, or its path and its array
+// if the file has others
+function prepFile(sources: Sources, arrays: Arrays, role: Role): PrepFile | null {
+  const chosen = sources.files[role];
+  const array = arrays.found[role];
+  const inFile = arrays.inFile[role] ?? [];
+  if (chosen === undefined || array === undefined) return null;
+  return inFile.length === 1 ? chosen.file : { file: chosen.file, hdu: arrayRef(inFile, array) };
+}
+
+// The sources of a dataset whose files were prepared: its errors are those
+// prepared (of a file, or of the noise), or else stay one value; the
+// prepared header states the convention of the velocities
+function withPrepared(sources: Sources, prepared: Prepared): Sources {
+  const file = (path: string | undefined) => (path === undefined ? undefined : { file: path });
+  return {
+    files: { data: file(prepared.file_d), error: file(prepared.file_e), mask: file(prepared.file_m) },
+    errorValue: prepared.file_e === undefined ? sources.errorValue : null,
+    velocity: null,
+  };
+}
+
 // The cube of a dataset, and at the side its files (editable when it
-// changes them) and what GBKFIT reads from them
+// changes them, and then preparable), and what GBKFIT reads from them
 function DatasetBody({
   project,
   sources,
@@ -267,6 +296,20 @@ function DatasetBody({
       <div className="col">
         <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
         <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
+        {onChange && sources.files.data !== undefined && data !== undefined && cube?.length === 3 && (
+          <Prepare
+            key={sources.files.data.file}
+            project={project}
+            data={data}
+            files={{
+              file_d: prepFile(sources, arrays, 'data')!,
+              file_e: sources.errorValue === null ? prepFile(sources, arrays, 'error') : null,
+              file_m: prepFile(sources, arrays, 'mask'),
+            }}
+            velocity={sources.velocity}
+            onPrepared={(prepared) => onChange(withPrepared(sources, prepared))}
+          />
+        )}
       </div>
     </div>
   );
@@ -496,7 +539,7 @@ function Facts({
             <>
               <dt>spectral</dt>
               <dd>
-                {array.axes[array.axes.length - 1] || 'no type'}
+                {keptAxes(array)[2] || 'no type'}
                 {array.step && array.step.length === 3 && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
               </dd>
             </>
@@ -523,7 +566,7 @@ function Facts({
               <>
                 <div>
                   The header does not say whether the velocities are radio or optical (
-                  {array.axes[array.axes.length - 1]} without VELREF; MIRIAD writes radio ones).
+                  {keptAxes(array)[2]} without VELREF; MIRIAD writes radio ones).
                 </div>
                 <div className="seg" role="group" aria-label="The convention of the velocities">
                   {(['radio', 'optical'] as const).map((convention) => (

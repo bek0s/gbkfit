@@ -1417,6 +1417,20 @@
             ],
             "title": "Run"
           },
+          "files": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
           "started": {
             "anyOf": [
               {
@@ -1463,13 +1477,14 @@
           "created",
           "state",
           "run",
+          "files",
           "started",
           "ended",
           "status",
           "output"
         ],
         "title": "JobInfo",
-        "description": "A job: its id, task and options, its state, its run, when it was\ncreated, started and ended, the exit status of its process, and the\nend of its log."
+        "description": "A job: its id, task and options, its state, its run, the files that\na job of prep prepared (by the options of their files, e.g. file_d),\nwhen it was created, started and ended, the exit status of its\nprocess, and the end of its log."
       },
       "JobRequest": {
         "properties": {
@@ -1495,7 +1510,7 @@
           "task"
         ],
         "title": "JobRequest",
-        "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir')."
+        "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir'); prep needs the\nfolder of the prepared files ('output_dir'), where they are kept as\nimported files are (an identical file is reused; a name taken is\nnumbered)."
       },
       "PieceRequest": {
         "properties": {

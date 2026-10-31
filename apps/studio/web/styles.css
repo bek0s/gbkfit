@@ -154,6 +154,18 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 
 /* a cube: one map at a time with its colour bar, the controls under it,
    and the spectrum of a pixel; the map as large as the screen allows */
+.prep-note { margin: 0 0 10px; }
+.prep { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px 14px; font-size: 12.5px; align-items: baseline; }
+.prep-label { font: 11px var(--mono); color: var(--faint); }
+.prep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; }
+.prep input[type="number"], .prep select { width: 64px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); padding: 1px 5px; font: 12px var(--mono); color: var(--fg); }
+.prep select { width: auto; }
+.prep input[type="number"] { appearance: textfield; }
+.prep input[type="number"]::-webkit-inner-spin-button { display: none; }
+.prep input[type="checkbox"] { margin: 0 6px 0 0; vertical-align: -2px; }
+.range { display: inline-flex; align-items: center; gap: 4px; }
+.prep-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; }
+.prep-output { margin: 8px 0 0; white-space: pre-wrap; font: 11.5px var(--mono); }
 .col { min-width: 0; display: grid; gap: 14px; align-content: start; }
 .viewer-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px; }
 .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 8px; padding: 2px; gap: 2px; }

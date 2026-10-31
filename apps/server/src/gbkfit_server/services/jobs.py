@@ -10,6 +10,7 @@ import collections
 import dataclasses
 import datetime
 import json
+import shutil
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import Any, Literal
 
 import gbkfit.outputs
 import gbkfit.project
+import gbkfit.tasks.prep
 
 from .errors import Invalid, NotFound
 from .events import Events
@@ -33,12 +35,16 @@ __all__ = [
 
 # The tasks of the jobs: those that make a run, those that continue one
 # (in the folder of their option output_dir), and those of prep, which
-# write prepared files of data (their options file_d, file_e and file_m)
-# into the folder of their option output_dir (see gbkfit.tasks.prep)
+# prepare files of data (their options file_d, file_e and file_m: a path,
+# or a path and an HDU, {file, hdu}) into the folder of their option
+# output_dir (see gbkfit.tasks.prep)
 _MAKE_RUN = ('eval', 'fit')
 _CONTINUE_RUN = ('resume',)
 _PREPARE = ('prep_pixel_spectra',)
 TASKS = _MAKE_RUN + _CONTINUE_RUN + _PREPARE
+
+# The options of the files that prep prepares
+_FILES = ('file_d', 'file_e', 'file_m')
 
 # How often the run of a job is read, for its events (seconds)
 _POLL = 0.5
@@ -52,8 +58,10 @@ class Job:
     """
     A job: its id, task and options (those of the task, with its paths
     relative to the workspace), its state, its run (relative to the
-    workspace), when it was created, started and ended (ISO 8601, UTC),
-    the exit status of its process, and the end of its log.
+    workspace), the files that a job of prep prepared, by the options of
+    their files (e.g. file_d; relative to the workspace), when it was
+    created, started and ended (ISO 8601, UTC), the exit status of its
+    process, and the end of its log.
     """
     id: str
     task: str
@@ -61,6 +69,7 @@ class Job:
     created: str
     state: State = 'queued'
     run: str | None = None
+    files: dict[str, str] | None = None
     started: str | None = None
     ended: str | None = None
     status: int | None = None
@@ -202,6 +211,8 @@ class Jobs:
         job.output = process.output()
         job.state = 'stopped' if job.id in self._stopping \
             else 'complete' if job.status == 0 else 'failed'
+        if job.task in _PREPARE:
+            self._keep_prepared(job, options)
         job.ended = _now()
         self._publish(job)
 
@@ -210,20 +221,26 @@ class Jobs:
         Return the options of the task of a job, with absolute paths, and
         set its run: for a task that makes a run, a new folder (by default
         in the runs of its setup; see gbkfit.project), which the task
-        writes into.
+        writes into. Prep writes into a folder of its own, in the folder
+        of its output_dir.
 
         Raises
         ------
         Invalid
             If the configuration is not a setup of a project and the
-            options give no folder, or the folder cannot be made.
+            options give no folder, or the folder cannot be made, or a
+            file of prep is not one (see _fits_file).
         """
         options = dict(job.options)
         if job.task in _PREPARE:
-            for key in ('file_d', 'file_e', 'file_m', 'output_dir'):
-                if isinstance(options.get(key), str):
-                    options[key] = self._workspace.path(options[key])
-            return options
+            for key in _FILES:
+                options[key] = self._fits_file(options.get(key))
+            # (prep writes into a folder of its own, whose files are kept
+            # as it ends; see _keep_prepared)
+            folder = Path(self._workspace.path(options['output_dir']))
+            return options | dict(
+                output_dir=str(folder / f'.prep-{job.id}'),
+                output_dir_mode='overwrite')
         if job.task in _CONTINUE_RUN:
             options['output_dir'] = self._workspace.path(options['output_dir'])
             job.run = self._workspace.relative(options['output_dir'])
@@ -241,6 +258,49 @@ class Jobs:
         job.run = self._workspace.relative(path)
         return options | dict(
             config=config, output_dir=path, output_dir_mode='overwrite')
+
+    def _fits_file(self, value: Any) -> str | tuple[str, int | str] | None:
+        """
+        Return a file option of prep (a path relative to the workspace, or
+        {file, hdu}) with its absolute path (see typeutils.FitsFile).
+
+        Raises
+        ------
+        Invalid
+            If it is neither, or out of the workspace.
+        """
+        if value is None or isinstance(value, str):
+            return value and self._workspace.path(value)
+        if isinstance(value, Mapping) and value.keys() == {'file', 'hdu'} \
+                and isinstance(value['hdu'], int | str):
+            return self._workspace.path(value['file']), value['hdu']
+        raise Invalid(
+            f"a file of prep is a path, or a path and an HDU ({{file, hdu}}); "
+            f"not {value!r}")
+
+    def _keep_prepared(self, job: Job, options: dict[str, Any]) -> None:
+        """
+        Keep the files that a complete job of prep wrote in a folder of
+        its own (see _prepare: its options) into that of its option
+        output_dir, as imported files are kept (see Workspace.keep_data),
+        as its files; then remove its folder.
+        """
+        folder = options['output_dir']
+        try:
+            if job.state == 'complete':
+                outputs = gbkfit.tasks.prep.output_files(
+                    folder, *(options[key] for key in _FILES),
+                    options.get('noise_error', False))
+                target = self._workspace.path(job.options['output_dir'])
+                job.files = {
+                    key: self._workspace.keep_data(output, target)
+                    for key, output in zip(_FILES, outputs)
+                    if output is not None}
+        except (Invalid, OSError) as e:
+            job.state = 'failed'
+            job.output += f"\ncannot keep the prepared files: {e}"
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
 
     async def _watch(self, job: Job) -> None:
         """

@@ -4,6 +4,7 @@ project, a job and its run, and a live session.
 """
 
 import json
+import os
 import pathlib
 import time
 
@@ -244,19 +245,35 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
         CDELT2=1 / 3600, CTYPE3='VRAD', CDELT3=10000, CUNIT3='m/s'))
     values = np.full((5, 3, 4), -1, np.float32)
     values[2] = 1
-    fits.writeto(pathlib.Path(root, 'study/data/cube.fits'), values, header)
-    job = client.post('/api/v1/jobs', json=dict(
-        task='prep_pixel_spectra', options=dict(
-            file_d='study/data/cube.fits', file_e=None, file_m=None,
-            roi_spat=None, roi_spec=None, clip_min=0, clip_max=None,
-            ccl_lcount=None, ccl_pcount=None, ccl_lratio=None,
-            sclip_sigma=None, sclip_iters=None, minify=False, nanpad=None,
-            dtype='float32', output_dir='study/data'))).json()
-    for _ in range(600):
-        job = client.get(f"/api/v1/jobs/{job['id']}").json()
-        if job['state'] not in ('queued', 'running'):
-            break
-        time.sleep(0.1)
-    assert job['state'] == 'complete', job['output']
+    fits.HDUList([fits.PrimaryHDU(values, header), fits.ImageHDU(
+        np.ones_like(values), name='STAT')]).writeto(
+            pathlib.Path(root, 'study/data/cube.fits'))
+
+    def prepare(clip_min):
+        job = client.post('/api/v1/jobs', json=dict(
+            task='prep_pixel_spectra', options=dict(
+                file_d='study/data/cube.fits',
+                file_e=dict(file='study/data/cube.fits', hdu='STAT'),
+                file_m=None, roi_spat=None, roi_spec=None,
+                clip_min=clip_min, clip_max=None, ccl_lcount=None,
+                ccl_pcount=None, ccl_lratio=None, sclip_sigma=None,
+                sclip_iters=None, minify=False, nanpad=None,
+                dtype='float32', output_dir='study/data'))).json()
+        for _ in range(600):
+            job = client.get(f"/api/v1/jobs/{job['id']}").json()
+            if job['state'] not in ('queued', 'running'):
+                break
+            time.sleep(0.1)
+        assert job['state'] == 'complete', job['output']
+        return job['files']
+    assert prepare(0) == dict(
+        file_d='study/data/prep_cube.fits',
+        file_e='study/data/prep_cube_STAT.fits')
     prepared = fits.getdata(pathlib.Path(root, 'study/data/prep_cube.fits'))
     assert np.isnan(prepared[0]).all() and (prepared[2] == 1).all()
+    # (prepared again, the same files are kept; others are numbered)
+    assert prepare(0)['file_d'] == 'study/data/prep_cube.fits'
+    assert prepare(None)['file_d'] == 'study/data/prep_cube-2.fits'
+    assert sorted(os.listdir(pathlib.Path(root, 'study/data'))) == [
+        'cube.fits', 'prep_cube-2.fits', 'prep_cube.fits',
+        'prep_cube_STAT-2.fits', 'prep_cube_STAT.fits']

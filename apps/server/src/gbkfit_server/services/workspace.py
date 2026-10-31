@@ -345,6 +345,22 @@ class Workspace:
             raise
         return self._keep(temporary, name)
 
+    def keep_data(self, filename: str, folder: str) -> str:
+        """
+        Move a new file of data (e.g. one that prep wrote) into a folder,
+        by its name, as imported files are kept (see _keep), and return
+        its path.
+
+        Raises
+        ------
+        Invalid
+            If it is not a file of data that GBKFIT reads.
+        """
+        name = Path(filename).name
+        temporary = self._temporary_data(Path(folder), name)
+        os.replace(filename, temporary)
+        return self._keep(temporary, name)
+
     def _data_folder(self, project: str) -> Path:
         """
         Return the folder data of a project.

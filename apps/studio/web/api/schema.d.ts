@@ -619,9 +619,10 @@ export interface components {
         };
         /**
          * JobInfo
-         * @description A job: its id, task and options, its state, its run, when it was
-         *     created, started and ended, the exit status of its process, and the
-         *     end of its log.
+         * @description A job: its id, task and options, its state, its run, the files that
+         *     a job of prep prepared (by the options of their files, e.g. file_d),
+         *     when it was created, started and ended, the exit status of its
+         *     process, and the end of its log.
          */
         JobInfo: {
             /** Id */
@@ -641,6 +642,10 @@ export interface components {
             state: "queued" | "running" | "complete" | "failed" | "stopped" | "cancelled";
             /** Run */
             run: string | null;
+            /** Files */
+            files: {
+                [key: string]: string;
+            } | null;
             /** Started */
             started: string | null;
             /** Ended */
@@ -656,14 +661,17 @@ export interface components {
          *     gbkfit.tasks), with their paths relative to the workspace. eval and
          *     fit need a configuration ('config'), and write their run in the runs
          *     of its setup, unless they give its folder ('output_dir'); resume
-         *     needs the folder of the run of the fit ('output_dir').
+         *     needs the folder of the run of the fit ('output_dir'); prep needs the
+         *     folder of the prepared files ('output_dir'), where they are kept as
+         *     imported files are (an identical file is reused; a name taken is
+         *     numbered).
          */
         JobRequest: {
             /**
              * Task
              * @enum {string}
              */
-            task: "eval" | "fit" | "resume";
+            task: "eval" | "fit" | "resume" | "prep_pixel_spectra";
             /**
              * Options
              * @default {}
