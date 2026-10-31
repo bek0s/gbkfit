@@ -274,6 +274,13 @@ def test_radial_nodes_start_at_the_centre():
             None, None, None, [1, 2, 3], None, 'linear')
 
 
+
+def test_a_ring_option_beside_another_set_is_refused():
+    # (rnsep beside rnodes was ignored silently: audit 2026-10-31 #30b)
+    with pytest.raises(parseutils.ConfigError, match="alone"):
+        parse_component_rnode_args(
+            None, 0.5, None, [0, 1, 2], None, 'linear')
+
 def test_radial_step_can_be_half_the_node_separation():
     # (half of 0.19999999999999996, the separation as it rounds)
     args = parse_component_rnode_args(

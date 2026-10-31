@@ -122,19 +122,23 @@ def parse_nodes(
     Return the nodes given by one of: nodes; nmax and nsep (from 0 every
     nsep, to the first node at or beyond nmax); nmax and nlen (nlen nodes
     from 0 to nmax). The prefix names the options in messages (e.g. 'r'
-    for rnodes). Raise ConfigError unless exactly one of them is given,
-    or the nodes are not at least two, from 0, ascending and unique.
+    for rnodes). Raise ConfigError unless exactly one of them is given
+    (alone), or the nodes are not at least two, from 0, ascending and
+    unique.
     """
-    nodes_list = nodes is not None
-    nodes_arange = [nmax, nsep].count(None) == 0
-    nodes_linspace = [nmax, nlen].count(None) == 0
-    if [nodes_list, nodes_arange, nodes_linspace].count(True) != 1:
+    # (exactly one set, alone: an option beside another set would be
+    # ignored silently)
+    given = {name for name, value in (
+        ('nodes', nodes), ('nmax', nmax), ('nsep', nsep), ('nlen', nlen))
+        if value is not None}
+    if given not in ({'nodes'}, {'nmax', 'nsep'}, {'nmax', 'nlen'}):
         raise ConfigError(
-            f"only one of the following sets of options "
-            f"must be defined: "
-            f"(1) {prefix}nodes; "
-            f"(2) {prefix}nmax, {prefix}nsep; "
-            f"(3) {prefix}nmax, {prefix}nlen")
+            f"exactly one of the following sets of options must be given, "
+            f"alone: (1) {prefix}nodes; (2) {prefix}nmax, {prefix}nsep; "
+            f"(3) {prefix}nmax, {prefix}nlen; given: "
+            f"{sorted(prefix + name for name in given)}")
+    nodes_arange = given == {'nmax', 'nsep'}
+    nodes_linspace = given == {'nmax', 'nlen'}
     if (nodes_arange or nodes_linspace) and not 0 < nmax:
         raise ConfigError(
             f"the following expression must be true: 0 < {prefix}nmax")
@@ -145,7 +149,7 @@ def parse_nodes(
     if nlen is not None and not 2 <= nlen:
         raise ConfigError(
             f"the following expression must be true: "
-            f"2 =< {prefix}nlen")
+            f"2 <= {prefix}nlen")
     if nodes_arange:
         # From 0 every nsep, to the first node at or beyond nmax; the
         # count tolerates the rounding of nmax / nsep, which made
