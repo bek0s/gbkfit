@@ -1478,7 +1478,8 @@
             "enum": [
               "eval",
               "fit",
-              "resume"
+              "resume",
+              "prep_pixel_spectra"
             ],
             "title": "Task"
           },

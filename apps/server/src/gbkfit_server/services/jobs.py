@@ -31,11 +31,14 @@ __all__ = [
 ]
 
 
-# The tasks of the jobs: those that make a run, and those that continue
-# one (in the folder of their option output_dir)
+# The tasks of the jobs: those that make a run, those that continue one
+# (in the folder of their option output_dir), and those of prep, which
+# write prepared files of data (their options file_d, file_e and file_m)
+# into the folder of their option output_dir (see gbkfit.tasks.prep)
 _MAKE_RUN = ('eval', 'fit')
 _CONTINUE_RUN = ('resume',)
-TASKS = _MAKE_RUN + _CONTINUE_RUN
+_PREPARE = ('prep_pixel_spectra',)
+TASKS = _MAKE_RUN + _CONTINUE_RUN + _PREPARE
 
 # How often the run of a job is read, for its events (seconds)
 _POLL = 0.5
@@ -190,9 +193,11 @@ class Jobs:
         self._processes[job.id] = process
         job.state, job.started = 'running', _now()
         self._publish(job)
-        watching = asyncio.create_task(self._watch(job))
+        # (prep makes no run to watch)
+        watching = asyncio.create_task(self._watch(job)) if job.run else None
         job.status = await process.wait()
-        watching.cancel()
+        if watching is not None:
+            watching.cancel()
         del self._processes[job.id]
         job.output = process.output()
         job.state = 'stopped' if job.id in self._stopping \
@@ -214,6 +219,11 @@ class Jobs:
             options give no folder, or the folder cannot be made.
         """
         options = dict(job.options)
+        if job.task in _PREPARE:
+            for key in ('file_d', 'file_e', 'file_m', 'output_dir'):
+                if isinstance(options.get(key), str):
+                    options[key] = self._workspace.path(options[key])
+            return options
         if job.task in _CONTINUE_RUN:
             options['output_dir'] = self._workspace.path(options['output_dir'])
             job.run = self._workspace.relative(options['output_dir'])

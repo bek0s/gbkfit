@@ -236,3 +236,27 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     assert client.get(
         f'/api/v1/views/channel/{path}', params=query | dict(channel=5)
     ).status_code == 400
+
+
+def test_a_job_prepares_a_cube_into_the_project(client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3='VRAD', CDELT3=10000, CUNIT3='m/s'))
+    values = np.full((5, 3, 4), -1, np.float32)
+    values[2] = 1
+    fits.writeto(pathlib.Path(root, 'study/data/cube.fits'), values, header)
+    job = client.post('/api/v1/jobs', json=dict(
+        task='prep_pixel_spectra', options=dict(
+            file_d='study/data/cube.fits', file_e=None, file_m=None,
+            roi_spat=None, roi_spec=None, clip_min=0, clip_max=None,
+            ccl_lcount=None, ccl_pcount=None, ccl_lratio=None,
+            sclip_sigma=None, sclip_iters=None, minify=False, nanpad=None,
+            dtype='float32', output_dir='study/data'))).json()
+    for _ in range(600):
+        job = client.get(f"/api/v1/jobs/{job['id']}").json()
+        if job['state'] not in ('queued', 'running'):
+            break
+        time.sleep(0.1)
+    assert job['state'] == 'complete', job['output']
+    prepared = fits.getdata(pathlib.Path(root, 'study/data/prep_cube.fits'))
+    assert np.isnan(prepared[0]).all() and (prepared[2] == 1).all()
