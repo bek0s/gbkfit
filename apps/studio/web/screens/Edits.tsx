@@ -10,7 +10,8 @@ import type { ArrayInfo } from '../api/client';
 import type { Velocity } from '../api/queries';
 import { FoldCard } from '../components/FoldCard';
 import { significant } from '../components/format';
-import { RangeSlider } from '../components/RangeSlider';
+import { Check, NumberField } from '../components/ui/inputs';
+import { ValueRange, ValueSlider } from '../components/ui/sliders';
 
 // A file as prep takes it: its path, or its path and its array
 export type PrepFile = string | { file: string; hdu: string | number };
@@ -241,28 +242,31 @@ export function EditsCard({
   const noise = data.rms !== null && data.rms > 0 ? data.rms : null;
   const spectral = spectralKind(data);
   const lineUnit = edits.lineUnit || (spectral ? LINE_UNITS[spectral][0] : '');
-  // (a crop is clamped to the cube as its field is left)
-  const crop = (key: 'x' | 'y' | 'channels', label: string, first: number, last: number, hint: string) => (
+  // (a crop is clamped to the cube as its fields are left, the first before
+  // the last)
+  const crop = (key: 'x' | 'y' | 'channels', label: string, first: number, last: number, unit: string) => (
     <>
       <span className="edit-label">{label}</span>
       <span className="edit-range" onBlur={() => set({ [key]: clampedCrop(edits[key], last - first + 1, first) })}>
-        <input
-          type="number"
+        <NumberField
           value={edits[key][0]}
+          min={first}
+          max={last}
           placeholder={String(first)}
-          aria-label={`The first of ${label}`}
-          onChange={(event) => set({ [key]: [event.target.value, edits[key][1]] })}
+          label={`The first of ${label}`}
+          onChange={(text) => set({ [key]: [text, edits[key][1]] })}
         />
         <span>–</span>
-        <input
-          type="number"
+        <NumberField
           value={edits[key][1]}
+          min={first}
+          max={last}
           placeholder={String(last)}
-          aria-label={`The last of ${label}`}
-          onChange={(event) => set({ [key]: [edits[key][0], event.target.value] })}
+          label={`The last of ${label}`}
+          onChange={(text) => set({ [key]: [edits[key][0], text] })}
         />
       </span>
-      <span className="edit-unit">{hint}</span>
+      <span className="edit-unit">{unit}</span>
     </>
   );
   // The value of a slider in units of the noise, in the unit of the data
@@ -272,12 +276,12 @@ export function EditsCard({
     const number = value(text);
     return number === null || Number.isNaN(number) || noise === null ? null : number / noise;
   };
-  const number = (key: 'below' | 'sigma' | 'regions' | 'pixels' | 'ratio' | 'pad', label: string, unit: string, title?: string) => (
+  const number = (key: 'sigma' | 'regions' | 'pixels' | 'ratio' | 'pad', label: string, unit: string, title?: string) => (
     <>
       <span className="edit-label" title={title}>
         {label}
       </span>
-      <input type="number" step="any" value={edits[key]} aria-label={label} title={title} onChange={(event) => set({ [key]: event.target.value })} />
+      <NumberField value={edits[key]} label={label} title={title} onChange={(text) => set({ [key]: text })} />
       <span className="edit-unit">{unit}</span>
     </>
   );
@@ -311,24 +315,28 @@ export function EditsCard({
             <span className="edit-label" title="The velocities of the channels are measured from the line at the redshift">
               line
             </span>
-            <input type="number" step="any" value={edits.line} aria-label="The rest of the line" onChange={(event) => set({ line: event.target.value })} />
+            <NumberField value={edits.line} label="The rest of the line" onChange={(text) => set({ line: text })} />
             <select className="edit-unit" value={lineUnit} aria-label="The unit of the line" onChange={(event) => set({ lineUnit: event.target.value })}>
               {LINE_UNITS[spectral].map((unit) => (
                 <option key={unit}>{unit}</option>
               ))}
             </select>
             <span className="edit-label">at redshift</span>
-            <input type="number" step="any" value={edits.redshift} placeholder="0" aria-label="The redshift" onChange={(event) => set({ redshift: event.target.value })} />
+            <NumberField value={edits.redshift} placeholder="0" label="The redshift" onChange={(text) => set({ redshift: text })} />
             <span />
           </>
         )}
         {!hasErrorFile && (
           <>
             <div className="edit-group">errors</div>
-            <label className="edit-check" title="The robust noise of the negative values of each channel, before any are left out">
-              <input type="checkbox" checked={edits.noise} onChange={(event) => set({ noise: event.target.checked })} />
-              from the noise of each channel
-            </label>
+            <div className="edit-check">
+              <Check
+                checked={edits.noise}
+                label="from the noise of each channel"
+                title="The robust noise of the negative values of each channel, before any are left out"
+                onChange={(noise) => set({ noise })}
+              />
+            </div>
           </>
         )}
         <details className="edit-more" open={leaveOut} onToggle={(event) => setLeaveOut(event.currentTarget.open)}>
@@ -338,32 +346,18 @@ export function EditsCard({
               keep values
             </span>
             <span className="edit-range">
-              <input
-                type="number"
-                step="any"
-                value={edits.below}
-                placeholder="−∞"
-                aria-label="Keep the values from"
-                onChange={(event) => set({ below: event.target.value })}
-              />
+              <NumberField value={edits.below} placeholder="−∞" label="Keep the values from" onChange={(below) => set({ below })} />
               <span>–</span>
-              <input
-                type="number"
-                step="any"
-                value={edits.above}
-                placeholder="∞"
-                aria-label="Keep the values up to"
-                onChange={(event) => set({ above: event.target.value })}
-              />
+              <NumberField value={edits.above} placeholder="∞" label="Keep the values up to" onChange={(above) => set({ above })} />
             </span>
             <span className="edit-unit">{data.unit ?? ''}</span>
             {noise !== null && (
               <div className="edit-wide">
-                <RangeSlider
+                <ValueRange
                   min={-3}
                   max={15}
                   step={0.1}
-                  values={[inNoise(edits.below), inNoise(edits.above)]}
+                  value={[inNoise(edits.below), inNoise(edits.above)]}
                   mark={0}
                   format={(at) => `${significant(at, 2)}σ`}
                   label="The values kept, in units of the noise of the header"
@@ -373,14 +367,14 @@ export function EditsCard({
             )}
             {number('sigma', 'outliers beyond', 'σ of them all', `Sigma clipping of all the values, ${SIGMA_ITERATIONS} times, on both sides`)}
             <div className="edit-wide">
-              <RangeSlider
+              <ValueSlider
                 min={0}
                 max={10}
                 step={0.5}
-                values={[value(edits.sigma) ?? null]}
+                value={value(edits.sigma)}
                 format={(at) => `${at}σ`}
                 label="Sigma clipping: the values beyond this many standard deviations of them all"
-                onChange={([at]) => set({ sigma: at === null ? '' : String(at) })}
+                onChange={(at) => set({ sigma: at === null ? '' : String(at) })}
               />
             </div>
             {edits.sigma.trim() !== '' && (
@@ -395,10 +389,9 @@ export function EditsCard({
             {number('regions', 'largest', 'regions', 'The number of regions kept, the largest first')}
             {number('pixels', 'of at least', 'pixels', 'The pixels of a region kept, at least')}
             {number('ratio', 'and at least', '× the largest', 'The size of a region kept, at least, as a fraction of the largest')}
-            <label className="edit-check" title="Crop the files to the pixels left">
-              <input type="checkbox" checked={edits.minify} onChange={(event) => set({ minify: event.target.checked })} />
-              crop to the pixels left
-            </label>
+            <div className="edit-check">
+              <Check checked={edits.minify} label="crop to the pixels left" title="Crop the files to the pixels left" onChange={(minify) => set({ minify })} />
+            </div>
             {number('pad', 'pad by', 'pixels', 'Pad the files by this many empty pixels on each side')}
           </div>
         </details>

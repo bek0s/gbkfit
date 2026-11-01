@@ -22,9 +22,10 @@ import {
 import { CubeViewer, type Layer } from '../components/CubeViewer';
 import { FilePicker, joinPath } from '../components/FilePicker';
 import { FoldCard } from '../components/FoldCard';
+import { Segments } from '../components/ui/inputs';
+import { SidePanes, type PanesControl } from '../components/ui/panes';
 import { significant } from '../components/format';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
-import { useRemembered } from '../shell/remember';
 import { useStudio } from '../studio';
 import {
   cropsOf,
@@ -421,40 +422,41 @@ function DatasetBody({
   const cube = data && kept(data);
   const isCube = sources.files.data !== undefined && data !== undefined && cube?.length === 3;
   const crops = edits && cube ? cropsOf(edits, cube) : null;
-  // (the column at the side can be hidden, for a larger cube; never without
-  // a cube, whose files it gives)
-  const [side, setSide] = useRemembered('dataset-side', true);
-  const hidden = isCube && !side;
-  return (
-    <div className="screen-body dataset" data-side={hidden ? 'hidden' : 'shown'}>
-      {isCube ? (
-        <CubeViewer
-          key={`${sources.files.data!.file}:${data.index}`}
-          layers={layersOf(sources, arrays)}
-          shape={cube}
-          region={crops?.region}
-          channels={crops?.channels}
-          kept={edits ? keptOf(edits) : null}
-          onRegion={edits && onEdits && ((region) => onEdits(withRegion(edits, region)))}
-          onChannels={edits && onEdits && ((channels) => onEdits(withChannels(edits, channels)))}
-          actions={
-            <button className="ghost side-toggle" aria-pressed={!hidden} title={hidden ? 'Show the panels at the side' : 'Hide the panels at the side'} onClick={() => setSide(!side)}>
-              {hidden ? 'Show panels ◂' : 'Hide panels ▸'}
-            </button>
-          }
-        />
-      ) : (
-        <div className="card viewer-empty">
-          <p className="note">Import or upload the data (at the side) to see them here.</p>
-        </div>
-      )}
-      <div className="col" hidden={hidden}>
-        <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
-        {isCube && edits && onEdits && (
-          <EditsCard data={data} edits={edits} hasErrorFile={sources.files.error !== undefined} onChange={onEdits} />
-        )}
-        <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
+  // (the column at the side is as wide as dragged, and folds away)
+  const viewer = ({ folded, toggle }: PanesControl) =>
+    isCube ? (
+      <CubeViewer
+        key={`${sources.files.data!.file}:${data.index}`}
+        layers={layersOf(sources, arrays)}
+        shape={cube}
+        region={crops?.region}
+        channels={crops?.channels}
+        kept={edits ? keptOf(edits) : null}
+        onRegion={edits && onEdits && ((region) => onEdits(withRegion(edits, region)))}
+        onChannels={edits && onEdits && ((channels) => onEdits(withChannels(edits, channels)))}
+        actions={
+          <button className="ghost side-toggle" aria-pressed={!folded} title={folded ? 'Show the panels at the side' : 'Hide the panels at the side'} onClick={toggle}>
+            {folded ? 'Show panels ◂' : 'Hide panels ▸'}
+          </button>
+        }
+      />
+    ) : (
+      <div className="card viewer-empty">
+        <p className="note">Import or upload the data (at the side) to see them here.</p>
       </div>
+    );
+  const column = (
+    <div className="col">
+      <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
+      {isCube && edits && onEdits && (
+        <EditsCard data={data} edits={edits} hasErrorFile={sources.files.error !== undefined} onChange={onEdits} />
+      )}
+      <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
+    </div>
+  );
+  return (
+    <div className="screen-body dataset">
+      <SidePanes main={viewer} side={column} />
     </div>
   );
 }
@@ -723,18 +725,16 @@ function Facts({
                 The header does not say whether the velocities are radio or optical (
                 {keptAxes(array)[2]} without VELREF; MIRIAD writes radio ones).
               </div>
-              <div className="seg" role="group" aria-label="The convention of the velocities">
-                {(['radio', 'optical'] as const).map((convention) => (
-                  <button
-                    key={convention}
-                    aria-pressed={velocity === convention}
-                    disabled={onVelocity === undefined}
-                    onClick={() => onVelocity?.(convention)}
-                  >
-                    {convention === 'radio' ? 'Radio' : 'Optical'}
-                  </button>
-                ))}
-              </div>
+              <Segments
+                items={(['radio', 'optical'] as const).map((convention) => ({
+                  value: convention,
+                  label: convention === 'radio' ? 'Radio' : 'Optical',
+                  disabled: onVelocity === undefined,
+                }))}
+                value={velocity}
+                label="The convention of the velocities"
+                onChange={(convention) => onVelocity?.(convention)}
+              />
             </>
           )}
         </div>

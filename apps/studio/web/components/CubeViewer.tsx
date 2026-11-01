@@ -18,6 +18,8 @@ import { ColourBar } from './ColourBar';
 import { significant } from './format';
 import { MapView, type Region } from './MapView';
 import { SpectrumPlot } from './SpectrumPlot';
+import { Segments } from './ui/inputs';
+import { StepSlider } from './ui/sliders';
 
 // A cube of a dataset: its data (the first), their errors or their mask;
 // its array in its file, and the unit of its values
@@ -139,13 +141,7 @@ export function CubeViewer({
     <div className="card viewer">
       <div className="card-head viewer-head">
         {layers.length > 1 ? (
-          <div className="seg" role="group" aria-label="The cube shown">
-            {layers.map((l) => (
-              <button key={l.key} aria-pressed={layer.key === l.key} onClick={() => setLayerKey(l.key)}>
-                {l.title}
-              </button>
-            ))}
-          </div>
+          <Segments items={layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The cube shown" />
         ) : (
           <h2>{data.title}</h2>
         )}
@@ -232,7 +228,7 @@ export function CubeViewer({
               <span>
                 channel {channel + 1} / {nchannels}
               </span>
-              <input type="range" min={0} max={nchannels - 1} value={channel} aria-label="Channel" onChange={(event) => setChannel(Number(event.target.value))} />
+              <StepSlider min={0} max={nchannels - 1} value={channel} format={(c) => `channel ${c + 1}`} label="Channel" onChange={setChannel} />
               <span>{plane.data?.spectral == null ? '' : `${significant(plane.data.spectral, 6)} ${plane.data.unit}`}</span>
             </div>
           ) : (
@@ -240,14 +236,14 @@ export function CubeViewer({
               <span title="The moments are of the voxels connected to those above this many times the noise, down to half of it, in the larger regions (0: all of them)">
                 moments of the signal from
               </span>
-              <input
-                type="range"
+              <StepSlider
                 min={0}
                 max={6}
                 step={0.5}
                 value={snr}
-                aria-label="The signal-to-noise ratio of the mask of the moments"
-                onChange={(event) => setSnr(Number(event.target.value))}
+                format={(x) => (x === 0 ? 'all' : `${x}σ`)}
+                label="The signal-to-noise ratio of the mask of the moments"
+                onChange={setSnr}
               />
               <span>{snr === 0 ? 'all the voxels' : `${snr}σ`}</span>
             </div>
