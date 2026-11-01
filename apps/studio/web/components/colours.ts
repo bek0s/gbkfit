@@ -4,9 +4,11 @@
 const SEQUENTIAL = ['--seq0', '--seq1', '--seq2', '--seq3'];
 const DIVERGING = ['--map-neg2', '--map-neg', '--map-mid', '--map-pos', '--map-pos2'];
 
-// The colour (r, g, b) of a token of the page (a hex colour)
+// The colour (r, g, b) of a token of the page (a hex colour, of 6 digits or
+// of 3, as the build shortens some: #fff)
 export function token(name: string): number[] {
-  const hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace('#', '');
+  let hex = getComputedStyle(document.documentElement).getPropertyValue(name).trim().replace('#', '');
+  if (hex.length === 3) hex = [...hex].map((digit) => digit + digit).join('');
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 }
 

@@ -101,6 +101,10 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .screen-body { flex: 1; min-height: 0; display: grid; gap: 14px; align-content: start; padding: 14px 18px 18px; overflow: auto; }
 .card { min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
 .card-head { padding: 11px 14px 8px; }
+.fold-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fold-title { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; padding: 0; color: inherit; }
+.fold-title[aria-expanded="true"] .chevron { transform: rotate(90deg); }
+.card[data-folded="true"] .card-head { padding-bottom: 11px; }
 .card-body { padding: 0 14px 14px; }
 
 /* controls and text */
@@ -131,7 +135,13 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .why { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg); }
 .why::before { content: '!'; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 11px var(--sans); }
 .screen-error { padding: 8px 18px 0; }
-.dataset { grid-template-columns: minmax(0, 1fr) 440px; align-items: start; }
+/* (the cube and the column at its side fill the screen; the column scrolls
+   on its own if it must) */
+.dataset { grid-template-columns: minmax(0, 1fr) 400px; grid-template-rows: minmax(0, 1fr); align-content: stretch; overflow: hidden; }
+.dataset > .col { min-height: 0; overflow: auto; }
+.dataset[data-side="hidden"] { grid-template-columns: minmax(0, 1fr); }
+.dataset > .col[hidden] { display: none; }
+.side-toggle { padding: 2px 10px; font-size: 12px; color: var(--muted); }
 .viewer-empty { display: grid; place-items: center; min-height: 320px; }
 .files { display: grid; gap: 6px; }
 .file-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 4px 10px; }
@@ -152,41 +162,94 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .facts dd { margin: 0; min-width: 0; }
 .problems { margin: 0; padding-left: 16px; color: var(--accent); }
 
-/* a cube: one map at a time with its colour bar, the controls under it,
-   and the spectrum of a pixel; the map as large as the screen allows */
-.prep-note { margin: 0 0 10px; }
-.prep { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px 14px; font-size: 12.5px; align-items: baseline; }
-.prep-label { font: 11px var(--mono); color: var(--faint); }
-.prep-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-width: 0; }
-.prep input[type="number"], .prep select { width: 64px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); padding: 1px 5px; font: 12px var(--mono); color: var(--fg); }
-.prep select { width: auto; }
-.prep input[type="number"] { appearance: textfield; }
-.prep input[type="number"]::-webkit-inner-spin-button { display: none; }
-.prep input[type="checkbox"] { margin: 0 6px 0 0; vertical-align: -2px; }
-.range { display: inline-flex; align-items: center; gap: 4px; }
-.prep-run { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; }
-.prep-output { margin: 8px 0 0; white-space: pre-wrap; font: 11.5px var(--mono); }
+/* the edits of a new cube: rows of a label, an input (or the first and
+   the last of a crop) and a unit, in one grid, so that they line up */
+.edits { display: grid; grid-template-columns: minmax(0, 1fr) 156px 96px; gap: 6px 10px; align-items: center; font-size: 12.5px; }
+.edit-group { grid-column: 1 / -1; margin-top: 8px; font: 600 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.edits > .edit-group:first-child { margin-top: 0; }
+.edit-hint { margin-left: 6px; font: 400 11px var(--sans); letter-spacing: 0; text-transform: none; }
+.edit-label { color: var(--muted); }
+.edits input[type="number"], .edits select { width: 100%; min-width: 0; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); padding: 2px 6px; font: 12px var(--mono); color: var(--fg); text-align: right; appearance: textfield; }
+.edits select { text-align: left; }
+.edits input[type="number"]::-webkit-inner-spin-button { display: none; }
+.edits input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+.edit-range { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 4px; align-items: center; color: var(--faint); }
+.edit-unit { min-width: 0; font: 11.5px var(--mono); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.edit-wide { grid-column: 1 / -1; }
+
+/* a slider of one value or of a range: a track, its fill, its handles (an
+   open one hollow), and the labels of its ends and of its mark */
+.range-slider { padding: 0 7px; }
+.range-track { position: relative; height: 18px; cursor: pointer; touch-action: none; }
+.range-track::before { content: ''; position: absolute; left: 0; right: 0; top: 8px; height: 3px; border-radius: 2px; background: var(--line2); }
+.range-fill { position: absolute; top: 8px; height: 3px; border-radius: 2px; background: var(--accent); }
+.range-mark { position: absolute; top: 4px; width: 1px; height: 11px; background: var(--faint); }
+.range-thumb { position: absolute; top: 3px; width: 13px; height: 13px; margin-left: -6.5px; border: 2px solid var(--panel); border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.range-thumb[data-open="true"] { background: var(--panel); box-shadow: 0 0 0 1px var(--faint); }
+.range-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.range-labels { position: relative; display: flex; justify-content: space-between; height: 14px; font: 10.5px var(--mono); color: var(--faint); }
+.range-labels span[style] { position: absolute; transform: translateX(-50%); }
+.edit-check { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.edit-more { grid-column: 1 / -1; }
+.edit-more > summary { cursor: pointer; }
+.edit-more > summary:hover { color: var(--fg); }
+.edit-more > .edits { margin-top: 6px; }
+.edit-sub { grid-column: 1 / -1; margin-top: 4px; font-size: 12px; color: var(--faint); }
+.edit-warn { grid-column: 1 / -1; margin: 0; padding: 6px 9px; border-left: 3px solid var(--accent); border-radius: 4px; background: var(--sel); font-size: 12px; }
+.edits-note { margin-top: 12px; }
+
+/* a cube: one map at a time with its colour bar, as large as the space
+   left allows; the controls under it, and the spectrum of a pixel */
 .col { min-width: 0; display: grid; gap: 14px; align-content: start; }
+.viewer { display: flex; flex-direction: column; min-height: 0; }
 .viewer-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px; }
+/* (the rail of views and tools at the left of the map, and the map, its
+   controls and the spectrum) */
+.viewer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 14px; padding: 0 14px 12px; }
+.viewer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.rail { min-height: 0; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.rail button { display: flex; align-items: baseline; border: 0; border-radius: 6px; background: transparent; padding: 4px 8px; font-size: 12px; color: var(--muted); text-align: left; white-space: nowrap; }
+.rail button:hover:not(:disabled) { color: var(--fg); background: var(--panel2); }
+.rail button[aria-pressed="true"] { background: var(--sel); color: var(--fg); }
+.rail button:disabled { opacity: .4; }
+.rail .rail-clear { font: 11px var(--mono); color: var(--accent); }
+.rail-label { margin-top: 12px; padding: 0 8px 3px; font: 600 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.rail-label:first-child { margin-top: 2px; }
+.seg button:disabled { opacity: .4; }
+.viewer-stage { flex: 1; min-height: 160px; display: grid; place-items: center; overflow: hidden; }
 .seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 8px; padding: 2px; gap: 2px; }
 .seg button { border: 0; background: transparent; color: var(--muted); border-radius: 6px; padding: 2px 10px; font-size: 12px; }
 .seg button[aria-pressed="true"] { background: var(--sel); color: var(--fg); }
-.viewer-map, .viewer-controls { width: min(100%, calc(100vh - 340px)); margin: 0 auto; }
-.viewer-map { display: grid; grid-template-columns: minmax(0, 1fr) 56px; gap: 10px; }
-.map { position: relative; width: 100%; }
-.map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; }
+.viewer-map { display: grid; grid-template-columns: auto 56px; gap: 10px; }
+.map { position: relative; width: 100%; height: 100%; }
+.map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
+.map[data-drag="pan"] canvas { cursor: default; }
 .map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.map rect { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.map-out { fill: var(--bg); opacity: .62; }
+.map-region { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.map-mark { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .colour-bar { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; justify-items: center; gap: 4px; font: 10.5px var(--mono); color: var(--faint); }
 .colour-bar i { width: 12px; border-radius: 3px; }
 .colour-unit { text-align: center; }
-.viewer-controls { display: grid; grid-template-columns: auto minmax(0, 1fr) 120px; align-items: center; gap: 10px; margin-top: 10px; font: 11.5px var(--mono); color: var(--muted); }
+/* (one height for the controls of channels and of moments, so that the
+   map keeps its size) */
+.viewer-controls { height: 30px; display: grid; grid-template-columns: auto minmax(0, 1fr) 120px; align-items: center; gap: 10px; margin-top: 8px; font: 11.5px var(--mono); color: var(--muted); }
+.order { margin-right: 5px; font: 10.5px var(--mono); color: var(--faint); }
+.viewer-canvas { position: relative; }
+.map-zoom { position: absolute; top: 6px; right: 6px; display: flex; gap: 2px; padding: 2px; border: 1px solid var(--line2); border-radius: 7px; background: color-mix(in srgb, var(--panel) 85%, transparent); }
+.map-zoom button { border: 0; background: transparent; border-radius: 5px; padding: 1px 8px; font: 11px var(--mono); color: var(--muted); }
+.map-zoom button:hover:not(:disabled) { color: var(--fg); background: var(--sel); }
+.map-zoom button:disabled { opacity: .35; }
 .viewer-controls input { accent-color: var(--accent); }
 .viewer-controls span:last-child { text-align: right; }
-.spectrum-head { margin-top: 12px; font: 11.5px var(--mono); color: var(--faint); }
-.spectrum { margin: 4px 0 0; }
-.spectrum svg { display: block; width: 100%; height: auto; background: var(--panel2); border-radius: 4px; cursor: crosshair; }
+.spectrum-head { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font: 11.5px var(--mono); color: var(--faint); }
+.spectrum { position: relative; margin: 4px 0 0; }
+.spectrum-y { position: absolute; left: 6px; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--panel2) 85%, transparent); font: 10.5px var(--mono); color: var(--faint); pointer-events: none; }
+.spectrum-y.top { top: 2px; }
+.spectrum-y.bottom { bottom: 22px; }
+.spectrum svg { display: block; width: 100%; height: 110px; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .spectrum polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.spectrum .out { fill: var(--bg); opacity: .62; }
 .spectrum .zero { stroke: var(--line2); vector-effect: non-scaling-stroke; }
 .spectrum .now { stroke: var(--muted); stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .spectrum figcaption { display: flex; justify-content: space-between; margin-top: 3px; font: 11px var(--mono); color: var(--faint); }
@@ -228,6 +291,9 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 
 @media (max-width: 900px) {
   .home, .dataset { grid-template-columns: minmax(0, 1fr); }
+  .dataset { grid-template-rows: none; overflow: auto; }
+  .dataset > .col { overflow: visible; }
+  .viewer-stage { min-height: 60vh; }
   .step { grid-template-columns: 30px minmax(0, 1fr); }
   .step-actions { grid-column: 2; grid-auto-flow: column; justify-content: start; }
 }

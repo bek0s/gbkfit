@@ -3,25 +3,45 @@
 // the errors can be one value for all the data instead) and what GBKFIT
 // reads from their headers, with the fixes it takes (axes of length 1 left
 // out; the convention of velocities that a header leaves ambiguous). A
-// new one is named, given its files (which prep can prepare, see Prepare)
-// and added to the project, once nothing stops it; one of the project is
+// new one is named, given its files and their edits (see Edits), and
+// added to the project once nothing stops it: of its files as they are,
+// or of the copies that prep edits as it is added. One of the project is
 // shown as it is.
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { upload, type ArrayInfo } from '../api/client';
 import {
   useCreateBlock,
   useDescription,
   useImportData,
+  useJob,
   usePiece,
   useProject,
+  useSubmitJob,
   type Velocity,
 } from '../api/queries';
-import { CubeViewer } from '../components/CubeViewer';
+import { CubeViewer, type Layer } from '../components/CubeViewer';
 import { FilePicker, joinPath } from '../components/FilePicker';
+import { FoldCard } from '../components/FoldCard';
 import { significant } from '../components/format';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
+import { useRemembered } from '../shell/remember';
 import { useStudio } from '../studio';
-import { Prepare, type PrepFile, type Prepared } from './Prepare';
+import {
+  cropsOf,
+  EditsCard,
+  ERROR_KINDS,
+  keptOf,
+  needsPrep,
+  NO_EDITS,
+  prepOptions,
+  withChannels,
+  withRegion,
+  type Edits,
+  type ErrorKind,
+  type PrepFile,
+  type PrepFiles,
+  type Prepared,
+} from './Edits';
 
 type Role = 'data' | 'error' | 'mask';
 
@@ -42,34 +62,70 @@ interface FileArray {
 type Files = Partial<Record<Role, FileArray>>;
 
 // What a dataset is made of: the arrays of files of its roles; for its
-// errors, one value for all the data instead (as typed; null: none); and
-// the convention of its velocities, if its header leaves it ambiguous
+// errors, one value for all the data instead (as typed; null: none), and
+// what their file holds (null: not chosen, guessed from the name of their
+// array; see errorKindOf); and the convention of its velocities, if its
+// header leaves it ambiguous
 interface Sources {
   files: Files;
   errorValue: string | null;
+  errorKind: ErrorKind | null;
   velocity: Velocity | null;
 }
 
-const NO_SOURCES: Sources = { files: {}, errorValue: null, velocity: null };
+const NO_SOURCES: Sources = { files: {}, errorValue: null, errorKind: null, velocity: null };
 
 export function NewDataset({ data }: { data: string }) {
   const { project, go } = useStudio();
   const info = useProject(project);
   const create = useCreateBlock(project ?? '.');
+  const submit = useSubmitJob();
   const kind = dataKind(data);
   const [name, setName] = useState('');
   const [sources, setSources] = useState<Sources>(NO_SOURCES);
+  const [edits, setEdits] = useState<Edits>(NO_EDITS);
+  // The job of prep that edits the files as the dataset is added
+  const [jobId, setJobId] = useState<string | null>(null);
+  const job = useJob(jobId).data;
   const arrays = useArrays(sources);
+  const added = useRef<string | null>(null);
+  // (the errors of an array of the file of the data, named as errors, are
+  // given once for that file; removed, they stay removed)
+  const guessed = useRef<string | null>(null);
+  useEffect(() => {
+    const data = sources.files.data;
+    if (data === undefined || arrays.found.data === undefined || guessed.current === data.file) return;
+    guessed.current = data.file;
+    const errors = errorSibling(arrays);
+    if (errors !== undefined && sources.files.error === undefined && sources.errorValue === null) {
+      setSources({ ...sources, files: { ...sources.files, error: { file: data.file, array: errors } } });
+    }
+  }, [sources, arrays]);
+  const array = arrays.found.data;
+  const prep = project !== null && array !== undefined && needsPrep(edits, array);
+  const request = prep ? prepOptions(edits, prepFiles(sources, arrays), errorKindOf(sources, arrays), array, sources.velocity, project) : null;
+  const finish = (content: Record<string, unknown>) =>
+    create.mutate({ folder: 'datasets', name: name.trim(), content }, { onSuccess: () => go({ kind: 'block', folder: 'datasets', name: name.trim() }) });
+  // (the files edited, the dataset of the copies is added)
+  useEffect(() => {
+    if (kind && project !== null && job?.state === 'complete' && job.files && added.current !== job.id) {
+      added.current = job.id;
+      finish(preparedBlock(kind, job.files, sources, project));
+    }
+  });
   if (kind === undefined || project === null) return null;
   const taken = info.data?.pieces.datasets.includes(name.trim()) ?? false;
   const reason =
     blocker(kind, arrays, sources) ??
+    (typeof request === 'string' ? request : null) ??
     (name.trim() === '' ? 'Name the dataset' : taken ? 'The project has a dataset of that name' : null);
-  const add = () =>
-    create.mutate(
-      { folder: 'datasets', name: name.trim(), content: toBlock(kind, arrays, sources, project) },
-      { onSuccess: () => go({ kind: 'block', folder: 'datasets', name: name.trim() }) },
-    );
+  const busy = submit.isPending || job?.state === 'queued' || job?.state === 'running' || create.isPending;
+  const add = () => {
+    if (request === null) finish(toBlock(kind, arrays, sources, project));
+    else if (typeof request !== 'string') {
+      submit.mutate({ task: 'prep_pixel_spectra', options: request }, { onSuccess: (submitted) => setJobId(submitted.id) });
+    }
+  };
   return (
     <section className="screen">
       <div className="screen-head">
@@ -85,19 +141,39 @@ export function NewDataset({ data }: { data: string }) {
           />
         </div>
         <div className="head-actions">
-          {reason && <span className="why">{reason}</span>}
+          {busy ? (
+            <span className="note">{create.isPending ? 'Adding…' : 'Writing the edited copy…'}</span>
+          ) : (
+            reason && <span className="why">{reason}</span>
+          )}
           <button className="ghost" onClick={() => go({ kind: 'home' })}>
             Cancel
           </button>
-          <button className="primary" disabled={reason !== null || create.isPending} onClick={add}>
+          <button className="primary" disabled={reason !== null || busy} onClick={add}>
             Add to the project
           </button>
         </div>
       </div>
-      {create.error && <p className="error screen-error">{create.error.message}</p>}
-      <DatasetBody project={project} sources={sources} arrays={arrays} onChange={setSources} />
+      {(create.error ?? submit.error) && <p className="error screen-error">{(create.error ?? submit.error)?.message}</p>}
+      {job?.state === 'failed' && <pre className="error screen-error">{lastLines(job.output, 4)}</pre>}
+      <DatasetBody
+        project={project}
+        sources={sources}
+        arrays={arrays}
+        edits={edits}
+        onChange={(changed) => {
+          setSources(changed);
+          // (other files, other edits)
+          if (changed.files.data?.file !== sources.files.data?.file) setEdits(NO_EDITS);
+        }}
+        onEdits={setEdits}
+      />
     </section>
   );
+}
+
+function lastLines(text: string, count: number): string {
+  return text.trimEnd().split('\n').slice(-count).join('\n');
 }
 
 export function Dataset({ name }: { name: string }) {
@@ -170,6 +246,34 @@ function likeliest(role: Role, arrays: ArrayInfo[], data: ArrayInfo | undefined)
   return arrays.find(fits) ?? arrays[0];
 }
 
+// The array of the file of the data that holds their errors, by its name
+// (ERR, ERROR, SIGMA, NOISE, STAT, VAR..., IVAR...), of their shape, if one
+// does (a mask is never guessed: its conventions differ, e.g. a DQ of
+// JWST is 0 where good)
+function errorSibling(arrays: Arrays): string | number | undefined {
+  const data = arrays.found.data;
+  const inFile = arrays.inFile.data ?? [];
+  const found = inFile.find(
+    (a) =>
+      data !== undefined &&
+      a.index !== data.index &&
+      kept(a).join() === kept(data).join() &&
+      /^(ERR|ERROR|ERRORS|SIGMA|NOISE|STAT|VAR|IVAR|INVVAR|INV_VAR)/i.test(a.name ?? ''),
+  );
+  return found && arrayRef(inFile, found);
+}
+
+// What the file of the errors of a dataset holds: as chosen, or else as
+// the name of its array says (variances: STAT of MUSE, VAR_* of JWST;
+// inverse variances: IVAR of MaNGA), or else standard deviations
+function errorKindOf(sources: Sources, arrays: Arrays): ErrorKind {
+  if (sources.errorKind !== null) return sources.errorKind;
+  const name = arrays.found.error?.name ?? '';
+  if (/^(STAT|VAR)/i.test(name)) return 'variance';
+  if (/^(IVAR|INVVAR|INV_VAR)/i.test(name)) return 'inverse_variance';
+  return 'sigma';
+}
+
 function findArray(arrays: ArrayInfo[], array: string | number): ArrayInfo | undefined {
   return typeof array === 'number' ? arrays.find((a) => a.index === array) : arrays.find((a) => a.name === array);
 }
@@ -200,8 +304,9 @@ function blocker(kind: DataKind, arrays: Arrays, sources: Sources): string | nul
 }
 
 // The options of a dataset of the arrays of files (each {file, hdu}, its
-// path relative to the project), its error value and the convention of
-// its velocities
+// path relative to the project), its error value or what the file of its
+// errors holds (unless standard deviations, the default), and the
+// convention of its velocities
 function toBlock(kind: DataKind, arrays: Arrays, sources: Sources, project: string): Record<string, unknown> {
   const prefix = project === '.' ? '' : `${project}/`;
   const options: Record<string, unknown> = { type: kind.type };
@@ -216,13 +321,18 @@ function toBlock(kind: DataKind, arrays: Arrays, sources: Sources, project: stri
       options[role] = { file: chosen.file.slice(prefix.length), hdu: arrayRef(arrays.inFile[role] ?? [], array) };
     }
   }
+  const errorKind = errorKindOf(sources, arrays);
+  if (sources.errorValue === null && options.error !== undefined && errorKind !== 'sigma') {
+    options.error_kind = errorKind;
+  }
   if (sources.velocity !== null) options.spectral = { convention: sources.velocity };
   return options;
 }
 
 // The sources of the options of a dataset: a file, or a file and its
-// array ({file, hdu}), or for the errors a number; and the convention of
-// its velocities
+// array ({file, hdu}), or for the errors a number, and what their file
+// holds (standard deviations unless it says; never guessed); and the
+// convention of its velocities
 function fromBlock(options: Record<string, unknown>, project: string): Sources {
   const files: Files = {};
   for (const { role } of ROLES) {
@@ -236,9 +346,10 @@ function fromBlock(options: Record<string, unknown>, project: string): Sources {
     }
   }
   const errorValue = typeof options.error === 'number' ? String(options.error) : null;
+  const errorKind = ERROR_KINDS.find(({ kind }) => kind === options.error_kind)?.kind ?? 'sigma';
   const convention = (options.spectral as { convention?: unknown } | undefined)?.convention;
   const velocity = convention === 'radio' || convention === 'optical' ? convention : null;
-  return { files, errorValue, velocity };
+  return { files, errorValue, errorKind, velocity };
 }
 
 // A file of a role as prep takes it: its path, or its path and its array
@@ -251,65 +362,98 @@ function prepFile(sources: Sources, arrays: Arrays, role: Role): PrepFile | null
   return inFile.length === 1 ? chosen.file : { file: chosen.file, hdu: arrayRef(inFile, array) };
 }
 
-// The sources of a dataset whose files were prepared: its errors are those
-// prepared (of a file, or of the noise), or else stay one value; the
-// prepared header states the convention of the velocities
-function withPrepared(sources: Sources, prepared: Prepared): Sources {
-  const file = (path: string | undefined) => (path === undefined ? undefined : { file: path });
+// The cubes of a dataset to look at: its data, and the errors and the mask
+// of files (as the data, once described)
+function layersOf(sources: Sources, arrays: Arrays): Layer[] {
+  const layers: Layer[] = [];
+  for (const { role, title } of ROLES) {
+    const chosen = sources.files[role];
+    const array = arrays.found[role];
+    if (chosen !== undefined && array !== undefined) {
+      layers.push({ key: role, title, path: chosen.file, hdu: array.index, unit: array.unit });
+    }
+  }
+  return layers;
+}
+
+// The files of a dataset as prep takes them
+function prepFiles(sources: Sources, arrays: Arrays): PrepFiles {
   return {
-    files: { data: file(prepared.file_d), error: file(prepared.file_e), mask: file(prepared.file_m) },
-    errorValue: prepared.file_e === undefined ? sources.errorValue : null,
-    velocity: null,
+    file_d: prepFile(sources, arrays, 'data')!,
+    file_e: sources.errorValue === null ? prepFile(sources, arrays, 'error') : null,
+    file_m: prepFile(sources, arrays, 'mask'),
   };
 }
 
-// The cube of a dataset, and at the side its files (editable when it
-// changes them, and then preparable), and what GBKFIT reads from them
+// The options of a dataset of the files that prep edited (paths of the
+// workspace): its errors are those prepared (of a file, or of the noise;
+// standard deviations), or else stay one value; the prepared header states
+// the convention of the velocities
+function preparedBlock(kind: DataKind, prepared: Prepared, sources: Sources, project: string): Record<string, unknown> {
+  const prefix = project === '.' ? '' : `${project}/`;
+  const relative = (path: string) => (path.startsWith(prefix) ? path.slice(prefix.length) : path);
+  const options: Record<string, unknown> = { type: kind.type, data: relative(prepared.file_d!) };
+  if (prepared.file_e !== undefined) options.error = relative(prepared.file_e);
+  else if (sources.errorValue !== null) options.error = Number(sources.errorValue);
+  if (prepared.file_m !== undefined) options.mask = relative(prepared.file_m);
+  return options;
+}
+
+// The cube of a dataset, and at the side its files and what GBKFIT reads
+// from them, and the edits of a new one; its files and edits can change
+// when it says how
 function DatasetBody({
   project,
   sources,
   arrays,
+  edits,
   onChange,
+  onEdits,
 }: {
   project: string;
   sources: Sources;
   arrays: Arrays;
+  edits?: Edits;
   onChange?: (sources: Sources) => void;
+  onEdits?: (edits: Edits) => void;
 }) {
   const data = arrays.found.data;
   const cube = data && kept(data);
+  const isCube = sources.files.data !== undefined && data !== undefined && cube?.length === 3;
+  const crops = edits && cube ? cropsOf(edits, cube) : null;
+  // (the column at the side can be hidden, for a larger cube; never without
+  // a cube, whose files it gives)
+  const [side, setSide] = useRemembered('dataset-side', true);
+  const hidden = isCube && !side;
   return (
-    <div className="screen-body dataset">
-      {sources.files.data !== undefined && data !== undefined && cube?.length === 3 ? (
+    <div className="screen-body dataset" data-side={hidden ? 'hidden' : 'shown'}>
+      {isCube ? (
         <CubeViewer
-          key={`${sources.files.data.file}:${data.index}`}
-          path={sources.files.data.file}
-          hdu={data.index}
+          key={`${sources.files.data!.file}:${data.index}`}
+          layers={layersOf(sources, arrays)}
           shape={cube}
-          unit={data.unit}
+          region={crops?.region}
+          channels={crops?.channels}
+          kept={edits ? keptOf(edits) : null}
+          onRegion={edits && onEdits && ((region) => onEdits(withRegion(edits, region)))}
+          onChannels={edits && onEdits && ((channels) => onEdits(withChannels(edits, channels)))}
+          actions={
+            <button className="ghost side-toggle" aria-pressed={!hidden} title={hidden ? 'Show the panels at the side' : 'Hide the panels at the side'} onClick={() => setSide(!side)}>
+              {hidden ? 'Show panels ◂' : 'Hide panels ▸'}
+            </button>
+          }
         />
       ) : (
         <div className="card viewer-empty">
           <p className="note">Import or upload the data (at the side) to see them here.</p>
         </div>
       )}
-      <div className="col">
+      <div className="col" hidden={hidden}>
         <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
-        <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
-        {onChange && sources.files.data !== undefined && data !== undefined && cube?.length === 3 && (
-          <Prepare
-            key={sources.files.data.file}
-            project={project}
-            data={data}
-            files={{
-              file_d: prepFile(sources, arrays, 'data')!,
-              file_e: sources.errorValue === null ? prepFile(sources, arrays, 'error') : null,
-              file_m: prepFile(sources, arrays, 'mask'),
-            }}
-            velocity={sources.velocity}
-            onPrepared={(prepared) => onChange(withPrepared(sources, prepared))}
-          />
+        {isCube && edits && onEdits && (
+          <EditsCard data={data} edits={edits} hasErrorFile={sources.files.error !== undefined} onChange={onEdits} />
         )}
+        <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
       </div>
     </div>
   );
@@ -333,117 +477,131 @@ function FilesCard({
   const setErrorValue = (value: string | null) => onChange?.({ ...sources, errorValue: value });
   const data = arrays.found.data;
   // The other arrays of the file of the data of its shape (e.g. its
-  // errors), offered for the errors
+  // errors), offered for the errors and the mask
   const siblings = (arrays.inFile.data ?? []).filter(
     (a) => data !== undefined && a.index !== data.index && kept(a).join() === kept(data).join(),
   );
   return (
-    <div className="card">
-      <h2 className="card-head">Files</h2>
-      <div className="card-body files">
-        {ROLES.map(({ role, title }) => {
-          const chosen = files[role];
-          const inFile = arrays.inFile[role] ?? [];
-          let slot;
-          if (role === 'error' && errorValue !== null) {
-            slot = (
-              <div className="slot">
-                {onChange ? (
-                  <input
-                    className="slot-value"
-                    type="number"
-                    step="any"
-                    min="0"
-                    autoFocus
-                    value={errorValue}
-                    aria-label="The error of every value"
-                    onChange={(event) => setErrorValue(event.target.value)}
-                  />
-                ) : (
-                  <span className="slot-file">{errorValue}</span>
-                )}
-                <span className="note">{data?.unit ?? 'in the unit of the data'} · every value</span>
-                {onChange && (
-                  <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
-                    ×
-                  </button>
-                )}
-              </div>
-            );
-          } else if (chosen === undefined) {
-            slot = (
-              <div className="slot empty">
-                {onChange ? (
-                  <>
-                    <FileSources project={project} onFile={(file) => set(role, { file })} />
-                    {role === 'error' && (
+    <FoldCard id="dataset-files" title="Files" bodyClass="files">
+      {ROLES.map(({ role, title }) => {
+        const chosen = files[role];
+        const inFile = arrays.inFile[role] ?? [];
+        let slot;
+        if (role === 'error' && errorValue !== null) {
+          slot = (
+            <div className="slot">
+              {onChange ? (
+                <input
+                  className="slot-value"
+                  type="number"
+                  step="any"
+                  min="0"
+                  autoFocus
+                  value={errorValue}
+                  aria-label="The error of every value"
+                  onChange={(event) => setErrorValue(event.target.value)}
+                />
+              ) : (
+                <span className="slot-file">{errorValue}</span>
+              )}
+              <span className="note">{data?.unit ?? 'in the unit of the data'} · every value</span>
+              {onChange && (
+                <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
+                  ×
+                </button>
+              )}
+            </div>
+          );
+        } else if (chosen === undefined) {
+          slot = (
+            <div className="slot empty">
+              {onChange ? (
+                <>
+                  <FileSources project={project} onFile={(file) => set(role, { file })} />
+                  {role === 'error' && (
+                    <button
+                      className="link"
+                      title="One error for every value of the data (e.g. the rms of a radio cube)"
+                      onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
+                    >
+                      One value
+                    </button>
+                  )}
+                  {role !== 'data' &&
+                    files.data !== undefined &&
+                    siblings.map((a) => (
                       <button
+                        key={a.index}
                         className="link"
-                        title="One error for every value of the data (e.g. the rms of a radio cube)"
-                        onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
+                        onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
                       >
-                        One value
+                        use {a.name || `array ${a.index}`}
                       </button>
-                    )}
-                    {role === 'error' &&
-                      files.data !== undefined &&
-                      siblings.map((a) => (
-                        <button
-                          key={a.index}
-                          className="link"
-                          onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
-                        >
-                          use {a.name || `array ${a.index}`}
-                        </button>
-                      ))}
-                  </>
-                ) : (
-                  <span className="note">none</span>
-                )}
-              </div>
-            );
-          } else {
-            slot = (
-              <div className="slot">
-                <span className="slot-file" title={chosen.file}>
-                  {chosen.file.split('/').pop()}
-                </span>
-                {inFile.length > 1 && onChange ? (
+                    ))}
+                </>
+              ) : (
+                <span className="note">none</span>
+              )}
+            </div>
+          );
+        } else {
+          slot = (
+            <div className="slot">
+              <span className="slot-file" title={chosen.file}>
+                {chosen.file.split('/').pop()}
+              </span>
+              {inFile.length > 1 && onChange ? (
+                <select
+                  aria-label={`The array of the ${title.toLowerCase()}`}
+                  value={arrays.found[role]?.index ?? ''}
+                  onChange={(event) => {
+                    const array = inFile.find((a) => a.index === Number(event.target.value));
+                    if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
+                  }}
+                >
+                  {inFile.map((a) => (
+                    <option key={a.index} value={a.index}>
+                      {a.name || `array ${a.index}`}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
+              )}
+              {role === 'error' &&
+                (onChange ? (
                   <select
-                    aria-label={`The array of the ${title.toLowerCase()}`}
-                    value={arrays.found[role]?.index ?? ''}
-                    onChange={(event) => {
-                      const array = inFile.find((a) => a.index === Number(event.target.value));
-                      if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
-                    }}
+                    aria-label="What the errors are"
+                    title="What the errors are: standard deviations (σ), variances (σ²) or inverse variances (1/σ²)"
+                    value={errorKindOf(sources, arrays)}
+                    onChange={(event) => onChange({ ...sources, errorKind: event.target.value as ErrorKind })}
                   >
-                    {inFile.map((a) => (
-                      <option key={a.index} value={a.index}>
-                        {a.name || `array ${a.index}`}
+                    {ERROR_KINDS.map(({ kind, title }) => (
+                      <option key={kind} value={kind}>
+                        {title}
                       </option>
                     ))}
                   </select>
                 ) : (
-                  <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
-                )}
-                {onChange && (
-                  <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
-                    ×
-                  </button>
-                )}
-              </div>
-            );
-          }
-          return (
-            <div className="file-row" key={role}>
-              <span className="file-label">{title}</span>
-              {slot}
-              {arrays.errors[role] && <p className="error file-error">{arrays.errors[role]}</p>}
+                  <span className="note">{ERROR_KINDS.find(({ kind }) => kind === errorKindOf(sources, arrays))?.title}</span>
+                ))}
+              {onChange && (
+                <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
+                  ×
+                </button>
+              )}
             </div>
           );
-        })}
-      </div>
-    </div>
+        }
+        return (
+          <div className="file-row" key={role}>
+            <span className="file-label">{title}</span>
+            {slot}
+            {arrays.errors[role] && <p className="error file-error">{arrays.errors[role]}</p>}
+          </div>
+        );
+      })}
+    </FoldCard>
   );
 }
 
@@ -518,81 +676,77 @@ function Facts({
 }) {
   if (array === undefined) {
     return (
-      <div className="card">
-        <h2 className="card-head">What GBKFIT reads</h2>
-        <p className="card-body note">The facts of the data come from their header, once they are given.</p>
-      </div>
+      <FoldCard id="dataset-facts" title="What GBKFIT reads">
+        <p className="note">The facts of the data come from their header, once they are given.</p>
+      </FoldCard>
     );
   }
   const flat = array.shape.map((size, i) => [size, array.axes[i]] as const).filter(([size]) => size === 1);
   const [x, y, z] = kept(array);
   return (
-    <div className="card">
-      <h2 className="card-head">What GBKFIT reads</h2>
-      <div className="card-body">
-        <dl className="facts">
-          <dt>shape</dt>
-          <dd>{z === undefined ? kept(array).join(' × ') : `${x} × ${y} pixels × ${z} channels`}</dd>
-          <dt>pixel</dt>
-          <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'unknown'}</dd>
-          {z !== undefined && (
-            <>
-              <dt>spectral</dt>
-              <dd>
-                {keptAxes(array)[2] || 'no type'}
-                {array.step && array.step.length === 3 && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
-              </dd>
-            </>
+    <FoldCard id="dataset-facts" title="What GBKFIT reads">
+      <dl className="facts">
+        <dt>shape</dt>
+        <dd>{z === undefined ? kept(array).join(' × ') : `${x} × ${y} pixels × ${z} channels`}</dd>
+        <dt>pixel</dt>
+        <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'unknown'}</dd>
+        {z !== undefined && (
+          <>
+            <dt>spectral</dt>
+            <dd>
+              {keptAxes(array)[2] || 'no type'}
+              {array.step && array.step.length === 3 && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
+            </dd>
+          </>
+        )}
+        <dt>unit</dt>
+        <dd>{array.unit ?? 'none in the header'}</dd>
+        <dt>beam</dt>
+        <dd>{beamText(array.beam)}</dd>
+        {array.rms !== null && (
+          <>
+            <dt>noise</dt>
+            <dd>{significant(array.rms, 3)} (the header)</dd>
+          </>
+        )}
+      </dl>
+      {(flat.length > 0 || array.ambiguous_velocity) && (
+        <div className="fixes">
+          {flat.length > 0 && (
+            <div className="fixed">
+              ✓ Left out: the {flat.length > 1 ? 'axes' : 'axis'} of length 1 ({flat.map(([, axis]) => axis || 'no type').join(', ')})
+            </div>
           )}
-          <dt>unit</dt>
-          <dd>{array.unit ?? 'none in the header'}</dd>
-          <dt>beam</dt>
-          <dd>{beamText(array.beam)}</dd>
-          {array.rms !== null && (
+          {array.ambiguous_velocity && (
             <>
-              <dt>noise</dt>
-              <dd>{significant(array.rms, 3)} (the header)</dd>
-            </>
-          )}
-        </dl>
-        {(flat.length > 0 || array.ambiguous_velocity) && (
-          <div className="fixes">
-            {flat.length > 0 && (
-              <div className="fixed">
-                ✓ Left out: the {flat.length > 1 ? 'axes' : 'axis'} of length 1 ({flat.map(([, axis]) => axis || 'no type').join(', ')})
+              <div>
+                The header does not say whether the velocities are radio or optical (
+                {keptAxes(array)[2]} without VELREF; MIRIAD writes radio ones).
               </div>
-            )}
-            {array.ambiguous_velocity && (
-              <>
-                <div>
-                  The header does not say whether the velocities are radio or optical (
-                  {keptAxes(array)[2]} without VELREF; MIRIAD writes radio ones).
-                </div>
-                <div className="seg" role="group" aria-label="The convention of the velocities">
-                  {(['radio', 'optical'] as const).map((convention) => (
-                    <button
-                      key={convention}
-                      aria-pressed={velocity === convention}
-                      disabled={onVelocity === undefined}
-                      onClick={() => onVelocity?.(convention)}
-                    >
-                      {convention === 'radio' ? 'Radio' : 'Optical'}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        )}
-        {array.problems.length > 0 && (
-          <ul className="problems">
-            {array.problems.map((problem) => (
-              <li key={problem}>{problem}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+              <div className="seg" role="group" aria-label="The convention of the velocities">
+                {(['radio', 'optical'] as const).map((convention) => (
+                  <button
+                    key={convention}
+                    aria-pressed={velocity === convention}
+                    disabled={onVelocity === undefined}
+                    onClick={() => onVelocity?.(convention)}
+                  >
+                    {convention === 'radio' ? 'Radio' : 'Optical'}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+      {array.problems.length > 0 && (
+        <ul className="problems">
+          {array.problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
+    </FoldCard>
   );
 }
 
