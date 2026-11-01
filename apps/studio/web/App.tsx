@@ -7,6 +7,7 @@ import { Logo } from './components/icons';
 import { SchemeMenu } from './components/ui/scheme';
 import { Dataset, NewDataset } from './screens/Dataset';
 import { Home } from './screens/Home';
+import { NewMoments } from './screens/Moments';
 import { Pending } from './screens/Pending';
 import { Welcome } from './screens/Welcome';
 import { kindOf } from './shell/blocks';
@@ -64,6 +65,7 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} />;
     case 'new-dataset':
+      if (screen.data === 'moments') return <NewMoments key={address(screen)} />;
       return <NewDataset key={address(screen)} data={screen.data} />;
     case 'observe':
       return <Pending eyebrow="Observe · no data" title="Galaxies through observations" />;

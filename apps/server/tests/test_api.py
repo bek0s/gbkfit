@@ -251,6 +251,21 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     ).status_code == 400
 
 
+def test_a_map_is_viewed_as_a_cube_of_one_channel(client, root):
+    # (a moment map, with an axis of length 1, as other codes write them)
+    values = np.arange(12, dtype=np.float32).reshape(1, 3, 4)
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3='VRAD', CDELT3=1000, CUNIT3='m/s'))
+    fits.writeto(pathlib.Path(root, 'study/data/mom1.fits'), values, header)
+    header, data = frames.decode(client.get(
+        '/api/v1/views/channel/study/data/mom1.fits',
+        params=dict(hdu=0, channel=0)).content)
+    (plane,) = frames.arrays(header, data)
+    np.testing.assert_array_equal(plane, values[0])
+    assert (header['nchannels'], header['spectral']) == (1, None)
+
+
 def test_the_moments_of_a_cube_are_of_the_mask_of_its_signal(client, root):
     # Noise of 1, and a line of 20 at 50 km/s in the spectra of a block of
     # 4 x 4 pixels, in 11 channels of 10 km/s (from 0)

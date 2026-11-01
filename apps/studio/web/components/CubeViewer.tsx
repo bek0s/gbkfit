@@ -428,7 +428,7 @@ export function CubeViewer({
 
 // The size of a map of nx by ny pixels that fits the space of its stage,
 // beside its colour bar (undefined until the stage is measured)
-function useFitted(nx: number, ny: number) {
+export function useFitted(nx: number, ny: number) {
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<[number, number] | null>(null);
   useLayoutEffect(() => {
@@ -454,7 +454,7 @@ function mapUnit(view: View, unit: string | null): string {
 // The range of the colours of a map: from the 1st to the 99th percentile
 // of its values; for one diverging, about its median or 0, as wide on
 // each side
-function robustRange(values: Float32Array, colours: 'sequential' | 'median' | 'zero'): [number, number] {
+export function robustRange(values: Float32Array, colours: 'sequential' | 'median' | 'zero'): [number, number] {
   const sorted = Array.from(values.filter(Number.isFinite)).sort((a, b) => a - b);
   if (sorted.length === 0) return [0, 1];
   const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];

@@ -196,6 +196,9 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .spectrum-head { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font: 11.5px var(--mono); color: var(--faint); }
 .spectrum-what, .spectrum-actions { display: inline-flex; align-items: center; gap: 8px; }
 .spectrum-what { color: var(--muted); }
+/* (the value under the pointer, under a map) */
+.map-status { height: 22px; margin-top: 6px; font: 11.5px var(--mono); color: var(--muted); }
+.add-map { display: flex; justify-content: flex-start; }
 .spectrum-what[data-hover] { color: var(--faint); font-style: italic; }
 .spectrum-unit { color: var(--faint); }
 /* (a chip: on the panel, in the text of the page; quiet, dimmer) */

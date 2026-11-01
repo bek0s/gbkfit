@@ -224,23 +224,27 @@ class Views:
 def _read(filename: str, hdu: int) -> Cube:
     """
     Read a cube: an array of a FITS file, as fitsutils.read_array reads
-    it, with the coordinates of its channels if its header gives them.
+    it, with the coordinates of its channels if its header gives them; a
+    map (e.g. a moment map) is read as a cube of one channel, without them.
 
     Raises
     ------
     Invalid
-        If the file cannot be read, or the array is not a cube.
+        If the file cannot be read, or the array is neither a cube nor a
+        map.
     """
     try:
         values, wcs = fitsutils.read_array(filename, hdu)
     except (OSError, IndexError, ConfigError) as e:
         raise Invalid(f"cannot read the array {hdu} of {filename}: {e}") \
             from e
-    if values.ndim != 3:
+    if values.ndim not in (2, 3):
         raise Invalid(
-            f"the array {hdu} of {filename} is not a cube: its shape is "
-            f"{values.shape}")
+            f"the array {hdu} of {filename} is neither a cube nor a map: "
+            f"its shape is {values.shape}")
     values = np.asarray(values, dtype=np.float32)
+    if values.ndim == 2:
+        return Cube(values[np.newaxis], None, None, _range(values))
     spectral, unit = _spectral(wcs, values.shape[0])
     return Cube(values, spectral, unit, _range(values))
 
