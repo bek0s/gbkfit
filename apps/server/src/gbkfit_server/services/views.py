@@ -49,9 +49,10 @@ _GROW = 0.5
 _REGIONS = 0.1
 
 # The values sampled for the range of the colours of a cube, and the
-# percentiles of the range
+# percentiles of the range: from the median (of the noise, in a cube of
+# lines; below it, the colour of the background), up to its brightest
 _SAMPLES = 1_000_000
-_PERCENTILES = (0.5, 99.5)
+_PERCENTILES = (50, 99.9)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -171,16 +172,24 @@ class Views:
                 f"the channels of '{path}' are not of velocities: its "
                 f"moments need them")
         if snr == 0:
-            values = cube.values
+            values, blank = cube.values, None
         else:
             mask = prep.signal_mask(cube.values, snr, _GROW * snr, _REGIONS)
-            values = np.where(mask, cube.values, np.nan)
+            # (a voxel left out has no flux: a missing value (NaN) would
+            # mask the moments of its whole spectrum; see moment_maps);
+            # the pixels with none kept have no moments
+            values = np.where(mask, cube.values, 0)
+            blank = ~mask.any(axis=0)
         maps = gbkfit.analysis.moment_maps(
             values, velocities, orders=(0, 1, 2, 3, 4))
         result = dict(
             flux=maps.data['moment0'], velocity=maps.data['moment1'],
             dispersion=maps.data['moment2'], skewness=maps.skewness(),
             kurtosis=maps.kurtosis())
+        if blank is not None:
+            result = {
+                name: np.where(blank, np.nan, values)
+                for name, values in result.items()}
         with self._lock:
             if key in self._cubes:
                 self._moments.setdefault(key, {})[snr] = result

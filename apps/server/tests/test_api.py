@@ -239,6 +239,30 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     ).status_code == 400
 
 
+def test_the_moments_of_a_cube_are_of_the_mask_of_its_signal(client, root):
+    # Noise of 1, and a line of 20 at 50 km/s in the spectra of a block of
+    # 4 x 4 pixels, in 11 channels of 10 km/s (from 0)
+    values = np.random.default_rng(1).normal(0, 1, (11, 12, 12))
+    values[4:7, 4:8, 4:8] += 20
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3='VRAD', CRVAL3=0, CDELT3=10000, CRPIX3=1,
+        CUNIT3='m/s'))
+    fits.writeto(
+        pathlib.Path(root, 'study/data/line.fits'),
+        values.astype(np.float32), header)
+    header, data = frames.decode(client.get(
+        '/api/v1/views/moments/study/data/line.fits',
+        params=dict(hdu=0, snr=5)).content)
+    flux, velocity, *_ = frames.arrays(header, data)
+    # (the moments of the block, of its line alone; none elsewhere)
+    block = np.zeros((12, 12), bool)
+    block[4:8, 4:8] = True
+    assert np.isfinite(flux[block]).all() and np.isnan(flux[~block]).all()
+    np.testing.assert_allclose(flux[block], 600, rtol=0.05)
+    np.testing.assert_allclose(velocity[block], 50, atol=1)
+
+
 def test_a_job_prepares_a_cube_into_the_project(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
@@ -254,7 +278,7 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
             task='prep_pixel_spectra', options=dict(
                 file_d='study/data/cube.fits',
                 file_e=dict(file='study/data/cube.fits', hdu='STAT'),
-                file_m=None, roi_spat=None, roi_spec=None,
+                error_kind='variance', file_m=None, roi_spat=None, roi_spec=None,
                 clip_min=clip_min, clip_max=None, ccl_lcount=None,
                 ccl_pcount=None, ccl_lratio=None, sclip_sigma=None,
                 sclip_iters=None, minify=False, nanpad=None,
@@ -268,7 +292,7 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
         return job['files']
     assert prepare(0) == dict(
         file_d='study/data/prep_cube.fits',
-        file_e='study/data/prep_cube_STAT.fits')
+        file_e='study/data/prep_cube_error.fits')
     prepared = fits.getdata(pathlib.Path(root, 'study/data/prep_cube.fits'))
     assert np.isnan(prepared[0]).all() and (prepared[2] == 1).all()
     # (prepared again, the same files are kept; others are numbered)
@@ -276,4 +300,4 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
     assert prepare(None)['file_d'] == 'study/data/prep_cube-2.fits'
     assert sorted(os.listdir(pathlib.Path(root, 'study/data'))) == [
         'cube.fits', 'prep_cube-2.fits', 'prep_cube.fits',
-        'prep_cube_STAT-2.fits', 'prep_cube_STAT.fits']
+        'prep_cube_error-2.fits', 'prep_cube_error.fits']
