@@ -261,7 +261,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def dataset(self, items: Mapping[str, Data]) -> Dataset:
+    def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
         Make the dataset of data items measured as this observable (e.g.
         mock data): the inverse of from_data.

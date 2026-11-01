@@ -254,7 +254,7 @@ def test_the_moments_above_2_are_those_of_the_method(method, other, message):
     observable = RegionMoments(
         regions, orders=[3], method=method,
         spectral=SpectralAxis(convention='relativistic'))
-    observable.require_matching(observable.dataset(
+    observable.require_matching(observable.make_dataset(
         {observable.keys()[0]: Data(np.zeros(2))}))
     with pytest.raises(ConfigError, match=message):
         observable.require_matching(

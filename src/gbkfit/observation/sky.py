@@ -494,12 +494,12 @@ class ObservationSky(Observation):
         """Return the instrument."""
         return self._instrument
 
-    def dataset(self, items: Mapping[str, Data]) -> Dataset:
+    def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
         Make the dataset of data items measured as its observable (see
-        Observable.dataset).
+        Observable.make_dataset).
         """
-        return self._observable.dataset(items)
+        return self._observable.make_dataset(items)
 
     def data_unit(self) -> DataUnit | None:
         """

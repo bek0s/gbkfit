@@ -818,7 +818,7 @@ class GroupPlan:
         if errors is None:
             errors = _scatter(draws[nmocks:])
         return [
-            observation.dataset({
+            observation.make_dataset({
                 key: Data(item['d'], error=errors[key], **options[key])
                 for key, item in draw.items()})
             for draw in draws[:nmocks]]

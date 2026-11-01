@@ -204,7 +204,7 @@ class PixelMoments(Observable):
         return tuple(
             _moments.moment_item(i, self._method) for i in self._orders)
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetPixelMoments:
+    def make_dataset(self, items: Mapping[str, Data]) -> DatasetPixelMoments:
         moments, hermite = _moments.moment_maps(
             items, self._orders, self._method)
         return DatasetPixelMoments(

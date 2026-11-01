@@ -102,7 +102,7 @@ def test_mocks_have_the_unit_beam_and_correlation_of_their_data(driver):
         | RECORDED['pixel_spectra'])
     model, _, params = evaluate(plan)
     observation = plan.group().observations()[0]
-    data = observation.dataset({'spectra': Data(
+    data = observation.make_dataset({'spectra': Data(
         model['spectra'], error=np.full_like(model['spectra'], 0.01),
         unit='Jy/beam', beam=dict(bmaj=4, bmin=3, bpa=10))})
     plan = plan.with_data([data])

@@ -540,7 +540,9 @@ class SlitlessSpectra(Observable):
         return super().flux_scales() \
             | dict(per_row=FluxScale(('spectra',), axis, nrows))
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetSlitlessSpectra:
+    def make_dataset(
+            self, items: Mapping[str, Data]
+    ) -> DatasetSlitlessSpectra:
         return DatasetSlitlessSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))
 

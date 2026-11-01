@@ -182,7 +182,7 @@ class SlitSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetSlitSpectra:
+    def make_dataset(self, items: Mapping[str, Data]) -> DatasetSlitSpectra:
         return DatasetSlitSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))
 

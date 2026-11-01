@@ -212,7 +212,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         return None
 
     @abc.abstractmethod
-    def dataset(self, items: Mapping[str, Data]) -> Dataset:
+    def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
         Make the dataset of data items measured as this observation (e.g.
         mock data), where its model is.

@@ -255,7 +255,7 @@ class ObservationProfile(Observation):
         """Return the name of the parameter of the inclination, if any."""
         return None if self._inclination is None else f'{self._name}_incl'
 
-    def dataset(self, items: Mapping[str, Data]) -> Dataset:
+    def make_dataset(self, items: Mapping[str, Data]) -> Dataset:
         """
         Make the table of data items of its functions (e.g. mock data) at
         its radii (see DatasetProfile).

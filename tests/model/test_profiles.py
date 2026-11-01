@@ -68,7 +68,8 @@ def test_rotation_curve_of_a_mass_model():
         np.testing.assert_allclose(
             model(group, PARAMS)['vcirc'], vcirc(expected), rtol=1e-12)
     # Data of the model have no residuals
-    data = observation.dataset({'vcirc': Data(vcirc(radii), error=np.ones(3))})
+    data = observation.make_dataset(
+        {'vcirc': Data(vcirc(radii), error=np.ones(3))})
     objective = Objective(
         ObservationGroup(galaxy, observation.with_data(data)).plan())
     assert objective.chi2(PARAMS) == pytest.approx(0, abs=1e-20)
@@ -219,7 +220,7 @@ def test_profile_data_in_another_unit_are_converted():
 def test_outputs_of_profiles_are_tables():
     import gbkfit.outputs
     observation = ObservationProfile(['vcirc'], [1.0, 3.0] * u.kpc, name='rc')
-    data = observation.dataset({'vcirc': Data(
+    data = observation.make_dataset({'vcirc': Data(
         [100.0, 150.0], error=[5.0, 5.0], unit='km/s')})
     plan = ObservationGroup(mass_galaxy(), observation.with_data(data)).plan()
     # (with the extra outputs of the gravity of a galaxy of mass alone)

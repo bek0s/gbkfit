@@ -148,7 +148,7 @@ class PixelSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetPixelSpectra:
+    def make_dataset(self, items: Mapping[str, Data]) -> DatasetPixelSpectra:
         return DatasetPixelSpectra(
             items['spectra'], **_detail.dataset_grid_options(self.grid()))
 

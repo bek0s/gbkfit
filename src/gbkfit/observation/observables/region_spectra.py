@@ -182,7 +182,7 @@ class RegionSpectra(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('spectra',)
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetRegionSpectra:
+    def make_dataset(self, items: Mapping[str, Data]) -> DatasetRegionSpectra:
         return DatasetRegionSpectra(
             items['spectra'], self.regions(), self.spectral())
 

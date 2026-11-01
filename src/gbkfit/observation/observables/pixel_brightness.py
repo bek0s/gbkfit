@@ -144,7 +144,9 @@ class PixelBrightness(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('brightness',)
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetPixelBrightness:
+    def make_dataset(
+            self, items: Mapping[str, Data]
+    ) -> DatasetPixelBrightness:
         return DatasetPixelBrightness(
             items['brightness'], **_detail.dataset_grid_options(self.grid()))
 

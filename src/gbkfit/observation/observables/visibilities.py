@@ -276,7 +276,7 @@ class Visibilities(Observable):
     def keys(self) -> tuple[str, ...]:
         return ('re', 'im')
 
-    def dataset(self, items: Mapping[str, Data]) -> DatasetVisibilities:
+    def make_dataset(self, items: Mapping[str, Data]) -> DatasetVisibilities:
         return DatasetVisibilities(items['re'], items['im'], self._coverage)
 
     def data_unit(
