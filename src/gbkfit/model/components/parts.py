@@ -81,13 +81,13 @@ def _check_rotation_at_heights(vptrait: traits.VPTrait) -> None:
             f"gravity at each height: it pairs with the velocity trait "
             f"'mass' only, not {vptrait.type()!r}")
     support = vptrait.from_galaxy().support
-    if support is not None and support.mode == 'self_gravitating' \
-            and support.density is None:
+    if support is not None and support.type() == 'self_gravitating' \
+            and support.density() is None:
         raise ConfigError(
             "the velocity height trait 'mass' takes the self_gravitating "
             "pressure support at each height in the sheet of the surface "
             "density of a mass component, of the scale height sigma^2 / "
-            "(pi G Sigma): give pressure_density")
+            "(pi G Sigma): give the density of the pressure support")
 
 
 def _check_dispersion_directions(
@@ -215,8 +215,8 @@ class KinematicTraits:
         dispersion trait, several velocity traits 'mass' (the rotation in
         the gravity would count more than once), or a velocity height
         trait 'mass' that does not pair with the velocity trait 'mass' or
-        takes its self_gravitating pressure support without
-        pressure_density (see traits.VHTraitMass).
+        takes its self_gravitating pressure support without its density
+        (see traits.VHTraitMass).
     """
 
     def dump(self) -> dict[str, Any]:

@@ -110,7 +110,7 @@ def test_the_mass_takes_the_light_of_the_image(tmp_path):
         mass=[dict(type='spheroid', name='halo', profile=dict(type='nfw'))],
         distance=dict(type='direct'))
     kinematics = dict(
-        type='traits', vptraits=dict(type='mass', pressure_support='jeans'),
+        type='traits', vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
         dptraits=dict(type='uniform'))
     params = GEOMETRY | dict(
         vsys=0, distance=100, mass_halo_log_m=12, mass_halo_c=10, dpt_a=15)

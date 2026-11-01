@@ -301,10 +301,11 @@ class DiskStage(ComponentStage):
         v2 = vcirc2
         pressure = None
         if support := disk.pressure_supported_params().get(name):
-            density = None if support.density is None else _pressure_density(
-                mass.model, support, R, mass.params, mass.context)
+            density = None if support.density() is None \
+                else _pressure_density(
+                    mass.model, support, R, mass.params, mass.context)
             pressure = pressure_support(
-                disk, self._plan, values, radii, support.mode, density,
+                disk, self._plan, values, radii, support.type(), density,
                 equilibrium)
             v2 = v2 + pressure
         result = _rotation(
@@ -343,11 +344,12 @@ class DiskStage(ComponentStage):
         v2 = -R[:, None] * force_R
         support = next(iter(disk.pressure_supported_params().values()), None)
         if support is not None:
-            density = None if support.density is None else _pressure_density(
-                mass.model, support, R, mass.params, mass.context,
-                z * kpc_per_arcsec)
+            density = None if support.density() is None \
+                else _pressure_density(
+                    mass.model, support, R, mass.params, mass.context,
+                    z * kpc_per_arcsec)
             v2 = v2 + pressure_support(
-                disk, self._plan, values, r, support.mode, density,
+                disk, self._plan, values, r, support.type(), density,
                 equilibrium, z, kpc_per_arcsec)
         v = _rotation(
             v2, r, self._lit(values, r),
@@ -432,12 +434,12 @@ def _pressure_density(
     def density(name: str) -> np.ndarray:
         component = mass_model.component(name)
         own = mass_model.component_params(name, params)
-        if support.mode == 'self_gravitating':
+        if support.type() == 'self_gravitating':
             return component.surface_density(R, own, context)
         if z is None:
             return component.density(R, np.zeros_like(R), own, context)
         return component.density(R[:, None], z, own, context)
-    return sum(density(name) for name in support.density)
+    return sum(density(name) for name in support.density())
 
 
 def _central_dispersion(

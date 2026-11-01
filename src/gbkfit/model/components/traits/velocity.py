@@ -4,7 +4,7 @@ VPTrait), and how the rotation in the gravity of a galaxy is corrected
 for pressure (PressureSupport).
 """
 
-import dataclasses
+import abc
 from collections.abc import Sequence
 from typing import Annotated, Any, Literal
 
@@ -22,6 +22,8 @@ from .options import (
 
 __all__ = [
     'PressureSupport',
+    'PressureSupportJeans',
+    'PressureSupportSelfGravitating',
     'VPTraitArctan',
     'VPTraitBar',
     'VPTraitBoissier',
@@ -40,7 +42,8 @@ __all__ = [
     'VPTraitSpiral',
     'VPTraitTanh',
     'VPTraitUniform',
-    'VPTraitWedge'
+    'VPTraitWedge',
+    'pressure_support_parser'
 ]
 
 
@@ -82,17 +85,87 @@ def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
     return np.concatenate((p - a, p + a, p + 180 - a, p + 180 + a), axis=1)
 
 
-@dataclasses.dataclass(frozen=True)
-class PressureSupport:
+class PressureSupport(parseutils.TypedSerializable, abc.ABC):
     """
     How the rotation of a disk in the gravity of its galaxy is corrected
-    for its pressure (see VPTraitMass): mode, 'jeans' or
-    'self_gravitating', and density, the names of the mass components of
-    the galaxy whose densities it takes (their sum), or None for that of
-    the disk.
+    for its pressure (see VPTraitMass): with the density of the disk, or
+    the sum of the densities of mass components of its galaxy.
+
+    Parameters
+    ----------
+    density : str or Sequence of str, optional
+        The name of the mass component whose density the pressure takes,
+        or the names of several, whose densities add up; by default, that
+        of its disk.
+
+    Raises
+    ------
+    ConfigError
+        If the names repeat, or there are none.
     """
-    mode: str
-    density: tuple[str, ...] | None = None
+
+    def dump(self) -> dict[str, Any]:
+        info: dict[str, Any] = dict(type=self.type())
+        if (names := self._density) is not None:
+            info['density'] = names[0] if len(names) == 1 else list(names)
+        return info
+
+    def __init__(self, density: str | Sequence[str] | None = None):
+        check_options(PressureSupport.__init__, locals())
+        if density is not None:
+            density = (density,) if isinstance(density, str) \
+                else tuple(density)
+            if not density or len(set(density)) != len(density):
+                raise ConfigError(
+                    f"the density of a pressure support names mass "
+                    f"components, at least one and each once; it is "
+                    f"{list(density)}")
+            for name in density:
+                parseutils.check_name(name)
+        self._density = density
+
+    def density(self) -> tuple[str, ...] | None:
+        """
+        Return the names of the mass components whose densities the
+        pressure takes, or None for that of the disk.
+        """
+        return self._density
+
+
+class PressureSupportJeans(PressureSupport):
+    """
+    The pressure support of an isotropic gas at the midplane of its disk:
+    the radial Jeans equation (see VPTraitMass).
+
+    Parameters
+    ----------
+    density : str or Sequence of str, optional
+        See PressureSupport: the densities at their midplane.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'jeans'
+
+
+class PressureSupportSelfGravitating(PressureSupport):
+    """
+    The pressure support of a disk whose thickness its own gravity sets
+    (see VPTraitMass).
+
+    Parameters
+    ----------
+    density : str or Sequence of str, optional
+        See PressureSupport: their surface densities.
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'self_gravitating'
+
+
+pressure_support_parser = parseutils.TypedParser(
+    PressureSupport, [PressureSupportJeans, PressureSupportSelfGravitating])
 
 
 class VPTraitUniform(VPTrait):
@@ -980,7 +1053,7 @@ class VPTraitMass(VPTrait):
     direction). It has no parameters of its own, and its galaxy must have
     mass.
 
-    With pressure_support 'jeans', the rotation of an isotropic gas at the
+    With the pressure support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
     rho) d(rho sigma^2)/dR, with the azimuthal means of the density rho of
     the disk at its midplane (its density traits times its density
@@ -1001,9 +1074,9 @@ class VPTraitMass(VPTrait):
     d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2, with sigma_z in rho of
     'self_gravitating' (see _profiles.pressure_support).
 
-    With pressure_density, the names of mass components of its galaxy
-    (one, or several: e.g. its atomic and its molecular gas), the
-    pressure takes the sum of their densities instead of that of its
+    With the density of the pressure support, the names of mass
+    components of its galaxy (one, or several: e.g. its atomic and its
+    molecular gas), the pressure takes the sum of their densities instead of that of its
     disk: at their midplane ('jeans'; e.g. the gas of thick mass disks,
     as DysmalPy's pressure support of type 3, which adds its gas
     components), or their surface densities ('self_gravitating'; e.g.
@@ -1015,22 +1088,11 @@ class VPTraitMass(VPTrait):
 
     Parameters
     ----------
-    pressure_support : str, optional
+    pressure_support : PressureSupport, optional
         The pressure support: none (the default), 'jeans' or
-        'self_gravitating'.
-    pressure_density : str or Sequence of str, optional
-        The name of the mass component whose density the pressure takes,
-        or the names of several, whose densities add up; by default, that
-        of its disk.
+        'self_gravitating', with the density it takes.
     name : str, optional
         Its name, which prefixes its parameters (see Trait).
-
-    Raises
-    ------
-    ConfigError
-        If pressure_support or pressure_density is not valid (names that
-        repeat, or none), or pressure_density is given without
-        pressure_support.
     """
 
     @staticmethod
@@ -1044,41 +1106,17 @@ class VPTraitMass(VPTrait):
     def dump(self) -> dict[str, Any]:
         info = {}
         if (support := self._pressure_support) is not None:
-            info['pressure_support'] = support.mode
-            if (names := support.density) is not None:
-                info['pressure_density'] = \
-                    names[0] if len(names) == 1 else list(names)
+            info['pressure_support'] = pressure_support_parser.dump(support)
         return super().dump() | info
 
     def __init__(
             self,
-            pressure_support: str | None = None,
-            pressure_density: str | Sequence[str] | None = None,
+            pressure_support: PressureSupport | None = None,
             name: str | None = None
     ):
         check_options(VPTraitMass.__init__, locals())
         super().__init__(name=name)
-        if pressure_support not in (None, 'jeans', 'self_gravitating'):
-            raise ConfigError(
-                f"pressure_support must be 'jeans', 'self_gravitating' or "
-                f"none; it is {pressure_support!r}")
-        if pressure_density is not None:
-            if pressure_support is None:
-                raise ConfigError(
-                    "pressure_density is the density of the pressure "
-                    "support: it needs pressure_support")
-            pressure_density = (pressure_density,) \
-                if isinstance(pressure_density, str) \
-                else tuple(pressure_density)
-            if not pressure_density \
-                    or len(set(pressure_density)) != len(pressure_density):
-                raise ConfigError(
-                    f"pressure_density names mass components, at least one "
-                    f"and each once; it is {list(pressure_density)}")
-            for name in pressure_density:
-                parseutils.check_name(name)
-        self._pressure_support = None if pressure_support is None \
-            else PressureSupport(pressure_support, pressure_density)
+        self._pressure_support = pressure_support
 
     def direction(self) -> str:
         return 'tan'

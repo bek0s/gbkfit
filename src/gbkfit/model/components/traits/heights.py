@@ -431,11 +431,11 @@ class VHTraitMass(VHTrait):
     v(R, z)^2 = -R F_R(R, z) (see gravity.Gravity), plus the pressure
     support of the trait 'mass' at z, if any: 'jeans', with the density of
     its disk at z (its density traits times its density height traits) or
-    that of the mass components of pressure_density (their sum), and its
-    dispersion at z (with its dispersion height traits);
-    'self_gravitating', in the isothermal sheet of the surface density S
-    of the mass components of pressure_density (required: the disk has
-    no mass) and the dispersion
+    that of the mass components of the density of the pressure support
+    (their sum), and its dispersion at z (with its dispersion height
+    traits); 'self_gravitating', in the isothermal sheet of the surface
+    density S of the mass components of its density (required: the disk
+    has no mass) and the dispersion
     sigma at the midplane, of the density ~ sech^2(z / z0), z0 = sigma^2 /
     (pi G S). v(R, z) is 0 where its square is negative, and NaN where it
     is infinite, as at the midplane; the factor is 1 where v(R, 0) is 0

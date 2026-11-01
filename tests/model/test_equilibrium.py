@@ -205,7 +205,7 @@ def test_pressure_support_takes_the_dispersion_of_the_equilibrium():
         mass=[dict(type='point', name='bh')],
         distance=dict(type='direct', cosmology='Planck18'))
     supported = with_kinematics(
-        DISK, vptraits=dict(type='mass', pressure_support='jeans'))
+        DISK, vptraits=dict(type='mass', pressure_support=dict(type='jeans')))
     balanced = galaxy(supported, **info)
     given = galaxy(with_kinematics(
         supported, dptraits=dict(type='nw_uniform', sampling='subrings'),

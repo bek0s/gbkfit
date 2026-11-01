@@ -219,8 +219,9 @@ class NodalDisk(abc.ABC):
                 f"the mass of their galaxy"))
         for support in self.pressure_supported_params().values():
             needs += density_needs(
-                support.density or (), support.mode == 'self_gravitating',
-                f"the {support.mode} pressure support of the component "
+                support.density() or (),
+                support.type() == 'self_gravitating',
+                f"the {support.type()} pressure support of the component "
                 f"{label}")
         if self.rotation_factor_params():
             needs.append(Need(

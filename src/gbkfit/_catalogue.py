@@ -60,6 +60,7 @@ _PARSERS: dict[str, parseutils.TypedParser] = dict(
     opacity=model.opacity_parser,
     param_mode=params.param_mode_parser,
     pdesc=params.pdesc_parser,
+    pressure_support=traits.pressure_support_parser,
     primary_beam=instrument.primary_beam_parser,
     prior=params.prior_parser,
     psf=instrument.psf_parser,

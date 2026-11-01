@@ -29,7 +29,7 @@ GAS = dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=10)),
     kinematics=dict(
-        type='traits', vptraits=dict(type='mass', pressure_support='jeans'),
+        type='traits', vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
         dptraits=dict(type='uniform'), equilibrium=dict(type='central')),
     emission=dict(type='lines'))
 MASS = [

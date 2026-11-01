@@ -231,7 +231,7 @@ def test_mond_without_a0_is_newtonian_gravity(form):
         equilibrium=dict(type='self_gravitating', density='stars')), MASS,
      "self_gravitating equilibrium of the component 'gas'"),
     (with_kinematics(
-        vptraits=dict(type='mass', pressure_support='self_gravitating')),
+        vptraits=dict(type='mass', pressure_support=dict(type='self_gravitating'))),
      POINT, "self_gravitating pressure support of the component 'gas'"),
     (DISK, MASS + [dict(
         type='spheroid', name='halo', profile=dict(type='nfw'),
