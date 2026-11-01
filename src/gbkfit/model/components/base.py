@@ -1,3 +1,9 @@
+"""
+The components of a galaxy (see Component): their base, their stages
+and plans, and what the plans evaluate on (the grid and its depth axis,
+the cubes of opacity, the fields of radiative transfer).
+"""
+
 import abc
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
 

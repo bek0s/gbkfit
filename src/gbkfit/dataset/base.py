@@ -1,3 +1,9 @@
+"""
+The base of the datasets: named data items of one shape, and where they
+were measured (see Dataset), and the correlation of their noise (see
+NoiseCorrelation).
+"""
+
 import abc
 import copy
 from collections.abc import Iterator, Mapping, Sequence

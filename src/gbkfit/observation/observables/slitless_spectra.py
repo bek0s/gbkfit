@@ -1,3 +1,9 @@
+"""
+The observable of slitless spectra: the image of a grism (or prism)
+exposure, its exposures, and where the light of a pixel lands along the
+trace of the disperser (see pixel_footprints).
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any
 

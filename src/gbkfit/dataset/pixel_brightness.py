@@ -1,3 +1,7 @@
+"""
+The dataset of brightness on a grid of pixels: an image.
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 

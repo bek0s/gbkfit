@@ -1,3 +1,7 @@
+"""
+The observable of spectra on a grid of pixels: a spectral cube.
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 

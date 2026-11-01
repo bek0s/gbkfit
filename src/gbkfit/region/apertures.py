@@ -1,3 +1,9 @@
+"""
+Apertures: regions of the sky whose data are the sum of the pixels of a
+grid, each weighted by the fraction of its area inside them (circles,
+ellipses, polygons, rectangles, or the whole field).
+"""
+
 import abc
 from collections.abc import Sequence
 from typing import Annotated, Any

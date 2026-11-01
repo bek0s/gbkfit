@@ -1,3 +1,9 @@
+"""
+The base of the observables: what a dataset measures, made from a model
+seen through an instrument (see Observable), its evaluation, and its
+flux scales.
+"""
+
 import abc
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, TypeAlias

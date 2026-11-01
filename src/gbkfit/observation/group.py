@@ -1,3 +1,9 @@
+"""
+Groups of observations: galaxies and the observations of them,
+evaluated together (see ObservationGroup), and the galaxies that pass
+through each other along the line of sight (see DepthGroup).
+"""
+
 import copy
 import logging
 from collections.abc import Mapping, Sequence

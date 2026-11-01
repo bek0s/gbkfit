@@ -1,3 +1,8 @@
+"""
+The observation on the sky: galaxies seen as an observable, along a
+line of sight, through a foreground and an instrument.
+"""
+
 import logging
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, Self, TypeAlias

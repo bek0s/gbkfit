@@ -1,3 +1,8 @@
+"""
+The observable of moments of the spectra on a grid of pixels: moment
+maps.
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 

@@ -1,3 +1,8 @@
+"""
+The base of the observations: data of galaxies, and how the model of
+the galaxies gives them (see Observation).
+"""
+
 import abc
 from collections.abc import Mapping, Sequence
 from typing import Self

@@ -1,3 +1,8 @@
+"""
+The driver of the host CPU: numpy arrays, and the C++ kernels (OpenMP)
+of the native host module.
+"""
+
 import types
 
 import numpy as np

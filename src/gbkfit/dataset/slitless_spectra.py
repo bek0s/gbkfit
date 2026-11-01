@@ -1,3 +1,8 @@
+"""
+The dataset of slitless spectra: an image of a grism (or prism)
+exposure.
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 

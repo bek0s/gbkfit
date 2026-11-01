@@ -1,3 +1,10 @@
+"""
+The likelihoods: how the model of an observation is compared with its
+data, the noise model of the data (see Likelihood): Gaussian (with
+fitted noise, upper limits and correlated noise), or a Python function
+of the user.
+"""
+
 import abc
 import copy
 import dataclasses

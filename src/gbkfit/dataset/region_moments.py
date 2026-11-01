@@ -1,3 +1,8 @@
+"""
+The dataset of moments of the spectra in regions of the sky (e.g.
+Voronoi bins, fibres).
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 

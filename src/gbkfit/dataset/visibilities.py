@@ -1,3 +1,8 @@
+"""
+The dataset of interferometric visibilities, and where they are
+measured (see UVCoverage).
+"""
+
 import numbers
 import os.path
 from collections.abc import Mapping, Sequence

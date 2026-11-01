@@ -1,3 +1,7 @@
+"""
+Helpers that belong in no other module: unique file paths.
+"""
+
 import pathlib
 
 

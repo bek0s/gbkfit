@@ -1,3 +1,8 @@
+"""
+The observation of profiles of a galaxy: the values of functions of the
+galaxy at radii (e.g. its rotation curve).
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any, Self
 

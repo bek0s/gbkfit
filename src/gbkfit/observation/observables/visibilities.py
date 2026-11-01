@@ -1,3 +1,8 @@
+"""
+The observable of interferometric visibilities: the Fourier transform
+of the cube of the model at the baselines of each channel.
+"""
+
 import logging
 from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias

@@ -1,3 +1,8 @@
+"""
+The dataset of spectra in regions of the sky (e.g. fibres, apertures,
+bins).
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 

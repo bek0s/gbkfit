@@ -1,3 +1,8 @@
+"""
+The objective: the comparison of the models of a group of observations
+with their data (see Objective), and its evaluations and merits.
+"""
+
 import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Any, NamedTuple, Self

@@ -1,3 +1,8 @@
+"""
+Point components (e.g. an unresolved nucleus), and the parameters and
+the light of a point, which particles share.
+"""
+
 from collections.abc import Sequence
 from typing import Any, Literal
 

@@ -1,3 +1,8 @@
+"""
+The dataset of values of functions of a galaxy at radii (e.g. its
+rotation curve).
+"""
+
 import os.path
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any

@@ -1,3 +1,9 @@
+"""
+The observable of moments of the spectra in regions of the sky (e.g.
+Voronoi bins, fibres), and the moments of the stars on orbits whose
+weights are solved (see OrbitMomentsPlan).
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 

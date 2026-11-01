@@ -1,3 +1,9 @@
+"""
+What happens to the light of a model before it reaches the telescope
+(see Foreground): a gravitational lens, and its evaluation (see
+LensPlan).
+"""
+
 import copy
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Self

@@ -1,3 +1,7 @@
+"""
+The dataset of spectra on a grid of pixels: a spectral cube.
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import Any
 

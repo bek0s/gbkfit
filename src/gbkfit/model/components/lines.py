@@ -1,3 +1,10 @@
+"""
+The emission lines and bands of components: those that configurations
+name (see LineCatalogue and lines_from), those of a component (see
+Lines and Bands), and where its lines are on a spectral axis (see
+LinePlacement).
+"""
+
 import contextlib
 import contextvars
 from collections.abc import Iterator, Mapping, Sequence

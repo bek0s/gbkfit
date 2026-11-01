@@ -1,3 +1,8 @@
+"""
+The driver of one CUDA GPU: CuPy arrays, and the CUDA kernels of the
+native cuda module.
+"""
+
 import types
 from typing import Annotated, Any
 

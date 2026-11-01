@@ -1,4 +1,7 @@
-
+"""
+Numerical helpers: rounding, the rotation of the native models, and the
+1d profiles of the PSFs and LSFs.
+"""
 
 import numpy as np
 import numpy.typing as npt
@@ -72,24 +75,44 @@ def transform_lh_rotate_z(
 
 
 def gauss_fwhm_to_sigma(fwhm: float) -> float:
+    """
+    Return the standard deviation of a Gaussian of the given full width
+    at half maximum.
+    """
     return fwhm / np.sqrt(8 * np.log(2))
 
 
 def gauss_1d_fun(x: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
+    """
+    Return a Gaussian of amplitude a, centre b and standard deviation c at
+    each value of x: a exp(-(x - b)^2 / (2 c^2)).
+    """
     return a * np.exp(- (x - b) * (x - b) / (2 * c * c))
 
 
 def ggauss_1d_fun(
         x: np.ndarray, a: float, b: float, c: float, d: float
 ) -> np.ndarray:
+    """
+    Return a generalised Gaussian of amplitude a, centre b, scale c and
+    shape d at each value of x: a exp(-(|x - b| / c)^d).
+    """
     return a * np.exp(-np.power(np.abs(x - b) / c, d))
 
 
 def lorentz_1d_fun(x: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
+    """
+    Return a Lorentzian of amplitude a, centre b and half width at half
+    maximum c at each value of x: a c^2 / ((x - b)^2 + c^2).
+    """
     return a * c * c / ((x - b) * (x - b) + c * c)
 
 
 def moffat_1d_fun(
         x: np.ndarray, a: float, b: float, c: float, d: float
 ) -> np.ndarray:
+    """
+    Return a Moffat profile of amplitude a, centre b, scale c and power d
+    at each value of x: a (1 + ((x - b) / c)^2)^-d.
+    """
     return a * np.power(1 + np.power((x - b) / c, 2), -d)

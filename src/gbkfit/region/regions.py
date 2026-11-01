@@ -1,3 +1,8 @@
+"""
+The regions of the sky in which data were measured (see Regions): bins
+of pixels, or apertures.
+"""
+
 import abc
 import os.path
 from collections.abc import Sequence

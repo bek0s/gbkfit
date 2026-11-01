@@ -1,3 +1,8 @@
+"""
+The observable of spectra in regions of the sky (e.g. fibres,
+apertures, bins, or the whole field for an integrated spectrum).
+"""
+
 from collections.abc import Mapping, Sequence
 from typing import TYPE_CHECKING, Any
 
