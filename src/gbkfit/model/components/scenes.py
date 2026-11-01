@@ -27,7 +27,7 @@ from ._units import DataUnit
 from .base import ComponentState, DepthAxis, FrameParams
 from .disks.disk import Disk
 from .lines import Band
-from .roles import STARS, DustOpacity
+from .roles import STARS
 from .traits import RPTraitImage
 
 if TYPE_CHECKING:
@@ -146,9 +146,7 @@ class Scene:
 
     def has_dust(self) -> bool:
         """Check whether a component of its galaxies has dust."""
-        return any(
-            isinstance(component.opacity(), DustOpacity)
-            for galaxy in self._galaxies for component in galaxy.components())
+        return any(galaxy.absorbers() for galaxy in self._galaxies)
 
     def bounding_radii(self) -> tuple[float, ...]:
         """
@@ -449,7 +447,7 @@ def _bounding_radius(galaxy: 'Galaxy', emitters: Sequence[int]) -> float:
     radii = [
         cmp.bounding_radius()
         for i, cmp in enumerate(galaxy.components())
-        if i in emitters or isinstance(cmp.opacity(), DustOpacity)]
+        if i in emitters or i in galaxy.absorbers()]
     return max(radii, default=0.0)
 
 

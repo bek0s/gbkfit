@@ -8,8 +8,8 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
 from gbkfit.model import (
-    STARS, Band, BandEmission, DataUnit, DepthUnit, DustOpacity, Emission,
-    Galaxy, LineEmission, LineOpacity, Scene, StarsEmission,
+    STARS, Band, BandEmission, DataUnit, DepthUnit, Emission,
+    Galaxy, LineEmission, Scene, StarsEmission,
     named_components)
 from gbkfit.utils import parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
@@ -92,10 +92,7 @@ def make_scene(
     _check_lines(galaxies, emitters, lines)
     if data_unit is None:
         _check_one_unit(galaxies, emitters)
-    absorbers = [
-        [i for i, cmp in enumerate(galaxy.components())
-         if isinstance(cmp.opacity(), DustOpacity)]
-        for galaxy in galaxies]
+    absorbers = [galaxy.absorbers() for galaxy in galaxies]
     if len(galaxies) > 1 and any(
             _has_opacity(galaxy, galaxy_emitters)
             for galaxy, galaxy_emitters in zip(galaxies, emitters)):
@@ -119,13 +116,11 @@ def make_scene(
 def _has_opacity(galaxy: Galaxy, emitters: Sequence[int]) -> bool:
     """
     Return whether a galaxy dims light in an observation that sees the
-    given emitters of it: whether it has components with dust, or among
-    those emitters, components with line opacity.
+    given emitters of it: whether it has absorbers (see Galaxy.absorbers),
+    or among those emitters, components with opacity.
     """
-    return any(
-        isinstance(cmp.opacity(), DustOpacity)
-        or (i in emitters and isinstance(cmp.opacity(), LineOpacity))
-        for i, cmp in enumerate(galaxy.components()))
+    return bool(galaxy.absorbers()) or any(
+        galaxy.components()[i].opacity() is not None for i in emitters)
 
 
 def _label(galaxy: Galaxy, index: int) -> str:

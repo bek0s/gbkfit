@@ -17,7 +17,7 @@ from annotated_types import Ge, Gt, Le
 from gbkfit.driver import Driver
 from gbkfit.model import (
     MAX_SUBCHANNELS, AdditiveScenePlan, DepthUnit, Emission, Galaxy,
-    LineOpacity, Scene, ScenePlan, TransferScenePlan)
+    Scene, ScenePlan, TransferScenePlan)
 from gbkfit.model.components.base import Component, DepthAxis
 from gbkfit.utils import gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
@@ -207,10 +207,12 @@ class LineOfSight(parseutils.TypedSerializable, abc.ABC):
 
 def _check_no_line_opacity(component: Component) -> None:
     """
-    Raise ConfigError if the component has line opacity, which only a line
-    of sight of radiative transfer sees.
+    Raise ConfigError if the component has line opacity (opacity that dims
+    only its own light; see Opacity.dims_others), which only a line of
+    sight of radiative transfer sees.
     """
-    if isinstance(component.opacity(), LineOpacity):
+    opacity = component.opacity()
+    if opacity is not None and not opacity.dims_others():
         raise ConfigError(
             "a component with line opacity needs a line of sight of "
             "radiative transfer (transfer)")

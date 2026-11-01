@@ -209,6 +209,17 @@ class Galaxy(parseutils.Serializable):
         """Return its components."""
         return self._component_set.components()
 
+    def absorbers(self) -> tuple[int, ...]:
+        """
+        Return the indices of its components whose opacity dims the light
+        of the others (see Opacity.dims_others): those that every
+        observation of it evaluates, besides those whose light it sees.
+        """
+        return tuple(
+            i for i, component in enumerate(self.components())
+            if component.opacity() is not None
+            and component.opacity().dims_others())
+
     def component_params(self, index: int) -> dict[str, str]:
         """
         Return the names of the parameters of its component of the given

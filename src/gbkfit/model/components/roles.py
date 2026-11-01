@@ -299,6 +299,15 @@ class Opacity(parseutils.TypedSerializable, abc.ABC):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
 
+    @abc.abstractmethod
+    def dims_others(self) -> bool:
+        """
+        Check whether it dims the light of the other components too (e.g.
+        dust), which every observation of its galaxy then sees, or only
+        that of its own component (e.g. line opacity), which only the
+        observations that see the light of the component see.
+        """
+
 
 class DustOpacity(Opacity):
     """
@@ -327,6 +336,9 @@ class DustOpacity(Opacity):
     def __init__(self, law: ExtinctionLaw | None = None):
         check_options(DustOpacity.__init__, locals())
         self._law = law
+
+    def dims_others(self) -> bool:
+        return True
 
     def law(self) -> ExtinctionLaw | None:
         """Return the extinction law, if any (none: grey dust)."""

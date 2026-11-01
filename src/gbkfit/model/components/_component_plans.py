@@ -20,7 +20,6 @@ from ._units import DataUnit
 from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
 from .extinction import ExtinctionLaw
 from .lines import Band
-from .roles import DustOpacity
 
 if TYPE_CHECKING:
     from ..galaxy import Galaxy
@@ -527,10 +526,7 @@ def opacity_cubes(
         not known, or there are too many kinds of dust (see
         _opacity_cubes).
     """
-    absorbers = [
-        [i for i, cmp in enumerate(galaxy.components())
-         if isinstance(cmp.opacity(), DustOpacity)]
-        for galaxy in galaxies]
+    absorbers = [galaxy.absorbers() for galaxy in galaxies]
     if not any(absorbers):
         return [OpacityCubes(0, {}, dict.fromkeys(indices))
                 for indices in emitters]

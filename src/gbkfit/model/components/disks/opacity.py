@@ -99,6 +99,9 @@ class LineOpacity(Opacity):
             raise ConfigError("line opacity needs coefficient traits")
         self._coefficients = coefficients
 
+    def dims_others(self) -> bool:
+        return False
+
     def coefficients(
             self
     ) -> tuple[RPTrait, ...] | dict[str, tuple[RPTrait, ...]]:
