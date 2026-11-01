@@ -575,19 +575,21 @@ class DCubePlan:
             out_extra: Extras | None,
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction,
-            flux_scale: float | None = None
+            flux_scale: float | None = None,
+            unit: str | None = None
     ) -> None:
         """
         Record the high-res cube into the low-res one (see record) and
         smooth it (see smooth). The extra outputs on the
         low- and high-res grids go to out_extra as extra_lo and extra_hi
         make them from their data and grid (e.g. cube_extra or
-        plain_extra).
+        plain_extra), the cubes of the model with the unit of its light,
+        if given (and they take one: data on a grid).
         """
         self.record(flux_scale)
         self.smooth()
         if out_extra is not None:
-            self._extras(out_extra, extra_lo, extra_hi)
+            self._extras(out_extra, extra_lo, extra_hi, unit)
 
     def record(self, flux_scale: float | None = None) -> None:
         """
@@ -657,7 +659,8 @@ class DCubePlan:
             self,
             out_extra: Extras,
             extra_lo: ExtraFunction,
-            extra_hi: ExtraFunction
+            extra_hi: ExtraFunction,
+            unit: str | None
     ) -> None:
         """Write the extra outputs (see evaluate and _CUBE_EXTRAS)."""
         dcube = self._dcube
@@ -682,8 +685,13 @@ class DCubePlan:
         def add(name: str, value: Any) -> None:
             out_extra.add(name, value, *_CUBE_EXTRAS[name])
 
-        add('dcube_lo', lo(dcube_lo))
-        add('dcube_hi', hi(dcube_hi))
+        def light(value: Any) -> Any:
+            if unit is None or not isinstance(value, gridutils.GridData):
+                return value
+            return value._replace(unit=unit)
+
+        add('dcube_lo', light(lo(dcube_lo)))
+        add('dcube_hi', light(hi(dcube_hi)))
         if has_weights:
             add('wcube_lo', lo(wcube_lo))
             add('wcube_hi', hi(wcube_hi))

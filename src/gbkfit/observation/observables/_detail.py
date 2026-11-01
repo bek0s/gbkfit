@@ -318,6 +318,11 @@ class DCubePlanBase(ObservablePlan):
         self._dtype = dtype
         self._dcube = dcube
         self._flux_param = flux_scale
+        # (the unit of the light of the model, if known)
+        data_unit = scene.data_unit()
+        unit = None if data_unit is None else data_unit.cube_unit()
+        self._light_unit = None if unit is None \
+            else unitutils.format_unit(unit)
         self._dcube_plan = dcube.plan(
             driver, has_weights=pixel_weights is not None)
         grid = self._model_grid()
@@ -364,7 +369,7 @@ class DCubePlanBase(ObservablePlan):
         self._evaluate_model(params, galaxies, model_extra)
         self._dcube_plan.evaluate(
             out_extra, self._extra_lo, self._extra_hi,
-            self._flux_scale(params))
+            self._flux_scale(params), self._light_unit)
         if model_extra:
             for extra in model_extra:
                 out_extra.add(

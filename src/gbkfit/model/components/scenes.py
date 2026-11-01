@@ -100,6 +100,13 @@ class Scene:
             DepthUnit((g,)) for g in range(len(self._galaxies))
             if g not in ordered)
 
+    def data_unit(self) -> DataUnit | None:
+        """
+        Return the unit of the data, which the light of the emitters takes
+        (None without data).
+        """
+        return self._data_unit
+
     def emitters(self) -> tuple[tuple[int, ...], ...]:
         """
         Return the indices of the components of each galaxy whose light is

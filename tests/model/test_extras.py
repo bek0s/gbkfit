@@ -113,14 +113,27 @@ def test_model_extras_are_on_the_sky(evaluate_cases, name):
         convention=None)
 
 
-def test_kinematic_extras_carry_their_units(evaluate_cases):
-    # (the unit of the light is not known to the plans: audit 2026-10-31
-    # #50)
+def test_extras_carry_their_units(evaluate_cases):
+    # The model cube is in the unit of the light of the model (here the
+    # unit of the observation, without data); the light of the voxels of
+    # a component has none (audit 2026-10-31 #50)
+    import astropy.units as u
     observable, galaxy, _, _ = CASES['pixel_spectra']
-    _, extra = evaluate_cases([flat_case(observable, galaxy)], PROPERTIES)
+    case = flat_case(observable, galaxy) | dict(unit='mJy/arcsec2')
+    _, extra = evaluate_cases([case], PROPERTIES)
+    assert u.Unit(extra.get('dcube_lo').unit) == u.mJy / u.arcsec ** 2
     assert extra.get('vdata', component='component0').unit == 'km/s'
     assert extra.get('ddata', component='component0').unit == 'km/s'
     assert extra.get('bdata', component='component0').unit is None
+
+
+def test_the_cube_of_moments_is_per_km_s_of_their_unit():
+    # (moment 0 is the cube integrated over the velocities)
+    import astropy.units as u
+    from gbkfit.model import DataUnit
+    unit = DataUnit(u.Jy / u.beam * u.km / u.s, 1.0, 2.0, integrated=True)
+    assert unit.cube_unit() == u.Jy / u.beam
+    assert DataUnit(u.Jy / u.beam, 1.0, 2.0).cube_unit() == u.Jy / u.beam
 
 
 def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):

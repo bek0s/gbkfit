@@ -258,6 +258,17 @@ class DataUnit(NamedTuple):
     beam_spectral: u.Quantity | None = None
     integrated: bool = False
 
+    def cube_unit(self) -> u.UnitBase | None:
+        """
+        Return the unit of the light of the model (its cube or image, as
+        the instrument records it): that of the data, or per km/s of it
+        for light integrated over the lines (e.g. moment 0, whose model
+        is a cube); None if the data have no unit.
+        """
+        if self.unit is None:
+            return None
+        return self.unit / (u.km / u.s) if self.integrated else self.unit
+
 
 class LightUnit(NamedTuple):
     """

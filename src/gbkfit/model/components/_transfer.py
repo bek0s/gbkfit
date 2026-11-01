@@ -12,7 +12,7 @@ import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ModelEvaluationError, ParamValues
-from gbkfit.utils import gridutils
+from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._component_plans import ComponentPlans
@@ -57,21 +57,19 @@ _THIN_TAU = 0.1
 _MAX_SPECTRAL_RATIO = 0.75
 _MAX_DEPTH_RATIO = 2.0
 
-# The titles, the descriptions and the units (None for the light, whose
-# unit the plans do not know; '' for none) of the extra outputs of the
-# march of a galaxy, or of a group of galaxies (see TransferPlan.evaluate)
+# The titles and the descriptions of the extra outputs of the march of a
+# galaxy, or of a group of galaxies (see TransferPlan.evaluate)
 _MARCH_EXTRAS = dict(
     total_unabsorbed=(
         "Light without opacity",
         "The light of the galaxies of the march without any opacity "
         "(neither their own nor that in front of them), as the model data "
-        "of the observation (an image or a cube), before its instrument.",
-        None),
+        "of the observation (an image or a cube), before its instrument."),
     total_line_tau=(
         "Optical depth of the lines",
         "The optical depth of the lines of the galaxies of the march at "
         "each channel of each spaxel (the mean over its sub-channels), "
-        "before the instrument of the observation.", ''))
+        "before the instrument of the observation."))
 
 
 class LineResolution(NamedTuple):
@@ -237,6 +235,10 @@ class TransferPlan:
             for member in members)
         self._driver = driver
         self._dtype = dtype
+        # (that of the model of the observation, if known)
+        unit = None if data_unit is None else data_unit.cube_unit()
+        self._light_unit = None if unit is None \
+            else unitutils.format_unit(unit)
         self._subchannels = subchannels
         self._smoothing = smoothing
         # (that of every galaxy: the cubes hold the dust of the scene)
@@ -443,16 +445,16 @@ class TransferPlan:
                     values[m], extras[m], self._smoothing))
         plans = self._plans[0]
 
-        def add(name: str, data: np.ndarray) -> None:
-            title, description, unit = _MARCH_EXTRAS[name]
+        def add(name: str, data: np.ndarray, unit: str | None) -> None:
             march_extra.add(
-                name, plans.output_extra(data, unit), title, description)
-        add('total_unabsorbed', driver.mem_copy_d2h(unabsorbed))
+                name, plans.output_extra(data, unit), *_MARCH_EXTRAS[name])
+        add('total_unabsorbed', driver.mem_copy_d2h(unabsorbed),
+            self._light_unit)
         spectral = depth = 0.0
         if tau_front is not None:
             line_tau = driver.mem_copy_d2h(tau) - tau_front
             add('total_line_tau', line_tau.reshape(
-                (-1, subchannels) + line_tau.shape[1:]).mean(axis=1))
+                (-1, subchannels) + line_tau.shape[1:]).mean(axis=1), '')
             spectral, depth = resolution.resolution(
                 line_tau.max(axis=0) >= _THIN_TAU)
         return LineResolution(spectral, depth, light)
