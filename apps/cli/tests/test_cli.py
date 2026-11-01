@@ -64,6 +64,20 @@ def test_prep_writes_to_the_output_directory(tmp_path):
     assert "output will be stored" in result.stderr
 
 
+def test_prep_reads_the_hdu_in_brackets(tmp_path):
+    # (e.g. the errors of a MUSE cube, in its HDU STAT)
+    write_image(tmp_path / 'image.fits')
+    with fits.open(tmp_path / 'image.fits', mode='append') as hdus:
+        hdus.append(fits.ImageHDU(
+            np.full((20, 24), 2, np.float32), hdus[0].header, name='STAT'))
+    result = run_cli(
+        tmp_path, 'prep', 'pixel_brightness', '--data-d', 'image.fits[0]',
+        '--data-e', 'image.fits[STAT]', '--output-dir', 'prepared')
+    assert result.returncode == 0, result.stderr
+    error = fits.getdata(tmp_path / 'prepared/prep_image_0_error.fits')
+    assert np.all(error == 2)
+
+
 def test_prep_takes_the_moments_of_a_table_of_kinematics(tmp_path):
     # (a series without h3 and h4 is a Gaussian: its V and sigma)
     from astropy.table import Table

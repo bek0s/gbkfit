@@ -324,9 +324,9 @@ def prep_pixel_spectra(
 
 
 def prep_pixel_moments(
-        file_d: Sequence[str],
-        file_e: Sequence[str | None] | None,
-        file_m: Sequence[str | None] | None,
+        file_d: Sequence[DataFile],
+        file_e: Sequence[DataFile | None] | None,
+        file_m: Sequence[DataFile | None] | None,
         roi_spat: _Range | None,
         clip_min: Sequence[float] | None,
         clip_max: Sequence[float] | None,
@@ -420,9 +420,9 @@ def _write_bins(
 
 def prep_region_moments(
         file_bins: str,
-        file_d: Sequence[str],
-        file_e: Sequence[str | None] | None,
-        file_m: Sequence[str | None] | None,
+        file_d: Sequence[DataFile],
+        file_e: Sequence[DataFile | None] | None,
+        file_m: Sequence[DataFile | None] | None,
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
@@ -495,9 +495,9 @@ def _spectral_header(cube: FitsArrays, nbins: int) -> fits.Header:
 
 def prep_region_spectra(
         file_bins: str,
-        file_d: str,
-        file_e: str | None,
-        file_m: str | None,
+        file_d: DataFile,
+        file_e: DataFile | None,
+        file_m: DataFile | None,
         roi_spec: _Range | None,
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,

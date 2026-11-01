@@ -5,6 +5,7 @@ library (see gbkfit.tasks) in-process.
 
 import argparse
 import logging
+import re
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
@@ -39,6 +40,20 @@ def _check_moment_counts(
                 f"argument {option}: invalid length; the number of values "
                 f"must match the number of moment orders; expected "
                 f"{len(args.orders)}, but got {len(values)}")
+
+
+def _data_file(text: str) -> str | tuple[str, int | str]:
+    """
+    Parse a file of data: a filename, or a filename and, in brackets, the
+    HDU of a FITS file (its index or its name) or the path of the array
+    in an ASDF file, as astropy writes them (e.g. 'muse.fits[STAT]',
+    'cube.fits[1]').
+    """
+    match = re.fullmatch(r'(.+)\[([^\[\]]+)\]', text)
+    if match is None:
+        return text
+    filename, key = match.groups()
+    return filename, int(key) if key.isdigit() else key
 
 
 def _validate_range_1d(
@@ -221,9 +236,13 @@ def _make_parser() -> argparse.ArgumentParser:
     # Create parser for prep task
     #
 
-    _DATA_D_HELP = "input data (measurements)"
-    _DATA_E_HELP = "input data (uncertainties)"
-    _DATA_M_HELP = "input data (mask)"
+    _DATA_D_HELP = (
+        "input data (measurements); the HDU of a FITS file in brackets, "
+        "e.g. cube.fits[DATA]")
+    _DATA_E_HELP = (
+        "input data (uncertainties); the HDU in brackets, e.g. "
+        "cube.fits[STAT]")
+    _DATA_M_HELP = "input data (mask); the HDU in brackets, e.g. cube.fits[DQ]"
     _ERROR_KIND_HELP = (
         "what the uncertainties are: standard deviations (sigma, the "
         "default), variances or inverse variances; the prepared ones are "
@@ -257,15 +276,15 @@ def _make_parser() -> argparse.ArgumentParser:
     # ...
     parser_prep_input_1 = argparse.ArgumentParser(add_help=False)
     parser_prep_input_1.add_argument(
-        '--data-d', type=str, required=True,
+        '--data-d', type=_data_file, required=True,
         metavar='DATA',
         help=_DATA_D_HELP)
     parser_prep_input_1.add_argument(
-        '--data-e', type=str,
+        '--data-e', type=_data_file,
         metavar='ERRORS',
         help=_DATA_E_HELP)
     parser_prep_input_1.add_argument(
-        '--data-m', type=str,
+        '--data-m', type=_data_file,
         metavar='MASK',
         help=_DATA_M_HELP)
     parser_prep_input_1.add_argument(
@@ -275,15 +294,15 @@ def _make_parser() -> argparse.ArgumentParser:
     # ...
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
-        '--data-d', type=str, nargs='+', required=True,
+        '--data-d', type=_data_file, nargs='+', required=True,
         metavar='DATA',
         help=_DATA_D_HELP)
     parser_prep_input_n.add_argument(
-        '--data-e', type=str, nargs='+',
+        '--data-e', type=_data_file, nargs='+',
         metavar='ERRORS',
         help=_DATA_E_HELP)
     parser_prep_input_n.add_argument(
-        '--data-m', type=str, nargs='+',
+        '--data-m', type=_data_file, nargs='+',
         metavar='MASK',
         help=_DATA_M_HELP)
     parser_prep_input_n.add_argument(
