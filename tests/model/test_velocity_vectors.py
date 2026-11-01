@@ -142,3 +142,32 @@ def test_the_total_vector_of_one_component_is_its_own(
         own = extra.get(f'v{axis}data', component='component0').data
         total = extra.get(f'total_v{axis}data').data
         np.testing.assert_allclose(total, own, equal_nan=True, rtol=1e-6)
+
+
+def test_a_radial_flow_points_away_from_the_centre(driver, evaluate_cases):
+    # The velocity of a radial flow of a disk is along the offset from its
+    # centre, which the sky sees projected as the vector: (vx, vy) along
+    # the offset on the sky, outwards (audit 2026-10-31 #86)
+    component = dict(
+        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        density=dict(ptraits=dict(type='exponential')), emission=LINES,
+        kinematics=dict(
+            type='traits', vptraits=dict(type='uniform', direction='rad'),
+            dptraits=UNIFORM))
+    _, extra = evaluate_cases([dict(
+        driver=dict(type=driver.type()), observable=dict(
+            type='pixel_spectra', size=[24, 24], step=[0.5, 0.5],
+            spectral=dict(size=41, step=10, convention='relativistic')),
+        line_of_sight=dict(type='flat'),
+        galaxy=dict(components=[component]))],
+        GEOMETRY | dict(pt_a=1, pt_s=3, vpt_vr=20, dpt_a=10))
+    vx, vy = vectors(extra)[:2]
+    y, x = (np.indices(vx.shape) - 11.5) * 0.5
+    dx, dy = x - GEOMETRY['xpos'], y - GEOMETRY['ypos']
+    moving = np.isfinite(vx) & (np.hypot(dx, dy) > 1)
+    assert np.count_nonzero(moving) > 100
+    cross = vx * dy - vy * dx
+    np.testing.assert_allclose(
+        cross[moving] / np.hypot(vx, vy)[moving] / np.hypot(dx, dy)[moving],
+        0, atol=1e-6)
+    assert np.all((vx * dx + vy * dy)[moving] > 0)
