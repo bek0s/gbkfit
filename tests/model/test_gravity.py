@@ -228,7 +228,7 @@ def test_mond_without_a0_is_newtonian_gravity(form):
 
 @pytest.mark.parametrize('disk, mass, message', [
     (with_kinematics(
-        equilibrium=dict(type='self_gravitating', density='stars')), MASS,
+        equilibrium=dict(type='self_gravitating', mass='stars')), MASS,
      "self_gravitating equilibrium of the component 'gas'"),
     (with_kinematics(
         vptraits=dict(type='mass', pressure_support=dict(type='self_gravitating'))),

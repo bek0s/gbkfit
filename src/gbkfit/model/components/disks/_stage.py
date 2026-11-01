@@ -301,7 +301,7 @@ class DiskStage(ComponentStage):
         v2 = vcirc2
         pressure = None
         if support := disk.pressure_supported_params().get(name):
-            density = None if support.density() is None \
+            density = None if support.mass() is None \
                 else _pressure_density(
                     mass.model, support, R, mass.params, mass.context)
             pressure = pressure_support(
@@ -344,7 +344,7 @@ class DiskStage(ComponentStage):
         v2 = -R[:, None] * force_R
         support = next(iter(disk.pressure_supported_params().values()), None)
         if support is not None:
-            density = None if support.density() is None \
+            density = None if support.mass() is None \
                 else _pressure_density(
                     mass.model, support, R, mass.params, mass.context,
                     z * kpc_per_arcsec)
@@ -402,7 +402,7 @@ class DiskStage(ComponentStage):
             sigma = _jeans_dispersion(disk, plan, values, radii, mass)
             taken = {}
         else:
-            name = equilibrium.density()
+            name = equilibrium.mass()
             surface = mass.model.component(name).surface_density(
                 radii * mass.kpc_per_arcsec,
                 mass.model.component_params(name, mass.params), mass.context)
@@ -439,7 +439,7 @@ def _pressure_density(
         if z is None:
             return component.density(R, np.zeros_like(R), own, context)
         return component.density(R[:, None], z, own, context)
-    return sum(density(name) for name in support.density())
+    return sum(density(name) for name in support.mass())
 
 
 def _central_dispersion(

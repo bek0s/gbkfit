@@ -185,7 +185,7 @@ def test_kinematics_are_migrated_to_typed_ones():
     migration.migrate(dict(galaxies=[dict(components=components)]), 2)
     assert [c['kinematics'] for c in components] == [
         dict(type='traits', vptraits=dict(type='mass'), equilibrium=dict(
-            type='self_gravitating', density='gas', direction='ver')),
+            type='self_gravitating', mass='gas', direction='ver')),
         dict(type='traits', vptraits=dict(type='uniform')),
         dict(type='jeans')]
 

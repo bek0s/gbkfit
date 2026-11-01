@@ -1847,7 +1847,7 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     disk = component.density_disk()
     (name, support), = disk.pressure_supported_params().items()
     assert name == 'vpt_vt' and support.type() == 'self_gravitating' \
-        and support.density() is None
+        and support.mass() is None
     radius = np.array(disk.subrnodes())
     squared = surface(radius) ** 2
     np.testing.assert_allclose(
@@ -1912,11 +1912,11 @@ def test_pressure_support_option():
         traits.vpt_parser.load(dict(
             type='mass', pressure_support=dict(type='asymmetric')))
     trait = traits.vpt_parser.load(dict(
-        type='mass', pressure_support=dict(type='jeans', density='gas')))
+        type='mass', pressure_support=dict(type='jeans', mass='gas')))
     assert traits.vpt_parser.dump(trait) == dict(
-        type='mass', pressure_support=dict(type='jeans', density='gas'))
+        type='mass', pressure_support=dict(type='jeans', mass='gas'))
     several = dict(type='mass', pressure_support=dict(
-        type='self_gravitating', density=['hi', 'h2']))
+        type='self_gravitating', mass=['hi', 'h2']))
     assert traits.vpt_parser.dump(traits.vpt_parser.load(several)) == several
     with pytest.raises(ConfigError, match="each once"):
         traits.PressureSupportJeans(['hi', 'hi'])
@@ -1940,7 +1940,7 @@ def test_pressure_support_takes_the_density_of_a_mass_component(mode):
             type='pseudo_isothermal', parameters='density_radius'))]
     density = dict(jeans='gas', self_gravitating='stars')[mode]
     galaxy = disk_galaxy('smooth', dict(
-        type='mass', pressure_support=dict(type=mode, density=density)),
+        type='mass', pressure_support=dict(type=mode, mass=density)),
         mass, DISTANCE)
     params = DISK_PROPERTIES | dict(
         distance=10, mass_gas_log_m=9, mass_gas_rd=1, mass_gas_hz=0.1,
@@ -1970,7 +1970,7 @@ def test_pressure_support_adds_the_densities_of_mass_components():
             type='pseudo_isothermal', parameters='density_radius'))]
     galaxy = disk_galaxy('smooth', dict(
         type='mass', pressure_support=dict(type='jeans',
-        density=['hi', 'h2'])), mass, DISTANCE)
+        mass=['hi', 'h2'])), mass, DISTANCE)
     params = DISK_PROPERTIES | dict(
         distance=10, mass_hi_log_m=9.5, mass_hi_rd=2, mass_hi_hz=0.1,
         mass_h2_log_m=9, mass_h2_rd=1, mass_h2_hz=0.1, mass_halo_log_rho=7,
@@ -2014,13 +2014,13 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
         state = galaxy.plan_stage().evaluate(params).states[0]
         return state.rotation['vpt_vt']
     np.testing.assert_allclose(
-        rotation(dict(pressure_support=dict(type=mode, density='hi'))),
+        rotation(dict(pressure_support=dict(type=mode, mass='hi'))),
         rotation({}), rtol=1e-10)
 
 
 def test_pressure_density_is_a_mass_component_that_gives_it():
     vptraits = dict(
-        type='mass', pressure_support=dict(type='jeans', density='dust'))
+        type='mass', pressure_support=dict(type='jeans', mass='dust'))
     with pytest.raises(ConfigError, match="which its galaxy does not have"):
         disk_galaxy('smooth', vptraits, MASS, DISTANCE)
     # (a thin disk has no density at its midplane: refused at load, not at
@@ -2028,7 +2028,7 @@ def test_pressure_density_is_a_mass_component_that_gives_it():
     with pytest.raises(ConfigError, match="does not give its density"):
         disk_galaxy(
             'smooth', vptraits | dict(
-                pressure_support=dict(type='jeans', density='stars')),
+                pressure_support=dict(type='jeans', mass='stars')),
             MASS,
             DISTANCE)
 
@@ -2056,7 +2056,7 @@ def test_a_self_gravitating_density_needs_a_projection():
     disk = with_traits(
         DISK, vptraits=dict(
             type='mass', pressure_support=dict(type='self_gravitating',
-            density='halo'))) | dict(type='disk', name='gas')
+            mass='halo'))) | dict(type='disk', name='gas')
     with pytest.raises(ConfigError, match="does not give its surface"):
         galaxy_parser.load(dict(
             components=[disk], mass=[dict(
@@ -2141,7 +2141,7 @@ def test_self_gravitating_rotation_at_each_height():
         dict(type='point', name='bh')]
     galaxy, state = rotation_at_heights(dict(
         type='mass', pressure_support=dict(type='self_gravitating',
-        density='gas')), mass, params)
+        mass='gas')), mass, params)
     disk = galaxy.components()[0].density_disk()
     R = np.array(disk.subrnodes())[1:, None] * KPC_PER_ARCSEC
     z = np.linspace(0, 8, 33) * KPC_PER_ARCSEC
@@ -2162,7 +2162,7 @@ def test_self_gravitating_rotation_at_each_height():
     (dict(type='arctan', direction='tan'), False,
      "pairs with the velocity trait 'mass' only, not 'arctan'"),
     (dict(type='mass', pressure_support=dict(type='self_gravitating')), False,
-     "give the density of the pressure support"),
+     "give the mass of the pressure support"),
     (dict(type='mass'), True,
      r"\['mine'\] do not give their forces off their plane")])
 def test_rotation_at_each_height_is_checked(

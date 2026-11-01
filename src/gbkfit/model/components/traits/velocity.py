@@ -89,11 +89,11 @@ class PressureSupport(parseutils.TypedSerializable, abc.ABC):
     """
     How the rotation of a disk in the gravity of its galaxy is corrected
     for its pressure (see VPTraitMass): with the density of the disk, or
-    the sum of the densities of mass components of its galaxy.
+    the sum of the densities of mass components of its galaxy (mass).
 
     Parameters
     ----------
-    density : str or Sequence of str, optional
+    mass : str or Sequence of str, optional
         The name of the mass component whose density the pressure takes,
         or the names of several, whose densities add up; by default, that
         of its disk.
@@ -106,30 +106,28 @@ class PressureSupport(parseutils.TypedSerializable, abc.ABC):
 
     def dump(self) -> dict[str, Any]:
         info: dict[str, Any] = dict(type=self.type())
-        if (names := self._density) is not None:
-            info['density'] = names[0] if len(names) == 1 else list(names)
+        if (names := self._mass) is not None:
+            info['mass'] = names[0] if len(names) == 1 else list(names)
         return info
 
-    def __init__(self, density: str | Sequence[str] | None = None):
+    def __init__(self, mass: str | Sequence[str] | None = None):
         check_options(PressureSupport.__init__, locals())
-        if density is not None:
-            density = (density,) if isinstance(density, str) \
-                else tuple(density)
-            if not density or len(set(density)) != len(density):
+        if mass is not None:
+            mass = (mass,) if isinstance(mass, str) else tuple(mass)
+            if not mass or len(set(mass)) != len(mass):
                 raise ConfigError(
-                    f"the density of a pressure support names mass "
-                    f"components, at least one and each once; it is "
-                    f"{list(density)}")
-            for name in density:
+                    f"the mass of a pressure support names mass components, "
+                    f"at least one and each once; it is {list(mass)}")
+            for name in mass:
                 parseutils.check_name(name)
-        self._density = density
+        self._mass = mass
 
-    def density(self) -> tuple[str, ...] | None:
+    def mass(self) -> tuple[str, ...] | None:
         """
         Return the names of the mass components whose densities the
         pressure takes, or None for that of the disk.
         """
-        return self._density
+        return self._mass
 
 
 class PressureSupportJeans(PressureSupport):
@@ -139,7 +137,7 @@ class PressureSupportJeans(PressureSupport):
 
     Parameters
     ----------
-    density : str or Sequence of str, optional
+    mass : str or Sequence of str, optional
         See PressureSupport: the densities at their midplane.
     """
 
@@ -155,7 +153,7 @@ class PressureSupportSelfGravitating(PressureSupport):
 
     Parameters
     ----------
-    density : str or Sequence of str, optional
+    mass : str or Sequence of str, optional
         See PressureSupport: their surface densities.
     """
 
@@ -1074,10 +1072,10 @@ class VPTraitMass(VPTrait):
     d(rho sigma_R^2)/dR + sigma_R^2 - sigma_phi^2, with sigma_z in rho of
     'self_gravitating' (see _profiles.pressure_support).
 
-    With the density of the pressure support, the names of mass
-    components of its galaxy (one, or several: e.g. its atomic and its
-    molecular gas), the pressure takes the sum of their densities instead of that of its
-    disk: at their midplane ('jeans'; e.g. the gas of thick mass disks,
+    With the mass of the pressure support, the names of mass components
+    of its galaxy (one, or several: e.g. its atomic and its molecular
+    gas), the pressure takes the sum of their densities instead of that
+    of its disk: at their midplane ('jeans'; e.g. the gas of thick mass disks,
     as DysmalPy's pressure support of type 3, which adds its gas
     components), or their surface densities ('self_gravitating'; e.g.
     that of the mass disk, as DysmalPy's types 1 and 2 take its

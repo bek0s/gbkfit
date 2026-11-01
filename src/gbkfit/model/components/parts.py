@@ -82,12 +82,12 @@ def _check_rotation_at_heights(vptrait: traits.VPTrait) -> None:
             f"'mass' only, not {vptrait.type()!r}")
     support = vptrait.from_galaxy().support
     if support is not None and support.type() == 'self_gravitating' \
-            and support.density() is None:
+            and support.mass() is None:
         raise ConfigError(
             "the velocity height trait 'mass' takes the self_gravitating "
             "pressure support at each height in the sheet of the surface "
             "density of a mass component, of the scale height sigma^2 / "
-            "(pi G Sigma): give the density of the pressure support")
+            "(pi G Sigma): give the mass of the pressure support")
 
 
 def _check_dispersion_directions(
@@ -215,8 +215,8 @@ class KinematicTraits:
         dispersion trait, several velocity traits 'mass' (the rotation in
         the gravity would count more than once), or a velocity height
         trait 'mass' that does not pair with the velocity trait 'mass' or
-        takes its self_gravitating pressure support without its density
-        (see traits.VHTraitMass).
+        takes its self_gravitating pressure support without its mass (see
+        traits.VHTraitMass).
     """
 
     def dump(self) -> dict[str, Any]:
@@ -351,7 +351,7 @@ class SelfGravitatingEquilibrium(Equilibrium):
 
     Parameters
     ----------
-    density : str
+    mass : str
         The name of the mass component whose surface density holds the
         disk up.
     direction : str, optional
@@ -368,25 +368,25 @@ class SelfGravitatingEquilibrium(Equilibrium):
         return 'self_gravitating'
 
     def dump(self) -> dict[str, Any]:
-        return super().dump() | dict(density=self._density)
+        return super().dump() | dict(mass=self._mass)
 
     def __init__(
             self,
-            density: str,
+            mass: str,
             direction: Literal[
                 EQUILIBRIUM_DIRECTIONS] = EQUILIBRIUM_DIRECTION_DEFAULT
     ):
         check_options(SelfGravitatingEquilibrium.__init__, locals())
         super().__init__(direction)
-        parseutils.check_name(density)
-        self._density = density
+        parseutils.check_name(mass)
+        self._mass = mass
 
-    def density(self) -> str:
+    def mass(self) -> str:
         """
         Return the name of the mass component whose surface density holds
         the disk up.
         """
-        return self._density
+        return self._mass
 
 
 class JeansEquilibrium(Equilibrium):

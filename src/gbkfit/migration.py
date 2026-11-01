@@ -297,12 +297,13 @@ class _TypedKinematics(Rule):
     The kinematics of every component are typed (2026-10-28): those of
     disks and cones, by traits, are of the type 'traits', as those of
     spheroids were, and the vertical equilibrium of a disk is one typed
-    option of them: equilibrium: {type: <equilibrium>, density:
-    <equilibrium_density>, direction: <equilibrium_direction>}.
+    option of them: equilibrium: {type: <equilibrium>, mass:
+    <equilibrium_density>, direction: <equilibrium_direction>} (mass was
+    density until 2026-11-01).
     """
 
     _OPTIONS = dict(
-        equilibrium_density='density', equilibrium_direction='direction')
+        equilibrium_density='mass', equilibrium_direction='direction')
 
     @staticmethod
     def version() -> int:

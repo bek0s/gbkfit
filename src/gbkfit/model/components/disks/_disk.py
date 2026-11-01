@@ -219,7 +219,7 @@ class NodalDisk(abc.ABC):
                 f"the mass of their galaxy"))
         for support in self.pressure_supported_params().values():
             needs += density_needs(
-                support.density() or (),
+                support.mass() or (),
                 support.type() == 'self_gravitating',
                 f"the {support.type()} pressure support of the component "
                 f"{label}")
@@ -252,7 +252,7 @@ class NodalDisk(abc.ABC):
                 f"vertical force of the gravity of its galaxy"))
         if isinstance(equilibrium, SelfGravitatingEquilibrium):
             needs += density_needs(
-                (equilibrium.density(),), True,
+                (equilibrium.mass(),), True,
                 f"the self_gravitating equilibrium of the component "
                 f"{label}")
         return tuple(needs)

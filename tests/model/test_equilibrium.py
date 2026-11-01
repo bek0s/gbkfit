@@ -35,7 +35,7 @@ DISK = dict(
     emission=dict(type='lines'))
 
 # The equilibrium in the gravity of the mass component 'gas'
-SELF_GRAVITATING = dict(type='self_gravitating', density='gas')
+SELF_GRAVITATING = dict(type='self_gravitating', mass='gas')
 
 PROPERTIES = dict(
     xpos=0, ypos=0, posa=30, incl=60, vsys=0, pt_a=1, pt_s=4, ht_s=1,
@@ -279,17 +279,17 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
 
 
 @pytest.mark.parametrize('disk, info, message', [
-    (with_kinematics(DISK, equilibrium=dict(type='central', density='gas')),
+    (with_kinematics(DISK, equilibrium=dict(type='central', mass='gas')),
      {}, "unknown options"),
     (with_kinematics(DISK, equilibrium=dict(type='self_gravitating')), {},
-     "density"),
+     "'mass'"),
     (with_kinematics(
         DISK, equilibrium=SELF_GRAVITATING),
      {}, "needs the mass of its galaxy"),
     (with_kinematics(DISK, equilibrium=dict(type='jeans')), {},
      "needs the mass of its galaxy"),
     (with_kinematics(
-        DISK, equilibrium=dict(type='self_gravitating', density='dust')),
+        DISK, equilibrium=dict(type='self_gravitating', mass='dust')),
      dict(mass=[dict(type='point', name='gas')],
           distance=dict(type='direct')), "which its galaxy does not have")])
 def test_self_gravitating_equilibrium_is_checked(disk, info, message):
