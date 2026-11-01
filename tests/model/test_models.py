@@ -208,12 +208,16 @@ def test_model(driver, name, evaluate_cases, ndarrays_regression):
             x.value.data if isinstance(x.value, gridutils.GridData)
             else x.value
         for x in extra}
-    # Thick disks on cuda and Monte Carlo disks are not bitwise
-    # reproducible, because the threads add to the outputs in a different
-    # order; their float32 sums of many terms differ by about 1e-5
-    ndarrays_regression.check(outputs, tolerances={
+    # Every driver is compared with the outputs of the host (written with
+    # --force-regen on the host). Thick disks on cuda and Monte Carlo
+    # disks are not bitwise reproducible, because the threads add to the
+    # outputs in a different order; their float32 sums of many terms
+    # differ by about 1e-5
+    tolerances = {
         key: dict(rtol=1e-4, atol=1e-6 * np.nanmax(np.abs(value)))
-        for key, value in outputs.items()})
+        for key, value in outputs.items()}
+    ndarrays_regression.check(
+        outputs, basename=f'test_model_{name}', tolerances=tolerances)
 
 
 @pytest.mark.parametrize('name', CASES)

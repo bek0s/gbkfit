@@ -156,6 +156,7 @@ _MCDISK_CUBE = dict(
     name='mcdisk_cube',
     doc="A thick Monte Carlo disk of clouds of a fixed seed in a cube, "
         "float64, on a grid.",
+    per_dtype="its clouds are drawn anew in each floating type",
     galaxies=[dict(components=[
         _disk(type='disk', clouds=dict(cflux=1e-4, seed=7), density=_THICK)])],
     observations=[

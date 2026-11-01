@@ -3,16 +3,19 @@ Make the golden cases of this directory, and their golden values.
 
 A case is a folder: config.yaml (galaxies and their observations, with
 the parameters at trial values), the data of its observations, and
-golden_<driver>.json for each driver (host, cuda): what the code computed
-for the configuration at the trial values (see golden_values). The data
-are mock data of the model at the true values, with noise of a fixed
-seed: made once from the recipe of the case (see RECIPE_MODULES)
+golden_host.json: what the code computed on the host for the
+configuration at the trial values (see golden_values), the reference
+of every driver (see REFERENCE). A case whose drivers differ by design
+has golden_<driver>.json of each other driver too (see Case.per_driver).
+The data are mock data of the model at the true values, with noise of a
+fixed seed: made once from the recipe of the case (see RECIPE_MODULES)
 and frozen.
 
-tests/model/test_golden.py computes the golden values again and compares
-them with those stored (see compare): a change that must not change the
-results (e.g. a refactor) is checked not to, end to end, from a
-configuration to its chi-square.
+tests/model/test_golden.py computes the golden values again on each
+driver and compares them with its reference (see reference_file and
+compare), at the tolerance of the driver (see TOLERANCES): a change that
+must not change the results (e.g. a refactor) is checked not to, end to
+end, from a configuration to its chi-square, and the drivers to agree.
 
 Usage:
 
@@ -26,9 +29,10 @@ golden values must then be made again. 'config' writes the configuration
 of cases from their recipes and keeps their data: after a change of the
 format of configurations, which must not change their golden values.
 'values' writes the golden values
-of cases with the current code (both drivers by default): after a change
-that changes the results on purpose, which its commit says. --root
-writes or reads the cases in another directory (e.g. to try a recipe).
+of cases with the current code (of the host, and of the other drivers
+of the cases that keep their own; all by default): after a change that
+changes the results on purpose, which its commit says. --root writes or
+reads the cases in another directory (e.g. to try a recipe).
 """
 
 import argparse
@@ -52,6 +56,10 @@ if TYPE_CHECKING:
 HERE = pathlib.Path(__file__).parent
 
 DRIVERS = ('host', 'cuda')
+
+# The driver whose golden values are the reference of all (but of the
+# cases that keep their own, see Case.per_driver)
+REFERENCE = 'host'
 
 # The relative tolerance of the values of float32 and float64
 # observations, by driver (the CUDA kernels that add with atomics add in
@@ -110,6 +118,12 @@ class Case:
         The galaxies of its mock data, if not those of its configuration
         (e.g. Jeans models of the stars of Schwarzschild models, whose
         observations have no mock data).
+    per_driver : str, optional
+        Why each driver has golden values of its own, if it has: its
+        drivers differ beyond their tolerance by design (see REFERENCE).
+    per_dtype : str, optional
+        Why its models in float32 and in float64 differ beyond rounding,
+        if they do (see tests/model/test_golden.py).
     """
     name: str
     doc: str
@@ -126,6 +140,8 @@ class Case:
     seed: int = 1
     nsamples: int = 30
     mock_galaxies: list[dict[str, Any]] | None = None
+    per_driver: str | None = None
+    per_dtype: str | None = None
 
 
 # --- The recipes ----------------------------------------------------------
@@ -316,9 +332,13 @@ def summary(array: Any) -> dict[str, Any]:
         scale=float(np.sum(weights * np.abs(values))))
 
 
-def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
+def golden_values(
+        folder: pathlib.Path, driver: str, dtype: str | None = None
+) -> dict[str, Any]:
     """
-    Return the golden values of a case on a driver: for each observation,
+    Return the golden values of a case on a driver, of the floating type of
+    its observations on the sky, or else of the given one: for each
+    observation,
     a summary of each part of each item of its model (data, mask,
     weights), with the values that the objective solves, if any (the
     model of a fit); of the objective, the chi-square, the
@@ -330,7 +350,13 @@ def golden_values(folder: pathlib.Path, driver: str) -> dict[str, Any]:
     from gbkfit.fitting.problem import FitProblem
     from gbkfit.setup import read_config
     file = read_config(str(folder / 'config.yaml'))
-    setup = _load(file.config, pathlib.Path(file.root), driver)
+    config = file.config
+    if dtype is not None:
+        config = dict(config, observations=[
+            obs if obs['type'] == 'profile'
+            else obs | dict(dtype=dtype, fft_dtype=dtype)
+            for obs in config['observations']])
+    setup = _load(config, pathlib.Path(file.root), driver)
     group_plan, params = setup.group_plan, setup.params
     values = params.evaluate()
     with setup:
@@ -441,6 +467,16 @@ def compare(
     return []
 
 
+def reference_file(folder: pathlib.Path, driver: str) -> pathlib.Path:
+    """
+    Return the file of the golden values that a driver is compared with:
+    its own, if the case keeps them (see Case.per_driver), or else those
+    of the reference driver.
+    """
+    own = folder / f'golden_{driver}.json'
+    return own if own.exists() else folder / f'golden_{REFERENCE}.json'
+
+
 def write_values(folder: pathlib.Path, driver: str) -> None:
     """Write the golden values of a case on a driver into its folder."""
     from gbkfit.utils import numutils
@@ -470,8 +506,12 @@ def main() -> None:
     names = args.cases or sorted(
         path.name for path in args.root.iterdir()
         if (path / 'config.yaml').exists())
+    known = recipes()
     for name in names:
         for driver in args.driver or DRIVERS:
+            if driver != REFERENCE and not known[name].per_driver:
+                print(f"{name}: {driver} compared with {REFERENCE}")
+                continue
             write_values(args.root / name, driver)
             print(f"{name}: golden values on {driver}")
 

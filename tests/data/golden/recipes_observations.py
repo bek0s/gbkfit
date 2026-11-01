@@ -265,6 +265,53 @@ _LENS_TRIAL = _LENS_TRUTH | dict(
     hst_lens_shear_gamma=dict(value=0.06, min=0, max=0.2))
 
 
+# The first science: a thick, turbulent disk with three clumps of a galaxy
+# at z = 1.5 (some 8.5 kpc per arcsec) that emits Halpha and [NII] 6583,
+# in the cube of an IFU (0.1 arcsec pixels, a PSF of 0.47 arcsec FWHM,
+# channels of 2.7 Angstrom at 1.64 um and R = 3600, as KMOS), whose
+# spectral axis is in optical velocities of Halpha at rest (as a linear
+# axis of wavelengths reads; Halpha at 1.5 c, [NII] 2360 km/s beyond it,
+# widths stretched by 1 + z), in float32 (the default)
+_CLUMPY_DISK = dict(
+    type='disk', loose=False, tilted=False,
+    rnodes=[0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
+    density=dict(
+        ptraits=[
+            dict(type='exponential'),
+            dict(type='mixture_exponential', nblobs=3)],
+        htraits=[dict(type='sech2', zmax=4)] * 2),
+    kinematics=dict(
+        type='traits', vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines', lines=['halpha', 'nii6583']))
+
+_CLUMPY_TRUTH = dict(
+    xpos=0.03, ypos=-0.04, posa=40, incl=55, vsys=10, pt_a=1, pt_s=0.4,
+    pt1_r=[0.25, 0.5, 0.7], pt1_t=[30, 160, 260], pt1_a=[0.8, 0.6, 0.5],
+    pt1_s=[0.06, 0.08, 0.05], pt1_q=[1, 1, 1], pt1_p=[0, 0, 0],
+    ht_s=0.08, ht1_s=0.06, vpt_rt=0.15, vpt_vt=200, dpt_a=50,
+    nii6583_ratio=0.3)
+
+_CLUMPY_TRIAL = _CLUMPY_TRUTH | dict(
+    xpos=0.02, ypos=-0.03, posa=dict(value=43, min=0, max=90),
+    incl=dict(value=50, min=10, max=80), vsys=dict(value=6, min=-50, max=50),
+    pt1_a=[dict(value=0.7, min=0, max=5), 0.6, 0.5],
+    vpt_vt=dict(value=185, min=50, max=400),
+    dpt_a=dict(value=45, min=5, max=150),
+    nii6583_ratio=dict(value=0.35, min=0, max=2))
+
+_IFU_HIGHZ = _sky(
+    dict(
+        type='pixel_spectra', size=[30, 30], step=[0.1, 0.1],
+        spectral=dict(
+            size=40, step=120, rval=450870, convention='optical',
+            rest='6564.61 Angstrom')),
+    line_of_sight=dict(type='grid'),
+    instrument=dict(
+        psf=dict(type='gauss', sigma=0.2), lsf=dict(type='gauss', sigma=35)),
+    dtype='float32')
+
+
 CASES: list[dict[str, Any]] = [
     dict(
         name='thin_disk_cube',
@@ -302,6 +349,16 @@ CASES: list[dict[str, Any]] = [
         trial=_DISK_TRIAL | dict(
             nii6583_ratio=dict(value=0.35, min=0, max=2)),
         noises=[_gauss(0.0005)]),
+    dict(
+        name='clumpy_disk_highz',
+        doc="The first science: a thick, turbulent disk with three clumps "
+            "of a galaxy at z = 1.5 that emits Halpha and [NII] 6583, in "
+            "the cube of an IFU whose spectral axis is in optical "
+            "velocities of Halpha at rest, float32 (the default).",
+        galaxies=[dict(redshift=1.5, components=[_CLUMPY_DISK])],
+        observations=[_IFU_HIGHZ],
+        truth=_CLUMPY_TRUTH, trial=_CLUMPY_TRIAL,
+        noises=[_gauss(2e-5)]),
     dict(
         name='slit_spectra',
         doc="The spectra of a long slit rotated on the sky, wider than "
@@ -409,6 +466,10 @@ CASES: list[dict[str, Any]] = [
         galaxies=_mge_stars(dict(type='schwarzschild', norbits=200,
                                  turns=20)),
         mock_galaxies=_mge_stars(dict(type='jeans')),
+        per_driver=(
+            "orbits are chaotic: each driver integrates them in its own "
+            "rounding, so that their libraries differ as much as the noise "
+            "of the sampling of the orbits (some 3% of the chi-square)"),
         observations=[_sky(
             dict(
                 type='region_moments',
