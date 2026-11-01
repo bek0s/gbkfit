@@ -116,6 +116,9 @@ class FitterMultiStart(Fitter):
                 f"starts from an initial value of each free element; "
                 f"'{local.type()}' is not")
         self._local = local
+        # (it needs what its local fitter needs: e.g. the residuals of the
+        # objective, of least squares)
+        self.info = self.info._replace(needs=local.info.needs)
         self._nstarts = nstarts
         self._nsolutions = nsolutions
         self._tolerance = tolerance

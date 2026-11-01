@@ -1614,6 +1614,26 @@ def test_ultranest_posterior_agrees_with_the_covariance():
     assert result.evidence.log_z_error > 0
 
 
+def test_multistart_needs_what_its_local_fitter_needs(tmp_path):
+    # Least squares need the residuals, which a likelihood of the
+    # log-likelihood has none of: refused before the starts (audit
+    # 2026-10-31 #53a)
+    from gbkfit.fitting.fitters.multistart import FitterMultiStart
+    from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
+    (tmp_path / 'like.py').write_text(
+        "import numpy as np\n"
+        "def log_like(item, data, model, error, mask, params):\n"
+        "    return -0.5 * np.sum(((model - data) / error) ** 2)\n")
+    likelihood = LikelihoodUser.from_file(
+        str(tmp_path / 'like.py'), 'log_like', 'log_likelihood')
+    objective = mock_objective(DriverHost(), likelihood=likelihood)
+    params = ParamSpace(objective.pdescs(), bounded_properties())
+    fitter = FitterMultiStart(FitterScipyLeastSquares())
+    assert fitter.info.needs == ('residuals',)
+    with pytest.raises(ConfigError, match="function of the log-likelihood"):
+        fitter.fit(objective, params)
+
+
 def test_multistart_runs_any_optimizer_with_its_options():
     # Each start keeps the options of the optimizer (here the sigma of
     # CMA-ES) at another initial value; samplers have no initial value
