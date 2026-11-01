@@ -227,6 +227,12 @@ def test_the_tuning_of_an_element_or_else_of_its_fitter():
     assert FitParamGrid.of(element, dict(n=5)).values().size == 5
     with pytest.raises(ConfigError, match="a grid needs option 'n'"):
         FitParamGrid.of(element, {})
+    # (the width of the walkers of the fitter, for the elements with a
+    # value only: the others start from their prior)
+    from gbkfit.fitting.fitparams import FitParamWalkers
+    unstarted = FreeElement.load(dict(min=0, max=4))
+    assert FitParamWalkers.of(element, dict(width=0.5)).width() == 0.5
+    assert FitParamWalkers.of(unstarted, dict(width=0.5)).width() is None
     # (a property of another fitter is known; a typo is not)
     with pytest.raises(
             ConfigError, match=r"'sigmaa' \(did you mean 'sigma'\?\)"):
@@ -560,6 +566,14 @@ def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
     assert log.nreplayed() == 500
     assert resumed.free == whole.free
     assert resumed.chi2 == pytest.approx(whole.chi2, rel=1e-12)
+    # (not a fit of other data, whose merits it does not have)
+    other = [
+        dataset.with_data({key: 2 * dataset[key].data() for key in dataset})
+        for dataset in objective.datasets()]
+    with objective.with_data(other) as changed:
+        with pytest.raises(ValueError, match="other data"):
+            FitterCMAES().fit(
+                changed, params, log=EvaluationLog.resume(filename))
 
 
 def test_a_least_squares_fit_logs_its_evaluations_and_resumes_anew(

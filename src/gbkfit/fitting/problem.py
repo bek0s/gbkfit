@@ -14,7 +14,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.fitting.control import FitControl, FitStopped
-from gbkfit.fitting.evaluation_log import EvaluationLog, SubFitLog
+from gbkfit.fitting.evaluation_log import EvaluationLog, SubFitLog, fingerprint
 from gbkfit.params.joint_priors import joint_prior_residuals
 from gbkfit.params.priors import Prior
 from gbkfit.fitting.progress import FitProgress, ProgressObserver
@@ -208,7 +208,7 @@ class FitProblem:
         self._pool = pool
         self._merit = merit
         if log is not None:
-            log.begin(names)
+            log.begin(names, fingerprint(objective.datasets()))
 
     def objective(self) -> Objective:
         """Return the objective."""

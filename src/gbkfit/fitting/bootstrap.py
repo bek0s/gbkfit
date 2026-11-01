@@ -353,8 +353,9 @@ def bootstrap(
     the bootstrap can be stopped (it raises FitStopped once the running
     refits stop) and resumed from its log. The residuals of each refit are
     drawn with a random stream of its own (of the seed of the options, or
-    else of the refits' fitter): in any order, the refits refit the same
-    data.
+    else of the refits' fitter), and its fitter has a seed of its own (of
+    another stream of it): in any order, the refits refit the same data
+    alike.
 
     Parameters
     ----------
@@ -396,7 +397,13 @@ def bootstrap(
     options.check(objective.group(), params)
     refitter = (options.fitter() or fitter).without_uncertainty()
     seed = refitter.seed() if options.seed() is None else options.seed()
-    seeds = np.random.SeedSequence(seed).spawn(options.nsamples())
+    # (of the draws of the data of each refit, and of its fitter, of
+    # streams of their own)
+    root = np.random.SeedSequence(seed)
+    seeds = root.spawn(options.nsamples())
+    fitter_seeds = [
+        int(child.generate_state(1)[0])
+        for child in root.spawn(options.nsamples())]
     start_params = params.with_values(start)
     # (the model that the objective compares with the data: with the
     # values of the solved elements that it solves there)
@@ -436,7 +443,9 @@ def bootstrap(
                     model[key] + noise[key] * drawn[key],
                     dataset[key].data())
                 for key in dataset}))
-        return _Refit(tuple(datasets), start_params, refitter, derived)
+        return _Refit(
+            tuple(datasets), start_params,
+            refitter.with_seed(fitter_seeds[k]), derived)
 
     def report(k: int, outcome: Outcome, logged: bool) -> None:
         refit = f"bootstrap refit {k + 1}/{options.nsamples()}" + (

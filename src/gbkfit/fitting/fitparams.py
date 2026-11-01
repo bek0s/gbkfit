@@ -307,8 +307,8 @@ class FitParamWalkers(FitParamPrior):
     value : float, optional
         The centre of the box of the walkers.
     width : float, optional
-        The width of the box of the walkers (needs a value; by default
-        that of the fitter, if any, see FitterEmcee).
+        The width of the box of the walkers (needs a value; by default,
+        with a value, that of the fitter, if any, see FitterEmcee).
 
     Raises
     ------
@@ -323,10 +323,12 @@ class FitParamWalkers(FitParamPrior):
     def of(
             cls, element: FreeElement, defaults: Mapping[str, Any]
     ) -> Self:
+        # (the width of the fitter, for the elements with a value only:
+        # the others start from their prior)
         width = element.width()
-        return cls(
-            element.proper_prior(), element.value(),
-            defaults.get('width') if width is None else width)
+        if width is None and element.value() is not None:
+            width = defaults.get('width')
+        return cls(element.proper_prior(), element.value(), width)
 
     def __init__(
             self,

@@ -20,7 +20,7 @@ from gbkfit.fitting.fitparams import (
 from gbkfit.fitting.problem import FitCounts, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.objective import Objective
-from gbkfit.params import EvaluationError, ParamSpace, Prior
+from gbkfit.params import ParamSpace, Prior
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
@@ -251,7 +251,10 @@ def _run_start(
             solution=np.asarray(x, dtype=float).tolist(),
             cost=float(problem.cost(x)), success=bool(run.success),
             message=str(run.message))
-    except (EvaluationError, ValueError) as e:
+    except (RuntimeError, ValueError) as e:
+        # (a start whose parameters cannot be evaluated, see
+        # EvaluationError, or whose fitter fails, e.g. CMA-ES without a
+        # point of a finite chi2: a failed start, not a failed fit)
         outcome = dict(error=str(e))
     finally:
         problem.close()

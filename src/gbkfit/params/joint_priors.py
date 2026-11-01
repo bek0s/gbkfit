@@ -14,6 +14,7 @@ import scipy.linalg
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
+from ._errors import ParamEvaluationError
 from .space import ParamFunctions, ParamSpace, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
@@ -213,16 +214,20 @@ class JointPriorSmooth(JointPrior):
 
         Raises
         ------
-        ValueError
-            If the positions are not one per element, or not increasing.
+        ConfigError
+            If the positions are not one per element.
+        ParamEvaluationError
+            If they are not increasing (a point that cannot be evaluated,
+            of positions that are parameters).
         """
         if positions.shape != (n,):
-            raise ValueError(
+            raise ConfigError(
                 f"{self._positions}: there must be one position per element "
                 f"of {self._expr} ({n}); there are {positions.size}")
         spacing = np.diff(positions)
         if not np.all(spacing > 0):
-            raise ValueError(f"{self._positions}: must be increasing")
+            raise ParamEvaluationError(
+                f"{self._positions}: must be increasing")
         return spacing / spacing.mean()
 
     def _differences(self, x: np.ndarray, h: np.ndarray) -> np.ndarray:
@@ -233,11 +238,11 @@ class JointPriorSmooth(JointPrior):
 
         Raises
         ------
-        ValueError
+        ConfigError
             If there are not more values than the order.
         """
         if len(x) <= self._order:
-            raise ValueError(
+            raise ConfigError(
                 f"{self._expr}: a smoothness prior of order {self._order} "
                 f"needs more than {self._order} values; there are {len(x)}")
         slope = np.diff(x) / h
@@ -320,7 +325,7 @@ class JointPriorSmooth2D(JointPrior):
         def residuals(values: ParamValues) -> np.ndarray:
             x = np.asarray(expression(values), dtype=float)
             if x.size != nx * ny:
-                raise ValueError(
+                raise ConfigError(
                     f"{self._expr}: a map of {nx} by {ny} cells needs "
                     f"{nx * ny} values; there are {x.size}")
             c = x.reshape(ny, nx)
@@ -483,7 +488,7 @@ class JointPriorMVN(JointPrior):
     def _scalar(value: np.ndarray, expr: str) -> float:
         """Return the value of an expression, which must be one number."""
         if value.size != 1:
-            raise ValueError(
+            raise ConfigError(
                 f"{expr}: each expression of an mvn prior must give one "
                 f"value; it gives {value.size}")
         return float(value[0])

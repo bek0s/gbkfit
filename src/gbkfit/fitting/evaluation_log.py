@@ -7,6 +7,7 @@ read_evaluations) and of the chain of an MCMC sampler (see read_chain).
 """
 
 import dataclasses
+import hashlib
 import json
 import logging
 import os
@@ -17,6 +18,7 @@ from typing import Any, BinaryIO, TextIO
 
 import numpy as np
 
+from gbkfit.dataset import Dataset
 from gbkfit.objective import Merits
 
 
@@ -25,6 +27,7 @@ __all__ = [
     'EvaluationLog',
     'Evaluations',
     'SubFitLog',
+    'fingerprint',
     'read_chain',
     'read_evaluations'
 ]
@@ -50,9 +53,11 @@ class EvaluationLog:
     A file of the model evaluations of a fit, written as it runs: the free
     values of each point the fitter asks about, with its numbers (see
     Merits). A fit that resumes from it (see resume) runs again
-    with the same configuration and seed, so that its fitter asks for the
-    same points: they are answered from the log while they match it
-    exactly, then evaluated (and logged). The result is that of the fit
+    with the same configuration, data and seed, so that its fitter asks
+    for the same points: they are answered from the log while they match
+    it exactly, then evaluated (and logged). The log keeps the fingerprint
+    of the data (see fingerprint): a fit of other data (e.g. their files
+    changed since) cannot resume from it. The result is that of the fit
     had it not stopped; the replay costs only the fitter's own work.
 
     The fit problem logs the evaluations of every fitter. Those of least
@@ -68,8 +73,9 @@ class EvaluationLog:
     starts of multistart), which a resumed fit takes as they are.
 
     The files: a first line naming the format, a line of JSON (the names
-    of the free elements; of a chain, also its walkers), then rows of
-    float64. A row cut short (a fit killed while writing it) is ignored.
+    of the free elements and the fingerprint of the data; of a chain,
+    also its walkers), then rows of float64. A row cut short (a fit
+    killed while writing it) is ignored.
 
     Parameters
     ----------
@@ -86,6 +92,7 @@ class EvaluationLog:
         self._next = 0
         self._replaying = False
         self._names: tuple[str, ...] | None = None
+        self._data: str | None = None
         self._file: BinaryIO | None = None
         self._chain_file: BinaryIO | None = None
         self._flushed = time.perf_counter()
@@ -106,6 +113,7 @@ class EvaluationLog:
         log = cls(filename)
         header, rows, size = _read(filename, chain=False)
         log._names = tuple(header['names'])
+        log._data = header.get('data')
         log._rows = rows
         log._header = size
         log._replaying = len(log._rows) > 0
@@ -124,28 +132,36 @@ class EvaluationLog:
         """Return the log of the outcomes of the sub-fits of the fit."""
         return self._subfits
 
-    def begin(self, names: Sequence[str]) -> None:
+    def begin(self, names: Sequence[str], data: str | None = None) -> None:
         """
         Open the files for a fit of the free elements of the given names
-        (see FitProblem).
+        (see FitProblem), of the data of the given fingerprint (see
+        fingerprint), if known.
 
         Raises
         ------
         ValueError
-            If the log of a fit to resume has other free elements.
+            If the log of a fit to resume has other free elements, or
+            other data.
         """
         names = tuple(names)
         if self._names is not None and self._names != names:
             raise ValueError(
                 f"{self._filename}: the log is of a fit of other free "
                 f"elements: {list(self._names)}, not {list(names)}")
+        if None not in (self._data, data) and self._data != data:
+            raise ValueError(
+                f"{self._filename}: the log is of a fit of other data (their "
+                f"files changed since?): fit them anew")
         self._names = names
+        self._data = data
         if self._replaying:
             self._file = open(self._filename, 'r+b')
         else:
             self._file = open(self._filename, 'wb')
             self._file.write(_MAGIC)
-            self._file.write(json.dumps(dict(names=names)).encode() + b'\n')
+            self._file.write(
+                json.dumps(dict(names=names, data=data)).encode() + b'\n')
             self._file.flush()
             self._header = self._file.tell()
         self._chain_file = None
@@ -339,6 +355,25 @@ def read_chain(filename: str, start: int = 0) -> Chain:
     return Chain(
         names=tuple(header['names']), positions=steps[..., :nfree],
         log_probs=steps[..., nfree])
+
+
+def fingerprint(datasets: Sequence[Dataset]) -> str:
+    """
+    Return the fingerprint of the data of a fit (see EvaluationLog): of
+    the arrays of each data item of each dataset (values, mask, errors
+    and footprint).
+    """
+    digest = hashlib.sha256()
+    for dataset in datasets:
+        for key in sorted(dataset):
+            item = dataset[key]
+            digest.update(key.encode())
+            for array in (item.data(), item.mask(), item.error(),
+                          item.footprint()):
+                if array is not None:
+                    digest.update(f'{array.dtype}{array.shape}'.encode())
+                    digest.update(np.ascontiguousarray(array).tobytes())
+    return digest.hexdigest()
 
 
 def _read(

@@ -208,6 +208,15 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         """
         return self._uncertainty
 
+    def with_seed(self, seed: int) -> Self:
+        """
+        Return a copy of it with another seed of its random numbers (e.g.
+        the refits of a bootstrap, each of its own; see bootstrap).
+        """
+        fitter = copy.copy(self)
+        fitter._seed = seed
+        return fitter
+
     def without_uncertainty(self) -> Self:
         """
         Return a copy of it that works out no uncertainty of its solutions

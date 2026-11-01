@@ -82,7 +82,7 @@ def test_smooth2d_needs_a_value_per_cell():
     params = ParamSpace(PDESCS, PROPERTIES, priors=[dict(
         type='smooth2d', expr='v', size=[4, 3], order=1, std=1)])
     (function,) = joint_prior_residuals(params)
-    with pytest.raises(ValueError, match="needs 12 values; there are 5"):
+    with pytest.raises(ConfigError, match="needs 12 values; there are 5"):
         function(VALUES)
 
 
