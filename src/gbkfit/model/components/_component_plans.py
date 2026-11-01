@@ -63,51 +63,52 @@ _VECTOR_DESCRIPTION = (
     "systemic velocity, which vdata has: along the line of sight, vzdata "
     "is vdata less it).")
 
-# The titles and the descriptions of the extra outputs of each component,
-# by name, and of their totals over the components of a galaxy (see
-# ComponentPlans.add_extras)
+# The titles, the descriptions and the units (None for the light, whose
+# unit the plans do not know; '' for none) of the extra outputs of each
+# component, by name, and of their totals over the components of a galaxy
+# (see ComponentPlans.add_extras)
 _COMPONENT_EXTRAS = dict(
     bdata=(
         "Brightness",
         "The light that the component emits in each voxel, before any "
-        "opacity."),
+        "opacity.", None),
     odata=(
         "Optical depth of dust at V",
         "The optical depth at V of the dust of the component in each "
-        "voxel."),
+        "voxel.", ''),
     vdata=(
         "Velocity",
         "The line-of-sight velocity of the component in each voxel (km/s; "
-        "the mean weighted by its density there)."),
+        "the mean weighted by its density there).", 'km/s'),
     ddata=(
         "Velocity dispersion",
         "The velocity dispersion of the component in each voxel (km/s; "
-        "the mean weighted by its density there)."),
+        "the mean weighted by its density there).", 'km/s'),
     obdata=(
         "Dimmed brightness",
         "The light of the component in each voxel after the opacity that "
-        "dims it there.")) | {
+        "dims it there.", None)) | {
     f'v{axis}data': (
         f"Velocity along {axis}", _VECTOR_DESCRIPTION.format(
-            axis=desc, whose="the component", weight="its density"))
+            axis=desc, whose="the component", weight="its density"), 'km/s')
     for axis, desc in _VECTOR_AXES.items()}
 _TOTAL_EXTRAS = dict(
     total_bdata=(
         "Total brightness",
         "The light that the components of the galaxy emit in each voxel, "
-        "before any opacity."),
+        "before any opacity.", None),
     total_obdata=(
         "Total dimmed brightness",
         "The light of the components of the galaxy in each voxel after the "
-        "opacity that dims it there."),
+        "opacity that dims it there.", None),
     total_odata=(
         "Total optical depth of dust at V",
         "The optical depth at V of the dust of the components of the galaxy "
-        "in each voxel.")) | {
+        "in each voxel.", '')) | {
     f'total_v{axis}data': (
         f"Total velocity along {axis}", _VECTOR_DESCRIPTION.format(
             axis=desc, whose="the components of the galaxy",
-            weight="their brightness"))
+            weight="their brightness"), 'km/s')
     for axis, desc in _VECTOR_AXES.items()}
 
 
@@ -366,9 +367,9 @@ class ComponentPlans:
         for index, extra in extras.items():
             label = _label(components, index)
             for key, value in extra.items():
-                title, description = _COMPONENT_EXTRAS[key]
+                title, description, unit = _COMPONENT_EXTRAS[key]
                 out_extra.add(
-                    key, self.extra(value, depth_zero), title,
+                    key, self.extra(value, depth_zero, unit), title,
                     f"{description} {_ON_THE_GRID}", component=label)
         if self.absorbers:
             totals = dict(odata=sum(
@@ -376,13 +377,16 @@ class ComponentPlans:
         if movers := [extra for extra in extras.values() if 'vxdata' in extra]:
             totals = totals | _total_vector(movers)
         for name, total in totals.items():
-            title, description = _TOTAL_EXTRAS[f'total_{name}']
+            title, description, unit = _TOTAL_EXTRAS[f'total_{name}']
             out_extra.add(
-                f'total_{name}', self.extra(total, depth_zero), title,
+                f'total_{name}', self.extra(total, depth_zero, unit), title,
                 f"{description} {_ON_THE_GRID}")
 
     def extra(
-            self, data: np.ndarray, depth_zero: float | None = None
+            self,
+            data: np.ndarray,
+            depth_zero: float | None = None,
+            unit: str | None = None
     ) -> gridutils.GridData:
         """
         Return an extra output on the grid: an image without a depth axis,
@@ -394,30 +398,32 @@ class ComponentPlans:
         grid = self._grid
         if self._depth is None:
             return gridutils.GridData(
-                data.reshape(data.shape[-2:]), grid.coords, None)
+                data.reshape(data.shape[-2:]), grid.coords, None, unit)
         depth = self._depth
         zero = depth.zero if depth_zero is None else depth_zero
         coords = gridutils.Coords(
             tuple(grid.coords.step) + (depth.step,),
             tuple(grid.coords.rpix) + (-zero / depth.step,),
             tuple(grid.coords.rval) + (0.0,), grid.coords.rota)
-        return gridutils.GridData(data, coords, None)
+        return gridutils.GridData(data, coords, None, unit)
 
-    def output_extra(self, data: np.ndarray) -> gridutils.GridData:
+    def output_extra(
+            self, data: np.ndarray, unit: str | None = None
+    ) -> gridutils.GridData:
         """
         Return an extra output of the shape of the output on the grid: an
         image (2d data), or a cube along the spectral axis (3d data).
         """
         coords = self._grid.coords
         if data.ndim == 2:
-            return gridutils.GridData(data, coords, None)
+            return gridutils.GridData(data, coords, None, unit)
         spectral = self._spectral.coords
         return gridutils.GridData(data, coords._replace(
             step=tuple(coords.step) + tuple(spectral.step),
             rpix=tuple(coords.rpix) + tuple(spectral.rpix),
             rval=tuple(coords.rval) + tuple(spectral.rval),
             rest=spectral.rest, medium=spectral.medium,
-            convention=spectral.convention), 2)
+            convention=spectral.convention), 2, unit)
 
 
 def _label(components: Sequence['Component'], index: int) -> str:

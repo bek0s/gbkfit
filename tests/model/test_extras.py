@@ -113,6 +113,16 @@ def test_model_extras_are_on_the_sky(evaluate_cases, name):
         convention=None)
 
 
+def test_kinematic_extras_carry_their_units(evaluate_cases):
+    # (the unit of the light is not known to the plans: audit 2026-10-31
+    # #50)
+    observable, galaxy, _, _ = CASES['pixel_spectra']
+    _, extra = evaluate_cases([flat_case(observable, galaxy)], PROPERTIES)
+    assert extra.get('vdata', component='component0').unit == 'km/s'
+    assert extra.get('ddata', component='component0').unit == 'km/s'
+    assert extra.get('bdata', component='component0').unit is None
+
+
 def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
     # The depth axis of a grid is along the line of sight, centred on 0
     observable, _, _, _ = CASES['pixel_spectra']
