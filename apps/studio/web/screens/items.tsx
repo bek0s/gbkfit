@@ -226,7 +226,7 @@ export function layersOf(sources: Sources, arrays: Arrays): Layer[] {
 
 // The files of an item of a dataset (its data, their errors and their
 // mask): a line for each, in a panel of a title (and actions, e.g. to
-// remove it)
+// remove it), under what is wrong with the item as a whole, if anything
 export function FilesCard({
   project,
   sources,
@@ -235,6 +235,7 @@ export function FilesCard({
   id = 'dataset-files',
   title = 'Files',
   actions,
+  problem,
 }: {
   project: string;
   sources: Sources;
@@ -243,6 +244,7 @@ export function FilesCard({
   id?: string;
   title?: string;
   actions?: ReactNode;
+  problem?: string | null;
 }) {
   const { files, errorValue } = sources;
   const set = (role: Role, value: FileArray | undefined) => onChange?.({ ...sources, files: { ...files, [role]: value } });
@@ -255,6 +257,7 @@ export function FilesCard({
   );
   return (
     <Panel id={id} title={title} actions={actions} bodyClass="files">
+      {problem && <p className="error item-problem">{problem}</p>}
       {ROLES.map(({ role, title }) => {
         const chosen = files[role];
         const inFile = arrays.inFile[role] ?? [];

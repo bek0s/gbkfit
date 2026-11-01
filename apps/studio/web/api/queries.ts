@@ -72,16 +72,18 @@ export function useDescription(path: string | null, velocity: Velocity | null = 
 // the number of channels of the cube, the coordinate of the channel along
 // its spectral axis and its unit (null if unknown), and the range of the
 // values of the cube for colours.
-// The channel shown before stays while the next one comes.
-export function useChannel(path: string, hdu: number, channel: number) {
+// The channel shown before stays while the next one comes; without a
+// path, none.
+export function useChannel(path: string | null, hdu: number, channel: number) {
   return useQuery({
-    queryKey: keys.view('channel', path, hdu, channel),
+    queryKey: keys.view('channel', path ?? '', hdu, channel),
+    enabled: path !== null,
     placeholderData: keepPreviousData,
     queryFn: async () => {
       const frame = decodeFrame(
         await data(
           api.GET('/api/v1/views/channel/{path}', {
-            params: { path: { path }, query: { hdu, channel } },
+            params: { path: { path: path ?? '' }, query: { hdu, channel } },
             parseAs: 'arrayBuffer',
           }),
         ),

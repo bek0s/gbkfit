@@ -328,3 +328,52 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
     assert sorted(os.listdir(pathlib.Path(root, 'study/data'))) == [
         'cube.fits', 'prep_cube-2.fits', 'prep_cube.fits',
         'prep_cube_error-2.fits', 'prep_cube_error.fits']
+
+
+def test_a_job_prepares_moment_maps_with_one_mask(client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600))
+    flux = np.ones((4, 5), np.float32)
+    velocity = np.full((4, 5), 100, np.float32)
+    velocity[0, 0] = np.nan
+    velocity[3, 4] = 900
+    folder = pathlib.Path(root, 'study/data')
+    fits.writeto(folder / 'mom0.fits', flux, header)
+    fits.HDUList([fits.PrimaryHDU(velocity, header), fits.ImageHDU(
+        np.ones_like(velocity), name='ERR')]).writeto(folder / 'mom1.fits')
+    job = client.post('/api/v1/jobs', json=dict(
+        task='prep_pixel_moments', options=dict(
+            file_d=['study/data/mom0.fits', 'study/data/mom1.fits'],
+            file_e=[None, dict(file='study/data/mom1.fits', hdu='ERR')],
+            file_m=None, roi_spat=None, clip_min=None,
+            clip_max=[None, 500], ccl_lcount=None, ccl_pcount=None,
+            ccl_lratio=None, sclip_sigma=[None, None], sclip_iters=5,
+            minify=False, nanpad=None, dtype='float32',
+            output_dir='study/data'))).json()
+    for _ in range(600):
+        job = client.get(f"/api/v1/jobs/{job['id']}").json()
+        if job['state'] not in ('queued', 'running'):
+            break
+        time.sleep(0.1)
+    assert job['state'] == 'complete', job['output']
+    assert job['files'] == dict(
+        file_d=['study/data/prep_mom0.fits', 'study/data/prep_mom1.fits'],
+        file_e=[None, 'study/data/prep_mom1_error.fits'])
+    # (a pixel left out of one map, as NaN or out of its range, is left
+    # out of all)
+    prepared = fits.getdata(folder / 'prep_mom0.fits')
+    assert np.isnan(prepared[0, 0]) and np.isnan(prepared[3, 4])
+    assert np.isfinite(prepared).sum() == 18
+
+
+def test_the_files_of_moment_maps_are_lists(client):
+    job = client.post('/api/v1/jobs', json=dict(
+        task='prep_pixel_moments', options=dict(
+            file_d='study/data/mom0.fits', output_dir='study/data'))).json()
+    for _ in range(100):
+        job = client.get(f"/api/v1/jobs/{job['id']}").json()
+        if job['state'] not in ('queued', 'running'):
+            break
+        time.sleep(0.1)
+    assert job['state'] == 'failed' and 'a list' in job['output']

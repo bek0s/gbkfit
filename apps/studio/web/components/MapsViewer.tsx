@@ -1,19 +1,20 @@
 // Maps on one grid (e.g. moment maps), to look at: one at a time, chosen on
-// a rail at its left (with the tools: select, a drag selecting a region;
-// pan, a drag moving the zoomed map), with its colour bar, as large as the
-// space left allows; its data, or the map of their errors or of their mask
-// (its layers). The selection (a region; never kept) shows as a chip in
-// the head, and the map zooms to it (or with the wheel) and back; a crop
-// (an edit) is outlined. Under the map, the value of the pixel under the
-// pointer.
+// a rail at its left, with its colour bar, as large as the space left
+// allows; its data, or the map of their errors or of their mask (its
+// layers). The map has two tools (see MapTools): select (a drag selects a
+// region) and pan (a drag moves the zoomed map). The selection (a region;
+// never kept) shows as a chip in the head, and the map zooms to it (or
+// with the wheel) and back; a crop (an edit) is outlined, and the pixels
+// the edits leave out are blank on the data. Over its corner, its file;
+// under it, the value of the pixel under the pointer.
 import { useState, type ReactNode } from 'react';
 import { useChannel } from '../api/queries';
 import { ColourBar } from './ColourBar';
 import { robustRange, useFitted, type Layer } from './CubeViewer';
 import { significant } from './format';
-import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
+import { MapTools, type Tool } from './MapTools';
 import { MapView, type Region } from './MapView';
-import { Chip, IconButton, NavItem } from './ui/basics';
+import { Chip, NavItem } from './ui/basics';
 import { Segments } from './ui/inputs';
 
 // A map: its key, its title on the rail (and its short name), how its
@@ -36,6 +37,7 @@ export function MapsViewer({
   selection,
   onSelection,
   crop = null,
+  out = null,
   actions,
 }: {
   maps: MapItem[];
@@ -44,12 +46,14 @@ export function MapsViewer({
   selection: Region | null;
   onSelection: (selection: Region | null) => void;
   crop?: Region | null;
+  // The pixels the edits leave out (1; null: none), of every map
+  out?: Uint8Array | null;
   actions?: ReactNode;
 }) {
   const [nx, ny] = shape;
   const [mapKey, setMapKey] = useState(maps[0]?.key);
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
-  const [tool, setTool] = useState<'select' | 'pan'>('select');
+  const [tool, setTool] = useState<Tool>('select');
   const [zoom, setZoom] = useState<Region | null>(null);
   const [hover, setHover] = useState<[number, number] | null>(null);
   // (a map gone, the first; a layer it has not, its data)
@@ -102,10 +106,7 @@ export function MapsViewer({
         {actions}
       </div>
       <div className="viewer-body">
-        <nav className="rail" aria-label="The maps and tools">
-          <div className="rail-label">tool</div>
-          <NavItem label="Select" active={tool === 'select'} title="Select: a drag selects a region of the map" onClick={() => setTool('select')} />
-          <NavItem label="Pan" active={tool === 'pan'} title="Pan: a drag moves the zoomed map" onClick={() => setTool('pan')} />
+        <nav className="rail" aria-label="The maps">
           <div className="rail-label">maps</div>
           {maps.map((m) => (
             <NavItem key={m.key} label={m.title} left={<span className="order">{m.short}</span>} active={m.key === map.key} onClick={() => setMapKey(m.key)} />
@@ -122,6 +123,7 @@ export function MapsViewer({
                     shape={values.shape}
                     range={range}
                     diverging={colours !== 'sequential'}
+                    out={layer.key === 'data' ? out : null}
                     window={zoom}
                     drag={selecting ? 'region' : 'pan'}
                     region={selection}
@@ -132,14 +134,15 @@ export function MapsViewer({
                     onHover={setHover}
                     label={`The ${layer.title.toLowerCase()} of ${map.title}`}
                   />
-                  <div className="zoom-buttons">
-                    <IconButton label="Zoom to the selection (the wheel zooms about the pointer)" disabled={selection === null} onClick={() => selection && setZoom(selection)}>
-                      <ZoomSelectionIcon />
-                    </IconButton>
-                    <IconButton label="The whole map" disabled={zoom === null} onClick={() => setZoom(null)}>
-                      <ZoomWholeIcon />
-                    </IconButton>
+                  <div className="map-source" title={layer.path}>
+                    {layer.path.split('/').pop()}
                   </div>
+                  <MapTools
+                    tool={tool}
+                    onTool={setTool}
+                    onZoomToSelection={selection ? () => setZoom(selection) : undefined}
+                    onWhole={zoom ? () => setZoom(null) : undefined}
+                  />
                 </div>
                 <ColourBar range={range} diverging={colours !== 'sequential'} unit={layer.unit ?? ''} />
               </div>

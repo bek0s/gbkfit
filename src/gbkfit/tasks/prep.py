@@ -328,12 +328,12 @@ def prep_pixel_moments(
         file_e: Sequence[DataFile | None] | None,
         file_m: Sequence[DataFile | None] | None,
         roi_spat: _Range | None,
-        clip_min: Sequence[float] | None,
-        clip_max: Sequence[float] | None,
+        clip_min: Sequence[float | None] | None,
+        clip_max: Sequence[float | None] | None,
         ccl_lcount: int | None,
         ccl_pcount: int | None,
         ccl_lratio: float | None,
-        sclip_sigma: Sequence[float] | None,
+        sclip_sigma: Sequence[float | None] | None,
         sclip_iters: int | Sequence[int] | None,
         minify: bool,
         nanpad: int | None,
@@ -346,9 +346,9 @@ def prep_pixel_moments(
     Prepare moment maps (pixel_moments), as image (see
     prep_pixel_brightness), but with one mask for all: a pixel invalid in
     one map is invalid in all. The options of the clipping (clip_min,
-    clip_max, sclip_sigma and sclip_iters) have one value for each map;
-    sclip_iters can also be one value for all maps. error_kind is what
-    the files of the errors hold.
+    clip_max, sclip_sigma and sclip_iters) have one value for each map
+    (None: none for that map); sclip_iters can also be one value for all
+    maps. error_kind is what the files of the errors hold.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
@@ -375,7 +375,7 @@ def prep_pixel_moments(
         mask &= (arrays.mask != 0) & prep.range_mask(
             arrays.data, clip_min[i] if clip_min is not None else None,
             clip_max[i] if clip_max is not None else None)
-        if sclip_sigma is not None:
+        if sclip_sigma is not None and sclip_sigma[i] is not None:
             mask &= prep.sigma_clip_mask(
                 arrays.data, mask, sclip_sigma[i], sclip_iters[i])
     if ccl_lcount is not None or ccl_pcount is not None or ccl_lratio:

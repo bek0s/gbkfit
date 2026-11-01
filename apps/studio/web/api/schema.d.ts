@@ -622,9 +622,10 @@ export interface components {
         /**
          * JobInfo
          * @description A job: its id, task and options, its state, its run, the files that
-         *     a job of prep prepared (by the options of their files, e.g. file_d),
-         *     when it was created, started and ended, the exit status of its
-         *     process, and the end of its log.
+         *     a job of prep prepared (by the options of their files, e.g. file_d;
+         *     of moment maps, a list, one for each map, None for a file not
+         *     prepared), when it was created, started and ended, the exit status
+         *     of its process, and the end of its log.
          */
         JobInfo: {
             /** Id */
@@ -646,7 +647,7 @@ export interface components {
             run: string | null;
             /** Files */
             files: {
-                [key: string]: string;
+                [key: string]: string | (string | null)[];
             } | null;
             /** Started */
             started: string | null;
@@ -673,7 +674,7 @@ export interface components {
              * Task
              * @enum {string}
              */
-            task: "eval" | "fit" | "resume" | "prep_pixel_spectra";
+            task: "eval" | "fit" | "resume" | "prep_pixel_spectra" | "prep_pixel_moments";
             /**
              * Options
              * @default {}

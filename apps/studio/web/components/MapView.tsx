@@ -1,7 +1,8 @@
 // A map of values (ny by nx; the row y = 0 at the bottom, as on the sky)
 // on a canvas, coloured over a range: sequentially, or diverging about
 // the middle of the range (see colours.ts). A pixel without a value (NaN),
-// or out of the range of the values kept, has the colour of the panel. It
+// out of the range of the values kept, or left out (e.g. by the edits of
+// moment maps), has the colour of the panel. It
 // shows a window of its pixels (all of them by default), which the wheel
 // asks to zoom about a pixel. A click gives the pixel (x, y), which a mark
 // can show; a drag gives a region (x0, x1, y0, y1, inclusive), which is
@@ -22,6 +23,7 @@ export function MapView({
   range,
   diverging = false,
   kept = null,
+  out = null,
   window = null,
   drag = 'region',
   mark,
@@ -40,6 +42,8 @@ export function MapView({
   diverging?: boolean;
   // The range of the values kept (null: all; an end null: open)
   kept?: [number | null, number | null] | null;
+  // The pixels left out (1; null: none), as the values
+  out?: Uint8Array | null;
   // The pixels shown (null: all), and how the wheel zooms about a pixel
   // (by a factor: above 1 in, below 1 out)
   window?: Region | null;
@@ -81,14 +85,14 @@ export function MapView({
     for (let y = wy0; y <= wy1; y++) {
       for (let x = wx0; x <= wx1; x++) {
         const value = values[y * nx + x];
-        const shown = Number.isFinite(value) && (keepLow === null || value >= keepLow) && (keepHigh === null || value <= keepHigh);
+        const shown = Number.isFinite(value) && !out?.[y * nx + x] && (keepLow === null || value >= keepLow) && (keepHigh === null || value <= keepHigh);
         const colour = shown ? rampColour(stops, (value - low) / (high - low || 1)) : empty;
         // (the row y is drawn from the bottom)
         image.data.set([...colour, 255], ((wy1 - y) * w + (x - wx0)) * 4);
       }
     }
     context.putImageData(image, 0, 0);
-  }, [values, nx, range, diverging, keepLow, keepHigh, wx0, wx1, wy0, wy1, w, h, scheme]);
+  }, [values, nx, range, diverging, keepLow, keepHigh, out, wx0, wx1, wy0, wy1, w, h, scheme]);
   // The pixel under a point of the screen
   const pixelAt = (clientX: number, clientY: number): [number, number] => {
     const box = canvas.current!.getBoundingClientRect();

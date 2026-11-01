@@ -36,12 +36,16 @@ __all__ = [
 # The tasks of the jobs: those that make a run, those that continue one
 # (in the folder of their option output_dir), and those of prep, which
 # prepare files of data (their options file_d, file_e and file_m: a path,
-# or a path and an HDU, {file, hdu}) into the folder of their option
-# output_dir (see gbkfit.tasks.prep)
+# or a path and an HDU, {file, hdu}; of moment maps, a list of them, one
+# for each map) into the folder of their option output_dir (see
+# gbkfit.tasks.prep)
 _MAKE_RUN = ('eval', 'fit')
 _CONTINUE_RUN = ('resume',)
-_PREPARE = ('prep_pixel_spectra',)
+_PREPARE = ('prep_pixel_spectra', 'prep_pixel_moments')
 TASKS = _MAKE_RUN + _CONTINUE_RUN + _PREPARE
+
+# The tasks of prep whose files are lists (one for each map)
+_PREPARE_MAPS = ('prep_pixel_moments',)
 
 # The options of the files that prep prepares
 _FILES = ('file_d', 'file_e', 'file_m')
@@ -59,7 +63,8 @@ class Job:
     A job: its id, task and options (those of the task, with its paths
     relative to the workspace), its state, its run (relative to the
     workspace), the files that a job of prep prepared, by the options of
-    their files (e.g. file_d; relative to the workspace), when it was
+    their files (e.g. file_d; relative to the workspace; of moment maps,
+    a list, None for a file not prepared), when it was
     created, started and ended (ISO 8601, UTC), the exit status of its
     process, and the end of its log.
     """
@@ -69,7 +74,7 @@ class Job:
     created: str
     state: State = 'queued'
     run: str | None = None
-    files: dict[str, str] | None = None
+    files: dict[str, str | list[str | None]] | None = None
     started: str | None = None
     ended: str | None = None
     status: int | None = None
@@ -234,7 +239,15 @@ class Jobs:
         options = dict(job.options)
         if job.task in _PREPARE:
             for key in _FILES:
-                options[key] = self._fits_file(options.get(key))
+                if job.task not in _PREPARE_MAPS:
+                    options[key] = self._fits_file(options.get(key))
+                    continue
+                files = options.get(key)
+                if files is not None and not isinstance(files, list):
+                    raise Invalid(
+                        f"the files of {key} of {job.task} are a list, one "
+                        f"for each map; not {files!r}")
+                options[key] = files and [self._fits_file(f) for f in files]
             # (prep writes into a folder of its own, whose files are kept
             # as it ends; see _keep_prepared)
             folder = Path(self._workspace.path(options['output_dir']))
@@ -288,14 +301,30 @@ class Jobs:
         folder = options['output_dir']
         try:
             if job.state == 'complete':
-                outputs = gbkfit.tasks.prep.output_files(
-                    folder, *(options[key] for key in _FILES),
-                    options.get('noise_error', False))
                 target = self._workspace.path(job.options['output_dir'])
-                job.files = {
-                    key: self._workspace.keep_data(output, target)
-                    for key, output in zip(_FILES, outputs)
-                    if output is not None}
+
+                def keep(output: str | None) -> str | None:
+                    return output and self._workspace.keep_data(output, target)
+                if job.task in _PREPARE_MAPS:
+                    # (of each map, its files; those of a role, a list)
+                    nmaps = len(options['file_d'])
+                    outputs = [
+                        gbkfit.tasks.prep.output_files(folder, *(
+                            (options[key] or [None] * nmaps)[i]
+                            for key in _FILES))
+                        for i in range(nmaps)]
+                    job.files = {
+                        key: [keep(output[k]) for output in outputs]
+                        for k, key in enumerate(_FILES)
+                        if any(output[k] is not None for output in outputs)}
+                else:
+                    outputs = gbkfit.tasks.prep.output_files(
+                        folder, *(options[key] for key in _FILES),
+                        options.get('noise_error', False))
+                    job.files = {
+                        key: keep(output)
+                        for key, output in zip(_FILES, outputs)
+                        if output is not None}
         except (Invalid, OSError) as e:
             job.state = 'failed'
             job.output += f"\ncannot keep the prepared files: {e}"

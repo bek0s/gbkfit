@@ -135,9 +135,10 @@ class JobRequest(BaseModel):
 class JobInfo(BaseModel):
     """
     A job: its id, task and options, its state, its run, the files that
-    a job of prep prepared (by the options of their files, e.g. file_d),
-    when it was created, started and ended, the exit status of its
-    process, and the end of its log.
+    a job of prep prepared (by the options of their files, e.g. file_d;
+    of moment maps, a list, one for each map, None for a file not
+    prepared), when it was created, started and ended, the exit status
+    of its process, and the end of its log.
     """
     id: str
     task: str
@@ -146,7 +147,7 @@ class JobInfo(BaseModel):
     state: Literal[
         'queued', 'running', 'complete', 'failed', 'stopped', 'cancelled']
     run: str | None
-    files: dict[str, str] | None
+    files: dict[str, str | list[str | None]] | None
     started: str | None
     ended: str | None
     status: int | None

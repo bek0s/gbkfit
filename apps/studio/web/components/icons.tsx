@@ -56,6 +56,22 @@ export const DarkIcon = () => (
   </Icon>
 );
 
+// The select tool: a pointer at the corner of a dashed box
+export const SelectIcon = () => (
+  <Icon>
+    <path d="M3 3h3M9 3h3M3 3v3M3 9v3M3 12h3" />
+    <path d="M10 10l10 4-4.2 1.8L14 20z" />
+  </Icon>
+);
+
+// The pan tool: arrows to the four sides
+export const PanIcon = () => (
+  <Icon>
+    <path d="M12 3v18M3 12h18" />
+    <path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3" />
+  </Icon>
+);
+
 // Zoom to the selection: a magnifier over a dashed box
 export const ZoomSelectionIcon = () => (
   <Icon>

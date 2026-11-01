@@ -1,13 +1,13 @@
 // A cube, to look at: its data, or the cube of their errors or of their
 // mask (its layers), one map at a time, with its colour bar, as large as
 // the space left allows: a channel, or one of the quick moment maps of the
-// data (a look, measured here; not part of the dataset), chosen on a rail
-// at its left. A selection (a region of the map, a band of channels of the
+// data (a look, measured here; not part of the dataset, as its corner
+// says), chosen on a rail at its left. A selection (a region of the map, a band of channels of the
 // spectrum) is made to look at: the map and the spectrum zoom to it (or
 // with the wheel) and back, and the total spectrum is of it; it is never
-// kept. The rail has two tools: to select (a drag selects; Esc clears)
-// and to pan (a drag pans the zoomed map); a click picks a pixel with
-// either. A crop (an edit of the dataset, set from the selection; see
+// kept. The map has two tools (see MapTools): to select (a drag selects;
+// Esc clears) and to pan (a drag pans the zoomed map); a click picks a
+// pixel with either. A crop (an edit of the dataset, set from the selection; see
 // Edits) is outlined. Under the map, the channel (a slider), or the mask
 // of the moments (grown by prep's tools from seeds above a number of times
 // the noise), in a row of one height, so that the map keeps its size; and
@@ -23,6 +23,7 @@ import { significant } from './format';
 import { MapView, type Region } from './MapView';
 import { SpectrumPlot, valueRange } from './SpectrumPlot';
 import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
+import { MapTools, type Tool } from './MapTools';
 import { Chip, IconButton, NavItem } from './ui/basics';
 import { Check, NumberField, Segments } from './ui/inputs';
 import { StepSlider } from './ui/sliders';
@@ -100,7 +101,7 @@ export function CubeViewer({
   const [nx, ny, nchannels] = shape;
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
   const [view, setView] = useState<View>('channel');
-  const [tool, setTool] = useState<'select' | 'pan'>('select');
+  const [tool, setTool] = useState<Tool>('select');
   const [channel, setChannel] = useState(Math.floor(nchannels / 2));
   // The pixel picked (none: the total spectrum is shown)
   const [pixel, setPixel] = useState<[number, number] | null>(null);
@@ -248,20 +249,17 @@ export function CubeViewer({
         {actions}
       </div>
       <div className="viewer-body">
-        <nav className="rail" aria-label="The views and tools of the cube">
-          <div className="rail-label">tool</div>
-          <NavItem label="Select" active={tool === 'select'} title="Select: a drag selects a region of the map (Esc clears the selection)" onClick={() => setTool('select')} />
-          <NavItem label="Pan" active={tool === 'pan'} title="Pan: a drag moves the zoomed map" onClick={() => setTool('pan')} />
+        <nav className="rail" aria-label="The views of the cube">
           <div className="rail-label">view</div>
           <NavItem label="Channel" active={shown === 'channel'} title="One channel of the cube at a time" onClick={() => setView('channel')} />
           <div className="rail-label" title="Quick moment maps of the data: a look, measured here; the dataset stays a cube">
-            moments
+            quick look
           </div>
           {MOMENTS.map(({ view: v, title, text }, order) => (
             <NavItem
               key={v}
               label={title}
-              left={<span className="order">{order}</span>}
+              left={<span className="order">≈{order}</span>}
               active={shown === v}
               disabled={layer.key !== 'data'}
               title={layer.key === 'data' ? text : 'The moments are of the data'}
@@ -305,15 +303,19 @@ export function CubeViewer({
                     onPan={panBy}
                     label={shown === 'channel' ? `A channel of the ${layer.title.toLowerCase()}` : `The ${shown} map of the data`}
                   />
+                  {shown !== 'channel' && (
+                    <div className="map-source derived" title="A quick moment map of the data, measured here from the cube; the dataset stays a cube">
+                      ≈ quick look · not part of the dataset
+                    </div>
+                  )}
                   {selecting && selection === null && pixel === null && <div className="map-hint">Drag on the map to select a region</div>}
-                  <div className="zoom-buttons">
-                    <IconButton label="Zoom to the selection (the wheel zooms about the pointer)" disabled={selection === null} onClick={() => selection && setZoom(selection)}>
-                      <ZoomSelectionIcon />
-                    </IconButton>
-                    <IconButton label="The whole map" disabled={zoom === null} onClick={() => setZoom(null)}>
-                      <ZoomWholeIcon />
-                    </IconButton>
-                  </div>
+                  <MapTools
+                    tool={tool}
+                    onTool={setTool}
+                    selectTitle="Select: a drag selects a region of the map (Esc clears the selection)"
+                    onZoomToSelection={selection ? () => setZoom(selection) : undefined}
+                    onWhole={zoom ? () => setZoom(null) : undefined}
+                  />
                 </div>
                 <ColourBar range={range} diverging={colours !== 'sequential'} unit={mapUnit(shown, layer.unit)} />
               </div>
@@ -332,17 +334,19 @@ export function CubeViewer({
               />
             </div>
           ) : (
+            // (the value at the side, not on the handle, which would cover
+            // the colour bar at the end)
             <div
-              className="viewer-controls"
+              className="viewer-controls viewer-controls-row"
               title="The moments are of the voxels connected to those above this many times the noise, down to half of it, in the larger regions (0: all of them)"
             >
+              <span className="control-text">{snr === 0 ? 'moments of all the voxels' : `moments of the signal from ${snr}σ`}</span>
               <StepSlider
                 min={0}
                 max={6}
                 step={0.5}
                 value={snr}
-                format={(x) => (x === 0 ? 'moments of all the voxels' : `moments of the signal from ${x}σ`)}
-                always
+                format={(x) => (x === 0 ? 'all' : `${x}σ`)}
                 label="The signal-to-noise ratio of the mask of the moments"
                 onChange={setSnr}
               />

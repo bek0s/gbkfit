@@ -1499,7 +1499,24 @@
             "anyOf": [
               {
                 "additionalProperties": {
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  ]
                 },
                 "type": "object"
               },
@@ -1562,7 +1579,7 @@
           "output"
         ],
         "title": "JobInfo",
-        "description": "A job: its id, task and options, its state, its run, the files that\na job of prep prepared (by the options of their files, e.g. file_d),\nwhen it was created, started and ended, the exit status of its\nprocess, and the end of its log."
+        "description": "A job: its id, task and options, its state, its run, the files that\na job of prep prepared (by the options of their files, e.g. file_d;\nof moment maps, a list, one for each map, None for a file not\nprepared), when it was created, started and ended, the exit status\nof its process, and the end of its log."
       },
       "JobRequest": {
         "properties": {
@@ -1572,7 +1589,8 @@
               "eval",
               "fit",
               "resume",
-              "prep_pixel_spectra"
+              "prep_pixel_spectra",
+              "prep_pixel_moments"
             ],
             "title": "Task"
           },

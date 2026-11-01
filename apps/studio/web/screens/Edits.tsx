@@ -80,9 +80,9 @@ export const NO_EDITS: Edits = {
 const LINE_UNITS = { wave: ['Angstrom', 'nm', 'micron'], freq: ['GHz', 'MHz'] };
 
 // The iterations of sigma clipping (as the command line)
-const SIGMA_ITERATIONS = 5;
+export const SIGMA_ITERATIONS = 5;
 
-const value = (text: string) => (text.trim() === '' ? null : Number(text));
+export const value = (text: string) => (text.trim() === '' ? null : Number(text));
 
 // Whether edits are typed (or checked)
 function hasEdits(edits: Edits): boolean {
@@ -101,7 +101,7 @@ export function needsPrep(edits: Edits, data: ArrayInfo): boolean {
 
 // A crop typed, as the first and the last (inclusive) from 0, or null if
 // none; base is the number of the first as typed
-function cropOf([first, last]: [string, string], size: number, base: number): [number, number] | null {
+export function cropOf([first, last]: [string, string], size: number, base: number): [number, number] | null {
   if (first.trim() === '' && last.trim() === '') return null;
   return [(value(first) ?? base) - base, (value(last) ?? size - 1 + base) - base];
 }
@@ -120,7 +120,7 @@ export function cropsOf(edits: Edits, shape: number[]) {
 
 // A crop typed, made whole numbers in the axis (from base to its size - 1
 // + base), the first before the last; a blank stays blank
-function clampedCrop([first, last]: [string, string], size: number, base: number): [string, string] {
+export function clampedCrop([first, last]: [string, string], size: number, base: number): [string, string] {
   const clamp = (text: string) => {
     const number = value(text);
     return number === null || Number.isNaN(number) ? null : Math.min(size - 1 + base, Math.max(base, Math.round(number)));
