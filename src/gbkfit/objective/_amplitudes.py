@@ -14,7 +14,7 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import LinearPieces, ObservationGroup
 from gbkfit.params import (
     ParamValues, Solution, Solve, check_together, solve_together)
-from gbkfit.params._keys import element_name
+from gbkfit.params import element_name
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.observation import Comparison
 

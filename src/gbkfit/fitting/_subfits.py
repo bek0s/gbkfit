@@ -8,12 +8,11 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
-from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import SubFitLog
 from gbkfit.objective import Objective
 
 if TYPE_CHECKING:
-    # (the workers import fitting, for its control)
     from gbkfit.parallel import WorkerPool
 
 

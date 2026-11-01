@@ -29,7 +29,7 @@ import threadpoolctl
 from annotated_types import Ge, Gt
 
 from gbkfit.driver import Driver, driver_parser
-from gbkfit.fitting.control import FitControl, FitStopped, StopFlag
+from gbkfit.control import FitControl, FitStopped, StopFlag
 from gbkfit.objective import Objective
 from gbkfit.observation import GroupPlan, ObservationGroup
 from gbkfit.params import Solve

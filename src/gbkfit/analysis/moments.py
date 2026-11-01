@@ -11,7 +11,8 @@ import numpy.typing as npt
 
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
-from gbkfit.observation.observables import _moments
+from gbkfit.observation.observables import (
+    MOMENT_METHODS, MomentsPlan, check_moment_orders)
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -138,14 +139,14 @@ def moment_maps(
             steps, steps[0], rtol=1e-6, atol=0) or steps[0] == 0:
         raise ValueError(
             "the velocities must be at least two, and evenly spaced")
-    if method not in _moments.METHODS:
+    if method not in MOMENT_METHODS:
         raise ValueError(
-            f"the method must be one of {_moments.METHODS}; it is {method!r}")
+            f"the method must be one of {MOMENT_METHODS}; it is {method!r}")
     if not 0 <= flux_floor < 1:
         raise ValueError(
             f"the flux floor must be from 0 to below 1; it is {flux_floor}")
     try:
-        orders = _moments.check_moment_orders(orders, method)
+        orders = check_moment_orders(orders, method)
     except ConfigError as e:
         raise ValueError(str(e)) from None
     # (the velocities from the lowest, so that moment 0 is positive)
@@ -160,7 +161,7 @@ def moment_maps(
     if driver is None:
         driver = DriverHost()
     _, ny, nx = cube.shape
-    plan = _moments.MomentsPlan(
+    plan = MomentsPlan(
         driver, (nx, ny), orders, flux_floor, method, dtype)
     maps = plan.measure(
         (1, 1, step), (0, 0, velocities[0]), driver.mem_copy_h2d(cube),

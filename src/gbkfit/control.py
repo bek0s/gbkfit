@@ -1,7 +1,8 @@
 """
 Stopping fits as they run: the caller of Fitter.fit holds a FitControl,
 and the fit problem raises FitStopped at the next model evaluation after
-it is asked to stop.
+it is asked to stop (as do the workers that run its evaluations; see
+gbkfit.parallel).
 """
 
 import threading

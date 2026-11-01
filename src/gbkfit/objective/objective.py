@@ -9,7 +9,7 @@ from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
 from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
 from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
-from gbkfit.params._keys import with_elements
+from gbkfit.params import with_elements
 from gbkfit.utils import threadutils
 from gbkfit.utils.parseutils import ConfigError
 from ._amplitudes import AmplitudeSolve, amplitude_solves

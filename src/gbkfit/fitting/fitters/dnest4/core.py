@@ -13,7 +13,7 @@ import numpy as np
 from annotated_types import Ge, Gt
 
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
-from gbkfit.fitting.control import FitStopped
+from gbkfit.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.fitters._tables import TableLayout, table_layout
 from gbkfit.fitting.problem import FitProblem

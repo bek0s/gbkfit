@@ -15,7 +15,7 @@ from annotated_types import Ge
 from gbkfit.dataset import Dataset
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import Fitter
-from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import SubFitLog
 from gbkfit.fitting.result import Bootstrap
 from gbkfit.objective import Objective
@@ -25,7 +25,6 @@ from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
 if TYPE_CHECKING:
-    # (the workers import fitting, for its control)
     from gbkfit.parallel import WorkerPool
 
 

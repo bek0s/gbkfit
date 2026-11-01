@@ -13,6 +13,12 @@ import numpy as np
 from gbkfit.params.pdescs import ParamDesc
 
 
+__all__ = [
+    'element_name',
+    'with_elements'
+]
+
+
 class InvalidKeyError(ValueError):
     """An invalid key; the message explains why."""
 

@@ -1,3 +1,4 @@
+from ._moments import *
 from .base import *
 from .pixel_brightness import *
 from .pixel_moments import *

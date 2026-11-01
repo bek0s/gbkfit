@@ -11,7 +11,7 @@ import numpy as np
 
 from gbkfit.observation import FluxScale, ModelData, ObservationGroup
 from gbkfit.params import ParamValues, Solution, Solve
-from gbkfit.params._keys import element_name
+from gbkfit.params import element_name
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.observation import Comparison
 

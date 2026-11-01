@@ -6,7 +6,9 @@ configuration, which fixes, ties, frees or solves each of them and
 evaluates them.
 """
 
+from ._cache import *
 from ._errors import *
+from ._keys import *
 from .modes import *
 from .pdescs import *
 from .priors import *

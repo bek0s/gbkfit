@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, NamedTuple, TypeVar
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog, SubFitLog, fingerprint
 from gbkfit.params.joint_priors import joint_prior_residuals
 from gbkfit.params.priors import Prior
@@ -25,7 +25,6 @@ from gbkfit.params import (
 from gbkfit.utils import threadutils
 
 if TYPE_CHECKING:
-    # (the workers import fitting, for its control)
     from gbkfit.parallel import WorkerPool
 
 

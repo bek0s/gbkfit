@@ -13,8 +13,8 @@ import numpy as np
 from gbkfit.driver import DeviceArray
 from gbkfit.observation import GroupPlan, OrbitRecording, OrbitSeries
 from gbkfit.params import ParamValues, Solution, Solve, solve_together_rows
-from gbkfit.params._cache import ParamView, StageCache
-from gbkfit.params._keys import element_name
+from gbkfit.params import ParamView, StageCache
+from gbkfit.params import element_name
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.observation import Comparison
 

@@ -10,7 +10,7 @@ from annotated_types import Gt
 from pydantic import FiniteFloat
 
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
-from gbkfit.fitting.control import FitStopped
+from gbkfit.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem

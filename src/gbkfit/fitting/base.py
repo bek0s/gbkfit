@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.fitting.control import FitControl, FitStopped
+from gbkfit.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import MERITS, FitProblem
@@ -30,7 +30,6 @@ from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
 if TYPE_CHECKING:
-    # (the workers import fitting, for its control)
     from gbkfit.observation import ObservationGroup
     from gbkfit.parallel import WorkerPool
 

@@ -4,9 +4,11 @@ fitter, the problem that fitters solve, the result of a fit, and its
 bootstrap.
 """
 
+# (the control of fits, which is below the fits and the workers that run
+# their evaluations)
+from gbkfit.control import *
 from .base import *
 from .bootstrap import *
-from .control import *
 from .evaluation_log import *
 from .fitparams import *
 from .problem import *

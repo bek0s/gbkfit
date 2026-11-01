@@ -24,6 +24,13 @@ if TYPE_CHECKING:
     from .region_moments import RegionMoments
 
 
+__all__ = [
+    'MOMENT_METHODS',
+    'MomentsPlan',
+    'check_moment_orders'
+]
+
+
 _log = logging.getLogger(__name__)
 
 
@@ -36,8 +43,8 @@ SPEC_RANGE = 1000
 # moments, the moments of a Gaussian fitted to them (its flux, centre and
 # dispersion), or a Gauss-Hermite series fitted to them (its flux, centre,
 # dispersion, h3 and h4)
-METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
-Method: TypeAlias = Literal[METHODS]
+MOMENT_METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
+Method: TypeAlias = Literal[MOMENT_METHODS]
 
 # The flux floor of the moments: a fraction of the flux of the brightest
 # spectrum (see PixelMoments)
@@ -125,7 +132,7 @@ def check_moment_orders(
 ) -> tuple[int, ...]:
     """
     Return the moment orders, sorted and unique. Raise ConfigError unless
-    they are valid for the method (see METHODS; a Gaussian has moments 0
+    they are valid for the method (see MOMENT_METHODS; a Gaussian has moments 0
     to 2, a Gauss-Hermite series 0 to 4).
     """
     max_order = _MAX_ORDERS[method]
@@ -142,7 +149,7 @@ def check_moment_orders(
 def moment_item(order: int, method: str) -> str:
     """
     Return the name of the data item of the moment of an order measured by
-    a method (see METHODS): moment0 to moment7, the central moments (the
+    a method (see MOMENT_METHODS): moment0 to moment7, the central moments (the
     flux, the mean velocity, the dispersion, and above in (km/s)^k), but
     the coefficients h3 and h4 of a Gauss-Hermite series (gauss_hermite;
     dimensionless, as pPXF names them).
@@ -240,7 +247,7 @@ def spectra_dcube(
 class MomentsPlan:
     """
     The moments of the given orders of the spectra of cubes (nz, ny, nx)
-    on a driver, measured with the given method (see METHODS): a map
+    on a driver, measured with the given method (see MOMENT_METHODS): a map
     (ny, nx) for each order, one mask shared by them (the spectra whose
     moment 0 is not above flux_floor times the largest of the map, in
     absolute value, and those whose fit fails), and one weight map shared

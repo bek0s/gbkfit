@@ -20,8 +20,8 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
 from gbkfit.params import ParamFunctions, ParamValues
-from gbkfit.params._cache import ParamView, StageCache
-from gbkfit.params._keys import with_elements
+from gbkfit.params import ParamView, StageCache
+from gbkfit.params import with_elements
 from gbkfit.utils import parseutils, threadutils, timeutils
 from gbkfit.utils.parseutils import ConfigError
 from ._orbits import OrbitRecording, OrbitSeries, orbit_recordings

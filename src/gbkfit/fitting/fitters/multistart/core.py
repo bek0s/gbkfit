@@ -14,7 +14,7 @@ from annotated_types import Gt
 
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, fitter_parser
-from gbkfit.fitting.control import FitControl
+from gbkfit.control import FitControl
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitCounts, FitProblem
