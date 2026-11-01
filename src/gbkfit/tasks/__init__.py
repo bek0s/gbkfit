@@ -7,3 +7,4 @@ Programs run them in-process, or in a process of their own with
 """
 
 from ._console import *
+from ._run import *

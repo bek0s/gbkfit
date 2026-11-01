@@ -11,8 +11,7 @@ import sys
 
 import pytest
 
-from gbkfit.tasks import prep
-from gbkfit.tasks.__main__ import _TASKS
+from gbkfit.tasks import TASKS, prep
 
 
 def run_task(*args):
@@ -29,17 +28,19 @@ def test_a_task_runs_with_its_options():
     assert os.path.isfile('tables/prep_lsf.ecsv')
 
 
-@pytest.mark.parametrize('args, message', [
-    (['prep_lsf_muse', '{"directory": "x"}'],
+@pytest.mark.parametrize('args, status, message', [
+    # (options that are not the task's are an error of the user's input,
+    # as one of a configuration; an invalid command line is argparse's)
+    (['prep_lsf_muse', '{"directory": "x"}'], 1,
      "unexpected keyword argument 'directory'"),
-    (['eval', '{}'], "missing a required argument: 'mode'"),
-    (['prep_lsf_muse', '[]'], "must be a JSON object"),
-    (['evaluate'], "invalid choice: 'evaluate'")])
-def test_invalid_tasks_and_options_are_rejected(args, message):
+    (['eval', '{}'], 1, "missing a required argument: 'mode'"),
+    (['prep_lsf_muse', '[]'], 2, "must be a JSON object"),
+    (['evaluate'], 2, "invalid choice: 'evaluate'")])
+def test_invalid_tasks_and_options_are_rejected(args, status, message):
     result = run_task(*args)
-    assert result.returncode == 2 and message in result.stderr
+    assert result.returncode == status and message in result.stderr
 
 
 def test_every_prep_task_is_a_task():
-    assert {name for name in _TASKS if name.startswith('prep_')} == set(
+    assert {name for name in TASKS if name.startswith('prep_')} == set(
         prep.__all__)

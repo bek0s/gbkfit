@@ -23,12 +23,12 @@ import numpy as np
 import numpy.typing as npt
 from astropy.io import fits
 
+import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
 from gbkfit.utils import datafiles, fitsutils, tableutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import DataFile
-from . import _detail
 
 
 __all__ = [
@@ -58,9 +58,9 @@ _Exists = Literal['terminate', 'overwrite', 'unique']
 def _output_dir(output_dir: str, mode: _Exists) -> str:
     """
     Create the output directory, and return its absolute path (see
-    _detail.make_output_dir).
+    gbkfit.outputs.make_directory).
     """
-    output_dir = _detail.make_output_dir(output_dir, mode)
+    output_dir = gbkfit.outputs.make_directory(output_dir, mode)
     _log.info(f"output will be stored under directory: {output_dir}")
     return output_dir
 

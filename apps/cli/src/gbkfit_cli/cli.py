@@ -5,31 +5,13 @@ library (see gbkfit.tasks) in-process.
 
 import argparse
 import logging
-import sys
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
-from gbkfit.tasks import log_handler
-from gbkfit.utils import parseutils
+from gbkfit.tasks import exit_on_user_errors, log_to_console, run
 from gbkfit.utils.parseutils import ConfigError
 
 _log = logging.getLogger(__name__)
-
-
-def configure_logging(
-        log_level: Literal['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
-) -> None:
-    """
-    Configure logging with specified log level: GBKFIT and the tool log to
-    the console of the tasks (stderr; see gbkfit.tasks.log_handler; the
-    tasks also log to their runs).
-    """
-    handler = log_handler()
-    for name in ('gbkfit', 'gbkfit_cli'):
-        logger = logging.getLogger(name)
-        logger.setLevel(log_level)
-        logger.addHandler(handler)
-        logger.propagate = False
 
 
 # The options of prep pixel_moments and region_moments with one value for
@@ -580,75 +562,49 @@ def _make_parser() -> argparse.ArgumentParser:
 
 def _run_eval(args: argparse.Namespace) -> None:
     """Run the eval task."""
-    import gbkfit.tasks.eval
-    with parseutils.strict_mode(not args.lenient):
-        gbkfit.tasks.eval.eval_(
-            args.mode, args.config, args.profile,
-            args.output_dir, args.output_dir_mode)
+    run('eval', dict(
+        mode=args.mode, config=args.config, profile_iters=args.profile,
+        output_dir=args.output_dir, output_dir_mode=args.output_dir_mode),
+        args.lenient)
 
 
 def _run_prep(args: argparse.Namespace) -> None:
-    """Run the prep task."""
-    import gbkfit.tasks.prep
-    output = dict(
-        output_dir=args.output_dir, output_dir_mode=args.output_dir_mode)
-    if args.prep_task == 'pixel_brightness':
-        gbkfit.tasks.prep.prep_pixel_brightness(
-            args.data_d, args.data_e, args.data_m,
-            args.roi_spat, args.clip_min, args.clip_max,
-            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-            args.sclip_sigma, args.sclip_iters,
-            args.minify, args.nanpad, args.dtype,
-            **output, error_kind=args.error_kind)
-    elif args.prep_task == 'slit_spectra':
-        gbkfit.tasks.prep.prep_slit_spectra(
-            args.data_d, args.data_e, args.data_m,
-            args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
-            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-            args.sclip_sigma, args.sclip_iters,
-            args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, args.velocity, **output,
+    """Run a prep task, with the options of the command line by name."""
+    task = args.prep_task
+    if task in ('pixel_brightness', 'slit_spectra', 'pixel_spectra',
+                'pixel_moments'):
+        options = dict(
+            file_d=args.data_d, file_e=args.data_e, file_m=args.data_m,
+            roi_spat=args.roi_spat, clip_min=args.clip_min,
+            clip_max=args.clip_max, ccl_lcount=args.ccl_lcount,
+            ccl_pcount=args.ccl_pcount, ccl_lratio=args.ccl_lratio,
+            sclip_sigma=args.sclip_sigma, sclip_iters=args.sclip_iters,
+            minify=args.minify, nanpad=args.nanpad, dtype=args.dtype,
             error_kind=args.error_kind)
-    elif args.prep_task == 'pixel_moments':
-        gbkfit.tasks.prep.prep_pixel_moments(
-            args.data_d, args.data_e, args.data_m,
-            args.roi_spat, args.clip_min, args.clip_max,
-            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-            args.sclip_sigma, args.sclip_iters,
-            args.minify, args.nanpad, args.dtype,
-            **output, error_kind=args.error_kind)
-    elif args.prep_task == 'region_moments':
-        gbkfit.tasks.prep.prep_region_moments(
-            args.bins, args.data_d, args.data_e, args.data_m, args.dtype,
-            **output, error_kind=args.error_kind)
-    elif args.prep_task == 'region_spectra':
-        gbkfit.tasks.prep.prep_region_spectra(
-            args.bins, args.data_d, args.data_e, args.data_m,
-            args.roi_spec, args.dtype, args.velocity_rest, args.velocity,
-            **output, error_kind=args.error_kind)
-    elif args.prep_task == 'gauss_hermite_moments':
-        gbkfit.tasks.prep.prep_gauss_hermite_moments(
-            args.table, args.columns, args.errors, args.format, **output)
-    elif args.prep_task == 'psf_muse':
-        gbkfit.tasks.prep.prep_psf_muse(args.cube, **output)
-    elif args.prep_task == 'lsf_muse':
-        gbkfit.tasks.prep.prep_lsf_muse(**output)
-    elif args.prep_task == 'psf_casa_beams':
-        gbkfit.tasks.prep.prep_psf_casa_beams(args.cube, **output)
-    elif args.prep_task == 'pixel_spectra':
-        gbkfit.tasks.prep.prep_pixel_spectra(
-            args.data_d, args.data_e, args.data_m,
-            args.roi_spat, args.roi_spec, args.clip_min, args.clip_max,
-            args.ccl_lcount, args.ccl_pcount, args.ccl_lratio,
-            args.sclip_sigma, args.sclip_iters,
-            args.minify, args.nanpad, args.dtype,
-            args.velocity_rest, args.velocity, **output,
-            noise_error=args.noise_error, error_kind=args.error_kind)
+    elif task in ('region_moments', 'region_spectra'):
+        options = dict(
+            file_bins=args.bins, file_d=args.data_d, file_e=args.data_e,
+            file_m=args.data_m, dtype=args.dtype, error_kind=args.error_kind)
+    elif task == 'gauss_hermite_moments':
+        options = dict(
+            file=args.table, columns=args.columns, errors=args.errors,
+            format_=args.format)
+    elif task in ('psf_muse', 'psf_casa_beams'):
+        options = dict(file=args.cube)
+    else:
+        options = {}
+    if task in ('slit_spectra', 'pixel_spectra', 'region_spectra'):
+        options |= dict(
+            roi_spec=args.roi_spec, velocity_rest=args.velocity_rest,
+            velocity=args.velocity)
+    if task == 'pixel_spectra':
+        options['noise_error'] = args.noise_error
+    run(f'prep_{task}', options | dict(
+        output_dir=args.output_dir, output_dir_mode=args.output_dir_mode))
 
 
 def _run_fit(args: argparse.Namespace) -> None:
     """Run the fit task (or resume a fit, or bootstrap one)."""
-    import gbkfit.tasks.fit
     if args.resume is not None and args.bootstrap is not None:
         raise ConfigError(
             "give the output directory of a fit to resume (--resume) or to "
@@ -674,30 +630,32 @@ def _run_fit(args: argparse.Namespace) -> None:
         raise ConfigError(
             f"a fit resumed (--resume) or bootstrapped (--bootstrap) writes "
             f"into its own output directory; {ignored} do not apply")
-    with parseutils.strict_mode(not args.lenient):
-        if args.resume is not None:
-            gbkfit.tasks.fit.resume(args.resume)
-        elif args.bootstrap is not None:
-            gbkfit.tasks.fit.bootstrap(args.bootstrap, args.config)
-        else:
-            gbkfit.tasks.fit.fit(
-                args.config, args.output_dir, args.output_dir_mode,
-                not args.no_evaluation_log)
+    if args.resume is not None:
+        run('resume', dict(output_dir=args.resume), args.lenient)
+    elif args.bootstrap is not None:
+        run('bootstrap', dict(
+            output_dir=args.bootstrap, config=args.config), args.lenient)
+    else:
+        run('fit', dict(
+            config=args.config, output_dir=args.output_dir,
+            output_dir_mode=args.output_dir_mode,
+            evaluation_log=not args.no_evaluation_log), args.lenient)
 
 
 def _run_plot(args: argparse.Namespace) -> None:
     """Run the plot task."""
-    import gbkfit.tasks.plot
-    gbkfit.tasks.plot.plot(
-        args.result_dir, args.output_dir, args.output_dir_mode,
-        args.format, args.dpi, args.only_best, args.posterior_mode,
-        args.posterior_params)
+    run('plot', dict(
+        result_dir=args.result_dir, output_dir=args.output_dir,
+        output_dir_mode=args.output_dir_mode, format_=args.format,
+        dpi=args.dpi, only_best=args.only_best,
+        posterior_mode=args.posterior_mode,
+        posterior_params=args.posterior_params))
 
 
 def _run_migrate(args: argparse.Namespace) -> None:
     """Run the migrate task."""
-    import gbkfit.tasks.migrate
-    gbkfit.tasks.migrate.migrate(args.path, args.output, args.from_version)
+    run('migrate', dict(
+        path=args.path, output=args.output, from_version=args.from_version))
 
 
 def main() -> None:
@@ -713,22 +671,16 @@ def main() -> None:
         _check_moment_counts(parser, args)
 
     # Configure log level before doing anything else
-    configure_logging('DEBUG' if args.verbose else 'INFO')
+    log_to_console(
+        logging.DEBUG if args.verbose else logging.INFO,
+        ('gbkfit', 'gbkfit_cli'))
     _log.debug(
         f"cli has been called with the following arguments: {vars(args)}")
 
     tasks = dict(
         eval=_run_eval, prep=_run_prep, fit=_run_fit, plot=_run_plot,
         migrate=_run_migrate)
-    # (errors a user fixes, without a traceback: of configurations, and
-    # of files and folders, e.g. one not found, or an output directory
-    # that exists)
-    try:
+    with exit_on_user_errors(args.verbose):
         tasks[args.task](args)
-    except (ConfigError, OSError) as e:
-        if args.verbose:
-            raise
-        _log.error(f"error: {e}")
-        sys.exit(1)
 
     _log.info("So long and thanks for all the fish!")

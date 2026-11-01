@@ -9,13 +9,11 @@ import copy
 import logging
 import os
 from collections.abc import Iterator, Mapping
-from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 import gbkfit.outputs
 import gbkfit.project
 from gbkfit.setup import ConfigFile
-from gbkfit.utils import miscutils
 
 
 # The log of a run, and the form of its messages
@@ -50,39 +48,6 @@ def write_setup(run: gbkfit.outputs.RunWriter, config: ConfigFile) -> None:
         'setup.json', 'setup',
         dict(project=os.path.relpath(config.project.path, run.path))
         | config.sources)
-
-
-def make_output_dir(
-        path: str,
-        mode: Literal['terminate', 'overwrite', 'unique']
-) -> str:
-    """
-    Create the output directory at the given path and return its absolute
-    path. If it exists: an error (terminate), use it (overwrite), or create
-    the first free path with a numeric suffix (unique, e.g. 'out_2').
-    Creating a directory is atomic, so two runs cannot both create the
-    same one.
-    """
-    path_obj = Path(path).absolute()
-    try:
-        path_obj.mkdir(parents=True)
-        return str(path_obj)
-    except FileExistsError:
-        pass
-    if not path_obj.is_dir():
-        raise FileExistsError(f"path '{str(path_obj)}' exists as a file")
-    if mode == 'terminate':
-        raise FileExistsError(f"path '{str(path_obj)}' already exists")
-    if mode == 'overwrite':
-        return str(path_obj)
-    while True:
-        candidate = miscutils.make_unique_path(path_obj)
-        try:
-            candidate.mkdir(parents=True)
-            return str(candidate)
-        except FileExistsError:
-            # Another run created it first: try the next one
-            continue
 
 
 @contextlib.contextmanager

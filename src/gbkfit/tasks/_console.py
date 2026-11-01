@@ -7,6 +7,7 @@ _progress.console_progress).
 
 import logging
 import sys
+from collections.abc import Sequence
 
 import rich.console
 import rich.highlighter
@@ -14,7 +15,8 @@ import rich.logging
 
 
 __all__ = [
-    'log_handler'
+    'log_handler',
+    'log_to_console'
 ]
 
 
@@ -40,3 +42,24 @@ def log_handler() -> logging.Handler:
     return rich.logging.RichHandler(
         console=CONSOLE, show_time=False, show_level=False, show_path=False,
         highlighter=rich.highlighter.NullHighlighter())
+
+
+def log_to_console(level: int, names: Sequence[str] = ('gbkfit',)) -> None:
+    """
+    Make the loggers of the given names (that of GBKFIT, and those of a
+    program) log to the console of the tasks at a level, and only there
+    (see log_handler).
+
+    Parameters
+    ----------
+    level : int
+        The level (e.g. logging.INFO).
+    names : Sequence of str, optional
+        The names of the loggers.
+    """
+    handler = log_handler()
+    for name in names:
+        logger = logging.getLogger(name)
+        logger.setLevel(level)
+        logger.addHandler(handler)
+        logger.propagate = False

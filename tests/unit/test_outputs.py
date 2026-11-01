@@ -141,3 +141,20 @@ def test_only_runs_of_known_versions_are_opened(tmp_path):
     json.dump(manifest, open('run/gbkfit.json', 'w'))
     with pytest.raises(ValueError, match='upgrade GBKFIT'):
         outputs.open('run')
+
+
+def test_make_directory(tmp_path):
+    path = tmp_path / 'out'
+    assert outputs.make_directory(str(path), 'terminate') == str(path)
+    assert path.is_dir()
+    with pytest.raises(FileExistsError, match="already exists"):
+        outputs.make_directory(str(path), 'terminate')
+    assert outputs.make_directory(str(path), 'overwrite') == str(path)
+    # Each unique directory is new
+    first = outputs.make_directory(str(path), 'unique')
+    second = outputs.make_directory(str(path), 'unique')
+    assert first == str(tmp_path / 'out_1')
+    assert second == str(tmp_path / 'out_2')
+    (tmp_path / 'file').write_text('')
+    with pytest.raises(FileExistsError, match="exists as a file"):
+        outputs.make_directory(str(tmp_path / 'file'), 'overwrite')
