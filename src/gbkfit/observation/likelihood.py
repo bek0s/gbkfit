@@ -3,7 +3,8 @@ import copy
 import dataclasses
 from collections.abc import Callable, Mapping, Sequence
 from numbers import Real
-from typing import Annotated, Any, Literal, NamedTuple, Self, TypeAlias
+from typing import (
+    TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self, TypeAlias)
 
 import astropy.units
 import numpy as np
@@ -17,6 +18,11 @@ from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import funcutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import FilePath
+
+if TYPE_CHECKING:
+    from gbkfit.driver import Driver
+    from .comparisons import Comparison
+    from .observation import Observation
 
 
 __all__ = [
@@ -156,6 +162,28 @@ class Likelihood(parseutils.TypedSerializable, abc.ABC):
         flux_floor of a moment map; see LikelihoodGaussian).
         """
         pass
+
+    @abc.abstractmethod
+    def comparison(
+            self, observation: 'Observation', driver: 'Driver'
+    ) -> 'Comparison':
+        """
+        Return the comparison of an observation of it with its data, on
+        the driver of its model: its residuals and chi-square (see
+        Comparison).
+
+        Parameters
+        ----------
+        observation : Observation
+            The observation, with data, of this likelihood.
+        driver : Driver
+            The driver of its model.
+
+        Returns
+        -------
+        Comparison
+            The comparison.
+        """
 
 
 class LikelihoodGaussian(Likelihood):
@@ -447,6 +475,13 @@ class LikelihoodGaussian(Likelihood):
 
     def takes_lacking_values(self) -> bool:
         return self._missing_residual is not None
+
+    def comparison(
+            self, observation: 'Observation', driver: 'Driver'
+    ) -> 'Comparison':
+        # (the comparisons import the likelihoods)
+        from .comparisons import ComparisonGaussian
+        return ComparisonGaussian(observation, driver)
 
     def upper_limit(self, key: str) -> tuple[float, float] | None:
         """
@@ -766,6 +801,13 @@ class LikelihoodUser(Likelihood):
 
     def takes_lacking_values(self) -> bool:
         return True
+
+    def comparison(
+            self, observation: 'Observation', driver: 'Driver'
+    ) -> 'Comparison':
+        # (the comparisons import the likelihoods)
+        from .comparisons import ComparisonUser
+        return ComparisonUser(observation, driver)
 
     def evaluate(
             self,

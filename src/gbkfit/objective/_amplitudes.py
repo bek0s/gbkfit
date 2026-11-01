@@ -16,7 +16,7 @@ from gbkfit.params import (
     ParamValues, Solution, Solve, check_together, solve_together)
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
-from .comparisons import Comparison
+from gbkfit.observation import Comparison
 
 
 __all__ = [

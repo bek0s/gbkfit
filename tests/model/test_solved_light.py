@@ -178,7 +178,6 @@ def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
     # the amplitudes of the core: the base, the envelope alone, and the
     # image of each amplitude alone; the comparison weighs them by the
     # errors of the data
-    from gbkfit.objective.comparisons import comparison
     image = models(driver, [(32, 32)], TRUTH)[0]
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=copy.deepcopy([CORE, ENVELOPE])))],
@@ -195,7 +194,8 @@ def test_the_pieces_of_a_model_are_its_parts_and_are_weighed(driver):
         np.testing.assert_allclose(parts[k], models(
             driver, [(32, 32)], with_amplitudes(TRUTH, np.eye(3)[k]))[0],
             atol=atol)
-    comparison_ = comparison(group.observations()[0], driver)
+    obs = group.observations()[0]
+    comparison_ = obs.likelihood().comparison(obs, driver)
     comparison_.prepare()
     rows = driver.mem_alloc_d((2, image.size), np.float64)
     comparison_.weigh(pieces, TRUTH, rows)

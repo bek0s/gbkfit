@@ -5,9 +5,8 @@ from typing import Any, NamedTuple, Self, TypeAlias
 import numpy as np
 
 from gbkfit.dataset import Dataset
-from gbkfit.driver import DeviceArray, Driver
+from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
-from gbkfit.objective.comparisons import comparison
 from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
 from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
 from gbkfit.params._keys import with_elements
@@ -182,7 +181,7 @@ class Objective:
         self._group = group
         self._datasets = tuple(obs.data() for obs in observations)
         self._comparisons = tuple(
-            comparison(obs, driver) for obs, driver in zip(
+            obs.likelihood().comparison(obs, driver) for obs, driver in zip(
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
         # The blocks of each kind, each of the solves left by the others

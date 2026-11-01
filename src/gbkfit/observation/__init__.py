@@ -1,5 +1,6 @@
 from ._group_plan import *
 from ._orbits import *
+from .comparisons import *
 from .foreground import *
 from .group import *
 from .lens_masses import *

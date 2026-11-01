@@ -13,7 +13,7 @@ from gbkfit.observation import FluxScale, ModelData, ObservationGroup
 from gbkfit.params import ParamValues, Solution, Solve
 from gbkfit.params._keys import element_name
 from gbkfit.utils.parseutils import ConfigError
-from .comparisons import Comparison
+from gbkfit.observation import Comparison
 
 
 __all__ = [

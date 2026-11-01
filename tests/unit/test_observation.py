@@ -134,7 +134,6 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
     # (so that no elements of the model are solved from them)
     from gbkfit.dataset import DatasetPixelSpectra
     from gbkfit.driver.drivers.host import DriverHost
-    from gbkfit.objective.comparisons import comparison
     from gbkfit.observation import PixelSpectra
     data = DatasetPixelSpectra(
         Data(np.ones((10, 4, 4))),
@@ -143,6 +142,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         PixelSpectra.from_data(data), Flat(), data=data,
         likelihood=LikelihoodGaussian(
             upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))))
-    comparison_ = comparison(observation, DriverHost())
+    comparison_ = observation.likelihood().comparison(
+        observation, DriverHost())
     for form in (comparison_.linear_form, comparison_.pointwise_form):
         assert "has an upper limit" in form(['spectra'])

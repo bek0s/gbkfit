@@ -1,23 +1,26 @@
+"""
+The comparisons of the models of observations with their data, each of
+the kind of its likelihood (see Likelihood.comparison): their residuals
+and chi-square.
+"""
+
 import abc
 from collections.abc import Collection, Mapping
 from typing import NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import LinearPieces, Observation
-from gbkfit.observation.likelihood import (
-    LikelihoodGaussian, LikelihoodUser, Whitening, whitening)
 from gbkfit.params import ParamValues
-from gbkfit.utils.parseutils import ConfigError
+from ._group_plan import LinearPieces
+from .likelihood import LikelihoodUser, Whitening, whitening
+from .observation import Observation
 
 
 __all__ = [
     'Comparison',
     'ComparisonGaussian',
-    'ComparisonUser',
-    'comparison'
+    'ComparisonUser'
 ]
 
 
@@ -974,25 +977,6 @@ class ComparisonUser(Comparison):
 
     def _terms_chi2(self) -> float:
         return self._chi2
-
-
-def comparison(observation: Observation, driver: Driver) -> Comparison:
-    """
-    Return the comparison of an observation with its data, of the kind of
-    its likelihood, on the driver of its model.
-    """
-    likelihood = observation.likelihood()
-    for kind, cls in _COMPARISONS:
-        if isinstance(likelihood, kind):
-            return cls(observation, driver)
-    raise TypeError(
-        f"no comparison of the likelihood {type(likelihood).__name__}")
-
-
-# The comparison of each kind of likelihood
-_COMPARISONS = (
-    (LikelihoodGaussian, ComparisonGaussian),
-    (LikelihoodUser, ComparisonUser))
 
 
 def _copied(
