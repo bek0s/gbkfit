@@ -262,7 +262,7 @@ class LensDeflectionMap(LensMass):
         pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
         scale = params['scale'] if self._scaled else 1.0
 
-        def sample(data):
+        def sample(data: np.ndarray) -> np.ndarray:
             return scale * scipy.ndimage.map_coordinates(
                 data, [pixel_y, pixel_x], order=1, mode='nearest')
         return sample(self._alpha_x), sample(self._alpha_y)

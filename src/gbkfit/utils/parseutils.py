@@ -122,7 +122,11 @@ def describe_unknown(unknown: Iterable, known: Iterable[str]) -> str:
     return ', '.join(descs)
 
 
-def report_unknown(message: str, unknown: Iterable, known: Iterable[str]):
+def report_unknown(
+        message: str,
+        unknown: Iterable,
+        known: Iterable[str]
+) -> None:
     """
     Report unknown names: an error, or in lenient mode a warning that they
     are ignored (see strict_mode).
@@ -283,7 +287,11 @@ class UnknownNamesError(ConfigError):
 _location = contextvars.ContextVar('location', default=())
 
 
-def _add_location(error: ConfigError, segments, context) -> None:
+def _add_location(
+        error: ConfigError,
+        segments: Sequence[str | int],
+        context: str | None
+) -> None:
     """Add the segments and the context of a part to an error."""
     if error.context is None and not error.path:
         error.context = context
@@ -883,7 +891,7 @@ def load_option(
         key: str,
         *,
         required: bool = False,
-        **kwargs
+        **kwargs: Any
 ) -> Any:
     """
     Load an option.
@@ -930,7 +938,7 @@ def load_option_and_update_info(
         key: str,
         *,
         required: bool = False,
-        **kwargs
+        **kwargs: Any
 ) -> None:
     """
     Load an option with a parser, and replace its value with the result.
@@ -1051,7 +1059,7 @@ class Serializable(abc.ABC):
         return class_schema(cls)
 
     @abc.abstractmethod
-    def dump(self, *args, **kwargs) -> dict[str, Any]:
+    def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         """
         Dump the object to its configuration.
 
@@ -1173,7 +1181,10 @@ def _prepare_args_and_kwargs(
     Each argument is a sequence with a value for each item, or None for
     None for each item.
     """
-    def validate_sequence(value, name):
+    def validate_sequence(
+            value: Sequence[Any] | None,
+            name: str
+    ) -> Sequence[Any]:
         if value is None:
             return [None] * length
         if not iterutils.is_sequence(value) or len(value) != length:
@@ -1216,7 +1227,12 @@ class Parser(abc.ABC):
     def cls_name(self) -> str:
         return self.cls().__qualname__
 
-    def load(self, x, *args, **kwargs) -> Any:
+    def load(
+            self,
+            x: dict[str, Any] | Sequence[dict[str, Any] | None] | None,
+            *args: Any,
+            **kwargs: Any
+    ) -> Any:
         """
         Load an object, or a list of objects, from its configuration.
 
@@ -1246,10 +1262,21 @@ class Parser(abc.ABC):
             result = self.load_one(x, *args, **kwargs)
         return result
 
-    def load_one(self, x, *args, **kwargs) -> Any:
+    def load_one(
+            self,
+            x: dict[str, Any] | None,
+            *args: Any,
+            **kwargs: Any
+    ) -> Any:
         return self._load_one_impl_wrapper(x, None, *args, **kwargs)
 
-    def _load_one_impl_wrapper(self, x, index, *args, **kwargs):
+    def _load_one_impl_wrapper(
+            self,
+            x: object,
+            index: int | None,
+            *args: Any,
+            **kwargs: Any
+    ) -> Any:
         # Create a copy of the configuration for safety
         x = copy.deepcopy(x)
         with config_path(*([] if index is None else [index])):
@@ -1261,10 +1288,20 @@ class Parser(abc.ABC):
                 if x is not None else None
 
     @abc.abstractmethod
-    def _load_one_impl(self, x, *args, **kwargs):
+    def _load_one_impl(
+            self,
+            x: dict[str, Any],
+            *args: Any,
+            **kwargs: Any
+    ) -> Serializable:
         pass
 
-    def load_many(self, x, *args, **kwargs) -> Any:
+    def load_many(
+            self,
+            x: Sequence[dict[str, Any] | None],
+            *args: Any,
+            **kwargs: Any
+    ) -> Any:
         args_list, kwargs_list = _prepare_args_and_kwargs(
             len(x), args, kwargs)
         results = []
@@ -1274,7 +1311,12 @@ class Parser(abc.ABC):
                 item, i, *item_args, **item_kwargs))
         return results
 
-    def dump(self, x, *args, **kwargs):
+    def dump(
+            self,
+            x: Serializable | Sequence[Serializable] | None,
+            *args: Any,
+            **kwargs: Any
+    ) -> dict[str, Any] | list[dict[str, Any]] | None:
         """
         Dump an object, or a list of objects, to its configuration.
 
@@ -1297,18 +1339,28 @@ class Parser(abc.ABC):
             result = self.dump_one(x, *args, **kwargs)
         return result
 
-    def dump_one(self, x: Serializable, *args, **kwargs) -> dict[str, Any]:
+    def dump_one(
+            self,
+            x: Serializable | None,
+            *args: Any,
+            **kwargs: Any
+    ) -> dict[str, Any] | None:
         return None if x is None else self._dump_one_impl(x, *args, **kwargs)
 
     @abc.abstractmethod
-    def _dump_one_impl(self, x: Serializable, *args, **kwargs) -> dict[str, Any]:
+    def _dump_one_impl(
+            self,
+            x: Serializable,
+            *args: Any,
+            **kwargs: Any
+    ) -> dict[str, Any]:
         pass
 
     def dump_many(
             self,
-            x: list[Serializable],
-            *args,
-            **kwargs
+            x: Sequence[Serializable],
+            *args: Any,
+            **kwargs: Any
     ) -> list[dict[str, Any]]:
         args_list, kwargs_list = _prepare_args_and_kwargs(len(x), args, kwargs)
         results = []
@@ -1322,10 +1374,20 @@ class BasicParser(Parser):
     The parser of a class with one form of configuration.
     """
 
-    def _load_one_impl(self, x, *args, **kwargs):
+    def _load_one_impl(
+            self,
+            x: dict[str, Any],
+            *args: Any,
+            **kwargs: Any
+    ) -> Serializable:
         return self.cls().load(x, *args, **kwargs)
 
-    def _dump_one_impl(self, x, *args, **kwargs):
+    def _dump_one_impl(
+            self,
+            x: Serializable,
+            *args: Any,
+            **kwargs: Any
+    ) -> dict[str, Any]:
         return x.dump(*args, **kwargs)
 
 
@@ -1439,7 +1501,8 @@ class TypedParser(Parser):
     def _load_one_impl(
             self,
             x: dict[str, Any],
-            *args, **kwargs
+            *args: Any,
+            **kwargs: Any
     ) -> TypedSerializable:
         if 'type' not in x:
             raise ConfigError(
@@ -1453,7 +1516,8 @@ class TypedParser(Parser):
     def _dump_one_impl(
             self,
             x: Serializable,
-            *args, **kwargs
+            *args: Any,
+            **kwargs: Any
     ) -> dict[str, Any]:
         """Dump the object, with its type."""
         if not isinstance(x, TypedSerializable):

@@ -303,7 +303,10 @@ def file_references(
             "the data give the number of channels of their spectral axis; "
             "remove its size")
 
-    def per_axis(spatial, value):
+    def per_axis(
+            spatial: float | Sequence[float] | None,
+            value: float | None
+    ) -> list[float | None] | None:
         values = [None] * nspatial if spatial is None \
             else np.broadcast_to(np.asarray(spatial, float), nspatial)
         values = [*values, value]

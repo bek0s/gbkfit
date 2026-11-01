@@ -344,7 +344,9 @@ class DiskPlan(NativePlan):
         sizes['posa_incl_sincos'] = 4 * sizes['posa']
         buffer = ParamBuffer(driver, dtype, sizes)
 
-        def to_device(values, dtype_):
+        def to_device(
+                values: npt.ArrayLike, dtype_: npt.DTypeLike
+        ) -> DeviceArray:
             return driver.mem_copy_h2d(np.array(values, dtype_))
 
         # Describe the disk to the native module: its (sub)nodes, the

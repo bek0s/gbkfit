@@ -344,7 +344,7 @@ class SpectralTable(parseutils.Serializable):
                 f"{file}: there is no column '{column}'; the columns "
                 f"are {table.colnames}")
 
-        def unit(name):
+        def unit(name: str) -> str | u.UnitBase | None:
             return units.get(name, table[name].unit)
         axis = axes[0]
         points_unit = unit(axis) or (_KMS if axis == 'velocity' else None)

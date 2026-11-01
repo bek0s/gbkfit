@@ -140,12 +140,17 @@ test-command = [
 
 [tool.ruff.lint]
 # Linting only (no automatic formatting for now): the core pyflakes and
-# pycodestyle error rules. Star imports are used on purpose.
-select = ['E4', 'E7', 'E9', 'F']
-ignore = ['F403', 'F405']
+# pycodestyle error rules, and type hints on every function of the
+# library (Any where any value goes; __init__ needs no return type).
+# Star imports are used on purpose.
+select = ['E4', 'E7', 'E9', 'F', 'ANN']
+ignore = ['F403', 'F405', 'ANN204', 'ANN401']
 
 [tool.ruff.lint.per-file-ignores]
 '__init__.py' = ['F401']
+# (the tests need no type hints; the applications have none yet)
+'tests/**' = ['ANN']
+'apps/**' = ['ANN']
 
 [tool.setuptools_scm]
 version_file = 'src/gbkfit/_version.py'

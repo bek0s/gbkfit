@@ -117,7 +117,7 @@ class Coords(NamedTuple):
             The world coordinates of the axes, with the same rota, rest and
             medium.
         """
-        def pick(values):
+        def pick(values: tuple[float, ...]) -> tuple[float, ...]:
             return tuple(values[i] for i in indices)
         return self._replace(
             step=pick(self.step), rpix=pick(self.rpix), rval=pick(self.rval))
@@ -734,7 +734,9 @@ def sky_to_pixel(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     return matrix, np.asarray(grid.coords.rpix[:2], float)
 
 
-def _to_sky(x, y, rval):
+def _to_sky(
+        x: npt.ArrayLike, y: npt.ArrayLike, rval: Sequence[float]
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Return the RA and Dec (radians) of positions in the frame of a grid
     (arcsec; see sky_positions) with the reference RA and Dec rval
@@ -749,7 +751,9 @@ def _to_sky(x, y, rval):
     return ra, dec
 
 
-def _from_sky(ra, dec, rval):
+def _from_sky(
+        ra: npt.ArrayLike, dec: npt.ArrayLike, rval: Sequence[float]
+) -> tuple[np.ndarray, np.ndarray]:
     """The inverse of _to_sky."""
     ra0, dec0 = np.radians(rval[:2])
     cos_distance = (

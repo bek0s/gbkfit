@@ -78,7 +78,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         return super().load(info)
 
     @classmethod
-    def varying(cls, **options) -> 'PSF':
+    def varying(cls, **options: Any) -> 'PSF':
         """
         Make a PSF of this class whose options vary along the spectral axis.
 

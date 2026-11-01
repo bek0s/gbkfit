@@ -1,7 +1,7 @@
 import abc
 import os.path
 from collections.abc import Sequence
-from typing import Annotated, TypeAlias
+from typing import Annotated, Any, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -94,7 +94,7 @@ class RegionsBins(Regions):
     """
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'bins'
 
     config_constructors = ('from_file',)
@@ -144,7 +144,10 @@ class RegionsBins(Regions):
             index, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota, valid)
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         filename = f'{prefix}bins.fits'
         coords = self._grid.coords
         fitsutils.write_data(
@@ -208,7 +211,7 @@ class RegionsBins(Regions):
         self._grid = gridutils.make_grid(
             index.shape[::-1], step, rpix, rval, rota)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (isinstance(other, RegionsBins)
                 and self._grid == other._grid
                 and np.array_equal(self._index, other._index)
@@ -218,23 +221,23 @@ class RegionsBins(Regions):
         """The bin of each pixel (negative for none)."""
         return self._index
 
-    def valid(self):
+    def valid(self) -> np.ndarray | None:
         return self._valid
 
-    def nregions(self):
+    def nregions(self) -> int:
         return self._nbins
 
-    def grid(self):
+    def grid(self) -> gridutils.Grid:
         return self._grid
 
-    def centres(self):
+    def centres(self) -> np.ndarray:
         weights = self.weights(self._grid)
         x, y = gridutils.sky_positions(self._grid)
         totals = np.asarray(weights.sum(axis=1)).ravel()
         return np.column_stack(
             [weights @ x.ravel(), weights @ y.ravel()]) / totals[:, None]
 
-    def weights(self, grid):
+    def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
         if grid != self._grid:
             raise RuntimeError(
                 f"the bins are defined on the grid {self._grid}, not on "
@@ -250,10 +253,13 @@ class RegionsApertures(Regions):
     """Apertures on the sky (see Aperture), one region each."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'apertures'
 
-    def dump(self, prefix='', dump_path=True, overwrite=False):
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
         return dict(
             type=self.type(),
             apertures=aperture_parser.dump(list(self._apertures)))
@@ -264,7 +270,7 @@ class RegionsApertures(Regions):
             raise ConfigError("at least one aperture is required")
         self._apertures = tuple(apertures)
 
-    def __eq__(self, other):
+    def __eq__(self, other: object) -> bool:
         return (isinstance(other, RegionsApertures)
                 and aperture_parser.dump(list(self._apertures))
                 == aperture_parser.dump(list(other._apertures)))
@@ -272,16 +278,16 @@ class RegionsApertures(Regions):
     def apertures(self) -> tuple[Aperture, ...]:
         return self._apertures
 
-    def nregions(self):
+    def nregions(self) -> int:
         return len(self._apertures)
 
-    def grid(self):
+    def grid(self) -> None:
         return None
 
-    def centres(self):
+    def centres(self) -> np.ndarray:
         return np.array([aperture.centre() for aperture in self._apertures])
 
-    def weights(self, grid):
+    def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
         npix = int(np.prod(grid.size[:2]))
         rows, columns, values = [], [], []
         for region, aperture in enumerate(self._apertures):

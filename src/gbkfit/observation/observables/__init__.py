@@ -10,7 +10,7 @@ from .slitless_spectra import *
 from .visibilities import *
 
 
-def _register_observables():
+def _register_observables() -> None:
     from gbkfit.observation.observables.base import (
         observable_parser as abstract_parser)
     abstract_parser.register([

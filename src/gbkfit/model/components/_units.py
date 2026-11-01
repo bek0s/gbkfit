@@ -472,7 +472,7 @@ class LineFactors:
         given frequency (Hz), at its frequency at the velocity 0, and its
         power of the frequency.
         """
-        def factor(velocity):
+        def factor(velocity: float) -> float:
             return line_factor(
                 source, target.unit,
                 _frame(self._convention, velocity, emitted * u.Hz),

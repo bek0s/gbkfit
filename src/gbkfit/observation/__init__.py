@@ -15,7 +15,7 @@ from .sky import *
 from .weights import *
 
 
-def _register_observations():
+def _register_observations() -> None:
     from gbkfit.observation.observation import (
         observation_parser as abstract_parser)
     abstract_parser.register([

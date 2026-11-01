@@ -1,6 +1,6 @@
 import abc
 from collections.abc import Sequence
-from typing import Annotated
+from typing import Annotated, Any
 
 import numpy as np
 from annotated_types import Gt
@@ -36,7 +36,7 @@ _MIN_OVERLAP = 1e-12
 _AREA_TOLERANCE = 1e-9
 
 
-def _axes(posa):
+def _axes(posa: float) -> tuple[np.ndarray, np.ndarray]:
     """
     The unit vectors on the sky along a position angle (degrees, north
     through east, like posa) and across it (90 degrees clockwise).
@@ -47,7 +47,11 @@ def _axes(posa):
     return along, across
 
 
-def _pixels_in_box(grid, lower, upper):
+def _pixels_in_box(
+        grid: gridutils.Grid,
+        lower: np.ndarray,
+        upper: np.ndarray
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     The pixel indices (i, j) of a spatial grid whose pixels overlap the box
     from lower to upper (pixel coordinates), and the flat indices of the
@@ -65,7 +69,12 @@ def _pixels_in_box(grid, lower, upper):
     return i.ravel(), j.ravel(), (j * size_x + i).ravel()
 
 
-def _overlaps_inside_grid(aperture, indices, areas, area):
+def _overlaps_inside_grid(
+        aperture: 'Aperture',
+        indices: np.ndarray,
+        areas: np.ndarray,
+        area: float
+) -> tuple[np.ndarray, np.ndarray]:
     """
     The pixels (flat indices) that overlap an aperture and the fraction of
     each inside it, given the areas of the overlaps (pixel units) of the
@@ -113,10 +122,10 @@ class ApertureEllipse(Aperture):
     """An ellipse of semi-axes a (along posa) and b."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'ellipse'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), x=self._x, y=self._y, a=self._a, b=self._b,
             posa=self._posa)
@@ -131,10 +140,10 @@ class ApertureEllipse(Aperture):
         self._b = b
         self._posa = posa
 
-    def centre(self):
+    def centre(self) -> tuple[float, float]:
         return self._x, self._y
 
-    def overlaps(self, grid):
+    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         return _ellipse_overlaps(
             self, grid, (self._x, self._y), self._a, self._b, self._posa)
 
@@ -143,10 +152,10 @@ class ApertureCircle(Aperture):
     """A circle."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'circle'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), x=self._x, y=self._y, radius=self._radius)
 
     def __init__(self, x: _Arcsec, y: _Arcsec, radius: _Length):
@@ -155,15 +164,22 @@ class ApertureCircle(Aperture):
         self._y = y
         self._radius = radius
 
-    def centre(self):
+    def centre(self) -> tuple[float, float]:
         return self._x, self._y
 
-    def overlaps(self, grid):
+    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         return _ellipse_overlaps(
             self, grid, (self._x, self._y), self._radius, self._radius, 0)
 
 
-def _ellipse_overlaps(aperture, grid, centre, a, b, posa):
+def _ellipse_overlaps(
+        aperture: Aperture,
+        grid: gridutils.Grid,
+        centre: tuple[float, float],
+        a: float,
+        b: float,
+        posa: float
+) -> tuple[np.ndarray, np.ndarray]:
     """
     The overlaps of an ellipse aperture with the pixels of a grid (see
     Aperture.overlaps). The map from pixels to the coordinates in which
@@ -190,10 +206,10 @@ class AperturePolygon(Aperture):
     """A simple polygon (it can be concave), of the given vertices."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'polygon'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), vertices=self._vertices.tolist())
 
     def __init__(
@@ -210,14 +226,14 @@ class AperturePolygon(Aperture):
             raise ConfigError("the polygon has no area")
         self._vertices = vertices
 
-    def centre(self):
+    def centre(self) -> tuple[float, float]:
         x, y = self._vertices.T
         cross = x * np.roll(y, -1) - np.roll(x, -1) * y
         area = cross.sum() / 2
         return (float(((x + np.roll(x, -1)) * cross).sum() / (6 * area)),
                 float(((y + np.roll(y, -1)) * cross).sum() / (6 * area)))
 
-    def overlaps(self, grid):
+    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         return _polygon_overlaps(self, grid, self._vertices)
 
 
@@ -225,10 +241,10 @@ class ApertureRectangle(Aperture):
     """A rectangle, its length along posa (e.g. a slit or a shutter)."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'rectangle'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), x=self._x, y=self._y, length=self._length,
             width=self._width, posa=self._posa)
@@ -243,10 +259,10 @@ class ApertureRectangle(Aperture):
         self._width = width
         self._posa = posa
 
-    def centre(self):
+    def centre(self) -> tuple[float, float]:
         return self._x, self._y
 
-    def overlaps(self, grid):
+    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         along, across = _axes(self._posa)
         half_along = along * self._length / 2
         half_across = across * self._width / 2
@@ -259,7 +275,11 @@ class ApertureRectangle(Aperture):
         return _polygon_overlaps(self, grid, vertices)
 
 
-def _polygon_overlaps(aperture, grid, vertices):
+def _polygon_overlaps(
+        aperture: Aperture,
+        grid: gridutils.Grid,
+        vertices: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """
     The overlaps of a polygon aperture (vertices on the sky) with the
     pixels of a grid (see Aperture.overlaps).
@@ -277,19 +297,19 @@ class ApertureField(Aperture):
     """The whole grid of the model (e.g. for an integrated spectrum)."""
 
     @staticmethod
-    def type():
+    def type() -> str:
         return 'field'
 
-    def dump(self):
+    def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
 
     def __init__(self):
         check_options(ApertureField.__init__, locals())
 
-    def centre(self):
+    def centre(self) -> tuple[float, float]:
         raise ConfigError("a field (the whole grid) has no centre")
 
-    def overlaps(self, grid):
+    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
         npix = int(np.prod(grid.size[:2]))
         return np.arange(npix), np.ones(npix)
 

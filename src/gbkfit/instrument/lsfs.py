@@ -86,7 +86,7 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         return super().load(info)
 
     @classmethod
-    def varying(cls, **options) -> 'LSF':
+    def varying(cls, **options: Any) -> 'LSF':
         """
         Make an LSF of this class whose options vary along the spectral
         axis.

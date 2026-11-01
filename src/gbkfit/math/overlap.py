@@ -42,7 +42,9 @@ def polygon_pixel_overlaps(
         + _polygon_area_below_left(vertices, i - 0.5, j - 0.5))
 
 
-def _polygon_area_below_left(vertices, x, y):
+def _polygon_area_below_left(
+        vertices: np.ndarray, x: np.ndarray, y: np.ndarray
+) -> np.ndarray:
     """
     The area of the part of a polygon below y and to the left of x
     (arrays of one shape). Along a vertical line, the length of the
@@ -108,7 +110,7 @@ def ellipse_pixel_overlaps(
     return np.abs(area) / abs(np.linalg.det(matrix))
 
 
-def _unit_disk_triangle_area(p, q):
+def _unit_disk_triangle_area(p: np.ndarray, q: np.ndarray) -> np.ndarray:
     """
     The signed area of the part of the unit disk inside the triangle of
     the origin and the points p and q (arrays of shape (..., 2)), positive
@@ -131,10 +133,10 @@ def _unit_disk_triangle_area(p, q):
     return _sector_area(p, p1) + _cross(p1, p2) / 2 + _sector_area(p2, q)
 
 
-def _cross(u, v):
+def _cross(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     return u[..., 0] * v[..., 1] - u[..., 1] * v[..., 0]
 
 
-def _sector_area(u, v):
+def _sector_area(u: np.ndarray, v: np.ndarray) -> np.ndarray:
     """The signed area of the sector of the unit disk from u to v."""
     return np.arctan2(_cross(u, v), np.sum(u * v, axis=-1)) / 2

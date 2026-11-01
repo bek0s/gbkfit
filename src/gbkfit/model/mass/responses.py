@@ -465,7 +465,9 @@ class _IsothermalCore:
         """
         r, mb = self.radii, self.baryons
 
-        def slopes(i: int, y: np.ndarray, m: np.ndarray):
+        def slopes(
+                i: int, y: np.ndarray, m: np.ndarray
+        ) -> tuple[np.ndarray, np.ndarray]:
             # (y = (Phi - Phi(0)) / v0^2, m the mass of the core)
             return (G * (m + mb[i]) / (r[i] * v0 ** 2),
                     4 * np.pi * r[i] ** 3 * rho0 * np.exp(-y))

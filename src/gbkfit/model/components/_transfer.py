@@ -649,7 +649,7 @@ class _ResolutionTracker:
         Return the worst spectral and depth ratios of the march at the
         given spaxels (a mask of shape (ny, nx); see LineResolution).
         """
-        def worst(ratio):
+        def worst(ratio: np.ndarray) -> float:
             return float(np.max(ratio, where=where, initial=0))
         return worst(self._spectral), worst(self._depth)
 

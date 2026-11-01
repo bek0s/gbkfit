@@ -56,7 +56,9 @@ def roundu_po2(x: npt.ArrayLike) -> np.ndarray:
     return np.vectorize(_roundu_po2)(x)
 
 
-def transform_lh_rotate_z(x, y, theta):
+def transform_lh_rotate_z(
+        x: np.ndarray, y: np.ndarray, theta: float
+) -> tuple[np.ndarray, np.ndarray]:
     """
     The same transform as the native transform_lh_rotate_z (gmodels), so
     that an angle theta is a position angle, measured from north (+y)
@@ -69,21 +71,25 @@ def transform_lh_rotate_z(x, y, theta):
     return out_x, out_y
 
 
-def gauss_fwhm_to_sigma(fwhm):
+def gauss_fwhm_to_sigma(fwhm: float) -> float:
     return fwhm / np.sqrt(8 * np.log(2))
 
 
-def gauss_1d_fun(x, a, b, c):
+def gauss_1d_fun(x: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
     return a * np.exp(- (x - b) * (x - b) / (2 * c * c))
 
 
-def ggauss_1d_fun(x, a, b, c, d):
+def ggauss_1d_fun(
+        x: np.ndarray, a: float, b: float, c: float, d: float
+) -> np.ndarray:
     return a * np.exp(-np.power(np.abs(x - b) / c, d))
 
 
-def lorentz_1d_fun(x, a, b, c):
+def lorentz_1d_fun(x: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
     return a * c * c / ((x - b) * (x - b) + c * c)
 
 
-def moffat_1d_fun(x, a, b, c, d):
+def moffat_1d_fun(
+        x: np.ndarray, a: float, b: float, c: float, d: float
+) -> np.ndarray:
     return a * np.power(1 + np.power((x - b) / c, 2), -d)

@@ -3,6 +3,7 @@ The sums of the pixels of regions.
 """
 
 import numpy as np
+import numpy.typing as npt
 import scipy.sparse
 
 from gbkfit.driver import DeviceArray, Driver
@@ -51,7 +52,9 @@ class RegionSumsPlan:
         self._dtype = dtype
         self._backend = driver.native_class('DModel', dtype)()
 
-        def to_device(values, dtype_):
+        def to_device(
+                values: npt.ArrayLike, dtype_: npt.DTypeLike
+        ) -> DeviceArray:
             return driver.mem_copy_h2d(np.asarray(values).astype(dtype_))
 
         # The chunks of each region: from each start, at most _CHUNK

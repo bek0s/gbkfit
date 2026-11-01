@@ -1503,7 +1503,7 @@ def write_spectra(
         output_verify='exception', overwrite=overwrite, checksum=True)
 
 
-def _linear(wcs):
+def _linear(wcs: astropy.wcs.WCS) -> np.ndarray:
     """
     Return the linear transformation from pixels to intermediate world
     coordinates: one row for each world axis, one column for each pixel
@@ -1512,7 +1512,7 @@ def _linear(wcs):
     return wcs.wcs.get_cdelt()[:, None] * wcs.wcs.get_pc()
 
 
-def _sky_header(coords):
+def _sky_header(coords: Coords) -> dict[str, float | str]:
     """Return the header keywords of the x and y axes on the sky."""
     step_x, step_y = coords.step[:2]
     rota = np.radians(coords.rota)
@@ -1534,14 +1534,23 @@ def _sky_header(coords):
         PC2_1=pc[1, 0], PC2_2=pc[1, 1])
 
 
-def _offset_header(n, step, rpix, rval):
+def _offset_header(
+        n: int,
+        step: float,
+        rpix: float,
+        rval: float
+) -> dict[str, float | str]:
     """Return the header keywords of an offset in arcsec, FITS axis n."""
     return {
         f'CTYPE{n}': 'OFFSET', f'CUNIT{n}': 'arcsec', f'CDELT{n}': step,
         f'CRPIX{n}': rpix + 1, f'CRVAL{n}': rval}
 
 
-def _velocity_header(coords, n, index=None):
+def _velocity_header(
+        coords: Coords,
+        n: int,
+        index: int | None = None
+) -> dict[str, float | str]:
     """
     Return the header keywords of the spectral axis, FITS axis n, whose
     world coordinates are those of axis index of coords (by default
@@ -1575,7 +1584,10 @@ def _velocity_header(coords, n, index=None):
     return header
 
 
-def _header_medium(source, header):
+def _header_medium(
+        source: str,
+        header: astropy.io.fits.Header
+) -> str | None:
     """
     Return the medium of the wavelengths of a header (its keyword
     AIRORVAC, see gridutils.make_medium), if it has one.
@@ -1685,7 +1697,7 @@ def _aips_frame(header: astropy.io.fits.Header) -> str | None:
         if ctype[:5] == 'VELO-' and ctype[5:].strip() in _AIPS_FRAMES), None)
 
 
-def _spectral_convention(wcs):
+def _spectral_convention(wcs: astropy.wcs.WCS) -> str | None:
     """
     Return the convention of the velocities of the spectral axis (see
     Coords) of its type: radio (VRAD), optical (VOPT), relativistic (VELO)
@@ -1699,7 +1711,11 @@ def _spectral_convention(wcs):
          if t in _CONVENTIONS_OF_TYPES), None)
 
 
-def _spectral_rest(source, wcs, rest):
+def _spectral_rest(
+        source: str,
+        wcs: astropy.wcs.WCS,
+        rest: astropy.units.Quantity | None
+) -> astropy.units.Quantity | None:
     """
     Return the rest of the spectral axis (see Coords): that given (rest,
     if not None), or that of the WCS (RESTWAV or RESTFRQ), as a
@@ -1731,7 +1747,7 @@ def _spectral_rest(source, wcs, rest):
     return rest.to(unit, astropy.units.spectral())
 
 
-def _axis_scale(source, wcs, axis):
+def _axis_scale(source: str, wcs: astropy.wcs.WCS, axis: int) -> float:
     """
     Return the factor from the world units of an axis to model units:
     celestial axes stay in degrees (only their steps become arcsec),
@@ -1760,7 +1776,7 @@ def _axis_scale(source, wcs, axis):
     return astropy.units.Unit(wcs.wcs.cunit[axis]).to(_KM_S)
 
 
-def _celestial_rotation(source, linear):
+def _celestial_rotation(source: str, linear: np.ndarray) -> float:
     """
     Return the position angle (degrees, north through east) of the +y
     pixel axis, from the linear transformation of the celestial axes (the
@@ -1775,7 +1791,12 @@ def _celestial_rotation(source, linear):
     return float(np.degrees(np.arctan2(column_y[0], column_y[1])))
 
 
-def _to_icrs(source, wcs, rval, rota):
+def _to_icrs(
+        source: str,
+        wcs: astropy.wcs.WCS,
+        rval: list[float],
+        rota: float
+) -> tuple[list[float], float]:
     """
     Return the world position of the reference pixel (rval, of the
     celestial axes in degrees) and the position angle of the +y pixel
@@ -1802,7 +1823,11 @@ def _to_icrs(source, wcs, rval, rota):
     return rval, float((rota + turn + 180) % 360 - 180)
 
 
-def _check_uncoupled(source, wcs, linear):
+def _check_uncoupled(
+        source: str,
+        wcs: astropy.wcs.WCS,
+        linear: np.ndarray
+) -> None:
     """
     Raise ConfigError if a pixel axis other than the celestial pair is
     rotated into another world axis (e.g. velocity varying along x).

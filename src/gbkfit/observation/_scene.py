@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
 from gbkfit.model import (
-    STARS, Band, BandEmission, DataUnit, DepthUnit, Emission,
+    STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
     Galaxy, LineEmission, Scene, StarsEmission,
     named_components)
 from gbkfit.utils import parseutils, unitutils
@@ -145,7 +145,7 @@ def _select_emitters(
     in the given band (see Emission.emits_in), in their order. kind
     describes the observation in messages.
     """
-    def seen(cmp):
+    def seen(cmp: Component) -> bool:
         return isinstance(cmp.emission(), types) \
             and cmp.emission().emits_in(band)
     if names is None:

@@ -116,28 +116,38 @@ def _nodewise_log_slope(
         return float((v[-1] - v[-2]) / ((r[-1] - r[-2]) * v[-1]))
 
 
-def _cumulative_exponential(r, a, s):
+def _cumulative_exponential(
+        r: np.ndarray, a: np.ndarray, s: np.ndarray
+) -> np.ndarray:
     x = r / s
     return 2 * np.pi * a * s * s * (1 - (1 + x) * np.exp(-x))
 
 
-def _cumulative_gauss(r, a, s):
+def _cumulative_gauss(
+        r: np.ndarray, a: np.ndarray, s: np.ndarray
+) -> np.ndarray:
     x = r / s
     return 2 * np.pi * a * s * s * -np.expm1(-x * x / 2)
 
 
-def _cumulative_ggauss(r, a, s, b):
+def _cumulative_ggauss(
+        r: np.ndarray, a: np.ndarray, s: np.ndarray, b: np.ndarray
+) -> np.ndarray:
     x = np.abs(r / s)
     return 2 * np.pi * a * s * s * scipy.special.gamma(2 / b) / b \
         * scipy.special.gammainc(2 / b, x ** b)
 
 
-def _cumulative_lorentz(r, a, s):
+def _cumulative_lorentz(
+        r: np.ndarray, a: np.ndarray, s: np.ndarray
+) -> np.ndarray:
     x = r / s
     return np.pi * a * s * s * np.log1p(x * x)
 
 
-def _cumulative_moffat(r, a, s, b):
+def _cumulative_moffat(
+        r: np.ndarray, a: np.ndarray, s: np.ndarray, b: np.ndarray
+) -> np.ndarray:
     # ((1 + x^2)^(1 - b) - 1) / (1 - b), log(1 + x^2) at b = 1
     u = np.log1p((r / s) ** 2)
     c = 1 - b
@@ -145,7 +155,9 @@ def _cumulative_moffat(r, a, s, b):
     return np.pi * a * s * s * np.where(c != 0, scaled, u)
 
 
-def _cumulative_sech2(r, a, s):
+def _cumulative_sech2(
+        r: np.ndarray, a: np.ndarray, s: np.ndarray
+) -> np.ndarray:
     x = np.abs(r / s)
     log_cosh = x + np.log1p(np.exp(-2 * x)) - np.log(2)
     return 2 * np.pi * a * s * s * (x * np.tanh(x) - log_cosh)
@@ -165,7 +177,9 @@ def _linear_moment(
     Return the integral of r |v(r)| from r0 to r1, v linear from v0 at r0
     to v1 at r1 (elementwise): of r v, apart where v crosses 0.
     """
-    def moment(r0, r1, v0, v1):
+    def moment(
+            r0: np.ndarray, r1: np.ndarray, v0: np.ndarray, v1: np.ndarray
+    ) -> np.ndarray:
         return (r1 - r0) * (r0 * (2 * v0 + v1) + r1 * (v0 + 2 * v1)) / 6
     crosses = v0 * v1 < 0
     rz = np.where(
@@ -285,14 +299,14 @@ def _ptrait_integrate_nw_distortion(
     s = np.abs(np.asarray(params['s'], dtype=float))
     inner, middles, outer = _rings(subrnodes)
 
-    def integrand(r):
+    def integrand(r: np.ndarray) -> np.ndarray:
         sr = np.interp(r, subrnodes, s)
         erf = scipy.special.erf(
             np.pi * r / (np.sqrt(2) * np.maximum(sr, 1e-300)))
         return np.sqrt(2 * np.pi) * np.abs(np.interp(r, subrnodes, a)) \
             * np.where(sr > 0, sr * erf, 0)
 
-    def integral(r0, r1):
+    def integral(r0: np.ndarray, r1: np.ndarray) -> np.ndarray:
         # (split where a crosses 0, at its kink)
         a0 = np.interp(r0, subrnodes, a)
         a1 = np.interp(r1, subrnodes, a)
