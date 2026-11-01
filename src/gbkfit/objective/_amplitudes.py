@@ -1,6 +1,6 @@
 """
 The solves of the amplitudes of the light of an objective
-(AmplitudeSolve): amplitudes of the light of components (see
+(AmplitudeBlock): amplitudes of the light of components (see
 Component.light_amplitudes) solved together to fit the observations whose
 models are linear in them (see GroupPlan.amplitude_pieces).
 """
@@ -11,24 +11,24 @@ from typing import NamedTuple
 import numpy as np
 
 from gbkfit.driver import DeviceArray, Driver
-from gbkfit.observation import LinearPieces, ObservationGroup
+from gbkfit.observation import Comparison, LinearPieces, ObservationGroup
 from gbkfit.params import (
-    ParamValues, Solution, Solve, check_together, solve_together)
-from gbkfit.params import element_name
+    ParamValues, Solution, Solve, check_together, element_name,
+    solve_together)
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.observation import Comparison
+from ._block import Block
 
 
 __all__ = [
-    'AmplitudeSolve',
-    'amplitude_solves'
+    'AmplitudeBlock',
+    'amplitude_blocks'
 ]
 
 
 class _Sums(NamedTuple):
     """
     The memory of the sums of the amplitudes of an observation (see
-    AmplitudeSolve), in float64: the rows R and the residuals r of the
+    AmplitudeBlock), in float64: the rows R and the residuals r of the
     base, on its device, and N = R R^T and R r on the host (h) and the
     device (d).
     """
@@ -40,7 +40,7 @@ class _Sums(NamedTuple):
     d_rhs: DeviceArray
 
 
-class AmplitudeSolve:
+class AmplitudeBlock(Block):
     """
     Amplitudes of the light of the models (see Component.light_amplitudes)
     solved together (see solve_together), where their parts of the model
@@ -157,16 +157,16 @@ class AmplitudeSolve:
                 *driver.mem_alloc_s(size, np.float64)))
 
 
-def amplitude_solves(
+def amplitude_blocks(
         group: ObservationGroup,
         comparisons: Sequence[Comparison],
         drivers: Sequence[Driver],
         solves: Mapping[str, Solve],
         scaled: Collection[int]
-) -> tuple[AmplitudeSolve, ...]:
+) -> tuple[AmplitudeBlock, ...]:
     """
     Return the solves of the amplitudes of the light of a group (see
-    AmplitudeSolve), of the comparison and the driver of each observation,
+    AmplitudeBlock), of the comparison and the driver of each observation,
     and the solve of each solved element (by element name; all must be
     amplitudes of the light): those of parameters whose models fall on the
     same observations together.
@@ -248,6 +248,6 @@ def amplitude_solves(
                 runs.append((solve, 1))
         check_together(
             [solve for solve, _ in runs], [count for _, count in runs])
-        result.append(AmplitudeSolve(
+        result.append(AmplitudeBlock(
             members, runs, sorted(observations), comparisons, drivers))
     return tuple(result)

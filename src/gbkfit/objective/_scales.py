@@ -1,5 +1,5 @@
 """
-The solves of the flux scales of an objective (ScaleSolve): elements of
+The solves of the flux scales of an objective (ScaleBlock): elements of
 the flux scale of an observation (see ObservationSky), which multiplies
 its model per item, spectrum or row (see FluxScale): the model at scale 1
 is their piece, and the sums of its comparison solve each alone.
@@ -9,20 +9,20 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.observation import FluxScale, ModelData, ObservationGroup
-from gbkfit.params import ParamValues, Solution, Solve
-from gbkfit.params import element_name
+from gbkfit.observation import (
+    Comparison, FluxScale, ModelData, ObservationGroup)
+from gbkfit.params import ParamValues, Solution, Solve, element_name
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.observation import Comparison
+from ._block import Block
 
 
 __all__ = [
-    'ScaleSolve',
-    'scale_solves'
+    'ScaleBlock',
+    'scale_blocks'
 ]
 
 
-class ScaleSolve:
+class ScaleBlock(Block):
     """
     Elements of the flux scale of an observation solved by one solve (see
     Objective): each scales the model of its observation where the scale
@@ -118,11 +118,11 @@ class ScaleSolve:
         flat[slice(None) if self._indices is None else self._indices] = values
 
 
-def scale_solves(
+def scale_blocks(
         group: ObservationGroup,
         comparisons: Sequence[Comparison],
         solves: Mapping[str, Solve]
-) -> tuple[ScaleSolve, ...]:
+) -> tuple[ScaleBlock, ...]:
     """
     Return the solves of the solved elements of the flux scales of the
     observations of a group, of the comparison of each observation and the
@@ -154,7 +154,7 @@ def scale_solves(
                 f"the flux scale of observation {i} ({param}) cannot be "
                 f"solved: {reason}")
         for indices in indices_of.values():
-            result.append(ScaleSolve(
+            result.append(ScaleBlock(
                 i, param, None if pdesc.is_scalar() else np.array(indices),
                 scale, solves[names[indices[0]]], comparisons[i]))
     return tuple(result)

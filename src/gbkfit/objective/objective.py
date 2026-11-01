@@ -1,6 +1,6 @@
 import dataclasses
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Any, NamedTuple, Self, TypeAlias
+from typing import Any, NamedTuple, Self
 
 import numpy as np
 
@@ -8,13 +8,14 @@ from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
 from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
-from gbkfit.params import ParamDesc, ParamValues, Solution, Solve
-from gbkfit.params import with_elements
+from gbkfit.params import (
+    ParamDesc, ParamValues, Solution, Solve, with_elements)
 from gbkfit.utils import threadutils
 from gbkfit.utils.parseutils import ConfigError
-from ._amplitudes import AmplitudeSolve, amplitude_solves
-from ._orbits import OrbitSolve, orbit_solves
-from ._scales import ScaleSolve, scale_solves
+from ._amplitudes import amplitude_blocks
+from ._block import Block
+from ._orbits import orbit_blocks
+from ._scales import scale_blocks
 
 
 __all__ = [
@@ -94,11 +95,6 @@ class Evaluation:
     solved: dict[str, float]
 
 
-# Solved elements solved together (a block): elements of a flux scale,
-# amplitudes of the light, or the weights of orbits
-_Block: TypeAlias = ScaleSolve | AmplitudeSolve | OrbitSolve
-
-
 class Objective:
     """
     The comparison of the models of a group of observations with their
@@ -115,18 +111,18 @@ class Objective:
     linear in, in blocks solved together. The plan of the group gives the
     models as linear in them, and the comparisons weigh their pieces (see
     Comparison.linear_form). A flux scale of an observation (see
-    ObservationSky; ScaleSolve): the model is evaluated with it at 1, the
+    ObservationSky; ScaleBlock): the model is evaluated with it at 1, the
     comparison of the observation gives its sums, its solve its values,
     and the comparison then compares the model times them (see
     Comparison.evaluate). Amplitudes of the light of components (see
-    Component.light_amplitudes; AmplitudeSolve), solved together where
+    Component.light_amplitudes; AmplitudeBlock), solved together where
     their parts of the model fall on the same data (in one or several
     observations): the plan gives the models with them at 0 and the piece
     of each (see GroupPlan.amplitude_pieces), and the models are evaluated
     at their values. They do not go with a solved flux scale of the same
     observation (the model is then not linear in both). The weights of the
     orbits of the stars of a spheroid (see Component.orbit_weights;
-    OrbitSolve): the models of the observations that see the stars are
+    OrbitBlock): the models of the observations that see the stars are
     linear in them (the orbits in the series of their data, see
     OrbitRecording), and the models are evaluated at their values. The
     priors of the solved values add residuals after those of the data;
@@ -166,7 +162,7 @@ class Objective:
         models are linear in (see Component.light_amplitudes,
         Observable.linear_in_light and Comparison.linear_form), nor a
         weight of orbits; or the weights of the orbits of stars that
-        observations see are not solved (see OrbitSolve).
+        observations see are not solved (see OrbitBlock).
     """
 
     def __init__(
@@ -185,18 +181,18 @@ class Objective:
                 observations, group_plan.observation_drivers()))
         self._solves = dict(solves or {})
         # The blocks of each kind, each of the solves left by the others
-        self._orbits = orbit_solves(
+        self._orbits = orbit_blocks(
             group_plan, self._comparisons, self._solves)
-        self._scales = scale_solves(
+        self._scales = scale_blocks(
             group, self._comparisons, _unclaimed(self._solves, self._orbits))
         # The observations with solved scales
         self._scaled = sorted({block.observation() for block in self._scales})
-        self._amplitudes = amplitude_solves(
+        self._amplitudes = amplitude_blocks(
             group, self._comparisons, group_plan.observation_drivers(),
             _unclaimed(self._solves, (*self._orbits, *self._scales)),
             self._scaled)
         # Every block, in the order of their values (see evaluate)
-        self._blocks: tuple[_Block, ...] = (
+        self._blocks: tuple[Block, ...] = (
             *self._scales, *self._amplitudes, *self._orbits)
         self._reset_memory()
 
@@ -212,7 +208,7 @@ class Objective:
         # The solution of each block of the last evaluation, and the scales
         # of the observations with solved ones, on the host (h) and the
         # device (d), by index
-        self._solutions: dict[_Block, Solution] = {}
+        self._solutions: dict[Block, Solution] = {}
         self._h_scales: dict[int, np.ndarray] = {}
         self._d_scales: dict[int, DeviceArray] = {}
         # The memory is allocated on the first evaluation (see prepare)
@@ -743,7 +739,7 @@ class Objective:
         """
         self.prepare()
         group_plan = self._group_plan
-        solutions: dict[_Block, Solution] = {}
+        solutions: dict[Block, Solution] = {}
         with group_plan.lock():
             values = self._unscaled(params)
             for block in self._amplitudes:
@@ -766,11 +762,11 @@ class Objective:
     def _solve_orbits(
             self,
             params: ParamValues,
-            solutions: dict[_Block, Solution]
+            solutions: dict[Block, Solution]
     ) -> ParamValues:
         """
         Solve the weights of the orbits of each recording of the plan (see
-        OrbitSolve), with BLAS on at most _ORBIT_BLAS_THREADS threads, into
+        OrbitBlock), with BLAS on at most _ORBIT_BLAS_THREADS threads, into
         the solutions, and return the values of the parameters with their
         solved values.
         """
@@ -797,11 +793,11 @@ class Objective:
             self,
             models: Sequence[ModelData],
             params: ParamValues,
-            solutions: dict[_Block, Solution]
+            solutions: dict[Block, Solution]
     ) -> list[dict[str, DeviceArray]]:
         """
         Solve the elements of the flux scales from the models (see
-        ScaleSolve) into the solutions, and return the scales of the data
+        ScaleBlock) into the solutions, and return the scales of the data
         items of each observation, on its device, by name.
         """
         scales: list[dict[str, DeviceArray]] = [
@@ -823,7 +819,7 @@ class Objective:
 
 
 def _unclaimed(
-        solves: Mapping[str, Solve], blocks: Iterable[_Block]
+        solves: Mapping[str, Solve], blocks: Iterable[Block]
 ) -> dict[str, Solve]:
     """
     Return the solves of the solved elements that none of the blocks

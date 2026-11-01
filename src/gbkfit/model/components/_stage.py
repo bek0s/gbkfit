@@ -14,8 +14,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 import numpy as np
 
 from gbkfit.driver import Driver
-from gbkfit.params import ParamValues
-from gbkfit.params import ParamView, StageCache
+from gbkfit.params import ParamValues, ParamView, StageCache
 from ..extras import Extras
 from ..gravity import GravityField
 from ..mass import MassContext, MassModel

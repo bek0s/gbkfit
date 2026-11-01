@@ -1,5 +1,5 @@
 """
-The solves of the weights of orbits of an objective (OrbitSolve): the
+The solves of the weights of orbits of an objective (OrbitBlock): the
 weights of the orbits of the stars of a spheroid (see
 Component.orbit_weights), solved to fit the observations that see them,
 whose models are linear in them (see OrbitRecording).
@@ -11,21 +11,22 @@ from collections.abc import Mapping, Sequence
 import numpy as np
 
 from gbkfit.driver import DeviceArray
-from gbkfit.observation import GroupPlan, OrbitRecording, OrbitSeries
-from gbkfit.params import ParamValues, Solution, Solve, solve_together_rows
-from gbkfit.params import ParamView, StageCache
-from gbkfit.params import element_name
+from gbkfit.observation import (
+    Comparison, GroupPlan, OrbitRecording, OrbitSeries)
+from gbkfit.params import (
+    ParamValues, ParamView, Solution, Solve, StageCache, element_name,
+    solve_together_rows)
 from gbkfit.utils.parseutils import ConfigError
-from gbkfit.observation import Comparison
+from ._block import Block
 
 
 __all__ = [
-    'OrbitSolve',
-    'orbit_solves'
+    'OrbitBlock',
+    'orbit_blocks'
 ]
 
 
-class OrbitSolve:
+class OrbitBlock(Block):
     """
     The weights of the orbits of a recording of a group plan (see
     OrbitRecording), solved together to fit the moments of the bins of
@@ -177,14 +178,14 @@ class OrbitSolve:
                 self._data, self._drivers, self._dtypes)]
 
 
-def orbit_solves(
+def orbit_blocks(
         group_plan: GroupPlan,
         comparisons: Sequence[Comparison],
         solves: Mapping[str, Solve]
-) -> tuple[OrbitSolve, ...]:
+) -> tuple[OrbitBlock, ...]:
     """
     Return the solves of the weights of the orbits of the recordings of a
-    group plan (see OrbitSolve and GroupPlan.orbit_recordings), of the
+    group plan (see OrbitBlock and GroupPlan.orbit_recordings), of the
     comparison of each observation, and the solve of each solved element
     (by element name).
 
@@ -192,7 +193,7 @@ def orbit_solves(
     ------
     ConfigError
         If the weights of the orbits of a recording are not solved, or not
-        by one solve, or an orbit solve cannot be made (see OrbitSolve).
+        by one solve, or an orbit solve cannot be made (see OrbitBlock).
     """
     pdescs = group_plan.group().pdescs()
     orbits = []
@@ -211,7 +212,7 @@ def orbit_solves(
             raise ConfigError(
                 f"the weights of the orbits {param!r} are solved by one "
                 f"solve")
-        orbits.append(OrbitSolve(
+        orbits.append(OrbitBlock(
             recording, group_plan, comparisons, elements,
             solves[elements[0]]))
     return tuple(orbits)
