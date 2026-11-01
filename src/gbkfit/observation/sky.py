@@ -196,9 +196,9 @@ class ObservationSky(Observation):
         (see Likelihood.check), the observable cannot be seen through the
         instrument (see Observable.check_observation), the dtype or the
         fft_dtype is not one of the native modules (see Driver.dtypes), or
-        the fft_dtype is less precise than the dtype, or the unit is
-        given with data, is not a unit, or is per beam without a beam (see
-        _light_unit).
+        the fft_dtype is less precise than the dtype, it has pixel weights
+        and a lens (not supported yet), or the unit is given with data, is
+        not a unit, or is per beam without a beam (see _light_unit).
     """
 
     @staticmethod
@@ -363,6 +363,8 @@ class ObservationSky(Observation):
             observable.model_can_lack_values())
         observable.check_observation(
             instrument, self._oversampling, pixel_weights)
+        if pixel_weights is not None and foreground.lens() is not None:
+            raise ConfigError("a lens does not support pixel_weights yet")
         self._light = None if unit is None \
             else _light_unit(unit, data, observable, instrument)
         if data is not None:

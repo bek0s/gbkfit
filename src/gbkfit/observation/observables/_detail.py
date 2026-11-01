@@ -331,8 +331,6 @@ class DCubePlanBase(ObservablePlan):
         self._lens_plan = None
         self._source_cube = None
         if foreground.lens() is not None:
-            if pixel_weights is not None:
-                raise ConfigError("a lens does not support pixel_weights yet")
             self._lens_plan = foreground.plan_lens(
                 driver, self._dcube_plan.scratch_grid(), dtype)
             grid = self._lens_plan.source_grid(grid)

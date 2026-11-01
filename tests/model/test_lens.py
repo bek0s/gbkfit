@@ -353,6 +353,23 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
     np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)
 
 
+def test_a_lens_refuses_pixel_weights_as_the_observation_is_made():
+    # (not first when it is planned on a driver, which describe and check
+    # do not do: audit 2026-10-31 #51)
+    from gbkfit.observation import ObservationSky, weights_parser
+    plain = observation_group([dict(
+        driver=dict(type='host'), galaxy=GALAXY,
+        line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))
+    ]).observations()[0]
+    with pytest.raises(ConfigError, match="a lens does not support"):
+        ObservationSky(
+            plain.observable(), plain.line_of_sight(),
+            foreground=Foreground(Lens((40, 40), (0.5, 0.5), LensSIE())),
+            pixel_weights=weights_parser.load(dict(component='disk', traits=[
+                dict(type='azimuth_power', power=1)])),
+            name='obs')
+
+
 def test_a_scaled_map_scales_its_deflection():
     # (e.g. by D_LS / D_S, of a source at another redshift than the map's)
     lens = LensDeflectionMap(
