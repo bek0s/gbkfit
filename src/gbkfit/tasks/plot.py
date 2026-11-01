@@ -27,6 +27,7 @@ except ModuleNotFoundError as e:
         f"'gbkfit[plot]'): {e}") from e
 
 import gbkfit.outputs
+from gbkfit.fitting import FitResult
 from gbkfit.outputs import Product, Run
 from . import _detail
 
@@ -353,34 +354,31 @@ def _posterior_figures(
     """
     if (result := _find(source, 'fit_result')) is None:
         return []
-    solutions = source.read(result)['solutions']
-    names = list(params) if params else list(solutions[0]['free'])
+    fit = FitResult.read(source)
+    names = list(params) if params else list(fit.best().free)
     sample_sets = []
-    if (posterior := _find(source, 'posterior')) is not None:
+    if fit.posterior is not None:
         sample_sets.append((
-            'fit/posterior', dict(plot='posterior'), posterior,
-            solutions[0], 'posterior'))
+            'fit/posterior', dict(plot='posterior'), fit.posterior,
+            _find(source, 'posterior'), fit.best(), 'posterior'))
     else:
-        for k, solution in enumerate(solutions[:1] if only_best
-                                     else solutions):
-            laplace = _find(source, 'laplace', solution=str(k))
-            if laplace is not None:
+        for k, solution in enumerate(fit.solutions[:1] if only_best
+                                     else fit.solutions):
+            if solution.laplace is not None:
                 sample_sets.append((
                     f'fit/solutions/{k}/laplace',
-                    dict(plot='laplace', solution=str(k)), laplace, solution,
+                    dict(plot='laplace', solution=str(k)), solution.laplace,
+                    _find(source, 'laplace', solution=str(k)), solution,
                     f'solution {k}: Laplace approximation'))
     figures = []
-    for path, ids, product, solution, title in sample_sets:
-        table = source.read(product)
-        header = [n for n in table.colnames if n != 'weight']
-        if missing := [n for n in names if n not in header]:
+    for path, ids, samples, product, solution, title in sample_sets:
+        if missing := [n for n in names if n not in samples.names]:
             raise ValueError(
                 f"these elements are not in the samples of {product.path}: "
-                f"{missing}; it has {header}")
-        columns = np.column_stack([np.asarray(table[n]) for n in names])
-        weights = np.asarray(table['weight']) \
-            if 'weight' in table.colnames else None
-        truths = [solution['elements'][n] for n in names]
+                f"{missing}; it has {list(samples.names)}")
+        columns = samples.samples[:, [samples.names.index(n) for n in names]]
+        weights = samples.weights
+        truths = [solution.elements[n] for n in names]
         sources = [result, product]
         if not separate:
             figures.append(_Figure(

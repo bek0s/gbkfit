@@ -408,10 +408,6 @@ def covariance(
     std = np.where(
         _along(np.diag(1 / norms), vt[~keep]), np.inf,
         np.sqrt(np.diag(matrix)))
-    with np.errstate(divide='ignore', invalid='ignore'):
-        correlation = matrix / np.outer(std, std)
-    correlation[~np.isfinite(std)] = np.nan
-    correlation[:, ~np.isfinite(std)] = np.nan
     names = problem.names()
     unconstrained = tuple(
         name for name, error in zip(names, std) if not np.isfinite(error))
@@ -430,7 +426,6 @@ def covariance(
         names=names,
         matrix=matrix,
         std=dict(zip(names, std.tolist())),
-        correlation=correlation,
         element_std=dict(zip(element_names, element_std[:nelements])),
         derived_std=dict(zip(derived, element_std[nelements:])),
         rank=int(keep.sum()),

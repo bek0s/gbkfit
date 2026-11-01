@@ -511,6 +511,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
                 name: unit.to_string()
                 for name in [*params.pdescs(), *params.derived()]
                 if (unit := params.unit(name)) is not None},
+            periods=params.periods(),
             raw=run.raw)
 
     @abc.abstractmethod

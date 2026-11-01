@@ -13,7 +13,7 @@ import numpy as np
 import numpy.typing as npt
 from astropy.table import Table
 
-from gbkfit.outputs import RunWriter
+from gbkfit.outputs import Run, RunWriter
 from gbkfit.params import ParamValues
 
 
@@ -142,9 +142,6 @@ class Covariance:
     std : dict
         The standard error of each free element: infinite for those in
         the directions that the data do not constrain (see unconstrained).
-    correlation : np.ndarray
-        The correlation matrix (NaN for the free elements of infinite
-        errors).
     element_std : dict
         The standard error of every element (propagated to the tied
         elements; 0 for the fixed ones, infinite for those that change in
@@ -171,13 +168,25 @@ class Covariance:
     names: tuple[str, ...]
     matrix: np.ndarray
     std: dict[str, float]
-    correlation: np.ndarray
     element_std: dict[str, float]
     derived_std: dict[str, float]
     rank: int
     unconstrained: tuple[str, ...]
     at_bounds: tuple[str, ...]
     scaled: bool
+
+    @property
+    def correlation(self) -> np.ndarray:
+        """
+        The correlation matrix (NaN for the free elements of infinite
+        errors).
+        """
+        std = np.array([self.std[name] for name in self.names])
+        with np.errstate(divide='ignore', invalid='ignore'):
+            correlation = self.matrix / np.outer(std, std)
+        correlation[~np.isfinite(std)] = np.nan
+        correlation[:, ~np.isfinite(std)] = np.nan
+        return correlation
 
     def table(self) -> Table:
         """
@@ -495,6 +504,9 @@ class FitResult:
         The units of the values of the parameters and the derived values
         that have one, by name (astropy unit strings; see
         ParamSpace.unit).
+    periods : dict
+        The period of each periodic element (see ParamSpace.periods), by
+        name.
     raw : object
         The result object of the fitter's library, for experts (not
         dumped).
@@ -512,7 +524,63 @@ class FitResult:
     diagnostics: dict[str, Any]
     bootstrap: Bootstrap | None = None
     units: dict[str, str] = dataclasses.field(default_factory=dict)
+    periods: dict[str, float] = dataclasses.field(default_factory=dict)
     raw: object = dataclasses.field(default=None, repr=False)
+
+    @classmethod
+    def read(cls, run: Run, folder: str = 'fit') -> 'FitResult':
+        """
+        Read a result from the products of a run (see write).
+
+        The numbers that are not finite, which result.json gives as null,
+        are NaN, but the standard errors of the covariance (std and
+        element_std), which are infinite. The result object of the
+        fitter's library (raw) is not read.
+
+        Parameters
+        ----------
+        run : Run
+            The run (see gbkfit.outputs.open).
+        folder : str, optional
+            The folder of the products in the run.
+
+        Returns
+        -------
+        FitResult
+            The result.
+
+        Raises
+        ------
+        LookupError
+            If the run has no result in the folder.
+        """
+        info = _read(run, f'{folder}/result.json')
+        if info is None:
+            raise LookupError(
+                f"run {run.path} has no fit result in {folder!r}")
+        periods = info['periods']
+        posterior = _read(run, f'{folder}/posterior.ecsv')
+        bootstrap = _read(run, f'{folder}/bootstrap.ecsv')
+        return cls(
+            fitter=info['fitter'],
+            params=info['params'],
+            versions=info['versions'],
+            solutions=tuple(
+                _read_solution(run, f'{folder}/solutions/{i}', x, periods)
+                for i, x in enumerate(info['solutions'])),
+            posterior=None if posterior is None
+            else _posterior(posterior, False, periods),
+            evidence=None if info['evidence'] is None
+            else Evidence(**info['evidence']),
+            nevals=info['nevals'],
+            time=info['time'],
+            success=info['success'],
+            message=info['message'],
+            diagnostics=info['diagnostics'],
+            bootstrap=None if bootstrap is None
+            else _bootstrap(bootstrap, info['bootstrap'], periods),
+            units=info['units'],
+            periods=periods)
 
     def best(self) -> FitSolution:
         """Return the best solution."""
@@ -572,12 +640,12 @@ class FitResult:
     def info(self) -> dict[str, Any]:
         """
         Return its summary (without the arrays): what was run, the
-        units, the solutions, the summaries of the posterior and of the
-        bootstrap, and the evidence.
+        units and the periods, the solutions, the summaries of the
+        posterior and of the bootstrap, and the evidence.
         """
         return dict(
             fitter=self.fitter, params=self.params, units=self.units,
-            versions=self.versions,
+            periods=self.periods, versions=self.versions,
             nevals=self.nevals, time=self.time, success=self.success,
             message=self.message, diagnostics=self.diagnostics,
             evidence=None if self.evidence is None
@@ -670,3 +738,122 @@ def _solution_summary(solution: FitSolution) -> dict[str, Any]:
     if solution.laplace is not None:
         info['laplace'] = solution.laplace.summary()
     return info
+
+
+def _read(run: Run, path: str) -> Any:
+    """Return the product of a run at a path, or None if it has none."""
+    found = [product for product in run.products() if product.path == path]
+    return run.read(found[0]) if found else None
+
+
+def _number(x: float | None, missing: float = math.nan) -> float:
+    """Return a number of result.json: null (not finite) as missing."""
+    return missing if x is None else x
+
+
+def _numbers(
+        x: dict[str, float | None], missing: float = math.nan
+) -> dict[str, float]:
+    """Return the numbers of a dict of result.json (see _number)."""
+    return {name: _number(value, missing) for name, value in x.items()}
+
+
+def _read_solution(
+        run: Run,
+        folder: str,
+        info: dict[str, Any],
+        periods: dict[str, float]
+) -> FitSolution:
+    """
+    Return a solution of a result, of its summary in result.json and the
+    tables of its folder.
+    """
+    elements = _numbers(info['elements'])
+    laplace = _read(run, f'{folder}/laplace.ecsv')
+    return FitSolution(
+        free=_numbers(info['free']),
+        values=_values(elements),
+        elements=elements,
+        derived=_numbers(info['derived']),
+        chi2=_number(info['chi2']),
+        nresiduals=info['nresiduals'],
+        nfitted=info['nfitted'],
+        dof=info['dof'],
+        reduced_chi2=_number(info['reduced_chi2']),
+        log_likelihood=_number(info['log_likelihood']),
+        log_prior=info['log_prior'],
+        aic=_number(info['aic']),
+        bic=_number(info['bic']),
+        aicp=_number(info['aicp']),
+        covariance=None if 'covariance' not in info else _covariance(
+            _read(run, f'{folder}/covariance.ecsv'), info['covariance']),
+        laplace=None if laplace is None
+        else _posterior(laplace, True, periods))
+
+
+def _values(elements: dict[str, float]) -> ParamValues:
+    """
+    Return the values of the parameters of the values of their elements,
+    by element name (e.g. 'a', 'v[3]'; see ParamSpace.element_values).
+    """
+    values: dict[str, Any] = {}
+    for element, value in elements.items():
+        name, _, index = element.partition('[')
+        if index:
+            values.setdefault(name, {})[int(index.rstrip(']'))] = value
+        else:
+            values[name] = value
+    return {
+        name: np.array([value[i] for i in range(len(value))])
+        if isinstance(value, dict) else value
+        for name, value in values.items()}
+
+
+def _covariance(table: Table, info: dict[str, Any]) -> Covariance:
+    """
+    Return a covariance of its table (see Covariance.table) and its
+    summary in result.json.
+    """
+    names = tuple(info['names'])
+    return Covariance(
+        names=names,
+        matrix=np.column_stack([np.asarray(table[n]) for n in names]),
+        std=_numbers(info['std'], math.inf),
+        element_std=_numbers(info['element_std'], math.inf),
+        derived_std=_numbers(info['derived_std']),
+        rank=info['rank'],
+        unconstrained=tuple(info['unconstrained']),
+        at_bounds=tuple(info['at_bounds']),
+        scaled=info['scaled'])
+
+
+def _samples(table: Table, *others: str) -> tuple[tuple[str, ...], np.ndarray]:
+    """
+    Return the names and the samples of a table of samples (see
+    _samples_table), without its other columns.
+    """
+    names = tuple(name for name in table.colnames if name not in others)
+    return names, np.column_stack([np.asarray(table[n]) for n in names])
+
+
+def _posterior(
+        table: Table, approximate: bool, periods: dict[str, float]
+) -> Posterior:
+    """Return a posterior of its table (see Posterior.table)."""
+    names, samples = _samples(table, 'weight')
+    weights = np.asarray(table['weight']) \
+        if 'weight' in table.colnames else None
+    return Posterior(names, samples, weights, approximate, periods)
+
+
+def _bootstrap(
+        table: Table, info: dict[str, Any], periods: dict[str, float]
+) -> Bootstrap:
+    """
+    Return a bootstrap of its table (see Bootstrap.table) and its summary
+    in result.json.
+    """
+    names, samples = _samples(table, 'converged')
+    return Bootstrap(
+        names, samples, np.asarray(table['converged'], bool),
+        tuple(info['failures']), info['options'], periods)

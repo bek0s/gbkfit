@@ -5,7 +5,6 @@ the result.
 
 import contextlib
 import dataclasses
-import json
 import logging
 import math
 import os
@@ -32,12 +31,10 @@ _log = logging.getLogger(__name__)
 
 
 # The paths of products of a fit in its run (see gbkfit.outputs): the
-# configuration and the log of the evaluations, to resume it from, and the
-# result, to bootstrap it
+# configuration and the log of the evaluations, to resume it from
 _CONFIG = 'config.yaml'
 _EVALUATIONS = 'logs/evaluations.bin'
 _BOOTSTRAP_LOG = 'logs/bootstrap.jsonl'
-_RESULT = 'fit/result.json'
 
 
 def fit(
@@ -177,27 +174,24 @@ def bootstrap(output_dir: str, config: str) -> None:
         If the directory is not the run of a fit with a configuration and
         a result, or a configuration is invalid.
     """
-    config_file, result_file = _products_of_fit(
+    config_file, _ = _products_of_fit(
         output_dir, 'bootstrap', 'config', 'fit_result')
     file = _read_config(config_file)
     _log.info(f"reading the configuration of the bootstrap: {config}...")
     bootstrap_cfg = gbkfit.setup.read_config(
         config, ('bootstrap',), ()).config
-    with open(result_file) as f:
-        result = json.load(f)
-    best = result['solutions'][0]
+    result = gbkfit.fitting.FitResult.read(gbkfit.outputs.open(output_dir))
+    best = result.best()
     with gbkfit.setup.load(file) as setup:
         options = _load_bootstrap(
             bootstrap_cfg, setup.group_plan.group(), setup.params)
         with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
             control = gbkfit.fitting.FitControl()
             with _stop_on_interrupt(control):
-                boot = _bootstrap(setup, best['elements'], options, control)
+                boot = _bootstrap(setup, best.elements, options, control)
             if boot is None:
                 return
-            result['bootstrap'] = boot.info()
-            run.write(_RESULT, 'fit_result', result)
-            run.write('fit/bootstrap.ecsv', 'bootstrap', boot.table())
+            dataclasses.replace(result, bootstrap=boot).write(run)
             run.write(
                 'fit/bootstrap.yaml', 'bootstrap_config',
                 dict(version=gbkfit.project.FORMAT_VERSION) | bootstrap_cfg)
@@ -289,13 +283,12 @@ def _bootstrap(
 
 
 def _bootstrap_summary(
-        solution: dict[str, Any], boot: gbkfit.fitting.Bootstrap
+        solution: gbkfit.fitting.FitSolution, boot: gbkfit.fitting.Bootstrap
 ) -> str:
     """
-    Return a summary of the bootstrap of a solution (its summary in
-    result.json), for humans: the best fit of each free element and
-    derived value, and its standard deviation and percentiles over the
-    refits.
+    Return a summary of the bootstrap of a solution, for humans: the best
+    fit of each free element and derived value, and its standard
+    deviation and percentiles over the refits.
     """
     std = boot.std()
     quantiles = boot.summary()
@@ -303,8 +296,8 @@ def _bootstrap_summary(
         f"{'name':<16} {'best':>12} {'bootstrap std':>13} "
         f"{'bootstrap 16/50/84':>38}"]
     # (the free elements decoded, as the bootstrap gives them)
-    free = {name: solution['elements'][name] for name in solution['free']}
-    for name, value in (free | solution['derived']).items():
+    free = {name: solution.elements[name] for name in solution.free}
+    for name, value in (free | solution.derived).items():
         q = quantiles.get(name, (math.nan,) * 3)
         lines.append(
             f"{name:<16} {value:>12.6g} {std.get(name, math.nan):>13.6g} "

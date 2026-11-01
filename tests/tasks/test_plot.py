@@ -8,6 +8,7 @@ import pytest
 from astropy.table import Table
 
 from gbkfit import outputs
+from gbkfit.fitting import FitResult, FitSolution, Posterior
 from gbkfit.tasks.plot import plot
 
 
@@ -46,21 +47,22 @@ def write_run(directory, task, with_posterior=False):
         'observations/observation0/extra/psf_lo.fits', 'extra', psf,
         observation='observation0', name='psf_lo')
     if task == 'fit':
+        samples = rng.normal([1, 2, 3], 0.1, (500, 3))
+        names = ('a', 'b', 'c')
         elements = dict(a=1.0, b=2.0, c=3.0)
-        solution = dict(free=dict(a=1.0, b=2.0), elements=elements)
-        run.write(
-            'fit/result.json', 'fit_result',
-            dict(solutions=[solution, solution]))
-        samples = Table(
-            list(rng.normal([1, 2, 3], 0.1, (500, 3)).T),
-            names=['a', 'b', 'c'])
-        if with_posterior:
-            samples['weight'] = np.full(500, 1 / 500)
-            run.write('fit/posterior.ecsv', 'posterior', samples)
-        for k in range(2):
-            run.write(
-                f'fit/solutions/{k}/laplace.ecsv', 'laplace', samples,
-                solution=str(k))
+        solution = FitSolution(
+            free=dict(a=1.0, b=2.0), values=elements, elements=elements,
+            derived={}, chi2=1.0, nresiduals=10, nfitted=2, dof=8,
+            reduced_chi2=0.125, log_likelihood=-0.5, log_prior=None,
+            aic=5.0, bic=6.0, aicp=5.0, covariance=None,
+            laplace=Posterior(names, samples, None, True))
+        posterior = Posterior(names, samples, np.full(500, 1 / 500), False) \
+            if with_posterior else None
+        FitResult(
+            fitter=dict(type='emcee'), params=None, versions={},
+            solutions=(solution, solution), posterior=posterior,
+            evidence=None, nevals=1, time=1.0, success=True, message='',
+            diagnostics={}).write(run)
     run.close()
 
 

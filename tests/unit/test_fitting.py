@@ -1683,7 +1683,7 @@ def test_summaries_show_the_free_elements_decoded():
     from gbkfit.fitting.result import Covariance, FitResult, FitSolution
     covariance = Covariance(
         names=('v[0]', 'v[1]'), matrix=np.diag([0.25, 1.0]),
-        std={'v[0]': 0.5, 'v[1]': 1.0}, correlation=np.eye(2),
+        std={'v[0]': 0.5, 'v[1]': 1.0},
         element_std={'v[0]': 0.5, 'v[1]': 1.25}, derived_std={}, rank=2,
         unconstrained=(), at_bounds=(), scaled=False)
     solution = FitSolution(
@@ -1704,6 +1704,59 @@ def test_summaries_show_the_free_elements_decoded():
     # (the tables of samples have the units of their columns)
     table = result._with_units(Table({'v[0]': [1.0]}))
     assert table['v[0]'].unit == 'km / s'
+
+
+def test_a_result_reads_back_as_it_was_written(tmp_path):
+    # Every part of a result, with an infinite error and a periodic
+    # element (audit 2026-10-31 #44)
+    from gbkfit import outputs
+    from gbkfit.fitting.result import (
+        Bootstrap, Covariance, Evidence, FitResult, FitSolution, Posterior)
+    names = ('v[0]', 'v[1]', 'pa')
+    periods = dict(pa=360.0)
+    samples = np.random.default_rng(1).normal(size=(6, 3))
+    covariance = Covariance(
+        names=names, matrix=np.diag([0.25, 1.0, 4.0]),
+        std={'v[0]': 0.5, 'v[1]': math.inf, 'pa': 2.0},
+        element_std={'v[0]': 0.5, 'v[1]': math.inf, 'pa': 2.0},
+        derived_std={'d': 0.1}, rank=2, unconstrained=('v[1]',),
+        at_bounds=('pa',), scaled=True)
+    solution = FitSolution(
+        free={'v[0]': 100.0, 'v[1]': 5.0, 'pa': 30.0},
+        values={'v': np.array([100.0, 105.0]), 'pa': 30.0},
+        elements={'v[0]': 100.0, 'v[1]': 105.0, 'pa': 30.0},
+        derived={'d': 1.0}, chi2=10.0, nresiduals=12, nfitted=3, dof=9,
+        reduced_chi2=1.1, log_likelihood=-5.0, log_prior=-1.0, aic=16.0,
+        bic=17.0, aicp=16.0, covariance=covariance,
+        laplace=Posterior(names, samples, None, True, periods))
+    result = FitResult(
+        fitter=dict(type='emcee'), params=None, versions=dict(gbkfit='1'),
+        solutions=(solution,),
+        posterior=Posterior(names, samples, np.arange(1.0, 7.0), False,
+                            periods),
+        evidence=Evidence(-3.0, None), nevals=10, time=1.5, success=True,
+        message='done', diagnostics=dict(acceptance=0.3),
+        bootstrap=Bootstrap(
+            names, samples, np.array([True] * 5 + [False]),
+            ('refit 6 failed',), dict(nsamples=7), periods),
+        units=dict(v='km / s'), periods=periods)
+    with outputs.create(str(tmp_path / 'run'), 'fit') as run:
+        result.write(run)
+    again = FitResult.read(outputs.open(str(tmp_path / 'run')))
+    assert again.info() == result.info()
+    best = again.best()
+    assert best.values.keys() == {'v', 'pa'}
+    np.testing.assert_array_equal(best.values['v'], [100.0, 105.0])
+    np.testing.assert_array_equal(best.covariance.matrix, covariance.matrix)
+    np.testing.assert_array_equal(
+        best.covariance.correlation, covariance.correlation)
+    for read in (again.posterior, best.laplace, again.bootstrap):
+        assert read.names == names and read.periods == periods
+        np.testing.assert_array_equal(read.samples, samples)
+    np.testing.assert_array_equal(
+        again.posterior.weights, result.posterior.weights)
+    np.testing.assert_array_equal(
+        again.bootstrap.converged, result.bootstrap.converged)
 
 
 def test_the_information_criteria_take_solved_values_by_their_likelihood():
