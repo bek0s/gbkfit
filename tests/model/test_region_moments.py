@@ -163,10 +163,11 @@ def test_region_moments_observation_dumps_its_bins_with_the_prefix(tmp_path):
     # Without data, the bins are options of the observable: their file is
     # named with the prefix of the dump, which can be dumped again
     from gbkfit.observation import (
-        Flat, ObservationSky, RegionMoments, observation_parser)
+        LineOfSightFlat, ObservationSky, RegionMoments, observation_parser)
     observation = ObservationSky(RegionMoments(
         RegionsBins(np.arange(16).reshape(4, 4) % 3),
-        spectral=SpectralAxis(size=11, convention='relativistic')), Flat())
+        spectral=SpectralAxis(size=11, convention='relativistic')),
+        LineOfSightFlat())
     prefix = str(tmp_path / 'out_')
     for _ in range(2):
         dumped = observation_parser.dump(
@@ -180,8 +181,8 @@ def test_region_moments_objective_residual(driver):
     from gbkfit.objective import Objective
     from gbkfit.instrument import instrument_parser
     from gbkfit.observation import (
-        Flat, LikelihoodGaussian, RegionMoments, ObservationSky,
-        ObservationGroup)
+        LikelihoodGaussian, LineOfSightFlat, ObservationGroup, ObservationSky,
+        RegionMoments)
     index = np.full((41, 32), -1)
     index[10:20, 5:15] = 0
     index[20:30, 10:25] = 1
@@ -191,7 +192,7 @@ def test_region_moments_objective_residual(driver):
     instrument = instrument_parser.load(copy.deepcopy(INSTRUMENT))
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
-        [ObservationSky(observable, Flat(), instrument=instrument)])
+        [ObservationSky(observable, LineOfSightFlat(), instrument=instrument)])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy() for key, value in
@@ -203,7 +204,7 @@ def test_region_moments_objective_residual(driver):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [ObservationSky(
-            observable, Flat(), instrument=instrument,
+            observable, LineOfSightFlat(), instrument=instrument,
             data=dataset, likelihood=LikelihoodGaussian(missing_residual=3))])
     residual = Objective(group.plan(driver)).residual_nddata_h(
         params.evaluate(), False)

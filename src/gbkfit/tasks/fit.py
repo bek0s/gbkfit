@@ -63,7 +63,7 @@ def fit(
     write_setup).
 
     With a section 'bootstrap' (see BootstrapOptions), the errors of the
-    best fit are then bootstrapped too (see gbkfit.fitting.bootstrap),
+    best fit are then bootstrapped too (see gbkfit.fitting.run_bootstrap),
     after the outputs of the fit are written, on its workers if any, and
     the result is written again with the bootstrap; a fit can be
     bootstrapped later as well (see bootstrap).
@@ -152,7 +152,7 @@ def resume(output_dir: str) -> None:
 def bootstrap(output_dir: str, config: str) -> None:
     """
     Bootstrap the errors of a fit in its run (see
-    gbkfit.fitting.bootstrap): rebuild its objective from its
+    gbkfit.fitting.run_bootstrap): rebuild its objective from its
     configuration, refit from its best fit by the section 'bootstrap' of
     a configuration (see BootstrapOptions; the refits use the fitter of
     the fit unless it gives one), and add the bootstrap to the result
@@ -267,7 +267,7 @@ def _bootstrap(
     _log.info(f"bootstrap started ({options.nsamples()} refits)")
     begin = time.perf_counter()
     try:
-        boot = gbkfit.fitting.bootstrap(
+        boot = gbkfit.fitting.run_bootstrap(
             setup.objective, setup.params, start, setup.fitter, options,
             setup.pool, control, log)
     except gbkfit.fitting.FitStopped:

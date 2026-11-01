@@ -128,10 +128,10 @@ class ObservationGroup:
         The galaxies along the line of sight, front to back, by name, or
         in groups of galaxies that can pass through each other (see
         DepthGroup): an observation of several galaxies through radiative
-        transfer (see Transfer) marches them in this order, which it needs
-        when one of them has opacity (the light of each is dimmed by the
-        opacity of those in front of it), and then of all of them. In
-        configurations, a group is {name: [galaxies]}.
+        transfer (see LineOfSightTransfer) marches them in this order,
+        which it needs when one of them has opacity (the light of each is
+        dimmed by the opacity of those in front of it), and then of all of
+        them. In configurations, a group is {name: [galaxies]}.
 
     Raises
     ------

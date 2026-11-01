@@ -1,6 +1,6 @@
 """
 Bootstrap errors: the spread of the best fits of data made of the model
-of a fit plus its residuals, redrawn (see bootstrap).
+of a fit plus its residuals, redrawn (see run_bootstrap).
 """
 
 import abc
@@ -33,8 +33,8 @@ __all__ = [
     'BootstrapGaussian',
     'BootstrapOptions',
     'BootstrapScheme',
-    'bootstrap',
-    'bootstrap_scheme_parser'
+    'bootstrap_scheme_parser',
+    'run_bootstrap'
 ]
 
 
@@ -44,7 +44,7 @@ _log = logging.getLogger(__name__)
 class BootstrapScheme(parseutils.TypedSerializable, abc.ABC):
     """
     How a bootstrap redraws the residuals of the data of an observation
-    (see bootstrap), keeping the correlations of the noise (e.g. within
+    (see run_bootstrap), keeping the correlations of the noise (e.g. within
     the beam): each kind of data offers the schemes it can (e.g. see
     Dataset.resample_blocks).
     """
@@ -157,7 +157,7 @@ class BootstrapGaussian(BootstrapScheme):
     """
     Residuals drawn anew from a Gaussian: each value of the data is the
     model plus Gaussian noise of its noise (its error, or its fitted noise;
-    see bootstrap), independent from value to value: a parametric
+    see run_bootstrap), independent from value to value: a parametric
     bootstrap, e.g. of the kinematics of Voronoi bins, whose few values
     have errors of their own, too unlike to swap residuals. Noise
     correlated between the values is not drawn so: blocks keep it (see
@@ -207,7 +207,7 @@ bootstrap_scheme_parser = parseutils.TypedParser(
 
 class BootstrapOptions(parseutils.Serializable):
     """
-    The options of a bootstrap (see bootstrap).
+    The options of a bootstrap (see run_bootstrap).
 
     Parameters
     ----------
@@ -299,7 +299,7 @@ class BootstrapOptions(parseutils.Serializable):
                 self._fitter.load_fit_params(params)
 
 
-def bootstrap(
+def run_bootstrap(
         objective: Objective,
         params: ParamSpace,
         start: Mapping[str, float],
@@ -466,7 +466,7 @@ def bootstrap(
 
 class _Refit(NamedTuple):
     """
-    A refit of a bootstrap (see bootstrap): its data, the parameters at
+    A refit of a bootstrap (see run_bootstrap): its data, the parameters at
     the best fit, its fitter, and the derived values to keep.
     """
     datasets: tuple[Dataset, ...]

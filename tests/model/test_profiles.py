@@ -13,8 +13,8 @@ from gbkfit.dataset import Data, DatasetProfile
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
-    Flat, NoiseGauss, ObservationGroup, ObservationProfile, ObservationSky,
-    PixelBrightness, PixelSpectra, observation_parser)
+    LineOfSightFlat, NoiseGauss, ObservationGroup, ObservationProfile,
+    ObservationSky, PixelBrightness, PixelSpectra, observation_parser)
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
 
@@ -139,7 +139,8 @@ def test_profile_beside_a_sky_observation():
         PixelSpectra(
             size=(8, 8), step=(1, 1),
             spectral=SpectralAxis(
-                size=5, step=10, convention='relativistic')), Flat())
+                size=5, step=10,
+                convention='relativistic')), LineOfSightFlat())
     group = ObservationGroup(galaxy, [profile, cube])
     params = PARAMS | GAS_PARAMS
     plan = group.plan()
@@ -163,7 +164,8 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
         components=[light], distance=dict(type='direct'), mass=[dict(
             type='disk', name='stellar', vertical=dict(type='thin'),
             surface=dict(type='component', component='stars'))]))
-    image = ObservationSky(PixelBrightness(size=(8, 8), step=(1, 1)), Flat())
+    image = ObservationSky(
+        PixelBrightness(size=(8, 8), step=(1, 1)), LineOfSightFlat())
     profile = ObservationProfile(['vcirc'], np.array([2.0, 6.0]) * u.arcsec)
     group = ObservationGroup(galaxy, [image, profile])
     params = dict(

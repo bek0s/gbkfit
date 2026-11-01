@@ -18,7 +18,7 @@ from modelutils import split_case
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-from gbkfit.observation import Depth, Grid
+from gbkfit.observation import Depth, LineOfSightGrid
 from gbkfit.params import ParamModeOffsets
 from gbkfit.utils import gridutils
 
@@ -257,7 +257,7 @@ def image_plan(driver, galaxy, size):
     grid = gridutils.Grid(size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
     return galaxy.plan(
         driver, grid, IMAGE_SPECTRAL_AXIS,
-        Grid(Depth(extent='legacy')).depth_axis(grid, 0),
+        LineOfSightGrid(Depth(extent='legacy')).depth_axis(grid, 0),
         np.float32, (0,),
         opacity_cubes([galaxy], [(0,)], None, None, np.float32)[0],
         None, None, None, None)

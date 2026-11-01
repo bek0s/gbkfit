@@ -209,7 +209,8 @@ def test_functions_of_a_disk_without_mass():
 def test_functions_of_a_galaxy_of_mass_alone():
     # (e.g. for its rotation curve) Its parameters are those of its mass
     # and its distance; observations on the sky see nothing of it
-    from gbkfit.observation import Flat, ObservationGroup, ObservationSky
+    from gbkfit.observation import (
+        LineOfSightFlat, ObservationGroup, ObservationSky)
     from gbkfit.observation import PixelBrightness
     from gbkfit.utils.parseutils import ConfigError
     info = dict(mass=copy.deepcopy(MASS), distance=dict(type='direct'))
@@ -225,7 +226,8 @@ def test_functions_of_a_galaxy_of_mass_alone():
         bound['vcirc_bh'](2.0), np.sqrt(G * 1e10 / 2.0), rtol=1e-9)
     with pytest.raises(ConfigError, match="it sees none"):
         ObservationGroup(
-            galaxy, ObservationSky(PixelBrightness(size=(4, 4)), Flat())
+            galaxy,
+            ObservationSky(PixelBrightness(size=(4, 4)), LineOfSightFlat())
         ).plan()
     with pytest.raises(ConfigError, match="at least one component, or mass"):
         galaxy_parser.load(dict())

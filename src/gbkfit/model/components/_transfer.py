@@ -1,6 +1,7 @@
 """
 The evaluation of the components of a galaxy by radiative transfer along
-each line of sight (TransferPlan; see the line of sight Transfer).
+each line of sight (TransferPlan; see the line of sight
+LineOfSightTransfer).
 """
 
 import logging

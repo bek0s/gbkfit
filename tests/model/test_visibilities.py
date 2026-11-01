@@ -143,7 +143,7 @@ def observation_of_data(driver, offset):
     from gbkfit.dataset import Data, DatasetVisibilities
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        Flat, ObservationGroup, ObservationSky, Visibilities)
+        LineOfSightFlat, ObservationGroup, ObservationSky, Visibilities)
     from gbkfit.params import ParamSpace
     model = visibilities(driver, DISK, DISK_PROPERTIES)
     error = np.ones(model.shape)
@@ -151,7 +151,8 @@ def observation_of_data(driver, offset):
         Data(model.real + offset, error=error),
         Data(model.imag + offset, error=error), COVERAGE)
     observation = ObservationSky(
-        Visibilities.from_data(dataset, **GRID), Flat(), data=dataset)
+        Visibilities.from_data(dataset, **GRID), LineOfSightFlat(),
+        data=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
     return (group.plan(driver),
             ParamSpace(group.pdescs(), DISK_PROPERTIES).evaluate())

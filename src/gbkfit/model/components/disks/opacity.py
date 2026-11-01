@@ -23,7 +23,8 @@ class LineOpacity(Opacity):
     HI): at each of its lines, its light there times a coefficient, 1/S
     (S the source function), so that the light j of a voxel has the
     optical depth j/S, with the shape of its line. Seen only along a
-    Transfer line of sight, by the observations that see the component,
+    line of sight of radiative transfer (LineOfSightTransfer), by the
+    observations that see the component,
     which must be a thick disk that emits lines.
 
     With a unit of its emission (see LineEmission), S is the brightness

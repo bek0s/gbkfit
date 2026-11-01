@@ -128,7 +128,7 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
     # the galaxy on their own grid
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        Flat, ObservationGroup, ObservationSky, observable_parser)
+        LineOfSightFlat, ObservationGroup, ObservationSky, observable_parser)
     galaxy_info, observable_type, size, key, properties = \
         FLAT_OBSERVATIONS[kind]
 
@@ -137,7 +137,7 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
         if len(size) == 3:
             info.update(spectral=dict(
                 size=size[2], step=10, convention='relativistic'))
-        return ObservationSky(observable_parser.load(info), Flat())
+        return ObservationSky(observable_parser.load(info), LineOfSightFlat())
 
     def evaluate(group, i):
         params = gbkfit.params.ParamSpace(group.pdescs(), properties)
@@ -239,7 +239,7 @@ def two_observations(driver):
     """
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        Flat, ObservationGroup, ObservationSky, PixelSpectra)
+        LineOfSightFlat, ObservationGroup, ObservationSky, PixelSpectra)
     from gbkfit.utils.gridutils import SpectralAxis
     return ObservationGroup(
         [galaxy_parser.load(line_disk(dict(type='arctan', direction='tan')))],
@@ -247,7 +247,8 @@ def two_observations(driver):
             PixelSpectra(
                 size=(16, 16), step=(1, 1),
                 spectral=SpectralAxis(
-                    size=11, step=20, convention='relativistic')), Flat(),
+                    size=11, step=20,
+                    convention='relativistic')), LineOfSightFlat(),
             name=name, offsets=dict(position=name == 'b'))
          for name in ('a', 'b')]).plan(driver)
 

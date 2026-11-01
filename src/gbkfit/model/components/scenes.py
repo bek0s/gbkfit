@@ -259,8 +259,9 @@ class ScenePlan(abc.ABC):
 class AdditiveScenePlan(ScenePlan):
     """
     The evaluation of a scene whose galaxies add their light, each dimmed
-    by its own opacity only (e.g. along the lines of sight Flat and Grid
-    of observations): on the given depth axis, if any (for the largest
+    by its own opacity only (e.g. along the lines of sight
+    LineOfSightFlat and LineOfSightGrid of observations): on the given
+    depth axis, if any (for the largest
     disk of the scene). With extra outputs, it logs a warning if the depth
     axis resolves the velocity of the light too coarsely (see
     warn_resolution).
@@ -324,7 +325,8 @@ class AdditiveScenePlan(ScenePlan):
 class TransferScenePlan(ScenePlan):
     """
     The evaluation of a scene by radiative transfer along each line of
-    sight (e.g. the line of sight Transfer of observations), unit by unit,
+    sight (e.g. the line of sight LineOfSightTransfer of observations),
+    unit by unit,
     front to back, in the order of the scene (see DepthUnit): a galaxy on
     its depth axis (the given one of each galaxy, for its largest disk),
     or a group of galaxies on one axis, each at its position (see

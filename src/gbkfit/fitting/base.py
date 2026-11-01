@@ -202,7 +202,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     def with_seed(self, seed: int) -> Self:
         """
         Return a copy of it with another seed of its random numbers (e.g.
-        the refits of a bootstrap, each of its own; see bootstrap).
+        the refits of a bootstrap, each of its own; see run_bootstrap).
         """
         fitter = copy.copy(self)
         fitter._seed = seed
@@ -212,7 +212,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         """
         Return a copy of it that works out no uncertainty of its solutions
         (e.g. the refits of a bootstrap, whose spread is their
-        uncertainty; see bootstrap).
+        uncertainty; see run_bootstrap).
         """
         fitter = copy.copy(self)
         fitter._uncertainty = _NO_UNCERTAINTY

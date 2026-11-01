@@ -9,8 +9,8 @@ import pytest
 from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
-    Flat, LikelihoodGaussian, ObservationSky, PixelBrightness, PixelMoments,
-    UpperLimit, observation_parser)
+    LikelihoodGaussian, LineOfSightFlat, ObservationSky, PixelBrightness,
+    PixelMoments, UpperLimit, observation_parser)
 from gbkfit.utils import parseutils
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
@@ -28,7 +28,7 @@ def test_observable_from_data():
     assert observable.orders() == (0, 1)
     assert observable.spectral().rval() == 1500
     ObservationSky(
-        observable, Flat(), data=data,
+        observable, LineOfSightFlat(), data=data,
         likelihood=LikelihoodGaussian(missing_residual=3))
 
 
@@ -57,7 +57,7 @@ def test_a_model_that_can_lack_values_needs_their_residual():
     observable = PixelMoments.from_data(
         data, spectral=SpectralAxis(step=5, convention='relativistic'))
     with pytest.raises(ConfigError, match="option missing_residual"):
-        ObservationSky(observable, Flat(), data=data)
+        ObservationSky(observable, LineOfSightFlat(), data=data)
 
 
 def test_observable_options_are_checked():
@@ -67,7 +67,7 @@ def test_observable_options_are_checked():
             spectral=SpectralAxis(convention='relativistic'))
     with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
         ObservationSky(
-            PixelBrightness(size=(8, 8)), Flat(),
+            PixelBrightness(size=(8, 8)), LineOfSightFlat(),
             instrument=Instrument(lsf=LSFGauss(10)))
 
 
@@ -102,15 +102,17 @@ def test_dtypes_without_kernels_are_errors(dtype):
     from gbkfit.dataset import DatasetPixelBrightness
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
     with pytest.raises(ConfigError, match="'dtype' must be one of 'float32', 'float64'"):
-        ObservationSky(observable, Flat(), dtype=dtype)
+        ObservationSky(observable, LineOfSightFlat(), dtype=dtype)
 
 
 def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
     observable = PixelBrightness(size=(8, 8))
-    assert ObservationSky(observable, Flat()).fft_dtype() == np.float64
+    assert ObservationSky(
+        observable, LineOfSightFlat()).fft_dtype() == np.float64
     with pytest.raises(ConfigError, match=r"fft_dtype \(float32\) is less"):
         ObservationSky(
-            observable, Flat(), dtype='float64', fft_dtype='float32')
+            observable, LineOfSightFlat(
+                ), dtype='float64', fft_dtype='float32')
 
 
 @pytest.mark.parametrize('options, message', [
@@ -126,7 +128,7 @@ def test_likelihoods_name_items_of_their_observation(options, message):
         ObservationSky(
             PixelMoments.from_data(
                 data, spectral=SpectralAxis(step=5, convention='relativistic')),
-            Flat(), data=data,
+            LineOfSightFlat(), data=data,
             likelihood=LikelihoodGaussian(missing_residual=3, **options))
 
 
@@ -139,7 +141,7 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         Data(np.ones((10, 4, 4))),
         spectral=SpectralAxis(convention='relativistic'))
     observation = ObservationSky(
-        PixelSpectra.from_data(data), Flat(), data=data,
+        PixelSpectra.from_data(data), LineOfSightFlat(), data=data,
         likelihood=LikelihoodGaussian(
             upper_limits=dict(spectra=UpperLimit(limit=0.1, error=0.05))))
     comparison_ = observation.likelihood().comparison(

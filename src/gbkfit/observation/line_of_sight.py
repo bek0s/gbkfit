@@ -1,10 +1,10 @@
 """
 How an observation treats the line of sight: it evaluates the galaxies it
-sees on the plane of the sky (Flat), on a grid with a depth axis along
-the line of sight (Grid), or by radiative transfer along it (Transfer).
-It is explicit, and checked against every component it sees: never
-inferred from them. Along the depth axis, the viewer is in front of its
-first voxel.
+sees on the plane of the sky (LineOfSightFlat), on a grid with a depth
+axis along the line of sight (LineOfSightGrid), or by radiative transfer
+along it (LineOfSightTransfer). It is explicit, and checked against
+every component it sees: never inferred from them. Along the depth
+axis, the viewer is in front of its first voxel.
 """
 
 import abc
@@ -26,10 +26,10 @@ from gbkfit.utils.typeutils import Unit
 
 __all__ = [
     'Depth',
-    'Flat',
-    'Grid',
     'LineOfSight',
-    'Transfer',
+    'LineOfSightFlat',
+    'LineOfSightGrid',
+    'LineOfSightTransfer',
     'line_of_sight_parser'
 ]
 
@@ -218,7 +218,7 @@ def _check_no_line_opacity(component: Component) -> None:
             "radiative transfer (transfer)")
 
 
-class Flat(LineOfSight):
+class LineOfSightFlat(LineOfSight):
     """
     No depth axis: the galaxies are evaluated on the plane of the sky. It
     sees thin components only (thin disks and points), and no opacity.
@@ -247,7 +247,7 @@ class Flat(LineOfSight):
                 "(grid or transfer)")
 
 
-class Grid(LineOfSight):
+class LineOfSightGrid(LineOfSight):
     """
     A depth axis: the galaxies are evaluated on the voxels of a grid,
     where dust dims the light behind it. It sees every component: thick
@@ -269,7 +269,7 @@ class Grid(LineOfSight):
         return dict(type=self.type(), depth=self._depth.dump())
 
     def __init__(self, depth: Depth | None = None):
-        check_options(Grid.__init__, locals())
+        check_options(LineOfSightGrid.__init__, locals())
         self._depth = depth if depth is not None else Depth()
 
     def depth(self) -> Depth:
@@ -287,19 +287,19 @@ class Grid(LineOfSight):
         _check_no_line_opacity(component)
 
 
-class Transfer(LineOfSight):
+class LineOfSightTransfer(LineOfSight):
     """
     A depth axis and radiative transfer along each line of sight: the
-    galaxies are evaluated on the voxels of a grid, as by Grid, but their
-    emitters write the fields of their light (its density, velocity and
-    dispersion in each voxel, or in the layer of a thin disk or a point;
-    see ComponentPlan.evaluate_fields), and a march along each line of
-    sight, front to back, adds the light of each channel that reaches the
-    viewer, dimmed by the opacity in front of it. It sees every component.
-    It gives what Grid gives, but for the clouds of a Monte Carlo disk:
-    those of each voxel become one line, of their mean velocity, and as
-    wide as the sum of their lines. Its components may have line opacity
-    (see LineOpacity).
+    galaxies are evaluated on the voxels of a grid, as by
+    LineOfSightGrid, but their emitters write the fields of their light
+    (its density, velocity and dispersion in each voxel, or in the layer
+    of a thin disk or a point; see ComponentPlan.evaluate_fields), and a
+    march along each line of sight, front to back, adds the light of each
+    channel that reaches the viewer, dimmed by the opacity in front of
+    it. It sees every component. It gives what LineOfSightGrid gives, but
+    for the clouds of a Monte Carlo disk: those of each voxel become one
+    line, of their mean velocity, and as wide as the sum of their lines.
+    Its components may have line opacity (see LineOpacity).
 
     It sees several galaxies with opacity, which can dim the light of one
     another: the march goes through one after the other, front to back,
@@ -341,7 +341,7 @@ class Transfer(LineOfSight):
             slab: Annotated[int, Gt(0)] | None = None,
             subchannels: Annotated[int, Ge(1), Le(MAX_SUBCHANNELS)] = 1
     ):
-        check_options(Transfer.__init__, locals())
+        check_options(LineOfSightTransfer.__init__, locals())
         self._depth = depth if depth is not None else Depth()
         self._slab = slab
         self._subchannels = subchannels
@@ -405,6 +405,6 @@ class Transfer(LineOfSight):
 
 
 line_of_sight_parser = parseutils.TypedParser(LineOfSight, [
-    Flat,
-    Grid,
-    Transfer])
+    LineOfSightFlat,
+    LineOfSightGrid,
+    LineOfSightTransfer])

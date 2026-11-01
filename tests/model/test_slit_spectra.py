@@ -80,9 +80,9 @@ def test_slit_spectra_objective_residual(driver):
         spectral=SpectralAxis(step=10, convention='relativistic'), rota=30)
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
-        Flat, ObservationGroup, ObservationSky, observable_parser)
+        LineOfSightFlat, ObservationGroup, ObservationSky, observable_parser)
     observation = ObservationSky(
-        observable_parser.load(copy.deepcopy(observable)), Flat(),
+        observable_parser.load(copy.deepcopy(observable)), LineOfSightFlat(),
         data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])

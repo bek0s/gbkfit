@@ -10,8 +10,8 @@ from astropy.coordinates import SkyCoord
 
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
-    Flat, ObservationGroup, ObservationSky, PixelMoments, SlitSpectra,
-    observable_parser, observation_parser)
+    LineOfSightFlat, ObservationGroup, ObservationSky, PixelMoments,
+    SlitSpectra, observable_parser, observation_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
@@ -54,7 +54,8 @@ def moments(driver, offsets=None, origin=ORIGIN, **values):
                 spectral=SpectralAxis(
                     size=81, step=5, convention='relativistic'),
                 orders=(0, 1)),
-            Flat(), name=name, offsets=offsets if name == 'b' else None)
+            LineOfSightFlat(), name=name,
+            offsets=offsets if name == 'b' else None)
         for name, rval in (('a', ORIGIN), ('b', origin))]
     group = ObservationGroup([galaxy_parser.load(GALAXY)], observations)
     params = ParamSpace(group.pdescs(), PARAMS | values)
@@ -78,14 +79,17 @@ def test_offsets_are_parameters_of_named_observations():
         size=(8, 8), spectral=SpectralAxis(size=11, convention='relativistic'),
         orders=(0,))
     observation = ObservationSky(
-        observable, Flat(), name='sinfoni', offsets=dict(position=True))
+        observable, LineOfSightFlat(), name='sinfoni',
+        offsets=dict(position=True))
     assert set(observation.pdescs()) == {'sinfoni_dx', 'sinfoni_dy'}
     loaded = observation_parser.load(observation_parser.dump(observation))
     assert loaded.offset_params() == ('sinfoni_dx', 'sinfoni_dy', None)
     with pytest.raises(ConfigError, match="needs a name"):
-        ObservationSky(observable, Flat(), offsets=dict(velocity=True))
+        ObservationSky(
+            observable, LineOfSightFlat(), offsets=dict(velocity=True))
     with pytest.raises(ConfigError, match="'position' and 'velocity'"):
-        ObservationSky(observable, Flat(), name='a', offsets=dict(x=True))
+        ObservationSky(
+            observable, LineOfSightFlat(), name='a', offsets=dict(x=True))
 
 
 def test_a_galaxy_needs_an_observation_without_offsets():
@@ -95,7 +99,7 @@ def test_a_galaxy_needs_an_observation_without_offsets():
             PixelMoments(
                 size=(8, 8),
                 spectral=SpectralAxis(size=11, convention='relativistic'),
-                orders=(0,)), Flat(),
+                orders=(0,)), LineOfSightFlat(),
             name=name, offsets=dict(position=True))
         for name in ('a', 'b')]
     with pytest.raises(ConfigError, match="offsets of position; one needs"):
@@ -112,7 +116,8 @@ def test_observations_in_two_frames_of_rest_are_warned_of(caplog):
                     size=(8, 8), spectral=SpectralAxis(
                         size=11, convention='relativistic', frame=frame),
                     orders=(0,)),
-                Flat(), name=name, offsets=offsets if name == 'b' else None)
+                LineOfSightFlat(), name=name,
+                offsets=offsets if name == 'b' else None)
             for name, frame in (('a', 'LSRK'), ('b', 'BARYCENT'))]
     ObservationGroup([galaxy_parser.load(GALAXY)], observations(None))
     assert "different frames of rest" in caplog.text

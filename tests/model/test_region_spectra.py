@@ -167,7 +167,8 @@ def test_region_spectra_objective_residual(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.objective import Objective
     from gbkfit.instrument import Instrument, instrument_parser
-    from gbkfit.observation import Flat, ObservationGroup, ObservationSky
+    from gbkfit.observation import (
+        LineOfSightFlat, ObservationGroup, ObservationSky)
     observable = aspec_of_apertures(APERTURES[:2])
     model = evaluate(driver, observable)
     observable = observable_of(observable)
@@ -176,7 +177,7 @@ def test_region_spectra_objective_residual(driver):
         observable.regions(),
         spectral=SpectralAxis(step=10, convention='relativistic'))
     observation = ObservationSky(
-        observable, Flat(), instrument=Instrument(), data=dataset)
+        observable, LineOfSightFlat(), instrument=Instrument(), data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
@@ -185,7 +186,7 @@ def test_region_spectra_objective_residual(driver):
     # Without the instrument, the model differs from the data
     assert not np.allclose(residual[0]['spectra'], -0.5)
     observation = ObservationSky(
-        observable, Flat(),
+        observable, LineOfSightFlat(),
         instrument=instrument_parser.load(copy.deepcopy(INSTRUMENT)),
         data=dataset)
     group = ObservationGroup(
@@ -264,13 +265,13 @@ def test_region_spectra_observation_from_data(tmp_path):
 
 
 def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error():
-    from gbkfit.observation import Flat, ObservationSky
+    from gbkfit.observation import LineOfSightFlat, ObservationSky
     observable = observable_of(aspec_of_apertures(APERTURES))
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), observable.regions(),
         spectral=SpectralAxis(step=5, convention='relativistic'))
     with pytest.raises(ConfigError, match="spectral axis"):
-        ObservationSky(observable, Flat(), data=dataset)
+        ObservationSky(observable, LineOfSightFlat(), data=dataset)
 
 
 
@@ -279,7 +280,8 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(kind):
     # The spectral axis of a rotated spatial grid is not rotated: it
     # matches that of the spectra
     from gbkfit.region import aperture_parser
-    from gbkfit.observation import Flat, RegionSpectra, ObservationSky
+    from gbkfit.observation import (
+        LineOfSightFlat, ObservationSky, RegionSpectra)
     if kind == 'apertures':
         regions = RegionsApertures([aperture_parser.load(dict(type='field'))])
         observable = RegionSpectra(
@@ -293,7 +295,7 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(kind):
             spectral=SpectralAxis(size=5, step=10, convention='relativistic'))
     dataset = DatasetRegionSpectra(Data(np.ones((5, 1))), regions,
     spectral=SpectralAxis(step=10, convention='relativistic'))
-    ObservationSky(observable, Flat(), data=dataset)
+    ObservationSky(observable, LineOfSightFlat(), data=dataset)
 
 def test_region_spectra_spatial_grid_options():
     from gbkfit.observation import RegionSpectra

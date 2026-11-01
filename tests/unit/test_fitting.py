@@ -24,8 +24,8 @@ from gbkfit.model import galaxy_parser
 from gbkfit.objective import Merits, Objective
 from gbkfit.parallel import WorkersProcesses, WorkersThreads
 from gbkfit.observation import (
-    FittedNoise, Flat, LikelihoodGaussian, LikelihoodUser, ObservationGroup,
-    ObservationSky, PixelBrightness)
+    FittedNoise, LikelihoodGaussian, LikelihoodUser, LineOfSightFlat,
+    ObservationGroup, ObservationSky, PixelBrightness)
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamScalarDesc, ParamSpace,
     PriorGauss, PriorGaussTrunc,
@@ -60,7 +60,7 @@ def mock_objective(
     """
     def group(dataset, likelihood=None, flux_scale=None):
         observation = ObservationSky(
-            PixelBrightness.from_data(dataset), Flat(),
+            PixelBrightness.from_data(dataset), LineOfSightFlat(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset,
             likelihood=likelihood, flux_scale=flux_scale, name=name)
         return ObservationGroup(
@@ -1021,14 +1021,14 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn():
     import dataclasses
     from gbkfit import outputs
     from gbkfit.fitting import (
-        BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace(
         objective.pdescs(), bounded_properties(),
         derived=dict(d='xpos + 2 * ypos'))
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
-    boot = bootstrap(
+    boot = run_bootstrap(
         objective, params, result.best().elements, fitter,
         BootstrapOptions(10, BootstrapBlocks([4, 4])))
     assert boot.samples.shape == (10, 7) and not boot.failures
@@ -1055,7 +1055,7 @@ def test_a_bootstrap_on_workers_is_the_bootstrap_without(kind):
     # (each refit draws its residuals with a stream of its own: on workers,
     # in any order, it refits the same data)
     from gbkfit.fitting import (
-        BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
     driver = DriverHost()
     objective = mock_objective(driver)
     params = ParamSpace(
@@ -1064,9 +1064,9 @@ def test_a_bootstrap_on_workers_is_the_bootstrap_without(kind):
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     start = fitter.fit(objective, params).best().elements
     options = BootstrapOptions(5, BootstrapBlocks([4, 4]))
-    alone = bootstrap(objective, params, start, fitter, options)
+    alone = run_bootstrap(objective, params, start, fitter, options)
     with two_workers(kind, driver).start(objective) as pool:
-        pooled = bootstrap(objective, params, start, fitter, options, pool)
+        pooled = run_bootstrap(objective, params, start, fitter, options, pool)
     assert pooled.names == alone.names
     np.testing.assert_allclose(pooled.samples, alone.samples, rtol=1e-9)
     assert list(pooled.converged) == list(alone.converged)
@@ -1090,22 +1090,22 @@ def test_a_stopped_bootstrap_resumes_from_its_log(tmp_path):
     # (stopped after two refits, it resumes with them, and ends as the
     # bootstrap that did not stop)
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     start = fitter.fit(objective, params).best().elements
     options = BootstrapOptions(4, BootstrapGaussian())
-    whole = bootstrap(objective, params, start, fitter, options)
+    whole = run_bootstrap(objective, params, start, fitter, options)
     filename = str(tmp_path / 'bootstrap.jsonl')
     control = FitControl()
     log = StopAfterOutcomes(filename, control, 2)
     with pytest.raises(FitStopped):
-        bootstrap(objective, params, start, fitter, options, None, control,
+        run_bootstrap(objective, params, start, fitter, options, None, control,
                   log)
     log.close()
     assert sorted(SubFitLog.resume(filename).outcomes()) == [0, 1]
-    resumed = bootstrap(
+    resumed = run_bootstrap(
         objective, params, start, fitter, options,
         log=SubFitLog.resume(filename))
     np.testing.assert_array_equal(resumed.samples, whole.samples)
@@ -1159,12 +1159,12 @@ def test_a_gaussian_bootstrap_draws_the_noise_anew():
     # Refits of the model plus Gaussian noise of the errors: of white
     # noise, they scatter about as the covariance says
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
-    boot = bootstrap(
+    boot = run_bootstrap(
         objective, params, result.best().elements, fitter,
         BootstrapOptions(10, BootstrapGaussian()))
     assert boot.samples.shape == (10, 6) and not boot.failures
@@ -1177,12 +1177,12 @@ def test_a_bootstrap_keeps_refits_that_do_not_converge():
     # Refits stopped by their budget of evaluations are kept, and flagged:
     # leaving them out would bias the samples to the refits easy to fit
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), bounded_properties())
     result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
         objective, params)
-    boot = bootstrap(
+    boot = run_bootstrap(
         objective, params, result.best().elements,
         fitter_parser.load(dict(type='scipy.least_squares', max_nfev=2)),
         BootstrapOptions(3, BootstrapGaussian()))
@@ -1195,7 +1195,7 @@ def test_a_bootstrap_refits_fits_of_solved_values():
     # (the refits start at copies of the parameters, whose solves are equal
     # to those of the objective)
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
     params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
@@ -1204,7 +1204,7 @@ def test_a_bootstrap_refits_fits_of_solved_values():
     objective = Objective(plan, params.solves())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
-    boot = bootstrap(
+    boot = run_bootstrap(
         objective, params, result.best().elements, fitter,
         BootstrapOptions(3, BootstrapGaussian()))
     assert len(boot.samples) == 3 and not boot.failures
@@ -1216,12 +1216,12 @@ def test_a_bootstrap_refits_fits_of_solved_values():
     (dict(type='blocks', size=[4, 0]), 'of positive numbers'),
 ])
 def test_bootstrap_options_that_do_not_suit_the_fit_refused(scheme, message):
-    from gbkfit.fitting import BootstrapOptions, bootstrap, fitter_parser
+    from gbkfit.fitting import BootstrapOptions, fitter_parser, run_bootstrap
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     with pytest.raises(ConfigError, match=message):
-        bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
+        run_bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
             dict(nsamples=5, scheme=scheme)))
 
 
@@ -1447,12 +1447,12 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
     # of about 2 FWHM of the PSF, about that scatter (0.85 of it on
     # average over 8 mocks, 1/2 in blocks of 2 pixels)
     from gbkfit.fitting import (
-        BootstrapBlocks, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
     from gbkfit.observation import NoiseGauss
 
     def group(dataset):
         observation = ObservationSky(
-            PixelBrightness.from_data(dataset), Flat(),
+            PixelBrightness.from_data(dataset), LineOfSightFlat(),
             instrument=Instrument(psf=PSFGauss(1.5)), data=dataset)
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(DriverHost())
@@ -1477,7 +1477,7 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
         covariance = np.array(
             [result.best().covariance.std[name] for name in TRUE])
         assert np.all(covariance < 0.5 * scatter)
-        boot = bootstrap(
+        boot = run_bootstrap(
             objective, params, result.best().elements, fitter,
             BootstrapOptions(40, BootstrapBlocks([8, 8])))
         ratios.append(np.array([boot.std()[name] for name in TRUE]) / scatter)

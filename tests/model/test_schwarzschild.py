@@ -513,7 +513,7 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
     # The data of the refits of a bootstrap of a fit of the weights are
     # the model that the objective compares with the data plus noise
     from gbkfit.fitting import (
-        BootstrapGaussian, BootstrapOptions, bootstrap, fitter_parser)
+        BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
 
     class KeptModels(BootstrapGaussian):
         """A Gaussian bootstrap that keeps the models it draws about."""
@@ -532,7 +532,7 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
         vsys=dict(value=0, min=-50, max=50), stars_weights=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
     scheme = KeptModels()
-    boot = bootstrap(
+    boot = run_bootstrap(
         objective, params, dict(vsys=0.0),
         fitter_parser.load(dict(type='scipy.least_squares', max_nfev=2)),
         BootstrapOptions(2, scheme, seed=1))

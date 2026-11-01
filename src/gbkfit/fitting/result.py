@@ -272,7 +272,7 @@ class Posterior:
 @dataclasses.dataclass(frozen=True)
 class Bootstrap:
     """
-    The bootstrap of a solution (see bootstrap): the best fits of refits
+    The bootstrap of a solution (see run_bootstrap): the best fits of refits
     of data made of its model plus its residuals redrawn, which scatter
     as the best fit does over data with other noise of the same kind.
 
@@ -287,7 +287,7 @@ class Bootstrap:
     converged : np.ndarray
         Whether the fitter of each of those refits reports success (bool,
         one per row); those it does not (e.g. stopped by its budget of
-        evaluations) are kept, see bootstrap.
+        evaluations) are kept, see run_bootstrap.
     failures : tuple of str
         Why each of the other refits failed.
     options : dict
@@ -499,7 +499,7 @@ class FitResult:
         Numbers that tell how well the fitter worked (e.g. the acceptance
         fraction of an MCMC sampler).
     bootstrap : Bootstrap or None
-        The bootstrap of the best solution, if run (see bootstrap).
+        The bootstrap of the best solution, if run (see run_bootstrap).
     units : dict
         The units of the values of the parameters and the derived values
         that have one, by name (astropy unit strings; see

@@ -98,8 +98,8 @@ class ObservationSky(Observation):
     observable : Observable
         What the data measure.
     line_of_sight : LineOfSight
-        How it treats the line of sight: Flat() (the plane of the sky) or
-        Grid() (a depth axis).
+        How it treats the line of sight: LineOfSightFlat() (the plane of
+        the sky) or LineOfSightGrid() (a depth axis).
     foreground : Foreground, optional
         What the light meets before the telescope; nothing by default.
     instrument : Instrument, optional

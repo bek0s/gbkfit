@@ -1,5 +1,5 @@
 """
-Tests for radiative transfer along the line of sight (Transfer): the
+Tests for radiative transfer along the line of sight (LineOfSightTransfer): the
 fields of the light of the emitters, which the march reads.
 """
 
@@ -711,14 +711,14 @@ def test_transfer_extras(driver, evaluate_cases):
 
 
 def test_subchannels_option():
-    from gbkfit.observation import Transfer
+    from gbkfit.observation import LineOfSightTransfer
     from gbkfit.utils.parseutils import ConfigError
-    assert Transfer(subchannels=4).dump()['subchannels'] == 4
+    assert LineOfSightTransfer(subchannels=4).dump()['subchannels'] == 4
     for subchannels, message in (
             (0, "at least 1 and at most 64"), (65, "at least 1 and at most 64"),
             (2.5, "of type int")):
         with pytest.raises(ConfigError, match=message):
-            Transfer(subchannels=subchannels)
+            LineOfSightTransfer(subchannels=subchannels)
 
 
 @pytest.mark.parametrize('incl, dispersion, subchannels, warnings', [

@@ -368,14 +368,18 @@ def test_observable_grid_comes_from_the_data(tmp_path):
 
 
 def test_observation_data_must_be_on_the_grid_of_the_observable():
-    from gbkfit.observation import Flat, ObservationSky, PixelBrightness
+    from gbkfit.observation import (
+        LineOfSightFlat, ObservationSky, PixelBrightness)
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
     with pytest.raises(ConfigError, match="the data are on the grid"):
-        ObservationSky(PixelBrightness(size=(20, 8)), Flat(), data=data)
+        ObservationSky(
+            PixelBrightness(size=(20, 8)), LineOfSightFlat(), data=data)
     with pytest.raises(ConfigError, match="cannot be compared"):
-        ObservationSky(PixelBrightness(size=(20, 8)), Flat(), data=moments)
-    ObservationSky(PixelBrightness(size=(20, 8), rota=30), Flat(), data=data)
+        ObservationSky(
+            PixelBrightness(size=(20, 8)), LineOfSightFlat(), data=moments)
+    ObservationSky(
+        PixelBrightness(size=(20, 8), rota=30), LineOfSightFlat(), data=data)
 
 
 def test_pixel_spectra_rest_comes_from_the_data(tmp_path):

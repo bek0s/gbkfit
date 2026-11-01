@@ -18,7 +18,7 @@ import pytest
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
     BootstrapBlocks, BootstrapOptions, FitControl, FitProblem, FitStopped,
-    bootstrap, fitter_parser)
+    fitter_parser, run_bootstrap)
 from gbkfit.params import ParamSpace
 from gbkfit.parallel import Workers, WorkersDask, WorkersRay
 
@@ -39,12 +39,12 @@ def check_workers(workers: Workers) -> None:
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     start = fitter.fit(objective, params).best().elements
     options = BootstrapOptions(4, BootstrapBlocks([4, 4]))
-    alone = bootstrap(objective, params, start, fitter, options)
+    alone = run_bootstrap(objective, params, start, fitter, options)
     with workers.start(objective) as pool:
         np.testing.assert_allclose(
             FitProblem(objective, params, pool=pool).chi2_batch(xs),
             FitProblem(objective, params).chi2_batch(xs), rtol=1e-12)
-        pooled = bootstrap(objective, params, start, fitter, options, pool)
+        pooled = run_bootstrap(objective, params, start, fitter, options, pool)
         np.testing.assert_allclose(pooled.samples, alone.samples, rtol=1e-9)
         control = FitControl()
         threading.Timer(1.0, control.stop).start()
