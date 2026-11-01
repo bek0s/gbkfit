@@ -21,7 +21,7 @@ from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail, _moments, _orbit_outputs
-from ._detail import Rota, Rval, Step
+from ._detail import Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method
 from ._region_sums import RegionSumsPlan, flux_weights
 from .base import HostModelData, ModelData, Observable, ObservablePlan
@@ -120,16 +120,16 @@ class RegionMoments(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetRegionMoments | None = None
     ) -> 'RegionMoments':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
             cls,
             dataset: DatasetRegionMoments,
             spectral: gridutils.SpectralAxis,
-            size: Sequence[int] | None = None,
+            size: Size | None = None,
             step: Step | None = None,
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota | None = None,
             flux_floor: FluxFloor = 1e-6,
@@ -191,9 +191,9 @@ class RegionMoments(Observable):
             self,
             regions: Regions,
             spectral: gridutils.SpectralAxis,
-            size: Sequence[int] | None = None,
+            size: Size | None = None,
             step: Step | None = None,
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota | None = None,
             flux_floor: FluxFloor = 1e-6,

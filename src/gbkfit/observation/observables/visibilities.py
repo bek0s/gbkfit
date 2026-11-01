@@ -20,7 +20,7 @@ from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
-from ._detail import Rota, Rval
+from ._detail import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
 from .base import HostModelData, ModelData, Observable
 
@@ -112,9 +112,9 @@ class Visibilities(Observable):
     step : float or Sequence of float, optional
         The size of the pixels (arcsec); by default 1 / (5 u_max), of the
         longest baseline at the highest frequency.
-    rpix : Sequence of float, optional
+    rpix : float or Sequence of float, optional
         The reference pixel; by default the centre.
-    rval : Sequence of float, optional
+    rval : float or Sequence of float, optional
         The RA and Dec of the reference pixel (degrees); by default the
         phase centre.
     rota : float, optional
@@ -159,7 +159,7 @@ class Visibilities(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetVisibilities | None = None
     ) -> 'Visibilities':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
@@ -167,7 +167,7 @@ class Visibilities(Observable):
             dataset: DatasetVisibilities,
             fov: _Lengths,
             step: _Lengths | None = None,
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota = 0,
             transform: _Transform = 'exact',
@@ -223,7 +223,7 @@ class Visibilities(Observable):
             coverage: UVCoverage,
             fov: _Lengths,
             step: _Lengths | None = None,
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota = 0,
             transform: _Transform = 'exact',

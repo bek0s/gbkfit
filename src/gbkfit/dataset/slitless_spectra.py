@@ -63,10 +63,6 @@ class DatasetSlitlessSpectra(Dataset):
         return 'slitless_spectra'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'DatasetSlitlessSpectra':
-        return _detail.load_with_files(cls, dict(info), cls.ndim)
-
-    @classmethod
     def from_files(
             cls,
             data: DataFile,

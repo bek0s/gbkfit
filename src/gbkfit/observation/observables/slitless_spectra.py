@@ -23,7 +23,7 @@ from gbkfit.utils import gridutils, iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail, _moments
-from ._detail import Rota, Rval, Step
+from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan
 from .apertures import Aperture, aperture_parser
 from .base import FluxScale, HostModelData, ModelData, Observable
@@ -351,7 +351,7 @@ class SlitlessSpectra(Observable):
 
     Parameters
     ----------
-    size : Sequence of int
+    size : int or Sequence of int
         The number of pixels of the image (nx, ny).
     spectral : SpectralAxis
         The spectral axis of the model (see gridutils.SpectralAxis): its
@@ -362,7 +362,7 @@ class SlitlessSpectra(Observable):
         default, its channels span 1000 km/s, centred on 0.
     trace : Trace
         The trace of the disperser.
-    step, rpix, rval : Sequence of float, optional
+    step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the image (see gridutils.Coords); rpix
         is the centre by default.
     rota : float, optional
@@ -402,7 +402,7 @@ class SlitlessSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetSlitlessSpectra | None = None
     ) -> 'SlitlessSpectra':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
@@ -470,11 +470,11 @@ class SlitlessSpectra(Observable):
 
     def __init__(
             self,
-            size: Sequence[int],
+            size: Size,
             spectral: gridutils.SpectralAxis,
             trace: Trace,
             step: Step = (1, 1),
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval = (0, 0),
             rota: Rota = 0,
             aperture: Aperture | None = None,

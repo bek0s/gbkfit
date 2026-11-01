@@ -611,7 +611,7 @@ CASES: list[dict[str, Any]] = [
             "with fitted offsets of position and velocity.",
         galaxies=_DISK,
         observations=[
-            _small_cube(rval=[150, -30, 0]) | dict(name='kmos'),
+            _small_cube(rval=[150, -30]) | dict(name='kmos'),
             _MOMENTS | dict(
                 name='sinfoni', offsets=dict(position=True, velocity=True),
                 observable=_MOMENTS['observable']

@@ -60,10 +60,6 @@ class DatasetPixelSpectra(Dataset):
         return 'pixel_spectra'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'DatasetPixelSpectra':
-        return _detail.load_with_files(cls, dict(info), cls.ndim - 1)
-
-    @classmethod
     def from_files(
             cls,
             data: DataFile,

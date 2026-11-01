@@ -97,24 +97,6 @@ def split_moments(
     return moments, hermite
 
 
-def load_with_files(
-        cls: type['Dataset'],
-        info: dict[str, Any],
-        ndim: int
-) -> 'Dataset':
-    """
-    Return the dataset of class cls that its from_files makes with the
-    options of its configuration, in which those of the world coordinates
-    with one value per axis (ndim of them: on the sky, of a dataset with a
-    spectral axis) are made lists (see
-    parseutils.sanitize_dimensional_options).
-    """
-    parseutils.sanitize_dimensional_options(
-        info, dict(step=float, rpix=float, rval=float), ndim)
-    return cls.from_files(
-        **parseutils.parse_options_for_callable(info, cls.from_files))
-
-
 def moment_items(
         moments: Mapping[int, Data],
         hermite: Mapping[int, Data] | None = None
@@ -295,7 +277,8 @@ def file_references(
     Raises
     ------
     ConfigError
-        If the spectral axis has a size: its data give it.
+        If the spectral axis has a size: its data give it; or rpix or
+        rval has neither one value nor one for each axis on the sky.
     """
     spectral = spectral or gridutils.SpectralAxis()
     if spectral.size() is not None:
@@ -304,16 +287,17 @@ def file_references(
             "remove its size")
 
     def per_axis(
+            option: str,
             spatial: float | Sequence[float] | None,
             value: float | None
     ) -> list[float | None] | None:
         values = [None] * nspatial if spatial is None \
-            else np.broadcast_to(np.asarray(spatial, float), nspatial)
+            else gridutils.per_axis(option, spatial, nspatial)
         values = [*values, value]
         return None if all(v is None for v in values) else values
     return dict(
-        rpix=per_axis(rpix, spectral.rpix()),
-        rval=per_axis(rval, spectral.rval()),
+        rpix=per_axis('rpix', rpix, spectral.rpix()),
+        rval=per_axis('rval', rval, spectral.rval()),
         rest=spectral.rest(), medium=spectral.medium(),
         velocity=spectral.convention())
 

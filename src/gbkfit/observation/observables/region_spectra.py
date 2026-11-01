@@ -16,7 +16,7 @@ from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
-from ._detail import Rota, Rval, Step
+from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan, flux_weights
 from .base import FluxScale, ModelData, Observable
 
@@ -91,15 +91,15 @@ class RegionSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetRegionSpectra | None = None
     ) -> 'RegionSpectra':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
             cls,
             dataset: DatasetRegionSpectra,
-            size: Sequence[int] | None = None,
+            size: Size | None = None,
             step: Step | None = None,
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota | None = None
     ) -> 'RegionSpectra':
@@ -152,9 +152,9 @@ class RegionSpectra(Observable):
             self,
             regions: Regions,
             spectral: gridutils.SpectralAxis,
-            size: Sequence[int] | None = None,
+            size: Size | None = None,
             step: Step | None = None,
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval | None = None,
             rota: Rota | None = None
     ):

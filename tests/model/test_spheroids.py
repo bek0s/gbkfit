@@ -634,9 +634,13 @@ def test_float32_stars_keep_their_dispersion_at_a_large_vsys(
     cubes = []
     for dtype in ('float32', 'float64'):
         case = stars_cube(driver, spheroid)
-        case['observable'] |= dict(dtype=dtype, rval=[0, 0, 15000])
+        case['observable'] |= dict(dtype=dtype)
+        case['observable']['spectral'] |= dict(rval=15000)
         data, _ = evaluate_cases([case], properties)
         cubes.append(data[0]['spectra']['d'][:, 14:18, 14:18])
+    # (the cubes have the light of each pixel: their channels are about
+    # vsys)
+    assert all(np.all(cube.sum(axis=0) > 0) for cube in cubes)
     velocity = 15000 + (np.arange(181) - 90) * 10.0
 
     def dispersion(cube):

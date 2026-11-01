@@ -14,7 +14,7 @@ from gbkfit.model import BandEmission, DataUnit, LightUnit
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
-from ._detail import MedianSize, Rota, Rval, Step
+from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from .base import ModelData, Observable
 
 if TYPE_CHECKING:
@@ -45,9 +45,9 @@ class PixelBrightness(Observable):
 
     Parameters
     ----------
-    size : Sequence of int
+    size : int or Sequence of int
         The number of pixels of the image (nx, ny).
-    step, rpix, rval : Sequence of float, optional
+    step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the image (see gridutils.Coords); rpix is
         the centre by default.
     rota : float, optional
@@ -82,7 +82,7 @@ class PixelBrightness(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetPixelBrightness | None = None
     ) -> 'PixelBrightness':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
@@ -133,9 +133,9 @@ class PixelBrightness(Observable):
 
     def __init__(
             self,
-            size: Sequence[int],
+            size: Size,
             step: Step = (1, 1),
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval = (0, 0),
             rota: Rota = 0,
             median_size: MedianSize | None = None

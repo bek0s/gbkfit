@@ -41,6 +41,7 @@ __all__ = [
     'make_medium',
     'make_rest',
     'frame_to_pixels',
+    'per_axis',
     'pixels_on',
     'sky_positions',
     'sky_to_pixel',
@@ -185,6 +186,43 @@ class Grid(NamedTuple):
             (self.size[axis],), self.coords.axes(axis)._replace(rota=0), 0)
 
 
+def per_axis(
+        option: str,
+        value: _T | Sequence[_T],
+        naxes: int
+) -> tuple[_T, ...]:
+    """
+    Return the values of an option of a grid with a value per axis (e.g.
+    size, step), given one value for all axes, or one for each.
+
+    Parameters
+    ----------
+    option : str
+        The name of the option, for messages.
+    value : Any or Sequence
+        One value, or one for each axis.
+    naxes : int
+        The number of axes.
+
+    Returns
+    -------
+    tuple
+        The value of each axis.
+
+    Raises
+    ------
+    ConfigError
+        If the option has neither one value nor one for each axis.
+    """
+    if np.ndim(value) == 0:
+        return (value,) * naxes
+    if len(value) != naxes:
+        raise ConfigError(
+            f"option '{option}' must have one value for all {naxes} axes, "
+            f"or one for each; it is {list(value)}")
+    return tuple(value)
+
+
 def make_grid(
         size: Sequence[int],
         step: float | Sequence[float] | None = None,
@@ -252,13 +290,8 @@ def make_grid(
     if rota is None:
         rota = 0
     step, rpix, rval = (
-        (value,) * ndim if np.ndim(value) == 0 else tuple(value)
-        for value in (step, rpix, rval))
-    for name, value in dict(step=step, rpix=rpix, rval=rval).items():
-        if len(value) != ndim:
-            raise ConfigError(
-                f"the grid has {ndim} axes, but {name} has {len(value)} "
-                f"values")
+        per_axis(name, value, ndim)
+        for name, value in dict(step=step, rpix=rpix, rval=rval).items())
     if not all(value > 0 for value in step):
         raise ConfigError(f"step must be positive; it is {step}")
     if spectral_axis is not None and spectral_axis not in range(ndim):

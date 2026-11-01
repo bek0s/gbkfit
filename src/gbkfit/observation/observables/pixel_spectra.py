@@ -14,7 +14,7 @@ from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import check_options
 from . import _dcube, _detail
-from ._detail import MedianSize, Rota, Rval, Step
+from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
@@ -40,12 +40,12 @@ class PixelSpectra(Observable):
 
     Parameters
     ----------
-    size : Sequence of int
+    size : int or Sequence of int
         The number of pixels of the cube on the sky (nx, ny).
     spectral : SpectralAxis
         The spectral axis of the cube: its size, its world coordinates and
         the convention of its velocities (see gridutils.make_cube_grid).
-    step, rpix, rval : Sequence of float, optional
+    step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the cube on the sky (see
         gridutils.Coords); rpix is the centre by default.
     rota : float, optional
@@ -84,7 +84,7 @@ class PixelSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetPixelSpectra | None = None
     ) -> 'PixelSpectra':
-        return _detail.load_observable(cls, info, dataset, 2)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
@@ -134,10 +134,10 @@ class PixelSpectra(Observable):
 
     def __init__(
             self,
-            size: Sequence[int],
+            size: Size,
             spectral: gridutils.SpectralAxis,
             step: Step = (1, 1),
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval = (0, 0),
             rota: Rota = 0,
             smooth_weights: bool = False,

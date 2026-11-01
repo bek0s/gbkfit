@@ -76,9 +76,9 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     Parameters
     ----------
-    size : Sequence of int
+    size : int or Sequence of int
         The number of pixels of each axis of the grid.
-    step, rpix, rval : Sequence of float
+    step, rpix, rval : float or Sequence of float
         The world coordinates of the grid (see gridutils.Coords); rpix is
         the centre if None.
     rota : float
@@ -162,10 +162,10 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
 
     def __init__(
             self,
-            size: Sequence[int],
-            step: Sequence[float],
-            rpix: Sequence[float] | None,
-            rval: Sequence[float],
+            size: int | Sequence[int],
+            step: float | Sequence[float],
+            rpix: float | Sequence[float] | None,
+            rval: float | Sequence[float],
             rota: float,
             spectral: gridutils.SpectralAxis | None = None
     ):
@@ -176,9 +176,12 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         gridutils.make_cube_grid), whose velocities need their convention
         (see gridutils.check_convention).
         """
+        # (the axes on the sky are those before the spectral axis, or
+        # without one, those of an image)
+        naxes = 2 if self.spectral_axis is None else self.spectral_axis
+        size = gridutils.per_axis('size', size, naxes)
         if self.spectral_axis is None:
-            self._grid = gridutils.make_grid(
-                tuple(size), step, rpix, rval, rota)
+            self._grid = gridutils.make_grid(size, step, rpix, rval, rota)
         else:
             self._grid = gridutils.make_cube_grid(
                 size, step, rpix, rval, rota, spectral)

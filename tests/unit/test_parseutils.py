@@ -17,33 +17,6 @@ from gbkfit.utils import parseutils, typeutils
 from gbkfit.utils.typeutils import FitsFile, Unit
 
 
-DIMENSIONAL = dict(size=int, step=float)
-
-
-@pytest.mark.parametrize('info, sanitized', [
-    (dict(size=4, step=0.5), dict(size=[4, 4, 4], step=[0.5, 0.5, 0.5])),
-    (dict(size=[1, 2, 3]), dict(size=[1, 2, 3])),
-    (dict(size=[1, 2, 3, 4]), dict(size=[1, 2, 3])),
-    (dict(size=None), dict(size=None)),
-    (dict(), dict())])
-def test_sanitize_dimensional_options(info, sanitized):
-    parseutils.sanitize_dimensional_options(info, DIMENSIONAL, 3)
-    assert info == sanitized
-
-
-@pytest.mark.parametrize('info', [
-    dict(size=[1, 2]),
-    dict(size=1.5),
-    dict(step='a'),
-    # A bool is an int in Python, but not a number in a configuration
-    dict(size=True),
-    dict(size=[True, 2, 3])])
-def test_sanitize_dimensional_options_errors(info):
-    with pytest.raises(
-            parseutils.ConfigError, match=f"option '{next(iter(info))}'"):
-        parseutils.sanitize_dimensional_options(info, DIMENSIONAL, 3)
-
-
 def test_config_error_paths():
     # Each level adds its part of the path; only the innermost type of
     # the part with the error describes it

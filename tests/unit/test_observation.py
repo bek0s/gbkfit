@@ -10,7 +10,7 @@ from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
     LikelihoodGaussian, LineOfSightFlat, ObservationSky, PixelBrightness,
-    PixelMoments, UpperLimit, observation_parser)
+    PixelMoments, UpperLimit, observable_parser, observation_parser)
 from gbkfit.utils import parseutils
 from gbkfit.utils.gridutils import SpectralAxis
 from gbkfit.utils.parseutils import ConfigError
@@ -69,6 +69,19 @@ def test_observable_options_are_checked():
         ObservationSky(
             PixelBrightness(size=(8, 8)), LineOfSightFlat(),
             instrument=Instrument(lsf=LSFGauss(10)))
+
+
+def test_grid_options_take_one_value_or_one_for_each_axis():
+    # (audit 2026-10-31 #52) In Python as in configurations: a value for
+    # both axes on the sky, or one for each; more (e.g. for the channels
+    # of a cube) are an error that names the option
+    observable = PixelBrightness(size=8, step=0.5)
+    assert observable.size() == (8, 8)
+    assert observable.step() == (0.5, 0.5)
+    with pytest.raises(ConfigError, match="option 'size' must have one"):
+        PixelBrightness(size=(8, 8, 10))
+    with pytest.raises(ConfigError, match="option 'size' must have one"):
+        observable_parser.load(dict(type='pixel_brightness', size=[8, 8, 10]))
 
 
 def test_observations_need_their_type():

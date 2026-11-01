@@ -836,55 +836,6 @@ def check_options(func: Callable, values: Mapping[str, Any]) -> None:
             raise ConfigError(f"option '{name}' {problem}")
 
 
-def sanitize_dimensional_options(
-        info: dict[str, Any],
-        options: dict[str, Any],
-        length: int
-) -> None:
-    """
-    Make the options with one value per dimension lists, in place.
-
-    A single value is repeated, and the extra values of a longer list are
-    dropped with a warning (so that, e.g., the configuration of a spectral
-    cube can be used for an image by changing its type). Options that are
-    missing or null are left as they are.
-
-    Parameters
-    ----------
-    info : dict
-        The options.
-    options : dict
-        The type of the values of each option (e.g. dict(size=int,
-        step=float)).
-    length : int
-        The number of dimensions.
-
-    Raises
-    ------
-    ConfigError
-        If an option has values of another type, or too few values.
-    """
-    for option, type_ in options.items():
-        value = info.get(option)
-        if value is None:
-            continue
-        if typeutils.matches_type(value, type_):
-            info[option] = [value] * length
-        elif (iterutils.is_sequence(value) and len(value) >= length
-              and all(typeutils.matches_type(x, type_) for x in value)):
-            if len(value) > length:
-                warn(
-                    f"option '{option}' has {len(value)} values, but only "
-                    f"{length} are needed; the values will be trimmed from "
-                    f"{list(value)} to {list(value[:length])}")
-            info[option] = list(value[:length])
-        else:
-            raise ConfigError(
-                f"option '{option}' must be a value of type "
-                f"{typeutils.describe_type(type_)}, or a sequence of {length} "
-                f"such values; it is {value!r}")
-
-
 def load_option(
         loader: Callable,
         info: dict[str, Any],

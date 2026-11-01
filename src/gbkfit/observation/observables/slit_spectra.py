@@ -16,7 +16,7 @@ from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
-from ._detail import Rota, Rval, Step
+from ._detail import Rota, Rpix, Rval, Size, Step
 from .base import FluxScale, ModelData, Observable
 
 if TYPE_CHECKING:
@@ -54,12 +54,12 @@ class SlitSpectra(Observable):
 
     Parameters
     ----------
-    size : Sequence of int
+    size : int or Sequence of int
         The number of positions along the slit (one value).
     spectral : SpectralAxis
         The spectral axis: its size, its world coordinates and the
         convention of its velocities (see gridutils.make_cube_grid).
-    step, rpix, rval : Sequence of float, optional
+    step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the positions along the slit (see
         gridutils.Coords; one value each); rpix is the centre by default.
     rota : float, optional
@@ -101,7 +101,7 @@ class SlitSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetSlitSpectra | None = None
     ) -> 'SlitSpectra':
-        return _detail.load_observable(cls, info, dataset, 1)
+        return _detail.load_observable(cls, info, dataset)
 
     @classmethod
     def from_data(
@@ -153,10 +153,10 @@ class SlitSpectra(Observable):
 
     def __init__(
             self,
-            size: Sequence[int],
+            size: Size,
             spectral: gridutils.SpectralAxis,
             step: Step = (1,),
-            rpix: Sequence[float] | None = None,
+            rpix: Rpix | None = None,
             rval: Rval = (0,),
             rota: Rota = 0,
             slit_width: _Width | None = None,

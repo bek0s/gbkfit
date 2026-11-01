@@ -36,10 +36,13 @@ if TYPE_CHECKING:
 SPATIAL_OPTIONS = ('size', 'step', 'rpix', 'rval', 'rota')
 
 # The types of the options of the grid of an observable on the sky (see
-# gridutils.Coords; size and rpix are in pixels), and of the size of a
+# gridutils.Coords; size and rpix are in pixels): one value for all its
+# axes, or one for each (see gridutils.per_axis); and of the size of a
 # median filter (see check_median_size)
-Step: TypeAlias = Annotated[Sequence[float], Unit('arcsec')]
-Rval: TypeAlias = Annotated[Sequence[float], Unit('deg')]
+Size: TypeAlias = int | Sequence[int]
+Step: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
+Rpix: TypeAlias = float | Sequence[float]
+Rval: TypeAlias = Annotated[float | Sequence[float], Unit('deg')]
 Rota: TypeAlias = Annotated[float, Unit('deg')]
 MedianSize: TypeAlias = Annotated[int, Ge(3)]
 
@@ -47,18 +50,13 @@ MedianSize: TypeAlias = Annotated[int, Ge(3)]
 def load_observable(
         cls: type[Observable],
         info: dict[str, Any],
-        dataset: Dataset | None,
-        ndim: int
+        dataset: Dataset | None
 ) -> Observable:
     """
     Load an observable of class cls from its configuration: with its
     __init__, or with its from_data and the given dataset, whose options
-    it must not repeat. The options of the grid with one value per axis
-    (on the sky, ndim of them) are made lists.
+    it must not repeat.
     """
-    info = dict(info)
-    parseutils.sanitize_dimensional_options(info, dict(
-        size=int, step=float, rpix=float, rval=float), ndim)
     if dataset is None:
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))
@@ -166,10 +164,10 @@ def warn_unsmoothed_weights(
 
 def spatial_grid_of_regions(
         regions: Regions,
-        size: Sequence[int] | None,
-        step: Sequence[float] | None,
-        rpix: Sequence[float] | None,
-        rval: Sequence[float] | None,
+        size: Size | None,
+        step: Step | None,
+        rpix: Rpix | None,
+        rval: Rval | None,
         rota: float | None
 ) -> gridutils.Grid:
     """
@@ -192,7 +190,8 @@ def spatial_grid_of_regions(
             raise ConfigError(
                 "the regions are on the sky; the size of the grid of the "
                 "model is required")
-        grid = gridutils.make_grid(size, step, rpix, rval, rota)
+        grid = gridutils.make_grid(
+            gridutils.per_axis('size', size, 2), step, rpix, rval, rota)
     return grid
 
 

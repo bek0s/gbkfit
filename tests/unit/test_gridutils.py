@@ -51,7 +51,7 @@ def test_grids_must_overlap():
 @pytest.mark.parametrize('options, message', [
     (dict(size=(10, 0)), "positive integers"),
     (dict(size=(10, 2.5)), "positive integers"),
-    (dict(size=(10, 10), step=(1, 1, 1)), "step has 3 values"),
+    (dict(size=(10, 10), step=(1, 1, 1)), "option 'step' must have one"),
     (dict(size=(10, 10), step=-1), "step must be positive"),
     (dict(size=(10, 10, 5), spectral_axis=3), "spectral axis cannot be 3"),
     (dict(size=(10, 10), rest='1 GHz'), "has no rest")])
