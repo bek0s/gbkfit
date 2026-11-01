@@ -22,6 +22,13 @@ class Instrument(parseutils.Serializable):
     instrument, in the order the light meets them: the primary beam, and
     the point and line spread functions.
 
+    Their widths are fixed in a fit, not parameters: an error of the width
+    of the PSF moves the dispersion and the rotation of a disk it smears
+    (e.g. some 3 km/s of dispersion per 10% of the width at z ~ 1.5). To
+    quote it, fit again with the widths off by their uncertainty (e.g.
+    +-10%), and take the spread of the results as a systematic error (as
+    KMOS3D does).
+
     Parameters
     ----------
     primary_beam : PrimaryBeam, optional
