@@ -145,7 +145,7 @@ def test_image_psf_matches_the_analytic_psf(driver, evaluate_cases):
     def evaluate(psf):
         case = thick_spectral_cube_case(driver, 'smdisk', 0, psf)
         # The convolution pads the grid to 128 x 64
-        case['observable']['size'] = [61, 17, 41]
+        case['observable']['size'] = [61, 17]
         data, _ = evaluate_cases([case], properties)
         return data[0]['spectra']['d'].copy()
 
