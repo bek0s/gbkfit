@@ -1,9 +1,11 @@
 // The colour bar of a map: its ramp upright, from the low end of its range
 // at the bottom to the high end at the top, and its unit.
-import { rampGradient } from './colours';
+import { rampGradient, useScheme } from './colours';
 import { significant } from './format';
 
 export function ColourBar({ range, diverging, unit }: { range: [number, number]; diverging: boolean; unit: string }) {
+  // (in the colours of the scheme of the system, as it changes)
+  useScheme();
   return (
     <div className="colour-bar">
       <span>{significant(range[1], 3)}</span>

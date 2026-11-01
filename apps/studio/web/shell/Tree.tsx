@@ -6,6 +6,7 @@
 import { useState, type ComponentType } from 'react';
 import { useCreateBlock, useProject } from '../api/queries';
 import { DataIcon, FitIcon, ModelIcon } from '../components/icons';
+import { Button, IconButton, NavItem, TextField } from '../components/ui/basics';
 import { useStudio } from '../studio';
 import { SECTIONS, type Group as GroupInfo, type Section } from './blocks';
 import { DataKindDialog } from './DataKindDialog';
@@ -44,24 +45,23 @@ export function Tree() {
       ) : folded ? (
         <div className="strip">
           {SECTIONS.map((section) => (
-            <button
+            <IconButton
               key={section.key}
-              aria-label={section.title}
-              title={section.title}
-              aria-expanded={flyout === section.key}
+              label={section.title}
+              pressed={flyout === section.key}
               onClick={() => setFlyout(flyout === section.key ? null : section.key)}
             >
               {ICONS[section.key]}
-            </button>
+            </IconButton>
           ))}
         </div>
       ) : (
         <Blocks project={project} folds={folds} />
       )}
       <div className="tree-foot">
-        <button onClick={() => setFolded(!folded)} aria-label={folded ? 'Unfold the tree' : 'Fold the tree'}>
+        <Button kind="quiet" title={folded ? 'Unfold the tree' : 'Fold the tree'} onClick={() => setFolded(!folded)}>
           {folded ? '»' : '« Fold'}
-        </button>
+        </Button>
       </div>
       {folded && project !== null && flyout !== null && (
         <div className="flyout">
@@ -96,13 +96,7 @@ function Blocks({ project, folds }: { project: string; folds: Folds }) {
   return (
     <>
       <div className="tree-find">
-        <input
-          type="search"
-          value={find}
-          placeholder="Find in the project"
-          aria-label="Find in the project"
-          onChange={(event) => setFind(event.target.value)}
-        />
+        <TextField search value={find} placeholder="Find in the project" label="Find in the project" onChange={setFind} />
       </div>
       <div className="tree-list">
         {info.error && <p className="error">{info.error.message}</p>}
@@ -185,42 +179,38 @@ function Group({
   return (
     <>
       <div className="tree-group">
-        <button className="tree-fold" aria-expanded={open} onClick={onToggle}>
-          <span className="chevron">▶</span>
-          {title}
-          <span className="count">{total}</span>
-        </button>
-        <button
-          className="tree-new"
-          aria-label={`New in ${title}`}
-          title={`New in ${title}`}
+        <NavItem label={title} opened={open} right={<span className="count">{total}</span>} onClick={onToggle} />
+        <IconButton
+          label={`New in ${title}`}
           onClick={() => {
             if (!open) onToggle();
             startAdding(folder);
           }}
         >
           +
-        </button>
+        </IconButton>
       </div>
       {adding === folder && <Adder project={project} folder={folder} onDone={() => startAdding(null)} />}
       {open &&
         shown.map((name) => (
-          <button
-            key={name}
-            className="tree-item"
-            aria-current={screen.kind === 'block' && screen.folder === folder && screen.name === name}
-            onClick={() => {
-              go({ kind: 'block', folder, name });
-              onOpen?.();
-            }}
-          >
-            {name}
-          </button>
+          <div key={name} className="tree-item">
+            <NavItem
+              label={name}
+              mono
+              active={screen.kind === 'block' && screen.folder === folder && screen.name === name}
+              onClick={() => {
+                go({ kind: 'block', folder, name });
+                onOpen?.();
+              }}
+            />
+          </div>
         ))}
       {open && shown.length < names.length && (
-        <button className="tree-more" onClick={() => setAll(true)}>
-          show all {names.length}
-        </button>
+        <div className="tree-more">
+          <Button kind="small" onClick={() => setAll(true)}>
+            show all {names.length}
+          </Button>
+        </div>
       )}
     </>
   );
@@ -244,12 +234,13 @@ function NewBlock({ project, folder, onDone }: AdderProps) {
     );
   return (
     <div className="tree-name">
-      <input
+      <TextField
         autoFocus
+        mono
         value={name}
         placeholder="name, e.g. ngc1313"
-        aria-label="Name of the new block"
-        onChange={(event) => setName(event.target.value)}
+        label="Name of the new block"
+        onChange={setName}
         onKeyDown={(event) => {
           if (event.key === 'Enter' && name.trim()) submit();
           if (event.key === 'Escape') onDone();

@@ -97,14 +97,26 @@ export function useChannel(path: string, hdu: number, channel: number) {
   });
 }
 
-// The spectrum of a pixel of a cube, and the coordinates of its channels
-// along its spectral axis, with their unit
-export function useSpectrum(path: string, hdu: number, x: number, y: number) {
+// The spectrum of a pixel of a cube, or (none) its total spectrum: the sum
+// of its pixels in each channel, of all of them or of a region (x0, x1,
+// y0, y1, inclusive); and the coordinates of its channels along its
+// spectral axis, with their unit
+export function useSpectrum(
+  path: string,
+  hdu: number,
+  pixel: [number, number] | null,
+  region: [number, number, number, number] | null,
+) {
+  const query =
+    pixel !== null
+      ? { hdu, x: pixel[0], y: pixel[1] }
+      : region !== null
+        ? { hdu, x0: region[0], x1: region[1], y0: region[2], y1: region[3] }
+        : { hdu };
   return useQuery({
-    queryKey: keys.view('spectrum', path, hdu, x, y),
+    queryKey: keys.view('spectrum', path, hdu, pixel?.join() ?? '', region?.join() ?? ''),
     placeholderData: keepPreviousData,
-    queryFn: () =>
-      data(api.GET('/api/v1/views/spectrum/{path}', { params: { path: { path }, query: { hdu, x, y } } })),
+    queryFn: () => data(api.GET('/api/v1/views/spectrum/{path}', { params: { path: { path }, query } })),
   });
 }
 

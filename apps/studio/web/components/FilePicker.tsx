@@ -3,7 +3,8 @@
 // GBKFIT reads are shown.
 import { useState } from 'react';
 import { useFolder } from '../api/queries';
-import { Dialog } from './Dialog';
+import { NavItem } from './ui/basics';
+import { Dialog } from './ui/overlays';
 
 // The endings of the names of the files of data that GBKFIT reads (FITS)
 const DATA_FILES = ['.fits', '.fit', '.fts', '.fits.gz'];
@@ -43,17 +44,18 @@ export function FilePicker({
     <Dialog title={title} onClose={onClose}>
       <div className="picker-path">{`${label}/${inside}`}</div>
       <div className="dialog-list">
-        {folder !== root && <button onClick={() => setFolder(parentOf(folder))}>..</button>}
+        {folder !== root && <NavItem mono label=".." onClick={() => setFolder(parentOf(folder))} />}
         {listing.data?.folders.map((name) => (
-          <button key={name} onClick={() => setFolder(joinPath(folder, name))}>
-            {name}/
-          </button>
+          <NavItem key={name} mono label={`${name}/`} onClick={() => setFolder(joinPath(folder, name))} />
         ))}
         {files.map((file) => (
-          <button key={file.name} className="picker-file" onClick={() => onChoose(joinPath(folder, file.name))}>
-            {file.name}
-            <small>{size(file.size)}</small>
-          </button>
+          <NavItem
+            key={file.name}
+            mono
+            label={file.name}
+            right={<small className="picker-size">{size(file.size)}</small>}
+            onClick={() => onChoose(joinPath(folder, file.name))}
+          />
         ))}
         {listing.error && <p className="note">Nothing here yet.</p>}
         {listing.data && listing.data.folders.length + files.length === 0 && (

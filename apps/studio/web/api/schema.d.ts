@@ -165,7 +165,9 @@ export interface paths {
         };
         /**
          * View Spectrum
-         * @description Return the spectrum of a pixel (x, y) of a cube.
+         * @description Return the spectrum of a pixel (x, y) of a cube, or its total spectrum
+         *     (the sum of its pixels in each channel): of all of them, or of a region
+         *     (x0 to x1, y0 to y1, inclusive).
          */
         get: operations["view_spectrum_api_v1_views_spectrum__path__get"];
         put?: never;
@@ -1080,8 +1082,12 @@ export interface operations {
         parameters: {
             query: {
                 hdu: number;
-                x: number;
-                y: number;
+                x?: number | null;
+                y?: number | null;
+                x0?: number | null;
+                x1?: number | null;
+                y0?: number | null;
+                y1?: number | null;
             };
             header?: never;
             path: {

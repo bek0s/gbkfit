@@ -20,9 +20,12 @@ import {
   type Velocity,
 } from '../api/queries';
 import { CubeViewer, type Layer } from '../components/CubeViewer';
+import type { Region } from '../components/MapView';
 import { FilePicker, joinPath } from '../components/FilePicker';
-import { FoldCard } from '../components/FoldCard';
-import { Segments } from '../components/ui/inputs';
+import { Panel } from '../components/ui/panel';
+import { PanelsIcon } from '../components/icons';
+import { Button, Callout, Close, IconButton } from '../components/ui/basics';
+import { Choice, Segments } from '../components/ui/inputs';
 import { SidePanes, type PanesControl } from '../components/ui/panes';
 import { significant } from '../components/format';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
@@ -147,12 +150,10 @@ export function NewDataset({ data }: { data: string }) {
           ) : (
             reason && <span className="why">{reason}</span>
           )}
-          <button className="ghost" onClick={() => go({ kind: 'home' })}>
-            Cancel
-          </button>
-          <button className="primary" disabled={reason !== null || busy} onClick={add}>
+          <Button onClick={() => go({ kind: 'home' })}>Cancel</Button>
+          <Button kind="primary" disabled={reason !== null || busy} onClick={add}>
             Add to the project
-          </button>
+          </Button>
         </div>
       </div>
       {(create.error ?? submit.error) && <p className="error screen-error">{(create.error ?? submit.error)?.message}</p>}
@@ -422,6 +423,9 @@ function DatasetBody({
   const cube = data && kept(data);
   const isCube = sources.files.data !== undefined && data !== undefined && cube?.length === 3;
   const crops = edits && cube ? cropsOf(edits, cube) : null;
+  // The selection on the cube (to look at; the crop is set from it)
+  const [selection, setSelection] = useState<Region | null>(null);
+  const [band, setBand] = useState<[number, number] | null>(null);
   // (the column at the side is as wide as dragged, and folds away)
   const viewer = ({ folded, toggle }: PanesControl) =>
     isCube ? (
@@ -429,15 +433,17 @@ function DatasetBody({
         key={`${sources.files.data!.file}:${data.index}`}
         layers={layersOf(sources, arrays)}
         shape={cube}
-        region={crops?.region}
-        channels={crops?.channels}
+        selection={selection}
+        band={band}
+        onSelection={setSelection}
+        onBand={setBand}
+        crop={crops?.region}
+        cropChannels={crops?.channels}
         kept={edits ? keptOf(edits) : null}
-        onRegion={edits && onEdits && ((region) => onEdits(withRegion(edits, region)))}
-        onChannels={edits && onEdits && ((channels) => onEdits(withChannels(edits, channels)))}
         actions={
-          <button className="ghost side-toggle" aria-pressed={!folded} title={folded ? 'Show the panels at the side' : 'Hide the panels at the side'} onClick={toggle}>
-            {folded ? 'Show panels ◂' : 'Hide panels ▸'}
-          </button>
+          <IconButton label={folded ? 'Show the panels at the side' : 'Hide the panels at the side'} pressed={!folded} onClick={toggle}>
+            <PanelsIcon />
+          </IconButton>
         }
       />
     ) : (
@@ -449,7 +455,22 @@ function DatasetBody({
     <div className="col">
       <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
       {isCube && edits && onEdits && (
-        <EditsCard data={data} edits={edits} hasErrorFile={sources.files.error !== undefined} onChange={onEdits} />
+        <EditsCard
+          data={data}
+          edits={edits}
+          hasErrorFile={sources.files.error !== undefined}
+          onChange={onEdits}
+          onCropToSelection={
+            selection === null && band === null
+              ? undefined
+              : () => {
+                  let next = edits;
+                  if (selection !== null) next = withRegion(next, selection);
+                  if (band !== null) next = withChannels(next, band);
+                  onEdits(next);
+                }
+          }
+        />
       )}
       <Facts array={data} velocity={sources.velocity} onVelocity={onChange && ((velocity) => onChange({ ...sources, velocity }))} />
     </div>
@@ -484,7 +505,7 @@ function FilesCard({
     (a) => data !== undefined && a.index !== data.index && kept(a).join() === kept(data).join(),
   );
   return (
-    <FoldCard id="dataset-files" title="Files" bodyClass="files">
+    <Panel id="dataset-files" title="Files" bodyClass="files">
       {ROLES.map(({ role, title }) => {
         const chosen = files[role];
         const inFile = arrays.inFile[role] ?? [];
@@ -508,9 +529,7 @@ function FilesCard({
               )}
               <span className="note">{data?.unit ?? 'in the unit of the data'} · every value</span>
               {onChange && (
-                <button className="slot-clear" aria-label="Remove the error" onClick={() => setErrorValue(null)}>
-                  ×
-                </button>
+                <Close label="Remove the error" onClick={() => setErrorValue(null)} />
               )}
             </div>
           );
@@ -521,24 +540,25 @@ function FilesCard({
                 <>
                   <FileSources project={project} onFile={(file) => set(role, { file })} />
                   {role === 'error' && (
-                    <button
-                      className="link"
+                    <Button
+                      kind="small"
                       title="One error for every value of the data (e.g. the rms of a radio cube)"
                       onClick={() => setErrorValue(data?.rms != null ? String(data.rms) : '')}
                     >
                       One value
-                    </button>
+                    </Button>
                   )}
                   {role !== 'data' &&
                     files.data !== undefined &&
                     siblings.map((a) => (
-                      <button
+                      <Button
                         key={a.index}
-                        className="link"
+                        kind="small"
+                        title="An array of the file of the data"
                         onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
                       >
                         use {a.name || `array ${a.index}`}
-                      </button>
+                      </Button>
                     ))}
                 </>
               ) : (
@@ -553,44 +573,32 @@ function FilesCard({
                 {chosen.file.split('/').pop()}
               </span>
               {inFile.length > 1 && onChange ? (
-                <select
-                  aria-label={`The array of the ${title.toLowerCase()}`}
-                  value={arrays.found[role]?.index ?? ''}
-                  onChange={(event) => {
-                    const array = inFile.find((a) => a.index === Number(event.target.value));
+                <Choice
+                  items={inFile.map((a) => ({ value: String(a.index), label: a.name || `array ${a.index}` }))}
+                  value={String(arrays.found[role]?.index ?? '')}
+                  label={`The array of the ${title.toLowerCase()}`}
+                  onChange={(index) => {
+                    const array = inFile.find((a) => a.index === Number(index));
                     if (array) set(role, { file: chosen.file, array: arrayRef(inFile, array) });
                   }}
-                >
-                  {inFile.map((a) => (
-                    <option key={a.index} value={a.index}>
-                      {a.name || `array ${a.index}`}
-                    </option>
-                  ))}
-                </select>
+                />
               ) : (
                 <span className="note">{arrays.found[role]?.name || String(chosen.array ?? '')}</span>
               )}
               {role === 'error' &&
                 (onChange ? (
-                  <select
-                    aria-label="What the errors are"
-                    title="What the errors are: standard deviations (σ), variances (σ²) or inverse variances (1/σ²)"
+                  <Choice
+                    items={ERROR_KINDS.map(({ kind, title }) => ({ value: kind, label: title }))}
                     value={errorKindOf(sources, arrays)}
-                    onChange={(event) => onChange({ ...sources, errorKind: event.target.value as ErrorKind })}
-                  >
-                    {ERROR_KINDS.map(({ kind, title }) => (
-                      <option key={kind} value={kind}>
-                        {title}
-                      </option>
-                    ))}
-                  </select>
+                    label="What the errors are"
+                    title="What the errors are: standard deviations (σ), variances (σ²) or inverse variances (1/σ²)"
+                    onChange={(kind) => onChange({ ...sources, errorKind: kind as ErrorKind })}
+                  />
                 ) : (
                   <span className="note">{ERROR_KINDS.find(({ kind }) => kind === errorKindOf(sources, arrays))?.title}</span>
                 ))}
               {onChange && (
-                <button className="slot-clear" aria-label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)}>
-                  ×
-                </button>
+                <Close label={`Remove the ${title.toLowerCase()}`} onClick={() => set(role, undefined)} />
               )}
             </div>
           );
@@ -603,7 +611,7 @@ function FilesCard({
           </div>
         );
       })}
-    </FoldCard>
+    </Panel>
   );
 }
 
@@ -628,12 +636,12 @@ function FileSources({ project, onFile }: { project: string; onFile: (path: stri
   const error = failure ?? importing.error?.message;
   return (
     <>
-      <button className="link" title="A file of the server's workspace; the project keeps a copy" onClick={() => setPicking(true)}>
+      <Button kind="small" title="A file of the server's workspace; the project keeps a copy" onClick={() => setPicking(true)}>
         Import
-      </button>
-      <button className="link" title="A file of this computer; the project keeps a copy" onClick={() => input.current?.click()}>
+      </Button>
+      <Button kind="small" title="A file of this computer; the project keeps a copy" onClick={() => input.current?.click()}>
         Upload
-      </button>
+      </Button>
       <input
         ref={input}
         type="file"
@@ -678,15 +686,15 @@ function Facts({
 }) {
   if (array === undefined) {
     return (
-      <FoldCard id="dataset-facts" title="What GBKFIT reads">
+      <Panel id="dataset-facts" title="What GBKFIT reads">
         <p className="note">The facts of the data come from their header, once they are given.</p>
-      </FoldCard>
+      </Panel>
     );
   }
   const flat = array.shape.map((size, i) => [size, array.axes[i]] as const).filter(([size]) => size === 1);
   const [x, y, z] = kept(array);
   return (
-    <FoldCard id="dataset-facts" title="What GBKFIT reads">
+    <Panel id="dataset-facts" title="What GBKFIT reads">
       <dl className="facts">
         <dt>shape</dt>
         <dd>{z === undefined ? kept(array).join(' × ') : `${x} × ${y} pixels × ${z} channels`}</dd>
@@ -720,7 +728,7 @@ function Facts({
             </div>
           )}
           {array.ambiguous_velocity && (
-            <>
+            <Callout>
               <div>
                 The header does not say whether the velocities are radio or optical (
                 {keptAxes(array)[2]} without VELREF; MIRIAD writes radio ones).
@@ -735,7 +743,7 @@ function Facts({
                 label="The convention of the velocities"
                 onChange={(convention) => onVelocity?.(convention)}
               />
-            </>
+            </Callout>
           )}
         </div>
       )}
@@ -746,7 +754,7 @@ function Facts({
           ))}
         </ul>
       )}
-    </FoldCard>
+    </Panel>
   );
 }
 

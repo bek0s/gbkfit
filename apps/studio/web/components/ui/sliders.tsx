@@ -90,7 +90,7 @@ export function ValueSlider({
 }
 
 // A value from min to max by steps, as a slider (e.g. a channel), its
-// value shown as it is moved
+// value shown on its handle as it is moved (or always)
 export function StepSlider({
   min,
   max,
@@ -99,6 +99,7 @@ export function StepSlider({
   onChange,
   format,
   label,
+  always,
 }: {
   min: number;
   max: number;
@@ -107,18 +108,20 @@ export function StepSlider({
   onChange: (value: number) => void;
   format?: (value: number) => string;
   label: string;
+  always?: boolean;
 }) {
   return (
     <Slider
       min={min}
       max={max}
       step={step}
-      value={value}
+      value={Math.min(max, Math.max(min, value))}
       onChange={onChange}
       label={format ?? null}
+      labelAlwaysOn={always}
       thumbLabel={label}
       size="md"
-      className="ui-slider"
+      className={always ? 'ui-slider ui-slider-labelled' : 'ui-slider'}
     />
   );
 }

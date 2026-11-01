@@ -1,8 +1,24 @@
 // The colours of the maps: ramps of the tokens of the page (see
-// styles.css), sequential (low to high), or diverging about the middle.
+// styles.css), sequential (low to high), or diverging about the middle;
+// they change with the colour scheme of the page (see useScheme).
+import { useSyncExternalStore } from 'react';
 
 const SEQUENTIAL = ['--seq0', '--seq1', '--seq2', '--seq3'];
 const DIVERGING = ['--map-neg2', '--map-neg', '--map-mid', '--map-pos', '--map-pos2'];
+
+// The colour scheme of the page (that chosen in the bar, or the system's),
+// which marks its root (data-mantine-color-scheme), followed as it changes:
+// the tokens of the page change with it, and so must what is drawn with them
+export function useScheme(): 'dark' | 'light' {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange);
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mantine-color-scheme'] });
+      return () => observer.disconnect();
+    },
+    () => (document.documentElement.getAttribute('data-mantine-color-scheme') === 'light' ? 'light' : 'dark'),
+  );
+}
 
 // The colour (r, g, b) of a token of the page (a hex colour, of 6 digits or
 // of 3, as the build shortens some: #fff)

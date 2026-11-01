@@ -5,9 +5,11 @@
 // shows a window of its pixels (all of them by default), which the wheel
 // asks to zoom about a pixel. A click gives the pixel (x, y), which a mark
 // can show; a drag gives a region (x0, x1, y0, y1, inclusive), which is
-// shown with the pixels out of it dimmed, or pans the window.
+// shown with the pixels out of it dimmed, or pans the window. The pixel
+// under the pointer is given as it moves (none as it leaves, or drags).
+// Another region (e.g. a crop) can be outlined.
 import { useEffect, useRef, useState } from 'react';
-import { rampColour, rampStops, token } from './colours';
+import { rampColour, rampStops, token, useScheme } from './colours';
 
 export type Region = [number, number, number, number];
 
@@ -24,10 +26,12 @@ export function MapView({
   drag = 'region',
   mark,
   region = null,
+  outline = null,
   onPick,
   onRegion,
   onZoom,
   onPan,
+  onHover,
   label,
 }: {
   values: Float32Array;
@@ -41,12 +45,14 @@ export function MapView({
   window?: Region | null;
   mark?: [number, number];
   region?: Region | null;
+  outline?: Region | null;
   onPick?: (x: number, y: number) => void;
   onRegion?: (region: Region) => void;
   onZoom?: (x: number, y: number, factor: number) => void;
   // What a drag does: give a region, or pan the window (by whole pixels)
   drag?: 'region' | 'pan';
   onPan?: (dx: number, dy: number) => void;
+  onHover?: (pixel: [number, number] | null) => void;
   label: string;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -60,6 +66,8 @@ export function MapView({
   // (the pan not yet made whole pixels, and where the pointer was)
   const panned = useRef<{ at: [number, number]; rest: [number, number] } | null>(null);
   const [keepLow, keepHigh] = kept ?? [null, null];
+  // (drawn again in the colours of another scheme)
+  const scheme = useScheme();
   useEffect(() => {
     const element = canvas.current;
     const context = element?.getContext('2d');
@@ -80,7 +88,7 @@ export function MapView({
       }
     }
     context.putImageData(image, 0, 0);
-  }, [values, nx, range, diverging, keepLow, keepHigh, wx0, wx1, wy0, wy1, w, h]);
+  }, [values, nx, range, diverging, keepLow, keepHigh, wx0, wx1, wy0, wy1, w, h, scheme]);
   // The pixel under a point of the screen
   const pixelAt = (clientX: number, clientY: number): [number, number] => {
     const box = canvas.current!.getBoundingClientRect();
@@ -122,8 +130,14 @@ export function MapView({
         }}
         onPointerMove={(event) => {
           const start = press.current;
-          if (start === null) return;
+          if (start === null) {
+            onHover?.(pixelAt(event.clientX, event.clientY));
+            return;
+          }
           const moved = Math.hypot(event.clientX - start.at[0], event.clientY - start.at[1]);
+          // (a press that becomes a drag hides the pixel under the pointer;
+          // a click keeps it, the pixel it picks)
+          if (moved > DRAG) onHover?.(null);
           if (drag === 'pan') {
             if (onPan === undefined || (panned.current === null && moved <= DRAG)) return;
             // (the pixels moved since the last move: the map follows the
@@ -159,6 +173,7 @@ export function MapView({
           press.current = null;
           setDragged(null);
         }}
+        onPointerLeave={() => press.current === null && onHover?.(null)}
       />
       {/* (in the pixels of the whole map; the window is its view) */}
       <svg viewBox={`${wx0} ${ny - 1 - wy1} ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true">
@@ -178,6 +193,15 @@ export function MapView({
               height={shown[3] - shown[2] + 1}
             />
           </>
+        )}
+        {outline && (
+          <rect
+            className="map-outline"
+            x={outline[0]}
+            y={ny - 1 - outline[3]}
+            width={outline[1] - outline[0] + 1}
+            height={outline[3] - outline[2] + 1}
+          />
         )}
         {mark && <rect className="map-mark" x={mark[0]} y={ny - 1 - mark[1]} width={1} height={1} />}
       </svg>

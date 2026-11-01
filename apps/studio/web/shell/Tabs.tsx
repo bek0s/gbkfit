@@ -2,6 +2,7 @@
 // its blocks (observe, compare, fit), with a dot on Fit while a job of the
 // project runs. Without a project, they are off.
 import { useJobs } from '../api/queries';
+import { BarTabs } from '../components/ui/basics';
 import { useStudio } from '../studio';
 
 const TABS = [
@@ -18,19 +19,17 @@ export function Tabs() {
     project !== null &&
     (jobs.data ?? []).some((job) => job.state === 'running' && inProject(String(job.options.config ?? ''), project));
   return (
-    <nav className="tabs" aria-label="Tasks">
-      {TABS.map(({ kind, title }) => (
-        <button
-          key={kind}
-          disabled={project === null}
-          aria-current={project !== null && screen.kind === kind ? 'page' : undefined}
-          onClick={() => go({ kind })}
-        >
-          {title}
-          {kind === 'fit' && running && <span className="dot" data-state="run" title="A job of the project runs" />}
-        </button>
-      ))}
-    </nav>
+    <BarTabs
+      label="Tasks"
+      tabs={TABS.map(({ kind, title }) => ({
+        value: kind,
+        label: title,
+        disabled: project === null,
+        mark: kind === 'fit' && running ? <span className="dot" data-state="run" title="A job of the project runs" /> : undefined,
+      }))}
+      value={project !== null && TABS.some(({ kind }) => kind === screen.kind) ? (screen.kind as (typeof TABS)[number]['kind']) : null}
+      onChange={(kind) => go({ kind })}
+    />
   );
 }
 

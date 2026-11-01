@@ -1,7 +1,35 @@
 // Inputs (of Mantine; see theme.ts), with the conventions of the Studio:
 // a number field whose value is its text (blank: none), clamped to its
-// range as it is left; a choice of a few (segments); and a check.
-import { Checkbox, NumberInput, SegmentedControl } from '@mantine/core';
+// range as it is left; a choice of a few (segments) or of a list (the
+// select of the browser); and a check.
+import { Checkbox, NativeSelect, NumberInput, SegmentedControl } from '@mantine/core';
+
+// One of a list of choices, as the select of the browser
+export function Choice({
+  items,
+  value,
+  onChange,
+  label,
+  title,
+}: {
+  items: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  title?: string;
+}) {
+  return (
+    <NativeSelect
+      data={items}
+      value={value}
+      onChange={(event) => onChange(event.currentTarget.value)}
+      aria-label={label}
+      title={title}
+      size="xs"
+      className="ui-choice"
+    />
+  );
+}
 
 // A number as typed (blank: none), clamped to min and max (if given) as
 // the field is left
@@ -13,6 +41,7 @@ export function NumberField({
   placeholder,
   label,
   title,
+  disabled,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -21,9 +50,11 @@ export function NumberField({
   placeholder?: string;
   label: string;
   title?: string;
+  disabled?: boolean;
 }) {
   return (
     <NumberInput
+      disabled={disabled}
       value={value}
       onChange={(next) => onChange(String(next))}
       min={min}

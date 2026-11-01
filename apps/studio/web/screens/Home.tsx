@@ -1,6 +1,7 @@
 // The home of the project: the three steps of the work (data, model, fit)
 // with what the project has for each and the next thing to do as the main
 // button, and the blocks opened last.
+import { Button, NavItem } from '../components/ui/basics';
 import type { ReactNode } from 'react';
 import { useProject } from '../api/queries';
 import { kindOf } from '../shell/blocks';
@@ -17,9 +18,9 @@ export function Home() {
   };
   const links = (folder: string) =>
     names(folder).map((name) => (
-      <button key={name} className="link" onClick={() => go({ kind: 'block', folder, name })}>
+      <Button key={name} kind="small" onClick={() => go({ kind: 'block', folder, name })}>
         {name}
-      </button>
+      </Button>
     ));
   const runs = info.data?.runs.length ?? 0;
   const hasData = names('datasets').length > 0;
@@ -52,9 +53,9 @@ export function Home() {
               )
             }
           >
-            <button className={hasData ? 'ghost' : 'primary'} onClick={() => startAdding('datasets')}>
+            <Button kind={hasData ? 'plain' : 'primary'} onClick={() => startAdding('datasets')}>
               + Add data
-            </button>
+            </Button>
           </Step>
           <Step
             number={2}
@@ -73,12 +74,10 @@ export function Home() {
               )
             }
           >
-            <button className={hasData && !hasGalaxy ? 'primary' : 'ghost'} onClick={() => startAdding('galaxies')}>
+            <Button kind={hasData && !hasGalaxy ? 'primary' : 'plain'} onClick={() => startAdding('galaxies')}>
               + New galaxy
-            </button>
-            <button className="ghost" onClick={() => go({ kind: 'observe' })}>
-              Observe
-            </button>
+            </Button>
+            <Button onClick={() => go({ kind: 'observe' })}>Observe</Button>
           </Step>
           <Step
             number={3}
@@ -90,12 +89,8 @@ export function Home() {
               </div>
             }
           >
-            <button className="ghost" onClick={() => go({ kind: 'compare' })}>
-              Compare
-            </button>
-            <button className="ghost" onClick={() => go({ kind: 'fit' })}>
-              Fit
-            </button>
+            <Button onClick={() => go({ kind: 'compare' })}>Compare</Button>
+            <Button onClick={() => go({ kind: 'fit' })}>Fit</Button>
           </Step>
         </div>
         <div className="card">
@@ -105,10 +100,7 @@ export function Home() {
             {visited.map(
               (screen) =>
                 screen.kind === 'block' && (
-                  <button key={address(screen)} onClick={() => go(screen)}>
-                    {screen.name}
-                    <small>{kindOf(screen.folder)}</small>
-                  </button>
+                  <NavItem key={address(screen)} mono label={screen.name} right={<small>{kindOf(screen.folder)}</small>} onClick={() => go(screen)} />
                 ),
             )}
           </div>

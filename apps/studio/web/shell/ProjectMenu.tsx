@@ -1,55 +1,33 @@
 // The project button at the top of the tree. Its menu makes a new
 // project, opens one of the workspace, closes the open one, and lists the
 // recent ones. Its dialogs serve the start (no project) too.
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { useCreateProject, useProjects } from '../api/queries';
-import { Dialog } from '../components/Dialog';
+import { Button, NavItem, TextField } from '../components/ui/basics';
+import { Dialog, DropMenu, type MenuEntry } from '../components/ui/overlays';
 import { useStudio } from '../studio';
 
 export function ProjectMenu() {
   const { project, openProject, recent } = useStudio();
-  const [open, setOpen] = useState(false);
   const [dialog, setDialog] = useState<'new' | 'open' | null>(null);
-  const menu = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (!menu.current?.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
-  const choose = (action: () => void) => () => {
-    setOpen(false);
-    action();
-  };
+  const entries: MenuEntry[] = [
+    { label: 'New project…', onClick: () => setDialog('new') },
+    { label: 'Open a project…', onClick: () => setDialog('open') },
+    ...(project !== null ? [{ label: 'Close the project', onClick: () => openProject(null) }] : []),
+    ...(recent.length > 0 ? [{ section: 'Recent' }] : []),
+    ...recent.map((path) => ({ label: path, onClick: () => openProject(path), current: path === project })),
+  ];
   return (
-    <div className="project-menu" ref={menu}>
-      <button className="project-button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span>{project ?? 'No project'}</span>
-        <i>▾</i>
-      </button>
-      {open && (
-        <div className="menu" role="menu">
-          <button role="menuitem" onClick={choose(() => setDialog('new'))}>
-            New project…
-          </button>
-          <button role="menuitem" onClick={choose(() => setDialog('open'))}>
-            Open a project…
-          </button>
-          {project !== null && (
-            <button role="menuitem" onClick={choose(() => openProject(null))}>
-              Close the project
-            </button>
-          )}
-          {recent.length > 0 && <div className="menu-label">Recent</div>}
-          {recent.map((path) => (
-            <button key={path} role="menuitem" aria-current={path === project} onClick={choose(() => openProject(path))}>
-              {path}
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="project-menu">
+      <DropMenu
+        label="The projects"
+        entries={entries}
+        target={
+          <Button full right="▾" title="The projects">
+            <span className="project-name">{project ?? 'No project'}</span>
+          </Button>
+        }
+      />
       <ProjectDialogs dialog={dialog} onClose={() => setDialog(null)} />
     </div>
   );
@@ -84,19 +62,14 @@ function NewProjectDialog({ onClose }: { onClose: () => void }) {
           });
         }}
       >
-        <label>
-          Folder of the project, in the workspace
-          <input autoFocus value={path} placeholder="e.g. ngc1313" onChange={(event) => setPath(event.target.value)} />
-        </label>
+        <TextField autoFocus mono showLabel value={path} placeholder="e.g. ngc1313" label="Folder of the project, in the workspace" onChange={setPath} />
         <p className="note">It holds the data, the galaxies and the fits of the study.</p>
         {create.error && <p className="error">{create.error.message}</p>}
         <div className="dialog-actions">
-          <button type="button" className="ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="submit" className="primary" disabled={!folder || create.isPending}>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="primary" submit disabled={!folder || create.isPending}>
             Create
-          </button>
+          </Button>
         </div>
       </form>
     </Dialog>
@@ -112,27 +85,20 @@ function OpenProjectDialog({ onClose }: { onClose: () => void }) {
   const shown = (projects.data ?? []).filter((path) => path.toLowerCase().includes(query));
   return (
     <Dialog title="Open a project" onClose={onClose}>
-      <input
-        className="dialog-find"
-        autoFocus
-        value={find}
-        placeholder="Find a project"
-        aria-label="Find a project"
-        onChange={(event) => setFind(event.target.value)}
-      />
+      <TextField search autoFocus value={find} placeholder="Find a project" label="Find a project" onChange={setFind} />
       <div className="dialog-list">
         {projects.error && <p className="error">{projects.error.message}</p>}
         {shown.map((path) => (
-          <button
+          <NavItem
             key={path}
-            aria-current={path === project}
+            mono
+            label={path === '.' ? '(the workspace)' : path}
+            active={path === project}
             onClick={() => {
               onClose();
               openProject(path);
             }}
-          >
-            {path === '.' ? '(the workspace)' : path}
-          </button>
+          />
         ))}
         {projects.data !== undefined && shown.length === 0 && (
           <p className="note">

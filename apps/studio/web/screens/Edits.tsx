@@ -1,6 +1,6 @@
 // The edits of the files of a new cube, which prep makes when the dataset
 // is added (see gbkfit.tasks.prep.prep_pixel_spectra): crop them (typed,
-// or dragged on the map and the spectrum), make their errors from the
+// or to the selection on the map and the spectrum), make their errors from the
 // noise, leave out values (out of a range, outliers, out of the largest
 // regions), crop them to the pixels left, and make their channels
 // velocities. The project keeps the original files and the prepared
@@ -8,9 +8,10 @@
 import { useState } from 'react';
 import type { ArrayInfo } from '../api/client';
 import type { Velocity } from '../api/queries';
-import { FoldCard } from '../components/FoldCard';
+import { Panel } from '../components/ui/panel';
+import { Button } from '../components/ui/basics';
 import { significant } from '../components/format';
-import { Check, NumberField } from '../components/ui/inputs';
+import { Check, Choice, NumberField } from '../components/ui/inputs';
 import { ValueRange, ValueSlider } from '../components/ui/sliders';
 
 // A file as prep takes it: its path, or its path and its array
@@ -228,6 +229,7 @@ export function EditsCard({
   edits,
   hasErrorFile,
   onChange,
+  onCropToSelection,
 }: {
   // The array of the data
   data: ArrayInfo;
@@ -235,6 +237,8 @@ export function EditsCard({
   // Whether the errors are of a file (else they can be made from the noise)
   hasErrorFile: boolean;
   onChange: (edits: Edits) => void;
+  // How the crop becomes the selection on the cube (none: nothing selected)
+  onCropToSelection?: () => void;
 }) {
   const set = (changed: Partial<Edits>) => onChange({ ...edits, ...changed });
   const [nx, ny, nchannels] = data.shape.filter((size) => size > 1);
@@ -291,20 +295,32 @@ export function EditsCard({
     [edits.below, edits.above, edits.sigma, edits.regions, edits.pixels, edits.ratio].some((text) => text.trim() !== ''),
   );
   return (
-    <FoldCard
+    <Panel
       id="dataset-edits"
       title="Edits"
       actions={
         hasEdits(edits) && (
-          <button className="link" onClick={() => onChange({ ...NO_EDITS, line: edits.line, lineUnit: edits.lineUnit, redshift: edits.redshift })}>
+          <Button kind="small" title="Clear the edits" onClick={() => onChange({ ...NO_EDITS, line: edits.line, lineUnit: edits.lineUnit, redshift: edits.redshift })}>
             clear
-          </button>
+          </Button>
         )
       }
     >
       <div className="edits">
-        <div className="edit-group">
-          crop <span className="edit-hint">or drag on the map (crop tool) and the spectrum</span>
+        <div className="edit-group edit-group-action">
+          crop
+          <Button
+            kind="small"
+            disabled={onCropToSelection === undefined}
+            title={
+              onCropToSelection === undefined
+                ? 'Select a region of the map, or channels of the spectrum, to crop to'
+                : 'Crop to the region and the channels selected on the cube'
+            }
+            onClick={() => onCropToSelection?.()}
+          >
+            Crop to selection
+          </Button>
         </div>
         {crop('x', 'x', 0, nx - 1, 'pixels')}
         {crop('y', 'y', 0, ny - 1, 'pixels')}
@@ -316,11 +332,12 @@ export function EditsCard({
               line
             </span>
             <NumberField value={edits.line} label="The rest of the line" onChange={(text) => set({ line: text })} />
-            <select className="edit-unit" value={lineUnit} aria-label="The unit of the line" onChange={(event) => set({ lineUnit: event.target.value })}>
-              {LINE_UNITS[spectral].map((unit) => (
-                <option key={unit}>{unit}</option>
-              ))}
-            </select>
+            <Choice
+              items={LINE_UNITS[spectral].map((unit) => ({ value: unit, label: unit }))}
+              value={lineUnit}
+              label="The unit of the line"
+              onChange={(unit) => set({ lineUnit: unit })}
+            />
             <span className="edit-label">at redshift</span>
             <NumberField value={edits.redshift} placeholder="0" label="The redshift" onChange={(text) => set({ redshift: text })} />
             <span />
@@ -399,6 +416,6 @@ export function EditsCard({
       {needsPrep(edits, data) && (
         <p className="note edits-note">Adding writes an edited copy of the files into the project; the originals stay.</p>
       )}
-    </FoldCard>
+    </Panel>
   );
 }

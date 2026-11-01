@@ -1,9 +1,10 @@
-// The Studio: a bar (the tabs of the tasks, and the state of the server),
-// the tree of the blocks of the open project, and the stage, with one
-// screen at a time.
+// The Studio: a bar (the tabs of the tasks, the state of the server, and
+// the colour scheme), the tree of the blocks of the open project, and the
+// stage, with one screen at a time.
 import { useServerEvents } from './api/events';
 import { useJobs } from './api/queries';
 import { Logo } from './components/icons';
+import { SchemeMenu } from './components/ui/scheme';
 import { Dataset, NewDataset } from './screens/Dataset';
 import { Home } from './screens/Home';
 import { Pending } from './screens/Pending';
@@ -35,6 +36,7 @@ function Layout() {
         </div>
         <Tabs />
         <ServerStatus />
+        <SchemeMenu />
       </header>
       <Tree />
       <main className="stage">{project === null ? <Welcome /> : <ScreenView screen={screen} />}</main>

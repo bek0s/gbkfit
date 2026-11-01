@@ -1,7 +1,9 @@
 // Two panes side by side (a Splitter of Mantine; see theme.ts): the main
 // one, which takes the space left, and one at its right, of a width that
-// a drag of the handle between them changes (or a double click resets),
-// and that folds away (toggle, or dragged below its least width).
+// a drag of the gap between them changes (or a double click resets), and
+// that folds away (toggle, or dragged below its least width). The gap is
+// that between the cards of the page, which shows a line as it is
+// hovered, dragged or focused.
 import { Splitter } from '@mantine/core';
 import type { UseSplitterReturnValue } from '@mantine/hooks';
 import { useRef, useState, type ReactNode } from 'react';
@@ -34,7 +36,8 @@ export function SidePanes({
       splitterRef={splitter}
       onCollapseChange={(pane, collapsed) => pane === 1 && setFolded(collapsed)}
       className="ui-panes"
-      lineSize={6}
+      lineSize={14}
+      withHandle={false}
     >
       <Splitter.Pane defaultSize="100%" min="40%">
         {main({ folded, toggle: () => splitter.current?.toggleCollapse(1) })}

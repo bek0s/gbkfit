@@ -1,5 +1,6 @@
 // The start, with no project open: make one, open one of the workspace,
 // or one of those opened last.
+import { Button, NavItem } from '../components/ui/basics';
 import { useState } from 'react';
 import { ProjectDialogs } from '../shell/ProjectMenu';
 import { useStudio } from '../studio';
@@ -13,20 +14,16 @@ export function Welcome() {
         <h1>GBKFIT Studio</h1>
         <p>Everything lives in a project: a folder of the workspace with its data, its galaxies and its fits.</p>
         <div className="welcome-actions">
-          <button className="primary" onClick={() => setDialog('new')}>
+          <Button kind="primary" onClick={() => setDialog('new')}>
             New project…
-          </button>
-          <button className="ghost" onClick={() => setDialog('open')}>
-            Open a project…
-          </button>
+          </Button>
+          <Button onClick={() => setDialog('open')}>Open a project…</Button>
         </div>
         {recent.length > 0 && (
           <div className="recent">
             <div className="eyebrow">Recent</div>
             {recent.map((path) => (
-              <button key={path} onClick={() => openProject(path)}>
-                {path}
-              </button>
+              <NavItem key={path} mono label={path} onClick={() => openProject(path)} />
             ))}
           </div>
         )}
