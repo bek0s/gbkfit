@@ -32,8 +32,8 @@ class FitProgress:
     elapsed : float
         The time since the fit started (s).
     chi2 : float
-        The chi-square of the last evaluation (of optimizers: their cost,
-        see FitProblem.cost).
+        The chi-square of the last evaluation, or of optimizers whose cost
+        is not the chi-square, their cost (see merit).
     best_chi2 : float
         The lowest of those so far.
     best : dict of str to float, optional
@@ -41,6 +41,10 @@ class FitProgress:
         before a finite chi-square).
     final : bool
         Whether this is the last report of the fit.
+    merit : str
+        What chi2 and best_chi2 are: 'chi2', or 'cost', the cost of
+        optimizers that is not the chi-square (the AICp, or a merit with
+        the chi-square of the priors; see FitProblem.cost).
     """
     stage: str
     nevals: int
@@ -49,6 +53,7 @@ class FitProgress:
     best_chi2: float
     best: dict[str, float] | None
     final: bool = False
+    merit: str = 'chi2'
 
 
 # A function that receives the progress of a fit

@@ -100,7 +100,8 @@ class JsonLinesProgress:
     def __call__(self, progress: FitProgress) -> None:
         record = dict(
             stage=progress.stage, nevals=progress.nevals,
-            elapsed=round(progress.elapsed, 3), chi2=_finite(progress.chi2),
+            elapsed=round(progress.elapsed, 3), merit=progress.merit,
+            chi2=_finite(progress.chi2),
             best_chi2=_finite(progress.best_chi2), best=progress.best,
             final=progress.final)
         with open(self._filename, 'a') as f:
@@ -140,8 +141,8 @@ def _summary(progress: FitProgress) -> str:
     rate = progress.nevals / progress.elapsed if progress.elapsed > 0 else 0
     return (
         f"{progress.stage}: {progress.nevals} evaluations, "
-        f"{minutes}:{seconds:02d} ({rate:.0f}/s), chi2 {progress.chi2:.7g}, "
-        f"best {progress.best_chi2:.7g}")
+        f"{minutes}:{seconds:02d} ({rate:.0f}/s), {progress.merit} "
+        f"{progress.chi2:.7g}, best {progress.best_chi2:.7g}")
 
 
 def _finite(value: float) -> float | None:

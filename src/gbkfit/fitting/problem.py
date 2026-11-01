@@ -186,6 +186,12 @@ class FitProblem:
             self._priors = None
         self._joint = joint_prior_residuals(
             params, objective.group_plan().functions())
+        # (what the cost of optimizers is: the chi-square, or else a cost
+        # of its own, see cost)
+        self._cost_merit = 'chi2' if merit == 'chi2' \
+            and self._priors is None and not self._joint else 'cost'
+        # (what the chi-squares recorded are, see FitProgress.merit)
+        self._recorded = 'chi2'
         self._precision = max(
             float(np.finfo(obs.dtype()).eps)
             for obs in objective.group().observations())
@@ -400,7 +406,7 @@ class FitProblem:
                 cost = float(residuals @ residuals)
             if math.isnan(cost):
                 self._count_nan(x)
-            self._record(x, cost)
+            self._record(x, cost, self._cost_merit)
             batch.append(residuals)
         return batch
 
@@ -552,7 +558,7 @@ class FitProblem:
             if merits is None:
                 chi2.append(math.inf)
                 continue
-            self._record(x, merits.chi2)
+            self._record(x, merits.chi2, 'chi2')
             chi2.append(merits.chi2)
         return np.array(chi2)
 
@@ -568,7 +574,7 @@ class FitProblem:
             except ParamEvaluationError as e:
                 self._count_failed(x, e)
                 cost = math.inf
-            self._record(x, cost)
+            self._record(x, cost, self._cost_merit)
             costs.append(cost)
         return np.array(costs)
 
@@ -579,7 +585,7 @@ class FitProblem:
             if merits is None:
                 log_likelihoods.append(-math.inf)
                 continue
-            self._record(x, merits.chi2)
+            self._record(x, merits.chi2, 'chi2')
             log_likelihoods.append(merits.log_likelihood)
         return np.array(log_likelihoods)
 
@@ -851,12 +857,14 @@ class FitProblem:
         """Report the end of the fit."""
         self._report(final=True)
 
-    def _record(self, x: npt.ArrayLike, chi2: float) -> None:
+    def _record(self, x: npt.ArrayLike, chi2: float, merit: str) -> None:
         """
-        Count an evaluation, keep the point if it is the best, and report
-        the progress if the interval has passed.
+        Count an evaluation of the chi-square, or of the cost, of the given
+        merit (see FitProgress.merit), keep the point if it is the best,
+        and report the progress if the interval has passed.
         """
         self._nevals += 1
+        self._recorded = merit
         self._last_chi2 = chi2
         if chi2 < self._best_chi2:
             self._best_chi2 = chi2
@@ -875,7 +883,7 @@ class FitProblem:
             else dict(zip(self._names, self._best_x.tolist()))
         progress = FitProgress(
             self._stage, self._nevals, now - self._start, self._last_chi2,
-            self._best_chi2, best, final)
+            self._best_chi2, best, final, self._recorded)
         failed = []
         for observer in self._observers:
             try:

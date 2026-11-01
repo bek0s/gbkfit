@@ -888,7 +888,10 @@ def test_optimizers_of_the_aicp_minimise_it():
             type='gaussian', mean=1, sigma=0.1, min=0)),
         posa=dict(min=36, max=44, n=5)))
     objective = Objective(plan, params.solves())
-    result = FitterGrid(merit='aicp').fit(objective, params)
+    reports = []
+    result = FitterGrid(merit='aicp').fit(objective, params, [reports.append])
+    # (its progress reports its cost, not a chi-square)
+    assert reports[-1].merit == 'cost'
     grid = result.diagnostics['grid']
     merits = objective.merits(params.evaluate([grid['axes'][0][1]]))
     assert merits.aicp > merits.chi2 + 1
@@ -1650,6 +1653,8 @@ def test_fits_report_their_progress():
     best = [report.best_chi2 for report in reports]
     assert nevals == sorted(nevals) and best == sorted(best, reverse=True)
     assert set(reports[-1].best) == set(result.best().free)
+    # (of least squares without priors: the chi-square)
+    assert {report.merit for report in reports} == {'chi2'}
 
 
 def test_observers_that_fail_are_dropped(caplog):
