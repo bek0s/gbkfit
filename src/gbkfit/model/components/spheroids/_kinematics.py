@@ -17,6 +17,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
+from ..traits import DHTrait, DPTrait, Trait, VHTrait, VPTrait
 from .._native import ParamBuffer
 from .._needs import Need
 from ...gravity import Capability
@@ -288,12 +289,12 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
 
     def __init__(
             self,
-            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
-            dptraits: traits.DPTrait | Sequence[traits.DPTrait],
+            vptraits: VPTrait | Sequence[VPTrait],
+            dptraits: DPTrait | Sequence[DPTrait],
             vhtraits:
-            traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
+            VHTrait | Sequence[VHTrait | None] | None = None,
             dhtraits:
-            traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
+            DHTrait | Sequence[DHTrait | None] | None = None,
             rnmax: RnMax | None = None,
             rnsep: RnSep | None = None,
             rnlen: int | None = None,
@@ -311,7 +312,7 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
         self._rstep = rstep
         self._interp = interp
 
-    def traits(self) -> dict[str, tuple[traits.Trait, ...]]:
+    def traits(self) -> dict[str, tuple[Trait, ...]]:
         """
         Return its traits by kind (see TRAIT_KINDS), with the height traits
         of the factor one where none are given.
