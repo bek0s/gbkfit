@@ -34,7 +34,7 @@ from gbkfit.fitting import (
 from gbkfit.objective import Evaluation, Objective
 from gbkfit.parallel import WorkerPool, Workers, workers_parser
 from gbkfit.observation import (
-    DepthGroup, GroupPlan, Likelihood, Noise, ObservationGroup)
+    DepthGroup, GroupPlan, MockOptions, ObservationGroup)
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
     load_pdescs_dict, param_space_parser)
@@ -106,31 +106,6 @@ class _ParamsSection(NamedTuple):
     derived: Mapping[str, str | Mapping[str, str]] | None = None
 
 
-class _MockSection(NamedTuple):
-    """
-    The section 'mock' of the task eval: mock data of the model.
-
-    Parameters
-    ----------
-    noise : Noise or Sequence of Noise
-        The noise of the observations, or of each.
-    likelihood : Likelihood or Sequence, optional
-        The likelihood of the observations, or of each.
-    nmocks : int, optional
-        The number of mock datasets.
-    nsamples : int, optional
-        The number of samples of the noise.
-    seed : int, optional
-        The seed of the random numbers.
-    """
-
-    noise: Noise | Sequence[Noise]
-    likelihood: Likelihood | Sequence[Likelihood | None] | None = None
-    nmocks: int = 1
-    nsamples: int = 100
-    seed: int | None = None
-
-
 class _Section(NamedTuple):
     """
     A section of configurations (see gbkfit.schema): the type of its
@@ -179,7 +154,7 @@ _SECTIONS = dict(
     fitter=_Section(Fitter, "The fitter."),
     workers=_Section(
         Workers, "The workers of evaluations of several parameters at once."),
-    mock=_Section(_MockSection, "Mock data (the task eval)."),
+    mock=_Section(MockOptions, "Mock data (the task eval)."),
     bootstrap=_Section(BootstrapOptions, "A bootstrap (the task fit)."))
 
 # The required sections, and the others

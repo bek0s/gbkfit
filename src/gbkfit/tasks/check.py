@@ -12,6 +12,8 @@ import os
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
+import gbkfit.fitting
+import gbkfit.observation
 import gbkfit.setup
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import Problem
@@ -69,13 +71,15 @@ def _check_task_sections(description: gbkfit.setup.Description) -> None:
     data of eval, the bootstrap of a fit, which needs data), as they load
     them, so that their errors show with those of the rest.
     """
-    from gbkfit.tasks import eval as eval_task, fit as fit_task
     config, group = description.config, description.group
     # (their paths relative to the root of the configuration, as eval
     # takes them, not to the current directory)
     with parseutils.paths_relative_to(description.root or os.curdir):
         if 'mock' in config:
             with parseutils.config_path('mock'):
-                eval_task._load_mock(config['mock'], group.nobservations())
-        if group.has_data():
-            fit_task._load_bootstrap(config, group, description.params)
+                gbkfit.observation.MockOptions.load(
+                    config['mock']).per_observation(group.nobservations())
+        if 'bootstrap' in config and group.has_data():
+            with parseutils.config_path('bootstrap'):
+                gbkfit.fitting.BootstrapOptions.load(
+                    config['bootstrap']).check(group, description.params)

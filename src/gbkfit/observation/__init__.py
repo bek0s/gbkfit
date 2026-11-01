@@ -6,6 +6,7 @@ from .group import *
 from .lens_masses import *
 from .likelihood import *
 from .line_of_sight import *
+from .mocks import *
 from .noise import *
 from .observables import *
 from .observation import *

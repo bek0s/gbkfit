@@ -7,17 +7,16 @@ and write the outputs. Programs that evaluate a configuration themselves
 
 import logging
 import os
-from typing import Any, Literal, NamedTuple
+from typing import Any, Literal
 
 
 import gbkfit.outputs
 import gbkfit.setup
 from gbkfit.observation import (
-    GroupPlan, Likelihood, Noise, likelihood_parser, noise_parser,
-    observation_parser)
+    GroupPlan, Likelihood, MockOptions, Noise, observation_parser)
 from gbkfit.params import ParamValues
 from gbkfit.setup import ConfigFile
-from gbkfit.utils import iterutils, numutils, parseutils
+from gbkfit.utils import numutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from . import _detail
 
@@ -28,15 +27,6 @@ __all__ = [
 
 
 _log = logging.getLogger(__name__)
-
-
-class _Mock(NamedTuple):
-    """The options of the mock data (the section 'mock'; see eval_)."""
-    noises: list[Noise]
-    likelihoods: list[Likelihood | None]
-    nmocks: int
-    nsamples: int
-    seed: int | None
 
 
 def eval_(
@@ -151,7 +141,9 @@ def _eval(
     if mode == 'mock':
         with parseutils.paths_relative_to(root), \
                 parseutils.config_path('mock'):
-            mock = _load_mock(cfg['mock'], group_plan.group().nobservations())
+            mock = MockOptions.load(cfg['mock'])
+            noises, likelihoods = mock.per_observation(
+                group_plan.group().nobservations())
 
     _log.info("calculating model parameters...")
     if missing := [
@@ -176,8 +168,10 @@ def _eval(
     _log.info("storing outputs to the filesystem...")
     gbkfit.outputs.write_outputs(run, outputs)
     if mock is not None:
-        _log.info(f"drawing {mock.nmocks} mock datasets...")
-        _write_mocks(cfg, root, group_plan, param_values, mock, run)
+        _log.info(f"drawing {mock.nmocks()} mock datasets...")
+        _write_mocks(
+            cfg, root, group_plan, param_values, mock, noises, likelihoods,
+            run)
 
     if profile_iters > 0:
         _log.info("running performance test...")
@@ -212,58 +206,27 @@ def _timings_table(time_stats: dict[str, dict[str, Any]]) -> str:
         for row in rows)
 
 
-def _load_mock(info: dict[str, Any], nobservations: int) -> _Mock:
-    """
-    Load the options of the mock data (see eval_), with a noise and a
-    likelihood (or None) for each of the observations.
-    """
-    if not iterutils.is_mapping(info):
-        raise ConfigError("section 'mock' must be a dictionary")
-    options = parseutils.parse_options(
-        info, required={'noise'},
-        optional={'likelihood', 'nmocks', 'nsamples', 'seed'})
-
-    def per_observation(key: str, parser: parseutils.Parser) -> list[Any]:
-        value = options.get(key)
-        if not iterutils.is_sequence(value):
-            value = [value] * nobservations
-        if len(value) != nobservations:
-            raise ConfigError(
-                f"{key} is one, or a list of one for each of the "
-                f"{nobservations} observations; it is a list of "
-                f"{len(value)}")
-        with parseutils.config_path(key):
-            return [
-                None if item is None else parser.load(item) for item in value]
-
-    noises = per_observation('noise', noise_parser)
-    if None in noises:
-        raise ConfigError("every observation needs a noise")
-    return _Mock(
-        noises, per_observation('likelihood', likelihood_parser),
-        options.get('nmocks', 1), options.get('nsamples', 100),
-        options.get('seed'))
-
-
 def _write_mocks(
         cfg: dict[str, Any],
         root: str,
         group_plan: GroupPlan,
         values: ParamValues,
-        mock: _Mock,
+        mock: MockOptions,
+        noises: list[Noise],
+        likelihoods: list[Likelihood | None],
         run: gbkfit.outputs.RunWriter
 ) -> None:
     """
     Draw the mock data of the observations of a plan of a group at the
-    parameter values, and write their files and configurations (see
-    eval_).
+    parameter values, with the noise and the likelihood of each, and
+    write their files and configurations (see eval_).
     """
     group = group_plan.group()
     with parseutils.config_path('mock'):
         datasets = group_plan.mock(
-            values, mock.noises, mock.nmocks, mock.nsamples, mock.seed)
+            values, noises, mock.nmocks(), mock.nsamples(), mock.seed())
     sections = {k: v for k, v in cfg.items() if k != 'mock'}
-    for k in range(mock.nmocks):
+    for k in range(mock.nmocks()):
         observations = []
         for i, (observation, info) in enumerate(zip(
                 group.observations(), cfg['observations'])):
@@ -273,7 +236,7 @@ def _write_mocks(
             os.makedirs(directory, exist_ok=True)
             with parseutils.config_path('mock'):
                 mocked = observation.with_data(
-                    datasets[i][k], mock.likelihoods[i])
+                    datasets[i][k], likelihoods[i])
             # (the paths of the files of the data are relative to the
             # root of the configuration, as its other paths; they are
             # of this run, whose earlier files a run into the same

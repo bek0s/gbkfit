@@ -158,3 +158,20 @@ def test_the_errors_of_moments_are_their_scatter(driver, method):
         scatter = np.nanstd(values, axis=0, ddof=1)
         ratio = scatter / np.nanmax(errors, axis=0)
         assert np.nanmedian(ratio) == pytest.approx(1, abs=0.1)
+
+
+@pytest.mark.parametrize('options, message', [
+    (dict(nmocks='2'), "option 'nmocks' must be of type int; it is '2'"),
+    (dict(nmocks=0), "option 'nmocks' must be at least 1; it is 0"),
+    (dict(nsamples=1), "option 'nsamples' must be at least 2; it is 1"),
+    (dict(likelihood=[None, None]),
+     "option 'likelihood' is one, or a list of one for each of the 3 "
+     "observations; it is a list of 2")])
+def test_mock_options_are_checked_as_they_load(options, message):
+    # (they were checked only by the task eval, after it evaluated the
+    # model: audit 2026-10-31 #42)
+    from gbkfit.observation import MockOptions
+    with pytest.raises(ConfigError) as error:
+        MockOptions.load(
+            dict(noise=dict(type='gauss', rms=1)) | options).per_observation(3)
+    assert str(error.value) == message
