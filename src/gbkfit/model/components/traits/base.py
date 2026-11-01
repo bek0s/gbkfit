@@ -14,7 +14,7 @@ from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from .options import (
-    Blobs, Direction, DispersionDirection, Nodes, SAMPLING_DEFAULT, Sampling,
+    Blobs, Direction, DispersionDirection, Nodewise, SAMPLING_DEFAULT, Sampling,
     TraitOption, VPT_DIRECTIONS, VPT_DIRECTION_PLANE, Zmax, splits_around)
 
 if TYPE_CHECKING:
@@ -214,26 +214,26 @@ class HTrait(Trait, abc.ABC):
     """
     A height trait: a function of the height above the surface of its
     component, whose parameters can have a value for each node (its
-    option rnodes, see Nodes).
+    option nodewise, see Nodewise).
 
     Raises
     ------
     ConfigError
-        If the name is invalid, or it has a sampling without rnodes.
+        If the name is invalid, or it has a sampling without nodewise.
     """
 
     def __init__(self, *options: TraitOption, name: str | None = None):
         check_options(HTrait.__init__, locals())
         super().__init__(*options, name=name)
-        if not self.rnodes() and self.sampling() != SAMPLING_DEFAULT:
+        if not self.nodewise() and self.sampling() != SAMPLING_DEFAULT:
             raise ConfigError(
-                f"sampling is '{self.sampling()}', but rnodes is False: "
+                f"sampling is '{self.sampling()}', but nodewise is False: "
                 f"the trait has no node-wise parameters")
 
-    def rnodes(self) -> bool:
+    def nodewise(self) -> bool:
         """Return whether its parameters are node-wise."""
-        nodes = self._option(Nodes)
-        return nodes is not None and nodes.rnodes
+        option = self._option(Nodewise)
+        return option is not None and option.nodewise
 
 
 class RPTrait(PTrait, abc.ABC):
@@ -345,7 +345,7 @@ class RHTrait(HTrait, abc.ABC):
         return self._option(Zmax).value
 
     def consts(self) -> tuple[float, ...]:
-        return (self.zmax(), self.rnodes())
+        return (self.zmax(), self.nodewise())
 
     @abc.abstractmethod
     def cdf(self, z: np.ndarray, *params: np.ndarray) -> np.ndarray:
@@ -410,7 +410,7 @@ class VHTrait(HTrait, abc.ABC):
     """
 
     def consts(self) -> tuple[float, ...]:
-        return (self.rnodes(),)
+        return (self.nodewise(),)
 
 
 class DPTrait(PTrait, abc.ABC):
@@ -444,7 +444,7 @@ class DHTrait(HTrait, abc.ABC):
     """
 
     def consts(self) -> tuple[float, ...]:
-        return (self.rnodes(),)
+        return (self.nodewise(),)
 
 
 class ZPTrait(PTrait, abc.ABC):

@@ -128,7 +128,7 @@ def test_flaring_at_the_subnodes():
         density=dict(
             ptraits=dict(type='exponential'),
             htraits=dict(
-                type='sech2', zmax=8, rnodes=True, sampling='subrings')),
+                type='sech2', zmax=8, nodewise=True, sampling='subrings')),
         emission=dict(type='band'))]))
     assert galaxy.pdescs()['ht_s'].size() == 42
 
@@ -195,10 +195,10 @@ def test_sampling_is_dumped():
 @pytest.mark.parametrize('part, traits, message', [
     ('kinematics',
      dict(vptraits=dict(type='nw_uniform', direction='tan', sampling='nodes')),
-     r"'sampling' must be one of 'rnodes', 'subrings'; it is 'nodes'"),
+     r"'sampling' must be one of 'rings', 'subrings'; it is 'nodes'"),
     ('density',
      dict(htraits=dict(type='sech2', zmax=8, sampling='subrings')),
-     "sampling is 'subrings', but rnodes is False: the trait has no "
+     "sampling is 'subrings', but nodewise is False: the trait has no "
      "node-wise parameters")])
 def test_invalid_sampling_is_rejected(part, traits, message):
     component = disk('smooth', [0, 20], dict(type='arctan', direction='tan'), thick=True)

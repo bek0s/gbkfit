@@ -37,7 +37,7 @@ class ZPTraitNWUniform(ZPTrait):
     zmax : float
         The largest displacement (arcsec; see ZPTrait).
     sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
+        Where the values of its node-wise parameters are given: 'rings',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the package docstring).
     name : str, optional
@@ -88,7 +88,7 @@ class ZPTraitNWHarmonic(ZPTrait):
     zmax : float
         The largest displacement (arcsec; see ZPTrait).
     sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
+        Where the values of its node-wise parameters are given: 'rings',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the package docstring).
     name : str, optional

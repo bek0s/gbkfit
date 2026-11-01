@@ -35,7 +35,7 @@ def kernel_consts_cases():
             if cls is traits.RPTraitImage:
                 continue
             if kind == 'rht':
-                options, consts = dict(zmax=5.0, rnodes=True), (5.0, True)
+                options, consts = dict(zmax=5.0, nodewise=True), (5.0, True)
             elif kind == 'vht' and type_ == 'mass':
                 options, consts = dict(zmax=5.0), (5.0, 33)
             elif kind in ('vht', 'dht'):

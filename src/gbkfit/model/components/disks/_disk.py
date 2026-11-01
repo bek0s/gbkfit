@@ -511,7 +511,7 @@ class DiskPlan(NativePlan):
         buffer = self._buffer
         params = dict(params)
         for name, pdescs in disk._geometry_pdescs.items():
-            sampling = 'rnodes' if disk._geometry_isnw[name] else None
+            sampling = 'rings' if disk._geometry_isnw[name] else None
             fill_param_values(
                 buffer.host(name), params, pdescs,
                 dict.fromkeys(pdescs, sampling), disk.rnodes(),

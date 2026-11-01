@@ -875,7 +875,7 @@ class RPTraitNWUniform(RPTrait):
     Parameters
     ----------
     sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
+        Where the values of its node-wise parameters are given: 'rings',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the package docstring).
     name : str, optional
@@ -936,7 +936,7 @@ class RPTraitNWHarmonic(RPTrait):
         The order m of the harmonic: the pattern repeats every 360 / m
         degrees, and order 0 is an axisymmetric a(r).
     sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
+        Where the values of its node-wise parameters are given: 'rings',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the package docstring).
     name : str, optional
@@ -998,7 +998,7 @@ class RPTraitNWDistortion(RPTrait):
     Parameters
     ----------
     sampling : str, optional
-        Where the values of its node-wise parameters are given: 'rnodes',
+        Where the values of its node-wise parameters are given: 'rings',
         at the radii of the rings, or 'subrings', at the rings it is
         evaluated on (see the package docstring).
     name : str, optional

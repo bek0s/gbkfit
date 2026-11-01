@@ -24,7 +24,7 @@ __all__ = [
     'Direction',
     'DispersionDirection',
     'Harmonic',
-    'Nodes',
+    'Nodewise',
     'SAMPLINGS',
     'SAMPLING_DEFAULT',
     'SAMPLING_TAIL',
@@ -57,8 +57,8 @@ DPT_DIRECTION_VER = 3
 # Where the values of the node-wise parameters of a trait are given: at
 # the radial nodes of its disk, which interpolates them to the subnodes,
 # or at the subnodes themselves (see _disk.NodalDisk)
-SAMPLINGS = ('rnodes', 'subrings')
-SAMPLING_DEFAULT = 'rnodes'
+SAMPLINGS = ('rings', 'subrings')
+SAMPLING_DEFAULT = 'rings'
 # Where the values that the galaxy of a disk gives beyond its last ring
 # too are given (e.g. the rotation of its mass, see VPTraitMass; not an
 # option of the traits): at the subnodes, and beyond the last, at the
@@ -216,7 +216,7 @@ class DispersionDirection(TraitOption):
 class Sampling(TraitOption):
     """
     The option sampling of a trait with node-wise parameters: where their
-    values are given (see SAMPLINGS; by default 'rnodes').
+    values are given (see SAMPLINGS; by default 'rings').
 
     Raises
     ------
@@ -231,15 +231,15 @@ class Sampling(TraitOption):
 
 
 @dataclasses.dataclass(frozen=True)
-class Nodes(TraitOption):
+class Nodewise(TraitOption):
     """
-    The option rnodes of a height trait: whether its parameters are
+    The option nodewise of a height trait: whether its parameters are
     node-wise (by default not).
     """
-    rnodes: bool = False
+    nodewise: bool = False
 
     def dump(self) -> dict[str, Any]:
-        return dict(rnodes=True) if self.rnodes else {}
+        return dict(nodewise=True) if self.nodewise else {}
 
 
 @dataclasses.dataclass(frozen=True)

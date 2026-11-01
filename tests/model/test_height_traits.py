@@ -100,7 +100,7 @@ def test_linear_height_trait_changes_the_model(driver, key, polar, values):
     lagged = evaluate(driver, component, properties)
     assert np.abs(lagged - plain).max() > 1e-3 * plain.max()
     component, properties = with_second(
-        key, polar, dict(type='linear', rnodes=True), values,
+        key, polar, dict(type='linear', nodewise=True), values,
         {f'{key}ht1_z0': [0] * len(DISK['rnodes'])})
     np.testing.assert_allclose(
         evaluate(driver, component, properties), lagged, rtol=1e-5,

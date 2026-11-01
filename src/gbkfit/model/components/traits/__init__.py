@@ -95,8 +95,8 @@ velocity is projected on the line of sight as v_y sin(incl), v_y its
 part along the azimuth 90 degrees (see VPTraitPlanar).
 
 Node-wise parameters (those of the nw_ traits, and of the height traits
-with rnodes) have a value for each node: at its radii (sampling
-'rnodes'), interpolated to the nodes the component is evaluated on (its
+with nodewise) have a value for each node: at its radii (sampling
+'rings'), interpolated to the nodes the component is evaluated on (its
 subnodes, see rstep) with the interpolation of the component (interp),
 or at those subnodes (sampling 'subrings'); between the subnodes, they
 are interpolated linearly.

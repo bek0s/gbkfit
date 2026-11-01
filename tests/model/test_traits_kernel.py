@@ -79,9 +79,9 @@ def trait_configs(parser):
             config |= dict(size=[3, 2], step=4.0)
         if 'zmax' in options:
             config['zmax'] = 8
-        if 'rnodes' in options:
+        if 'nodewise' in options:
             configs += [
-                config | dict(rnodes=False), config | dict(rnodes=True)]
+                config | dict(nodewise=False), config | dict(nodewise=True)]
         elif 'direction' in options and issubclass(cls, traits.VPTrait):
             # (the dispersion traits isotropic, by default; see
             # test_dispersion_directions)

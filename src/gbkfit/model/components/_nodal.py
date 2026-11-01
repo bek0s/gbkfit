@@ -233,7 +233,7 @@ def fill_param_values(
     """
     start = 0
     for name in pdescs:
-        if sampling[name] == 'rnodes':
+        if sampling[name] == 'rings':
             params[name] = interp(nodes, params[name])(subnodes)
         stop = start + np.size(params[name])
         values[start:stop] = params[name]
@@ -429,7 +429,7 @@ class NodalTraits:
             values = {}
             for name, full in names.items():
                 value = np.asarray(params[full], dtype=float)
-                if trait_params.sampling[full] == 'rnodes':
+                if trait_params.sampling[full] == 'rings':
                     value = self._interp(self._rnodes, value)(self._subrnodes)
                 values[name] = value
             out.append(values)

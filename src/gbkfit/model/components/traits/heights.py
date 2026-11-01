@@ -16,7 +16,7 @@ from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.typeutils import Unit
 from .base import DHTrait, RHTrait, RotationFactorsInput, VHTrait
-from .options import Nodes, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
+from .options import Nodewise, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
 
 
 __all__ = [
@@ -76,20 +76,20 @@ class RHTraitP1(RHTrait, abc.ABC):
     def __init__(
             self,
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
-            rnodes: bool = False,
+            nodewise: bool = False,
             sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RHTraitP1.__init__, locals())
         super().__init__(
-            Zmax(zmax), Nodes(rnodes), Sampling(sampling), name=name)
+            Zmax(zmax), Nodewise(nodewise), Sampling(sampling), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else dict(
+        return {} if self.nodewise() else dict(
             s=ParamScalarDesc(min=0, unit='arcsec', default=0.2))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else dict(
+        return {} if not self.nodewise() else dict(
             s=ParamVectorDesc(
                 nrnodes, min=0, unit='arcsec', default=0.2))
 
@@ -102,21 +102,21 @@ class RHTraitP2(RHTrait, abc.ABC):
     def __init__(
             self,
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
-            rnodes: bool = False,
+            nodewise: bool = False,
             sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RHTraitP2.__init__, locals())
         super().__init__(
-            Zmax(zmax), Nodes(rnodes), Sampling(sampling), name=name)
+            Zmax(zmax), Nodewise(nodewise), Sampling(sampling), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else dict(
+        return {} if self.nodewise() else dict(
             s=ParamScalarDesc(min=0, unit='arcsec', default=0.2),
             b=ParamScalarDesc(min=0, unit='', default=1))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else dict(
+        return {} if not self.nodewise() else dict(
             s=ParamVectorDesc(
                 nrnodes, min=0, unit='arcsec', default=0.2),
             b=ParamVectorDesc(
@@ -135,7 +135,7 @@ class RHTraitUniform(RHTraitP1):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -173,7 +173,7 @@ class RHTraitExponential(RHTraitP1):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -212,7 +212,7 @@ class RHTraitGauss(RHTraitP1):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -251,7 +251,7 @@ class RHTraitGGauss(RHTraitP2):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -291,7 +291,7 @@ class RHTraitLorentz(RHTraitP1):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -330,7 +330,7 @@ class RHTraitMoffat(RHTraitP2):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -371,7 +371,7 @@ class RHTraitSech2(RHTraitP1):
     zmax : float
         The height above the midplane (arcsec) within which the density
         lies (see RHTrait).
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -480,7 +480,7 @@ class VHTraitMass(VHTrait):
         """Return its zmax (arcsec): the top of its table."""
         return self._option(Zmax).value
 
-    def rnodes(self) -> bool:
+    def nodewise(self) -> bool:
         # (node-wise always: its table at each subnode)
         return True
 
@@ -505,17 +505,17 @@ class VHTraitMass(VHTrait):
 class VHTraitP1(VHTrait, abc.ABC):
     """
     A velocity height trait: a factor of the height, of one parameter
-    (param_name), node-wise if rnodes.
+    (param_name), node-wise if nodewise.
     """
 
     def __init__(
             self,
-            rnodes: bool = False,
+            nodewise: bool = False,
             sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(VHTraitP1.__init__, locals())
-        super().__init__(Nodes(rnodes), Sampling(sampling), name=name)
+        super().__init__(Nodewise(nodewise), Sampling(sampling), name=name)
 
     @staticmethod
     @abc.abstractmethod
@@ -524,11 +524,11 @@ class VHTraitP1(VHTrait, abc.ABC):
         pass
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else {
+        return {} if self.nodewise() else {
             self.param_name(): ParamScalarDesc(unit='arcsec', default=1)}
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else {
+        return {} if not self.nodewise() else {
             self.param_name(): ParamVectorDesc(
                 nrnodes, unit='arcsec', default=1)}
 
@@ -541,7 +541,7 @@ class VHTraitLinear(VHTraitP1):
 
     Parameters
     ----------
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -576,7 +576,7 @@ class VHTraitExponential(VHTraitP1):
 
     Parameters
     ----------
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -611,7 +611,7 @@ class VHTraitGauss(VHTraitP1):
 
     Parameters
     ----------
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -666,17 +666,17 @@ class DHTraitOne(DHTrait):
 class DHTraitP1(DHTrait, abc.ABC):
     """
     A dispersion height trait: a factor of the height, of one parameter
-    (param_name), node-wise if rnodes.
+    (param_name), node-wise if nodewise.
     """
 
     def __init__(
             self,
-            rnodes: bool = False,
+            nodewise: bool = False,
             sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(DHTraitP1.__init__, locals())
-        super().__init__(Nodes(rnodes), Sampling(sampling), name=name)
+        super().__init__(Nodewise(nodewise), Sampling(sampling), name=name)
 
     @staticmethod
     @abc.abstractmethod
@@ -685,11 +685,11 @@ class DHTraitP1(DHTrait, abc.ABC):
         pass
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {} if self.rnodes() else {
+        return {} if self.nodewise() else {
             self.param_name(): ParamScalarDesc(unit='arcsec', default=1)}
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
-        return {} if not self.rnodes() else {
+        return {} if not self.nodewise() else {
             self.param_name(): ParamVectorDesc(
                 nrnodes, unit='arcsec', default=1)}
 
@@ -702,7 +702,7 @@ class DHTraitLinear(DHTraitP1):
 
     Parameters
     ----------
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -737,7 +737,7 @@ class DHTraitExponential(DHTraitP1):
 
     Parameters
     ----------
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional
@@ -772,7 +772,7 @@ class DHTraitGauss(DHTraitP1):
 
     Parameters
     ----------
-    rnodes : bool, optional
+    nodewise : bool, optional
         Whether its parameters have a value for each ring (e.g. the scale
         height of a flaring disk).
     sampling : str, optional

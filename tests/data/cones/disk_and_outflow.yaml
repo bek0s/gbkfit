@@ -23,7 +23,7 @@ galaxies:
     rnodes: [0, 2, 4, 6]
     density:
       ptraits: {type: exponential}
-      htraits: {type: uniform, zmax: 1.5, rnodes: true}
+      htraits: {type: uniform, zmax: 1.5, nodewise: true}
     kinematics:
       type: traits
       vptraits: {type: uniform, direction: out}

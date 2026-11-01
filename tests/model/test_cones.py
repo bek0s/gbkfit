@@ -142,7 +142,7 @@ def test_a_uniform_wall_is_a_hard_cone(driver, evaluate_cases):
     # between them as the cone interpolates it (of the hollow cone, whose
     # density is 0 within 3.5: the half-width there is that at 3.5).
     cone = HOLLOW | dict(emission=BAND, density=HOLLOW['density'] | dict(
-        htraits=dict(type='uniform', zmax=2, rnodes=True)))
+        htraits=dict(type='uniform', zmax=2, nodewise=True)))
     _, extra = evaluate_cases([image(driver, cone)], GEOMETRY | dict(
         wall=30, pt_a=HOLLOW_A, ht_s=list(np.multiply(
             np.maximum(HOLLOW_RNODES, 3.5), np.sin(np.radians(10))))))

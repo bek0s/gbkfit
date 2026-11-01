@@ -1878,7 +1878,7 @@ def test_mass_trait_with_pressure_support(driver, line_of_sight):
     density = np.exp(-subrnodes / 1.2)
     if line_of_sight == 'grid':
         disk = with_traits(
-            disk, htraits=dict(type='sech2', zmax=8, rnodes=True))
+            disk, htraits=dict(type='sech2', zmax=8, nodewise=True))
         properties |= dict(ht_s=flaring)
         density /= 2 * np.interp(subrnodes, rnodes, flaring)
     pressure = density * (30 * np.exp(-subrnodes / 10)) ** 2
