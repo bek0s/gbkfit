@@ -25,7 +25,8 @@ from annotated_types import Gt, Le
 import gbkfit.math
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from gbkfit.utils.typeutils import (
+    FitsFile, Unit, Varying, split_fits_file)
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -56,7 +57,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         """
         Load a PSF from its configuration.
 
-        Options that can vary (see VARYING_OPTIONS) given as tables make a
+        Options that can vary (see typeutils.Varying) given as tables make a
         PSF that varies along the spectral axis (see varying and
         PSFVarying).
 
@@ -71,7 +72,8 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
             The PSF.
         """
         options = varying.load_tables(cls, info)
-        if options != info:
+        if any(isinstance(x, varying.SpectralTable)
+               for x in options.values()):
             return cls.varying(**options)
         return super().load(info)
 
@@ -84,7 +86,8 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         ----------
         **options
             The options of the class; those that vary (see the
-            VARYING_OPTIONS of the class) are tables (SpectralTable).
+            options of the class marked Varying) are tables
+            (SpectralTable).
 
         Returns
         -------
@@ -369,8 +372,6 @@ class PSFGauss(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = ('sigma', 'ratio', 'posa')
-
     @staticmethod
     def type() -> str:
         return 'gauss'
@@ -387,9 +388,9 @@ class PSFGauss(PSF):
 
     def __init__(
             self,
-            sigma: Annotated[float, Gt(0), Unit('arcsec')],
-            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
-            posa: Annotated[float, Unit('deg')] = 0.0
+            sigma: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
+            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFGauss.__init__, locals())
         self._sigma = sigma
@@ -443,8 +444,6 @@ class PSFGGauss(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = ('alpha', 'beta', 'ratio', 'posa')
-
     @staticmethod
     def type() -> str:
         return 'ggauss'
@@ -462,10 +461,10 @@ class PSFGGauss(PSF):
 
     def __init__(
             self,
-            alpha: Annotated[float, Gt(0), Unit('arcsec')],
-            beta: Annotated[float, Gt(0)],
-            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
-            posa: Annotated[float, Unit('deg')] = 0.0
+            alpha: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            beta: Annotated[float, Gt(0), Varying()],
+            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
+            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFGGauss.__init__, locals())
         self._alpha = alpha
@@ -524,8 +523,6 @@ class PSFMoffat(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = ('alpha', 'beta', 'ratio', 'posa')
-
     @staticmethod
     def type() -> str:
         return 'moffat'
@@ -543,10 +540,10 @@ class PSFMoffat(PSF):
 
     def __init__(
             self,
-            alpha: Annotated[float, Gt(0), Unit('arcsec')],
-            beta: Annotated[float, Gt(1)],
-            ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
-            posa: Annotated[float, Unit('deg')] = 0.0
+            alpha: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            beta: Annotated[float, Gt(1), Varying()],
+            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
+            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFMoffat.__init__, locals())
         self._alpha = alpha
@@ -878,8 +875,6 @@ class PSFGaussBeam(PSF):
         The position angle of the major axis.
     """
 
-    VARYING_OPTIONS = ('bmaj', 'bmin', 'bpa')
-
     config_constructors = ('__init__', 'from_file')
 
     @staticmethod
@@ -927,9 +922,9 @@ class PSFGaussBeam(PSF):
 
     def __init__(
             self,
-            bmaj: Annotated[float, Gt(0), Unit('arcsec')],
-            bmin: Annotated[float, Gt(0), Unit('arcsec')],
-            bpa: Annotated[float, Unit('deg')] = 0.0
+            bmaj: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            bmin: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            bpa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFGaussBeam.__init__, locals())
         if bmin > bmaj:

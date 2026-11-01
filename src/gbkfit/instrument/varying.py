@@ -510,7 +510,7 @@ def load_tables(cls: type, info: dict[str, Any]) -> dict[str, Any]:
         If a table is invalid.
     """
     options = dict(info)
-    for name in getattr(cls, 'VARYING_OPTIONS', ()):
+    for name in typeutils.varying_options(cls.__init__):
         if isinstance(info.get(name), Mapping):
             with parseutils.config_path(name):
                 options[name] = SpectralTable.load(info[name])
@@ -522,9 +522,9 @@ class _VaryingOptions:
     The options of an object of a class (e.g. a PSF), some of which are
     tables of values along the spectral axis (see PSF.varying).
 
-    The class lists the names of its options that can vary in
-    VARYING_OPTIONS (e.g. ('sigma', 'ratio')); their units are those of
-    the annotations of its __init__ (see typeutils.Unit; none for none).
+    The options of the class that can vary are those whose annotations
+    are marked so (see typeutils.Varying); their units are those of the
+    annotations (see typeutils.Unit; none for none).
 
     Parameters
     ----------
@@ -545,7 +545,7 @@ class _VaryingOptions:
             name: value for name, value in options.items()
             if isinstance(value, SpectralTable)}
         for name in tables:
-            if name not in getattr(cls, 'VARYING_OPTIONS', ()):
+            if name not in typeutils.varying_options(cls.__init__):
                 raise ConfigError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")

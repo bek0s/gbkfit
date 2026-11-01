@@ -32,7 +32,8 @@ from annotated_types import Gt
 import gbkfit.math
 from gbkfit.utils import fitsutils, gridutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from gbkfit.utils.typeutils import (
+    FitsFile, Unit, Varying, split_fits_file)
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -64,7 +65,7 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         Load an LSF from its configuration.
 
-        Options that can vary (see VARYING_OPTIONS) given as tables make
+        Options that can vary (see typeutils.Varying) given as tables make
         an LSF that varies along the spectral axis (see varying and
         LSFVarying).
 
@@ -79,7 +80,8 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
             The LSF.
         """
         options = varying.load_tables(cls, info)
-        if options != info:
+        if any(isinstance(x, varying.SpectralTable)
+               for x in options.values()):
             return cls.varying(**options)
         return super().load(info)
 
@@ -93,7 +95,8 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         ----------
         **options
             The options of the class; those that vary (see the
-            VARYING_OPTIONS of the class) are tables (SpectralTable).
+            options of the class marked Varying) are tables
+            (SpectralTable).
 
         Returns
         -------
@@ -327,8 +330,6 @@ class LSFGauss(LSF):
         The standard deviation (km/s of the light).
     """
 
-    VARYING_OPTIONS = ('sigma',)
-
     @staticmethod
     def type() -> str:
         return 'gauss'
@@ -341,7 +342,9 @@ class LSFGauss(LSF):
             type=self.type(),
             sigma=self._sigma)
 
-    def __init__(self, sigma: Annotated[float, Gt(0), Unit('km/s')]):
+    def __init__(
+            self, sigma: Annotated[float, Gt(0), Unit('km/s'), Varying()]
+    ):
         check_options(LSFGauss.__init__, locals())
         self._sigma = sigma
 
@@ -381,8 +384,6 @@ class LSFGGauss(LSF):
         The shape, > 0: 2 is a Gaussian, and 1 an exponential.
     """
 
-    VARYING_OPTIONS = ('alpha', 'beta')
-
     @staticmethod
     def type() -> str:
         return 'ggauss'
@@ -398,8 +399,8 @@ class LSFGGauss(LSF):
 
     def __init__(
             self,
-            alpha: Annotated[float, Gt(0), Unit('km/s')],
-            beta: Annotated[float, Gt(0)]
+            alpha: Annotated[float, Gt(0), Unit('km/s'), Varying()],
+            beta: Annotated[float, Gt(0), Varying()]
     ):
         check_options(LSFGGauss.__init__, locals())
         self._alpha = alpha
@@ -441,8 +442,6 @@ class LSFLorentz(LSF):
         The scale (km/s of the light): the half width at half maximum.
     """
 
-    VARYING_OPTIONS = ('gamma',)
-
     @staticmethod
     def type() -> str:
         return 'lorentz'
@@ -455,7 +454,9 @@ class LSFLorentz(LSF):
             type=self.type(),
             gamma=self._gamma)
 
-    def __init__(self, gamma: Annotated[float, Gt(0), Unit('km/s')]):
+    def __init__(
+            self, gamma: Annotated[float, Gt(0), Unit('km/s'), Varying()]
+    ):
         check_options(LSFLorentz.__init__, locals())
         self._gamma = gamma
 
@@ -495,8 +496,6 @@ class LSFMoffat(LSF):
         The slope of the wings, > 0.5 (for a finite flux).
     """
 
-    VARYING_OPTIONS = ('alpha', 'beta')
-
     @staticmethod
     def type() -> str:
         return 'moffat'
@@ -512,8 +511,8 @@ class LSFMoffat(LSF):
 
     def __init__(
             self,
-            alpha: Annotated[float, Gt(0), Unit('km/s')],
-            beta: Annotated[float, Gt(0.5)]
+            alpha: Annotated[float, Gt(0), Unit('km/s'), Varying()],
+            beta: Annotated[float, Gt(0.5), Varying()]
     ):
         check_options(LSFMoffat.__init__, locals())
         self._alpha = alpha

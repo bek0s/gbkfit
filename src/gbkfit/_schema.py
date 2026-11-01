@@ -304,9 +304,9 @@ class SchemaWriter:
             if param.kind is param.VAR_KEYWORD:
                 others = schema
                 continue
-            if name in getattr(owner, 'VARYING_OPTIONS', ()):
-                # (a PSF or an LSF of options that vary along the spectral
-                # axis, see PSF.varying, has tables of them)
+            if typeutils.is_varying(hints.get(name)):
+                # (an option that varies along the spectral axis is given
+                # as a table of its values too, see typeutils.Varying)
                 from gbkfit.instrument import SpectralTable
                 schema = {'anyOf': [schema, self.option(SpectralTable)]}
             if (unit := typeutils.unit_of(hints.get(name))) is not None:

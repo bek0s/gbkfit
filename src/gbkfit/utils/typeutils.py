@@ -30,14 +30,17 @@ __all__ = [
     'FilePath',
     'FitsFile',
     'Unit',
+    'Varying',
     'is_asdf_file',
+    'is_varying',
     'describe_type',
     'matches_type',
     'option_types',
     'problem',
     'split_fits_file',
     'union_members',
-    'unit_of'
+    'unit_of',
+    'varying_options'
 ]
 
 
@@ -57,6 +60,16 @@ class Unit:
     """
 
     unit: str
+
+
+@dataclasses.dataclass(frozen=True)
+class Varying:
+    """
+    The marker of an option that can vary along the spectral axis, e.g.
+    ``Annotated[float, Gt(0), Unit('arcsec'), Varying()]``: given as a
+    value, or as a table of values (see gbkfit.instrument.SpectralTable,
+    and PSF.varying).
+    """
 
 
 @dataclasses.dataclass(frozen=True)
@@ -367,3 +380,23 @@ def unit_of(type_: Any) -> str | None:
         return None
     units = [x.unit for x in type_.__metadata__ if isinstance(x, Unit)]
     return units[0] if units else None
+
+
+def is_varying(type_: Any) -> bool:
+    """
+    Return whether an option of a type annotation can vary along the
+    spectral axis (its Varying marker; see Varying).
+    """
+    type_ = _without_none(type_)
+    return typing.get_origin(type_) is Annotated and any(
+        isinstance(x, Varying) for x in type_.__metadata__)
+
+
+def varying_options(func: Callable) -> tuple[str, ...]:
+    """
+    Return the names of the parameters of a callable (e.g. ``cls.__init__``)
+    that can vary along the spectral axis (see Varying).
+    """
+    return tuple(
+        name for name, type_ in option_types(func).items()
+        if is_varying(type_))
