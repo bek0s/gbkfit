@@ -134,10 +134,17 @@ def view_channel(
 
 @router.get('/views/spectrum/{path:path}')
 def view_spectrum(
-        server: ServerDep, path: str, hdu: int, x: int, y: int
+        server: ServerDep, path: str, hdu: int, x: int | None = None,
+        y: int | None = None, x0: int | None = None, x1: int | None = None,
+        y0: int | None = None, y1: int | None = None
 ) -> SpectrumView:
-    """Return the spectrum of a pixel (x, y) of a cube."""
-    values = server.views.spectrum(path, hdu, x, y)
+    """
+    Return the spectrum of a pixel (x, y) of a cube, or its total spectrum
+    (the sum of its pixels in each channel): of all of them, or of a region
+    (x0 to x1, y0 to y1, inclusive).
+    """
+    region = None if None in (x0, x1, y0, y1) else (x0, x1, y0, y1)
+    values = server.views.spectrum(path, hdu, x, y, region)
     cube = server.views.cube(path, hdu)
     return SpectrumView(
         values=[float(v) if np.isfinite(v) else None for v in values],

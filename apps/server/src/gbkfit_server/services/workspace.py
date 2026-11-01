@@ -21,6 +21,7 @@ from astropy.io import fits
 import gbkfit.dataset
 import gbkfit.outputs
 import gbkfit.project
+from gbkfit.utils import unitutils
 from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid, NotFound
@@ -283,7 +284,7 @@ class Workspace:
             raise Invalid(f"cannot read '{relative}': {e}") from e
         return [
             dict(index=hdu.index, name=hdu.name, shape=list(hdu.shape),
-                 axes=list(hdu.axes), unit=hdu.unit,
+                 axes=list(hdu.axes), unit=_readable_unit(hdu.unit),
                  step=None if hdu.coords is None
                  else [float(step) for step in hdu.coords.step],
                  beam=None if hdu.beam is None else dict(
@@ -498,3 +499,17 @@ def _numbered(folder: Path, name: str) -> Iterator[Path]:
     yield folder / name
     for number in itertools.count(2):
         yield folder / f'{stem}-{number}{ending}'
+
+
+def _readable_unit(text: str | None) -> str | None:
+    """
+    Return the unit of the values of an array (BUNIT, as its header writes
+    it, e.g. JY/BEAM) as astropy writes it, to read (e.g. Jy / beam), or as
+    written if it is not a unit.
+    """
+    if text is None:
+        return None
+    try:
+        return unitutils.parse_unit(text).to_string()
+    except ConfigError:
+        return text

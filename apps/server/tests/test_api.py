@@ -226,6 +226,18 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     assert spectrum['values'] == [0, 0, 1, 0, 0]
     assert spectrum['spectral'] == pytest.approx([0, 10, 20, 30, 40])
     assert spectrum['unit'] == 'km/s'
+    # (the total spectrum: of the 12 pixels, or of a region of 2 x 2)
+    assert client.get(
+        f'/api/v1/views/spectrum/{path}', params=query
+    ).json()['values'] == [0, 0, 12, 0, 0]
+    assert client.get(
+        f'/api/v1/views/spectrum/{path}',
+        params=query | dict(x0=1, x1=2, y0=0, y1=1)
+    ).json()['values'] == [0, 0, 4, 0, 0]
+    assert client.get(
+        f'/api/v1/views/spectrum/{path}',
+        params=query | dict(x0=1, x1=9, y0=0, y1=1)
+    ).status_code == 400
     header, data = frames.decode(client.get(
         f'/api/v1/views/moments/{path}', params=query | dict(snr=0)).content)
     assert [a['name'] for a in header['arrays']] == [

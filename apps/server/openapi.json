@@ -348,7 +348,7 @@
     "/api/v1/views/spectrum/{path}": {
       "get": {
         "summary": "View Spectrum",
-        "description": "Return the spectrum of a pixel (x, y) of a cube.",
+        "description": "Return the spectrum of a pixel (x, y) of a cube, or its total spectrum\n(the sum of its pixels in each channel): of all of them, or of a region\n(x0 to x1, y0 to y1, inclusive).",
         "operationId": "view_spectrum_api_v1_views_spectrum__path__get",
         "parameters": [
           {
@@ -372,19 +372,97 @@
           {
             "name": "x",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "integer",
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "X"
             }
           },
           {
             "name": "y",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "integer",
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Y"
+            }
+          },
+          {
+            "name": "x0",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X0"
+            }
+          },
+          {
+            "name": "x1",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X1"
+            }
+          },
+          {
+            "name": "y0",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Y0"
+            }
+          },
+          {
+            "name": "y1",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Y1"
             }
           }
         ],

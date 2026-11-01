@@ -132,20 +132,37 @@ class Views:
                 f"the cube has {values.shape[0]} channels; not {channel}")
         return values[channel]
 
-    def spectrum(self, path: str, hdu: int, x: int, y: int) -> np.ndarray:
+    def spectrum(
+            self, path: str, hdu: int, x: int | None = None,
+            y: int | None = None,
+            region: tuple[int, int, int, int] | None = None
+    ) -> np.ndarray:
         """
-        Return the spectrum of a pixel of a cube (its channels).
+        Return the spectrum of a pixel (x, y) of a cube (its channels), or,
+        without one, its total spectrum: the sum of the values of its
+        pixels in each channel (NaN left out; NaN where all are), of all
+        its pixels or of those of a region (x0, x1, y0, y1, inclusive).
 
         Raises
         ------
         Invalid
-            If the pixel is not in the cube (or as cube).
+            If the pixel or the region is not in the cube (or as cube).
         """
         values = self.cube(path, hdu).values
         _, ny, nx = values.shape
-        if not (0 <= x < nx and 0 <= y < ny):
-            raise Invalid(f"the cube has {nx} x {ny} pixels; not ({x}, {y})")
-        return values[:, y, x]
+        if x is not None or y is not None:
+            if x is None or y is None or not (0 <= x < nx and 0 <= y < ny):
+                raise Invalid(
+                    f"the cube has {nx} x {ny} pixels; not ({x}, {y})")
+            return values[:, y, x]
+        x0, x1, y0, y1 = (0, nx - 1, 0, ny - 1) if region is None else region
+        if not (0 <= x0 <= x1 < nx and 0 <= y0 <= y1 < ny):
+            raise Invalid(
+                f"the cube has {nx} x {ny} pixels; not the region "
+                f"({x0}-{x1}, {y0}-{y1})")
+        pixels = values[:, y0:y1 + 1, x0:x1 + 1]
+        missing = np.isnan(pixels).all(axis=(1, 2))
+        return np.where(missing, np.nan, np.nansum(pixels, axis=(1, 2)))
 
     def moments(
             self, path: str, hdu: int, snr: float
