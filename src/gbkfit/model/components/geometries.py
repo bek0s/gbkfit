@@ -5,12 +5,11 @@ by default (see Component.geometry); others are named.
 """
 
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from . import _detail
 
 
@@ -91,10 +90,10 @@ class Geometry(parseutils.Serializable):
             params: Sequence[Literal[tuple(GEOMETRY_PARAMS)]] | None = None,
             loose: bool = False,
             tilted: bool = False,
-            rnmax: Annotated[float, Unit('arcsec')] | None = None,
-            rnsep: Annotated[float, Unit('arcsec')] | None = None,
+            rnmax: _detail.RnMax | None = None,
+            rnsep: _detail.RnSep | None = None,
             rnlen: int | None = None,
-            rnodes: Annotated[Sequence[float], Unit('arcsec')] | None = None
+            rnodes: _detail.RNodes | None = None
     ):
         check_options(Geometry.__init__, locals())
         parseutils.check_name(name)

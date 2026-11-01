@@ -20,6 +20,7 @@ from .. import traits
 from .._native import ParamBuffer
 from .._needs import Need
 from ...gravity import Capability
+from .._detail import Interp, RNodes, RnMax, RnSep, RStep
 from .._nodal import (
     NodalTraits, TraitTable, native_traits, parse_component_rnode_args,
     subring_radii, with_default_height_traits)
@@ -293,12 +294,12 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
             traits.VHTrait | Sequence[traits.VHTrait | None] | None = None,
             dhtraits:
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
-            rnmax: float | None = None,
-            rnsep: float | None = None,
+            rnmax: RnMax | None = None,
+            rnsep: RnSep | None = None,
             rnlen: int | None = None,
-            rnodes: Sequence[float] | None = None,
-            rstep: float | None = None,
-            interp: str = 'linear'
+            rnodes: RNodes | None = None,
+            rstep: RStep | None = None,
+            interp: Interp = 'linear'
     ):
         check_options(SpheroidTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)

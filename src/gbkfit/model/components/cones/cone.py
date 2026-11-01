@@ -3,7 +3,7 @@ The cone component: shells around an apex, with traits.
 """
 
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
 import numpy as np
 
@@ -11,10 +11,9 @@ from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from .. import traits
 from .._native import make_bands, make_lines
-from .._nodal import INTERPOLATIONS
+from .._detail import Interp, RNodes, RnMax, RnSep, RStep
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
@@ -102,12 +101,12 @@ class Cone(Component):
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             sides: Literal[_cone.SIDES] = 'both',
-            rnmax: Annotated[float, Unit('arcsec')] | None = None,
-            rnsep: Annotated[float, Unit('arcsec')] | None = None,
+            rnmax: RnMax | None = None,
+            rnsep: RnSep | None = None,
             rnlen: int | None = None,
-            rnodes: Annotated[Sequence[float], Unit('arcsec')] | None = None,
-            rstep: Annotated[float, Unit('arcsec')] | None = None,
-            interp: Literal[INTERPOLATIONS] = 'linear',
+            rnodes: RNodes | None = None,
+            rstep: RStep | None = None,
+            interp: Interp = 'linear',
             geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):

@@ -33,9 +33,6 @@ from .traits import (
 # in constants.hpp)
 MAX_TRAITS = 16
 
-# The interpolations of the values of node-wise parameters between nodes
-INTERPOLATIONS = ('linear', 'akima', 'pchip')
-
 
 @dataclass(frozen=True)
 class TraitTable:

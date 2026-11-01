@@ -3,18 +3,33 @@ Helpers shared by the components.
 """
 
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 
 from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils.typeutils import Unit
 from ._units import BandFactors, LineFactors
 
 if TYPE_CHECKING:
     from .base import Component
     from .geometries import Geometry
+
+
+# The interpolations of the values of node-wise parameters between nodes
+INTERPOLATIONS = ('linear', 'akima', 'pchip')
+
+# The options of the radii of the nodes of a component (its rings or
+# shells; see parse_nodes), of its subnodes (rstep), and of the
+# interpolation between them, as the components and the geometries take
+# them: one definition of each
+RnMax: TypeAlias = Annotated[float, Unit('arcsec')]
+RnSep: TypeAlias = Annotated[float, Unit('arcsec')]
+RNodes: TypeAlias = Annotated[Sequence[float], Unit('arcsec')]
+RStep: TypeAlias = Annotated[float, Unit('arcsec')]
+Interp: TypeAlias = Literal[INTERPOLATIONS]
 
 
 def disk_to_sky(
