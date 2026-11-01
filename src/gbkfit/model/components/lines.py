@@ -1,4 +1,6 @@
-from collections.abc import Mapping, Sequence
+import contextlib
+import contextvars
+from collections.abc import Iterator, Mapping, Sequence
 
 import astropy.units
 import numpy as np
@@ -16,7 +18,8 @@ __all__ = [
     'LinePlacement',
     'Lines',
     'band_parser',
-    'line_parser'
+    'line_parser',
+    'lines_from'
 ]
 
 
@@ -247,6 +250,48 @@ class LineCatalogue:
                 f"there is no line {name!r} in the catalogue; its lines: "
                 f"{list(self._lines)}")
         return self._lines[name]
+
+
+# The catalogue of the configurations loaded in this context (thread or
+# task), if any (see lines_from)
+_in_use: contextvars.ContextVar[LineCatalogue | None] = \
+    contextvars.ContextVar('gbkfit_lines', default=None)
+
+
+@contextlib.contextmanager
+def lines_from(catalogue: LineCatalogue) -> Iterator[None]:
+    """
+    Make the configurations loaded in the block name the lines and bands
+    of a catalogue (e.g. with those of the sections 'lines' and 'bands' of
+    a configuration); outside, they name those of GBKFIT.
+
+    Parameters
+    ----------
+    catalogue : LineCatalogue
+        The catalogue.
+
+    Examples
+    --------
+    >>> from gbkfit.model import LineCatalogue, emission_parser, lines_from
+    >>> catalogue = LineCatalogue({'mgii2796': '2796.35 Angstrom'})
+    >>> with lines_from(catalogue):
+    ...     emission = emission_parser.load(
+    ...         dict(type='lines', lines=['mgii2796']))
+    """
+    token = _in_use.set(catalogue)
+    try:
+        yield
+    finally:
+        _in_use.reset(token)
+
+
+def catalogue_in_use() -> LineCatalogue:
+    """
+    Return the catalogue of the configurations being loaded (see
+    lines_from): that of GBKFIT outside a block.
+    """
+    catalogue = _in_use.get()
+    return LineCatalogue() if catalogue is None else catalogue
 
 
 class Lines:

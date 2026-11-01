@@ -4,13 +4,13 @@ clouds (see Clouds).
 """
 
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal
 
 import numpy as np
 
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
 from ...mass import DiskDensity
@@ -21,7 +21,7 @@ from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..geometries import Geometry
-from ..lines import Band, LineCatalogue
+from ..lines import Band
 from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
@@ -102,18 +102,6 @@ class Disk(Component):
     @staticmethod
     def type() -> str:
         return 'disk'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
-        info = dict(info)
-        if info.get('clouds') is not None:
-            info['clouds'] = parseutils.load_option(
-                Clouds.load, info, 'clouds')
-        return cls(**_detail.load_disk_component(cls, info, catalogue))
 
     def dump(self) -> dict[str, Any]:
         info = _detail.dump_disk_component(

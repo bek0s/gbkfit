@@ -5,7 +5,7 @@ where the instrument records them (see GroupPlan.mock).
 
 import abc
 import os
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal
 
 import astropy.io.fits
 import astropy.units as u
@@ -184,16 +184,6 @@ class NoiseGauss(Noise):
     @staticmethod
     def type() -> str:
         return 'gauss'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        info = dict(info)
-        if isinstance(info.get('spatial_correlation'), dict):
-            parseutils.load_option_and_update_info(
-                psf_parser, info, 'spatial_correlation')
-        parseutils.load_option_and_update_info(
-            lsf_parser, info, 'spectral_correlation')
-        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

@@ -8,7 +8,7 @@ and normalised by the comparison of the data (see Weights).
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self, TypeAlias
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 from annotated_types import Ge, Gt, Le
@@ -156,12 +156,6 @@ class Weights(parseutils.Serializable):
     ConfigError
         If there are no weight functions.
     """
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(
-            weight_trait_parser, info, 'traits', required=True)
-        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         return dict(

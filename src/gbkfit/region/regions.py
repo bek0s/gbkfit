@@ -1,7 +1,7 @@
 import abc
 import os.path
 from collections.abc import Sequence
-from typing import Annotated, Any, TypeAlias
+from typing import Annotated, TypeAlias
 
 import numpy as np
 import numpy.typing as npt
@@ -252,12 +252,6 @@ class RegionsApertures(Regions):
     @staticmethod
     def type():
         return 'apertures'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'RegionsApertures':
-        parseutils.load_option_and_update_info(
-            aperture_parser, info, 'apertures', required=True)
-        return super().load(info)
 
     def dump(self, prefix='', dump_path=True, overwrite=False):
         return dict(

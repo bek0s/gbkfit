@@ -14,7 +14,7 @@ from annotated_types import Ge
 
 from gbkfit.dataset import Dataset
 from gbkfit.fitting._subfits import Outcome, run_subfits
-from gbkfit.fitting.base import Fitter, fitter_parser
+from gbkfit.fitting.base import Fitter
 from gbkfit.fitting.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import SubFitLog
 from gbkfit.fitting.result import Bootstrap
@@ -229,14 +229,6 @@ class BootstrapOptions(parseutils.Serializable):
     ConfigError
         If nsamples is below 2.
     """
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'BootstrapOptions':
-        info = dict(info)
-        parseutils.load_option_and_update_info(
-            bootstrap_scheme_parser, info, 'scheme', required=True)
-        parseutils.load_option_and_update_info(fitter_parser, info, 'fitter')
-        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         info: dict[str, Any] = dict(

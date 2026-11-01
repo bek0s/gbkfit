@@ -57,9 +57,7 @@ class DatasetPixelSpectra(Dataset):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'DatasetPixelSpectra':
-        info = dict(info)
-        _detail.load_correlations(info)
-        return _detail.load_with_files(cls, info, cls.ndim - 1)
+        return _detail.load_with_files(cls, dict(info), cls.ndim - 1)
 
     @classmethod
     def from_files(

@@ -127,12 +127,8 @@ class FreeElement:
 
     @classmethod
     def load(cls, info: Mapping[str, Any]) -> 'FreeElement':
-        info = dict(info)
-        if isinstance(info.get('prior'), Mapping):
-            info['prior'] = parseutils.load_option(
-                prior_parser.load, info, 'prior')
         return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+            dict(info), cls.__init__))
 
     def __init__(
             self,
@@ -453,12 +449,6 @@ class ParamSpace(parseutils.Serializable):
         if 'transforms' in info:
             info['transforms'] = parseutils.load_option(
                 _load_transforms, info, 'transforms')
-        if info.get('modes') is not None:
-            with parseutils.config_path('modes'):
-                info['modes'] = {
-                    name: parseutils.load_option(
-                        param_mode_parser.load, info['modes'], name)
-                    for name in dict(info['modes'])}
         opts = parseutils.parse_options_for_callable(
             info, cls.__init__,
             ignore_params=[

@@ -885,20 +885,17 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     along the line of sight of its section 'depth_order'. The galaxies
     and observations name lines and bands of the catalogue of GBKFIT and
     of the sections 'lines' and 'bands' of the configuration (see
-    LineCatalogue). Their option driver places them on a driver of the
-    configuration (see _load_placement).
+    LineCatalogue and lines_from). Their option driver places them on a
+    driver of the configuration (see _load_placement).
     """
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
-    ngalaxies = len(cfg['galaxies'])
-    with parseutils.config_path('galaxies'):
-        galaxies = gbkfit.model.galaxy_parser.load(
-            _without_driver(cfg['galaxies']),
-            catalogue=[catalogue] * ngalaxies)
-    nobservations = len(cfg['observations'])
-    with parseutils.config_path('observations'):
-        observations = gbkfit.observation.observation_parser.load(
-            _without_driver(cfg['observations']),
-            catalogue=[catalogue] * nobservations)
+    with gbkfit.model.lines_from(catalogue):
+        with parseutils.config_path('galaxies'):
+            galaxies = gbkfit.model.galaxy_parser.load(
+                _without_driver(cfg['galaxies']))
+        with parseutils.config_path('observations'):
+            observations = gbkfit.observation.observation_parser.load(
+                _without_driver(cfg['observations']))
     with parseutils.config_path('depth_order'):
         depth_order = _load_depth_order(cfg.get('depth_order'))
     return gbkfit.observation.ObservationGroup(

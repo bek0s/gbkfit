@@ -396,13 +396,6 @@ class SlitlessSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetSlitlessSpectra | None = None
     ) -> 'SlitlessSpectra':
-        info = dict(info)
-        parseutils.load_option_and_update_info(
-            trace_parser, info, 'trace', required=True)
-        parseutils.load_option_and_update_info(
-            aperture_parser, info, 'aperture')
-        parseutils.load_option_and_update_info(
-            exposure_parser, info, 'exposures')
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod

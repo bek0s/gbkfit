@@ -9,7 +9,7 @@ first voxel.
 
 import abc
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal, Self, TypeAlias
+from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 from annotated_types import Ge, Gt, Le
@@ -112,9 +112,6 @@ class Depth(parseutils.Serializable):
                 f"grid or twice their bounding radius): their density "
                 f"beyond its ends is lost; its extent 'galaxy' holds it")
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
-
-
-depth_parser = parseutils.BasicParser(Depth)
 
 
 class LineOfSight(parseutils.TypedSerializable, abc.ABC):
@@ -266,11 +263,6 @@ class Grid(LineOfSight):
     def type() -> str:
         return 'grid'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(depth_parser, info, 'depth')
-        return super().load(info)
-
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), depth=self._depth.dump())
 
@@ -335,11 +327,6 @@ class Transfer(LineOfSight):
     @staticmethod
     def type() -> str:
         return 'transfer'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(depth_parser, info, 'depth')
-        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         return dict(

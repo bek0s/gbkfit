@@ -12,7 +12,7 @@ from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail, _moments, _orbit_outputs
 from ._detail import Rota, Rval, Step
@@ -114,9 +114,6 @@ class RegionMoments(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetRegionMoments | None = None
     ) -> 'RegionMoments':
-        if dataset is None:
-            parseutils.load_option_and_update_info(
-                regions_parser, info, 'regions', required=True)
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod

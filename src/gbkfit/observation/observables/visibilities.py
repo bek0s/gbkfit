@@ -11,7 +11,7 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, parseutils, unitutils
+from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
@@ -154,9 +154,6 @@ class Visibilities(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetVisibilities | None = None
     ) -> 'Visibilities':
-        if dataset is None and 'coverage' in info:
-            info['coverage'] = parseutils.load_option(
-                UVCoverage.load, info, 'coverage')
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod

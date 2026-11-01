@@ -8,7 +8,7 @@ from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
 from ._detail import Rota, Rval, Step
@@ -86,9 +86,6 @@ class RegionSpectra(Observable):
             cls, info: dict[str, Any],
             dataset: DatasetRegionSpectra | None = None
     ) -> 'RegionSpectra':
-        if dataset is None:
-            parseutils.load_option_and_update_info(
-                regions_parser, info, 'regions', required=True)
         return _detail.load_observable(cls, info, dataset, 2)
 
     @classmethod

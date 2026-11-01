@@ -4,9 +4,9 @@ component at its own lines, of coefficients that are traits of its disk.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Any, Self
+from typing import Any
 
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from ..roles import Opacity, opacity_parser
 from ..traits import RPTrait, rpt_parser
@@ -67,24 +67,6 @@ class LineOpacity(Opacity):
     @staticmethod
     def type() -> str:
         return 'line'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        # (the traits of one line, or a mapping of lines to theirs)
-        coefficients = info.get('coefficients')
-        if coefficients is not None:
-            with parseutils.config_path('coefficients'):
-                if isinstance(coefficients, Mapping) \
-                        and not isinstance(coefficients.get('type'), str):
-                    loaded = {}
-                    for name, traits in coefficients.items():
-                        with parseutils.config_path(name):
-                            loaded[name] = rpt_parser.load(traits)
-                    info['coefficients'] = loaded
-                else:
-                    info['coefficients'] = rpt_parser.load(coefficients)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         coefficients = self._coefficients

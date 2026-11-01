@@ -10,8 +10,8 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import (
     Band, BandEmission, DataUnit, Extras, GalaxyState, LightUnit,
-    LineCatalogue, Scene, band_parser)
-from gbkfit.model.components.roles import load_band
+    Scene, band_parser)
+from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
 from gbkfit.utils import gridutils, parseutils, unitutils
@@ -25,7 +25,7 @@ from .observables import (
     FluxScale, HostModelData, ModelData, Observable, ObservablePlan,
     observable_parser)
 from .observation import Observation
-from .weights import Weights, weights_geometry, weights_parser
+from .weights import Weights, weights_geometry
 
 
 __all__ = [
@@ -116,11 +116,11 @@ class ObservationSky(Observation):
         The names of the emission lines it sees (e.g. the line of the
         data); all by default.
     band : str or Band, optional
-        The band of an image, or the name of a band of the catalogue (of
-        GBKFIT, or in configurations of the configuration, see
-        LineCatalogue): it sees the components that emit in every
-        band or in it (see BandEmission), and dust of an extinction law
-        dims them at its rest wavelength (see Galaxy).
+        The band of an image, or the name of a band of the catalogue in
+        use (that of GBKFIT, or of a configuration, see lines_from): it
+        sees the components that emit in every band or in it (see
+        BandEmission), and dust of an extinction law dims them at its
+        rest wavelength (see Galaxy).
     pixel_weights : Weights, optional
         The weights of the pixels of its data (e.g. less weight near the
         minor axis of a disk); none by default.
@@ -206,27 +206,19 @@ class ObservationSky(Observation):
         return 'sky'
 
     @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> 'ObservationSky':
+    def load(cls, info: dict[str, Any]) -> 'ObservationSky':
         """
         Load an observation from its configuration.
 
-        Its band is the name
-        of a band of the catalogue, or a band (its name and wavelength).
         Its data are a dataset of the dataset class of its observable
         (see e.g. DatasetPixelSpectra.from_files, whose options outliers
-        and mask_whole_spectra clean them).
+        and mask_whole_spectra clean them), which gives the observable
+        some of its options (see Observable.from_data).
 
         Parameters
         ----------
         info : dict
             The configuration.
-        catalogue : LineCatalogue, optional
-            The catalogue of the names of bands; that of GBKFIT by
-            default.
 
         Returns
         -------
@@ -238,28 +230,11 @@ class ObservationSky(Observation):
         ConfigError
             If the configuration has an error.
         """
-        if info.get('band') is not None:
-            with parseutils.config_path('band'):
-                info['band'] = load_band(
-                    info['band'],
-                    catalogue if catalogue is not None else LineCatalogue())
-        # The data give the observable some of its options (see
-        # Observable.from_data)
+        info = dict(info)
         parseutils.load_option_and_update_info(dataset_parser, info, 'data')
-        dataset = info.get('data')
         parseutils.load_option_and_update_info(
-            likelihood_parser, info, 'likelihood')
-        parseutils.load_option_and_update_info(
-            line_of_sight_parser, info, 'line_of_sight', required=True)
-        parseutils.load_option_and_update_info(
-            foreground_parser, info, 'foreground')
-        parseutils.load_option_and_update_info(
-            weights_parser, info, 'pixel_weights')
-        parseutils.load_option_and_update_info(
-            instrument_parser, info, 'instrument')
-        parseutils.load_option_and_update_info(
-            observable_parser, info, 'observable', dataset=dataset)
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
+            observable_parser, info, 'observable', dataset=info.get('data'))
+        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -338,7 +313,8 @@ class ObservationSky(Observation):
     ):
         check_options(ObservationSky.__init__, locals())
         if isinstance(band, str):
-            band = LineCatalogue().band(band)
+            with parseutils.config_path('band'):
+                band = catalogue_in_use().band(band)
         if components is not None:
             components = tuple(components)
             check_component_names(components)

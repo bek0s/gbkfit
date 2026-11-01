@@ -4,7 +4,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import fitsutils, gridutils, parseutils
+from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.datafiles import ErrorKind
 from gbkfit.utils.typeutils import DataFile
@@ -59,13 +59,6 @@ class DatasetRegionSpectra(Dataset):
     @staticmethod
     def type() -> str:
         return 'region_spectra'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'DatasetRegionSpectra':
-        info = dict(info)
-        parseutils.load_option_and_update_info(
-            regions_parser, info, 'regions', required=True)
-        return _detail.load_with_files(cls, info)
 
     @classmethod
     def from_files(

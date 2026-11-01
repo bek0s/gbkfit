@@ -10,7 +10,6 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
-from gbkfit.instrument import lsf_parser, psf_parser
 from gbkfit.utils import (
     fitsutils, gridutils, parseutils, tableutils, unitutils)
 from gbkfit.utils.parseutils import ConfigError
@@ -21,11 +20,6 @@ if TYPE_CHECKING:
 
 
 _log = logging.getLogger(__name__)
-
-# The parsers of the correlations of the noise of a data item, by their
-# options (see Data)
-_CORRELATION_PARSERS = dict(
-    spatial_correlation=psf_parser, spectral_correlation=lsf_parser)
 
 # The data items of moments (and the options of their files): the central
 # moments of the orders 0 to 7 (moment0, the flux; moment1, the mean
@@ -76,28 +70,6 @@ def _logged(before: 'Dataset', after: 'Dataset', what: str) -> 'Dataset':
     return after
 
 
-def load_correlations(info: dict[str, Any]) -> None:
-    """
-    Load the correlations of the noise of a data item in the options of
-    its files (spatial_correlation and spectral_correlation; see
-    DataFiles), in place.
-    """
-    for key, parser in _CORRELATION_PARSERS.items():
-        parseutils.load_option_and_update_info(parser, info, key)
-
-
-def load_moment_correlations(info: dict[str, Any]) -> None:
-    """
-    Load the correlations of the noise of the moments in the options of
-    their files (see MOMENT_ITEMS and load_correlations), in place.
-    """
-    for name in MOMENT_ITEMS:
-        if isinstance(info.get(name), Mapping):
-            info[name] = dict(info[name])
-            with parseutils.config_path(name):
-                load_correlations(info[name])
-
-
 def moment_options(values: Mapping[str, Any]) -> dict[str, Any]:
     """
     Return the options of the moments given among the arguments of a
@@ -128,21 +100,17 @@ def split_moments(
 def load_with_files(
         cls: type['Dataset'],
         info: dict[str, Any],
-        ndim: int | None = None
+        ndim: int
 ) -> 'Dataset':
     """
     Return the dataset of class cls that its from_files makes with the
-    options of its configuration, with its spectral axis, if it has one
-    (see spectral_axis). With ndim, the options of the world coordinates
-    with one value per axis (on the sky, of a dataset with a spectral axis)
-    are made lists (see parseutils.sanitize_dimensional_options).
+    options of its configuration, in which those of the world coordinates
+    with one value per axis (ndim of them: on the sky, of a dataset with a
+    spectral axis) are made lists (see
+    parseutils.sanitize_dimensional_options).
     """
-    if ndim is not None:
-        parseutils.sanitize_dimensional_options(
-            info, dict(step=float, rpix=float, rval=float), ndim)
-    if cls.spectral_axis is not None:
-        parseutils.load_option_and_update_info(
-            gridutils.spectral_axis_parser, info, 'spectral')
+    parseutils.sanitize_dimensional_options(
+        info, dict(step=float, rpix=float, rval=float), ndim)
     return cls.from_files(
         **parseutils.parse_options_for_callable(info, cls.from_files))
 

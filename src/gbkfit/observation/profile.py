@@ -9,9 +9,9 @@ from astropy.table import Table
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
 from gbkfit.model import (
-    DataUnit, Extras, GalaxyFunctions, GalaxyState, LineCatalogue)
+    DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils, parseutils, unitutils
+from gbkfit.utils import gridutils, unitutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import Unit
 from ._scene import SeenGalaxies
@@ -105,40 +105,6 @@ class ObservationProfile(Observation):
     @staticmethod
     def type() -> str:
         return 'profile'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> 'ObservationProfile':
-        """
-        Load a profile observation from its configuration. The catalogue is
-        not used (a profile has no lines).
-
-        Parameters
-        ----------
-        info : dict
-            The configuration.
-        catalogue : LineCatalogue, optional
-            Unused.
-
-        Returns
-        -------
-        ObservationProfile
-            The observation.
-
-        Raises
-        ------
-        ConfigError
-            If the configuration has an error.
-        """
-        if info.get('data') is not None:
-            with parseutils.config_path('data'):
-                info['data'] = DatasetProfile.load(dict(info['data']))
-        parseutils.load_option_and_update_info(
-            likelihood_parser, info, 'likelihood')
-        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

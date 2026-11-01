@@ -262,12 +262,6 @@ class RPTraitImage(RPTrait):
         # parameters)
         return RPT_UID_MAP
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'RPTraitImage':
-        info = dict(info)
-        parseutils.load_option_and_update_info(psf_parser, info, 'psf')
-        return super().load(info)
-
     def dump(self) -> dict[str, Any]:
         if self._file is None:
             raise TypeError(

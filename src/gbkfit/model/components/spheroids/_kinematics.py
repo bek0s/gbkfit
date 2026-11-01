@@ -276,12 +276,6 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     def type() -> str:
         return 'traits'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'SpheroidTraitsKinematics':
-        KinematicTraits.load_options(info)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(self) -> dict[str, Any]:
         info = super().dump() | self._traits.dump()
         if self._nodes is not None:

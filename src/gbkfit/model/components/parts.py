@@ -6,7 +6,7 @@ and the vertical equilibrium of disks.
 
 import abc
 from collections.abc import Sequence
-from typing import Any, Literal, Self
+from typing import Any, Literal
 
 from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
@@ -143,15 +143,6 @@ class Density(parseutils.Serializable):
         for each polar trait.
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(
-            traits.rpt_parser, info, 'ptraits', required=True)
-        parseutils.load_option_and_update_info(
-            traits.rht_parser, info, 'htraits')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(self) -> dict[str, Any]:
         info = dict(ptraits=_dump_traits(traits.rpt_parser, self._ptraits))
         if self._htraits is not None:
@@ -227,17 +218,6 @@ class KinematicTraits:
         takes its self_gravitating pressure support without
         pressure_density (see traits.VHTraitMass).
     """
-
-    @staticmethod
-    def load_options(info: dict[str, Any]) -> None:
-        """Load the traits of the options of kinematics, in place."""
-        for parser, key, required in (
-                (traits.vpt_parser, 'vptraits', True),
-                (traits.dpt_parser, 'dptraits', True),
-                (traits.vht_parser, 'vhtraits', False),
-                (traits.dht_parser, 'dhtraits', False)):
-            parseutils.load_option_and_update_info(
-                parser, info, key, required=required)
 
     def dump(self) -> dict[str, Any]:
         """Return the options of the traits."""
@@ -463,14 +443,6 @@ class DiskTraitsKinematics(parseutils.TypedSerializable):
     def type() -> str:
         return 'traits'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        KinematicTraits.load_options(info)
-        parseutils.load_option_and_update_info(
-            equilibrium_parser, info, 'equilibrium')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | self._traits.dump()
         if self._equilibrium is not None:
@@ -531,12 +503,6 @@ class ConeTraitsKinematics(parseutils.TypedSerializable):
     @staticmethod
     def type() -> str:
         return 'traits'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        KinematicTraits.load_options(info)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | self._traits.dump()

@@ -127,7 +127,7 @@ def test_component_loads(name):
 @pytest.mark.parametrize('name, part, key', REQUIRED_TRAITS)
 def test_required_traits_cannot_be_missing(name, part, key):
     message = part_error(name, part, **{key: ...})
-    assert f"option '{key}' is required but not provided" in message
+    assert f"missing required options: '{key}'" in message
 
 
 @pytest.mark.parametrize('name, part, key', REQUIRED_TRAITS)
@@ -198,8 +198,7 @@ def test_a_point_needs_emission():
     # A point has no depth, so it has no opacity
     message = load_error(dict(type='point'))
     assert message == (
-        "components[0] [point]: option 'emission' is required but not "
-        "provided")
+        "components[0] [point]: missing required options: 'emission'")
 
 
 @pytest.mark.parametrize('name', COMPONENTS)

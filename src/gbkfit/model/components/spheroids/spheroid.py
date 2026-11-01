@@ -7,7 +7,7 @@ shape.
 import abc
 import functools
 import math
-from typing import Any, Literal, Self
+from typing import Any, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -34,7 +34,7 @@ from .._units import DataUnit, mass_per_unit
 from ..base import (
     Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
 from ..geometries import Geometry, geometry_pdesc
-from ..lines import Band, LineCatalogue
+from ..lines import Band
 from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
 from ._jeans import JeansKinematics
@@ -527,24 +527,6 @@ class Spheroid(Component):
     @staticmethod
     def type() -> str:
         return 'spheroid'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
-        parseutils.load_option_and_update_info(
-            light_profile_parser, info, 'profile', required=True)
-        parseutils.load_option_and_update_info(
-            spheroid_shape_parser, info, 'shape')
-        parseutils.load_option_and_update_info(
-            spheroid_kinematics_parser, info, 'kinematics')
-        parseutils.load_option_and_update_info(
-            emission_parser, info, 'emission', required=True,
-            catalogue=catalogue)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | dump_name(self) \

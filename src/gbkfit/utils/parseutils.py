@@ -557,8 +557,11 @@ def parse_options_for_callable(
     configuration (see resolve_path), a FitsFile is a filename or a dict
     with the filename (file) and the HDU (hdu), a record (a NamedTuple,
     e.g. a Column) is a dict of its fields, a Quantity is a dict with its
-    value and unit (e.g. {value: [1, 2], unit: kpc}), and the values of a
-    Mapping are in the forms of their type.
+    value and unit (e.g. {value: [1, 2], unit: kpc}), an object of a
+    family (e.g. a PSF) is a dict of its options with its type, one of
+    another serializable class (e.g. an Instrument) is a dict of its
+    options, and the items of a sequence and the values of a Mapping are
+    in the forms of their type.
 
     Parameters
     ----------
@@ -616,7 +619,13 @@ def from_config(value: Any, type_: Any) -> Any:
     """
     Return the value of an option of a type annotation from the form a
     configuration gives it in (see parse_options_for_callable); values in
-    no form of their own are returned as they are.
+    no form of their own are returned as they are (e.g. numbers, and
+    objects given in Python).
+
+    A dict is in the form of a member of a union annotation that takes
+    dicts: a member of a family, if the dict has a type (or no other
+    member takes dicts), or else the first other one. A list is in the
+    form of the first sequence member: each item in that of its items.
 
     Parameters
     ----------
@@ -635,30 +644,130 @@ def from_config(value: Any, type_: Any) -> Any:
     ConfigError
         If the value is in a form of its own and invalid.
     """
-    for member in typeutils.union_members(type_):
-        if member == typeutils.FilePath and isinstance(value, str):
-            return resolve_path(value)
-        if member == typeutils.FitsFile and isinstance(value, str | Mapping):
-            # (without an HDU, the file alone: its readers take their
-            # first HDU, or the first with data, see datafiles)
-            file, hdu = parse_file(value)
-            return (file, hdu) \
-                if isinstance(value, Mapping) and 'hdu' in value else file
-        if member == typeutils.DataFile and isinstance(value, str | Mapping):
-            return _data_file(value)
-        if is_record(member) and isinstance(value, Mapping):
-            return member(**parse_options_for_callable(dict(value), member))
-        if typing.get_origin(member) is Mapping \
-                and isinstance(value, Mapping):
-            item_type = typing.get_args(member)[1]
-            items = {}
-            for key, item in value.items():
-                with config_path(key):
-                    items[key] = from_config(item, item_type)
-            return items
-        if member is astropy.units.Quantity and isinstance(value, Mapping):
-            return _quantity(value)
+    # (an object given in Python, which may be a mapping, e.g. a Dataset)
+    if isinstance(value, Serializable):
+        return value
+    members = typeutils.union_members(type_)
+    if isinstance(value, str):
+        return _from_string(value, members)
+    if isinstance(value, Mapping):
+        return _from_dict(value, members)
+    if isinstance(value, list | tuple):
+        return _from_list(value, members)
     return value
+
+
+def _from_string(value: str, members: tuple[Any, ...]) -> Any:
+    """Return the value of a string, of the members of a union annotation."""
+    for member in members:
+        if member in (typeutils.FilePath, typeutils.FitsFile):
+            return resolve_path(value)
+        if member == typeutils.DataFile:
+            return _data_file(value)
+    return value
+
+
+def _from_dict(value: Mapping[str, Any], members: tuple[Any, ...]) -> Any:
+    """Return the value of a dict, of the members of a union annotation."""
+    forms = [x for x in members if _takes_dicts(x)]
+    parsers = [p for p in map(_family_parser, forms) if p is not None]
+    others = [x for x in forms if _family_parser(x) is None]
+    if parsers and ('type' in value or not others):
+        return parsers[0].load(dict(value))
+    if not others:
+        return value
+    member = others[0]
+    if member == typeutils.FitsFile:
+        # (without an HDU, the file alone: its readers take their first
+        # HDU, or the first with data, see datafiles)
+        file, hdu = parse_file(dict(value))
+        return (file, hdu) if 'hdu' in value else file
+    if member == typeutils.DataFile:
+        return _data_file(value)
+    if member is astropy.units.Quantity:
+        return _quantity(value)
+    if typing.get_origin(member) in (dict, Mapping):
+        item_type = typing.get_args(member)[1]
+        items = {}
+        for key, item in value.items():
+            with config_path(key):
+                items[key] = _from_item(item, item_type)
+        return items
+    if is_record(member):
+        return member(**parse_options_for_callable(dict(value), member))
+    return member.load(dict(value))
+
+
+def _from_list(value: list | tuple, members: tuple[Any, ...]) -> Any:
+    """Return the value of a list, of the members of a union annotation."""
+    item_types = [x for x in map(_item_type, members) if x is not None]
+    if not item_types:
+        return value
+    items = []
+    for i, item in enumerate(value):
+        with config_path(i):
+            items.append(_from_item(item, item_types[0]))
+    return tuple(items) if isinstance(value, tuple) else items
+
+
+def _from_item(value: Any, type_: Any) -> Any:
+    """
+    Return the value of an item of a sequence or a Mapping of an
+    annotation. An item of objects given as dicts (e.g. of PSFs) is
+    checked against it, so that an error names the item.
+
+    Raises
+    ------
+    ConfigError
+        If the item is invalid.
+    """
+    value = from_config(value, type_)
+    if any(map(_takes_dicts, typeutils.union_members(type_))) \
+            and (problem := typeutils.problem(value, type_)):
+        raise ConfigError(problem)
+    return value
+
+
+def _takes_dicts(type_: Any) -> bool:
+    """
+    Return whether configurations give the values of a member of a union
+    annotation as dicts (see from_config).
+    """
+    return (
+        type_ in (typeutils.FitsFile, typeutils.DataFile)
+        or type_ is astropy.units.Quantity
+        or typing.get_origin(type_) in (dict, Mapping)
+        or is_record(type_)
+        or _family_parser(type_) is not None
+        or (isinstance(type_, type) and issubclass(type_, Serializable)
+            and not inspect.isabstract(type_)))
+
+
+def _item_type(type_: Any) -> Any:
+    """
+    Return the annotation of the items of a sequence annotation (e.g.
+    ``Sequence[PSF]``, or ``tuple[PSF, ...]``), or None if it is not one.
+    """
+    origin, args = typing.get_origin(type_), typing.get_args(type_)
+    if origin in (list, Sequence) and args:
+        return args[0]
+    if origin is tuple and len(args) == 2 and args[1] is Ellipsis:
+        return args[0]
+    return None
+
+
+def _family_parser(type_: Any) -> 'TypedParser | None':
+    """
+    Return the parser of the family whose base is an annotation (e.g.
+    that of the PSFs, for PSF; see gbkfit._catalogue), or None if it is
+    the base of none.
+    """
+    if not (isinstance(type_, type) and issubclass(type_, TypedSerializable)):
+        return None
+    # (the catalogue imports every family, and so this module)
+    from gbkfit._catalogue import family_of
+    family = family_of(type_)
+    return None if family is None else family.parser
 
 
 def is_record(type_: Any) -> bool:
@@ -885,8 +994,13 @@ class Serializable(abc.ABC):
         Load an object from its configuration.
 
         By default, the options are the parameters of one of its
-        config_constructors (see config_constructor and
-        parse_options_for_callable).
+        config_constructors (see config_constructor), each in the form
+        of its annotation, objects of other classes included (e.g. the
+        PSF of an Instrument; see parse_options_for_callable). A class
+        overrides it only for options in other forms (e.g. named
+        geometries) or loaded with what its caller gives (e.g. the
+        catalogue of lines of an emission), and then calls it. The
+        configuration is not changed.
 
         Parameters
         ----------

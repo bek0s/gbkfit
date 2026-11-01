@@ -9,7 +9,7 @@ import astropy.units
 import numpy as np
 
 from gbkfit.driver import Driver
-from gbkfit.utils import gridutils, iterutils, parseutils
+from gbkfit.utils import gridutils, iterutils
 from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._detail import dump_geometry, dump_name
@@ -20,9 +20,9 @@ from .._nodal import (
 from .. import _units
 from .._units import DataUnit
 from ..base import Component
-from ..lines import Band, Bands, LineCatalogue, Lines
+from ..lines import Band, Bands, Lines
 from ..parts import (
-    ConeTraitsKinematics, Density, cone_kinematics_parser, density_parser)
+    ConeTraitsKinematics, Density, cone_kinematics_parser)
 from ..roles import (
     DustOpacity, Emission, LineEmission, Opacity, emission_parser,
     opacity_parser)
@@ -33,7 +33,6 @@ __all__ = [
     'CONE_TRAITS',
     'cone_plan',
     'dump_cone_component',
-    'load_cone_component',
     'make_cone'
 ]
 
@@ -75,29 +74,6 @@ CONE_TRAITS = TraitTable('cone', dict(
         traits.SPTraitRadialRange, traits.SPTraitAzimuthalRange,
         traits.SPTraitNWAzimuthalRange)),
     ('tan', 'out'), ('iso',))
-
-
-def load_cone_component(
-        cls: type[Component],
-        info: dict[str, Any],
-        catalogue: LineCatalogue | None
-) -> dict[str, Any]:
-    """
-    Return the options of a cone component of class cls, with its parts,
-    roles and traits loaded, and the lines its emission names from the
-    catalogue (see Emission.load). The __init__ of cls declares the
-    options.
-    """
-    for parser, key, required in (
-            (density_parser, 'density', True),
-            (cone_kinematics_parser, 'kinematics', False),
-            (opacity_parser, 'opacity', False),
-            (traits.spt_parser, 'sptraits', False)):
-        parseutils.load_option_and_update_info(
-            parser, info, key, required=required)
-    parseutils.load_option_and_update_info(
-        emission_parser, info, 'emission', catalogue=catalogue)
-    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 def dump_cone_component(

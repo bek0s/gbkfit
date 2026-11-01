@@ -151,19 +151,6 @@ class MassSpheroid(MassComponent):
     def type() -> str:
         return 'spheroid'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'MassSpheroid':
-        parseutils.load_option_and_update_info(
-            spheroid_profile_parser, info, 'profile', required=True)
-        parseutils.load_option_and_update_info(
-            spheroid_shape_parser, info, 'shape')
-        parseutils.load_option_and_update_info(
-            halo_response_parser, info, 'response')
-        parseutils.load_option_and_update_info(
-            dark_fraction_parser, info, 'dark_fraction')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(self) -> dict[str, Any]:
         info = super().dump() | dict(
             profile=spheroid_profile_parser.dump(self._profile),

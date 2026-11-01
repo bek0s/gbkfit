@@ -55,12 +55,6 @@ class Lens(parseutils.Serializable):
         pdescs).
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Lens':
-        parseutils.load_option_and_update_info(
-            lens_mass_parser, info, 'masses', required=True)
-        return super().load(info)
-
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -281,11 +275,6 @@ class Foreground(parseutils.Serializable):
     lens : Lens, optional
         The gravitational lens, if any.
     """
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Foreground':
-        parseutils.load_option_and_update_info(lens_parser, info, 'lens')
-        return super().load(info)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

@@ -13,7 +13,7 @@ import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.typeutils import FilePath
 from ._detail import (
@@ -23,7 +23,7 @@ from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
 from .geometries import Geometry, geometry_pdesc
-from .lines import Band, LineCatalogue, LinePlacement
+from .lines import Band, LinePlacement
 from .points import band_light, line_light
 from .roles import (
     STARS, Emission, LineEmission, emission_parser)
@@ -390,17 +390,6 @@ class Particles(Component):
     @staticmethod
     def type() -> str:
         return 'particles'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> 'Particles':
-        parseutils.load_option_and_update_info(
-            emission_parser, info, 'emission', required=True,
-            catalogue=catalogue)
-        return super().load(info)
 
     @classmethod
     def from_file(

@@ -21,7 +21,6 @@ from gbkfit.fitting.problem import FitCounts, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.objective import Objective
 from gbkfit.params import ParamSpace, Prior
-from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 
 
@@ -90,13 +89,6 @@ class FitterMultiStart(Fitter):
     def fit_param_class(self) -> FitParamClass:
         # (the options of the local fitter)
         return self._local.fit_param_class()
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'FitterMultiStart':
-        info = dict(info)
-        info['local'] = parseutils.load_option(
-            fitter_parser.load, info, 'local', required=True)
-        return typing.cast(FitterMultiStart, super().load(info))
 
     def libraries(self) -> tuple[str, ...]:
         return self._local.libraries()

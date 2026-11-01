@@ -59,9 +59,7 @@ class DatasetPixelMoments(Dataset):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'DatasetPixelMoments':
-        info = dict(info)
-        _detail.load_moment_correlations(info)
-        return _detail.load_with_files(cls, info, cls.ndim)
+        return _detail.load_with_files(cls, dict(info), cls.ndim)
 
     @classmethod
     def from_files(

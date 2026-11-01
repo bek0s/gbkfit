@@ -2,6 +2,7 @@
 Tests for the parsing of configurations.
 """
 
+import copy
 import re
 import typing
 from collections.abc import Mapping, Sequence
@@ -297,6 +298,27 @@ def test_configurations_call_the_constructor_of_their_options(tmp_path):
             scale=dict(value=2, unit='arcsec')))
     assert beam.file == (str(tmp_path / 'beam.fits'), 1)
     assert beam.scale == 2 * u.arcsec
+
+
+def test_options_of_classes_are_loaded_by_their_annotation():
+    # The PSF of an instrument (of a family), and the PSFs of a sum (a
+    # sequence of them); the configuration is not changed (audit
+    # 2026-10-31 #41)
+    from gbkfit.instrument import Instrument, PSFSum
+    info = dict(psf=dict(type='sum', weights=[1, 1], psfs=[
+        dict(type='gauss', sigma=1), dict(type='point')]))
+    original = copy.deepcopy(info)
+    psf = Instrument.load(info).psf()
+    assert isinstance(psf, PSFSum)
+    assert [x['type'] for x in psf.dump()['psfs']] == ['gauss', 'point']
+    assert info == original
+    with pytest.raises(parseutils.ConfigError) as error:
+        Instrument.load(dict(psf=dict(type='sum', weights=[1], psfs=[
+            dict(type='gaus', sigma=1)])))
+    assert str(error.value).startswith("psf.psfs[0]: unknown type 'gaus'")
+    with pytest.raises(parseutils.ConfigError) as error:
+        Instrument.load(dict(psf=dict(type='sum', weights=[1], psfs=[5])))
+    assert str(error.value) == "psf.psfs[0]: must be of type PSF; it is 5"
 
 
 @pytest.mark.parametrize('info, message', [

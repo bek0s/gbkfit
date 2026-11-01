@@ -21,7 +21,7 @@ from .components.base import Component, DepthAxis, OpacityCubes
 from .components.cones import Cone
 from .components.disks import Disk
 from .components.geometries import Geometry, geometry_parser
-from .components.lines import Band, LineCatalogue
+from .components.lines import Band
 from .components.particles import Particles
 from .components.points import Point
 from .components.roles import BandEmission
@@ -123,21 +123,16 @@ class Galaxy(parseutils.Serializable):
     config_options = {'geometries': Sequence[Geometry]}
 
     @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
+    def load(cls, info: dict[str, Any]) -> Self:
         """
-        Load a galaxy from its configuration.
+        Load a galaxy from its configuration, whose components can name
+        its geometries (see config_options), and the lines of the
+        catalogue in use (see lines_from).
 
         Parameters
         ----------
         info : dict
             The configuration.
-        catalogue : LineCatalogue, optional
-            The catalogue of the lines that the emission of its components
-            names (see Emission.load); that of GBKFIT by default.
 
         Returns
         -------
@@ -149,24 +144,13 @@ class Galaxy(parseutils.Serializable):
         ConfigError
             If the configuration has an error.
         """
+        info = dict(info)
         if info.get('geometry') is not None:
             info['geometry'] = parseutils.load_option(
                 geometry_parser.load, info, 'geometry')
         _detail.load_geometries(
             info, ('components',), info.get('geometry') or Geometry())
-        components = info.get('components')
-        parseutils.load_option_and_update_info(
-            component_parser, info, 'components',
-            catalogue=[catalogue] * len(components)
-            if iterutils.is_sequence(components) else catalogue)
-        parseutils.load_option_and_update_info(
-            mass_component_parser, info, 'mass')
-        parseutils.load_option_and_update_info(
-            distance_parser, info, 'distance')
-        parseutils.load_option_and_update_info(
-            gravity_parser, info, 'gravity')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
+        return super().load(info)
 
     def dump(self) -> dict[str, Any]:
         info = dict(name=self._name) if self._name is not None else {}

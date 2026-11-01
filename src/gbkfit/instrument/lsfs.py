@@ -673,12 +673,6 @@ class LSFSum(LSF):
     def type() -> str:
         return 'sum'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'LSFSum':
-        parseutils.load_option_and_update_info(
-            lsf_parser, info, 'lsfs', required=True)
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
-
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -742,12 +736,6 @@ class LSFConvolution(LSF):
     @staticmethod
     def type() -> str:
         return 'convolution'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'LSFConvolution':
-        parseutils.load_option_and_update_info(
-            lsf_parser, info, 'lsfs', required=True)
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

@@ -60,14 +60,6 @@ class DatasetRegionMoments(Dataset):
         return 'region_moments'
 
     @classmethod
-    def load(cls, info: dict[str, Any]) -> 'DatasetRegionMoments':
-        info = dict(info)
-        parseutils.load_option_and_update_info(
-            regions_parser, info, 'regions', required=True)
-        _detail.load_moment_correlations(info)
-        return super().load(info)
-
-    @classmethod
     def from_files(
             cls,
             regions: Regions,

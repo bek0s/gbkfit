@@ -54,13 +54,11 @@ def load_observable(
     Load an observable of class cls from its configuration: with its
     __init__, or with its from_data and the given dataset, whose options
     it must not repeat. The options of the grid with one value per axis
-    (on the sky, ndim of them) are made lists, and its spectral axis is
-    loaded (see gridutils.SpectralAxis).
+    (on the sky, ndim of them) are made lists.
     """
+    info = dict(info)
     parseutils.sanitize_dimensional_options(info, dict(
         size=int, step=float, rpix=float, rval=float), ndim)
-    parseutils.load_option_and_update_info(
-        gridutils.spectral_axis_parser, info, 'spectral')
     if dataset is None:
         return cls(**parseutils.parse_options_for_callable(
             info, cls.__init__))

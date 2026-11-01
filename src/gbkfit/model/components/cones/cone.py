@@ -3,7 +3,7 @@ The cone component: shells around an apex, with traits.
 """
 
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal
 
 import numpy as np
 
@@ -17,7 +17,7 @@ from .._native import make_bands, make_lines
 from .._nodal import INTERPOLATIONS
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
-from ..lines import Band, LineCatalogue
+from ..lines import Band
 from ..parts import ConeTraitsKinematics, Density
 from ..roles import STARS, Emission, Opacity
 from .._detail import geometry_desc
@@ -89,14 +89,6 @@ class Cone(Component):
     @staticmethod
     def type() -> str:
         return 'cone'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
-        return cls(**_detail.load_cone_component(cls, info, catalogue))
 
     def dump(self) -> dict[str, Any]:
         return _detail.dump_cone_component(

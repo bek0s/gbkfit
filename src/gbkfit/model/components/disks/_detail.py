@@ -23,7 +23,7 @@ from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..geometries import Geometry
-from ..lines import Band, Bands, LineCatalogue, Lines
+from ..lines import Band, Bands, Lines
 from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk
@@ -31,14 +31,13 @@ from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
 from .opacity import LineOpacity
 from ..parts import (
-    Density, DiskTraitsKinematics, density_parser, disk_kinematics_parser)
+    Density, DiskTraitsKinematics, disk_kinematics_parser)
 
 
 __all__ = [
     'DiskComponentPlan',
     'disk_plan',
     'dump_disk_component',
-    'load_disk_component',
     'make_disk'
 ]
 
@@ -70,30 +69,6 @@ DISK_TRAITS = TraitTable('disk', {
         zpt=traits.zpt_parser, spt=traits.spt_parser).items()},
     ('tan', 'rad', 'ver', 'away', 'out', 'los', 'plane'),
     tuple(traits.DPT_DIRECTIONS))
-
-
-def load_disk_component(
-        cls: type[Component],
-        info: dict[str, Any],
-        catalogue: LineCatalogue | None
-) -> dict[str, Any]:
-    """
-    Return the options of a disk component of class cls, with its parts,
-    roles and traits loaded, and the lines its emission names from the
-    catalogue (see Emission.load). The __init__ of cls declares the
-    options.
-    """
-    for parser, key, required in (
-            (density_parser, 'density', True),
-            (disk_kinematics_parser, 'kinematics', False),
-            (opacity_parser, 'opacity', False),
-            (traits.zpt_parser, 'zptraits', False),
-            (traits.spt_parser, 'sptraits', False)):
-        parseutils.load_option_and_update_info(
-            parser, info, key, required=required)
-    parseutils.load_option_and_update_info(
-        emission_parser, info, 'emission', catalogue=catalogue)
-    return parseutils.parse_options_for_callable(info, cls.__init__)
 
 
 def dump_disk_component(

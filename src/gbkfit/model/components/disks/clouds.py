@@ -3,7 +3,7 @@ The disks made of clouds (see Clouds).
 """
 
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any
 
 import astropy.units
 import numpy as np
@@ -58,10 +58,6 @@ class Clouds(parseutils.Serializable):
     ConfigError
         If cflux is not positive, or the seed is not in its range.
     """
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return dict(cflux=self._cflux, seed=self._seed)

@@ -167,14 +167,6 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
     # What it is and gives, and what it needs
     info: ClassVar[FitterInfo]
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Fitter':
-        info = dict(info)
-        if 'uncertainty' in info:
-            info['uncertainty'] = parseutils.load_option(
-                UncertaintyOptions.load, info, 'uncertainty')
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
-
     def __init__(
             self,
             seed: int,

@@ -39,15 +39,6 @@ class Instrument(parseutils.Serializable):
         The line spread function, if any.
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'Instrument':
-        parseutils.load_option_and_update_info(
-            primary_beam_parser, info, 'primary_beam')
-        parseutils.load_option_and_update_info(psf_parser, info, 'psf')
-        parseutils.load_option_and_update_info(lsf_parser, info, 'lsf')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False

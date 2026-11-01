@@ -4,8 +4,8 @@ and what they remove from the light behind them (Opacity).
 """
 
 import abc
-from collections.abc import Sequence
-from typing import Any, Self
+from collections.abc import Callable, Sequence
+from typing import Any
 
 import astropy.units
 
@@ -14,7 +14,7 @@ from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
-    Band, Bands, Line, LineCatalogue, Lines, band_parser, line_parser)
+    Band, Bands, Line, Lines, band_parser, catalogue_in_use, line_parser)
 
 
 __all__ = [
@@ -35,24 +35,21 @@ __all__ = [
 STARS = 'stars'
 
 
-def _load_line(info: Any, catalogue: LineCatalogue) -> Line:
+def _named(
+        items: Any,
+        lookup: Callable[[str], Line | Band],
+        option: str
+) -> list[Line | Band]:
     """
-    Return the line of a configuration: the line of the catalogue of the
-    given name, or a line (its name and rest).
+    Return the items of an option (one or a sequence), each name replaced
+    by its line or band of the catalogue (lookup); the error of an
+    unknown name has the path of its item (e.g. lines[1]).
     """
-    if isinstance(info, str):
-        return catalogue.line(info)
-    return line_parser.load(info)
-
-
-def load_band(info: Any, catalogue: LineCatalogue) -> Band:
-    """
-    Return the band of a configuration: the band of the catalogue of the
-    given name, or a band (its name and wavelength).
-    """
-    if isinstance(info, str):
-        return catalogue.band(info)
-    return band_parser.load(info)
+    named = []
+    for i, item in enumerate(iterutils.listify(items)):
+        with parseutils.config_path(option, i):
+            named.append(lookup(item) if isinstance(item, str) else item)
+    return named
 
 
 class Emission(parseutils.TypedSerializable, abc.ABC):
@@ -60,23 +57,7 @@ class Emission(parseutils.TypedSerializable, abc.ABC):
     The light that a component emits: its density, with a spectral shape.
     Spectral cubes see the components that emit lines, and images those
     that emit in a band.
-
-    In configurations, emission is loaded with the catalogue of the lines
-    it can name (see load).
     """
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
-        """
-        Load it from its configuration, with the catalogue of the names of
-        its lines (that of GBKFIT by default).
-        """
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
@@ -119,10 +100,10 @@ class LineEmission(Emission):
 
     Parameters
     ----------
-    lines : Sequence of str or Line, optional
-        The lines, or names of lines of the catalogue (of GBKFIT, or in
-        configurations of the configuration, see LineCatalogue; the flux
-        of each after the first, relative to the first, is a parameter
+    lines : str or Line or Sequence of them, optional
+        The lines, or names of lines of the catalogue in use (that of
+        GBKFIT, or of a configuration, see lines_from; the flux of each
+        after the first, relative to the first, is a parameter
         '{name}_ratio'); by default one line at the velocity of the
         spectral axis, whatever the line is.
     unit : str or astropy.units.UnitBase, optional
@@ -140,52 +121,14 @@ class LineEmission(Emission):
     Raises
     ------
     ConfigError
-        If there are no lines, their names repeat, or the unit is not one
-        of lines (see _units.check_line_unit).
+        If there are no lines, a name is not in the catalogue, the names
+        repeat, or the unit is not one of lines (see
+        _units.check_line_unit).
     """
 
     @staticmethod
     def type() -> str:
         return 'lines'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
-        """
-        Load it from its configuration, in which each line is the name of
-        a line of the catalogue, or a line (its name and rest).
-
-        Parameters
-        ----------
-        info : dict
-            The configuration.
-        catalogue : LineCatalogue, optional
-            The catalogue of the names; that of GBKFIT by default.
-
-        Returns
-        -------
-        LineEmission
-            The emission.
-
-        Raises
-        ------
-        ConfigError
-            If the configuration has an error, or a line is not in the
-            catalogue.
-        """
-        if catalogue is None:
-            catalogue = LineCatalogue()
-        if info.get('lines') is not None:
-            lines = iterutils.listify(info['lines'])
-            info['lines'] = []
-            for i, line in enumerate(lines):
-                with parseutils.config_path('lines', i):
-                    info['lines'].append(_load_line(line, catalogue))
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         lines = self._lines.lines()
@@ -195,13 +138,12 @@ class LineEmission(Emission):
 
     def __init__(
             self,
-            lines: Sequence[str | Line] | None = None,
+            lines: str | Line | Sequence[str | Line] | None = None,
             unit: str | astropy.units.UnitBase | None = None
     ):
         check_options(LineEmission.__init__, locals())
-        catalogue = LineCatalogue()
-        self._lines = Lines(None if lines is None else [
-            catalogue.line(x) if isinstance(x, str) else x for x in lines])
+        self._lines = Lines(None if lines is None else _named(
+            lines, catalogue_in_use().line, 'lines'))
         if STARS in self._lines.names():
             raise ConfigError(
                 f"no line can be named {STARS!r}: that is the light of "
@@ -240,10 +182,10 @@ class BandEmission(Emission):
 
     Parameters
     ----------
-    bands : Sequence of str or Band, optional
-        The bands, or names of bands of the catalogue (of GBKFIT, or in
-        configurations of the configuration, see LineCatalogue); every
-        band if None.
+    bands : str or Band or Sequence of them, optional
+        The bands, or names of bands of the catalogue in use (that of
+        GBKFIT, or of a configuration, see lines_from); every band if
+        None.
     unit : str or astropy.units.UnitBase, optional
         The physical unit of the density (that of the first band; the
         ratios have none): a flux density per solid angle (e.g.
@@ -258,52 +200,14 @@ class BandEmission(Emission):
     Raises
     ------
     ConfigError
-        If there are no bands, their names repeat, or the unit is not one
-        of bands (see _units.check_band_unit).
+        If there are no bands, a name is not in the catalogue, the names
+        repeat, or the unit is not one of bands (see
+        _units.check_band_unit).
     """
 
     @staticmethod
     def type() -> str:
         return 'band'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> Self:
-        """
-        Load it from its configuration, in which each band is the name of
-        a band of the catalogue, or a band (its name and wavelength).
-
-        Parameters
-        ----------
-        info : dict
-            The configuration.
-        catalogue : LineCatalogue, optional
-            The catalogue of the names; that of GBKFIT by default.
-
-        Returns
-        -------
-        BandEmission
-            The emission.
-
-        Raises
-        ------
-        ConfigError
-            If the configuration has an error, or a band is not in the
-            catalogue.
-        """
-        if catalogue is None:
-            catalogue = LineCatalogue()
-        if info.get('bands') is not None:
-            bands = iterutils.listify(info['bands'])
-            info['bands'] = []
-            for i, band in enumerate(bands):
-                with parseutils.config_path('bands', i):
-                    info['bands'].append(load_band(band, catalogue))
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         bands = self._bands.bands()
@@ -313,13 +217,12 @@ class BandEmission(Emission):
 
     def __init__(
             self,
-            bands: Sequence[str | Band] | None = None,
+            bands: str | Band | Sequence[str | Band] | None = None,
             unit: str | astropy.units.UnitBase | None = None
     ):
         check_options(BandEmission.__init__, locals())
-        catalogue = LineCatalogue()
-        self._bands = Bands(None if bands is None else [
-            catalogue.band(x) if isinstance(x, str) else x for x in bands])
+        self._bands = Bands(None if bands is None else _named(
+            bands, catalogue_in_use().band, 'bands'))
         self._unit = _parse_unit(unit)
         if self._unit is not None:
             _units.check_band_unit(self._unit)
@@ -357,7 +260,7 @@ class StarsEmission(BandEmission):
 
     Parameters
     ----------
-    bands : Sequence of str or Band, optional
+    bands : str or Band or Sequence of them, optional
         The bands (see BandEmission).
     unit : str or astropy.units.UnitBase, optional
         The physical unit of the density (see BandEmission).
@@ -365,8 +268,9 @@ class StarsEmission(BandEmission):
     Raises
     ------
     ConfigError
-        If there are no bands, their names repeat, or the unit is not one
-        of bands (see _units.check_band_unit).
+        If there are no bands, a name is not in the catalogue, the names
+        repeat, or the unit is not one of bands (see
+        _units.check_band_unit).
     """
 
     @staticmethod
@@ -414,13 +318,6 @@ class DustOpacity(Opacity):
     @staticmethod
     def type() -> str:
         return 'dust'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        parseutils.load_option_and_update_info(
-            extinction_law_parser, info, 'law')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | (

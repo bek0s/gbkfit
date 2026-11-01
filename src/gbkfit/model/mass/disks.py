@@ -10,7 +10,6 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
 from .surfaces import DiskSurface, disk_surface_parser
@@ -89,15 +88,6 @@ class MassDisk(MassComponent):
     @staticmethod
     def type() -> str:
         return 'disk'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'MassDisk':
-        parseutils.load_option_and_update_info(
-            disk_surface_parser, info, 'surface', required=True)
-        parseutils.load_option_and_update_info(
-            disk_vertical_parser, info, 'vertical', required=True)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(

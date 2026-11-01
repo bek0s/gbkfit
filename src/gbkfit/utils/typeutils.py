@@ -289,7 +289,8 @@ def problem(value: Any, type_: Any) -> str | None:
     Returns
     -------
     str or None
-        The problem (e.g. "must be greater than 0; it is -1"), or None.
+        The problem (e.g. "must be greater than 0; it is -1", or "cannot
+        be null"), or None.
 
     Raises
     ------
@@ -298,8 +299,9 @@ def problem(value: Any, type_: Any) -> str | None:
     """
     if isinstance(value, np.generic):
         value = value.item()
-    if value is None and type(None) in union_members(type_):
-        return None
+    if value is None:
+        return None if type(None) in union_members(type_) \
+            else "cannot be null"
     type_, bounds = _split_bounds(_without_none(type_))
     # (a plain array, not a subclass, e.g. a Quantity)
     if not matches_type(value, type_) and not (

@@ -283,13 +283,6 @@ class ResponseSIDM(HaloResponse):
     def type() -> str:
         return 'sidm'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'ResponseSIDM':
-        parseutils.load_option_and_update_info(
-            halo_response_parser, info, 'contraction')
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(self) -> dict[str, Any]:
         info = super().dump()
         if self._contraction is not None:

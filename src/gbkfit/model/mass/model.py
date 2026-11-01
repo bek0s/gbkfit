@@ -63,13 +63,6 @@ class MassModel(parseutils.Serializable):
         MassComponent.takes_enclosed_masses).
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'MassModel':
-        parseutils.load_option_and_update_info(
-            mass_component_parser, info, 'components', required=True)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
-
     def dump(self) -> dict[str, Any]:
         return dict(components=mass_component_parser.dump(
             list(self._components)))

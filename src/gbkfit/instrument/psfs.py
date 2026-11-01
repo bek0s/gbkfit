@@ -734,12 +734,6 @@ class PSFSum(PSF):
     def type() -> str:
         return 'sum'
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'PSFSum':
-        parseutils.load_option_and_update_info(
-            psf_parser, info, 'psfs', required=True)
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
-
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -813,12 +807,6 @@ class PSFConvolution(PSF):
     @staticmethod
     def type() -> str:
         return 'convolution'
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'PSFConvolution':
-        parseutils.load_option_and_update_info(
-            psf_parser, info, 'psfs', required=True)
-        return cls(**parseutils.parse_options_for_callable(info, cls.__init__))
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

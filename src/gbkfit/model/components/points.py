@@ -7,7 +7,7 @@ import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.parseutils import ConfigError, check_options
 from ._detail import (
     Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
@@ -16,7 +16,7 @@ from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
 from .geometries import Geometry, geometry_pdesc
-from .lines import Band, Bands, LineCatalogue, LinePlacement, Lines
+from .lines import Band, Bands, LinePlacement, Lines
 from .roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
 
@@ -351,18 +351,6 @@ class Point(Component):
     @staticmethod
     def type() -> str:
         return 'point'
-
-    @classmethod
-    def load(
-            cls,
-            info: dict[str, Any],
-            catalogue: LineCatalogue | None = None
-    ) -> 'Point':
-        parseutils.load_option_and_update_info(
-            emission_parser, info, 'emission', required=True,
-            catalogue=catalogue)
-        return cls(**parseutils.parse_options_for_callable(
-            info, cls.__init__))
 
     def dump(self) -> dict[str, Any]:
         return (

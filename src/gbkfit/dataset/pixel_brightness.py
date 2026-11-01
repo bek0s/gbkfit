@@ -53,9 +53,7 @@ class DatasetPixelBrightness(Dataset):
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'DatasetPixelBrightness':
-        info = dict(info)
-        _detail.load_correlations(info)
-        return _detail.load_with_files(cls, info, cls.ndim)
+        return _detail.load_with_files(cls, dict(info), cls.ndim)
 
     @classmethod
     def from_files(
