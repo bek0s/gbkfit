@@ -4,7 +4,7 @@
 // select of the browser); and a check.
 import { Checkbox, NativeSelect, NumberInput, SegmentedControl } from '@mantine/core';
 
-// One of a list of choices, as the select of the browser
+// One of a list of choices (some can be off), as the select of the browser
 export function Choice({
   items,
   value,
@@ -12,7 +12,7 @@ export function Choice({
   label,
   title,
 }: {
-  items: { value: string; label: string }[];
+  items: { value: string; label: string; disabled?: boolean }[];
   value: string;
   onChange: (value: string) => void;
   label: string;

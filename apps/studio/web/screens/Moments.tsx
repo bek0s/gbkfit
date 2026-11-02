@@ -316,6 +316,7 @@ function MomentsBody({
           sources={maps[key]!}
           arrays={arrays[key]}
           problem={misfit(arrays[key], shape)}
+          ndim={2}
           onChange={onChange && ((sources) => onChange({ ...maps, [key]: sources }))}
           actions={
             onChange && (

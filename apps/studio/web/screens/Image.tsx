@@ -234,7 +234,7 @@ function ImageBody({
     );
   const column = (
     <div className="col">
-      <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} />
+      <FilesCard project={project} sources={sources} arrays={arrays} onChange={onChange} ndim={2} />
       {edits && onEdits && shape && (
         <MapEditsCard
           maps={edited}

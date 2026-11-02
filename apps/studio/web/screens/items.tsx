@@ -12,6 +12,7 @@ import { FilePicker, joinPath } from '../components/FilePicker';
 import { significant } from '../components/format';
 import { Button, Callout, Close } from '../components/ui/basics';
 import { Choice, Segments } from '../components/ui/inputs';
+import { DropMenu } from '../components/ui/overlays';
 import { Panel } from '../components/ui/panel';
 import { ERROR_KINDS, type ErrorKind, type PrepFile } from './Edits';
 
@@ -98,21 +99,23 @@ function likeliest(role: Role, arrays: ArrayInfo[], data: ArrayInfo | undefined,
 }
 
 // The array of the file of the data that holds their errors, by its name
-// (ERR, ERROR, SIGMA, NOISE, STAT, VAR..., IVAR...), of their shape, if one
-// does (a mask is never guessed: its conventions differ, e.g. a DQ of
+// (ERR, ERROR, SIGMA, NOISE, STAT, VAR..., IVAR..., or those after the
+// name of the data, e.g. MOM1_ERR), of their shape, if one does (a mask is never guessed: its conventions differ, e.g. a DQ of
 // JWST is 0 where good)
 export function errorSibling(arrays: Arrays): string | number | undefined {
   const data = arrays.found.data;
   const inFile = arrays.inFile.data ?? [];
-  const found = inFile.find(
-    (a) =>
-      data !== undefined &&
-      a.index !== data.index &&
-      kept(a).join() === kept(data).join() &&
-      /^(ERR|ERROR|ERRORS|SIGMA|NOISE|STAT|VAR|IVAR|INVVAR|INV_VAR)/i.test(a.name ?? ''),
-  );
+  const siblings = inFile.filter((a) => data !== undefined && a.index !== data.index && kept(a).join() === kept(data).join());
+  // (those of the data by name first, e.g. MOM1_ERR of MOM1, of a file of
+  // several maps and their errors)
+  const own = data?.name ? new RegExp(`^${data.name.replace(/[^\w]/g, '\\$&')}[_-]?${ERROR_NAMES}$`, 'i') : null;
+  const found =
+    (own && siblings.find((a) => own.test(a.name ?? ''))) ?? siblings.find((a) => new RegExp(`^${ERROR_NAMES}`, 'i').test(a.name ?? ''));
   return found && arrayRef(inFile, found);
 }
+
+// The names of arrays of errors (see errorSibling)
+const ERROR_NAMES = '(ERR|ERROR|ERRORS|SIGMA|NOISE|STAT|VAR|IVAR|INVVAR|INV_VAR)';
 
 // What the file of the errors of a dataset holds: as chosen, or else as
 // the name of its array says (variances: STAT of MUSE, VAR_* of JWST;
@@ -120,8 +123,8 @@ export function errorSibling(arrays: Arrays): string | number | undefined {
 export function errorKindOf(sources: Sources, arrays: Arrays): ErrorKind {
   if (sources.errorKind !== null) return sources.errorKind;
   const name = arrays.found.error?.name ?? '';
-  if (/^(STAT|VAR)/i.test(name)) return 'variance';
-  if (/^(IVAR|INVVAR|INV_VAR)/i.test(name)) return 'inverse_variance';
+  if (/(^|_)(STAT|VAR)/i.test(name)) return 'variance';
+  if (/(^|_)(IVAR|INVVAR|INV_VAR)/i.test(name)) return 'inverse_variance';
   return 'sigma';
 }
 
@@ -236,6 +239,7 @@ export function FilesCard({
   title = 'Files',
   actions,
   problem,
+  ndim = 3,
 }: {
   project: string;
   sources: Sources;
@@ -245,6 +249,8 @@ export function FilesCard({
   title?: string;
   actions?: ReactNode;
   problem?: string | null;
+  // The number of axes of the data (3: a cube; 2: a map)
+  ndim?: number;
 }) {
   const { files, errorValue } = sources;
   const set = (role: Role, value: FileArray | undefined) => onChange?.({ ...sources, files: { ...files, [role]: value } });
@@ -302,15 +308,30 @@ export function FilesCard({
                   )}
                   {role !== 'data' &&
                     files.data !== undefined &&
-                    siblings.map((a) => (
-                      <Button
-                        key={a.index}
-                        kind="small"
-                        title="An array of the file of the data"
-                        onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
-                      >
-                        use {a.name || `array ${a.index}`}
-                      </Button>
+                    (siblings.length <= 2 ? (
+                      siblings.map((a) => (
+                        <Button
+                          key={a.index}
+                          kind="small"
+                          title="An array of the file of the data"
+                          onClick={() => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) })}
+                        >
+                          use {a.name || `array ${a.index}`}
+                        </Button>
+                      ))
+                    ) : (
+                      <DropMenu
+                        label="An array of the file of the data"
+                        entries={siblings.map((a) => ({
+                          label: a.name || `array ${a.index}`,
+                          onClick: () => set(role, { file: files.data!.file, array: arrayRef(arrays.inFile.data ?? [], a) }),
+                        }))}
+                        target={
+                          <Button kind="small" title="An array of the file of the data, of its shape" right="▾">
+                            use an array of the data
+                          </Button>
+                        }
+                      />
                     ))}
                 </>
               ) : (
@@ -326,7 +347,15 @@ export function FilesCard({
               </span>
               {inFile.length > 1 && onChange ? (
                 <Choice
-                  items={inFile.map((a) => ({ value: String(a.index), label: a.name || `array ${a.index}` }))}
+                  items={inFile.map((a) => {
+                    const why = unusable(role, a, data, ndim);
+                    return {
+                      value: String(a.index),
+                      label: `${a.name || `array ${a.index}`} · ${kept(a).join(' × ') || 'one value'}${why ? ` (${why})` : ''}`,
+                      // (the one chosen stays, to show what is wrong)
+                      disabled: why !== null && a.index !== arrays.found[role]?.index,
+                    };
+                  })}
                   value={String(arrays.found[role]?.index ?? '')}
                   label={`The array of the ${title.toLowerCase()}`}
                   onChange={(index) => {
@@ -365,6 +394,16 @@ export function FilesCard({
       })}
     </Panel>
   );
+}
+
+// Why an array of a file cannot be of a role (null: it can): the data
+// must have ndim axes (of length above 1), their errors and mask their
+// shape
+function unusable(role: Role, array: ArrayInfo, data: ArrayInfo | undefined, ndim: number): string | null {
+  const axes = kept(array).length;
+  if (role === 'data') return axes === ndim ? null : `${axes} ${axes === 1 ? 'axis' : 'axes'}`;
+  if (data === undefined || kept(array).join() === kept(data).join()) return null;
+  return 'another shape';
 }
 
 // The two ways to give a slot its file, each copying it into the project:
