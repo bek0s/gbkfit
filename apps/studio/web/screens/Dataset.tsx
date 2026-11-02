@@ -47,6 +47,7 @@ import {
   type Arrays,
   type Sources,
 } from './items';
+import { ImageDataset } from './Image';
 import { Moments } from './Moments';
 
 export function NewDataset({ data }: { data: string }) {
@@ -148,8 +149,8 @@ function lastLines(text: string, count: number): string {
   return text.trimEnd().split('\n').slice(-count).join('\n');
 }
 
-// A dataset of the project, as its piece gives it: of a cube, or of moment
-// maps (see Moments)
+// A dataset of the project, as its piece gives it: of a cube, of moment
+// maps (see Moments), or of a flux map (see Image)
 export function Dataset({ name }: { name: string }) {
   const { project } = useStudio();
   const piece = usePiece(project === null ? null : joinPath(project, `datasets/${name}.yaml`));
@@ -172,6 +173,8 @@ export function Dataset({ name }: { name: string }) {
         piece.data !== undefined &&
         (piece.data.type === 'pixel_moments' ? (
           <Moments options={piece.data} project={project} />
+        ) : piece.data.type === 'pixel_brightness' ? (
+          <ImageDataset options={piece.data} project={project} />
         ) : (
           <CubeDataset options={piece.data} project={project} />
         ))}

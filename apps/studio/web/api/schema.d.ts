@@ -784,7 +784,7 @@ export interface components {
              * Task
              * @enum {string}
              */
-            task: "eval" | "fit" | "resume" | "prep_pixel_spectra" | "prep_pixel_moments";
+            task: "eval" | "fit" | "resume" | "prep_pixel_brightness" | "prep_pixel_spectra" | "prep_pixel_moments";
             /**
              * Options
              * @default {}

@@ -42,7 +42,7 @@ __all__ = [
 # gbkfit.tasks.prep)
 _MAKE_RUN = ('eval', 'fit')
 _CONTINUE_RUN = ('resume',)
-_PREPARE = ('prep_pixel_spectra', 'prep_pixel_moments')
+_PREPARE = ('prep_pixel_brightness', 'prep_pixel_spectra', 'prep_pixel_moments')
 TASKS = _MAKE_RUN + _CONTINUE_RUN + _PREPARE
 
 # The tasks of prep whose files are lists (one for each map)

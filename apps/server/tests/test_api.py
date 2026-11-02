@@ -440,6 +440,32 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
         'prep_cube_error-2.fits', 'prep_cube_error.fits']
 
 
+def test_a_job_prepares_a_flux_map_into_the_project(client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600))
+    values = np.arange(12, dtype=np.float32).reshape(3, 4)
+    fits.PrimaryHDU(values, header).writeto(
+        pathlib.Path(root, 'study/data/image.fits'))
+    job = client.post('/api/v1/jobs', json=dict(
+        task='prep_pixel_brightness', options=dict(
+            file_d='study/data/image.fits', file_e=None, file_m=None,
+            roi_spat=[1, 3, 0, 3], clip_min=2, clip_max=None,
+            ccl_lcount=None, ccl_pcount=None, ccl_lratio=None,
+            sclip_sigma=None, sclip_iters=5, minify=False, nanpad=None,
+            dtype='float32', output_dir='study/data'))).json()
+    for _ in range(600):
+        job = client.get(f"/api/v1/jobs/{job['id']}").json()
+        if job['state'] not in ('queued', 'running'):
+            break
+        time.sleep(0.1)
+    assert job['state'] == 'complete', job['output']
+    assert job['files'] == dict(file_d='study/data/prep_image.fits')
+    prepared = fits.getdata(pathlib.Path(root, 'study/data/prep_image.fits'))
+    assert prepared.shape == (3, 2) and np.isnan(prepared[0, 0])
+    assert prepared[2, 1] == 10
+
+
 def test_a_job_prepares_moment_maps_with_one_mask(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',

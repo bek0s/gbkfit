@@ -64,7 +64,7 @@ export const DATA_KINDS: { title: string; kinds: DataKind[] }[] = [
     kinds: [
       { key: 'cube', title: 'Cube', text: 'Spectra on a grid: an IFU or a radio cube', type: 'pixel_spectra', ready: true },
       { key: 'moments', title: 'Moment maps', text: 'Maps of the intensity, velocity and dispersion', type: 'pixel_moments', ready: true },
-      { key: 'image', title: 'Flux map', text: 'An image of the light', type: 'pixel_brightness', ready: false },
+      { key: 'image', title: 'Flux map', text: 'An image of the light', type: 'pixel_brightness', ready: true },
     ],
   },
   {
