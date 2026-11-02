@@ -413,14 +413,21 @@ def covariance(
         name for name, error in zip(names, std) if not np.isfinite(error))
     # The errors of all elements and of the derived values: J_e cov J_e^T,
     # with J_e the Jacobian of their values by the free values
+    # (of those that have a value at the solution: the solved elements, and
+    # derived values that cannot be evaluated there, are NaN in the
+    # samples, and have NaN errors)
     element_names = list(params.element_values(params.evaluate(x)))
+    valued = np.isfinite(sample_values(problem, x, derived))
     jac_elements = jacobian(
-        lambda points: [sample_values(problem, p, derived) for p in points],
+        lambda points: [
+            sample_values(problem, p, derived)[valued] for p in points],
         x, steps, lower, upper)
-    element_std = np.where(
+    element_std = np.full(valued.size, np.nan)
+    element_std[valued] = np.where(
         _along(jac_elements / norms, vt[~keep]), np.inf,
         np.sqrt(np.maximum(np.einsum(
-            'ij,jk,ik->i', jac_elements, matrix, jac_elements), 0))).tolist()
+            'ij,jk,ik->i', jac_elements, matrix, jac_elements), 0)))
+    element_std = element_std.tolist()
     nelements = len(element_names)
     return Covariance(
         names=names,

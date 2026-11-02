@@ -398,6 +398,27 @@ def test_the_reduced_chi2_is_of_the_data_alone():
     assert best.reduced_chi2 == pytest.approx(data_chi2 / best.dof, rel=1e-6)
 
 
+def test_a_fit_of_solved_values_has_a_covariance():
+    # The solved elements are NaN in the samples, which made the errors of
+    # the elements (and so the whole covariance) fail; they have NaN
+    # errors, and the other elements theirs
+    from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
+    plan = mock_objective(
+        DriverHost(), name='obs', flux_scale='one').group_plan()
+    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
+        pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
+            type='gaussian', mean=1, sigma=1e8, min=0))))
+    objective = Objective(plan, params.solves())
+    result = FitterScipyLeastSquares().fit(objective, params)
+    best = result.best()
+    assert 'uncertainty_errors' not in result.diagnostics
+    std = best.covariance.element_std
+    assert math.isnan(std['obs_flux_scale'])
+    assert std['pt_a'] == 0
+    assert all(0 < best.covariance.std[name] < math.inf for name in best.free)
+    assert best.laplace is not None
+
+
 def test_lmfit_says_why_leastsq_stopped():
     # lmfit reported every MINPACK convergence as 'Fit succeeded.' (also
     # when no step was accepted), and a run stopped by max_nfev as
@@ -1835,3 +1856,15 @@ def test_the_bootstrap_std_of_a_value_missing_in_a_refit():
         ('a', 'v'), np.array([[1.0, 2.0], [2.0, np.nan], [3.0, 4.0]]),
         np.ones(3, bool), (), {})
     assert refits.std() == pytest.approx(dict(a=1.0, v=np.sqrt(2)))
+
+
+def test_samples_without_rows_are_summarised_as_nan():
+    # (Laplace samples that all fell outside the bounds: the summary
+    # failed to reshape them, and the fit failed to write its result after
+    # 67 minutes; TNG 371330, 2026-11-02)
+    from gbkfit.fitting.result import Posterior
+    posterior = Posterior(
+        ('posa', 'x'), np.empty((0, 2)), None, False, periods=dict(posa=360))
+    summary = posterior.summary()
+    assert set(summary) == {'posa', 'x'}
+    assert all(np.isnan(v) for values in summary.values() for v in values)

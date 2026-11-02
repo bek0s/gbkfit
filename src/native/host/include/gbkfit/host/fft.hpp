@@ -3,7 +3,6 @@
 #include <array>
 #include <complex>
 #include <string>
-#include <thread>
 #include <type_traits>
 #include <vector>
 
@@ -149,10 +148,13 @@ private:
         return strides<ComplexType>(shape_c, shape_c[2]);
     }
 
+    // The threads of the transforms: those of OpenMP (OMP_NUM_THREADS), as
+    // the kernels have, not every core of the machine; processes given
+    // one thread each (e.g. fits side by side) then keep to it
     static std::size_t
     nthreads()
     {
-        return std::thread::hardware_concurrency();
+        return std::size_t(omp_get_max_threads());
     }
 
     // Copy the rows of a cube of the shape between two arrays whose rows

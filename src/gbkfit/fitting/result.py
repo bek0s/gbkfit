@@ -55,7 +55,13 @@ def weighted_quantiles(
         column without values.
     """
     q = np.atleast_1d(np.asarray(q, dtype=float))
-    samples = np.asarray(samples, dtype=float).reshape(len(samples), -1)
+    samples = np.asarray(samples, dtype=float)
+    # (a table keeps its columns without rows, e.g. Laplace samples that
+    # all fell outside the bounds)
+    if samples.ndim == 1:
+        samples = samples[:, None]
+    elif samples.ndim > 2:
+        samples = samples.reshape(len(samples), -1)
     if weights is None:
         weights = np.ones(len(samples))
     result = np.full((len(q), samples.shape[1]), np.nan)
