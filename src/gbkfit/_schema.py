@@ -4,7 +4,10 @@ the signatures of the constructors that configurations call (see
 Serializable.config_constructors): their parameters are the options,
 with the types, ranges and choices of their annotations, their units
 (Unit; the keyword 'unit'), their defaults, and the descriptions of their
-docstrings.
+docstrings. Each member of a family is described by the first paragraph
+of the docstring of its class, and each form of the configurations of a
+class of several (see Serializable.config_constructors) by that of its
+named constructor (not __init__, which the class describes).
 
 The options of a family (e.g. a PSF) are one of its members, chosen by
 their type (see catalogue); a member that needs modules that are not
@@ -207,7 +210,13 @@ class SchemaWriter:
         """
         forms = [
             self._constructor(cls, name) for name in cls.config_constructors]
-        return forms[0] if len(forms) == 1 else {'oneOf': forms}
+        if len(forms) == 1:
+            return forms[0]
+        for form, name in zip(forms, cls.config_constructors):
+            summary = _summary(getattr(cls, name))
+            if name != '__init__' and summary:
+                form['description'] = summary
+        return {'oneOf': forms}
 
     def with_options(
             self,
@@ -265,6 +274,8 @@ class SchemaWriter:
                 schema['requires'] = '; '.join(
                     dict.fromkeys(member.missing.values()))
             members.append(schema | {'title': member.cls.__qualname__})
+            if summary := _summary(member.cls):
+                members[-1]['description'] = summary
         return {'oneOf': members}
 
     def _constructor(
@@ -378,6 +389,15 @@ def _json(value: Any) -> Any:
         items = [_json(x) for x in value]
         return _NO_JSON if _NO_JSON in items else items
     return _NO_JSON
+
+
+def _summary(obj: Any) -> str:
+    """
+    Return the first paragraph of the docstring of a class or a function,
+    in a line.
+    """
+    doc = inspect.cleandoc(obj.__doc__ or '')
+    return ' '.join(doc.split('\n\n')[0].split())
 
 
 def _param_docs(cls: type, func: Callable | None) -> dict[str, str]:

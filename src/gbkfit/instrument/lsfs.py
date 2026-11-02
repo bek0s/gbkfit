@@ -293,7 +293,7 @@ def _create_grid_1d(size: int, step: float, offset: int) -> np.ndarray:
 
 class LSFPoint(LSF):
     """
-    A point: all the light stays in its channel.
+    No spreading: the light stays in its channel.
     """
 
     @staticmethod
@@ -322,7 +322,9 @@ class LSFPoint(LSF):
 
 class LSFGauss(LSF):
     """
-    A Gaussian, exp(-v^2 / 2 sigma^2).
+    A Gaussian, by its sigma.
+
+    Its profile is exp(-v^2 / 2 sigma^2).
 
     Parameters
     ----------
@@ -374,7 +376,10 @@ class LSFGauss(LSF):
 
 class LSFGGauss(LSF):
     """
-    A generalised Gaussian, exp(-(|v| / alpha)^beta).
+    A Gaussian with a shape parameter beta: flat-topped above 2, peaked
+    below 2, exponential at 1.
+
+    Its profile is exp(-(|v| / alpha)^beta).
 
     Parameters
     ----------
@@ -434,7 +439,9 @@ class LSFGGauss(LSF):
 
 class LSFLorentz(LSF):
     """
-    A Lorentzian, gamma^2 / (v^2 + gamma^2).
+    Broad wings, as of natural or pressure broadening.
+
+    Its profile is gamma^2 / (v^2 + gamma^2).
 
     Parameters
     ----------
@@ -486,7 +493,9 @@ class LSFLorentz(LSF):
 
 class LSFMoffat(LSF):
     """
-    A Moffat, (1 + (v / alpha)^2)^(-beta).
+    A core with power-law wings.
+
+    Its profile is (1 + (v / alpha)^2)^(-beta).
 
     Parameters
     ----------
@@ -546,8 +555,10 @@ class LSFMoffat(LSF):
 
 class LSFImage(LSF):
     """
-    An LSF given as a 1D image, centred on the centre of the image, and
-    resampled to the channels it is drawn on (with splines of order 5).
+    A measured LSF, from a 1D FITS image.
+
+    It is centred on the centre of the image, and resampled to the
+    channels it is drawn on (with splines of order 5).
 
     Configurations give its file (see from_file).
 
@@ -724,7 +735,7 @@ class LSFSum(LSF):
 class LSFConvolution(LSF):
     """
     The convolution of LSFs: e.g. the LSF of an instrument and the
-    Hanning smoothing of the channels of the data (see LSFHanning).
+    Hanning smoothing of the channels of the data (see hanning).
 
     Parameters
     ----------
@@ -788,9 +799,11 @@ class LSFConvolution(LSF):
 
 class LSFHanning(LSF):
     """
-    The response of the Hanning smoothing of channels: 1/4, 1/2 and 1/4 of
-    the light of each channel go to the channel before, the channel itself
-    and the channel after.
+    The smoothing of channels by a Hanning window, as of radio
+    spectrometers.
+
+    1/4, 1/2 and 1/4 of the light of each channel go to the channel
+    before, the channel itself and the channel after.
 
     Parameters
     ----------
@@ -866,7 +879,9 @@ def _read_images(
 
 class LSFImages(LSF):
     """
-    An LSF given as profiles at points of the spectral axis (e.g. measured
+    A measured LSF that changes with wavelength, from a FITS file.
+
+    It is given as profiles at points of the spectral axis (e.g. measured
     from sky lines or arc lamps). At each channel it is the image LSF (see
     LSFImage) of the profiles of the two nearest points, interpolated
     linearly; beyond the points, that of the nearest profile.

@@ -40,6 +40,19 @@ def test_members_of_families_have_their_options():
     assert sigma['unit'] == 'arcsec'
     assert sigma['description'].startswith('The standard deviation')
     assert gauss['properties']['ratio']['default'] == 1.0
+    # (a member is described by the first paragraph of the docstring of
+    # its class, in a line)
+    assert gauss['description'] == (
+        'A Gaussian, round or elliptical, by its sigma, axis ratio and '
+        'angle.')
+    # (and each form of a member of several by its named constructor:
+    # e.g. a beam by its axes, or by a file, from_file)
+    beam = next(
+        x for x in writer.defs()['psf']['oneOf']
+        if x['title'] == 'PSFGaussBeam')
+    axes, file = beam['oneOf']
+    assert 'description' not in axes
+    assert file['description'].startswith('Read a beam from the header')
 
 
 def test_options_have_the_forms_of_configurations():

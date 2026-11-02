@@ -324,7 +324,7 @@ def _create_grid_2d(
 
 class PSFPoint(PSF):
     """
-    A point: all the light stays in its pixel.
+    No blurring: the light stays in its pixel.
     """
 
     @staticmethod
@@ -360,7 +360,9 @@ class PSFPoint(PSF):
 
 class PSFGauss(PSF):
     """
-    An elliptical Gaussian, exp(-r^2 / 2 sigma^2).
+    A Gaussian, round or elliptical, by its sigma, axis ratio and angle.
+
+    Its profile is exp(-r^2 / 2 sigma^2).
 
     Parameters
     ----------
@@ -430,7 +432,10 @@ class PSFGauss(PSF):
 
 class PSFGGauss(PSF):
     """
-    An elliptical generalised Gaussian, exp(-(r / alpha)^beta).
+    A Gaussian with a shape parameter beta: flat-topped above 2, peaked
+    below 2, exponential at 1.
+
+    Its profile is exp(-(r / alpha)^beta), round or elliptical.
 
     Parameters
     ----------
@@ -509,7 +514,9 @@ class PSFGGauss(PSF):
 
 class PSFMoffat(PSF):
     """
-    An elliptical Moffat, (1 + (r / alpha)^2)^(-beta).
+    The usual model of atmospheric seeing: a core with power-law wings.
+
+    Its profile is (1 + (r / alpha)^2)^(-beta), round or elliptical.
 
     Parameters
     ----------
@@ -585,8 +592,10 @@ class PSFMoffat(PSF):
 
 class PSFImage(PSF):
     """
-    A PSF given as an image, centred on the centre of the image, and
-    resampled to the pixels it is drawn on (with splines of order 5).
+    A measured PSF, from a FITS image.
+
+    It is centred on the centre of the image, and resampled to the pixels
+    it is drawn on (with splines of order 5).
 
     The image is in the frame of the pixels of the data, so it is not
     rotated with them. Configurations give its file (see from_file).
@@ -861,7 +870,8 @@ class PSFConvolution(PSF):
 
 class PSFGaussBeam(PSF):
     """
-    An elliptical Gaussian given as radio data give their beams.
+    A Gaussian by the FWHM of its axes and their angle, as in the header
+    of radio FITS files (BMAJ, BMIN, BPA).
 
     Configurations give it by its axes, or by a FITS file whose header
     has them (see from_file), e.g. {type: gauss_beam, file: cube.fits}.
@@ -992,7 +1002,9 @@ def _read_images(
 
 class PSFImages(PSF):
     """
-    A PSF given as images at points of the spectral axis (e.g. simulated
+    A measured PSF that changes with wavelength, from a FITS cube.
+
+    It is given as images at points of the spectral axis (e.g. simulated
     by STPSF, or of a star in the data). At each channel it is the image
     PSF (see PSFImage) of the images of the two nearest points,
     interpolated linearly; beyond the points, that of the nearest image.
