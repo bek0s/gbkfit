@@ -1,7 +1,7 @@
 // The state of the Studio that its parts share: the open project and the
 // recent ones, the screen on the stage, the blocks opened last, the tree
 // folded or not, and the folder where a new block is being named.
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useProjects } from './api/queries';
 import { draft } from './shell/drafts';
 import { address, parseAddress, sameScreen, type Screen } from './shell/navigation';
@@ -27,6 +27,9 @@ export interface Studio {
   // renamed (to: its new path or name) or deleted (to: null)
   movedProject: (path: string, to: string | null) => void;
   movedBlock: (folder: string, name: string, to: string | null) => void;
+  // Whether the screen has edits not saved, which leaving it asks about
+  // (see useUnsaved)
+  setUnsaved: (unsaved: boolean) => void;
 }
 
 const StudioContext = createContext<Studio | null>(null);
@@ -60,14 +63,24 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     if (recent.some((path) => !found.includes(path))) setRecent(recent.filter((path) => found.includes(path)));
   }, [projects.data, project, recent, setProject, setRecent]);
 
+  // (the screen has edits not saved: leaving it is asked first)
+  const unsaved = useRef(false);
+  const setUnsaved = useCallback((value: boolean) => {
+    unsaved.current = value;
+  }, []);
+  const leave = () => !unsaved.current || window.confirm('The edits of this screen are not saved. Leave it anyway?');
+
   const show = useCallback((next: Screen) => {
+    if (!leave()) return false;
+    unsaved.current = false;
     setScreen(next);
     window.history.pushState(null, '', address(next));
+    return true;
   }, []);
 
   const go = useCallback(
     (next: Screen) => {
-      show(next);
+      if (!show(next)) return;
       if (project !== null && next.kind === 'block') {
         setVisited((all) => ({ ...all, [project]: latestFirst(all[project] ?? [], next, RECENT, sameScreen) }));
       }
@@ -77,9 +90,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
 
   const openProject = useCallback(
     (path: string | null) => {
+      if (!show({ kind: 'home' })) return;
       setProject(path);
       if (path !== null) setRecent((paths) => latestFirst(paths, path, RECENT));
-      show({ kind: 'home' });
     },
     [setProject, setRecent, show],
   );
@@ -138,8 +151,9 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       startAdding,
       movedProject,
       movedBlock,
+      setUnsaved,
     }),
-    [project, openProject, recent, screen, go, visited, folded, setFolded, adding, startAdding, movedProject, movedBlock],
+    [project, openProject, recent, screen, go, visited, folded, setFolded, adding, startAdding, movedProject, movedBlock, setUnsaved],
   );
   return <StudioContext.Provider value={studio}>{children}</StudioContext.Provider>;
 }

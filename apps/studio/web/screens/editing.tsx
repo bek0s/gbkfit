@@ -1,11 +1,12 @@
 // A block of the project being edited: its options as saved, as edited,
 // and how they are saved (see the server's PUT /pieces) or reverted; and
 // the actions of the head of its screen.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { usePiece, useProject, useSchema, useUpdateBlock } from '../api/queries';
 import { joinPath } from '../components/FilePicker';
 import type { Defs, Options } from '../components/SchemaForm';
 import { Button } from '../components/ui/basics';
+import { useStudio } from '../studio';
 
 export interface EditedBlock {
   path: string;
@@ -32,11 +33,13 @@ export function useEditedBlock(project: string, folder: string, name: string): E
   const [draft, setDraft] = useState<Options | null>(null);
   const saved = piece.data as Options | undefined;
   const options = draft ?? saved;
+  const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
+  useUnsaved(dirty);
   return {
     path,
     options,
     error: piece.error ?? schema.error,
-    dirty: draft !== null && JSON.stringify(draft) !== JSON.stringify(saved),
+    dirty,
     set: setDraft,
     save: () => draft && update.mutate({ path, content: draft }, { onSuccess: () => setDraft(null) }),
     revert: () => setDraft(null),
@@ -45,6 +48,22 @@ export function useEditedBlock(project: string, folder: string, name: string): E
     defs: schema.data?.$defs as Defs | undefined,
     blocks: info.data?.pieces ?? {},
   };
+}
+
+// Whether a screen has edits not saved: leaving it (another screen, or
+// the page) asks first
+export function useUnsaved(unsaved: boolean) {
+  const { setUnsaved } = useStudio();
+  useEffect(() => {
+    setUnsaved(unsaved);
+    if (!unsaved) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+      setUnsaved(false);
+    };
+  }, [unsaved, setUnsaved]);
 }
 
 // Revert and save, with whether the edits are saved

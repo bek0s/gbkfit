@@ -22,6 +22,7 @@ import { SidePanes, type PanesControl } from '../components/ui/panes';
 import { BlockMenu } from '../shell/BlockMenu';
 import { kindOf } from '../shell/blocks';
 import { useStudio } from '../studio';
+import { useUnsaved } from './editing';
 
 export type Family = 'psf' | 'lsf';
 
@@ -68,6 +69,7 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   const saved = piece.data as Options | undefined;
   const options = draft ?? saved;
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
+  useUnsaved(dirty);
   if (project === null || path === null) return null;
   const defs = (schema.data?.$defs ?? {}) as Defs;
   return (
