@@ -8,6 +8,8 @@ test('every screen has an address that leads back to it', () => {
     { kind: 'fit' },
     { kind: 'block', folder: 'observations', name: 'ngc1313/hi #2' },
     { kind: 'new-dataset', data: 'cube' },
+    { kind: 'draft', id: 'galaxy-cards', name: null },
+    { kind: 'draft', id: 'galaxy-cards', name: 'ngc1313/disk' },
   ];
   for (const screen of screens) expect(parseAddress(address(screen))).toEqual(screen);
 });

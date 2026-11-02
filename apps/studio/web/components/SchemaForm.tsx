@@ -28,7 +28,14 @@ interface FormContext {
   defs: Defs;
   project: string;
   starts: Record<string, Record<string, Options>>;
+  // The blocks of the project by folder (their names), and how one opens
+  blocks: Record<string, string[]>;
+  openBlock?: (folder: string, name: string) => void;
 }
+
+// The families whose options can be a block of the project instead, by
+// its name, and the folders of those blocks (see gbkfit.project)
+const BLOCK_FOLDERS: Record<string, string> = { dataset: 'datasets', psf: 'psfs', lsf: 'lsfs', noise: 'noise' };
 
 const Context = createContext<FormContext | null>(null);
 
@@ -38,31 +45,45 @@ function useForm(): FormContext {
   return form;
 }
 
-// The form of a definition of the schema (e.g. 'psf'), of its options
+// The form of a definition of the schema (e.g. 'psf'), or of a node of it
+// (e.g. the density of a disk), of its options
 export function SchemaForm({
   defs,
   def,
+  node: given,
   project,
   value,
   onChange,
   starts = {},
+  blocks = {},
+  openBlock,
 }: {
   defs: Defs;
-  def: string;
+  def?: string;
+  node?: Schema;
   project: string;
   value: Options;
   onChange: (value: Options) => void;
   starts?: Record<string, Record<string, Options>>;
+  blocks?: Record<string, string[]>;
+  openBlock?: (folder: string, name: string) => void;
 }) {
-  const node = defs[def];
+  const node = given ?? (def === undefined ? undefined : defs[def]);
   if (node === undefined) return <p className="error">The schema has no {def}.</p>;
   return (
-    <Context.Provider value={{ defs, project, starts }}>
+    <Context.Provider value={{ defs, project, starts, blocks, openBlock }}>
       <div className="schema-form">
-        <Field node={node} family={def} value={value} onChange={(next) => onChange((next ?? {}) as Options)} />
+        <Field node={node} family={def} value={value} onChange={(next) => onChange(next as Options)} />
       </div>
     </Context.Provider>
   );
+}
+
+// A node of the schema, its references followed
+export function resolve(node: Schema, defs: Defs): Schema {
+  const ref = node.$ref;
+  if (typeof ref === 'string' && ref.startsWith('#/$defs/')) return resolve(defs[ref.slice(8)] ?? {}, defs);
+  return node;
 }
 
 // The members of a family: the objects of its choice (oneOf, nested),
@@ -75,15 +96,9 @@ export function membersOf(node: Schema, defs: Defs): Schema[] {
 }
 
 // The type of a member of a family (the const of its option type)
-function typeOf(node: Schema): string | undefined {
+export function typeOf(node: Schema): string | undefined {
   const type = (node.properties as Record<string, Schema> | undefined)?.type;
   return typeof type?.const === 'string' ? type.const : undefined;
-}
-
-function resolve(node: Schema, defs: Defs): Schema {
-  const ref = node.$ref;
-  if (typeof ref === 'string' && ref.startsWith('#/$defs/')) return resolve(defs[ref.slice(8)] ?? {}, defs);
-  return node;
 }
 
 // The name of a family a node is (that of its definition), if it is one
@@ -98,22 +113,55 @@ function Field({
   value,
   onChange,
   family,
+  nullable = false,
 }: {
   node: Schema;
   value: unknown;
   onChange: (value: unknown) => void;
   // The family it is (e.g. 'psf'), for the options its members start with
   family?: string;
+  // Whether it can be none
+  nullable?: boolean;
 }) {
   const { defs } = useForm();
   const resolved = resolve(node, defs);
   const name = family ?? familyOf(node);
+  if (typeof value === 'string' && name && BLOCK_FOLDERS[name]) return <BlockField family={name} value={value} onChange={onChange} />;
   if (membersOf(resolved, defs).length > 0 && resolved.oneOf) {
-    return <MemberField members={membersOf(resolved, defs)} family={name ?? ''} value={value} onChange={onChange} />;
+    return <MemberField members={membersOf(resolved, defs)} family={name ?? ''} nullable={nullable} value={value} onChange={onChange} />;
   }
   const branches = resolved.anyOf as Schema[] | undefined;
-  if (branches) return <AnyField branches={branches.map((b) => resolve(b, defs))} node={resolved} value={value} onChange={onChange} />;
+  if (branches) return <AnyField branches={branches} node={resolved} value={value} onChange={onChange} />;
   return <PlainField node={resolved} value={value} onChange={onChange} />;
+}
+
+// A block of the project named in place of options (e.g. the dataset of
+// an observation): its name, which can be another, or options in place
+// instead; it opens
+function BlockField({ family, value, onChange }: { family: string; value: string; onChange: (value: unknown) => void }) {
+  const { blocks, starts, openBlock } = useForm();
+  const folder = BLOCK_FOLDERS[family];
+  const names = blocks[folder] ?? [];
+  const first = Object.entries(starts[family] ?? {})[0];
+  return (
+    <div className="schema-block">
+      <Choice
+        items={[
+          ...(names.includes(value) ? [] : [{ value, label: `${value} (missing)` }]),
+          ...names.map((name) => ({ value: name, label: name })),
+          { value: '\u0000', label: 'options here instead…' },
+        ]}
+        value={value}
+        label={`The ${family} of the project`}
+        onChange={(next) => onChange(next === '\u0000' ? (first ? { type: first[0], ...first[1] } : {}) : next)}
+      />
+      {openBlock && names.includes(value) && (
+        <Button kind="small" title={`Open the ${family} ${value}`} onClick={() => openBlock(folder, value)}>
+          open →
+        </Button>
+      )}
+    </div>
+  );
 }
 
 // A member of a family: the choice of its type, and the fields of its
@@ -121,15 +169,19 @@ function Field({
 function MemberField({
   members,
   family,
+  nullable,
   value,
   onChange,
 }: {
   members: Schema[];
   family: string;
+  nullable: boolean;
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
-  const { starts } = useForm();
+  const { starts, blocks } = useForm();
+  // (a family of blocks of the project can name one instead)
+  const named = BLOCK_FOLDERS[family] ? (blocks[BLOCK_FOLDERS[family]] ?? []) : [];
   const options = isObject(value) ? value : {};
   const type = typeof options.type === 'string' ? options.type : undefined;
   // (a type of several members, e.g. of options or of a file: that whose
@@ -139,6 +191,8 @@ function MemberField({
     ofType.find((m) => Object.keys(options).every((key) => key === 'type' || key in propertiesOf(m))) ?? ofType[0];
   const types = [...new Set(members.map((m) => typeOf(m)!))];
   const choose = (next: string) => {
+    if (next === '') return onChange(undefined);
+    if (next.startsWith('block:')) return onChange(next.slice(6));
     const start = starts[family]?.[next] ?? {};
     const target = members.find((m) => typeOf(m) === next);
     const kept = Object.fromEntries(Object.entries(options).filter(([key]) => key !== 'type' && target && key in propertiesOf(target)));
@@ -150,8 +204,10 @@ function MemberField({
         <span className="schema-label">type</span>
         <Choice
           items={[
-            ...(type === undefined || !types.includes(type) ? [{ value: type ?? '', label: type ?? 'choose…' }] : []),
+            ...(nullable ? [{ value: '', label: 'none' }] : type === undefined ? [{ value: '', label: 'choose…' }] : []),
+            ...(type !== undefined && !types.includes(type) ? [{ value: type, label: type }] : []),
             ...types.map((t) => ({ value: t, label: typeTitle(t) })),
+            ...named.map((name) => ({ value: `block:${name}`, label: `the ${family} ${name}` })),
           ]}
           value={type ?? ''}
           label={`The type of the ${family}`}
@@ -188,7 +244,7 @@ export function typeTitle(type: string): string {
   return TYPE_TITLES[type] ?? type;
 }
 
-function propertiesOf(node: Schema): Record<string, Schema> {
+export function propertiesOf(node: Schema): Record<string, Schema> {
   return (node.properties as Record<string, Schema> | undefined) ?? {};
 }
 
@@ -206,13 +262,26 @@ function ObjectFields({ node, value, onChange }: { node: Schema; value: Options;
   };
   // (options it has that the schema has not: kept, and shown)
   const unknown = Object.keys(value).filter((key) => key !== 'type' && !(key in propertiesOf(node)));
+  const { defs } = useForm();
   return (
     <>
-      {properties.map(([key, property]) => (
-        <Row key={key} name={key} node={property} required={required.includes(key)}>
-          <Field node={property} value={value[key]} onChange={(next) => set(key, next)} />
-        </Row>
-      ))}
+      {properties.map(([key, property]) => {
+        // (an optional object of options of its own, not given: added on
+        // demand, as its fields are many; given, it can go)
+        const optional = !required.includes(key) && isPlainObject(property, defs);
+        return (
+          <Row key={key} name={key} node={property} required={required.includes(key)}>
+            {optional && value[key] === undefined ? (
+              <Button kind="small" title={typeof property.description === 'string' ? property.description : undefined} onClick={() => set(key, {})}>
+                + set
+              </Button>
+            ) : (
+              <Field node={property} value={value[key]} onChange={(next) => set(key, next)} />
+            )}
+            {optional && value[key] !== undefined && <Close label={`Remove ${key}`} onClick={() => set(key, undefined)} />}
+          </Row>
+        );
+      })}
       {unknown.map((key) => (
         <Row key={key} name={key} node={{ description: 'An option this type does not take: the configuration is invalid with it.' }} required={false}>
           <span className="error">{JSON.stringify(value[key])}</span>
@@ -221,6 +290,14 @@ function ObjectFields({ node, value, onChange }: { node: Schema; value: Options;
       ))}
     </>
   );
+}
+
+// Whether a node is options of their own (an object of properties, not a
+// family), or none
+function isPlainObject(node: Schema, defs: Defs): boolean {
+  const resolved = resolve(node, defs);
+  const branches = ((resolved.anyOf as Schema[] | undefined) ?? [resolved]).map((b) => resolve(b, defs)).filter((b) => b.type !== 'null');
+  return branches.length === 1 && branches[0].type === 'object' && branches[0].properties !== undefined && branches[0].oneOf === undefined;
 }
 
 // A row of an option: its name (marked if it must be given), its field,
@@ -256,19 +333,40 @@ function AnyField({
   value: unknown;
   onChange: (value: unknown) => void;
 }) {
-  const kinds = branches.filter((b) => b.type !== 'null');
-  const nullable = kinds.length < branches.length;
+  const { defs } = useForm();
+  const resolved = branches.map((b) => resolve(b, defs));
+  const nullable = resolved.some((b) => b.type === 'null');
+  const kinds = resolved.map((_, i) => i).filter((i) => resolved[i].type !== 'null');
+  const find = (test: (b: Schema) => boolean) => kinds.find((i) => test(resolved[i]));
+  const field = (i: number) => <Field node={branches[i]} nullable={nullable} value={value} onChange={onChange} />;
   // (a file: a path, or a path and its HDU)
-  if (kinds.some((b) => b.format === 'path')) return <FileField value={value} onChange={onChange} />;
-  const number = kinds.find((b) => b.type === 'number' || b.type === 'integer');
-  if (number && (value === undefined || value === null || typeof value === 'number')) {
-    return <NumberValue node={{ ...number, default: node.default }} value={value as number | undefined} onChange={onChange} />;
+  if (resolved.some((b) => b.format === 'path')) return <FileField value={value} onChange={onChange} />;
+  // (a name: of a block of the project, or a choice)
+  if (typeof value === 'string' || value === undefined) {
+    const family = kinds.map((i) => familyOf(branches[i])).find((f) => f && BLOCK_FOLDERS[f]);
+    if (typeof value === 'string' && family) return <BlockField family={family} value={value} onChange={onChange} />;
+    const choice = find((b) => Array.isArray(b.enum) && (value === undefined || (b.enum as unknown[]).includes(value)));
+    if (choice !== undefined) return <PlainField node={{ ...resolved[choice], default: node.default }} value={value} onChange={onChange} />;
+    const text = find((b) => b.type === 'string' && b.format !== 'path');
+    if (typeof value === 'string' && text !== undefined) return <PlainField node={resolved[text]} value={value} onChange={onChange} />;
   }
-  const plain = kinds.find((b) => b.type === 'array' && resolve((b.items as Schema) ?? {}, {}).type === 'number');
-  if (plain && (value === undefined || value === null || Array.isArray(value))) {
-    return <NumbersField value={value as number[] | undefined} onChange={onChange} placeholder={nullable ? 'from the header' : undefined} />;
+  const number = find((b) => b.type === 'number' || b.type === 'integer');
+  if (number !== undefined && (value === undefined || value === null || typeof value === 'number')) {
+    return <NumberValue node={{ ...resolved[number], default: node.default }} value={value as number | undefined} onChange={onChange} />;
   }
-  if (kinds.length === 1) return <Field node={kinds[0]} value={value} onChange={onChange} />;
+  const flag = find((b) => b.type === 'boolean');
+  if (flag !== undefined && (value === undefined || typeof value === 'boolean')) {
+    return <PlainField node={{ ...resolved[flag], default: node.default }} value={value} onChange={onChange} />;
+  }
+  const plain = find((b) => b.type === 'array' && resolve((b.items as Schema) ?? {}, defs).type === 'number');
+  if (plain !== undefined && (value === undefined || value === null || (Array.isArray(value) && value.every((v) => typeof v === 'number')))) {
+    return <NumbersField value={value as number[] | undefined} onChange={onChange} placeholder={nullable ? 'none' : undefined} />;
+  }
+  const list = find((b) => b.type === 'array');
+  if (Array.isArray(value) && list !== undefined) return field(list);
+  const options = find((b) => b.type !== 'array' && (b.oneOf !== undefined || b.type === 'object'));
+  if ((value === undefined || isObject(value)) && options !== undefined) return field(options);
+  if (kinds.length === 1) return field(kinds[0]);
   return <Kept value={value} onChange={onChange} />;
 }
 
@@ -296,7 +394,7 @@ function PlainField({ node, value, onChange }: { node: Schema; value: unknown; o
       />
     );
   }
-  if (node.type === 'string' && Array.isArray(node.enum)) {
+  if (Array.isArray(node.enum)) {
     return (
       <Choice
         items={[{ value: '', label: node.default === undefined ? '—' : `default (${String(node.default)})` }, ...(node.enum as string[]).map((e) => ({ value: e, label: e }))]}

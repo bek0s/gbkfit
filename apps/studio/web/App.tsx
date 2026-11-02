@@ -6,6 +6,7 @@ import { useJobs } from './api/queries';
 import { Logo } from './components/icons';
 import { SchemeMenu } from './components/ui/scheme';
 import { Dataset, NewDataset } from './screens/Dataset';
+import { BlockInLayout, DraftScreen } from './screens/Drafts';
 import { Home } from './screens/Home';
 import { NewImage } from './screens/Image';
 import { NewMoments } from './screens/Moments';
@@ -67,11 +68,16 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;
       if (screen.folder === 'psfs') return <ResponseScreen key={address(screen)} family="psf" name={screen.name} />;
       if (screen.folder === 'lsfs') return <ResponseScreen key={address(screen)} family="lsf" name={screen.name} />;
+      if (screen.folder === 'galaxies' || screen.folder === 'observations') {
+        return <BlockInLayout key={address(screen)} folder={screen.folder} name={screen.name} />;
+      }
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} />;
     case 'new-dataset':
       if (screen.data === 'moments') return <NewMoments key={address(screen)} />;
       if (screen.data === 'image') return <NewImage key={address(screen)} />;
       return <NewDataset key={address(screen)} data={screen.data} />;
+    case 'draft':
+      return <DraftScreen key={address(screen)} id={screen.id} name={screen.name} />;
     case 'observe':
       return <Pending eyebrow="Observe · no data" title="Galaxies through observations" />;
     case 'compare':
