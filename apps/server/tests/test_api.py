@@ -230,6 +230,32 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
         step=0.001)).status_code == 400
 
 
+def test_the_parameters_of_a_galaxy_are_described(client):
+    disk = dict(
+        type='disk', rnodes=[0, 2, 4],
+        density=dict(ptraits=dict(type='exponential')),
+        kinematics=dict(
+            type='traits', vptraits=dict(type='arctan', direction='tan'),
+            dptraits=dict(type='uniform')),
+        emission=dict(type='lines'))
+    info = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=dict(components=[disk]))).json()
+    names = [p['name'] for p in info['parameters']]
+    assert {'xpos', 'ypos', 'vsys', 'posa', 'incl', 'vpt_vt'} <= set(names)
+    vsys = next(p for p in info['parameters'] if p['name'] == 'vsys')
+    assert vsys['unit'] == 'km / s' and vsys['size'] == 1
+    assert info['problems'] == []
+    # (a galaxy of a band, seen in an image; one with problems)
+    band = dict(disk, emission=dict(type='band'), kinematics=None)
+    assert client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=dict(components=[band]))).json()['parameters']
+    info = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=dict(components=[dict(disk, tilted=True)])
+    )).json()
+    assert info['parameters'] == []
+    assert info['problems'][0]['path'] == ['components', 0]
+
+
 def test_the_schema_of_the_configurations_is_served(client):
     schema = client.get('/api/v1/schema').json()
     assert {'psf', 'lsf'} <= set(schema['$defs'])

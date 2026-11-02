@@ -869,6 +869,45 @@
         }
       }
     },
+    "/api/v1/parameters": {
+      "post": {
+        "summary": "Galaxy Parameters",
+        "description": "Describe a galaxy of the options of a piece of a project, as the\nlibrary does without devices: the parameters it has, and its problems.",
+        "operationId": "galaxy_parameters_api_v1_parameters_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalaxyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GalaxyInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/schema": {
       "get": {
         "summary": "Config Schema",
@@ -1765,6 +1804,53 @@
         ],
         "title": "FolderInfo",
         "description": "A folder: its path, and its folders and files (but the hidden ones),\nby name."
+      },
+      "GalaxyInfo": {
+        "properties": {
+          "parameters": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Parameters"
+          },
+          "problems": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Problems"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parameters",
+          "problems"
+        ],
+        "title": "GalaxyInfo",
+        "description": "A galaxy as the library describes it (see Galaxies.describe): its\nparameters ({name, size, default, unit, range, period}, in its order)\nand its problems ({severity, path, message}; paths in the galaxy)."
+      },
+      "GalaxyRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "galaxy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Galaxy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "galaxy"
+        ],
+        "title": "GalaxyRequest",
+        "description": "A galaxy to describe: the project of its piece, and its options (its\nfiles relative to the project)."
       },
       "HTTPValidationError": {
         "properties": {

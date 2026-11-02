@@ -296,3 +296,16 @@ export function useLsfView(project: string, options: Record<string, unknown>, st
     queryFn: () => data(api.POST('/api/v1/views/lsf', { body: { project, options, step } })),
   });
 }
+
+// A galaxy of options of a block of a project as the library describes it:
+// the parameters it has, and its problems; the last stays while the next
+// comes
+export function useGalaxyParameters(project: string, galaxy: Record<string, unknown> | undefined) {
+  return useQuery({
+    queryKey: keys.view('parameters', project, JSON.stringify(galaxy ?? null)),
+    enabled: galaxy !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: () => data(api.POST('/api/v1/parameters', { body: { project, galaxy: galaxy ?? {} } })),
+  });
+}

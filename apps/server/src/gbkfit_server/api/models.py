@@ -16,6 +16,8 @@ __all__ = [
     'PieceRequest',
     'PieceReference',
     'ProjectRename',
+    'GalaxyInfo',
+    'GalaxyRequest',
     'LSFRequest',
     'LSFViewInfo',
     'PSFRequest',
@@ -73,6 +75,25 @@ class PieceReference(BaseModel):
     """A piece (or a setup) that names another: its folder and name."""
     folder: str
     name: str
+
+
+class GalaxyRequest(BaseModel):
+    """
+    A galaxy to describe: the project of its piece, and its options (its
+    files relative to the project).
+    """
+    project: str
+    galaxy: dict[str, Any]
+
+
+class GalaxyInfo(BaseModel):
+    """
+    A galaxy as the library describes it (see Galaxies.describe): its
+    parameters ({name, size, default, unit, range, period}, in its order)
+    and its problems ({severity, path, message}; paths in the galaxy).
+    """
+    parameters: list[dict[str, Any]]
+    problems: list[dict[str, Any]]
 
 
 class PSFRequest(BaseModel):

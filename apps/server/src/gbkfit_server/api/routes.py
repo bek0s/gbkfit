@@ -26,7 +26,8 @@ from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    ArrayInfo, CheckRequest, CheckResult, FolderInfo, ImportRequest,
+    ArrayInfo, CheckRequest, CheckResult, FolderInfo, GalaxyInfo,
+    GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
@@ -268,6 +269,17 @@ def view_lsf(server: ServerDep, request: LSFRequest) -> LSFViewInfo:
     view = server.responses.lsf(request.project, request.options, request.step)
     return LSFViewInfo(
         values=view.values.tolist(), step=view.step, fwhm=view.fwhm)
+
+
+@router.post('/parameters')
+def galaxy_parameters(server: ServerDep, request: GalaxyRequest) -> GalaxyInfo:
+    """
+    Describe a galaxy of the options of a piece of a project, as the
+    library does without devices: the parameters it has, and its problems.
+    """
+    return GalaxyInfo.model_validate(
+        server.galaxies.describe(request.project, request.galaxy),
+        from_attributes=True)
 
 
 @router.get('/schema')

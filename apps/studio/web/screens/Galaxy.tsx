@@ -5,7 +5,9 @@
 // forms are of the schema of the library (see SchemaForm); the model
 // itself (its maps and profiles) is to come, from a live session of a
 // setup that sees the galaxy.
+import { useDebouncedValue } from '@mantine/hooks';
 import { useState } from 'react';
+import { useGalaxyParameters } from '../api/queries';
 import { membersOf, propertiesOf, resolve, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../components/SchemaForm';
 import { Button, Close, NavItem } from '../components/ui/basics';
 import { Segments } from '../components/ui/inputs';
@@ -245,12 +247,7 @@ export function GalaxyOutline({ project, edited }: LayoutProps) {
       <div className="card inspector">{inspector}</div>
       <div className="col">
         <ModelCard compact />
-        <Panel id="galaxy-parameters" title="Its parameters">
-          <p className="note">
-            The parameters it has (e.g. xpos, ypos, vsys, posa, incl, and those of the traits of its components), with their values in
-            the blocks of parameters of the project: to come.
-          </p>
-        </Panel>
+        <GalaxyParameters project={project} options={options} />
       </div>
     </div>
   );
@@ -324,6 +321,7 @@ export function GalaxyCards({ project, edited }: LayoutProps) {
         <Panel id="galaxy-whole" title="The galaxy as a whole">
           <GalaxyOptions project={project} edited={edited} defs={defs} />
         </Panel>
+        <GalaxyParameters project={project} options={options} />
         <Panel id="galaxy-profiles" title="Radial profiles">
           <div className="draft-placeholder">
             <p>The rotation curve, the dispersion and the surface brightness of each component against radius, at the values of the parameters: to come.</p>
@@ -342,6 +340,7 @@ export function GalaxyCanvas({ project, edited }: LayoutProps) {
   const [view, setView] = useState<(typeof VIEWS)[number]>('velocity');
   const [chosen, setChosen] = useState<number | null>(null);
   const { go } = useStudio();
+  const parameters = useParameters(project, edited.options);
   const defs = edited.defs;
   const options = edited.options;
   if (!defs || !options) return <p className="note screen-error">Reading the galaxy…</p>;
@@ -385,16 +384,69 @@ export function GalaxyCanvas({ project, edited }: LayoutProps) {
           />
         ) : (
           <div className="drawer-sliders">
-            {['xpos', 'ypos', 'vsys', 'posa', 'incl'].map((p) => (
+            {(parameters.data?.parameters.map((p) => String(p.name)) ?? []).map((p) => (
               <div key={p} className="drawer-slider">
                 <span className="schema-label">{p}</span>
                 <div className="slider-placeholder" />
               </div>
             ))}
-            <p className="note">The sliders of its parameters (of the blocks of parameters of the project): to come. Choose a component to edit it.</p>
+            <p className="note">The sliders of its parameters (their values from the blocks of parameters of the project): to come. Choose a component to edit it.</p>
           </div>
         )}
       </div>
     </div>
+  );
+}
+
+// The parameters of the galaxy (as the library describes it, as its
+// options settle), and its problems, if any
+function useParameters(project: string, options: Options | undefined) {
+  const [settled] = useDebouncedValue(options, 400);
+  return useGalaxyParameters(project, settled);
+}
+
+export function GalaxyParameters({ project, options }: { project: string; options: Options | undefined }) {
+  const described = useParameters(project, options);
+  const info = described.data;
+  return (
+    <Panel id="galaxy-parameters" title="Its parameters">
+      {described.error && <p className="error">{described.error.message}</p>}
+      {info && info.problems.length > 0 && (
+        <ul className="problems">
+          {info.problems.map((p, i) => (
+            <li key={i}>
+              {(p.path as (string | number)[]).length > 0 && <code>{(p.path as (string | number)[]).join('.')}: </code>}
+              {String(p.message)}
+            </li>
+          ))}
+        </ul>
+      )}
+      {info && info.parameters.length > 0 && (
+        <table className="parameters">
+          <thead>
+            <tr>
+              <th>name</th>
+              <th>default</th>
+              <th>unit</th>
+              <th>range</th>
+            </tr>
+          </thead>
+          <tbody>
+            {info.parameters.map((p) => (
+              <tr key={String(p.name)} title={p.period ? `periodic, of ${p.period}` : undefined}>
+                <td className="mono">
+                  {String(p.name)}
+                  {Number(p.size) > 1 && <span className="note"> ×{String(p.size)}</span>}
+                </td>
+                <td className="mono">{p.default === null ? '—' : String(p.default)}</td>
+                <td>{p.unit === null ? '' : String(p.unit)}</td>
+                <td className="mono">{String(p.range)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <p className="note">Their values and priors are in the blocks of parameters of the project; editing them here is to come.</p>
+    </Panel>
   );
 }

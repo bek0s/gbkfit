@@ -290,6 +290,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/parameters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Galaxy Parameters
+         * @description Describe a galaxy of the options of a piece of a project, as the
+         *     library does without devices: the parameters it has, and its problems.
+         */
+        post: operations["galaxy_parameters_api_v1_parameters_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/schema": {
         parameters: {
             query?: never;
@@ -712,6 +733,35 @@ export interface components {
             folders: string[];
             /** Files */
             files: components["schemas"]["FileEntry"][];
+        };
+        /**
+         * GalaxyInfo
+         * @description A galaxy as the library describes it (see Galaxies.describe): its
+         *     parameters ({name, size, default, unit, range, period}, in its order)
+         *     and its problems ({severity, path, message}; paths in the galaxy).
+         */
+        GalaxyInfo: {
+            /** Parameters */
+            parameters: {
+                [key: string]: unknown;
+            }[];
+            /** Problems */
+            problems: {
+                [key: string]: unknown;
+            }[];
+        };
+        /**
+         * GalaxyRequest
+         * @description A galaxy to describe: the project of its piece, and its options (its
+         *     files relative to the project).
+         */
+        GalaxyRequest: {
+            /** Project */
+            project: string;
+            /** Galaxy */
+            galaxy: {
+                [key: string]: unknown;
+            };
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1605,6 +1655,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LSFViewInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    galaxy_parameters_api_v1_parameters_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalaxyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GalaxyInfo"];
                 };
             };
             /** @description Validation Error */
