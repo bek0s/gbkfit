@@ -3,6 +3,7 @@
 // folded or not, and the folder where a new block is being named.
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useProjects } from './api/queries';
+import { draft } from './shell/drafts';
 import { address, parseAddress, sameScreen, type Screen } from './shell/navigation';
 import { latestFirst, useRemembered } from './shell/remember';
 
@@ -101,9 +102,12 @@ export function StudioProvider({ children }: { children: ReactNode }) {
         ...all,
         [project]: (all[project] ?? []).flatMap((other) => (was(other) ? (next ? [next] : []) : [other])),
       }));
-      // (the screen of the block shows it as renamed, or the home)
-      if (was(screen)) {
-        const shown = next ?? { kind: 'home' };
+      // (the screen of the block shows it as renamed, or the home; that of
+      // a draft of its folder shown with it, it renamed, or the first)
+      let shown: Screen | null = null;
+      if (was(screen)) shown = next ?? { kind: 'home' };
+      else if (screen.kind === 'draft' && screen.name === name && draft(screen.id)?.folder === folder) shown = { ...screen, name: to };
+      if (shown !== null) {
         setScreen(shown);
         window.history.replaceState(null, '', address(shown));
       }
