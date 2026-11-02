@@ -49,8 +49,19 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [screen, setScreen] = useState<Screen>(() => parseAddress(window.location.hash));
   const [adding, setAdding] = useState<string | null>(null);
 
+  // (back and forward ask first too, as the edits of the screen are not
+  // saved: kept, the address goes back to the screen)
+  const shown = useRef(screen);
+  shown.current = screen;
   useEffect(() => {
-    const onPop = () => setScreen(parseAddress(window.location.hash));
+    const onPop = () => {
+      if (!leave()) {
+        window.history.pushState(null, '', address(shown.current));
+        return;
+      }
+      unsaved.current = false;
+      setScreen(parseAddress(window.location.hash));
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
