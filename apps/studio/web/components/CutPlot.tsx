@@ -5,11 +5,14 @@
 // the map does, over a range of values, with a line at a pixel (e.g. that
 // of the other cut). A vertical cut runs up, as the rows of a map do.
 import { useId } from 'react';
-import { significant } from './format';
 
 // (the plot is drawn on a square stretched to its box; its lines keep
 // their width)
 const SIZE = 1000;
+
+// (the room left above the top of its range, a fraction of the plot, so
+// that a peak does not touch its edge)
+const HEADROOM = 0.1;
 
 export function CutPlot({
   values,
@@ -32,7 +35,7 @@ export function CutPlot({
   // (where a pixel and a value are on the plot, along it and across it,
   // from 0 to 1)
   const along = (i: number) => (i - i0) / n;
-  const across = (value: number) => Math.min(1, Math.max(0, (value - low) / (high - low || 1)));
+  const across = (value: number) => (1 - HEADROOM) * Math.min(1, Math.max(0, (value - low) / (high - low || 1)));
   const point = (u: number, v: number) =>
     vertical ? `${(v * SIZE).toFixed(1)},${((1 - u) * SIZE).toFixed(1)}` : `${(u * SIZE).toFixed(1)},${((1 - v) * SIZE).toFixed(1)}`;
   // (each pixel a step from edge to edge; a pixel without a value breaks
@@ -68,7 +71,6 @@ export function CutPlot({
           ))}
         </g>
       </svg>
-      <span className="cut-high">{significant(high, 3)}</span>
     </figure>
   );
 }

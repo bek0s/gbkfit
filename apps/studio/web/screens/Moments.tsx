@@ -10,12 +10,11 @@
 // added. One of the project is shown as it is.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChannel, useCreateBlock, useJob, useProject, useSubmitJob } from '../api/queries';
-import { PanelsIcon } from '../components/icons';
 import type { Region } from '../components/MapView';
 import { MapsViewer, type MapItem } from '../components/MapsViewer';
-import { Button, Close, IconButton } from '../components/ui/basics';
+import { Button, Close } from '../components/ui/basics';
 import { DropMenu } from '../components/ui/overlays';
-import { SidePanes, type PanesControl } from '../components/ui/panes';
+import { SidePanes } from '../components/ui/panes';
 import { useStudio } from '../studio';
 import type { Prepared } from './Edits';
 import {
@@ -315,7 +314,7 @@ function MomentsBody({
   const fits = fitting.map(({ key }) => key).join();
   const out = useMemo(() => (edits ? leftOut(edits, edited) : null), [edits, fits, ...MAPS.map(({ key }) => values[key])]);
   const absent = MAPS.filter(({ key }) => maps[key] === undefined);
-  const viewer = ({ folded, toggle }: PanesControl) =>
+  const viewer =
     items.length > 0 && shape ? (
       <MapsViewer
         key={items.map((item) => item.key).join()}
@@ -325,11 +324,6 @@ function MomentsBody({
         onSelection={setSelection}
         crop={edits ? mapCropOf(edits, shape) : null}
         out={out}
-        actions={
-          <IconButton label={folded ? 'Show the panels at the side' : 'Hide the panels at the side'} pressed={!folded} onClick={toggle}>
-            <PanelsIcon />
-          </IconButton>
-        }
       />
     ) : (
       <div className="card viewer-empty">

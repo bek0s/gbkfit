@@ -35,7 +35,7 @@ export function Choice({
         return description ? (
           <div className="ui-choice-option">
             <span>{option.label}</span>
-            <small>{description}</small>
+            <small title={description}>{description}</small>
           </div>
         ) : (
           option.label

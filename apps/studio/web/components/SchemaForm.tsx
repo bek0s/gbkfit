@@ -96,7 +96,11 @@ export function membersOf(node: Schema, defs: Defs): Schema[] {
   const resolved = resolve(node, defs);
   const choices = resolved.oneOf as Schema[] | undefined;
   if (!choices) return typeOf(resolved) === undefined ? [] : [resolved];
-  return choices.flatMap((choice) => membersOf(choice, defs));
+  // (the forms of a member, e.g. a beam by its axes or by a file, have its
+  // description; their own, of their constructors, is kept as form)
+  return choices.flatMap((choice) =>
+    membersOf(choice, defs).map((member) => (resolved.description === undefined ? member : { ...member, description: resolved.description, form: member.description })),
+  );
 }
 
 // The type of a member of a family (the const of its option type)
@@ -192,14 +196,25 @@ function MemberField({
   const options = isObject(value) ? value : {};
   const type = typeof options.type === 'string' ? options.type : undefined;
   // (a type of several members, e.g. of options or of a file: that whose
-  // options it has, or the first)
+  // options it has, the one chosen of those that fit, e.g. before any of
+  // its options are given, or the first)
+  const [chosen, setChosen] = useState(0);
   const ofType = members.filter((m) => typeOf(m) === type);
-  const member =
-    ofType.find((m) => Object.keys(options).every((key) => key === 'type' || key in propertiesOf(m))) ?? ofType[0];
+  const fit = ofType.filter((m) => Object.keys(options).every((key) => key === 'type' || key in propertiesOf(m)));
+  const member = fit.includes(ofType[chosen]) ? ofType[chosen] : (fit[0] ?? ofType[0]);
   // (in the order of their texts, the common ones first; others after)
-  const order = Object.keys(TYPE_TEXTS);
+  const order = TYPE_ORDER;
   const rank = (t: string) => (order.includes(t) ? order.indexOf(t) : order.length);
   const types = [...new Set(members.map((m) => typeOf(m)!))].sort((a, b) => rank(a) - rank(b));
+  // (a form chosen keeps the options it has too, and starts the others as
+  // the type does)
+  const chooseForm = (index: number) => {
+    const target = ofType[index];
+    setChosen(index);
+    const start = Object.entries(starts[family]?.[type!] ?? {}).filter(([key]) => key in propertiesOf(target));
+    const kept = Object.entries(options).filter(([key]) => key !== 'type' && key in propertiesOf(target));
+    onChange({ type, ...Object.fromEntries(start), ...Object.fromEntries(kept) });
+  };
   const choose = (next: string) => {
     if (next === '') return onChange(undefined);
     if (next.startsWith('block:')) return onChange(next.slice(6));
@@ -216,7 +231,7 @@ function MemberField({
           items={[
             ...(nullable ? [{ value: '', label: 'none' }] : type === undefined ? [{ value: '', label: 'choose…' }] : []),
             ...(type !== undefined && !types.includes(type) ? [{ value: type, label: type }] : []),
-            ...types.map((t) => ({ value: t, label: typeTitle(t), description: TYPE_TEXTS[t] })),
+            ...types.map((t) => ({ value: t, label: typeTitle(t), description: members.find((m) => typeOf(m) === t)?.description as string | undefined })),
             ...named.map((name) => ({ value: `block:${name}`, label: `the ${family} ${name}`, description: 'A block of the project' })),
           ]}
           value={type ?? ''}
@@ -225,9 +240,15 @@ function MemberField({
         />
       </div>
       {ofType.length > 1 && member && (
-        <p className="note schema-note">
-          Also given as: {ofType.filter((m) => m !== member).map((m) => Object.keys(propertiesOf(m)).filter((k) => k !== 'type').join(', ')).join('; ')}
-        </p>
+        <div className="schema-row">
+          <span className="schema-label">given by</span>
+          <Choice
+            items={ofType.map((m, i) => ({ value: String(i), label: formLabel(m), description: m.form as string | undefined }))}
+            value={String(ofType.indexOf(member))}
+            label={`How the ${family} is given`}
+            onChange={(next) => chooseForm(Number(next))}
+          />
+        </div>
       )}
       {member && <ObjectFields node={member} value={options} onChange={onChange} />}
     </div>
@@ -235,35 +256,31 @@ function MemberField({
 }
 
 // The titles of the types of the families of instruments (others: their
-// names)
+// names); what each is comes from the library (its description: the
+// first paragraph of the docstring of its class)
 const TYPE_TITLES: Record<string, string> = {
-  point: 'Point (none)',
+  point: 'None (a point)',
   gauss: 'Gaussian',
+  gauss_beam: 'Gaussian, by FWHM (radio beam)',
   ggauss: 'Generalised Gaussian',
   moffat: 'Moffat',
   lorentz: 'Lorentzian',
   hanning: 'Hanning',
-  gauss_beam: 'Gaussian beam (FWHM)',
-  image: 'Image',
-  images: 'Images, along the spectrum',
+  image: 'Image (measured)',
+  images: 'Image per wavelength (measured)',
   sum: 'Sum',
   convolution: 'Convolution',
 };
 
-// What the types of the families of instruments are, in a line
-const TYPE_TEXTS: Record<string, string> = {
-  point: 'No spreading: all the light stays in its pixel or channel',
-  gauss: 'The usual one',
-  ggauss: 'A Gaussian of a shape: flatter (beta > 2) or peakier (beta < 2)',
-  moffat: 'A core with power-law wings, as of atmospheric seeing',
-  lorentz: 'Broad wings, as of natural or pressure broadening',
-  hanning: 'The smoothing of a Hanning window, as of radio spectrometers',
-  gauss_beam: 'A beam by its FWHMs, or that of the header of a file',
-  image: 'Measured: an image of it, from a FITS file',
-  images: 'Measured: one at each point of the spectrum, from a cube',
-  sum: 'A weighted sum of several, e.g. a core and a halo',
-  convolution: 'Several, one after the other, e.g. a telescope and a slit',
-};
+// The order of the types in their menus: the common ones first (others
+// after them)
+const TYPE_ORDER = ['point', 'gauss', 'gauss_beam', 'moffat', 'ggauss', 'lorentz', 'hanning', 'image', 'images', 'sum', 'convolution'];
+
+// A form of a member, by its options (e.g. bmaj, bmin, bpa; file)
+function formLabel(form: Schema): string {
+  const keys = Object.keys(propertiesOf(form)).filter((key) => key !== 'type');
+  return keys.length ? keys.join(', ') : 'nothing';
+}
 
 export function typeTitle(type: string): string {
   return TYPE_TITLES[type] ?? type;
@@ -463,20 +480,20 @@ function PlainField({
   return <Kept value={value} onChange={onChange} />;
 }
 
-// The slider of a number: from min to max by step; a range that grows
-// (e.g. of a width) is as wide as twice the value at first, and wider as
-// a larger one is typed
+// The slider of a number: from min to max by step; or, logarithmic (of a
+// width, above 0 without an end), from min to max, each step the same
+// fraction of the value
 export interface SliderSpec {
   min: number;
   max: number;
   step: number;
-  grow?: boolean;
+  log?: boolean;
 }
 
 // The slider of an option, by its name, its range and its unit, if it has
 // one: a range of its own (e.g. an axis ratio, in (0, 1]), an angle (0 to
-// 180 degrees), the slope of a profile (beta), or a width (arcsec, km/s);
-// none for others, or a value that is not a number (e.g. a table)
+// 180 degrees), the slope of a profile (beta), or a width above 0 (arcsec:
+// from a fine seeing to a radio beam; km/s); none for others, or a value that is not a number (e.g. a table)
 export function sliderOf(name: string, property: Schema, defs: Defs, value: unknown): SliderSpec | null {
   if (value !== undefined && typeof value !== 'number') return null;
   const resolved = resolve(property, defs);
@@ -496,18 +513,18 @@ export function sliderOf(name: string, property: Schema, defs: Defs, value: unkn
   }
   if (unit === 'deg') return { min: 0, max: 180, step: 1 };
   if (name === 'beta') return low === 1 ? { min: 1.05, max: 10, step: 0.05 } : { min: 0.2, max: 8, step: 0.05 };
-  if (unit === 'arcsec') return { min: 0, max: 5, step: 0.01, grow: true };
-  if (unit === 'km/s') return { min: 0, max: 50, step: 0.1, grow: true };
+  if (low !== 0) return null;
+  if (unit === 'arcsec') return { min: 0.01, max: 100, step: LOG_STEP, log: true };
+  if (unit === 'km/s') return { min: 0.1, max: 1000, step: LOG_STEP, log: true };
   return null;
 }
 
-// The round numbers (1, 2 and 5 times a power of 10) at or above, and at
-// or below, a positive number
-function niceAbove(x: number): number {
-  const power = 10 ** Math.floor(Math.log10(x));
-  return ([1, 2, 5, 10].find((m) => m * power >= x * (1 - 1e-9)) ?? 10) * power;
-}
+// (the step of a logarithmic slider, of the logarithm of the value: about
+// 2% of the value; 400 steps over the 4 decades of its range)
+const LOG_STEP = 0.01;
 
+// The round number (1, 2 or 5 times a power of 10) at or below a positive
+// number
 function niceBelow(x: number): number {
   const power = 10 ** Math.floor(Math.log10(x));
   return ([5, 2, 1].find((m) => m * power <= x * (1 + 1e-9)) ?? 1) * power;
@@ -531,13 +548,7 @@ function NumberValue({
   useEffect(() => {
     if ((value ?? null) !== (text.trim() === '' ? null : Number(text))) setText(value == null ? '' : String(value));
   }, [value]);
-  // (the end of a slider that grows: twice the value at first, then wider
-  // as a larger one is typed; never as it is dragged)
   const at = typeof value === 'number' ? value : typeof node.default === 'number' ? node.default : null;
-  const [top, setTop] = useState(() => (slider?.grow ? niceAbove(Math.max(slider.max, 2 * (at ?? 0))) : (slider?.max ?? 0)));
-  useEffect(() => {
-    if (slider?.grow && at !== null && at > top) setTop(niceAbove(1.5 * at));
-  }, [at]);
   const low = (node.exclusiveMinimum ?? node.minimum) as number | undefined;
   const high = (node.exclusiveMaximum ?? node.maximum) as number | undefined;
   const n = text.trim() === '' ? null : Number(text);
@@ -567,19 +578,30 @@ function NumberValue({
     />
   );
   if (!slider) return input;
-  const step = slider.grow ? niceBelow(top / 500) : slider.step;
-  // (a width is above 0: its slider starts a step above)
-  const min = slider.grow && node.exclusiveMinimum === 0 ? step : slider.min;
-  const max = slider.grow ? top : slider.max;
+  // (a logarithmic slider moves along the logarithm of the value, and gives
+  // it to 3 significant digits; a value beyond its ends puts it at one. As
+  // it is dragged, the value has as many decimals as its step, or, of a
+  // logarithmic one, as its order of magnitude has, so that its digits
+  // stay still)
+  const log = slider.log === true;
+  const min = log ? Math.log10(slider.min) : slider.min;
+  const max = log ? Math.log10(slider.max) : slider.max;
+  const decimals = (step: number) => Math.max(0, -Math.floor(Math.log10(step) + 1e-9));
+  const valueOf = (x: number) => {
+    if (!log) return x.toFixed(decimals(slider.step));
+    const v = Number((10 ** x).toPrecision(3));
+    return v.toFixed(Math.max(0, 2 - Math.floor(Math.log10(v) + 1e-9)));
+  };
+  const position = at === null || (log && !(at > 0)) ? min : log ? Math.log10(at) : at;
   return (
     <div className="schema-slide">
       <Slider
         min={min}
         max={max}
-        step={step}
-        value={Math.min(max, Math.max(min, at ?? min))}
-        onChange={(x) => typed(String(Number(x.toPrecision(6))))}
-        label={(x) => String(Number(x.toPrecision(4)))}
+        step={slider.step}
+        value={Math.min(max, Math.max(min, position))}
+        onChange={(x) => typed(valueOf(x))}
+        label={valueOf}
         thumbLabel="a number"
         size="sm"
         className="ui-slider schema-slider"

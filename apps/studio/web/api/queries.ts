@@ -277,9 +277,10 @@ export function useUpdateBlock() {
 // A PSF of options of a block of a project drawn on pixels of a size
 // (arcsec; null: of its own scale), with its width; the last drawn stays
 // while the next comes
-export function usePsfView(project: string, options: Record<string, unknown>, step: [number, number] | null) {
+export function usePsfView(project: string, options: Record<string, unknown>, step: [number, number] | null, enabled = true) {
   return useQuery({
     queryKey: keys.view('psf', project, JSON.stringify(options), step?.join() ?? ''),
+    enabled,
     placeholderData: keepPreviousData,
     retry: false,
     queryFn: () => data(api.POST('/api/v1/views/psf', { body: { project, options, step } })),
@@ -288,9 +289,10 @@ export function usePsfView(project: string, options: Record<string, unknown>, st
 
 // An LSF of options of a block of a project drawn on channels of a width
 // (km/s; null: of its own scale), with its width
-export function useLsfView(project: string, options: Record<string, unknown>, step: number | null) {
+export function useLsfView(project: string, options: Record<string, unknown>, step: number | null, enabled = true) {
   return useQuery({
     queryKey: keys.view('lsf', project, JSON.stringify(options), step ?? ''),
+    enabled,
     placeholderData: keepPreviousData,
     retry: false,
     queryFn: () => data(api.POST('/api/v1/views/lsf', { body: { project, options, step } })),

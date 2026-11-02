@@ -11,10 +11,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useCreateBlock, useJob, usePiece, useProject, useSubmitJob } from '../api/queries';
 import { CubeViewer } from '../components/CubeViewer';
 import { joinPath } from '../components/FilePicker';
-import { PanelsIcon } from '../components/icons';
 import type { Region } from '../components/MapView';
-import { Button, IconButton } from '../components/ui/basics';
-import { SidePanes, type PanesControl } from '../components/ui/panes';
+import { Button } from '../components/ui/basics';
+import { SidePanes } from '../components/ui/panes';
 import { BlockMenu } from '../shell/BlockMenu';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
 import { useStudio } from '../studio';
@@ -259,7 +258,7 @@ function DatasetBody({
   const [selection, setSelection] = useState<Region | null>(null);
   const [band, setBand] = useState<[number, number] | null>(null);
   // (the column at the side is as wide as dragged, and folds away)
-  const viewer = ({ folded, toggle }: PanesControl) =>
+  const viewer =
     isCube ? (
       <CubeViewer
         key={`${sources.files.data!.file}:${data.index}`}
@@ -272,11 +271,6 @@ function DatasetBody({
         crop={crops?.region}
         cropChannels={crops?.channels}
         kept={edits ? keptOf(edits) : null}
-        actions={
-          <IconButton label={folded ? 'Show the panels at the side' : 'Hide the panels at the side'} pressed={!folded} onClick={toggle}>
-            <PanelsIcon />
-          </IconButton>
-        }
       />
     ) : (
       <div className="card viewer-empty">

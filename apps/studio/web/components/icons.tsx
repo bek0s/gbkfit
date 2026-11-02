@@ -95,11 +95,19 @@ export const ClearIcon = () => (
   </Icon>
 );
 
-// The panels at the side: a window with a column at its right
-export const PanelsIcon = () => (
+// Linked (e.g. the x and y of a size, kept one): two links of a chain
+export const LinkIcon = () => (
   <Icon>
-    <rect x="3" y="4.5" width="18" height="15" rx="1.5" />
-    <path d="M15 4.5v15" />
+    <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />
+    <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
+  </Icon>
+);
+
+// Not linked: the two links of a chain apart
+export const UnlinkIcon = () => (
+  <Icon>
+    <path d="M15.5 12.5l3.2-3.2a4 4 0 0 0-5.7-5.7L9.8 6.8" />
+    <path d="M8.5 11.5l-3.2 3.2a4 4 0 0 0 5.7 5.7l3.2-3.2" />
   </Icon>
 );
 

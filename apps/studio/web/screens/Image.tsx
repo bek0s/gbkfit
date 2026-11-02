@@ -7,11 +7,10 @@
 // added. One of the project is shown as it is.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useChannel, useCreateBlock, useJob, useProject, useSubmitJob } from '../api/queries';
-import { PanelsIcon } from '../components/icons';
 import type { Region } from '../components/MapView';
 import { MapsViewer } from '../components/MapsViewer';
-import { Button, IconButton } from '../components/ui/basics';
-import { SidePanes, type PanesControl } from '../components/ui/panes';
+import { Button } from '../components/ui/basics';
+import { SidePanes } from '../components/ui/panes';
 import { useStudio } from '../studio';
 import type { Prepared } from './Edits';
 import {
@@ -209,7 +208,7 @@ function ImageBody({
   const values = useChannel(path, data?.index ?? 0, 0).data?.plane.values;
   const edited = [{ key: KEY, title: 'Flux', unit: data?.unit ?? null, values }];
   const out = useMemo(() => (edits ? leftOut(edits, edited) : null), [edits, values]);
-  const viewer = ({ folded, toggle }: PanesControl) =>
+  const viewer =
     shape && data ? (
       <MapsViewer
         key={`${sources.files.data!.file}:${data.index}`}
@@ -219,11 +218,6 @@ function ImageBody({
         onSelection={setSelection}
         crop={edits ? mapCropOf(edits, shape) : null}
         out={out}
-        actions={
-          <IconButton label={folded ? 'Show the panels at the side' : 'Hide the panels at the side'} pressed={!folded} onClick={toggle}>
-            <PanelsIcon />
-          </IconButton>
-        }
       />
     ) : (
       <div className="card viewer-empty">

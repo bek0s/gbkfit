@@ -3,9 +3,30 @@
 import { rampGradient, useScheme } from './colours';
 import { significant } from './format';
 
-export function ColourBar({ range, diverging, unit }: { range: [number, number]; diverging: boolean; unit: string }) {
+export function ColourBar({
+  range,
+  diverging,
+  unit,
+  horizontal = false,
+}: {
+  range: [number, number];
+  diverging: boolean;
+  unit: string;
+  // (lying under a map, from low on the left to high on the right)
+  horizontal?: boolean;
+}) {
   // (in the colours of the scheme of the system, as it changes)
   useScheme();
+  if (horizontal) {
+    return (
+      <div className="colour-bar horizontal">
+        <span>{significant(range[0], 3)}</span>
+        <i style={{ background: rampGradient(diverging, 'to right') }} />
+        <span>{significant(range[1], 3)}</span>
+        <span className="colour-unit">{unit}</span>
+      </div>
+    );
+  }
   return (
     <div className="colour-bar">
       <span>{significant(range[1], 3)}</span>
