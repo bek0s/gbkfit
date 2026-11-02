@@ -5,8 +5,9 @@
 // of the project) by a likelihood, in two layouts to compare. Their forms
 // are of the schema of the library (see SchemaForm).
 import { useState } from 'react';
-import { usePiece } from '../api/queries';
+import { useDescription, usePiece } from '../api/queries';
 import { joinPath } from '../components/FilePicker';
+import { significant } from '../components/format';
 import { membersOf, propertiesOf, SchemaForm, typeOf, type Options, type Schema } from '../components/SchemaForm';
 import { Button } from '../components/ui/basics';
 import { Panel } from '../components/ui/panel';
@@ -184,6 +185,14 @@ function Checks({ project, options, datasets }: { project: string; options: Opti
   const dataset = usePiece(named === null || !datasets.includes(named) ? null : joinPath(project, `datasets/${named}.yaml`)).data as Options | undefined;
   const observable = (options.observable ?? {}) as Options;
   const instrument = (options.instrument ?? {}) as Options;
+  // (the array of the data of the dataset, from its header: of its first
+  // map, for moment maps)
+  const item = (dataset?.type === 'pixel_moments' ? (dataset.moment0 ?? dataset.moment1) : dataset) as Options | undefined;
+  const data = item?.data as string | { file?: string; hdu?: string | number } | undefined;
+  const file = typeof data === 'string' ? data : data?.file;
+  const hdu = typeof data === 'object' ? data.hdu : undefined;
+  const arrays = useDescription(file ? joinPath(project, file) : null).data ?? [];
+  const array = arrays.find((a) => a.name === hdu || a.index === hdu) ?? arrays[0];
   const spectral = ['pixel_spectra', 'pixel_moments', 'slit_spectra', 'slitless_spectra', 'region_spectra', 'region_moments'].includes(String(observable.type));
   const checks: { ok: boolean | null; text: string }[] = [];
   if (options.data == null) checks.push({ ok: null, text: 'No data: it makes a model, or mock data.' });
@@ -196,8 +205,22 @@ function Checks({ project, options, datasets }: { project: string; options: Opti
     );
     if (Array.isArray(observable.size)) checks.push({ ok: null, text: 'The observable gives its grid; with data, the grid of the data is used.' });
   }
-  checks.push(instrument.psf != null ? { ok: true, text: `PSF: ${glance(instrument.psf)}.` } : { ok: null, text: 'No PSF: a perfect instrument on the sky.' });
+  const beam = array?.beam;
+  if (instrument.psf != null) checks.push({ ok: true, text: `PSF: ${glance(instrument.psf)}.` });
+  else if (beam && !Array.isArray(beam.bmaj)) {
+    checks.push({
+      ok: false,
+      text: `Their header has a beam of ${significant(Number(beam.bmaj), 3)}″ × ${significant(Number(beam.bmin), 3)}″, but there is no PSF: give one (e.g. gauss_beam of that beam).`,
+    });
+  } else checks.push({ ok: null, text: 'No PSF: a perfect instrument on the sky.' });
   if (spectral) checks.push(instrument.lsf != null ? { ok: true, text: `LSF: ${glance(instrument.lsf)}.` } : { ok: null, text: 'No LSF: a perfect spectrograph.' });
+  // (the channels of the observable, given, against those of the data)
+  const given = (observable.spectral as Options | undefined)?.step;
+  const width = array?.step && array.step.length === 3 ? Math.abs(array.step[2]) : null;
+  if (spectral && typeof given === 'number' && width !== null && Math.abs(given - width) > 1e-6 * width) {
+    checks.push({ ok: null, text: `The observable gives channels of ${given} km/s; those of the data are ${significant(width, 4)} km/s, which are used.` });
+  }
+  if (array?.step) checks.push({ ok: null, text: `The data: pixels of ${significant(Math.abs(array.step[0]), 3)}″${width !== null ? `, channels of ${significant(width, 4)} km/s` : ''}.` });
   return (
     <Panel id="observation-checks" title="Checks">
       <ul className="checks">
@@ -212,7 +235,7 @@ function Checks({ project, options, datasets }: { project: string; options: Opti
           Open the dataset {named} →
         </Button>
       )}
-      <p className="note">To come: its pixels and channels against those of the data, and its PSF against the beam of their header.</p>
+      <p className="note">To come: its PSF against the beam (their widths), and its grid against that of the data when both are given.</p>
     </Panel>
   );
 }
