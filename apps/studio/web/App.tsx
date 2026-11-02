@@ -71,7 +71,7 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'galaxies' || screen.folder === 'observations') {
         return <BlockInLayout key={address(screen)} folder={screen.folder} name={screen.name} />;
       }
-      return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} />;
+      return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} folder={screen.folder} />;
     case 'new-dataset':
       if (screen.data === 'moments') return <NewMoments key={address(screen)} />;
       if (screen.data === 'image') return <NewImage key={address(screen)} />;
