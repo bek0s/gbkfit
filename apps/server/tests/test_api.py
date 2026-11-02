@@ -305,6 +305,18 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
     assert array['problems'] == []
     assert client.get(
         '/api/v1/describe/study/setups/disk.yaml').status_code == 400
+    # (of velocities of no convention, the size of its pixels on the sky
+    # alone, until one is given)
+    header['CTYPE3'] = 'VELO-HEL'
+    fits.writeto(
+        pathlib.Path(root, 'study/data/velo.fits'),
+        np.zeros((4, 3, 2), np.float32), header)
+    (array,) = client.get('/api/v1/describe/study/data/velo.fits').json()
+    assert array['ambiguous_velocity']
+    assert [abs(step) for step in array['step']] == pytest.approx([1, 1])
+    (array,) = client.get(
+        '/api/v1/describe/study/data/velo.fits?velocity=radio').json()
+    assert [abs(step) for step in array['step']] == pytest.approx([1, 1, 10])
 
 
 def test_files_of_data_are_imported_and_uploaded_into_a_project(client, root):

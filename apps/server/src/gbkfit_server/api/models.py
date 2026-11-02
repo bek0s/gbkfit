@@ -165,8 +165,8 @@ class ArrayInfo(BaseModel):
     header: its index and name in the file, its shape and the types of
     its axes, in the order of the model (x, y, then the spectral axis),
     the unit of its values, the size of its pixels in that order (arcsec,
-    and km/s along a velocity axis; none if its coordinates cannot be
-    read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
+    and km/s along a velocity axis; the spatial ones alone while its
+    velocities are ambiguous; none if its coordinates cannot be read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
     a beam of each channel), the noise of its values that its header
     states (keyword RMS or NOISE), whether its header leaves it open
     whether its velocities are radio or optical (a dataset of it gives

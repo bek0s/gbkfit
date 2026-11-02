@@ -412,8 +412,9 @@ class Workspace:
         gbkfit.dataset.describe_fits), with the convention of velocities
         that its headers leave ambiguous, if given: each of its arrays (its
         index, name, shape and axes, in the order of the model, unit, the
-        size of its pixels in that order, beam, the noise its header
-        states, whether its velocities are ambiguous, and problems).
+        size of its pixels in that order (only the spatial ones while its
+        velocities are ambiguous), beam, the noise its header states,
+        whether its velocities are ambiguous, and problems).
 
         Raises
         ------
@@ -429,12 +430,20 @@ class Workspace:
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
             hdus = gbkfit.dataset.describe_fits(path, velocity)
+            # (the size of the pixels of arrays of ambiguous velocities is
+            # that of either convention: their spatial steps are given)
+            spatial = {
+                hdu.index: [float(step) for step in hdu.coords.step[:2]]
+                for hdu in gbkfit.dataset.describe_fits(path, 'radio')
+                if hdu.coords is not None} \
+                if velocity is None \
+                and any(hdu.ambiguous_velocity for hdu in hdus) else {}
         except OSError as e:
             raise Invalid(f"cannot read '{relative}': {e}") from e
         return [
             dict(index=hdu.index, name=hdu.name, shape=list(hdu.shape),
                  axes=list(hdu.axes), unit=_readable_unit(hdu.unit),
-                 step=None if hdu.coords is None
+                 step=spatial.get(hdu.index) if hdu.coords is None
                  else [float(step) for step in hdu.coords.step],
                  beam=None if hdu.beam is None else dict(
                      bmaj=np.asarray(hdu.beam.bmaj).tolist(),
