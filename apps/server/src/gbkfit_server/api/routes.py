@@ -19,12 +19,13 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from starlette.requests import HTTPConnection
 
 from gbkfit_server.services import frames
-from gbkfit_server.services.errors import Failed, NotFound
+from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
     ArrayInfo, CheckRequest, CheckResult, FolderInfo, ImportRequest,
-    JobInfo, JobRequest, PieceRequest, ProjectInfo, ProjectRequest, RunInfo,
+    JobInfo, JobRequest, PieceReference, PieceRename, PieceRequest,
+    ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
     SessionInfo, SessionRequest, SpectrumView)
 
 
@@ -78,6 +79,63 @@ def project(server: ServerDep, path: str) -> ProjectInfo:
     """Return a project: its pieces, setups and runs."""
     return ProjectInfo.model_validate(
         server.workspace.project(path), from_attributes=True)
+
+
+@router.patch('/projects/{path:path}')
+def rename_project(
+        server: ServerDep, path: str, request: ProjectRename) -> ProjectInfo:
+    """
+    Move a project to another folder of the workspace; not while jobs of
+    it are queued or running.
+    """
+    _idle(server, path)
+    return ProjectInfo.model_validate(
+        server.workspace.rename_project(path, request.path),
+        from_attributes=True)
+
+
+@router.delete('/projects/{path:path}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_project(server: ServerDep, path: str) -> None:
+    """
+    Delete a project and all its files (its data and runs too); not while
+    jobs of it are queued or running.
+    """
+    _idle(server, path)
+    server.workspace.delete_project(path)
+
+
+def _idle(server: Server, path: str) -> None:
+    """Raise Invalid if jobs of a folder are queued or running."""
+    if busy := server.jobs.busy(path):
+        raise Invalid(
+            f"'{path}' has {len(busy)} job(s) queued or running; stop them "
+            f"first")
+
+
+@router.patch('/pieces/{path:path}')
+def rename_piece(server: ServerDep, path: str, request: PieceRename) -> str:
+    """
+    Rename a piece (or a setup) of a project, and the pieces and setups
+    that name it with it; return its new path.
+    """
+    return server.workspace.rename_piece(path, request.name)
+
+
+@router.delete('/pieces/{path:path}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_piece(server: ServerDep, path: str) -> None:
+    """
+    Delete a piece (or a setup) of a project; the pieces and setups that
+    name it still do (see references), and its files of data stay.
+    """
+    server.workspace.delete_piece(path)
+
+
+@router.get('/references/{path:path}')
+def references(server: ServerDep, path: str) -> list[PieceReference]:
+    """Return the pieces and setups of a project that name one of its pieces."""
+    return [
+        PieceReference.model_validate(reference)
+        for reference in server.workspace.references(path)]
 
 
 @router.get('/folders/{path:path}')

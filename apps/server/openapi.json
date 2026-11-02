@@ -145,6 +145,86 @@
             }
           }
         }
+      },
+      "patch": {
+        "summary": "Rename Piece",
+        "description": "Rename a piece (or a setup) of a project, and the pieces and setups\nthat name it with it; return its new path.",
+        "operationId": "rename_piece_api_v1_pieces__path__patch",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PieceRename"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string",
+                  "title": "Response Rename Piece Api V1 Pieces  Path  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Piece",
+        "description": "Delete a piece (or a setup) of a project; the pieces and setups that\nname it still do (see references), and its files of data stay.",
+        "operationId": "delete_piece_api_v1_pieces__path__delete",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/projects/{path}": {
@@ -170,6 +250,129 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Rename Project",
+        "description": "Move a project to another folder of the workspace; not while jobs of\nit are queued or running.",
+        "operationId": "rename_project_api_v1_projects__path__patch",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectRename"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Project",
+        "description": "Delete a project and all its files (its data and runs too); not while\njobs of it are queued or running.",
+        "operationId": "delete_project_api_v1_projects__path__delete",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/references/{path}": {
+      "get": {
+        "summary": "References",
+        "description": "Return the pieces and setups of a project that name one of its pieces.",
+        "operationId": "references_api_v1_references__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PieceReference"
+                  },
+                  "title": "Response References Api V1 References  Path  Get"
                 }
               }
             }
@@ -1608,6 +1811,39 @@
         "title": "JobRequest",
         "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir'); prep needs the\nfolder of the prepared files ('output_dir'), where they are kept as\nimported files are (an identical file is reused; a name taken is\nnumbered)."
       },
+      "PieceReference": {
+        "properties": {
+          "folder": {
+            "type": "string",
+            "title": "Folder"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "folder",
+          "name"
+        ],
+        "title": "PieceReference",
+        "description": "A piece (or a setup) that names another: its folder and name."
+      },
+      "PieceRename": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "PieceRename",
+        "description": "The new name of a piece (a path in its folder, without .yaml)."
+      },
       "PieceRequest": {
         "properties": {
           "project": {
@@ -1676,6 +1912,20 @@
         ],
         "title": "ProjectInfo",
         "description": "A project: its path, the names of its pieces and setups by folder\n(e.g. 'galaxies'), and the paths of its runs."
+      },
+      "ProjectRename": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "ProjectRename",
+        "description": "The new folder of a project, in the workspace."
       },
       "ProjectRequest": {
         "properties": {

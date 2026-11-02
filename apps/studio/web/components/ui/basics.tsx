@@ -4,8 +4,9 @@
 import { ActionIcon, Alert, Button as MantineButton, CloseButton, NavLink, Tabs, TextInput } from '@mantine/core';
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
-// A button: primary (the main action of a screen), plain, quiet (of a
-// bar), or a small action beside a value (e.g. Import, clear). Other props
+// A button: primary (the main action of a screen), danger (an action that
+// cannot be undone, e.g. delete), plain, quiet (of a bar), or a small
+// action beside a value (e.g. Import, clear). Other props
 // (and its ref) go to the button, so that it can be the target of a menu.
 export function Button({
   kind = 'plain',
@@ -18,7 +19,7 @@ export function Button({
   children,
   ...rest
 }: {
-  kind?: 'primary' | 'plain' | 'quiet' | 'small';
+  kind?: 'primary' | 'danger' | 'plain' | 'quiet' | 'small';
   onClick?: (event: React.MouseEvent<HTMLButtonElement>) => void;
   disabled?: boolean;
   title?: string;
@@ -30,12 +31,13 @@ export function Button({
   submit?: boolean;
   children: ReactNode;
 } & Omit<ComponentPropsWithRef<'button'>, 'onClick' | 'disabled' | 'title' | 'type' | 'children'>) {
-  const variant = { primary: 'filled', plain: 'default', quiet: 'subtle', small: 'subtle' }[kind];
+  const variant = { primary: 'filled', danger: 'filled', plain: 'default', quiet: 'subtle', small: 'subtle' }[kind];
   return (
     <MantineButton
       {...rest}
       type={submit ? 'submit' : 'button'}
       variant={variant}
+      color={kind === 'danger' ? 'red' : undefined}
       size={kind === 'small' ? 'compact-xs' : 'xs'}
       onClick={onClick}
       disabled={disabled}

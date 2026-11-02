@@ -201,6 +201,142 @@ class Workspace:
         except (ConfigError, OSError) as e:
             raise Invalid(f"cannot create the piece '{name}': {e}") from e
 
+    def rename_project(self, relative: str, to: str) -> ProjectInfo:
+        """
+        Move a project to another folder of the workspace (its pieces and
+        setups name their files relative to it, so they follow).
+
+        Raises
+        ------
+        NotFound
+            If the project does not exist.
+        Invalid
+            If it is the workspace itself, or the new folder exists, or is
+            in a project.
+        """
+        source = self._project_path(relative)
+        target = self.path(to)
+        if source == self._root:
+            raise Invalid("the workspace itself cannot move")
+        if os.path.exists(target):
+            raise Invalid(f"'{to}' exists")
+        try:
+            outer = gbkfit.project.find(os.path.dirname(target))
+        except ValueError as e:
+            raise Invalid(str(e)) from e
+        if outer is not None:
+            raise Invalid(
+                f"'{to}' is in the project '{self.relative(outer.path)}'")
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        os.rename(source, target)
+        return self.project(self.relative(target))
+
+    def delete_project(self, relative: str) -> None:
+        """
+        Delete a project, and all its files: its data and runs too.
+
+        Raises
+        ------
+        NotFound
+            If the project does not exist.
+        Invalid
+            If it is the workspace itself.
+        """
+        path = self._project_path(relative)
+        if path == self._root:
+            raise Invalid("the workspace itself cannot be deleted")
+        shutil.rmtree(path)
+
+    def references(self, relative: str) -> list[dict[str, str]]:
+        """
+        Return the pieces and setups of a project that name one of its
+        pieces (see gbkfit.project.Project.references), by its path: their
+        folders and names ({folder, name}).
+
+        Raises
+        ------
+        NotFound
+            If the piece is not one of a project.
+        """
+        target, folder, name = self._piece_of(relative)
+        return [
+            dict(folder=other, name=other_name)
+            for other, other_name in target.references(folder, name)]
+
+    def rename_piece(self, relative: str, name: str) -> str:
+        """
+        Rename a piece (or a setup) of a project by its path, and the
+        pieces and setups that name it with it (see
+        gbkfit.project.Project.rename_piece); return its new path.
+
+        Raises
+        ------
+        NotFound
+            If the piece is not one of a project.
+        Invalid
+            If the name is invalid, or a piece of it exists.
+        """
+        target, folder, old = self._piece_of(relative)
+        try:
+            return self.relative(target.rename_piece(folder, old, name))
+        except (ConfigError, FileExistsError) as e:
+            raise Invalid(f"cannot rename the piece '{old}': {e}") from e
+
+    def delete_piece(self, relative: str) -> None:
+        """
+        Delete a piece (or a setup) of a project by its path; its files of
+        data stay.
+
+        Raises
+        ------
+        NotFound
+            If the piece is not one of a project.
+        """
+        target, folder, name = self._piece_of(relative)
+        target.delete_piece(folder, name)
+
+    def _project_path(self, relative: str) -> str:
+        """
+        Return the folder of a project (absolute).
+
+        Raises
+        ------
+        NotFound
+            If the folder is not a project.
+        """
+        path = self.path(relative)
+        try:
+            gbkfit.project.open(path)
+        except ValueError as e:
+            raise NotFound(str(e)) from e
+        return path
+
+    def _piece_of(
+            self, relative: str
+    ) -> tuple[gbkfit.project.Project, str, str]:
+        """
+        Return the project of a piece (or a setup) by its path, and its
+        folder and name.
+
+        Raises
+        ------
+        NotFound
+            If the file is not a piece of a project.
+        """
+        path = self.path(relative)
+        try:
+            target = gbkfit.project.find(path)
+        except ValueError as e:
+            raise NotFound(str(e)) from e
+        parts = Path(os.path.relpath(path, target.path)).parts \
+            if target is not None else ()
+        if len(parts) < 2 or parts[0] not in _PIECES \
+                or not parts[-1].endswith('.yaml') \
+                or not os.path.isfile(path):
+            raise NotFound(f"no piece '{relative}'")
+        name = Path(*parts[1:]).with_suffix('').as_posix()
+        return target, parts[0], name
+
     def read_text(self, relative: str) -> str:
         """
         Return the text of a file.

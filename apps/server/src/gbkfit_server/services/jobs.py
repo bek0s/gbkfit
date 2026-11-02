@@ -10,9 +10,10 @@ import collections
 import dataclasses
 import datetime
 import json
+import os
 import shutil
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, Literal
 
@@ -153,6 +154,35 @@ class Jobs:
         self._publish(job)
         self._start_queued()
         return job
+
+    def busy(self, relative: str) -> list[Job]:
+        """
+        Return the jobs queued or running whose options name a path in a
+        folder of the workspace (e.g. a project), or the folder itself.
+        """
+        folder = self._workspace.path(relative)
+
+        def paths(value: Any) -> Iterator[str]:
+            if isinstance(value, str):
+                yield value
+            elif isinstance(value, Mapping):
+                for item in value.values():
+                    yield from paths(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from paths(item)
+
+        def inside(value: str) -> bool:
+            try:
+                path = self._workspace.path(value)
+            except (Invalid, ValueError):
+                return False
+            return path == folder or path.startswith(folder + os.sep)
+
+        return [
+            job for job in self._jobs.values()
+            if job.state in ('queued', 'running')
+            and any(inside(value) for value in paths(job.options))]
 
     def stop(self, id_: str) -> Job:
         """

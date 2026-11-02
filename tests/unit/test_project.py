@@ -164,3 +164,57 @@ def test_pieces_are_made_from_templates_in_their_folders(study):
         study.create_piece('runs', 'x')
     with pytest.raises(ConfigError, match="must be a path in setups/"):
         study.create_piece('setups', '../x')
+
+
+def test_pieces_are_renamed_with_the_names_of_them(study):
+    path = Path(study.path)
+    (path / 'datasets').mkdir(exist_ok=True)
+    write(path / 'datasets/ngc1313/hi.yaml', DATASET)
+    write(path / 'psfs/beam.yaml', PSF)
+    (path / 'observations/ngc1313/hi.yaml').write_text(
+        "# The HI of NGC 1313\n"
+        "data: ngc1313/hi\n"
+        "# its instrument\n"
+        "instrument: {psf: beam, lsf: {type: gauss, sigma: 15}}\n")
+    (path / 'setups').mkdir(exist_ok=True)
+    (path / 'setups/fit.yaml').write_text(
+        "galaxies: [arctan]\n"
+        "observations:\n"
+        "- ngc1313/hi\n"
+        "- {data: ngc1313/hi, instrument: {psf: beam}}\n"
+        "params: [bounds, ngc1313]\n"
+        "fitter: nautilus\n")
+    assert study.references('datasets', 'ngc1313/hi') == [
+        ('observations', 'ngc1313/hi'), ('setups', 'fit')]
+    assert study.references('psfs', 'beam') == [
+        ('observations', 'ngc1313/hi'), ('setups', 'fit')]
+    assert study.references('galaxies', 'arctan') == [('setups', 'fit')]
+    assert study.references('datasets', 'other') == []
+    # (renamed, the names of it follow; comments and layout stay)
+    target = study.rename_piece('datasets', 'ngc1313/hi', 'hi')
+    assert target == str(path / 'datasets/hi.yaml')
+    assert not (path / 'datasets/ngc1313').exists()
+    assert (path / 'observations/ngc1313/hi.yaml').read_text() == (
+        "# The HI of NGC 1313\n"
+        "data: hi\n"
+        "# its instrument\n"
+        "instrument: {psf: beam, lsf: {type: gauss, sigma: 15}}\n")
+    assert yaml.load(path / 'setups/fit.yaml')['observations'] == [
+        'ngc1313/hi', dict(data='hi', instrument=dict(psf='beam'))]
+    study.rename_piece('observations', 'ngc1313/hi', 'hi')
+    assert yaml.load(path / 'setups/fit.yaml')['observations'][0] == 'hi'
+    with pytest.raises(FileExistsError):
+        study.rename_piece('galaxies', 'arctan', 'arctan')
+    with pytest.raises(FileNotFoundError):
+        study.rename_piece('galaxies', 'nothing', 'other')
+    with pytest.raises(ConfigError, match="must be a path in galaxies/"):
+        study.rename_piece('galaxies', 'arctan', '../arctan')
+    # (deleted, the names of it stay)
+    study.delete_piece('psfs', 'beam')
+    assert not (path / 'psfs/beam.yaml').exists()
+    assert study.references('psfs', 'beam') == [
+        ('observations', 'hi'), ('setups', 'fit')]
+    with pytest.raises(FileNotFoundError):
+        study.delete_piece('psfs', 'beam')
+    with pytest.raises(ConfigError, match="pieces are in the folders"):
+        study.delete_piece('runs', 'x')

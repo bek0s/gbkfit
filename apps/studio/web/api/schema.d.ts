@@ -63,10 +63,20 @@ export interface paths {
         get: operations["piece_api_v1_pieces__path__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Piece
+         * @description Delete a piece (or a setup) of a project; the pieces and setups that
+         *     name it still do (see references), and its files of data stay.
+         */
+        delete: operations["delete_piece_api_v1_pieces__path__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Rename Piece
+         * @description Rename a piece (or a setup) of a project, and the pieces and setups
+         *     that name it with it; return its new path.
+         */
+        patch: operations["rename_piece_api_v1_pieces__path__patch"];
         trace?: never;
     };
     "/api/v1/projects/{path}": {
@@ -81,6 +91,36 @@ export interface paths {
          * @description Return a project: its pieces, setups and runs.
          */
         get: operations["project_api_v1_projects__path__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Project
+         * @description Delete a project and all its files (its data and runs too); not while
+         *     jobs of it are queued or running.
+         */
+        delete: operations["delete_project_api_v1_projects__path__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Rename Project
+         * @description Move a project to another folder of the workspace; not while jobs of
+         *     it are queued or running.
+         */
+        patch: operations["rename_project_api_v1_projects__path__patch"];
+        trace?: never;
+    };
+    "/api/v1/references/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * References
+         * @description Return the pieces and setups of a project that name one of its pieces.
+         */
+        get: operations["references_api_v1_references__path__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -684,6 +724,24 @@ export interface components {
             };
         };
         /**
+         * PieceReference
+         * @description A piece (or a setup) that names another: its folder and name.
+         */
+        PieceReference: {
+            /** Folder */
+            folder: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * PieceRename
+         * @description The new name of a piece (a path in its folder, without .yaml).
+         */
+        PieceRename: {
+            /** Name */
+            name: string;
+        };
+        /**
          * PieceRequest
          * @description A piece (or a setup) to create: its project, its folder (e.g.
          *     galaxies, psfs or setups), its name (its path in the folder, without
@@ -716,6 +774,14 @@ export interface components {
             };
             /** Runs */
             runs: string[];
+        };
+        /**
+         * ProjectRename
+         * @description The new folder of a project, in the workspace.
+         */
+        ProjectRename: {
+            /** Path */
+            path: string;
         };
         /**
          * ProjectRequest
@@ -950,6 +1016,70 @@ export interface operations {
             };
         };
     };
+    delete_piece_api_v1_pieces__path__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_piece_api_v1_pieces__path__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PieceRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     project_api_v1_projects__path__get: {
         parameters: {
             query?: never;
@@ -968,6 +1098,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_api_v1_projects__path__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_project_api_v1_projects__path__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectRename"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    references_api_v1_references__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PieceReference"][];
                 };
             };
             /** @description Validation Error */

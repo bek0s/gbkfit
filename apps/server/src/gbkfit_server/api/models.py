@@ -14,6 +14,9 @@ __all__ = [
     'ArrayInfo',
     'CheckRequest',
     'PieceRequest',
+    'PieceReference',
+    'ProjectRename',
+    'PieceRename',
     'ProjectRequest',
     'CheckResult',
     'Diagnostic',
@@ -50,6 +53,22 @@ class ProjectInfo(BaseModel):
     path: str
     pieces: dict[str, list[str]]
     runs: list[str]
+
+
+class ProjectRename(BaseModel):
+    """The new folder of a project, in the workspace."""
+    path: str
+
+
+class PieceRename(BaseModel):
+    """The new name of a piece (a path in its folder, without .yaml)."""
+    name: str
+
+
+class PieceReference(BaseModel):
+    """A piece (or a setup) that names another: its folder and name."""
+    folder: str
+    name: str
 
 
 class FileEntry(BaseModel):

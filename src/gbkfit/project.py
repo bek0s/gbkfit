@@ -30,7 +30,7 @@ are relative to its folder.
 
 import copy
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -76,6 +76,11 @@ _yaml = ruamel.yaml.YAML(typ='safe')
 _yaml_out = ruamel.yaml.YAML(typ='safe')
 _yaml_out.default_flow_style = None
 _yaml_out.sort_base_mapping_type_on_output = False
+# (pieces rewritten in place, e.g. as a piece they name is renamed: their
+# comments and layout stay)
+_yaml_rt = ruamel.yaml.YAML()
+_yaml_rt.preserve_quotes = True
+_yaml_rt.width = 4096
 
 # The templates of new pieces and setups, by folder (see
 # Project.create_piece): a disk seen in a cube; a setup names the first
@@ -333,6 +338,116 @@ class Project:
             else:
                 _yaml_out.dump(dict(content), f)
         return filename
+
+    def references(self, folder: str, name: str) -> list[tuple[str, str]]:
+        """
+        Return the pieces and setups that name a piece (see the module):
+        their folders and names, in order. A file that cannot be read
+        names none.
+
+        Parameters
+        ----------
+        folder : str
+            The folder of the piece (e.g. 'datasets').
+        name : str
+            The name of the piece.
+        """
+        found = []
+        for other in ('observations', 'setups'):
+            for other_name in self.names(other):
+                content = _load_quietly(self._file(other, other_name))
+                if any(target == folder and parent[key] == name
+                       for parent, key, target in _named(other, content)):
+                    found.append((other, other_name))
+        return found
+
+    def rename_piece(self, folder: str, name: str, new: str) -> str:
+        """
+        Rename a piece (or a setup), and the pieces and setups that name
+        it with it (their other text, e.g. comments, stays as it is); and
+        return its new file. The folders its old name leaves empty go.
+
+        Raises
+        ------
+        ConfigError
+            If the folder is not one of pieces or setups, or a name is
+            not a path in it.
+        FileNotFoundError
+            If the piece does not exist.
+        FileExistsError
+            If a piece of the new name exists.
+        """
+        source = self._piece_file(folder, name)
+        target = self._file(folder, new)
+        if not os.path.isfile(source):
+            raise FileNotFoundError(f"the project has no piece '{name}' "
+                                    f"of {folder}")
+        if os.path.exists(target):
+            raise FileExistsError(f"the project has a piece '{new}' of "
+                                  f"{folder}")
+        referring = self.references(folder, name)
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+        os.rename(source, target)
+        self._prune(folder, source)
+        for other, other_name in referring:
+            filename = self._file(other, other_name)
+            content = _yaml_rt.load(Path(filename))
+            for parent, key, target_folder in _named(other, content):
+                if target_folder == folder and parent[key] == name:
+                    parent[key] = new
+            with Path(filename).open('w') as f:
+                _yaml_rt.dump(content, f)
+        return target
+
+    def delete_piece(self, folder: str, name: str) -> None:
+        """
+        Delete a piece (or a setup); the folders its name leaves empty go.
+        The pieces and setups that name it still do (see references).
+
+        Raises
+        ------
+        ConfigError
+            If the folder is not one of pieces or setups, or the name is
+            not a path in it.
+        FileNotFoundError
+            If the piece does not exist.
+        """
+        filename = self._piece_file(folder, name)
+        try:
+            os.remove(filename)
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"the project has no piece '{name}' of {folder}") from None
+        self._prune(folder, filename)
+
+    def _piece_file(self, folder: str, name: str) -> str:
+        """
+        Return the file of a piece (or a setup) by its folder and name.
+
+        Raises
+        ------
+        ConfigError
+            If the folder is not one of pieces or setups, or the name is
+            not a path in it.
+        """
+        if folder not in TEMPLATES:
+            raise ConfigError(
+                f"pieces are in the folders {list(TEMPLATES)}; not {folder!r}")
+        return self._file(folder, name)
+
+    def _prune(self, folder: str, filename: str) -> None:
+        """
+        Remove the folders of a file gone from a folder of the project
+        that it leaves empty, up to that folder.
+        """
+        base = Path(self._path, folder)
+        parent = Path(filename).parent
+        while parent != base and parent.is_relative_to(base):
+            try:
+                parent.rmdir()
+            except OSError:
+                break
+            parent = parent.parent
 
     def _file(self, folder: str, name: str) -> str:
         """
@@ -674,3 +789,50 @@ def _marker(path: str) -> dict[str, Any]:
         raise ValueError(
             f"{os.path.join(path, MARKER)} is not a marker of {FORMAT}")
     return marker
+
+
+def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
+    """
+    Yield the places of the names of pieces in the content of a piece or
+    a setup of a folder (see the module), as (parent, key, folder): the
+    parent (a mapping or a list) whose item of the key is a name, and the
+    folder of the piece it names.
+    """
+    if not isinstance(content, Mapping):
+        return
+
+    def names(parent: Any, key: Any, target: str) -> Iterator[Any]:
+        value = parent.get(key) if isinstance(parent, Mapping) else None
+        if isinstance(value, str):
+            yield parent, key, target
+        elif isinstance(value, list):
+            yield from (
+                (value, i, target) for i, item in enumerate(value)
+                if isinstance(item, str))
+
+    def observation(options: Any) -> Iterator[Any]:
+        if not isinstance(options, Mapping):
+            return
+        yield from names(options, 'data', 'datasets')
+        for key, target in (('psf', 'psfs'), ('lsf', 'lsfs')):
+            yield from names(options.get('instrument'), key, target)
+
+    if folder == 'observations':
+        yield from observation(content)
+    elif folder == 'setups':
+        for section in ('galaxies', 'observations', 'params'):
+            yield from names(content, section, _FOLDERS[section])
+        observations = content.get('observations')
+        for item in observations if isinstance(observations, list) \
+                else [observations]:
+            yield from observation(item)
+        yield from names(content, 'fitter', 'fitters')
+        yield from names(content.get('mock'), 'noise', 'noise')
+
+
+def _load_quietly(filename: str) -> Any:
+    """Return the content of a YAML file; None if it cannot be read."""
+    try:
+        return _yaml.load(Path(filename))
+    except (OSError, ruamel.yaml.YAMLError):
+        return None

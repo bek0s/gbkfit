@@ -15,8 +15,10 @@ from fastapi.testclient import TestClient
 
 from gbkfit_server.api import create_app, openapi
 from gbkfit_server.services import frames
+from gbkfit_server.services.errors import Invalid
 from gbkfit_server.services.executors import LocalExecutor
 from gbkfit_server.services.server import Server
+from gbkfit_server.services.workspace import Workspace
 
 
 TOKEN = 'secret'
@@ -145,6 +147,51 @@ def test_pieces_are_created_with_their_content_and_read(client):
     assert client.get(f'/api/v1/pieces/{path}').json() == content
     assert client.get('/api/v1/pieces/study/datasets/no.yaml').status_code \
         == 404
+
+
+def test_pieces_are_renamed_with_their_names_and_deleted(client):
+    assert client.get('/api/v1/references/study/observations/image.yaml') \
+        .json() == [dict(folder='setups', name='disk')]
+    response = client.patch(
+        '/api/v1/pieces/study/observations/image.yaml',
+        json=dict(name='sky/image'))
+    assert response.json() == 'study/observations/sky/image.yaml'
+    assert client.get('/api/v1/pieces/study/setups/disk.yaml').json()[
+        'observations'] == 'sky/image'
+    assert client.patch(
+        '/api/v1/pieces/study/galaxies/disk.yaml', json=dict(name='../x')
+    ).status_code == 400
+    assert client.patch(
+        '/api/v1/pieces/study/data/disk.yaml', json=dict(name='x')
+    ).status_code == 404
+    assert client.delete(
+        '/api/v1/pieces/study/observations/sky/image.yaml').status_code == 204
+    assert client.get('/api/v1/projects/study').json()['pieces'][
+        'observations'] == []
+    assert client.delete(
+        '/api/v1/pieces/study/observations/sky/image.yaml').status_code == 404
+
+
+def test_projects_are_renamed_and_deleted(client, root):
+    response = client.patch('/api/v1/projects/study', json=dict(
+        path='studies/ngc1313'))
+    assert response.status_code == 200
+    assert response.json()['pieces']['galaxies'] == ['disk']
+    assert client.get('/api/v1/projects').json() == ['studies/ngc1313']
+    client.post('/api/v1/projects', json=dict(path='other'))
+    for path in ('other', 'other/inner', '.', '../out'):
+        assert client.patch('/api/v1/projects/studies/ngc1313', json=dict(
+            path=path)).status_code == 400, path
+    assert client.patch('/api/v1/projects/nothing', json=dict(
+        path='x')).status_code == 404
+    # (a workspace that is a project stays)
+    inner = Workspace(os.path.join(root, 'studies/ngc1313'))
+    for change in (inner.delete_project, lambda p: inner.rename_project(p, 'x')):
+        with pytest.raises(Invalid):
+            change('.')
+    assert client.delete('/api/v1/projects/other').status_code == 204
+    assert not os.path.exists(os.path.join(root, 'other'))
+    assert client.get('/api/v1/projects').json() == ['studies/ngc1313']
 
 
 def test_folders_are_listed_and_files_of_data_described(client, root):

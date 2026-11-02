@@ -262,6 +262,10 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .dialog-form { display: grid; gap: 10px; }
 .dialog-form label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
 .dialog-form input { border: 1px solid var(--line2); background: var(--panel2); border-radius: 7px; padding: 6px 8px; font: 12.5px var(--mono); }
+.mono { font-family: var(--mono); }
+.dialog-form p { margin: 0; }
+.callout-list { border: 1px solid var(--line2); border-radius: 7px; padding: 8px 10px; background: var(--panel2); font-size: 12.5px; }
+.callout-list ul { margin: 6px 0 0; padding-left: 18px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-list { display: grid; gap: 2px; max-height: 50vh; overflow: auto; }
 

@@ -1,19 +1,26 @@
 // The project button at the top of the tree. Its menu makes a new
-// project, opens one of the workspace, closes the open one, and lists the
-// recent ones. Its dialogs serve the start (no project) too.
+// project, opens one of the workspace, renames, deletes or closes the open
+// one, and lists the recent ones. Its dialogs serve the start (no project)
+// too.
 import { useState } from 'react';
-import { useCreateProject, useProjects } from '../api/queries';
+import { useCreateProject, useDeleteProject, useProject, useProjects, useRenameProject } from '../api/queries';
 import { Button, NavItem, TextField } from '../components/ui/basics';
 import { Dialog, DropMenu, type MenuEntry } from '../components/ui/overlays';
 import { useStudio } from '../studio';
 
 export function ProjectMenu() {
   const { project, openProject, recent } = useStudio();
-  const [dialog, setDialog] = useState<'new' | 'open' | null>(null);
+  const [dialog, setDialog] = useState<'new' | 'open' | 'rename' | 'delete' | null>(null);
   const entries: MenuEntry[] = [
     { label: 'New project…', onClick: () => setDialog('new') },
     { label: 'Open a project…', onClick: () => setDialog('open') },
-    ...(project !== null ? [{ label: 'Close the project', onClick: () => openProject(null) }] : []),
+    ...(project !== null
+      ? [
+          { label: 'Rename the project…', onClick: () => setDialog('rename') },
+          { label: 'Delete the project…', onClick: () => setDialog('delete') },
+          { label: 'Close the project', onClick: () => openProject(null) },
+        ]
+      : []),
     ...(recent.length > 0 ? [{ section: 'Recent' }] : []),
     ...recent.map((path) => ({ label: path, onClick: () => openProject(path), current: path === project })),
   ];
@@ -28,7 +35,13 @@ export function ProjectMenu() {
           </Button>
         }
       />
-      <ProjectDialogs dialog={dialog} onClose={() => setDialog(null)} />
+      {dialog === 'rename' && project !== null ? (
+        <RenameProjectDialog project={project} onClose={() => setDialog(null)} />
+      ) : dialog === 'delete' && project !== null ? (
+        <DeleteProjectDialog project={project} onClose={() => setDialog(null)} />
+      ) : (
+        <ProjectDialogs dialog={dialog === 'new' || dialog === 'open' ? dialog : null} onClose={() => setDialog(null)} />
+      )}
     </div>
   );
 }
@@ -106,6 +119,85 @@ function OpenProjectDialog({ onClose }: { onClose: () => void }) {
           </p>
         )}
       </div>
+    </Dialog>
+  );
+}
+
+// Move the open project to another folder of the workspace (its blocks
+// name their files relative to it, so they follow)
+function RenameProjectDialog({ project, onClose }: { project: string; onClose: () => void }) {
+  const { movedProject } = useStudio();
+  const rename = useRenameProject();
+  const [path, setPath] = useState(project);
+  const folder = path.trim();
+  return (
+    <Dialog title="Rename the project" onClose={onClose}>
+      <form
+        className="dialog-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!folder || folder === project) return;
+          rename.mutate(
+            { path: project, to: folder },
+            {
+              onSuccess: (moved) => {
+                onClose();
+                movedProject(project, moved.path);
+              },
+            },
+          );
+        }}
+      >
+        <TextField autoFocus mono showLabel value={path} label="Folder of the project, in the workspace" onChange={setPath} />
+        <p className="note">Its folder moves, with its data and runs. Not while a job of it runs.</p>
+        {rename.error && <p className="error">{rename.error.message}</p>}
+        <div className="dialog-actions">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="primary" submit disabled={!folder || folder === project || rename.isPending}>
+            Rename
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+// Delete the open project and all its files, once its path is typed
+function DeleteProjectDialog({ project, onClose }: { project: string; onClose: () => void }) {
+  const { movedProject } = useStudio();
+  const info = useProject(project);
+  const remove = useDeleteProject();
+  const [typed, setTyped] = useState('');
+  const blocks = Object.values(info.data?.pieces ?? {}).reduce((n, names) => n + names.length, 0);
+  const runs = info.data?.runs.length ?? 0;
+  return (
+    <Dialog title="Delete the project" onClose={onClose}>
+      <form
+        className="dialog-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (typed !== project) return;
+          remove.mutate(project, {
+            onSuccess: () => {
+              onClose();
+              movedProject(project, null);
+            },
+          });
+        }}
+      >
+        <p>
+          This deletes the folder <b className="mono">{project}</b> and everything in it: its {blocks}{' '}
+          {blocks === 1 ? 'block' : 'blocks'}, its {runs} {runs === 1 ? 'run' : 'runs'}, and its copies of the data. It cannot be undone.
+        </p>
+        <TextField autoFocus mono showLabel value={typed} label="Type the folder of the project to confirm" onChange={setTyped} />
+        {remove.error && <p className="error">{remove.error.message}</p>}
+        <div className="dialog-actions">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button kind="danger" submit disabled={typed !== project || remove.isPending}>
+            Delete the project
+          </Button>
+        </div>
+      </form>
     </Dialog>
   );
 }

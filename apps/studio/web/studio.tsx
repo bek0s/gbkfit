@@ -22,6 +22,10 @@ export interface Studio {
   setFolded: (folded: boolean) => void;
   adding: string | null;
   startAdding: (folder: string | null) => void;
+  // What the page remembers of a project or a block follows it as it is
+  // renamed (to: its new path or name) or deleted (to: null)
+  movedProject: (path: string, to: string | null) => void;
+  movedBlock: (folder: string, name: string, to: string | null) => void;
 }
 
 const StudioContext = createContext<Studio | null>(null);
@@ -79,6 +83,34 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     [setProject, setRecent, show],
   );
 
+  const movedProject = useCallback(
+    (path: string, to: string | null) => {
+      setRecent((paths) => (to === null ? paths.filter((p) => p !== path) : paths.map((p) => (p === path ? to : p))));
+      setVisited(({ [path]: moved, ...others }) => (to === null || moved === undefined ? others : { ...others, [to]: moved }));
+      if (project === path) openProject(to);
+    },
+    [project, openProject, setRecent, setVisited],
+  );
+
+  const movedBlock = useCallback(
+    (folder: string, name: string, to: string | null) => {
+      if (project === null) return;
+      const was = (other: Screen) => other.kind === 'block' && other.folder === folder && other.name === name;
+      const next: Screen | null = to === null ? null : { kind: 'block', folder, name: to };
+      setVisited((all) => ({
+        ...all,
+        [project]: (all[project] ?? []).flatMap((other) => (was(other) ? (next ? [next] : []) : [other])),
+      }));
+      // (the screen of the block shows it as renamed, or the home)
+      if (was(screen)) {
+        const shown = next ?? { kind: 'home' };
+        setScreen(shown);
+        window.history.replaceState(null, '', address(shown));
+      }
+    },
+    [project, screen, setVisited],
+  );
+
   const startAdding = useCallback(
     (folder: string | null) => {
       setAdding(folder);
@@ -100,8 +132,10 @@ export function StudioProvider({ children }: { children: ReactNode }) {
       setFolded,
       adding,
       startAdding,
+      movedProject,
+      movedBlock,
     }),
-    [project, openProject, recent, screen, go, visited, folded, setFolded, adding, startAdding],
+    [project, openProject, recent, screen, go, visited, folded, setFolded, adding, startAdding, movedProject, movedBlock],
   );
   return <StudioContext.Provider value={studio}>{children}</StudioContext.Provider>;
 }

@@ -15,6 +15,7 @@ import { PanelsIcon } from '../components/icons';
 import type { Region } from '../components/MapView';
 import { Button, IconButton } from '../components/ui/basics';
 import { SidePanes, type PanesControl } from '../components/ui/panes';
+import { BlockMenu } from '../shell/BlockMenu';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
 import { useStudio } from '../studio';
 import {
@@ -160,6 +161,11 @@ export function Dataset({ name }: { name: string }) {
           <div className="eyebrow">Dataset{kind ? ` · ${kind.title}` : ''}</div>
           <h1>{name}</h1>
         </div>
+        {project !== null && (
+          <div className="head-actions">
+            <BlockMenu project={project} folder="datasets" name={name} />
+          </div>
+        )}
       </div>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {project !== null &&

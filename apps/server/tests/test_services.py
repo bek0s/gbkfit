@@ -96,6 +96,19 @@ def test_a_job_of_a_configuration_out_of_the_setups_needs_a_folder(root):
     assert job.state == 'failed' and 'give the folder' in job.output
 
 
+def test_the_jobs_of_a_folder_are_busy_until_they_end(root, setup):
+    async def run():
+        server = Server(root, LocalExecutor())
+        job = server.jobs.submit(
+            'eval', dict(mode='model', config=setup, profile_iters=0))
+        busy = server.jobs.busy('study'), server.jobs.busy('elsewhere')
+        await ended(job)
+        return job, busy, server.jobs.busy('study')
+
+    job, (inside, outside), after = asyncio.run(run())
+    assert (inside, outside, after) == ([job], [], [])
+
+
 def test_the_latest_values_replace_those_not_taken():
     async def run():
         latest = Latest()

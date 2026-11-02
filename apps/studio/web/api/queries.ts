@@ -191,3 +191,66 @@ export function useCreateBlock(project: string) {
     onSuccess: () => client.invalidateQueries({ queryKey: keys.project(project) }),
   });
 }
+
+// Move a project to another folder of the workspace; resolves to it
+export function useRenameProject() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, to }: { path: string; to: string }) =>
+      data(api.PATCH('/api/v1/projects/{path}', { params: { path: { path } }, body: { path: to } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.projects }),
+  });
+}
+
+// Delete a project and all its files
+export function useDeleteProject() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (path: string) => {
+      const { error, response } = await api.DELETE('/api/v1/projects/{path}', { params: { path: { path } } });
+      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.projects }),
+  });
+}
+
+// The blocks of a project that name one of its blocks (by its path): their
+// folders and names
+export function useReferences(path: string | null) {
+  return useQuery({
+    queryKey: ['references', path ?? ''],
+    enabled: path !== null,
+    queryFn: () => data(api.GET('/api/v1/references/{path}', { params: { path: { path: path ?? '' } } })),
+  });
+}
+
+// Rename a block of a project (by its path), and the blocks that name it
+// with it; resolves to its new path
+export function useRenameBlock(project: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, name }: { path: string; name: string }) =>
+      data(api.PATCH('/api/v1/pieces/{path}', { params: { path: { path } }, body: { name } })),
+    onSuccess: () => {
+      client.invalidateQueries({ queryKey: keys.project(project) });
+      client.invalidateQueries({ queryKey: ['piece'] });
+      client.invalidateQueries({ queryKey: ['references'] });
+    },
+  });
+}
+
+// Delete a block of a project (by its path)
+export function useDeleteBlock(project: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (path: string) => {
+      const { error, response } = await api.DELETE('/api/v1/pieces/{path}', { params: { path: { path } } });
+      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+    },
+    onSuccess: (_, path) => {
+      client.invalidateQueries({ queryKey: keys.project(project) });
+      client.removeQueries({ queryKey: keys.piece(path) });
+      client.invalidateQueries({ queryKey: ['references'] });
+    },
+  });
+}
