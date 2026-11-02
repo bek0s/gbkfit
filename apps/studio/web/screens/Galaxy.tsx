@@ -7,10 +7,12 @@
 // setup that sees the galaxy.
 import { useDebouncedValue } from '@mantine/hooks';
 import { useState } from 'react';
-import { useGalaxyParameters } from '../api/queries';
+import { useGalaxyParameters, usePiece, useProject } from '../api/queries';
+import { joinPath } from '../components/FilePicker';
+import { useRemembered } from '../shell/remember';
 import { membersOf, propertiesOf, resolve, SchemaForm, typeOf, type Defs, type Options, type Schema } from '../components/SchemaForm';
 import { Button, Close, NavItem } from '../components/ui/basics';
-import { Segments } from '../components/ui/inputs';
+import { Choice, Segments } from '../components/ui/inputs';
 import { DropMenu } from '../components/ui/overlays';
 import { Panel } from '../components/ui/panel';
 import { useStudio } from '../studio';
@@ -405,11 +407,42 @@ function useParameters(project: string, options: Options | undefined) {
   return useGalaxyParameters(project, settled);
 }
 
+// The properties of a parameter in a block of parameters (by its name,
+// with or without subscripts): its value, or its value and range (free)
+function propertyText(properties: Options, name: string): { text: string; free: boolean } | null {
+  const found = Object.entries(properties).filter(([key]) => key.split('[', 1)[0].trim() === name);
+  if (found.length === 0) return null;
+  const one = ([key, value]: [string, unknown]) => {
+    const at = key.includes('[') ? `${key.slice(key.indexOf('['))} ` : '';
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      const v = value as Options;
+      const free = v.min !== undefined || v.max !== undefined;
+      return { text: `${at}${v.value ?? '?'}${free ? ` (${v.min ?? '−∞'} to ${v.max ?? '∞'})` : ''}`, free };
+    }
+    return { text: `${at}${Array.isArray(value) ? value.join(', ') : String(value)}`, free: false };
+  };
+  const all = found.map(one);
+  return { text: all.map((a) => a.text).join('; '), free: all.some((a) => a.free) };
+}
+
 export function GalaxyParameters({ project, options }: { project: string; options: Options | undefined }) {
   const described = useParameters(project, options);
   const info = described.data;
+  const blocks = useProject(project).data?.pieces.params ?? [];
+  const [chosen, setChosen] = useRemembered<string | null>(`parameters-of:${project}`, null);
+  const layer = chosen !== null && blocks.includes(chosen) ? chosen : (blocks[0] ?? null);
+  const piece = usePiece(layer === null ? null : joinPath(project, `params/${layer}.yaml`)).data as Options | undefined;
+  const properties = (piece?.properties ?? {}) as Options;
   return (
     <Panel id="galaxy-parameters" title="Its parameters">
+      {blocks.length > 0 && (
+        <div className="schema-row">
+          <span className="schema-label">values of</span>
+          <div className="schema-field">
+            <Choice items={blocks.map((b) => ({ value: b, label: b }))} value={layer ?? ''} label="The block of parameters whose values are shown" onChange={setChosen} />
+          </div>
+        </div>
+      )}
       {described.error && <p className="error">{described.error.message}</p>}
       {info && info.problems.length > 0 && (
         <ul className="problems">
@@ -426,7 +459,7 @@ export function GalaxyParameters({ project, options }: { project: string; option
           <thead>
             <tr>
               <th>name</th>
-              <th>default</th>
+              <th>{layer === null ? 'default' : 'value'}</th>
               <th>unit</th>
               <th>range</th>
             </tr>
@@ -438,7 +471,13 @@ export function GalaxyParameters({ project, options }: { project: string; option
                   {String(p.name)}
                   {Number(p.size) > 1 && <span className="note"> ×{String(p.size)}</span>}
                 </td>
-                <td className="mono">{p.default === null ? '—' : String(p.default)}</td>
+                <td className="mono">
+                  {(() => {
+                    const given = layer === null ? null : propertyText(properties, String(p.name));
+                    if (given) return <span className={given.free ? 'free' : undefined}>{given.text}</span>;
+                    return <span className="note">{p.default === null ? '—' : `${String(p.default)} (default)`}</span>;
+                  })()}
+                </td>
                 <td>{p.unit === null ? '' : String(p.unit)}</td>
                 <td className="mono">{String(p.range)}</td>
               </tr>
@@ -446,7 +485,11 @@ export function GalaxyParameters({ project, options }: { project: string; option
           </tbody>
         </table>
       )}
-      <p className="note">Their values and priors are in the blocks of parameters of the project; editing them here is to come.</p>
+      <p className="note">
+        {blocks.length === 0
+          ? 'Their values and priors go in the blocks of parameters of the project (Fit · Parameters).'
+          : 'Free ones show their range. A setup layers several blocks; editing them here is to come.'}
+      </p>
     </Panel>
   );
 }

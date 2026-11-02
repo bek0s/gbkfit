@@ -357,3 +357,4 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .parameters th { text-align: left; font: 600 10px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 2px 6px 4px 0; }
 .parameters td { padding: 3px 6px 3px 0; border-top: 1px solid var(--line); color: var(--muted); }
 .parameters td.mono { color: var(--fg); }
+.parameters .free { color: var(--accent); }
