@@ -42,5 +42,6 @@ def test_invalid_tasks_and_options_are_rejected(args, status, message):
 
 
 def test_every_prep_task_is_a_task():
-    assert {name for name in TASKS if name.startswith('prep_')} == set(
-        prep.__all__)
+    # (prep exports helpers too, e.g. output_files)
+    assert {name for name in TASKS if name.startswith('prep_')} == {
+        name for name in prep.__all__ if name.startswith('prep_')}
