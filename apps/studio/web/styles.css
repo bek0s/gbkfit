@@ -276,3 +276,27 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
   .step { grid-template-columns: 30px minmax(0, 1fr); }
   .step-actions { grid-column: 2; grid-auto-flow: column; justify-content: start; }
 }
+
+/* The forms of the schema of the library (see SchemaForm): a row of each
+   option, its name at the left, its field and unit at the right */
+.schema-form { display: grid; gap: 6px; }
+.schema-member { display: grid; gap: 6px; }
+.schema-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 8px; }
+.schema-label { font: 12px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.schema-required { margin-left: 2px; color: var(--accent); }
+.schema-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.schema-field > * { min-width: 0; }
+.schema-field > .ui-number, .schema-field > .ui-text, .schema-field > .ui-choice { flex: 1; }
+.schema-unit { flex: none; font: 11px var(--mono); color: var(--faint); }
+.schema-note { margin: 0; font-size: 11.5px; }
+.schema-list, .schema-object { display: grid; gap: 8px; width: 100%; }
+.schema-item { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+.schema-item-head { display: flex; align-items: center; justify-content: space-between; }
+.schema-kept { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.schema-kept code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--mono); color: var(--muted); }
+/* The drawn response of an instrument (see Response) */
+.response { overflow: auto; }
+.response-body { display: grid; gap: 14px; padding: 0 14px 14px; }
+.response-map { display: grid; grid-template-columns: minmax(0, 420px) 56px; gap: 10px; }
+.response-map .map { aspect-ratio: 1; height: auto; }
+.response-profiles { display: grid; gap: 4px; }

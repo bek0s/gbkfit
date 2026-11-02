@@ -195,6 +195,49 @@
           }
         }
       },
+      "put": {
+        "summary": "Update Piece",
+        "description": "Write the content of a piece (or a setup) of a project: its options\nthat change (its comments stay).",
+        "operationId": "update_piece_api_v1_pieces__path__put",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Content"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "delete": {
         "summary": "Delete Piece",
         "description": "Delete a piece (or a setup) of a project; the pieces and setups that\nname it still do (see references), and its files of data stay.",
@@ -741,6 +784,105 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/psf": {
+      "post": {
+        "summary": "View Psf",
+        "description": "Draw a PSF of the options of a piece of a project, on pixels of a\nsize or of its own scale, with the solid angle of its beam and its\nwidth.",
+        "operationId": "view_psf_api_v1_views_psf_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PSFRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PSFViewInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/lsf": {
+      "post": {
+        "summary": "View Lsf",
+        "description": "Draw an LSF of the options of a piece of a project, on channels of a\nwidth or of its own scale, with its width.",
+        "operationId": "view_lsf_api_v1_views_lsf_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LSFRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LSFViewInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/schema": {
+      "get": {
+        "summary": "Config Schema",
+        "description": "Return the JSON Schema of the configurations of GBKFIT, from the\noptions of the library (see gbkfit.schema): the forms of the pieces\nare made of it.",
+        "operationId": "config_schema_api_v1_schema_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Config Schema Api V1 Schema Get"
                 }
               }
             }
@@ -1810,6 +1952,171 @@
         ],
         "title": "JobRequest",
         "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir'); prep needs the\nfolder of the prepared files ('output_dir'), where they are kept as\nimported files are (an identical file is reused; a name taken is\nnumbered)."
+      },
+      "LSFRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "options"
+        ],
+        "title": "LSFRequest",
+        "description": "An LSF to draw: the project of its piece, its options (its files\nrelative to the project), and the width of the channels (km/s; none:\nof its own scale)."
+      },
+      "LSFViewInfo": {
+        "properties": {
+          "values": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Values"
+          },
+          "step": {
+            "type": "number",
+            "title": "Step"
+          },
+          "fwhm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwhm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "step",
+          "fwhm"
+        ],
+        "title": "LSFViewInfo",
+        "description": "An LSF drawn on channels (see Responses.lsf): its values (they sum\nto 1), the width of the channels (km/s), and its full width at half\nmaximum (km/s; none for a point)."
+      },
+      "PSFRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 2,
+                "minItems": 2
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "options"
+        ],
+        "title": "PSFRequest",
+        "description": "A PSF to draw: the project of its piece, its options (its files\nrelative to the project), and the size of the pixels (x, y; arcsec;\nnone: of its own scale)."
+      },
+      "PSFViewInfo": {
+        "properties": {
+          "values": {
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Values"
+          },
+          "step": {
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Step"
+          },
+          "beam_area": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Beam Area"
+          },
+          "fwhm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fwhm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "values",
+          "step",
+          "beam_area",
+          "fwhm"
+        ],
+        "title": "PSFViewInfo",
+        "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point)."
       },
       "PieceReference": {
         "properties": {

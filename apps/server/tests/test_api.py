@@ -172,6 +172,69 @@ def test_pieces_are_renamed_with_their_names_and_deleted(client):
         '/api/v1/pieces/study/observations/sky/image.yaml').status_code == 404
 
 
+def test_pieces_are_updated_and_their_comments_stay(client):
+    path = client.post('/api/v1/pieces', json=dict(
+        project='study', folder='psfs', name='beam')).json()
+    content = dict(type='moffat', alpha=1.2, beta=3)
+    assert client.put(f'/api/v1/pieces/{path}', json=content).status_code \
+        == 204
+    assert client.get(f'/api/v1/pieces/{path}').json() == content
+    assert client.get(f'/api/v1/files/{path}').text.startswith('# A PSF')
+    assert client.put('/api/v1/pieces/study/psfs/no.yaml', json=content) \
+        .status_code == 404
+
+
+def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
+    psf = client.post('/api/v1/views/psf', json=dict(
+        project='study', options=dict(type='gauss', sigma=1.0))).json()
+    values = np.array(psf['values'])
+    assert values.shape[0] == values.shape[1] and values.shape[0] > 100
+    assert np.isclose(values.sum(), 1, atol=1e-4)
+    assert np.isclose(psf['fwhm'], 2 * np.sqrt(2 * np.log(2)), rtol=1e-6)
+    # (on the pixels of data)
+    psf = client.post('/api/v1/views/psf', json=dict(
+        project='study', options=dict(type='gauss', sigma=1.0),
+        step=[0.5, 0.5])).json()
+    assert psf['step'] == [0.5, 0.5] and len(psf['values']) < 100
+    point = client.post('/api/v1/views/psf', json=dict(
+        project='study', options=dict(type='point'))).json()
+    assert point['values'] == [[1.0]] and point['fwhm'] is None
+    lsf = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(type='gauss', sigma=10))).json()
+    assert np.isclose(lsf['fwhm'], 10 * 2 * np.sqrt(2 * np.log(2)), rtol=1e-3)
+    # (a Hanning smoothing: on channels of which its width is a multiple)
+    lsf = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(type='convolution', lsfs=[
+            dict(type='gauss', sigma=10), dict(type='hanning', width=10)]))
+    ).json()
+    assert (10 / lsf['step']) % 1 == 0, lsf['step']
+    # (of an image of the project, relative to it)
+    os.makedirs(os.path.join(root, 'study/data'), exist_ok=True)
+    y, x = np.mgrid[-10:11, -10:11]
+    fits.writeto(os.path.join(root, 'study/data/psf.fits'),
+                 np.exp(-(x * x + y * y) / 8.0))
+    image = client.post('/api/v1/views/psf', json=dict(
+        project='study', options=dict(
+            type='image', file='data/psf.fits', step=[0.2, 0.2]))).json()
+    assert np.isclose(np.array(image['values']).sum(), 1, atol=1e-4)
+    for options, message in [
+            (dict(type='gauss'), 'sigma'),
+            (dict(type='gauss', sigma=-1), 'sigma'),
+            (dict(type='image', file='../../x.fits'), 'out of the workspace')]:
+        response = client.post('/api/v1/views/psf', json=dict(
+            project='study', options=options))
+        assert response.status_code == 400
+        assert message in response.json()['detail'], response.json()
+    assert client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(type='gauss', sigma=10),
+        step=0.001)).status_code == 400
+
+
+def test_the_schema_of_the_configurations_is_served(client):
+    schema = client.get('/api/v1/schema').json()
+    assert {'psf', 'lsf'} <= set(schema['$defs'])
+
+
 def test_projects_are_renamed_and_deleted(client, root):
     response = client.patch('/api/v1/projects/study', json=dict(
         path='studies/ngc1313'))

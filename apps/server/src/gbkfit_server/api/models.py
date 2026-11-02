@@ -16,6 +16,10 @@ __all__ = [
     'PieceRequest',
     'PieceReference',
     'ProjectRename',
+    'LSFRequest',
+    'LSFViewInfo',
+    'PSFRequest',
+    'PSFViewInfo',
     'PieceRename',
     'ProjectRequest',
     'CheckResult',
@@ -69,6 +73,53 @@ class PieceReference(BaseModel):
     """A piece (or a setup) that names another: its folder and name."""
     folder: str
     name: str
+
+
+class PSFRequest(BaseModel):
+    """
+    A PSF to draw: the project of its piece, its options (its files
+    relative to the project), and the size of the pixels (x, y; arcsec;
+    none: of its own scale).
+    """
+    project: str
+    options: dict[str, Any]
+    step: tuple[float, float] | None = None
+
+
+class LSFRequest(BaseModel):
+    """
+    An LSF to draw: the project of its piece, its options (its files
+    relative to the project), and the width of the channels (km/s; none:
+    of its own scale).
+    """
+    project: str
+    options: dict[str, Any]
+    step: float | None = None
+
+
+class PSFViewInfo(BaseModel):
+    """
+    A PSF drawn on pixels (see Responses.psf): its values (rows of y,
+    from the bottom; they sum to 1), the size of the pixels (x, y;
+    arcsec), the solid angle of its beam (arcsec^2) and the full width at
+    half maximum of the circular Gaussian of that beam (arcsec; none for
+    a point).
+    """
+    values: list[list[float]]
+    step: tuple[float, float]
+    beam_area: float | None
+    fwhm: float | None
+
+
+class LSFViewInfo(BaseModel):
+    """
+    An LSF drawn on channels (see Responses.lsf): its values (they sum
+    to 1), the width of the channels (km/s), and its full width at half
+    maximum (km/s; none for a point).
+    """
+    values: list[float]
+    step: float
+    fwhm: float | None
 
 
 class FileEntry(BaseModel):

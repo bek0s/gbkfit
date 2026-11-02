@@ -282,6 +282,19 @@ class Workspace:
         except (ConfigError, FileExistsError) as e:
             raise Invalid(f"cannot rename the piece '{old}': {e}") from e
 
+    def update_piece(self, relative: str, content: dict[str, Any]) -> None:
+        """
+        Write the content of a piece (or a setup) of a project by its path
+        (see gbkfit.project.Project.update_piece: its comments stay).
+
+        Raises
+        ------
+        NotFound
+            If the piece is not one of a project.
+        """
+        target, folder, name = self._piece_of(relative)
+        target.update_piece(folder, name, content)
+
     def delete_piece(self, relative: str) -> None:
         """
         Delete a piece (or a setup) of a project by its path; its files of

@@ -9,6 +9,7 @@ import { Dataset, NewDataset } from './screens/Dataset';
 import { Home } from './screens/Home';
 import { NewMoments } from './screens/Moments';
 import { Pending } from './screens/Pending';
+import { ResponseScreen } from './screens/Response';
 import { Welcome } from './screens/Welcome';
 import { kindOf } from './shell/blocks';
 import { address, type Screen } from './shell/navigation';
@@ -63,6 +64,8 @@ function ScreenView({ screen }: { screen: Screen }) {
       return <Home />;
     case 'block':
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;
+      if (screen.folder === 'psfs') return <ResponseScreen key={address(screen)} family="psf" name={screen.name} />;
+      if (screen.folder === 'lsfs') return <ResponseScreen key={address(screen)} family="lsf" name={screen.name} />;
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} />;
     case 'new-dataset':
       if (screen.data === 'moments') return <NewMoments key={address(screen)} />;

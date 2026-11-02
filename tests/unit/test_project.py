@@ -218,3 +218,16 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         study.delete_piece('psfs', 'beam')
     with pytest.raises(ConfigError, match="pieces are in the folders"):
         study.delete_piece('runs', 'x')
+
+
+def test_pieces_are_updated_in_place(study):
+    path = study.create_piece('psfs', 'beam')
+    study.update_piece('psfs', 'beam', dict(type='gauss', sigma=2.0))
+    text = Path(path).read_text()
+    assert text.startswith('# A PSF') and 'sigma: 2.0' in text
+    assert yaml.load(Path(path)) == dict(type='gauss', sigma=2.0)
+    content = dict(type='moffat', alpha=1.0, beta=2.5, posa=10)
+    study.update_piece('psfs', 'beam', content)
+    assert yaml.load(Path(path)) == content
+    with pytest.raises(FileNotFoundError):
+        study.update_piece('psfs', 'nothing', content)

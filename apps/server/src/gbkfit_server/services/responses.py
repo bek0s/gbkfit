@@ -1,0 +1,240 @@
+"""
+The responses of instruments, to look at them as they are made: a PSF
+drawn on pixels, and an LSF on channels (see gbkfit.instrument), of their
+options as a piece of a project gives them (their files relative to it),
+with what they amount to: the solid angle of the beam of a PSF, and the
+full widths at half maximum of both.
+"""
+
+import dataclasses
+import os
+from collections.abc import Iterator, Mapping
+from typing import Any
+
+import numpy as np
+
+from gbkfit.instrument.lsfs import lsf_parser
+from gbkfit.instrument.psfs import psf_parser
+from gbkfit.utils import parseutils
+from gbkfit.utils.parseutils import ConfigError
+
+from .errors import Invalid
+from .workspace import Workspace
+
+
+__all__ = [
+    'LSFView',
+    'PSFView',
+    'Responses'
+]
+
+
+# The pixels (channels) across a response drawn at its own scale, and the
+# most drawn at a scale given (e.g. that of the data)
+_ACROSS = 129
+_MOST = 1025
+
+
+@dataclasses.dataclass
+class PSFView:
+    """
+    A PSF drawn on pixels: its values (ny, nx; they sum to 1), the size
+    of the pixels (x, y; arcsec), the solid angle of its beam (arcsec^2)
+    and the full width at half maximum of the circular Gaussian of that
+    beam (arcsec; none for a point), and whether it varies along the
+    spectral axis.
+    """
+    values: np.ndarray
+    step: tuple[float, float]
+    beam_area: float | None
+    fwhm: float | None
+
+
+@dataclasses.dataclass
+class LSFView:
+    """
+    An LSF drawn on channels: its values (they sum to 1), the width of
+    the channels (km/s), and its full width at half maximum (km/s; none
+    for a point, or one narrower than a channel).
+    """
+    values: np.ndarray
+    step: float
+    fwhm: float | None
+
+
+class Responses:
+    """
+    The responses of the instruments of the projects of a workspace.
+
+    Parameters
+    ----------
+    workspace : Workspace
+        The workspace.
+    """
+
+    def __init__(self, workspace: Workspace):
+        self._workspace = workspace
+
+    def psf(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            step: tuple[float, float] | None = None
+    ) -> PSFView:
+        """
+        Draw a PSF of the options of a piece of a project: on pixels of a
+        size (e.g. those of the data; arcsec), or of its own scale (about
+        _ACROSS pixels across).
+
+        Raises
+        ------
+        Invalid
+            If the options are not those of a PSF, or one that varies
+            along the spectral axis, or it needs too many pixels.
+        """
+        psf = self._load(psf_parser, project, options, 'PSF')
+        if step is None:
+            extent = max(psf.size((1.0, 1.0)))
+            step = (extent / _ACROSS, extent / _ACROSS)
+        if min(step) <= 0:
+            raise Invalid(f"the size of the pixels must be positive: {step}")
+        try:
+            size = psf.size(step)
+            if max(size) > _MOST:
+                raise Invalid(
+                    f"the PSF needs {size[0]} x {size[1]} pixels of "
+                    f"{step[0]:g} x {step[1]:g} arcsec; at most {_MOST}")
+            values = psf.asarray(step, size)
+        except RuntimeError as e:
+            raise Invalid(f"cannot draw the PSF: {e}") from e
+        try:
+            beam_area = psf.beam_area()
+        except ConfigError:
+            # (a point has none)
+            beam_area = None
+        fwhm = None if beam_area is None \
+            else float(np.sqrt(4 * np.log(2) * beam_area / np.pi))
+        return PSFView(
+            np.asarray(values, dtype=np.float32), tuple(step), beam_area,
+            fwhm)
+
+    def lsf(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            step: float | None = None
+    ) -> LSFView:
+        """
+        Draw an LSF of the options of a piece of a project: on channels
+        of a width (e.g. those of the data; km/s), or of its own scale
+        (about _ACROSS channels across).
+
+        Raises
+        ------
+        Invalid
+            If the options are not those of an LSF, or one that varies
+            along the spectral axis, or it needs too many channels.
+        """
+        lsf = self._load(lsf_parser, project, options, 'LSF')
+        if step is not None and step <= 0:
+            raise Invalid(f"the width of the channels must be positive: {step}")
+        # (of its own scale, the first round width below about 1/_ACROSS
+        # of it that it can be drawn on: e.g. a Hanning smoothing, only on
+        # channels of which its width is a multiple)
+        steps = [step] if step is not None else _round_below(
+            lsf.size(1.0) / _ACROSS)
+        for i, width in enumerate(steps):
+            try:
+                size = lsf.size(width)
+                if size > _MOST:
+                    raise Invalid(
+                        f"the LSF needs {size} channels of {width:g} km/s; "
+                        f"at most {_MOST}")
+                values = np.asarray(lsf.asarray(width, size), dtype=np.float32)
+            except RuntimeError as e:
+                if i == len(steps) - 1:
+                    raise Invalid(f"cannot draw the LSF: {e}") from e
+                continue
+            return LSFView(values, width, _fwhm(values, width))
+        raise AssertionError("unreachable: there is a width")
+
+    def _load(
+            self,
+            parser: parseutils.TypedParser,
+            project: str,
+            options: Mapping[str, Any],
+            what: str
+    ) -> Any:
+        """
+        Load a response of the options of a piece of a project, its files
+        relative to the project (and in the workspace).
+
+        Raises
+        ------
+        Invalid
+            If the options are invalid, a file is out of the workspace, or
+            it varies along the spectral axis.
+        """
+        folder = self._workspace.path(project)
+        for file in _files(options):
+            self._workspace.path(os.path.join(project, file))
+        try:
+            with parseutils.paths_relative_to(folder):
+                response = parser.load(dict(options))
+        except (ConfigError, OSError, ValueError, TypeError) as e:
+            raise Invalid(str(e)) from e
+        if response.varies():
+            raise Invalid(
+                f"this {what} varies along the spectral axis; the Studio "
+                f"cannot draw one yet")
+        return response
+
+
+def _files(options: Any) -> Iterator[str]:
+    """Yield the files that options name (their options 'file')."""
+    if isinstance(options, Mapping):
+        for key, value in options.items():
+            if key == 'file':
+                if isinstance(value, str):
+                    yield value
+                elif isinstance(value, Mapping) \
+                        and isinstance(value.get('file'), str):
+                    yield value['file']
+                elif isinstance(value, list) and value \
+                        and isinstance(value[0], str):
+                    yield value[0]
+            else:
+                yield from _files(value)
+    elif isinstance(options, list):
+        for item in options:
+            yield from _files(item)
+
+
+def _round_below(value: float) -> list[float]:
+    """
+    Return the round numbers (1, 2, 2.5 and 5 times a power of 10) at or
+    below a value, from it down, over three powers of 10.
+    """
+    power = 10.0 ** np.floor(np.log10(value))
+    rounds = [
+        m * power * 10.0 ** k for k in (0, -1, -2, -3)
+        for m in (5, 2.5, 2, 1)]
+    return [float(f'{r:.6g}') for r in rounds if r <= value]
+
+
+def _fwhm(values: np.ndarray, step: float) -> float | None:
+    """
+    Return the full width at half maximum of a profile of one peak on
+    channels of a width, between its crossings of half its peak (linear
+    between channels); none if it does not cross it on both sides.
+    """
+    peak = int(np.argmax(values))
+    half = values[peak] / 2
+    below = np.flatnonzero(values[:peak] < half)
+    above = np.flatnonzero(values[peak:] < half)
+    if below.size == 0 or above.size == 0:
+        return None
+    i, j = below[-1], peak + above[0]
+    left = i + (half - values[i]) / (values[i + 1] - values[i])
+    right = j - 1 + (values[j - 1] - half) / (values[j - 1] - values[j])
+    return float((right - left) * step)

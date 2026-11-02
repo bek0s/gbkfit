@@ -7,6 +7,7 @@ the event loop of their services.
 """
 
 import asyncio
+import functools
 from collections.abc import AsyncIterator
 from typing import Annotated, Any, Literal
 
@@ -18,13 +19,16 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from starlette.requests import HTTPConnection
 
+import gbkfit
+
 from gbkfit_server.services import frames
 from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
     ArrayInfo, CheckRequest, CheckResult, FolderInfo, ImportRequest,
-    JobInfo, JobRequest, PieceReference, PieceRename, PieceRequest,
+    JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
+    PieceReference, PieceRename, PieceRequest,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
     SessionInfo, SessionRequest, SpectrumView)
 
@@ -119,6 +123,19 @@ def rename_piece(server: ServerDep, path: str, request: PieceRename) -> str:
     that name it with it; return its new path.
     """
     return server.workspace.rename_piece(path, request.name)
+
+
+@router.put('/pieces/{path:path}', status_code=status.HTTP_204_NO_CONTENT)
+def update_piece(
+        server: ServerDep,
+        path: str,
+        content: Annotated[dict[str, Any], Body()]
+) -> None:
+    """
+    Write the content of a piece (or a setup) of a project: its options
+    that change (its comments stay).
+    """
+    server.workspace.update_piece(path, content)
 
 
 @router.delete('/pieces/{path:path}', status_code=status.HTTP_204_NO_CONTENT)
@@ -227,6 +244,46 @@ def view_moments(
     return Response(
         frames.array_frame(dict(path=path, hdu=hdu), arrays),
         media_type='application/octet-stream')
+
+
+@router.post('/views/psf')
+def view_psf(server: ServerDep, request: PSFRequest) -> PSFViewInfo:
+    """
+    Draw a PSF of the options of a piece of a project, on pixels of a
+    size or of its own scale, with the solid angle of its beam and its
+    width.
+    """
+    view = server.responses.psf(request.project, request.options, request.step)
+    return PSFViewInfo(
+        values=view.values.tolist(), step=view.step,
+        beam_area=view.beam_area, fwhm=view.fwhm)
+
+
+@router.post('/views/lsf')
+def view_lsf(server: ServerDep, request: LSFRequest) -> LSFViewInfo:
+    """
+    Draw an LSF of the options of a piece of a project, on channels of a
+    width or of its own scale, with its width.
+    """
+    view = server.responses.lsf(request.project, request.options, request.step)
+    return LSFViewInfo(
+        values=view.values.tolist(), step=view.step, fwhm=view.fwhm)
+
+
+@router.get('/schema')
+def config_schema() -> dict[str, Any]:
+    """
+    Return the JSON Schema of the configurations of GBKFIT, from the
+    options of the library (see gbkfit.schema): the forms of the pieces
+    are made of it.
+    """
+    return _schema()
+
+
+@functools.cache
+def _schema() -> dict[str, Any]:
+    """Return the JSON Schema of the configurations (once)."""
+    return gbkfit.schema()
 
 
 @router.post('/imports', status_code=status.HTTP_201_CREATED)

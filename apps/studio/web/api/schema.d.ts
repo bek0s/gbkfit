@@ -61,7 +61,12 @@ export interface paths {
          * @description Return a piece (or a setup) of a project: its options.
          */
         get: operations["piece_api_v1_pieces__path__get"];
-        put?: never;
+        /**
+         * Update Piece
+         * @description Write the content of a piece (or a setup) of a project: its options
+         *     that change (its comments stay).
+         */
+        put: operations["update_piece_api_v1_pieces__path__put"];
         post?: never;
         /**
          * Delete Piece
@@ -234,6 +239,71 @@ export interface paths {
          *     of all of them; see Views.moments).
          */
         get: operations["view_moments_api_v1_views_moments__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/psf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Psf
+         * @description Draw a PSF of the options of a piece of a project, on pixels of a
+         *     size or of its own scale, with the solid angle of its beam and its
+         *     width.
+         */
+        post: operations["view_psf_api_v1_views_psf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/lsf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Lsf
+         * @description Draw an LSF of the options of a piece of a project, on channels of a
+         *     width or of its own scale, with its width.
+         */
+        post: operations["view_lsf_api_v1_views_lsf_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/schema": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Config Schema
+         * @description Return the JSON Schema of the configurations of GBKFIT, from the
+         *     options of the library (see gbkfit.schema): the forms of the pieces
+         *     are made of it.
+         */
+        get: operations["config_schema_api_v1_schema_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -724,6 +794,76 @@ export interface components {
             };
         };
         /**
+         * LSFRequest
+         * @description An LSF to draw: the project of its piece, its options (its files
+         *     relative to the project), and the width of the channels (km/s; none:
+         *     of its own scale).
+         */
+        LSFRequest: {
+            /** Project */
+            project: string;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Step */
+            step?: number | null;
+        };
+        /**
+         * LSFViewInfo
+         * @description An LSF drawn on channels (see Responses.lsf): its values (they sum
+         *     to 1), the width of the channels (km/s), and its full width at half
+         *     maximum (km/s; none for a point).
+         */
+        LSFViewInfo: {
+            /** Values */
+            values: number[];
+            /** Step */
+            step: number;
+            /** Fwhm */
+            fwhm: number | null;
+        };
+        /**
+         * PSFRequest
+         * @description A PSF to draw: the project of its piece, its options (its files
+         *     relative to the project), and the size of the pixels (x, y; arcsec;
+         *     none: of its own scale).
+         */
+        PSFRequest: {
+            /** Project */
+            project: string;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Step */
+            step?: [
+                number,
+                number
+            ] | null;
+        };
+        /**
+         * PSFViewInfo
+         * @description A PSF drawn on pixels (see Responses.psf): its values (rows of y,
+         *     from the bottom; they sum to 1), the size of the pixels (x, y;
+         *     arcsec), the solid angle of its beam (arcsec^2) and the full width at
+         *     half maximum of the circular Gaussian of that beam (arcsec; none for
+         *     a point).
+         */
+        PSFViewInfo: {
+            /** Values */
+            values: number[][];
+            /** Step */
+            step: [
+                number,
+                number
+            ];
+            /** Beam Area */
+            beam_area: number | null;
+            /** Fwhm */
+            fwhm: number | null;
+        };
+        /**
          * PieceReference
          * @description A piece (or a setup) that names another: its folder and name.
          */
@@ -1004,6 +1144,41 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_piece_api_v1_pieces__path__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -1373,6 +1548,94 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_psf_api_v1_views_psf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PSFRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PSFViewInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_lsf_api_v1_views_lsf_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LSFRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LSFViewInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    config_schema_api_v1_schema_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

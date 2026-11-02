@@ -339,6 +339,46 @@ class Project:
                 _yaml_out.dump(dict(content), f)
         return filename
 
+    def update_piece(
+            self, folder: str, name: str, content: Mapping[str, Any]
+    ) -> str:
+        """
+        Write the content of a piece (or a setup) that exists, and return
+        its file: its options that change are written anew, and the rest
+        of its text (e.g. its comments, and the options that stay) as it
+        is.
+
+        Raises
+        ------
+        ConfigError
+            If the folder is not one of pieces or setups, or the name is
+            not a path in it.
+        FileNotFoundError
+            If the piece does not exist.
+        """
+        filename = self._piece_file(folder, name)
+        try:
+            text = Path(filename).read_text()
+        except FileNotFoundError:
+            raise FileNotFoundError(
+                f"the project has no piece '{name}' of {folder}") from None
+        try:
+            old = _yaml_rt.load(text)
+        except ruamel.yaml.YAMLError:
+            old = None
+        if not isinstance(old, Mapping):
+            with Path(filename).open('w') as f:
+                _yaml_out.dump(dict(content), f)
+            return filename
+        for key in [key for key in old if key not in content]:
+            del old[key]
+        for key, value in content.items():
+            if key not in old or _plain(old[key]) != value:
+                old[key] = value
+        with Path(filename).open('w') as f:
+            _yaml_rt.dump(old, f)
+        return filename
+
     def references(self, folder: str, name: str) -> list[tuple[str, str]]:
         """
         Return the pieces and setups that name a piece (see the module):
@@ -836,3 +876,20 @@ def _load_quietly(filename: str) -> Any:
         return _yaml.load(Path(filename))
     except (OSError, ruamel.yaml.YAMLError):
         return None
+
+
+def _plain(value: Any) -> Any:
+    """
+    Return a value read in round trip (e.g. a CommentedMap) as plain
+    values (dict, list, str, int, float, bool, None).
+    """
+    if isinstance(value, Mapping):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_plain(item) for item in value]
+    if isinstance(value, bool) or value is None:
+        return value
+    for kind in (int, float, str):
+        if isinstance(value, kind):
+            return kind(value)
+    return value

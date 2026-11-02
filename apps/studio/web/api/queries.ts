@@ -254,3 +254,45 @@ export function useDeleteBlock(project: string) {
     },
   });
 }
+
+// The JSON Schema of the configurations of GBKFIT (see the server's
+// /schema), which the forms of the blocks are made of; it changes with
+// the library alone
+export function useSchema() {
+  return useQuery({ queryKey: ['schema'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/schema')) });
+}
+
+// Write the options of a block of a project (by its path)
+export function useUpdateBlock() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ path, content }: { path: string; content: Record<string, unknown> }) => {
+      const { error, response } = await api.PUT('/api/v1/pieces/{path}', { params: { path: { path } }, body: content });
+      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+    },
+    onSuccess: (_, { path }) => client.invalidateQueries({ queryKey: keys.piece(path) }),
+  });
+}
+
+// A PSF of options of a block of a project drawn on pixels of a size
+// (arcsec; null: of its own scale), with its width; the last drawn stays
+// while the next comes
+export function usePsfView(project: string, options: Record<string, unknown>, step: [number, number] | null) {
+  return useQuery({
+    queryKey: keys.view('psf', project, JSON.stringify(options), step?.join() ?? ''),
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: () => data(api.POST('/api/v1/views/psf', { body: { project, options, step } })),
+  });
+}
+
+// An LSF of options of a block of a project drawn on channels of a width
+// (km/s; null: of its own scale), with its width
+export function useLsfView(project: string, options: Record<string, unknown>, step: number | null) {
+  return useQuery({
+    queryKey: keys.view('lsf', project, JSON.stringify(options), step ?? ''),
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: () => data(api.POST('/api/v1/views/lsf', { body: { project, options, step } })),
+  });
+}
