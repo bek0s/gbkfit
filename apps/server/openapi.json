@@ -2193,6 +2193,37 @@
               }
             ],
             "title": "Fwhm"
+          },
+          "axes": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                ],
+                "type": "array",
+                "maxItems": 3,
+                "minItems": 3
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Axes"
           }
         },
         "type": "object",
@@ -2200,10 +2231,11 @@
           "values",
           "step",
           "beam_area",
-          "fwhm"
+          "fwhm",
+          "axes"
         ],
         "title": "PSFViewInfo",
-        "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point)."
+        "description": "A PSF drawn on pixels (see Responses.psf): its values (rows of y,\nfrom the bottom; they sum to 1), the size of the pixels (x, y;\narcsec), the solid angle of its beam (arcsec^2) and the full width at\nhalf maximum of the circular Gaussian of that beam (arcsec; none for\na point), and its full widths at half maximum along its major and\nminor axes (arcsec) and the position angle of its major axis\n(degrees; none if round), as measured (none for a point)."
       },
       "PieceReference": {
         "properties": {

@@ -222,12 +222,17 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
 
 def test_pieces_are_updated_in_place(study):
     path = study.create_piece('psfs', 'beam')
+    # (the comment of the template, which says what it is, goes as it
+    # changes; others stay, as do the options that do not change)
+    study.update_piece('psfs', 'beam', dict(type='gauss', sigma=1.5))
+    assert Path(path).read_text().startswith('# A PSF')
     study.update_piece('psfs', 'beam', dict(type='gauss', sigma=2.0))
-    text = Path(path).read_text()
-    assert text.startswith('# A PSF') and 'sigma: 2.0' in text
-    assert yaml.load(Path(path)) == dict(type='gauss', sigma=2.0)
-    content = dict(type='moffat', alpha=1.0, beta=2.5, posa=10)
+    assert Path(path).read_text() == 'type: gauss\nsigma: 2.0\n'
+    Path(path).write_text('# my seeing\ntype: gauss  # round\nsigma: 2.0\n')
+    content = dict(type='gauss', sigma=1.0)
     study.update_piece('psfs', 'beam', content)
     assert yaml.load(Path(path)) == content
+    assert Path(path).read_text().startswith('# my seeing')
+    assert '# round' in Path(path).read_text()
     with pytest.raises(FileNotFoundError):
         study.update_piece('psfs', 'nothing', content)

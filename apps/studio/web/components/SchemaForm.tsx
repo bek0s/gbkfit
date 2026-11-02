@@ -7,7 +7,7 @@
 // forms. A file is one of the project (imported or uploaded), and its
 // array, if it has several. What the form cannot edit (e.g. a table along
 // the spectral axis) is shown as it is, and kept.
-import { NumberInput } from '@mantine/core';
+import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
 import { FileSources } from '../screens/items';
@@ -31,6 +31,8 @@ interface FormContext {
   // The blocks of the project by folder (their names), and how one opens
   blocks: Record<string, string[]>;
   openBlock?: (folder: string, name: string) => void;
+  // Whether numbers have sliders too (see sliderOf)
+  sliders: boolean;
 }
 
 // The families whose options can be a block of the project instead, by
@@ -57,6 +59,7 @@ export function SchemaForm({
   starts = {},
   blocks = {},
   openBlock,
+  sliders = false,
 }: {
   defs: Defs;
   def?: string;
@@ -67,11 +70,12 @@ export function SchemaForm({
   starts?: Record<string, Record<string, Options>>;
   blocks?: Record<string, string[]>;
   openBlock?: (folder: string, name: string) => void;
+  sliders?: boolean;
 }) {
   const node = given ?? (def === undefined ? undefined : defs[def]);
   if (node === undefined) return <p className="error">The schema has no {def}.</p>;
   return (
-    <Context.Provider value={{ defs, project, starts, blocks, openBlock }}>
+    <Context.Provider value={{ defs, project, starts, blocks, openBlock, sliders }}>
       <div className="schema-form">
         <Field node={node} family={def} value={value} onChange={(next) => onChange(next as Options)} />
       </div>
@@ -114,6 +118,7 @@ function Field({
   onChange,
   family,
   nullable = false,
+  slider,
 }: {
   node: Schema;
   value: unknown;
@@ -122,6 +127,8 @@ function Field({
   family?: string;
   // Whether it can be none
   nullable?: boolean;
+  // The slider of a number, if it has one
+  slider?: SliderSpec | null;
 }) {
   const { defs } = useForm();
   const resolved = resolve(node, defs);
@@ -131,8 +138,8 @@ function Field({
     return <MemberField members={membersOf(resolved, defs)} family={name ?? ''} nullable={nullable} value={value} onChange={onChange} />;
   }
   const branches = resolved.anyOf as Schema[] | undefined;
-  if (branches) return <AnyField branches={branches} node={resolved} value={value} onChange={onChange} />;
-  return <PlainField node={resolved} value={value} onChange={onChange} />;
+  if (branches) return <AnyField branches={branches} node={resolved} value={value} onChange={onChange} slider={slider} />;
+  return <PlainField node={resolved} value={value} onChange={onChange} slider={slider} />;
 }
 
 // A block of the project named in place of options (e.g. the dataset of
@@ -189,7 +196,10 @@ function MemberField({
   const ofType = members.filter((m) => typeOf(m) === type);
   const member =
     ofType.find((m) => Object.keys(options).every((key) => key === 'type' || key in propertiesOf(m))) ?? ofType[0];
-  const types = [...new Set(members.map((m) => typeOf(m)!))];
+  // (in the order of their texts, the common ones first; others after)
+  const order = Object.keys(TYPE_TEXTS);
+  const rank = (t: string) => (order.includes(t) ? order.indexOf(t) : order.length);
+  const types = [...new Set(members.map((m) => typeOf(m)!))].sort((a, b) => rank(a) - rank(b));
   const choose = (next: string) => {
     if (next === '') return onChange(undefined);
     if (next.startsWith('block:')) return onChange(next.slice(6));
@@ -200,20 +210,20 @@ function MemberField({
   };
   return (
     <div className="schema-member">
-      <label className="schema-row">
+      <div className="schema-row">
         <span className="schema-label">type</span>
         <Choice
           items={[
             ...(nullable ? [{ value: '', label: 'none' }] : type === undefined ? [{ value: '', label: 'choose…' }] : []),
             ...(type !== undefined && !types.includes(type) ? [{ value: type, label: type }] : []),
-            ...types.map((t) => ({ value: t, label: typeTitle(t) })),
-            ...named.map((name) => ({ value: `block:${name}`, label: `the ${family} ${name}` })),
+            ...types.map((t) => ({ value: t, label: typeTitle(t), description: TYPE_TEXTS[t] })),
+            ...named.map((name) => ({ value: `block:${name}`, label: `the ${family} ${name}`, description: 'A block of the project' })),
           ]}
           value={type ?? ''}
           label={`The type of the ${family}`}
           onChange={choose}
         />
-      </label>
+      </div>
       {ofType.length > 1 && member && (
         <p className="note schema-note">
           Also given as: {ofType.filter((m) => m !== member).map((m) => Object.keys(propertiesOf(m)).filter((k) => k !== 'type').join(', ')).join('; ')}
@@ -240,6 +250,21 @@ const TYPE_TITLES: Record<string, string> = {
   convolution: 'Convolution',
 };
 
+// What the types of the families of instruments are, in a line
+const TYPE_TEXTS: Record<string, string> = {
+  point: 'No spreading: all the light stays in its pixel or channel',
+  gauss: 'The usual one',
+  ggauss: 'A Gaussian of a shape: flatter (beta > 2) or peakier (beta < 2)',
+  moffat: 'A core with power-law wings, as of atmospheric seeing',
+  lorentz: 'Broad wings, as of natural or pressure broadening',
+  hanning: 'The smoothing of a Hanning window, as of radio spectrometers',
+  gauss_beam: 'A beam by its FWHMs, or that of the header of a file',
+  image: 'Measured: an image of it, from a FITS file',
+  images: 'Measured: one at each point of the spectrum, from a cube',
+  sum: 'A weighted sum of several, e.g. a core and a halo',
+  convolution: 'Several, one after the other, e.g. a telescope and a slit',
+};
+
 export function typeTitle(type: string): string {
   return TYPE_TITLES[type] ?? type;
 }
@@ -262,10 +287,11 @@ function ObjectFields({ node, value, onChange }: { node: Schema; value: Options;
   };
   // (options it has that the schema has not: kept, and shown)
   const unknown = Object.keys(value).filter((key) => key !== 'type' && !(key in propertiesOf(node)));
-  const { defs } = useForm();
+  const { defs, sliders } = useForm();
   return (
     <>
       {properties.map(([key, property]) => {
+        const slider = sliders ? sliderOf(key, property, defs, value[key]) : null;
         // (an optional object of options of its own, not given: added on
         // demand, as its fields are many; given, it can go)
         const optional = !required.includes(key) && isPlainObject(property, defs);
@@ -276,7 +302,7 @@ function ObjectFields({ node, value, onChange }: { node: Schema; value: Options;
                 + set
               </Button>
             ) : (
-              <Field node={property} value={value[key]} onChange={(next) => set(key, next)} />
+              <Field node={property} value={value[key]} onChange={(next) => set(key, next)} slider={slider} />
             )}
             {optional && value[key] !== undefined && <Close label={`Remove ${key}`} onClick={() => set(key, undefined)} />}
           </Row>
@@ -313,7 +339,8 @@ function Row({ name, node, required, children }: { name: string; node: Schema; r
       </span>
       <div className="schema-field">
         {children}
-        {unit && <span className="schema-unit">{unit}</span>}
+        {/* (a column of units in every row, so that the fields line up) */}
+        <span className="schema-unit">{unit ?? ''}</span>
       </div>
     </div>
   );
@@ -327,11 +354,13 @@ function AnyField({
   node,
   value,
   onChange,
+  slider,
 }: {
   branches: Schema[];
   node: Schema;
   value: unknown;
   onChange: (value: unknown) => void;
+  slider?: SliderSpec | null;
 }) {
   const { defs } = useForm();
   const resolved = branches.map((b) => resolve(b, defs));
@@ -352,7 +381,7 @@ function AnyField({
   }
   const number = find((b) => b.type === 'number' || b.type === 'integer');
   if (number !== undefined && (value === undefined || value === null || typeof value === 'number')) {
-    return <NumberValue node={{ ...resolved[number], default: node.default }} value={value as number | undefined} onChange={onChange} />;
+    return <NumberValue node={{ ...resolved[number], default: node.default }} value={value as number | undefined} onChange={onChange} slider={slider} />;
   }
   const flag = find((b) => b.type === 'boolean');
   if (flag !== undefined && (value === undefined || typeof value === 'boolean')) {
@@ -371,11 +400,21 @@ function AnyField({
 }
 
 // The field of a node of one type
-function PlainField({ node, value, onChange }: { node: Schema; value: unknown; onChange: (value: unknown) => void }) {
+function PlainField({
+  node,
+  value,
+  onChange,
+  slider,
+}: {
+  node: Schema;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  slider?: SliderSpec | null;
+}) {
   const { defs } = useForm();
   if (node.type === 'number' || node.type === 'integer') {
     return typeof value === 'number' || value === undefined ? (
-      <NumberValue node={node} value={value} onChange={onChange} />
+      <NumberValue node={node} value={value} onChange={onChange} slider={slider} />
     ) : (
       <Kept value={value} onChange={onChange} />
     );
@@ -424,14 +463,81 @@ function PlainField({ node, value, onChange }: { node: Schema; value: unknown; o
   return <Kept value={value} onChange={onChange} />;
 }
 
+// The slider of a number: from min to max by step; a range that grows
+// (e.g. of a width) is as wide as twice the value at first, and wider as
+// a larger one is typed
+export interface SliderSpec {
+  min: number;
+  max: number;
+  step: number;
+  grow?: boolean;
+}
+
+// The slider of an option, by its name, its range and its unit, if it has
+// one: a range of its own (e.g. an axis ratio, in (0, 1]), an angle (0 to
+// 180 degrees), the slope of a profile (beta), or a width (arcsec, km/s);
+// none for others, or a value that is not a number (e.g. a table)
+export function sliderOf(name: string, property: Schema, defs: Defs, value: unknown): SliderSpec | null {
+  if (value !== undefined && typeof value !== 'number') return null;
+  const resolved = resolve(property, defs);
+  const branches = ((resolved.anyOf as Schema[] | undefined) ?? [resolved]).map((b) => resolve(b, defs));
+  const number = branches.find((b) => b.type === 'number');
+  if (number === undefined) return null;
+  const unit = resolved.unit;
+  const low = (number.exclusiveMinimum ?? number.minimum) as number | undefined;
+  const high = (number.exclusiveMaximum ?? number.maximum) as number | undefined;
+  if (low !== undefined && high !== undefined) {
+    const step = niceBelow((high - low) / 100);
+    return {
+      min: number.exclusiveMinimum !== undefined ? low + step : low,
+      max: number.exclusiveMaximum !== undefined ? high - step : high,
+      step,
+    };
+  }
+  if (unit === 'deg') return { min: 0, max: 180, step: 1 };
+  if (name === 'beta') return low === 1 ? { min: 1.05, max: 10, step: 0.05 } : { min: 0.2, max: 8, step: 0.05 };
+  if (unit === 'arcsec') return { min: 0, max: 5, step: 0.01, grow: true };
+  if (unit === 'km/s') return { min: 0, max: 50, step: 0.1, grow: true };
+  return null;
+}
+
+// The round numbers (1, 2 and 5 times a power of 10) at or above, and at
+// or below, a positive number
+function niceAbove(x: number): number {
+  const power = 10 ** Math.floor(Math.log10(x));
+  return ([1, 2, 5, 10].find((m) => m * power >= x * (1 - 1e-9)) ?? 10) * power;
+}
+
+function niceBelow(x: number): number {
+  const power = 10 ** Math.floor(Math.log10(x));
+  return ([5, 2, 1].find((m) => m * power <= x * (1 + 1e-9)) ?? 1) * power;
+}
+
 // A number, as typed (blank: none, its default shown); out of its range,
-// marked
-function NumberValue({ node, value, onChange }: { node: Schema; value: number | undefined | null; onChange: (value: unknown) => void }) {
+// marked; with a slider beside it, if it has one (see sliderOf)
+function NumberValue({
+  node,
+  value,
+  onChange,
+  slider,
+}: {
+  node: Schema;
+  value: number | undefined | null;
+  onChange: (value: unknown) => void;
+  slider?: SliderSpec | null;
+}) {
   const [text, setText] = useState(value == null ? '' : String(value));
   // (a value changed elsewhere, e.g. the type, is shown)
   useEffect(() => {
     if ((value ?? null) !== (text.trim() === '' ? null : Number(text))) setText(value == null ? '' : String(value));
   }, [value]);
+  // (the end of a slider that grows: twice the value at first, then wider
+  // as a larger one is typed; never as it is dragged)
+  const at = typeof value === 'number' ? value : typeof node.default === 'number' ? node.default : null;
+  const [top, setTop] = useState(() => (slider?.grow ? niceAbove(Math.max(slider.max, 2 * (at ?? 0))) : (slider?.max ?? 0)));
+  useEffect(() => {
+    if (slider?.grow && at !== null && at > top) setTop(niceAbove(1.5 * at));
+  }, [at]);
   const low = (node.exclusiveMinimum ?? node.minimum) as number | undefined;
   const high = (node.exclusiveMaximum ?? node.maximum) as number | undefined;
   const n = text.trim() === '' ? null : Number(text);
@@ -442,23 +548,44 @@ function NumberValue({ node, value, onChange }: { node: Schema; value: number | 
       (typeof node.exclusiveMaximum === 'number' && n >= node.exclusiveMaximum) ||
       (typeof node.maximum === 'number' && n > node.maximum));
   const range = low !== undefined || high !== undefined ? `${node.exclusiveMinimum !== undefined ? '(' : '['}${low ?? '−∞'}, ${high ?? '∞'}${node.exclusiveMaximum !== undefined ? ')' : ']'}` : undefined;
-  return (
+  const typed = (next: string) => {
+    setText(next);
+    if (next.trim() === '') onChange(undefined);
+    else if (Number.isFinite(Number(next))) onChange(Number(next));
+  };
+  const input = (
     <NumberInput
       value={text}
-      onChange={(next) => {
-        const typed = String(next);
-        setText(typed);
-        if (typed.trim() === '') onChange(undefined);
-        else if (Number.isFinite(Number(typed))) onChange(Number(typed));
-      }}
+      onChange={(next) => typed(String(next))}
       hideControls
       placeholder={node.default != null ? String(node.default) : undefined}
       aria-label="a number"
       title={range && `In ${range}`}
       error={out ? `out of ${range}` : undefined}
       size="xs"
-      className="ui-number schema-number"
+      className={slider ? 'ui-number schema-number compact' : 'ui-number schema-number'}
     />
+  );
+  if (!slider) return input;
+  const step = slider.grow ? niceBelow(top / 500) : slider.step;
+  // (a width is above 0: its slider starts a step above)
+  const min = slider.grow && node.exclusiveMinimum === 0 ? step : slider.min;
+  const max = slider.grow ? top : slider.max;
+  return (
+    <div className="schema-slide">
+      <Slider
+        min={min}
+        max={max}
+        step={step}
+        value={Math.min(max, Math.max(min, at ?? min))}
+        onChange={(x) => typed(String(Number(x.toPrecision(6))))}
+        label={(x) => String(Number(x.toPrecision(4)))}
+        thumbLabel="a number"
+        size="sm"
+        className="ui-slider schema-slider"
+      />
+      {input}
+    </div>
   );
 }
 

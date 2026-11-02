@@ -257,7 +257,7 @@ def view_psf(server: ServerDep, request: PSFRequest) -> PSFViewInfo:
     view = server.responses.psf(request.project, request.options, request.step)
     return PSFViewInfo(
         values=view.values.tolist(), step=view.step,
-        beam_area=view.beam_area, fwhm=view.fwhm)
+        beam_area=view.beam_area, fwhm=view.fwhm, axes=view.axes)
 
 
 @router.post('/views/lsf')

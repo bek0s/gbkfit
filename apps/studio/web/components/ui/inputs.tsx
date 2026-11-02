@@ -1,10 +1,12 @@
 // Inputs (of Mantine; see theme.ts), with the conventions of the Studio:
 // a number field whose value is its text (blank: none), clamped to its
-// range as it is left; a choice of a few (segments) or of a list (the
-// select of the browser); and a check.
-import { Checkbox, NativeSelect, NumberInput, SegmentedControl } from '@mantine/core';
+// range as it is left; a choice of a few (segments) or of a list (a
+// field whose list drops as the menus do); and a check.
+import { Checkbox, NumberInput, SegmentedControl, Select } from '@mantine/core';
 
-// One of a list of choices (some can be off), as the select of the browser
+// One of a list of choices (some can be off, and each can say what it
+// is under its label), as a field whose list drops as the menus do (see
+// overlays)
 export function Choice({
   items,
   value,
@@ -12,21 +14,38 @@ export function Choice({
   label,
   title,
 }: {
-  items: { value: string; label: string; disabled?: boolean }[];
+  items: { value: string; label: string; disabled?: boolean; description?: string }[];
   value: string;
   onChange: (value: string) => void;
   label: string;
   title?: string;
 }) {
+  const described = new Map(items.map((item) => [item.value, item.description]));
   return (
-    <NativeSelect
-      data={items}
+    <Select
+      data={items.map(({ value, label, disabled }) => ({ value, label, disabled }))}
       value={value}
-      onChange={(event) => onChange(event.currentTarget.value)}
+      onChange={(next) => next !== null && onChange(next)}
+      allowDeselect={false}
+      checkIconPosition="right"
+      maxDropdownHeight={340}
+      comboboxProps={{ offset: 4, shadow: 'md' }}
+      renderOption={({ option }) => {
+        const description = described.get(option.value);
+        return description ? (
+          <div className="ui-choice-option">
+            <span>{option.label}</span>
+            <small>{description}</small>
+          </div>
+        ) : (
+          option.label
+        );
+      }}
       aria-label={label}
       title={title}
       size="xs"
       className="ui-choice"
+      classNames={{ dropdown: 'ui-menu ui-choice-dropdown' }}
     />
   );
 }

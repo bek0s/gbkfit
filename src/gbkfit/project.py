@@ -346,7 +346,8 @@ class Project:
         Write the content of a piece (or a setup) that exists, and return
         its file: its options that change are written anew, and the rest
         of its text (e.g. its comments, and the options that stay) as it
-        is.
+        is; but the comment of its template, which says what it is (e.g.
+        'here a Gaussian of dispersion 1.5 arcsec'), goes as it changes.
 
         Raises
         ------
@@ -366,6 +367,12 @@ class Project:
             old = _yaml_rt.load(text)
         except ruamel.yaml.YAMLError:
             old = None
+        # (the comment of its template, which says what it is, e.g. 'here
+        # a Gaussian of dispersion 1.5 arcsec', goes as it changes)
+        header = _header(TEMPLATES.get(folder, ''))
+        if isinstance(old, Mapping) and header and text.startswith(header) \
+                and _plain(old) != dict(content):
+            old = _yaml_rt.load(text[len(header):])
         if not isinstance(old, Mapping):
             with Path(filename).open('w') as f:
                 _yaml_out.dump(dict(content), f)
@@ -893,3 +900,12 @@ def _plain(value: Any) -> Any:
         if isinstance(value, kind):
             return kind(value)
     return value
+
+
+def _header(text: str) -> str:
+    """Return the lines of comments that a text starts with."""
+    lines = text.splitlines(keepends=True)
+    count = next(
+        (i for i, line in enumerate(lines) if not line.startswith('#')),
+        len(lines))
+    return ''.join(lines[:count])

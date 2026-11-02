@@ -898,7 +898,9 @@ export interface components {
          *     from the bottom; they sum to 1), the size of the pixels (x, y;
          *     arcsec), the solid angle of its beam (arcsec^2) and the full width at
          *     half maximum of the circular Gaussian of that beam (arcsec; none for
-         *     a point).
+         *     a point), and its full widths at half maximum along its major and
+         *     minor axes (arcsec) and the position angle of its major axis
+         *     (degrees; none if round), as measured (none for a point).
          */
         PSFViewInfo: {
             /** Values */
@@ -912,6 +914,12 @@ export interface components {
             beam_area: number | null;
             /** Fwhm */
             fwhm: number | null;
+            /** Axes */
+            axes: [
+                number,
+                number,
+                number | null
+            ] | null;
         };
         /**
          * PieceReference

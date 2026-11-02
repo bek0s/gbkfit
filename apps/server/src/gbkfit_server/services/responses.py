@@ -41,13 +41,16 @@ class PSFView:
     A PSF drawn on pixels: its values (ny, nx; they sum to 1), the size
     of the pixels (x, y; arcsec), the solid angle of its beam (arcsec^2)
     and the full width at half maximum of the circular Gaussian of that
-    beam (arcsec; none for a point), and whether it varies along the
-    spectral axis.
+    beam (arcsec; none for a point), and its full widths at half maximum
+    along its major and minor axes (arcsec) and the position angle of the
+    major axis (degrees, from north through east; none if it is round),
+    as measured (see _axes; none for a point).
     """
     values: np.ndarray
     step: tuple[float, float]
     beam_area: float | None
     fwhm: float | None
+    axes: tuple[float, float, float | None] | None
 
 
 @dataclasses.dataclass
@@ -116,7 +119,7 @@ class Responses:
             else float(np.sqrt(4 * np.log(2) * beam_area / np.pi))
         return PSFView(
             np.asarray(values, dtype=np.float32), tuple(step), beam_area,
-            fwhm)
+            fwhm, None if beam_area is None else _axes(psf))
 
     def lsf(
             self,
@@ -208,6 +211,35 @@ def _files(options: Any) -> Iterator[str]:
     elif isinstance(options, list):
         for item in options:
             yield from _files(item)
+
+
+# The pixels across a PSF drawn to measure its widths (see _axes)
+_FINE = 401
+
+
+def _axes(psf: Any) -> tuple[float, float, float | None]:
+    """
+    Return the full widths at half maximum of a PSF along its major and
+    minor axes (arcsec), and the position angle of its major axis
+    (degrees, from north through east, in [0, 180); none if it is round
+    to 1%): those of the ellipse of the second moments of the region
+    above half its peak, drawn on pixels of 1/_FINE of its extent (for
+    a filled ellipse, the variance along an axis is a quarter of the
+    square of its semi-axis).
+    """
+    extent = max(psf.size((1.0, 1.0)))
+    step = extent / _FINE
+    values = psf.asarray((step, step))
+    y, x = np.mgrid[:values.shape[0], :values.shape[1]]
+    half = values >= values.max() / 2
+    xs, ys = x[half] * step, y[half] * step
+    variances, vectors = np.linalg.eigh(np.cov(np.vstack([xs, ys]), bias=True))
+    major, minor = 4 * np.sqrt(np.maximum(variances[::-1], 0))
+    # (the angle of the major axis on the array, from x, is that of the
+    # position angle from north plus 90)
+    angle = np.degrees(np.arctan2(vectors[1, 1], vectors[0, 1]))
+    posa = None if major - minor < 0.01 * major else float((angle - 90) % 180)
+    return float(major), float(minor), posa
 
 
 def _round_below(value: float) -> list[float]:

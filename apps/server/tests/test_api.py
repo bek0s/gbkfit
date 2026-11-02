@@ -175,11 +175,18 @@ def test_pieces_are_renamed_with_their_names_and_deleted(client):
 def test_pieces_are_updated_and_their_comments_stay(client):
     path = client.post('/api/v1/pieces', json=dict(
         project='study', folder='psfs', name='beam')).json()
+    # (the comment of the template, which says what it is, goes as it
+    # changes; those of the user stay)
     content = dict(type='moffat', alpha=1.2, beta=3)
     assert client.put(f'/api/v1/pieces/{path}', json=content).status_code \
         == 204
     assert client.get(f'/api/v1/pieces/{path}').json() == content
-    assert client.get(f'/api/v1/files/{path}').text.startswith('# A PSF')
+    assert client.get(f'/api/v1/files/{path}').text == \
+        'type: moffat\nalpha: 1.2\nbeta: 3\n'
+    client.put(f'/api/v1/files/{path}', content='# mine\n' + client.get(
+        f'/api/v1/files/{path}').text, headers={'content-type': 'text/plain'})
+    client.put(f'/api/v1/pieces/{path}', json=dict(content, beta=4))
+    assert client.get(f'/api/v1/files/{path}').text.startswith('# mine')
     assert client.put('/api/v1/pieces/study/psfs/no.yaml', json=content) \
         .status_code == 404
 
@@ -191,6 +198,13 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
     assert values.shape[0] == values.shape[1] and values.shape[0] > 100
     assert np.isclose(values.sum(), 1, atol=1e-4)
     assert np.isclose(psf['fwhm'], 2 * np.sqrt(2 * np.log(2)), rtol=1e-6)
+    assert psf['axes'][2] is None
+    assert np.allclose(psf['axes'][:2], psf['fwhm'], rtol=0.01)
+    # (of an elliptical one, its widths along its axes, and its angle)
+    beam = client.post('/api/v1/views/psf', json=dict(
+        project='study', options=dict(
+            type='gauss_beam', bmaj=6, bmin=3, bpa=30))).json()
+    assert np.allclose(beam['axes'], [6, 3, 30], rtol=0.01)
     # (on the pixels of data)
     psf = client.post('/api/v1/views/psf', json=dict(
         project='study', options=dict(type='gauss', sigma=1.0),
@@ -199,6 +213,7 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
     point = client.post('/api/v1/views/psf', json=dict(
         project='study', options=dict(type='point'))).json()
     assert point['values'] == [[1.0]] and point['fwhm'] is None
+    assert point['axes'] is None
     lsf = client.post('/api/v1/views/lsf', json=dict(
         project='study', options=dict(type='gauss', sigma=10))).json()
     assert np.isclose(lsf['fwhm'], 10 * 2 * np.sqrt(2 * np.log(2)), rtol=1e-3)
