@@ -20,6 +20,7 @@ import { useStudio } from '../studio';
 import type { Prepared } from './Edits';
 import {
   errorKindOf,
+  errorSibling,
   Facts,
   FilesCard,
   itemBlocker,
@@ -114,6 +115,36 @@ export function NewMoments() {
   const job = useJob(jobId).data;
   const added = useRef<string | null>(null);
   const arrays = useMapArrays(maps);
+  // (the errors of a map in an array of the file of its data, named as its
+  // errors, e.g. MOM1_ERR of MOM1, are guessed for each array of its data,
+  // and follow it while they are those guessed; removed or chosen, they
+  // stay so)
+  const guessed = useRef<Partial<Record<MapKey, { at: string; error: string | number | null }>>>({});
+  useEffect(() => {
+    let changed: Maps | null = null;
+    for (const { key } of MAPS) {
+      const sources = maps[key];
+      const data = sources?.files.data;
+      const array = arrays[key].found.data;
+      if (!sources || data === undefined || array === undefined) continue;
+      const at = `${data.file}:${array.index}`;
+      const last = guessed.current[key];
+      if (last?.at === at) continue;
+      const error = sources.files.error;
+      const ours = error === undefined ? last === undefined || last.error === null : error.file === data.file && error.array === last?.error;
+      if (!ours || sources.errorValue !== null) {
+        guessed.current[key] = { at, error: null };
+        continue;
+      }
+      const next = errorSibling(arrays[key]) ?? null;
+      guessed.current[key] = { at, error: next };
+      const files = { ...sources.files };
+      if (next === null) delete files.error;
+      else files.error = { file: data.file, array: next };
+      changed = { ...(changed ?? maps), [key]: { ...sources, files } };
+    }
+    if (changed !== null) setMaps(changed);
+  }, [maps, arrays]);
   const shown = present(maps);
   const shape = shapeOf(maps, arrays);
   const reason0 = blocker(maps, arrays);
