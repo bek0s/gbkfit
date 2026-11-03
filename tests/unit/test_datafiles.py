@@ -148,6 +148,42 @@ def test_the_beams_of_the_channels_follow_them(tmp_path):
     assert describe_fits(path)[0].beam is not None
 
 
+def test_the_beams_follow_the_channels_past_an_axis_of_stokes(tmp_path):
+    # The axes of a cube of CASA: RA, Dec, Stokes (of 1) and increasing
+    # frequency, whose radio velocities of a rest decrease, so its channels
+    # are reversed; the spectral axis is the third of the model, the fourth
+    # of the file
+    header = fits.Header(dict(
+        CTYPE1='RA---SIN', CRVAL1=10.0, CDELT1=-1 / 3600, CRPIX1=3.0,
+        CUNIT1='deg', CTYPE2='DEC--SIN', CRVAL2=-30.0, CDELT2=1 / 3600,
+        CRPIX2=3.0, CUNIT2='deg', CTYPE3='STOKES', CRVAL3=1.0, CDELT3=1.0,
+        CRPIX3=1.0, CTYPE4='FREQ', CRVAL4=1.42e9, CDELT4=1e5, CRPIX4=1.0,
+        CUNIT4='Hz', SPECSYS='LSRK'))
+    values = np.arange(4.0)[:, None, None, None] * np.ones((4, 1, 5, 6))
+    beams = fits.BinTableHDU.from_columns([
+        fits.Column(name='BMAJ', format='E', unit='arcsec',
+                    array=[1, 2, 3, 4]),
+        fits.Column(name='BMIN', format='E', unit='arcsec', array=[1] * 4),
+        fits.Column(name='BPA', format='E', unit='deg', array=[0] * 4),
+        fits.Column(name='CHAN', format='J', array=range(4)),
+        fits.Column(name='POL', format='J', array=[0] * 4)], name='BEAMS')
+    path = str(tmp_path / 'cube.fits')
+    fits.HDUList([
+        fits.PrimaryHDU(values.astype(np.float32), header), beams
+    ]).writeto(path)
+    arrays = datafiles.read_arrays(path, rest='1.420405752 GHz')
+    np.testing.assert_array_equal(arrays.data[:, 0, 0], [3, 2, 1, 0])
+    np.testing.assert_allclose(arrays.beam['bmaj'], [4, 3, 2, 1])
+
+
+def test_a_bunit_that_is_not_a_unit_is_left_out_with_a_warning(
+        tmp_path, caplog):
+    write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE | dict(BUNIT='Jy/bm'))
+    arrays = datafiles.read_arrays(str(tmp_path / 'data.fits'))
+    assert arrays.unit is None
+    assert "BUNIT is left out" in caplog.text
+
+
 def test_world_axes_beyond_the_array_are_flat(tmp_path):
     # A moment map written with the header of its cube (astropy keeps its
     # spectral axis) reads as a map

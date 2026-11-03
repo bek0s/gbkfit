@@ -18,7 +18,7 @@ import astropy.wcs
 import gwcs
 import numpy as np
 
-from gbkfit.utils import fitsutils, unitutils
+from gbkfit.utils import fitsutils, parseutils, unitutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import DataFile, is_asdf_file
 
@@ -163,14 +163,14 @@ def read_arrays(
     values, header, orientation, beam = _read(data, rest, velocity)
     if isinstance(unit, str):
         unit = unitutils.parse_unit(unit)
-    unit = unit or _header_unit(header)
+    unit = unit or _header_unit(_filename(data), header)
     errors = None
     if error is not None:
         errors, error_header = _read_companion(
             error, header, orientation, rest, velocity)
         errors = _standard_deviations(
             _filename(error), errors, error_kind,
-            _header_unit(error_header), unit)
+            _header_unit(_filename(error), error_header), unit)
     masks = None
     if mask is not None:
         masks, _ = _read_companion(mask, header, orientation, rest, velocity)
@@ -211,19 +211,20 @@ def _read(
     model, orientation = fitsutils.model_header(
         filename, header, values.shape, rest, velocity)
     return (_floats(orientation.apply(values)), model, orientation,
-            _beam(filename, header, orientation))
+            _beam(filename, header, model, orientation))
 
 
 def _beam(
         filename: str,
         header: astropy.io.fits.Header,
+        model: astropy.io.fits.Header,
         orientation: fitsutils.Orientation
 ) -> dict[str, typing.Any] | None:
     """
     Return the beam of the values of a file of the given header (see
     fitsutils.header_beam; the header of an ASDF file has none), the
     beams of the channels of a cube of CASA in the order of its channels
-    in the orientation of the model.
+    in the orientation of the model (of the header model).
 
     Raises
     ------
@@ -234,9 +235,12 @@ def _beam(
         header, None if is_asdf_file(filename) else filename)
     if beam is None or 'spectral' not in beam:
         return beam
-    # (the table BEAMS of a cube has a spectral axis, see casa_beam_table)
-    axis = astropy.wcs.WCS(header).wcs.spec
-    nchannels = int(header[f'NAXIS{axis + 1}'])
+    # A cube with a table BEAMS has a spectral axis (see casa_beam_table).
+    # The axes that the orientation reverses are those of the model, where
+    # the spectral axis can be at another index than in the file (e.g. of
+    # RA, Dec, Stokes and frequency, once the Stokes axis of 1 is dropped).
+    axis = astropy.wcs.WCS(model).wcs.spec
+    nchannels = int(model[f'NAXIS{axis + 1}'])
     if len(beam['bmaj']) != nchannels:
         raise ConfigError(
             f"{filename}: the cube has {nchannels} channels, but its table "
@@ -413,18 +417,20 @@ def _standard_deviations(
 
 
 def _header_unit(
-        header: astropy.io.fits.Header
+        source: str, header: astropy.io.fits.Header
 ) -> astropy.units.UnitBase | None:
     """
     Return the unit of the values of a header (BUNIT), if it has one that
-    is a unit (see unitutils.parse_unit).
+    is a unit (see unitutils.parse_unit); one that is not is left out,
+    with a warning (see parseutils.warn).
     """
     text = str(header.get('BUNIT', '')).strip()
     if not text:
         return None
     try:
         return unitutils.parse_unit(text)
-    except ConfigError:
+    except ConfigError as e:
+        parseutils.warn(f"{source}: BUNIT is left out: {e}")
         return None
 
 
