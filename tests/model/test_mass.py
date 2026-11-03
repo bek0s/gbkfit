@@ -1827,7 +1827,6 @@ def test_pressure_support_of_self_gravitating_disks(driver, ptrait, surface):
     # -2 sigma^2 1.5 (R / 4)^1.5 (type 2), here of a dispersion of scale 10
     from gbkfit.model import Disk
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-    from gbkfit.model.components import traits
     from gbkfit.model.components.disks._profiles import pressure_support
     component = Disk.load(dict(
         rnodes=list(range(0, 21, 2)), rstep=0.5,

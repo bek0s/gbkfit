@@ -571,11 +571,11 @@ def test_the_jeans_tables_of_a_rotating_flattened_spheroid():
     for i, j in points:
         Rk, zk = R[i, j] * k, z[i, j] * k
         h = 1e-4 * Rk
-        I = nu_sz2(Rk, zk)
-        dI = Rk * (nu_sz2(Rk + h, zk) - nu_sz2(Rk - h, zk)) / (2 * h)
-        vphi2 = (b * (dI + I) + Rk * nu(Rk, zk) * gm * Rk
+        p = nu_sz2(Rk, zk)
+        dp = Rk * (nu_sz2(Rk + h, zk) - nu_sz2(Rk - h, zk)) / (2 * h)
+        vphi2 = (b * (dp + p) + Rk * nu(Rk, zk) * gm * Rk
                  / np.hypot(Rk, zk) ** 3) / nu(Rk, zk)
-        sz2 = I / nu(Rk, zk)
+        sz2 = p / nu(Rk, zk)
         rotation = vphi2 - b * sz2
         vphi = kappa * np.sqrt(max(rotation, 0.0))
         still.append(rotation < 0)
