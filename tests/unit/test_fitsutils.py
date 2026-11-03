@@ -208,6 +208,25 @@ def test_coordinates_the_model_cannot_represent(header, shape, message):
         write(header, shape)
 
 
+def test_rounding_of_a_matrix_is_not_a_coupling():
+    # e.g. what tools that compute the matrices of headers leave
+    write(dict(CDELT1=1.0, CDELT2=1.0, CDELT3=1.0, PC3_1=1e-17), (6, 20, 24))
+    _, coords = fitsutils.read_data('data.fits')
+    assert coords.step == (1.0, 1.0, 1.0)
+
+
+def test_the_first_image_is_read_past_tables():
+    fits.HDUList([
+        fits.PrimaryHDU(),
+        fits.BinTableHDU.from_columns([fits.Column('a', 'K', array=[1, 2])]),
+        fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
+    ]).writeto('data.fits')
+    data, _ = fitsutils.read_hdu('data.fits')
+    assert data.shape == (20, 24)
+    with pytest.raises(ConfigError, match="HDU 1 is not an image"):
+        fitsutils.read_hdu('data.fits', 1)
+
+
 # A cube in the orientation of the model: RA, Dec and increasing velocity,
 # east to the left of north (reference pixels off the centre, so that a
 # reversed axis moves them)

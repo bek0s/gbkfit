@@ -81,8 +81,8 @@ _KM_S = astropy.units.km / astropy.units.s
 # The speed of light (km/s)
 _C = astropy.constants.c.to_value('km/s')
 
-# The values of the header keyword AIRORVAC of each medium of wavelengths
-# (see gridutils.make_medium)
+# The values of the header keyword AIRORVAC of each medium of
+# wavelengths, as gridutils.make_medium names them
 _HEADER_MEDIUMS = dict(vacuum='vac', air='air')
 
 # The frames of the velocity axes of the AIPS convention (VELO-LSR, ...)
@@ -106,6 +106,12 @@ _REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
 # grid of the header that stands for them (see linear_header)
 _SPECTRAL_UNITS = (astropy.units.m, astropy.units.Hz, _KM_S)
 _LINEAR_TOLERANCE = 1e-3
+
+# How small a coupling of axes is taken as none, relative to the largest
+# step of its world axis: rounding left by the tools that compute the
+# matrices of headers (e.g. 1e-17). Over 1e5 pixels it is still 1e-5 of
+# a pixel.
+_COUPLING_TOLERANCE = 1e-10
 
 
 class Orientation(typing.NamedTuple):
@@ -363,13 +369,18 @@ def read_array(
     """
     data, header = read_hdu(filename, hdu)
     try:
-        # (the fixes of astropy to the header are not of the orientation)
+        # The warnings of the fixes of astropy to the header are left out,
+        # as they are not of the orientation. That changes the warning
+        # filters of the whole process for a moment, which can only show
+        # or hide a warning of another thread (see typeutils._adapter for
+        # the fix once Python 3.14 is the least supported); astropy cannot
+        # fix a header without warning.
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
             header, orientation = _oriented(filename, header, data.shape)
             wcs = astropy.wcs.WCS(header) if has_wcs(header) else None
     except Exception:
-        # (any error of astropy: the array as it is)
+        # Any error of astropy leaves the array as it is
         return data.reshape(_without_flat(data.shape)), None
     return orientation.apply(data), wcs
 
@@ -422,26 +433,35 @@ def read_hdu(
         filename: str, hdu: int | str | None = None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
-    Return the array and the header of an HDU of a FITS file: the one
-    given, or else the first with an array (e.g. the extension after an
-    empty primary HDU).
+    Return the image and the header of an HDU of a FITS file: the one
+    given, or else the first with an image (e.g. the extension after an
+    empty primary HDU), whatever tables come before it.
 
     Raises
     ------
     ConfigError
-        If the file has no such HDU, or it has no array.
+        If the file has no such HDU, or it is not an image (e.g. a table),
+        or it has no data.
     """
     with astropy.io.fits.open(filename) as hdulist:
         if hdu is None:
-            found = next((h for h in hdulist if h.data is not None), None)
+            # By the header, so that the data of the HDUs passed by are not
+            # read
+            found = next((
+                h for h in hdulist
+                if h.is_image and h.header.get('NAXIS', 0) > 0), None)
             if found is None:
-                raise ConfigError(f"{filename}: no HDU has data")
+                raise ConfigError(f"{filename}: no HDU has an image")
         else:
             try:
                 found = hdulist[hdu]
             except (IndexError, KeyError) as e:
                 raise ConfigError(
                     f"{filename}: it has no HDU {hdu!r}") from e
+            if not found.is_image:
+                raise ConfigError(
+                    f"{filename}: HDU {hdu!r} is not an image (e.g. a "
+                    f"table); choose the HDU of the image (e.g. hdu: SCI)")
             if found.data is None:
                 raise ConfigError(
                     f"{filename}: HDU {hdu} has no data; choose the HDU with "
@@ -605,8 +625,8 @@ def coords_from_header(
         represent (see coords_from_wcs), the spectral axis is not at
         spectral_axis, or the medium is not valid.
     """
-    # (a header without world coordinates: the reference pixels at the
-    # centres, see centre_missing_crpix)
+    # A header without world coordinates has its reference pixels at the
+    # centres (see centre_missing_crpix)
     wcs = _wcs(source, centre_missing_crpix(header, header_shape(header)))
     wcs, log = _log_velocity_axis(source, wcs)
     spec = wcs.wcs.spec
@@ -616,7 +636,7 @@ def coords_from_header(
             f"{spectral_axis + 1}; it is the axis {spec + 1}")
     coords = coords_from_wcs(source, wcs, rpix, rval, rest, medium)
     if medium is None and coords.medium is not None:
-        # (of an axis of logarithmic wavelengths in air, AWAV-LOG, air)
+        # An axis of logarithmic wavelengths in air (AWAV-LOG) is in air
         coords = coords._replace(
             medium='air' if log == 'air'
             else _header_medium(source, header) or coords.medium)
@@ -713,7 +733,7 @@ def _velocity_axis(
     rest_wavelength = rest.to_value(u.m, u.spectral())
     rest_frequency = rest.to_value(u.Hz, u.spectral())
     if ctype in _LOG_TYPES.values():
-        # (read as the log velocities of the rest, see coords_from_header)
+        # Read as the log velocities of the rest (see coords_from_header)
         wcs.wcs.restwav, wcs.wcs.restfrq = rest_wavelength, 0
         wcs.wcs.set()
         return wcs, 'air' if ctype == _LOG_TYPES['air'] else 'vac'
@@ -916,8 +936,8 @@ def coords_from_wcs(
         if axis in (lng, lat)
         else linear[axis, axis] * scale[axis]
         for axis in range(naxis)]
-    # (NaN where not given; an axis takes the other one of the WCS, at the
-    # values of the header on the other axes, which do not change it)
+    # NaN where not given: an axis takes the other one of the WCS, at the
+    # values of the header on the other axes, which do not change it
     rpix, rval = (
         np.full(naxis, np.nan) if value is None
         else np.broadcast_to(np.asarray(value, float), naxis)
@@ -1034,7 +1054,7 @@ def reorder_data(data: np.ndarray, order: typing.Sequence[int]) -> np.ndarray:
         The data, as a view.
     """
     n = data.ndim
-    # (numpy axes are in the reverse of the FITS order)
+    # numpy axes are in the reverse of the FITS order
     return np.transpose(data, [n - 1 - order[n - 1 - i] for i in range(n)])
 
 
@@ -1269,12 +1289,12 @@ def linear_header(
         ctype[k], cunit[k], crval[k], cd[k, k] = _linear_spectral_axis(
             source, low, j, k, centre, sizes[k])
     if sky:
-        lon, lat = sorted(sky, key=lambda j: components[j][1])
-        pixels = np.flatnonzero(correlation[lon] | correlation[lat])
+        pixels = np.flatnonzero(correlation[sky].any(axis=0))
         if len(sky) != 2 or len(pixels) != 2:
             raise ConfigError(
                 f"{source}: the celestial axes must be two, of two pixel "
                 f"axes")
+        lon, lat = sorted(sky, key=lambda j: components[j][1])
         frame = astropy.wcs.utils.celestial_frame_to_wcs(
             classes[components[lon][0]][2]['frame'], projection='TAN')
         a, b = (int(k) for k in pixels)
@@ -1375,7 +1395,7 @@ def _linear_spectral_axis(
     lines = []
     for kind, y in kinds:
         step, middle = np.polyfit(x, y, 1)
-        # (the largest distance from the line, in pixels)
+        # The largest distance from the line, in pixels
         distance = np.max(np.abs(y - (middle + step * x))) / abs(step)
         lines.append((distance, kind, step, middle))
     distance, kind, step, middle = min(lines)
@@ -1385,7 +1405,7 @@ def _linear_spectral_axis(
             f"{', '.join(kind for kind, _ in kinds)}: resample the data "
             f"first")
     if kind == 'WAVE-LOG':
-        # (w = S exp(x / S), S at the reference pixel)
+        # w = S exp(x / S), with S at the reference pixel
         middle = np.exp(middle)
         step *= middle
     return kind, unit.to_string('fits'), float(middle), float(step)
@@ -1667,7 +1687,8 @@ def with_velocity_convention(
             f"of the AIPS convention without VELREF (e.g. VELO-HEL); this "
             f"header states its own")
     header = header.copy()
-    header['VELREF'] = _AIPS_FRAMES[frame] + (256 if velocity == 'radio' else 0)
+    radio = 256 if velocity == 'radio' else 0
+    header['VELREF'] = _AIPS_FRAMES[frame] + radio
     return header
 
 
@@ -1686,8 +1707,8 @@ def _aips_frame(header: astropy.io.fits.Header) -> str | None:
     Return the frame of the spectral axis of the AIPS convention of a
     header (e.g. 'HEL'), if it has one.
     """
-    # (an axis of one pixel, e.g. that left in a moment map, has no
-    # velocities to read)
+    # An axis of one pixel (e.g. that left in a moment map) has no
+    # velocities to read
     ctypes = [
         str(header.get(f'CTYPE{n}', ''))
         for n in range(1, header.get('NAXIS', 0) + 1)
@@ -1830,7 +1851,8 @@ def _check_uncoupled(
 ) -> None:
     """
     Raise ConfigError if a pixel axis other than the celestial pair is
-    rotated into another world axis (e.g. velocity varying along x).
+    rotated into another world axis (e.g. velocity varying along x),
+    beyond rounding (see _COUPLING_TOLERANCE).
     """
     celestial = {wcs.wcs.lng, wcs.wcs.lat} - {-1}
     coupled = linear.copy()
@@ -1838,7 +1860,8 @@ def _check_uncoupled(
         for j in celestial:
             coupled[i, j] = 0
     np.fill_diagonal(coupled, 0)
-    if np.any(coupled):
+    scale = np.abs(linear).max(axis=1, keepdims=True)
+    if np.any(np.abs(coupled) > _COUPLING_TOLERANCE * scale):
         raise ConfigError(
             f"{source}: the world coordinates couple axes that the model "
             f"keeps independent (e.g. the velocity varies along a spatial "
