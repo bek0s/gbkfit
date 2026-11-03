@@ -875,7 +875,7 @@ def check_overlap(grid: Grid, other: Grid, desc: str) -> None:
 
     Raises
     ------
-    RuntimeError
+    ConfigError
         If other covers none of the pixels of grid (e.g. because one of
         them has the wrong RA and Dec).
     """
@@ -886,7 +886,7 @@ def check_overlap(grid: Grid, other: Grid, desc: str) -> None:
             & (pixel_y >= -0.5) & (pixel_y <= size_y - 0.5)):
         x, y = _from_sky(
             *np.radians(other.coords.rval[:2]), grid.coords.rval)
-        raise RuntimeError(
+        raise ConfigError(
             f"{desc} does not cover any of the pixels it is used on: by "
             f"their RA and Dec, its reference pixel is at x = {x:.6g}, "
             f"y = {y:.6g} arcsec from theirs; check the world coordinates "

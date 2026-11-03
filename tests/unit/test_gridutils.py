@@ -44,7 +44,7 @@ def test_grids_must_overlap():
     grid = gridutils.make_grid((10, 10), rval=(150.0, 2.0))
     gridutils.check_overlap(grid, grid, 'the image')
     far = gridutils.make_grid((10, 10), rval=(150.0, 2.1))
-    with pytest.raises(RuntimeError, match="the image does not cover"):
+    with pytest.raises(ConfigError, match="the image does not cover"):
         gridutils.check_overlap(grid, far, 'the image')
 
 
