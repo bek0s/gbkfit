@@ -36,7 +36,7 @@ from typing import Any, NamedTuple
 
 import ruamel.yaml
 
-from gbkfit.utils import parseutils
+from gbkfit.utils import parseutils, yamlutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -70,15 +70,15 @@ _FOLDERS = dict(
     psf='psfs', lsf='lsfs', noise='noise', params='params',
     fitter='fitters')
 
-_yaml = ruamel.yaml.YAML(typ='safe')
+_yaml = yamlutils.YAML(typ='safe')
 # (pieces written with their content: lists and dictionaries of plain
 # values on one line, e.g. data: {file: data/cube.fits, hdu: SCI})
-_yaml_out = ruamel.yaml.YAML(typ='safe')
+_yaml_out = yamlutils.YAML(typ='safe')
 _yaml_out.default_flow_style = None
 _yaml_out.sort_base_mapping_type_on_output = False
 # (pieces rewritten in place, e.g. as a piece they name is renamed: their
 # comments and layout stay)
-_yaml_rt = ruamel.yaml.YAML()
+_yaml_rt = yamlutils.YAML()
 _yaml_rt.preserve_quotes = True
 _yaml_rt.width = 4096
 

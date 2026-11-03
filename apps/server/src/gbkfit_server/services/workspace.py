@@ -21,7 +21,7 @@ from astropy.io import fits
 import gbkfit.dataset
 import gbkfit.outputs
 import gbkfit.project
-from gbkfit.utils import unitutils
+from gbkfit.utils import unitutils, yamlutils
 from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid, NotFound
@@ -41,7 +41,7 @@ _SKIPPED = ('data', 'runs', 'node_modules', '__pycache__')
 # The endings of the names of the files of data that GBKFIT reads (FITS)
 _DATA_FILES = ('.fits', '.fit', '.fts', '.fits.gz')
 
-_yaml = ruamel.yaml.YAML(typ='safe')
+_yaml = yamlutils.YAML(typ='safe')
 
 # The folders of the pieces and of the setups of a project
 _PIECES = (

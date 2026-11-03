@@ -23,6 +23,7 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 import gbkfit.project
 from gbkfit.project import FORMAT_VERSION
+from gbkfit.utils import yamlutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -42,7 +43,7 @@ _SECTIONS = ('galaxies', 'observations', 'params', 'fitter')
 # (round trip, keeping comments; a flow collection is rewritten on one
 # line, as ruamel breaks lines between keys and their values, and null
 # stays null)
-_yaml = ruamel.yaml.YAML()
+_yaml = yamlutils.YAML()
 _yaml.width = 4096
 _yaml.representer.add_representer(
     type(None),

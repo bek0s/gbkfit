@@ -38,7 +38,7 @@ from gbkfit.observation import (
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
     load_pdescs_dict, param_space_parser)
-from gbkfit.utils import iterutils, parseutils
+from gbkfit.utils import iterutils, parseutils, yamlutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import FilePath
 
@@ -60,7 +60,7 @@ _log = logging.getLogger(__name__)
 _T = TypeVar('_T')
 
 # Reads YAML (round trip: dicts keep their order)
-_yaml = ruamel.yaml.YAML()
+_yaml = yamlutils.YAML()
 
 
 class _FunctionFile(NamedTuple):

@@ -10,10 +10,9 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-import ruamel.yaml
-
 import gbkfit
 import gbkfit.project
+from gbkfit.utils import yamlutils
 
 from .workspace import Workspace
 
@@ -24,7 +23,7 @@ __all__ = [
 ]
 
 
-_yaml = ruamel.yaml.YAML(typ='safe')
+_yaml = yamlutils.YAML(typ='safe')
 
 # The observations a galaxy is described through, in turn: that of the
 # template (a cube), and an image (e.g. for a galaxy of a band)
