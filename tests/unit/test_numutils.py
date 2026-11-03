@@ -14,9 +14,18 @@ from gbkfit.utils import numutils
 def test_cumsum_from(origin, expected):
     x = np.array([1.0, 2.0, 3.0, 4.0])
     np.testing.assert_array_equal(numutils.cumsum_from(x, origin), expected)
-    # (in place)
+    # In place
     numutils.cumsum_from(x, origin, out=x)
     np.testing.assert_array_equal(x, expected)
+
+
+def test_cumsum_from_widens_small_integers_and_bools():
+    # As in np.cumsum, the sums do not fit the type of the values
+    np.testing.assert_array_equal(
+        numutils.cumsum_from(np.array([100, 100, 100], np.int8), 0),
+        [100, 200, 300])
+    np.testing.assert_array_equal(
+        numutils.cumsum_from(np.array([True, True, True]), 2), [3, 2, 1])
 
 
 def test_cumsum_from_errors():

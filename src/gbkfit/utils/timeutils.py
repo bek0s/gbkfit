@@ -6,6 +6,7 @@ tell users how long the steps take.
 import contextlib
 import dataclasses
 import math
+import threading
 import time
 from collections.abc import Generator
 from typing import Any
@@ -73,14 +74,24 @@ class Timers:
     """
     The times of named steps (e.g. 'model_eval'). Each step keeps running
     statistics of its times, so the memory they take does not grow with
-    the number of times.
+    the number of times. Threads can time steps at once.
     """
 
     def __init__(self):
+        self._lock = threading.Lock()
         self._steps: dict[str, _RunningStats] = {}
 
+    # A copy (e.g. pickled for another process) has a lock of its own
+    def __getstate__(self) -> dict[str, Any]:
+        with self._lock:
+            return {'_steps': self._steps}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self._lock = threading.Lock()
+        self._steps = state['_steps']
+
     @contextlib.contextmanager
-    def measure(self, name: str) -> Generator[None, None, None]:
+    def measure(self, name: str) -> Generator[None]:
         """
         Measure the time of the block, as a time of the step of the given
         name. A block that raises an exception is not measured.
@@ -91,24 +102,28 @@ class Timers:
 
     def record(self, name: str, milliseconds: float) -> None:
         """Add a time to the step of the given name."""
-        self._steps.setdefault(name, _RunningStats()).add(milliseconds)
+        with self._lock:
+            self._steps.setdefault(name, _RunningStats()).add(milliseconds)
 
     def clear(self) -> None:
         """Forget the times of all the steps."""
-        self._steps.clear()
+        with self._lock:
+            self._steps.clear()
 
     def stats(self) -> dict[str, TimerStats]:
         """Return the statistics of the times of each step, by name."""
         result = {}
-        for name, steps in self._steps.items():
-            variance = steps.m2 / (steps.count - 1) if steps.count > 1 else 0.0
-            result[name] = TimerStats(
-                unit='millisecond',
-                count=steps.count,
-                mean=_round(steps.mean),
-                stddev=_round(math.sqrt(variance)),
-                min=_round(steps.min),
-                max=_round(steps.max))
+        with self._lock:
+            for name, steps in self._steps.items():
+                variance = (
+                    steps.m2 / (steps.count - 1) if steps.count > 1 else 0.0)
+                result[name] = TimerStats(
+                    unit='millisecond',
+                    count=steps.count,
+                    mean=_round(steps.mean),
+                    stddev=_round(math.sqrt(variance)),
+                    min=_round(steps.min),
+                    max=_round(steps.max))
         return result
 
 

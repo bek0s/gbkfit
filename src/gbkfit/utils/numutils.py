@@ -62,10 +62,12 @@ def cumsum_from(
         raise IndexError(
             f"the origin {origin} is outside an array of {x.size} values")
     origin %= x.size
-    # (both sums are computed before out, which can be x, is written)
+    # Both sums are computed before out is written, as out can be x
     right = np.cumsum(x[origin:])
     left = np.cumsum(x[origin::-1])[::-1]
-    result = np.empty_like(x) if out is None else out
+    # The result has the type of the sums, which is wider than that of
+    # small integers and bools
+    result = np.empty(x.shape, right.dtype) if out is None else out
     result[origin:] = right
     result[:origin + 1] = left
     return result

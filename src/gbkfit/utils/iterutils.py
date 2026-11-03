@@ -230,7 +230,7 @@ def merge_with_prefixes(
 
     Raises
     ------
-    RuntimeError
+    ValueError
         If a prefixed key is repeated.
     """
     merged = {}
@@ -239,7 +239,7 @@ def merge_with_prefixes(
         mapping = {key: f'{prefix}{key}' for key in item}
         repeated = sorted(set(mapping.values()) & merged.keys())
         if repeated:
-            raise RuntimeError(f"names are repeated: {repeated}")
+            raise ValueError(f"names are repeated: {repeated}")
         merged |= {mapping[key]: value for key, value in item.items()}
         mappings.append(mapping)
     return merged, tuple(mappings)
@@ -411,7 +411,7 @@ def sorted_by_order(
         raise ValueError(f"these items are not in the order: {missing}")
     if on_missing == 'discard':
         x = [item for item in x if item in positions]
-    # (sorted is stable: the missing items keep their order)
+    # sorted is stable, so the missing items keep their order
     missing_key = (-1, 0) if on_missing == 'start' else (1, 0)
     return sorted(x, key=lambda item: (
         (0, positions[item]) if item in positions else missing_key))

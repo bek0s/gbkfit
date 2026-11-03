@@ -1,11 +1,11 @@
 """
-The threads of the libraries that GBKFIT calls.
+Limits on the threads of the BLAS libraries that numpy and scipy use.
 """
 
 import contextlib
 import functools
 import threading
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Protocol
 
 import threadpoolctl
@@ -48,7 +48,7 @@ class _BlasLimits:
         self._limiter: _Limiter | None = None
 
     @contextlib.contextmanager
-    def limit(self, threads: int) -> Iterator[None]:
+    def limit(self, threads: int) -> Generator[None]:
         """Return a context of BLAS on at most the given threads."""
         with self._lock:
             self._limits.append(threads)
@@ -85,23 +85,31 @@ def blas_limit(threads: int) -> contextlib.AbstractContextManager:
     threads.
 
     The limit applies to the whole process while any thread is in the
-    context (evaluations can run in several threads at once), and to the
-    libraries loaded when it is first used (gbkfit loads numpy and scipy
-    at import); of contexts that threads are in at once, the fewest
-    threads. Threads that spin from a call made before it keep spinning
-    (see single_threaded_blas).
+    context, because evaluations can run in several threads at once. When
+    threads are in several contexts at once, the smallest limit applies.
+    It covers the BLAS libraries loaded when it is first used (numpy's and
+    scipy's, which gbkfit loads at import). BLAS threads already spinning
+    from an earlier call keep spinning until they stop (see
+    single_threaded_blas).
 
     Parameters
     ----------
     threads : int
-        The most threads.
+        The most threads, at least 1.
 
     Returns
     -------
     contextlib.AbstractContextManager
         The context; nested contexts, and contexts in several threads at
         once, are allowed.
+
+    Raises
+    ------
+    ValueError
+        If threads is less than 1.
     """
+    if threads < 1:
+        raise ValueError(f"threads must be at least 1; it is {threads}")
     return _BLAS_LIMITS.limit(threads)
 
 

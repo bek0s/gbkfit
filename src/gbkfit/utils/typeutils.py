@@ -31,9 +31,9 @@ __all__ = [
     'FitsFile',
     'Unit',
     'Varying',
+    'describe_type',
     'is_asdf_file',
     'is_varying',
-    'describe_type',
     'matches_type',
     'option_types',
     'problem',
@@ -111,8 +111,9 @@ class Column(NamedTuple):
     column : str
         Its name.
     unit : str, optional
-        The unit of its values, if the file does not give it (e.g. a CSV
-        file) or to read them in another; by default, that of the file.
+        The unit of its values: if the file gives one, they are converted
+        to it; if not (e.g. a CSV file), they are taken to be in it. By
+        default, the unit of the file.
     """
 
     column: str
@@ -316,11 +317,11 @@ def problem(value: Any, type_: Any) -> str | None:
         return None if type(None) in union_members(type_) \
             else "cannot be null"
     type_, bounds = _split_bounds(_without_none(type_))
-    # (a plain array, not a subclass, e.g. a Quantity)
+    # A plain array (not a subclass, e.g. a Quantity) is checked as a list
     if not matches_type(value, type_) and not (
             type(value) is np.ndarray
             and matches_type(value.tolist(), type_)):
-        # (a union of choices or ranges, by each of its members)
+        # A union of choices or ranges is checked by each of its members
         members = union_members(type_)
         if len(members) > 1 and any(
                 typing.get_origin(x) is Literal or _split_bounds(x)[1]

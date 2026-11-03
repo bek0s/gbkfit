@@ -1,5 +1,6 @@
 """
-Helpers for functions.
+Helpers for functions: the names of their parameters, and functions
+loaded from Python files.
 """
 
 import functools
@@ -28,7 +29,7 @@ class ParameterNames(typing.NamedTuple):
 
     @property
     def all(self) -> tuple[str, ...]:
-        """Return the names of all the parameters, the required first."""
+        """The names of all the parameters, the required first."""
         return self.required + self.optional
 
 
@@ -74,10 +75,11 @@ def load_function_from_file(file_path: str, name: str) -> Callable:
     Return a function defined in a Python file.
 
     The file is run as a module of its own, which is not added to
-    sys.modules. The function is called as it is, and a copy of it (e.g.
-    pickled for another process) runs the file again, there (the
-    functions of modules that are not in sys.modules do not pickle);
-    inspect.unwrap gives the function itself.
+    sys.modules. Functions of such modules cannot be pickled, so the
+    function is returned in a wrapper that can be: a copy of it (e.g.
+    sent to another process) runs the file again there to get the
+    function, so the code at the top level of the file runs again in each
+    process. inspect.unwrap gives the function itself.
 
     Parameters
     ----------
@@ -102,9 +104,9 @@ def load_function_from_file(file_path: str, name: str) -> Callable:
 
 class _FileFunction:
     """
-    A function of a Python file (see load_function_from_file), which
-    pickles as the path of its file (absolute: copies may run in other
-    directories) and its name.
+    A function of a Python file (see load_function_from_file). It pickles
+    as the absolute path of its file and the function's name, so that a
+    copy can run the file again, from any directory.
     """
 
     def __init__(self, file_path: str, name: str):
@@ -118,6 +120,9 @@ class _FileFunction:
 
     def __reduce__(self) -> tuple[type, tuple[str, str]]:
         return _FileFunction, (self._file_path, self._name)
+
+    def __repr__(self) -> str:
+        return f"<function {self._name} of '{self._file_path}'>"
 
 
 def _run_file_function(file_path: str, name: str) -> Callable:

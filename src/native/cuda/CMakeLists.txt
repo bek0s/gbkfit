@@ -9,7 +9,8 @@ nanobind_add_module(
   NOMINSIZE
   src/bindings.cpp
   src/wrapper.cu
-  # (the kernels of each family on their own: they compile at once)
+  # The kernels of each family are in files of their own, so that they
+  # compile in parallel
   src/dmodel.cu
   src/gmodel.cu
   src/gmodel_mcdisk.cu

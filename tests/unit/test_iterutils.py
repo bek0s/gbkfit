@@ -18,7 +18,7 @@ def test_merge_with_prefixes():
 def test_merge_with_prefixes_rejects_repeated_names():
     # e.g. a component named 'disk' with the parameter 'pt_a', and one
     # named 'disk_pt' with the parameter 'a'
-    with pytest.raises(RuntimeError, match=r"repeated: \['disk_pt_a'\]"):
+    with pytest.raises(ValueError, match=r"repeated: \['disk_pt_a'\]"):
         iterutils.merge_with_prefixes(
             [dict(pt_a=1), dict(a=2)], ['disk_', 'disk_pt_'])
 

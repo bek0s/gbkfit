@@ -33,7 +33,7 @@ import ruamel.yaml
 from astropy.table import Table
 
 import gbkfit
-from gbkfit.utils import fitsutils, gridutils, miscutils, numutils
+from gbkfit.utils import fitsutils, gridutils, numutils, pathutils
 
 if TYPE_CHECKING:
     import astropy.units
@@ -639,7 +639,7 @@ def make_directory(
     if exists == 'overwrite':
         return str(path_obj)
     while True:
-        candidate = miscutils.make_unique_path(path_obj)
+        candidate = pathutils.make_unique_path(path_obj)
         try:
             candidate.mkdir(parents=True)
             return str(candidate)
