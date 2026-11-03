@@ -12,6 +12,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useDescription, useLsfView, usePiece, useProject, usePsfView, useReferences, useSchema, useUpdateBlock } from '../api/queries';
 import { ColourBar } from '../components/ColourBar';
+import { UNSTRETCHED, type Stretch } from '../components/colours';
 import { joinPath } from '../components/FilePicker';
 import { significant } from '../components/format';
 import { CutPlot } from '../components/CutPlot';
@@ -525,6 +526,8 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
   // from the centre, arcsec), so that it stays there on other pixels
   const [hover, setHover] = useState<[number, number] | null>(null);
   const [pin, setPin] = useState<[number, number] | null>(null);
+  // (the stretch of the colours, by the right button on the map)
+  const [stretch, setStretch] = useState<Stretch>(UNSTRETCHED);
   // (Esc lets go of the pixel clicked)
   useEffect(() => {
     if (pin === null) return;
@@ -538,7 +541,8 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
   const ny = data.values.length;
   const nx = data.values[0]?.length ?? 0;
   const flat = data.values.flat();
-  const peak = Math.max(...flat);
+  // (not Math.max(...flat): a large map would overflow the stack)
+  const peak = flat.reduce((a, b) => Math.max(a, b), -Infinity);
   const log = scale === 'log';
   const values = Float32Array.from(scaled(flat, peak, scale));
   const range: [number, number] = log ? [FLOOR, 0] : [0, 1];
@@ -589,12 +593,12 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
   };
   const fraction = peak > 0 ? (data.values[y]?.[x] ?? 0) / peak : 0;
   // (the contour at half the peak, on the map, and the width at that level
-  // of the cuts through the peak: its FWHM; not on the cuts on a log scale,
-  // which is for the wings, where half the peak is at the top)
+  // of the cuts through the peak, in their units: its FWHM)
   const half = contourPath(data.values, peak / 2);
+  const level = log ? Math.log10(0.5) : 0.5;
   const widthOn = (values: number[]): Width | null => {
-    const at = log ? null : widthAt(values, peak / 2);
-    return at && { level: 0.5, from: at[0], to: at[1] };
+    const at = widthAt(values, peak / 2);
+    return at && { level, from: at[0], to: at[1] };
   };
   const shown = log ? (fraction > 10 ** FLOOR ? Math.log10(fraction).toFixed(2).replace('-', '−') : `<${FLOOR}`.replace('-', '−')) : fraction.toFixed(3);
   return (
@@ -623,6 +627,8 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
             drag="pan"
             mark={pinned ?? undefined}
             contour={half}
+            stretch={stretch}
+            onStretch={setStretch}
             onHover={setHover}
             onPick={(px, py) => setPin(pinned && pinned[0] === px && pinned[1] === py ? null : [(px - cx) * dx, (py - cy) * dy])}
             label="The PSF"
@@ -633,7 +639,14 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
           <CutPlot lines={linesY} window={[window[2], window[3]]} limits={range} marks={marksY} width={widthOn(data.values.map((row) => row[cx]))} vertical label="The cuts along y" />
         </div>
         <div className="psf-bar">
-          <ColourBar range={range} diverging={false} horizontal unit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'} />
+          <ColourBar
+            range={range}
+            diverging={false}
+            horizontal
+            unit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'}
+            stretch={stretch}
+            onReset={() => setStretch(UNSTRETCHED)}
+          />
         </div>
       </div>
     </div>
@@ -698,9 +711,8 @@ function LsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
   const centre = Math.floor(n / 2);
   const peak = Math.max(...data.values);
   const log = scale === 'log';
-  // (its width at half its peak: its FWHM; not on a log scale, which is
-  // for the wings, where half the peak is at the top)
-  const width = log ? null : widthAt(data.values, peak / 2);
+  // (its width at half its peak: its FWHM)
+  const width = widthAt(data.values, peak / 2);
   return (
     <div className="response-body">
       {view.error && <p className="error">{view.error.message}</p>}
@@ -714,7 +726,8 @@ function LsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
           valueUnit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'}
           channel={centre}
           limits={log ? [FLOOR, 0] : null}
-          width={width && { level: 0.5, from: width[0], to: width[1] }}
+          zero={!log}
+          width={width && { level: log ? Math.log10(0.5) : 0.5, from: width[0], to: width[1] }}
           onPick={() => {}}
         >
           {width && <FwhmKey title="The width at half the peak: its FWHM" />}

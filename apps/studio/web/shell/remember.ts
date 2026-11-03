@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 
 const PREFIX = 'gbkfit-studio:';
 
-function recall<T>(key: string, fallback: T): T {
+export function recall<T>(key: string, fallback: T): T {
   try {
     const text = localStorage.getItem(PREFIX + key);
     return text === null ? fallback : (JSON.parse(text) as T);
@@ -14,7 +14,7 @@ function recall<T>(key: string, fallback: T): T {
   }
 }
 
-function remember(key: string, value: unknown): void {
+export function remember(key: string, value: unknown): void {
   try {
     localStorage.setItem(PREFIX + key, JSON.stringify(value));
   } catch {

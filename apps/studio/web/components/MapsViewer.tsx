@@ -10,6 +10,7 @@
 import { useState, type ReactNode } from 'react';
 import { useChannel } from '../api/queries';
 import { ColourBar } from './ColourBar';
+import { UNSTRETCHED, useStretches } from './colours';
 import { robustRange, useFitted, type Layer } from './CubeViewer';
 import { significant } from './format';
 import { MapTools, type Tool } from './MapTools';
@@ -59,6 +60,8 @@ export function MapsViewer({
   // (a map gone, the first; a layer it has not, its data)
   const map = maps.find((m) => m.key === mapKey) ?? maps[0];
   const layer = map.layers.find((l) => l.key === layerKey) ?? map.layers[0];
+  // (the colours of each, as the right button stretches them on the map)
+  const [stretch, setStretch] = useStretches(`${map.key}/${layer.key}`);
   const plane = useChannel(layer.path, layer.hdu, 0);
   const shownPixels = zoom ?? ([0, nx - 1, 0, ny - 1] as Region);
   const fitted = useFitted(shownPixels[1] - shownPixels[0] + 1, shownPixels[3] - shownPixels[2] + 1);
@@ -89,8 +92,8 @@ export function MapsViewer({
   };
   const hovered = hover && values ? values.values[hover[1] * nx + hover[0]] : undefined;
   return (
-    <div className="card viewer">
-      <div className="card-head viewer-head">
+    <div className="viewer">
+      <div className="viewer-head">
         {map.layers.length > 1 ? (
           <Segments items={map.layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The map shown" />
         ) : (
@@ -132,6 +135,8 @@ export function MapsViewer({
                     onZoom={zoomAt}
                     onPan={panBy}
                     onHover={setHover}
+                    stretch={stretch}
+                    onStretch={setStretch}
                     label={`The ${layer.title.toLowerCase()} of ${map.title}`}
                   />
                   <div className="map-source" title={layer.path}>
@@ -144,7 +149,14 @@ export function MapsViewer({
                     onWhole={zoom ? () => setZoom(null) : undefined}
                   />
                 </div>
-                <ColourBar range={range} diverging={colours !== 'sequential'} unit={layer.unit ?? ''} />
+                <ColourBar
+                  range={range}
+                  diverging={colours !== 'sequential'}
+                  horizontal
+                  unit={layer.unit ?? ''}
+                  stretch={stretch}
+                  onReset={() => setStretch(UNSTRETCHED)}
+                />
               </div>
             )}
           </div>

@@ -3,12 +3,14 @@
 // steps (each channel a bin, to its edges halfway to its neighbours), with
 // a line at the channel shown. The range of its values (given, or else
 // that of the values shown, with 0; see valueRange) shows at its left, and
-// their unit, if given, over it. It shows a window of its channels (all
-// of them by default; the range of its values is that of the window), which the wheel asks to zoom
-// about a channel. A click picks the nearest channel, and a drag a band of
-// channels (first and last, inclusive), which is shown with the channels
-// out of it dimmed. Another band (e.g. a crop) can be marked by its edges,
-// and its width at a level (e.g. at half its peak: its FWHM).
+// their unit, if given, up its left between the two. It shows a window of
+// its channels (all of them by default; the range of its values is that of
+// the window), which the wheel asks to zoom about a channel. A click picks
+// the nearest channel, and a drag a band of channels (first and last,
+// inclusive), which is shown with the channels out of it dimmed. Another
+// band (e.g. a crop) can be marked by its edges, and its width at a level
+// (e.g. at half its peak: its FWHM). A line marks 0, unless it means
+// nothing (e.g. on a log scale, where 0 is the peak).
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Width } from './contour';
 import { significant } from './format';
@@ -16,6 +18,11 @@ import { significant } from './format';
 const WIDTH = 800;
 const HEIGHT = 130;
 const PAD = { left: 8, right: 8, top: 10, bottom: 10 };
+
+// (the room left above the top of the range, a fraction of the plot, so
+// that a peak does not touch its edge, as on the cuts of a map; the ends of
+// the range are labelled where they are)
+const HEADROOM = 0.1;
 
 // How far the pointer moves (in screen pixels) before a click is a drag
 const DRAG = 4;
@@ -31,6 +38,7 @@ export function SpectrumPlot({
   window = null,
   limits = null,
   width = null,
+  zero = true,
   onPick,
   onBand,
   onZoom,
@@ -50,6 +58,7 @@ export function SpectrumPlot({
   // The range of the values shown (low, high; null: that of the values)
   limits?: [number, number] | null;
   width?: Width | null;
+  zero?: boolean;
   onPick: (channel: number) => void;
   onBand?: (band: [number, number]) => void;
   onZoom?: (channel: number, factor: number) => void;
@@ -71,7 +80,9 @@ export function SpectrumPlot({
   const [x0, x1] = [Math.min(...shownXs) - half, Math.max(...shownXs) + half];
   const [y0, y1] = limits !== null && limits[1] > limits[0] ? limits : valueRange(values, window);
   const X = (x: number) => PAD.left + ((x - x0) / (x1 - x0 || 1)) * (WIDTH - PAD.left - PAD.right);
-  const Y = (y: number) => HEIGHT - PAD.bottom - ((y - y0) / (y1 - y0 || 1)) * (HEIGHT - PAD.top - PAD.bottom);
+  const Y = (y: number) => HEIGHT - PAD.bottom - (1 - HEADROOM) * ((y - y0) / (y1 - y0 || 1)) * (HEIGHT - PAD.top - PAD.bottom);
+  // (a height of the plot, as a fraction of its box)
+  const at = (y: number) => `${((Y(y) / HEIGHT) * 100).toFixed(2)}%`;
   // The edges of a channel, halfway to its neighbours, on the plot
   const edge = (i: number, side: -1 | 1) => Math.min(WIDTH, Math.max(0, X(xs[i] + (side * step) / 2)));
   // (each channel a step from edge to edge; a channel without a value
@@ -117,66 +128,72 @@ export function SpectrumPlot({
   const [left, right] = shown ? [Math.min(edge(shown[0], -1), edge(shown[1], 1)), Math.max(edge(shown[0], -1), edge(shown[1], 1))] : [0, 0];
   return (
     <figure className="spectrum">
-      {valueUnit && <span className="spectrum-title">{valueUnit}</span>}
-      <svg
-        ref={svg}
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label="The spectrum"
-        onPointerDown={(event) => {
-          if (event.button !== 0) return;
-          event.currentTarget.setPointerCapture(event.pointerId);
-          press.current = { channel: channelAt(event.clientX), at: event.clientX };
-        }}
-        onPointerMove={(event) => {
-          const start = press.current;
-          if (start === null || onBand === undefined) return;
-          if (dragged !== null || Math.abs(event.clientX - start.at) > DRAG) {
+      <div className="spectrum-plot">
+        {valueUnit && <span className="spectrum-title">{valueUnit}</span>}
+        <svg
+          ref={svg}
+          viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="The spectrum"
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.currentTarget.setPointerCapture(event.pointerId);
+            press.current = { channel: channelAt(event.clientX), at: event.clientX };
+          }}
+          onPointerMove={(event) => {
+            const start = press.current;
+            if (start === null || onBand === undefined) return;
+            if (dragged !== null || Math.abs(event.clientX - start.at) > DRAG) {
+              const now = channelAt(event.clientX);
+              setDragged([Math.min(start.channel, now), Math.max(start.channel, now)]);
+            }
+          }}
+          onPointerUp={(event) => {
+            const start = press.current;
+            press.current = null;
+            if (start === null) return;
+            // (the band to where the pointer is let go: the last drawn may
+            // lag behind it)
             const now = channelAt(event.clientX);
-            setDragged([Math.min(start.channel, now), Math.max(start.channel, now)]);
-          }
-        }}
-        onPointerUp={(event) => {
-          const start = press.current;
-          press.current = null;
-          if (start === null) return;
-          // (the band to where the pointer is let go: the last drawn may
-          // lag behind it)
-          const now = channelAt(event.clientX);
-          if (dragged !== null) onBand?.([Math.min(start.channel, now), Math.max(start.channel, now)]);
-          else onPick(now);
-          setDragged(null);
-        }}
-        onPointerCancel={() => {
-          press.current = null;
-          setDragged(null);
-        }}
-      >
-        {shown && (
-          <>
-            <rect className="out" x={0} y={0} width={Math.max(0, left)} height={HEIGHT} />
-            <rect className="out" x={right} y={0} width={Math.max(0, WIDTH - right)} height={HEIGHT} />
-          </>
-        )}
-        {marked &&
-          [edge(marked[0], -1), edge(marked[1], 1)].map((x, i) => (
-            <line key={i} className="marked" x1={x} x2={x} y1={0} y2={HEIGHT} />
-          ))}
-        <line className="zero" x1={PAD.left} x2={WIDTH - PAD.right} y1={Y(0)} y2={Y(0)} />
-        {width !== null && <line className="width" x1={X(xs[0] + width.from * step)} x2={X(xs[0] + width.to * step)} y1={Y(width.level)} y2={Y(width.level)} />}
-        {inWindow(channel) && <line className="now" x1={X(xs[channel])} x2={X(xs[channel])} y1={PAD.top} y2={HEIGHT - PAD.bottom} />}
-        <clipPath id={clip}>
-          <rect x={0} y={PAD.top} width={WIDTH} height={HEIGHT - PAD.top - PAD.bottom} />
-        </clipPath>
-        <g clipPath={`url(#${clip})`}>
-          {lines.map((points, i) => (
-            <polyline key={i} points={points} />
-          ))}
-        </g>
-      </svg>
-      <span className="spectrum-y top">{significant(y1, 3)}</span>
-      <span className="spectrum-y bottom">{significant(y0, 3)}</span>
+            if (dragged !== null) onBand?.([Math.min(start.channel, now), Math.max(start.channel, now)]);
+            else onPick(now);
+            setDragged(null);
+          }}
+          onPointerCancel={() => {
+            press.current = null;
+            setDragged(null);
+          }}
+        >
+          {shown && (
+            <>
+              <rect className="out" x={0} y={0} width={Math.max(0, left)} height={HEIGHT} />
+              <rect className="out" x={right} y={0} width={Math.max(0, WIDTH - right)} height={HEIGHT} />
+            </>
+          )}
+          {marked &&
+            [edge(marked[0], -1), edge(marked[1], 1)].map((x, i) => (
+              <line key={i} className="marked" x1={x} x2={x} y1={0} y2={HEIGHT} />
+            ))}
+          {zero && <line className="zero" x1={PAD.left} x2={WIDTH - PAD.right} y1={Y(0)} y2={Y(0)} />}
+          {width !== null && <line className="width" x1={X(xs[0] + width.from * step)} x2={X(xs[0] + width.to * step)} y1={Y(width.level)} y2={Y(width.level)} />}
+          {inWindow(channel) && <line className="now" x1={X(xs[channel])} x2={X(xs[channel])} y1={PAD.top} y2={HEIGHT - PAD.bottom} />}
+          <clipPath id={clip}>
+            <rect x={0} y={PAD.top} width={WIDTH} height={HEIGHT - PAD.top - PAD.bottom} />
+          </clipPath>
+          <g clipPath={`url(#${clip})`}>
+            {lines.map((points, i) => (
+              <polyline key={i} points={points} />
+            ))}
+          </g>
+        </svg>
+        <span className="spectrum-y" style={{ top: at(y1) }}>
+          {significant(y1, 3)}
+        </span>
+        <span className="spectrum-y" style={{ top: at(y0) }}>
+          {significant(y0, 3)}
+        </span>
+      </div>
       {children}
       <figcaption>
         <span>{significant(x0, 6)}</span>

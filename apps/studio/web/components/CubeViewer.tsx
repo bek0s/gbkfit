@@ -19,6 +19,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import type { FrameArray } from '../api/frames';
 import { useChannel, useMoments, useSpectrum } from '../api/queries';
 import { ColourBar } from './ColourBar';
+import { UNSTRETCHED, useStretches } from './colours';
 import { significant } from './format';
 import { MapView, type Region } from './MapView';
 import { SpectrumPlot, valueRange } from './SpectrumPlot';
@@ -60,8 +61,9 @@ const MOMENTS: { view: Moment; title: string; text: string; colours: 'sequential
 // server's views)
 const SNR = 5;
 
-// The width of the colour bar at the side of the map, with its gap
-const BAR = 66;
+// The height of the colour bar under the map (its ramp and the line of its
+// numbers and unit), with its gap
+const BAR = 40;
 
 // How often (ms) the spectrum of the pixel under the pointer is updated
 const HOVER = 40;
@@ -140,6 +142,8 @@ export function CubeViewer({
   const layer = layers.find((l) => l.key === layerKey) ?? layers[0];
   const data = layers[0];
   const shown: View = layer.key === 'data' ? view : 'channel';
+  // (the colours of each, as the right button stretches them on the map)
+  const [stretch, setStretch] = useStretches(`${layer.key}/${shown}`);
   const selecting = tool === 'select';
   const plane = useChannel(layer.path, layer.hdu, channel);
   const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel');
@@ -219,8 +223,8 @@ export function CubeViewer({
     setZoom([x0 + mx, x1 + mx, y0 + my, y1 + my]);
   };
   return (
-    <div className="card viewer">
-      <div className="card-head viewer-head">
+    <div className="viewer">
+      <div className="viewer-head">
         {layers.length > 1 ? (
           <Segments items={layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The cube shown" />
         ) : (
@@ -301,6 +305,8 @@ export function CubeViewer({
                     onHover={hoverAt}
                     onZoom={zoomAt}
                     onPan={panBy}
+                    stretch={stretch}
+                    onStretch={setStretch}
                     label={shown === 'channel' ? `A channel of the ${layer.title.toLowerCase()}` : `The ${shown} map of the data`}
                   />
                   {shown !== 'channel' && (
@@ -317,7 +323,14 @@ export function CubeViewer({
                     onWhole={zoom ? () => setZoom(null) : undefined}
                   />
                 </div>
-                <ColourBar range={range} diverging={colours !== 'sequential'} unit={mapUnit(shown, layer.unit)} />
+                <ColourBar
+                  range={range}
+                  diverging={colours !== 'sequential'}
+                  horizontal
+                  unit={mapUnit(shown, layer.unit)}
+                  stretch={stretch}
+                  onReset={() => setStretch(UNSTRETCHED)}
+                />
               </div>
             )}
           </div>
@@ -431,7 +444,7 @@ export function CubeViewer({
 }
 
 // The size of a map of nx by ny pixels that fits the space of its stage,
-// beside its colour bar (undefined until the stage is measured)
+// over its colour bar (undefined until the stage is measured)
 export function useFitted(nx: number, ny: number) {
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<[number, number] | null>(null);
@@ -443,7 +456,7 @@ export function useFitted(nx: number, ny: number) {
     return () => observer.disconnect();
   }, []);
   if (space === null) return { stage, size: undefined };
-  const scale = Math.max(0, Math.min((space[0] - BAR) / nx, space[1] / ny));
+  const scale = Math.max(0, Math.min(space[0] / nx, (space[1] - BAR) / ny));
   return { stage, size: [Math.floor(nx * scale), Math.floor(ny * scale)] as [number, number] };
 }
 

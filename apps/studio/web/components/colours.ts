@@ -1,7 +1,12 @@
 // The colours of the maps: ramps of the tokens of the page (see
 // styles.css), sequential (low to high), or diverging about the middle;
-// they change with the colour scheme of the page (see useScheme).
-import { useSyncExternalStore } from 'react';
+// they change with the colour scheme of the page (see useScheme). The
+// sequential ramp can be another colour map, and inverted, as chosen (see
+// useColourMap); the diverging one stays, its middle meaning a value (e.g.
+// 0, or the median of velocities).
+import { useState, useSyncExternalStore } from 'react';
+import { colourMaps } from '../palette';
+import { recall, remember } from '../shell/remember';
 
 const SEQUENTIAL = ['--seq0', '--seq1', '--seq2', '--seq3'];
 const DIVERGING = ['--map-neg2', '--map-neg', '--map-mid', '--map-pos', '--map-pos2'];
@@ -28,9 +33,61 @@ export function token(name: string): number[] {
   return [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
 }
 
+// The colour maps that can be chosen for the sequential ramp: that of
+// the scheme, or one of the palette
+export type ColourMap = 'studio' | keyof typeof colourMaps;
+
+export const COLOUR_MAPS: { name: ColourMap; label: string }[] = [
+  { name: 'studio', label: 'Default' },
+  { name: 'grey', label: 'Grey' },
+  { name: 'viridis', label: 'Viridis' },
+  { name: 'cividis', label: 'Cividis' },
+];
+
+export type ColourChoice = { map: ColourMap; inverted: boolean };
+
+// The colour map chosen, one for all the maps of the Studio, remembered in
+// this browser, and those that follow it
+let choice: ColourChoice = recall('colour-map', { map: 'studio', inverted: false });
+const followers = new Set<() => void>();
+
+export function setColourMap(next: ColourChoice): void {
+  choice = next;
+  remember('colour-map', next);
+  followers.forEach((onChange) => onChange());
+}
+
+// The colour map chosen, followed as it changes: what draws with the ramps
+// must draw again with it
+export function useColourMap(): ColourChoice {
+  return useSyncExternalStore(
+    (onChange) => {
+      followers.add(onChange);
+      return () => followers.delete(onChange);
+    },
+    () => choice,
+  );
+}
+
+// (a colour of the palette, #rrggbb, as r, g, b)
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+
+// The colours of a colour map, from low to high, or from high to low
+function mapStops({ map, inverted }: ColourChoice): number[][] {
+  const stops = map === 'studio' ? SEQUENTIAL.map(token) : colourMaps[map].map(rgb);
+  return inverted ? stops.reverse() : stops;
+}
+
 // The colours of a ramp, from low to high
 export function rampStops(diverging: boolean): number[][] {
-  return (diverging ? DIVERGING : SEQUENTIAL).map(token);
+  return diverging ? DIVERGING.map(token) : mapStops(choice);
+}
+
+// A colour map as a CSS gradient, to the right (e.g. its swatch in a menu)
+export function mapGradient(map: ColourChoice): string {
+  return `linear-gradient(to right, ${mapStops(map)
+    .map((colour) => `rgb(${colour.join(', ')})`)
+    .join(', ')})`;
 }
 
 // The colour at a fraction (0 to 1) of a ramp
@@ -41,9 +98,38 @@ export function rampColour(stops: number[][], fraction: number): number[] {
   return stops[i].map((low, k) => Math.round(low + (stops[i + 1][k] - low) * u));
 }
 
-// A ramp as a CSS gradient, in a direction (e.g. 'to top')
-export function rampGradient(diverging: boolean, direction: string): string {
-  return `linear-gradient(${direction}, ${rampStops(diverging)
-    .map((colour) => `rgb(${colour.join(', ')})`)
-    .join(', ')})`;
+// A stretch of a ramp over the range of a map, as QFitsView sets it from
+// where the pointer is on the map (see stretchAt in MapView): the fraction
+// of the range at the middle of the ramp (less is brighter), and the
+// fraction of the range the ramp spans about it (less is more contrast; 0
+// makes it two colours), the values beyond it taking the colours of its
+// ends
+export type Stretch = { middle: number; width: number };
+
+export const UNSTRETCHED: Stretch = { middle: 0.5, width: 1 };
+
+export const isStretched = ({ middle, width }: Stretch) => middle !== UNSTRETCHED.middle || width !== UNSTRETCHED.width;
+
+// The stretches of the colours of the maps of a viewer, one of each of
+// what it shows (e.g. a channel of the data, or a moment), kept as it
+// shows another: that of what it shows, and how it is set
+export function useStretches(key: string): [Stretch, (stretch: Stretch) => void] {
+  const [stretches, setStretches] = useState<Record<string, Stretch>>({});
+  return [stretches[key] ?? UNSTRETCHED, (stretch) => setStretches((all) => ({ ...all, [key]: stretch }))];
+}
+
+// The fraction of a ramp at a fraction of the range, as stretched (a
+// width of 0: the low end below the middle, the high end above it)
+export function stretched(fraction: number, { middle, width }: Stretch): number {
+  return width > 0 ? (fraction - middle) / width + 0.5 : fraction < middle ? 0 : 1;
+}
+
+// A ramp as a CSS gradient, in a direction (e.g. 'to top'), as stretched
+// (sampled finely enough that its ends, where it clips, are sharp)
+export function rampGradient(diverging: boolean, direction: string, stretch: Stretch = UNSTRETCHED): string {
+  const stops = rampStops(diverging);
+  const colours = isStretched(stretch)
+    ? Array.from({ length: 65 }, (_, k) => `rgb(${rampColour(stops, stretched(k / 64, stretch)).join(', ')}) ${((k / 64) * 100).toFixed(2)}%`)
+    : stops.map((colour) => `rgb(${colour.join(', ')})`);
+  return `linear-gradient(${direction}, ${colours.join(', ')})`;
 }

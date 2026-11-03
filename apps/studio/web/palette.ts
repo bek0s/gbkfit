@@ -106,6 +106,18 @@ export const light: Scheme = {
 // The shades of the accent, from light to dark, that Mantine needs (ten):
 // the accent of the dark scheme is the fifth, that of the light one the
 // eighth (see theme.ts)
+// The colour maps that can be chosen for maps of values (see
+// components/colours.ts), besides that of the scheme (seq0 to seq3): the
+// same in both schemes, from low to high. Each lightens steadily from end
+// to end, so that it reads alike with colour blindness, and in grey.
+// Viridis and cividis are those of matplotlib, at tenths (cividis made to
+// look the same with the commonest colour blindness, red and green).
+export const colourMaps = {
+  grey: ['#000000', '#ffffff'],
+  viridis: ['#440154', '#482475', '#414487', '#355f8d', '#2a788e', '#21918c', '#22a884', '#44bf70', '#7ad151', '#bddf26', '#fde725'],
+  cividis: ['#00224e', '#083370', '#35456c', '#4f576c', '#666970', '#7d7c78', '#948e77', '#aea371', '#c8b866', '#e5cf52', '#fee838'],
+};
+
 export const accentShades = [
   '#fff8e6',
   '#fdedc8',

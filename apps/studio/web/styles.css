@@ -194,12 +194,17 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 /* (the rail of views and tools at the left of the map, and the map, its
    controls and the spectrum) */
 .viewer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 14px; padding: 0 14px 12px; }
+/* (the viewer of a dataset: no frame, as the preview of a PSF, so that the
+   room the map leaves is page, not an empty box; its parts at the edges of
+   the page) */
+.viewer:not(.card):not(.response) > .viewer-head { padding: 0 0 10px; }
+.viewer:not(.card):not(.response) > .viewer-body { padding: 0; }
 .viewer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .rail { min-height: 0; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
 .rail-label { margin-top: 12px; padding: 0 8px 3px; font: 600 10px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
 .rail-label:first-child { margin-top: 2px; }
 .viewer-stage { flex: 1; min-height: 160px; display: grid; place-items: center; overflow: hidden; }
-.viewer-map { display: grid; grid-template-columns: auto 56px; gap: 10px; }
+.viewer-map { display: grid; gap: 10px; }
 .map { position: relative; width: 100%; height: 100%; }
 .map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .map[data-drag="pan"] canvas { cursor: default; }
@@ -211,11 +216,15 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .map-outline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
 .map-mark { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .colour-bar { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; justify-items: center; gap: 4px; font: 10.5px var(--mono); color: var(--faint); }
-.colour-bar i { width: 12px; border-radius: 3px; }
+.colour-bar i, .colour-bar .colour-ramp { width: 12px; border-radius: 3px; }
+/* (a sequential ramp: a button that chooses the colour map) */
+.colour-ramp { display: block; padding: 0; border: 0; cursor: pointer; }
+.colour-ramp:hover, .colour-ramp[aria-expanded='true'] { outline: 1px solid var(--line2); outline-offset: 2px; }
+.colour-swatch { display: block; width: 180px; height: 12px; margin-left: 16px; border-radius: 2px; }
 .colour-unit { text-align: center; }
 /* (as wide as the map, its ends labelled under them, its unit between) */
 .colour-bar.horizontal { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: 10px auto; align-items: start; justify-items: stretch; gap: 4px 8px; }
-.colour-bar.horizontal i { grid-row: 1; grid-column: 1 / -1; width: auto; height: 10px; }
+.colour-bar.horizontal i, .colour-bar.horizontal .colour-ramp { grid-row: 1; grid-column: 1 / -1; width: auto; height: 10px; }
 .colour-bar.horizontal span { grid-row: 2; }
 .colour-bar.horizontal span:first-child { grid-column: 1; justify-self: start; }
 .colour-bar.horizontal span:nth-of-type(2) { grid-column: 3; justify-self: end; }
@@ -224,7 +233,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
    map keeps its size) */
 /* (a slider as wide as the spectrum under it, its value on its handle,
    above it) */
-.viewer-controls { height: 46px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 2px 6px; }
+.viewer-controls { height: 58px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 2px 6px; }
 .viewer-controls-row { flex-direction: row; align-items: center; justify-content: flex-start; gap: 16px; padding-bottom: 2px; }
 .viewer-controls-row > .ui-slider { flex: 1; }
 .control-text { flex: none; width: 31ch; font: 11.5px var(--mono); color: var(--muted); }
@@ -256,12 +265,12 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .spectrum-scale .ui-number { width: 64px; }
 .spectrum-scale .ui-number input { height: 22px; min-height: 22px; padding: 0 5px; font-size: 11px; }
 .spectrum { position: relative; margin: 4px 0 0; }
-.spectrum-y { position: absolute; left: 6px; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--panel2) 85%, transparent); font: 10.5px var(--mono); color: var(--faint); pointer-events: none; }
-.spectrum-y.top { top: 2px; }
-/* (the unit of its values, over it, and its top value under that) */
-.spectrum-title { display: block; margin-bottom: 4px; font-size: 11px; line-height: 14px; color: var(--faint); }
-.spectrum-title ~ .spectrum-y.top { top: 20px; }
-.spectrum-y.bottom { bottom: 22px; }
+.spectrum-plot { position: relative; }
+/* (the ends of the range of values, at their heights on the plot) */
+.spectrum-y { position: absolute; left: 6px; transform: translateY(-50%); padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--panel2) 85%, transparent); font: 10.5px var(--mono); color: var(--faint); pointer-events: none; }
+/* (the unit of the values: a label up the left of the plot, between the
+   ends of its range, reading upwards) */
+.spectrum-title { position: absolute; left: 4px; top: 0; bottom: 0; display: flex; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg); font-size: 11px; line-height: 14px; color: var(--faint); pointer-events: none; }
 .spectrum svg { display: block; width: 100%; height: 110px; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .spectrum polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .spectrum .out { fill: var(--dim); }
@@ -442,7 +451,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .psf-map { position: relative; }
 .fwhm-key { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 3px; background: color-mix(in srgb, var(--bg) 70%, transparent); font-size: 11px; color: var(--muted); pointer-events: none; }
 .fwhm-key-line { width: 14px; border-top: 1px solid var(--fg); opacity: .75; }
-.spectrum .fwhm-key { top: 30px; }
+.spectrum .fwhm-key { top: 8px; }
 /* (of the size of the figure of a PSF: as wide as its map and y-cut, as
    tall as its cuts, map and colour bar) */
 .response-profiles { display: grid; gap: 8px; width: var(--figure); }
