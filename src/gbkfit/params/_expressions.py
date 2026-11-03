@@ -179,9 +179,13 @@ class Expression:
 
     def evaluate(self, namespace: Mapping[str, Any]) -> Any:
         """Evaluate with the values of the parameters and constants."""
-        return eval(self._code, {
-            '__builtins__': BUILTINS, 'np': np, 'relations': relations},
-            namespace)
+        # (without the warnings of numpy, e.g. of np.log(0): a warning shown
+        # from here imports through the builtins of the expression, which
+        # have no __import__; values that are not finite are refused after)
+        with np.errstate(all='ignore'):
+            return eval(self._code, {
+                '__builtins__': BUILTINS, 'np': np, 'relations': relations},
+                namespace)
 
     def _check(
             self,
