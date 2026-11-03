@@ -1,0 +1,11 @@
+# Opens pull requests when the actions that CI uses have new versions.
+
+version: 2
+updates:
+- package-ecosystem: github-actions
+  directory: /
+  schedule:
+    interval: monthly
+  groups:
+    actions:
+      patterns: ['*']

@@ -82,7 +82,11 @@ def test_param_desc_exclusive_bounds_and_period():
     (lambda: ParamScalarDesc(min=0, min_exclusive=True, default=0),
      "in its valid range"),
     (lambda: ParamScalarDesc(period=0), "must be positive"),
-    (lambda: ParamVectorDesc(2, default=np.nan), "must be finite")])
+    (lambda: ParamVectorDesc(2, default=np.nan), "must be finite")],
+    ids=['size_zero', 'size_negative', 'size_float', 'size_bool',
+         'bounds_empty', 'bounds_empty_exclusive', 'exclusive_without_min',
+         'default_below_min', 'default_at_exclusive_min', 'period_zero',
+         'default_nan'])
 def test_invalid_param_descs(make, message):
     with pytest.raises(ConfigError, match=message):
         make()

@@ -122,6 +122,10 @@ packages, installed with:
 
    pip install "cupy-cuda12x[ctk]"
 
+If CuPy for CUDA 13 (``cupy-cuda13x``) is already installed, install GBKFIT
+without the ``cuda`` extra (``pip install gbkfit``) and keep that CuPy: the
+extra would install a second CuPy, and the two do not work side by side.
+
 .. attention::
    Support for CUDA GPUs is not fully functional yet.
 

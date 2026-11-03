@@ -3,17 +3,19 @@ Reading data from files with their errors and mask, in the orientation of
 the model: the one reader of the datasets (see dataset.Data.from_files)
 and of prep (see prep.FitsArrays).
 
-The files are FITS files, or ASDF files (with the packages asdf and gwcs),
-whose world coordinates (a gwcs) become those of a FITS header (see
-fitsutils.linear_header): past that, both are read alike.
+The files are FITS files, or ASDF files, whose world coordinates (a gwcs)
+become those of a FITS header (see fitsutils.linear_header): past that,
+both are read alike.
 """
 
 import dataclasses
 import typing
 
+import asdf
 import astropy.io.fits
 import astropy.units
 import astropy.wcs
+import gwcs
 import numpy as np
 
 from gbkfit.utils import fitsutils, unitutils
@@ -267,16 +269,9 @@ def _read_asdf(
     Raises
     ------
     ConfigError
-        If the packages asdf and gwcs are missing, the path is not given or
-        not in the tree, or the file has more than one WCS.
+        If the path is not given or not in the tree, or the file has more
+        than one WCS.
     """
-    try:
-        import asdf
-        import gwcs
-    except ImportError as e:
-        raise ConfigError(
-            f"{filename}: ASDF files need the packages asdf and gwcs (pip "
-            f"install gbkfit[asdf])") from e
     if path is None:
         raise ConfigError(
             f"{filename}: give the path of the array in the tree of the "

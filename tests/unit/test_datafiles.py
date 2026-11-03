@@ -221,8 +221,6 @@ def twin_files(tmp_path, kind):
 def test_asdf_files_read_as_their_fits_twins(tmp_path, kind):
     # One reader past the file: the same values, unit and world
     # coordinates (here as the velocities of the rest of Halpha)
-    pytest.importorskip('asdf')
-    pytest.importorskip('gwcs')
     fits_file, asdf_file = twin_files(tmp_path, kind)
     rest = '6564.61 Angstrom'
     from_fits = datafiles.read_arrays(fits_file, rest=rest)
@@ -249,16 +247,12 @@ def test_asdf_files_read_as_their_fits_twins(tmp_path, kind):
 
 def test_asdf_files_off_a_grid_are_refused(tmp_path):
     # Wavelengths of a curved axis: no linear header stands for them
-    pytest.importorskip('asdf')
-    pytest.importorskip('gwcs')
     _, asdf_file = twin_files(tmp_path, 'curved')
     with pytest.raises(ConfigError, match="resample"):
         datafiles.read_arrays((asdf_file, 'roman/data'))
 
 
 def test_datasets_read_asdf_files(tmp_path):
-    pytest.importorskip('asdf')
-    pytest.importorskip('gwcs')
     from gbkfit.dataset import dataset_parser
     _, asdf_file = twin_files(tmp_path, 'WAVE')
     dataset = dataset_parser.load(dict(

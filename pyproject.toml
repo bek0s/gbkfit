@@ -7,31 +7,37 @@ name = 'gbkfit'
 dynamic = ['version']
 description = 'Galaxy kinematic modelling and fitting'
 readme = 'README.rst'
-# (MIT: DNest4, which the native modules build in)
 license = 'BSD-3-Clause AND MIT'
 license-files = [
-    'LICENSE',
-    # (of the code that the native modules build in)
-    'src/native/third_party/dnest4/LICENSE',
-    'src/native/third_party/nanobind/LICENSE',
-    'src/native/third_party/pocketfft/LICENSE.md'
+    'LICENSE',                                     # BSD-3-Clause
+    'src/native/third_party/dnest4/LICENSE',       # MIT
+    'src/native/third_party/nanobind/LICENSE',     # BSD-3-Clause
+    'src/native/third_party/pocketfft/LICENSE.md'  # BSD-3-Clause
 ]
 authors = [{ name = 'Georgios Bekiaris', email = 'gbkfit@gmail.com' }]
 requires-python = '>=3.12'
 classifiers = [
     'Development Status :: 3 - Alpha',
     'Environment :: Console',
+    'Environment :: GPU :: NVIDIA CUDA :: 12',
     'Intended Audience :: Science/Research',
     'Operating System :: MacOS',
+    'Operating System :: Microsoft :: Windows',
     'Operating System :: POSIX :: Linux',
     'Programming Language :: C++',
     'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3 :: Only',
+    'Programming Language :: Python :: 3.12',
+    'Programming Language :: Python :: 3.13',
+    'Programming Language :: Python :: 3.14',
     'Topic :: Scientific/Engineering :: Astronomy'
 ]
 dependencies = [
     'annotated-types',
+    'asdf',
     'astropy',
-    'numpy',
+    'gwcs',
+    'numpy>=2.5',
     'pydantic>=2',
     'rich',
     'ruamel.yaml',
@@ -40,42 +46,42 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# (the plot task)
 plot = ['corner', 'matplotlib']
 cuda = ['cupy-cuda12x']
-finufft = ['finufft>=2.5']
+# Transforms of visibilities, on CPUs and on GPUs
 cufinufft = ['cufinufft>=2.5']
+finufft = ['finufft>=2.5']
 casacore = ['python-casacore']
+# The JWST datamodels and their transforms, not the pipeline
+jwst = ['stdatamodels']
+# Fitters
+cmaes = ['cma']
 dynesty = ['dynesty']
 emcee = ['emcee']
-zeus = ['zeus-mcmc']
 lmfit = ['lmfit']
 nautilus = ['nautilus-sampler']
-cmaes = ['cma']
 ultranest = ['ultranest']
-# (the datamodels of JWST files, and their transforms; not the pipeline)
-jwst = ['stdatamodels']
-# (data in ASDF files, with their world coordinates)
-asdf = ['asdf', 'gwcs']
-# (workers of clusters, see gbkfit.parallel)
+zeus = ['zeus-mcmc']
+# Cluster workers
+dask = ['distributed']
 mpi = ['mpi4py']
 ray = ['ray']
-dask = ['distributed']
 
 [project.urls]
 Homepage = 'https://github.com/bek0s/gbkfit'
 Documentation = 'https://gbkfit.readthedocs.io'
+Issues = 'https://github.com/bek0s/gbkfit/issues'
 
 [dependency-groups]
 test = [
-    'pytest>=8', 'pytest-regressions', 'pytest-xdist',
-    # (the plot task)
+    'pytest>=9', 'pytest-regressions', 'pytest-xdist',
+    # For the tests of the plot task
     'corner', 'matplotlib',
-    # (the schema of configurations, see gbkfit.schema)
-    'jsonschema',
-    # (data in ASDF files)
-    'asdf', 'gwcs']
-dev = [{ include-group = 'test' }]
+    # For the tests of the configuration schema
+    'jsonschema']
+docs = ['sphinx', 'numpydoc', 'pydata-sphinx-theme']
+# All of the above, plus ruff, the code checker that CI also runs
+dev = [{ include-group = 'test' }, { include-group = 'docs' }, 'ruff']
 
 [tool.scikit-build]
 minimum-version = 'build-system.requires'
@@ -83,20 +89,24 @@ build-dir = 'build/{wheel_tag}'
 wheel.packages = ['src/gbkfit']
 wheel.py-api = 'cp312'
 sdist.include = ['src/gbkfit/_version.py']
-# (the apps are packages of their own)
+# The apps are packages of their own.
 sdist.exclude = ['apps/']
 
 [[tool.dynamic-metadata]]
 provider = 'scikit_build_core.metadata.setuptools_scm'
 
-[tool.pytest.ini_options]
-minversion = '8.0'
+[tool.setuptools_scm]
+version_file = 'src/gbkfit/_version.py'
+version_file_template = '__version__ = "{version}"'
+
+[tool.pytest]
+minversion = '9.0'
 testpaths = ['tests']
-# (tests run on a worker per core, at most 8; -n 0 runs them in one)
-addopts = [
-    '-ra', '--strict-markers', '--strict-config', '-n', 'auto',
-    '--maxprocesses', '8']
-xfail_strict = true
+# Tests run on one worker per core, at most 8; -n 0 runs them in one.
+addopts = ['-ra', '-n', 'auto', '--maxprocesses', '8']
+# Unknown markers and options, xfails that pass and repeated test ids
+# are errors.
+strict = true
 markers = [
     'cuda: needs the cuda driver and a CUDA GPU',
     'slow: takes seconds (e.g. full fits by samplers); run with --runslow',
@@ -119,43 +129,33 @@ environment = { MACOSX_DEPLOYMENT_TARGET = '14.0' }
 # Linux and Windows wheels also include the cuda module (built with
 # CUDA 12.9 for Pascal to Blackwell GPUs, plus PTX for newer ones). It
 # only needs the NVIDIA driver and CuPy (the 'cuda' extra) at run time.
+[[tool.cibuildwheel.overrides]]
+select = ['*-manylinux_*', '*-win_*']
+config-settings = { 'cmake.define.GBKFIT_CUDA' = 'ON', 'cmake.define.CMAKE_CUDA_ARCHITECTURES' = '60-real;70-real;75-real;80-real;86-real;89-real;90-real;100-real;120-real;120-virtual' }
+test-command = [
+    'pytest tests -m "not cuda"',
+    'python -c "import gbkfit.driver.drivers.cuda._cuda"',
+]
+
+# Linux wheels are built inside a container, so CUDA is installed in it
+# here. (Windows has no container: the CI workflow installs CUDA there.)
 [tool.cibuildwheel.linux]
 before-all = '''
 dnf config-manager --add-repo https://developer.download.nvidia.com/compute/cuda/repos/rhel8/$(uname -m | sed s/aarch64/sbsa/)/cuda-rhel8.repo
 dnf install -y cuda-nvcc-12-9 cuda-cudart-devel-12-9
 '''
 environment = { CUDACXX = '/usr/local/cuda-12.9/bin/nvcc' }
-config-settings = { 'cmake.define.GBKFIT_CUDA' = 'ON', 'cmake.define.CMAKE_CUDA_ARCHITECTURES' = '60-real;70-real;75-real;80-real;86-real;89-real;90-real;100-real;120-real;120-virtual' }
-test-command = [
-    'pytest tests -m "not cuda"',
-    'python -c "import gbkfit.driver.drivers.cuda._cuda"',
-]
-
-[tool.cibuildwheel.windows]
-config-settings = { 'cmake.define.GBKFIT_CUDA' = 'ON', 'cmake.define.CMAKE_CUDA_ARCHITECTURES' = '60-real;70-real;75-real;80-real;86-real;89-real;90-real;100-real;120-real;120-virtual' }
-test-command = [
-    'pytest tests -m "not cuda"',
-    'python -c "import gbkfit.driver.drivers.cuda._cuda"',
-]
 
 [tool.ruff.lint]
-# Linting only (no automatic formatting for now): the core pyflakes and
-# pycodestyle error rules, type hints on every function of the library
-# (Any where any value goes; __init__ needs no return type), and a
-# docstring on each of its modules and public functions. Docstrings are
-# numpydoc, and their summary (the first paragraph) can take several
-# lines, so the rules of one-line summaries (e.g. D205, D400) are off.
-# Star imports are used on purpose.
+# Lint only, no formatting. Checks: errors, type hints on every function
+# and a docstring on every module and public function. Star imports are
+# used on purpose.
 select = ['E4', 'E7', 'E9', 'F', 'ANN', 'D100', 'D103']
 ignore = ['F403', 'F405', 'ANN204', 'ANN401']
 
 [tool.ruff.lint.per-file-ignores]
+# Imports in __init__.py re-export names, so they aren't unused
 '__init__.py' = ['F401']
-# (the tests need neither, their names say what they check; the
-# applications have none yet)
+# Tests and the apps don't need type hints or docstrings
 'tests/**' = ['ANN', 'D100', 'D103']
 'apps/**' = ['ANN', 'D100', 'D103']
-
-[tool.setuptools_scm]
-version_file = 'src/gbkfit/_version.py'
-version_file_template = '__version__ = "{version}"'
