@@ -10,25 +10,25 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
+import ruamel.yaml
+
 import gbkfit
 import gbkfit.project
-from gbkfit.utils import yamlutils
 
 from .workspace import Workspace
 
 
 __all__ = [
-    'GalaxyDescription',
-    'Galaxies'
+    'Galaxies',
+    'GalaxyDescription'
 ]
 
-
-_yaml = yamlutils.YAML(typ='safe')
 
 # The observations a galaxy is described through, in turn: that of the
 # template (a cube), and an image (e.g. for a galaxy of a band)
 _OBSERVATIONS = (
-    _yaml.load(gbkfit.project.TEMPLATES['observations']),
+    ruamel.yaml.YAML(typ='safe').load(
+        gbkfit.project.TEMPLATES['observations']),
     dict(type='sky', observable=dict(type='pixel_brightness', size=[48, 48]),
          line_of_sight=dict(type='flat')))
 

@@ -36,7 +36,7 @@ from typing import Any, NamedTuple
 
 import ruamel.yaml
 
-from gbkfit.utils import parseutils, yamlutils
+from gbkfit.utils import parseutils
 from gbkfit.utils.parseutils import ConfigError
 
 
@@ -44,8 +44,8 @@ __all__ = [
     'FORMAT',
     'FORMAT_VERSION',
     'MARKER',
-    'Project',
     'TEMPLATES',
+    'Project',
     'Resolved',
     'create',
     'find',
@@ -70,17 +70,34 @@ _FOLDERS = dict(
     psf='psfs', lsf='lsfs', noise='noise', params='params',
     fitter='fitters')
 
-_yaml = yamlutils.YAML(typ='safe')
-# (pieces written with their content: lists and dictionaries of plain
-# values on one line, e.g. data: {file: data/cube.fits, hdu: SCI})
-_yaml_out = yamlutils.YAML(typ='safe')
-_yaml_out.default_flow_style = None
-_yaml_out.sort_base_mapping_type_on_output = False
-# (pieces rewritten in place, e.g. as a piece they name is renamed: their
-# comments and layout stay)
-_yaml_rt = yamlutils.YAML()
-_yaml_rt.preserve_quotes = True
-_yaml_rt.width = 4096
+
+def _yaml() -> ruamel.yaml.YAML:
+    """Return a new YAML that reads and writes plain values."""
+    return ruamel.yaml.YAML(typ='safe')
+
+
+def _yaml_out() -> ruamel.yaml.YAML:
+    """
+    Return a new YAML of the pieces written with their content: lists and
+    dictionaries of plain values on one line (e.g. data: {file:
+    data/cube.fits, hdu: SCI}).
+    """
+    yaml = ruamel.yaml.YAML(typ='safe')
+    yaml.default_flow_style = None
+    yaml.sort_base_mapping_type_on_output = False
+    return yaml
+
+
+def _yaml_rt() -> ruamel.yaml.YAML:
+    """
+    Return a new YAML of the pieces rewritten in place (e.g. as a piece
+    they name is renamed): their comments and layout stay.
+    """
+    yaml = ruamel.yaml.YAML()
+    yaml.preserve_quotes = True
+    yaml.width = 4096
+    return yaml
+
 
 # The templates of new pieces and setups, by folder (see
 # Project.create_piece): a disk seen in a cube; a setup names the first
@@ -240,7 +257,7 @@ class Project:
         filename = self.piece_file(section, name)
         text = self._texts.get(filename)
         try:
-            piece = _yaml.load(Path(filename) if text is None else text)
+            piece = _yaml().load(Path(filename) if text is None else text)
         except FileNotFoundError:
             raise ConfigError(
                 f"the project has no piece '{name}' of {_FOLDERS[section]} "
@@ -336,7 +353,7 @@ class Project:
             if content is None:
                 f.write(text)
             else:
-                _yaml_out.dump(dict(content), f)
+                _yaml_out().dump(dict(content), f)
         return filename
 
     def update_piece(
@@ -364,7 +381,7 @@ class Project:
             raise FileNotFoundError(
                 f"the project has no piece '{name}' of {folder}") from None
         try:
-            old = _yaml_rt.load(text)
+            old = _yaml_rt().load(text)
         except ruamel.yaml.YAMLError:
             old = None
         # (the comment of its template, which says what it is, e.g. 'here
@@ -372,10 +389,10 @@ class Project:
         header = _header(TEMPLATES.get(folder, ''))
         if isinstance(old, Mapping) and header and text.startswith(header) \
                 and _plain(old) != dict(content):
-            old = _yaml_rt.load(text[len(header):])
+            old = _yaml_rt().load(text[len(header):])
         if not isinstance(old, Mapping):
             with Path(filename).open('w') as f:
-                _yaml_out.dump(dict(content), f)
+                _yaml_out().dump(dict(content), f)
             return filename
         for key in [key for key in old if key not in content]:
             del old[key]
@@ -383,7 +400,7 @@ class Project:
             if key not in old or _plain(old[key]) != value:
                 old[key] = value
         with Path(filename).open('w') as f:
-            _yaml_rt.dump(old, f)
+            _yaml_rt().dump(old, f)
         return filename
 
     def references(self, folder: str, name: str) -> list[tuple[str, str]]:
@@ -438,12 +455,12 @@ class Project:
         self._prune(folder, source)
         for other, other_name in referring:
             filename = self._file(other, other_name)
-            content = _yaml_rt.load(Path(filename))
+            content = _yaml_rt().load(Path(filename))
             for parent, key, target_folder in _named(other, content):
                 if target_folder == folder and parent[key] == name:
                     parent[key] = new
             with Path(filename).open('w') as f:
-                _yaml_rt.dump(content, f)
+                _yaml_rt().dump(content, f)
         return target
 
     def delete_piece(self, folder: str, name: str) -> None:
@@ -513,6 +530,7 @@ class Project:
                 f"'{name}'")
         return filename
 
+
 def create(path: str) -> Project:
     """
     Create a project: its folder, if needed, its marker, and the folders
@@ -535,7 +553,7 @@ def create(path: str) -> Project:
     """
     os.makedirs(path, exist_ok=True)
     with Path(path, MARKER).open('x') as f:
-        _yaml.dump(dict(format=FORMAT, version=FORMAT_VERSION), f)
+        _yaml().dump(dict(format=FORMAT, version=FORMAT_VERSION), f)
     for folder in (*TEMPLATES, 'data', 'runs'):
         os.makedirs(os.path.join(path, folder), exist_ok=True)
     return Project(path)
@@ -828,7 +846,7 @@ def _marker(path: str) -> dict[str, Any]:
         projects or has no version.
     """
     try:
-        marker = _yaml.load(Path(path, MARKER))
+        marker = _yaml().load(Path(path, MARKER))
     except FileNotFoundError:
         raise ValueError(f"{path} is not a project (no {MARKER})") from None
     if not isinstance(marker, dict) or marker.get('format') != FORMAT \
@@ -880,7 +898,7 @@ def _named(folder: str, content: Any) -> Iterator[tuple[Any, Any, str]]:
 def _load_quietly(filename: str) -> Any:
     """Return the content of a YAML file; None if it cannot be read."""
     try:
-        return _yaml.load(Path(filename))
+        return _yaml().load(Path(filename))
     except (OSError, ruamel.yaml.YAMLError):
         return None
 

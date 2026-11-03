@@ -23,13 +23,12 @@ from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
 import gbkfit.project
 from gbkfit.project import FORMAT_VERSION
-from gbkfit.utils import yamlutils
 from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
-    'Change',
     'RULES',
+    'Change',
     'Rule',
     'migrate',
     'migrate_file',
@@ -40,15 +39,27 @@ __all__ = [
 # The sections whose items are pieces of projects
 _SECTIONS = ('galaxies', 'observations', 'params', 'fitter')
 
-# (round trip, keeping comments; a flow collection is rewritten on one
-# line, as ruamel breaks lines between keys and their values, and null
-# stays null)
-_yaml = yamlutils.YAML()
-_yaml.width = 4096
-_yaml.representer.add_representer(
+
+class _Representer(ruamel.yaml.representer.RoundTripRepresenter):
+    """The representer of round trips, which writes null as null."""
+
+
+_Representer.add_representer(
     type(None),
     lambda representer, _: representer.represent_scalar(
         'tag:yaml.org,2002:null', 'null'))
+
+
+def _yaml() -> ruamel.yaml.YAML:
+    """
+    Return a new YAML of round trips, keeping comments: a flow collection
+    is rewritten on one line, as ruamel breaks lines between keys and
+    their values, and null stays null.
+    """
+    yaml = ruamel.yaml.YAML()
+    yaml.Representer = _Representer
+    yaml.width = 4096
+    return yaml
 
 
 class Change(NamedTuple):
@@ -1132,7 +1143,7 @@ def _read(path: str) -> Any:
     """
     try:
         with open(path) as f:
-            return _yaml.load(f)
+            return _yaml().load(f)
     except (OSError, ruamel.yaml.YAMLError) as e:
         raise ConfigError(f"cannot read {path}: {e}") from e
 
@@ -1144,7 +1155,7 @@ def _write(path: str, config: Any) -> None:
             json.dump(config, f, indent=2)
             f.write('\n')
         else:
-            _yaml.dump(config, f)
+            _yaml().dump(config, f)
 
 
 def _mark_current(path: str) -> None:

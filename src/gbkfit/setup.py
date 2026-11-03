@@ -38,7 +38,7 @@ from gbkfit.observation import (
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
     load_pdescs_dict, param_space_parser)
-from gbkfit.utils import iterutils, parseutils, yamlutils
+from gbkfit.utils import iterutils, parseutils
 from gbkfit.utils.parseutils import ConfigError
 from gbkfit.utils.typeutils import FilePath
 
@@ -56,11 +56,8 @@ __all__ = [
 
 _log = logging.getLogger(__name__)
 
-# (a driver, or what stands for it, see _load_placement)
+# A driver, or what stands for it (see _load_placement)
 _T = TypeVar('_T')
-
-# Reads YAML (round trip: dicts keep their order)
-_yaml = yamlutils.YAML()
 
 
 class _FunctionFile(NamedTuple):
@@ -477,11 +474,12 @@ def read_config(
     filename = os.path.abspath(filename)
     texts = texts or {}
     try:
+        # Round trip, so that dicts keep their order
         if filename in texts:
-            cfg = _yaml.load(texts[filename])
+            cfg = ruamel.yaml.YAML().load(texts[filename])
         else:
             with open(filename) as f:
-                cfg = _yaml.load(f)
+                cfg = ruamel.yaml.YAML().load(f)
     except (OSError, ruamel.yaml.YAMLError) as e:
         raise ConfigError(
             f"cannot read the configuration file {filename}: {e}") from e
