@@ -29,16 +29,16 @@ __all__ = [
     'ParamDesc',
     'ParamScalarDesc',
     'ParamTable',
+    'ParamUnit',
     'ParamVectorDesc',
     'ValidRange',
-    'param_tables',
-    'ParamUnit',
     'default_values',
-    'make_param_unit',
-    'pdesc_parser',
-    'pdescs_with_units',
+    'dump_pdescs_dict',
     'load_pdescs_dict',
-    'dump_pdescs_dict'
+    'make_param_unit',
+    'param_tables',
+    'pdesc_parser',
+    'pdescs_with_units'
 ]
 
 

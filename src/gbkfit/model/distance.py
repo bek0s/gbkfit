@@ -28,10 +28,10 @@ from .mass.units import G
 
 
 __all__ = [
+    'KPC_PER_ARCSEC_MPC',
     'Distance',
     'DistanceDirect',
     'DistanceRedshift',
-    'KPC_PER_ARCSEC_MPC',
     'distance_parser'
 ]
 

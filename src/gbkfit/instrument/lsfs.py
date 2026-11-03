@@ -41,8 +41,8 @@ from ._detail import MIN_EXTENT, WING_FLUX
 __all__ = [
     'LSF',
     'LSFConvolution',
-    'LSFGauss',
     'LSFGGauss',
+    'LSFGauss',
     'LSFHanning',
     'LSFImage',
     'LSFImages',

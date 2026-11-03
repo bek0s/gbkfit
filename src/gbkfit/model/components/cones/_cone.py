@@ -22,11 +22,11 @@ from ..traits import Trait
 
 
 __all__ = [
-    'NodalCone',
     'SIDES',
+    'TRAIT_KINDS',
+    'NodalCone',
     'SmoothCone',
-    'SmoothConePlan',
-    'TRAIT_KINDS'
+    'SmoothConePlan'
 ]
 
 

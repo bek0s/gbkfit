@@ -28,11 +28,11 @@ from .units import G
 
 
 __all__ = [
-    'Overdensity',
     'PARAMETERISATIONS',
-    'parameterisation_pdescs',
+    'Overdensity',
     'halo_scale_radius',
-    'halo_scales'
+    'halo_scales',
+    'parameterisation_pdescs'
 ]
 
 

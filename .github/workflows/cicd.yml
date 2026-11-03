@@ -24,6 +24,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
     - run: pipx run ruff check
+    - run: pipx run pyright
 
   wheels:
     name: wheels (${{ matrix.os }})

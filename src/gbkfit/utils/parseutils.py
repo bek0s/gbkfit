@@ -21,7 +21,7 @@ import logging
 import os
 import re
 import typing
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from typing import Any, ClassVar, Literal, NamedTuple, Self
 
 import astropy.units
@@ -62,7 +62,7 @@ _strict = contextvars.ContextVar('strict', default=True)
 
 
 @contextlib.contextmanager
-def strict_mode(strict: bool = True) -> Iterator[None]:
+def strict_mode(strict: bool = True) -> Generator[None]:
     """
     Make unknown options errors (strict, the default) or warnings
     (lenient), in the block.
@@ -198,7 +198,7 @@ class Problem(NamedTuple):
 
 
 @contextlib.contextmanager
-def collect_problems() -> Iterator[list[Problem]]:
+def collect_problems() -> Generator[list[Problem]]:
     """
     Collect the problems of the configuration loaded in the block: the
     warnings logged about it (see warn), its unknown names, as errors (see
@@ -302,7 +302,7 @@ def _add_location(
 def config_path(
         *segments: str | int,
         context: str | None = None
-) -> Iterator[None]:
+) -> Generator[None]:
     """
     Add to the path of the configuration errors raised in the block.
 
@@ -463,7 +463,7 @@ _base_dir: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 
 
 @contextlib.contextmanager
-def paths_relative_to(directory: str) -> Iterator[None]:
+def paths_relative_to(directory: str) -> Generator[None]:
     """
     Resolve the relative paths of configurations (see resolve_path)
     against a directory, e.g. that of the configuration file, while

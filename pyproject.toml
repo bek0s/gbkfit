@@ -107,6 +107,12 @@ addopts = ['-ra', '-n', 'auto', '--maxprocesses', '8']
 # Unknown markers and options, xfails that pass and repeated test ids
 # are errors.
 strict = true
+# Deprecated APIs fail the tests.
+filterwarnings = [
+    'error::DeprecationWarning',
+    'error::PendingDeprecationWarning',
+    'error::FutureWarning',
+]
 markers = [
     'cuda: needs the cuda driver and a CUDA GPU',
     'slow: takes seconds (e.g. full fits by samplers); run with --runslow',
@@ -146,11 +152,22 @@ dnf install -y cuda-nvcc-12-9 cuda-cudart-devel-12-9
 '''
 environment = { CUDACXX = '/usr/local/cuda-12.9/bin/nvcc' }
 
+[tool.pyright]
+# Only the use of deprecated APIs is checked (no type checking yet), as
+# of the newest Python the wheels support. CI does not install the
+# packages, so only the deprecations of Python itself are checked there.
+include = ['src', 'apps']
+pythonVersion = '3.14'
+typeCheckingMode = 'off'
+reportDeprecated = 'error'
+reportMissingImports = false
+reportInvalidTypeForm = false
+
 [tool.ruff.lint]
-# Lint only, no formatting. Checks: errors, type hints on every function
-# and a docstring on every module and public function. Star imports are
-# used on purpose.
-select = ['E4', 'E7', 'E9', 'F', 'ANN', 'D100', 'D103']
+# Lint only, no formatting. Checks: errors, type hints on every function,
+# a docstring on every module and public function, and a sorted __all__.
+# Star imports are used on purpose.
+select = ['E4', 'E7', 'E9', 'F', 'ANN', 'D100', 'D103', 'RUF022']
 ignore = ['F403', 'F405', 'ANN204', 'ANN401']
 
 [tool.ruff.lint.per-file-ignores]

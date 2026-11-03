@@ -4,7 +4,7 @@ The UltraNest nested sampler.
 
 import contextlib
 import logging
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from typing import Annotated, Any
 
 import numpy as np
@@ -31,7 +31,7 @@ _REJECTED = -1e300
 
 
 @contextlib.contextmanager
-def _seeded_global_rng(seed: int) -> Iterator[None]:
+def _seeded_global_rng(seed: int) -> Generator[None]:
     """
     Seed numpy's global random numbers, which UltraNest draws from (it
     takes no generator), and restore their state afterwards.
@@ -45,7 +45,7 @@ def _seeded_global_rng(seed: int) -> Iterator[None]:
 
 
 @contextlib.contextmanager
-def _log_level(name: str, level: int) -> Iterator[None]:
+def _log_level(name: str, level: int) -> Generator[None]:
     """Set the level of a logger, and restore it afterwards."""
     logger = logging.getLogger(name)
     previous = logger.level

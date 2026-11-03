@@ -18,12 +18,12 @@ from .lines import (
 
 
 __all__ = [
+    'STARS',
     'BandEmission',
     'DustOpacity',
     'Emission',
     'LineEmission',
     'Opacity',
-    'STARS',
     'StarsEmission',
     'emission_parser',
     'opacity_parser'

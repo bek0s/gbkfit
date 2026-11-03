@@ -18,21 +18,21 @@ from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
-    'Blobs',
     'DPT_DIRECTIONS',
     'DPT_DIRECTION_DEFAULT',
+    'SAMPLINGS',
+    'SAMPLING_DEFAULT',
+    'SAMPLING_TAIL',
+    'VPT_DIRECTIONS',
+    'Blobs',
     'Direction',
     'DispersionDirection',
     'Harmonic',
     'Nodewise',
-    'SAMPLINGS',
-    'SAMPLING_DEFAULT',
-    'SAMPLING_TAIL',
     'Sampling',
     'Spiral',
     'TraitOption',
     'VPTDirection',
-    'VPT_DIRECTIONS',
     'Zmax'
 ]
 

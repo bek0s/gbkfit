@@ -27,10 +27,10 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    'BandFactors',
     'DataUnit',
     'LightUnit',
     'LineFactors',
-    'BandFactors',
     'OpacityScales',
     'band_factors',
     'check_band_unit',

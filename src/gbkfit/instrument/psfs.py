@@ -34,9 +34,9 @@ from ._detail import MIN_EXTENT, WING_FLUX
 __all__ = [
     'PSF',
     'PSFConvolution',
+    'PSFGGauss',
     'PSFGauss',
     'PSFGaussBeam',
-    'PSFGGauss',
     'PSFImage',
     'PSFImages',
     'PSFMoffat',

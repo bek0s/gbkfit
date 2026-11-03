@@ -8,7 +8,7 @@ import importlib
 import inspect
 import logging
 import sys
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from typing import Any
 
 from gbkfit.utils import parseutils
@@ -71,7 +71,7 @@ def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:
 
 
 @contextlib.contextmanager
-def exit_on_user_errors(verbose: bool) -> Iterator[None]:
+def exit_on_user_errors(verbose: bool) -> Generator[None]:
     """
     In the block, end the program (status 1) at an error that a user
     fixes, logged without a traceback (with one if verbose): of a

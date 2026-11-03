@@ -8,7 +8,7 @@ import contextlib
 import copy
 import logging
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Generator, Mapping
 from typing import Any
 
 import gbkfit.outputs
@@ -51,7 +51,7 @@ def write_setup(run: gbkfit.outputs.RunWriter, config: ConfigFile) -> None:
 
 
 @contextlib.contextmanager
-def run_log(run: gbkfit.outputs.RunWriter) -> Iterator[None]:
+def run_log(run: gbkfit.outputs.RunWriter) -> Generator[None]:
     """
     While the block runs, copy the log of GBKFIT (the logger 'gbkfit', at
     its level) to the log of a run (logs/gbkfit.log, kind 'log'; appended

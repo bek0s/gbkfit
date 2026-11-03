@@ -7,7 +7,7 @@ LinePlacement).
 
 import contextlib
 import contextvars
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Generator, Mapping, Sequence
 
 import astropy.units
 import numpy as np
@@ -266,7 +266,7 @@ _in_use: contextvars.ContextVar[LineCatalogue | None] = \
 
 
 @contextlib.contextmanager
-def lines_from(catalogue: LineCatalogue) -> Iterator[None]:
+def lines_from(catalogue: LineCatalogue) -> Generator[None]:
     """
     Make the configurations loaded in the block name the lines and bands
     of a catalogue (e.g. with those of the sections 'lines' and 'bands' of

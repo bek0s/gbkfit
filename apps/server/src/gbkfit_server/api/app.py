@@ -6,7 +6,7 @@ token, with the responses to the errors of the services; and its pages
 
 import contextlib
 import secrets
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncGenerator, Callable, Mapping
 from importlib.metadata import version
 
 from fastapi import (
@@ -70,7 +70,7 @@ def create_app(
         The app; it closes the server as it shuts down.
     """
     @contextlib.asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         yield
         if server is not None:
             await server.close()

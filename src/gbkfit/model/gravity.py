@@ -33,6 +33,8 @@ from .mass.units import G
 
 __all__ = [
     'A0_UNIT',
+    'MOND_FORMS',
+    'MOND_INTERPOLATIONS',
     'Capability',
     'Gravity',
     'GravityField',
@@ -40,8 +42,6 @@ __all__ = [
     'GravityMOND',
     'GravityNewton',
     'GravityPalatini',
-    'MOND_FORMS',
-    'MOND_INTERPOLATIONS',
     'gravity_parser'
 ]
 

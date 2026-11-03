@@ -11,7 +11,7 @@ import os
 import signal
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Any, Literal
 
 import gbkfit.fitting
@@ -362,7 +362,7 @@ def _fit(
 
 
 @contextlib.contextmanager
-def _stop_on_interrupt(control: gbkfit.fitting.FitControl) -> Iterator[None]:
+def _stop_on_interrupt(control: gbkfit.fitting.FitControl) -> Generator[None]:
     """
     While the block runs, make the first Ctrl-C (SIGINT) stop the fit at
     its next evaluation, and a second one quit at once (only in the main

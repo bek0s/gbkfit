@@ -25,13 +25,13 @@ if TYPE_CHECKING:
 _T = TypeVar('_T')
 
 __all__ = [
+    'MAX_ARRAY_SIZE',
+    'NUFFT',
     'DeviceArray',
     'Driver',
     'DriverFFT',
     'DriverNUFFT',
     'FFTConvolution',
-    'MAX_ARRAY_SIZE',
-    'NUFFT',
     'check_array_size',
     'driver_by_name',
     'driver_parser'

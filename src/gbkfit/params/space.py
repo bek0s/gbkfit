@@ -1498,7 +1498,7 @@ class ParamSpace(parseutils.Serializable):
         for name in self._ranged:
             pdesc = self._pdescs[name]
             value = np.atleast_1d(values[name])
-            outside = ~pdesc.valid_range().contains(value)
+            outside = np.logical_not(pdesc.valid_range().contains(value))
             if np.any(outside):
                 names = element_names(
                     name, None if pdesc.is_scalar()

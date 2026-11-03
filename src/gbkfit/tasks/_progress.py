@@ -13,7 +13,7 @@ import json
 import logging
 import math
 import time
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 
 import rich.live
 import rich.text
@@ -32,7 +32,7 @@ __all__ = [
 
 
 @contextlib.contextmanager
-def console_progress(logger: logging.Logger) -> Iterator[ProgressObserver]:
+def console_progress(logger: logging.Logger) -> Generator[ProgressObserver]:
     """
     Show the progress of a fit on the console while the block runs: on a
     terminal, a line at its bottom (see TerminalProgress), else lines in

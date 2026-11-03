@@ -28,9 +28,9 @@ from .workspace import Workspace
 
 
 __all__ = [
+    'TASKS',
     'Job',
-    'Jobs',
-    'TASKS'
+    'Jobs'
 ]
 
 

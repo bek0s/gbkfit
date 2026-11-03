@@ -5,7 +5,7 @@ The zeus ensemble slice sampler.
 import contextlib
 import random
 import typing
-from collections.abc import Iterator
+from collections.abc import Generator
 from typing import Annotated, Any, Literal
 
 import numpy as np
@@ -35,7 +35,7 @@ class FitParamZeus(FitParamWalkers):
 
 
 @contextlib.contextmanager
-def _seeded_globals(seed: int) -> Iterator[None]:
+def _seeded_globals(seed: int) -> Generator[None]:
     """
     Seed the global random numbers of NumPy and of the module random,
     which zeus draws, and restore their states afterwards.
