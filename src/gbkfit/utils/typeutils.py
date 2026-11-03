@@ -9,9 +9,11 @@ units (``Unit``). They are checked against them in Python calls (see
 `gbkfit.utils.parseutils.parse_options_for_callable`).
 """
 
+import collections.abc
 import dataclasses
 import functools
 import math
+import re
 import types
 import typing
 import warnings
@@ -146,6 +148,17 @@ def _adapter(type_: typing.Any) -> pydantic.TypeAdapter:
     For an annotation that is not a type (e.g. 5), pydantic would instead
     warn and accept any value.
     """
+    # pydantic only warns of an annotation that is not a type, so its
+    # warning is made an error while the validator is made. That changes
+    # the warning filters of the whole process for a moment, but only once
+    # per annotation (the validator is cached), and pydantic has no other
+    # way to tell. Another thread changing the filters at the same moment
+    # can lose a filter, which can only show or hide a warning.
+    # TODO: once Python 3.14 is the minimum, have the server run with
+    # context-aware warnings (-X context_aware_warnings, or the variable
+    # PYTHON_CONTEXT_AWARE_WARNINGS=1). Each thread then has filters of its
+    # own, which tested as fixing this (2026-11-04); it has to be set when
+    # Python starts, and Python 3.12 and 3.13 do not have it.
     try:
         with warnings.catch_warnings():
             warnings.simplefilter(
@@ -213,11 +226,7 @@ def describe_type(type_: typing.Any) -> str:
         return ' | '.join(describe_type(x) for x in members)
     name = getattr(type_, '__name__', None)
     label = str(type_) if typing.get_args(type_) or name is None else name
-    return (
-        label
-        .replace('collections.abc.', '')
-        .replace('types.', '')
-        .replace('typing.', ''))
+    return re.sub(r'\b(collections\.abc|types|typing)\.', '', label)
 
 
 def option_types(func: Callable) -> dict[str, Any]:
@@ -259,6 +268,8 @@ def union_members(type_: Any) -> tuple[Any, ...]:
 def _without_none(type_: Any) -> Any:
     """Return an annotation without None, if it is a union with it."""
     members = [x for x in union_members(type_) if x is not type(None)]
+    if not members:
+        return type_
     return functools.reduce(lambda a, b: a | b, members) \
         if len(members) > 1 else members[0]
 
@@ -331,11 +342,39 @@ def problem(value: Any, type_: Any) -> str | None:
         if typing.get_origin(type_) is Literal:
             choices = ', '.join(repr(x) for x in typing.get_args(type_))
             return f"must be one of {choices}; it is {value!r}"
+        if (item := _item_problem(value, type_)) is not None:
+            return item
         return f"must be of type {describe_type(type_)}; it is {value!r}"
     bounds = [_bound(x) for x in bounds]
     if not all(check(value) for _, check in bounds):
         within = ' and '.join(words for words, _ in bounds)
         return f"must be {within}; it is {value!r}"
+    return None
+
+
+def _item_problem(value: Any, type_: Any) -> str | None:
+    """
+    Return what is wrong with the first wrong item of a sequence of a
+    sequence annotation (e.g. "item [1] must be greater than 0; it is -2",
+    or "item [1][0] ..." in a sequence of sequences), or None if the value
+    is not a sequence of one, or no item is wrong.
+    """
+    if type(value) is np.ndarray:
+        value = value.tolist()
+    origin = typing.get_origin(type_)
+    args = typing.get_args(type_)
+    if not isinstance(value, list | tuple) or origin not in (
+            list, tuple, collections.abc.Sequence):
+        return None
+    # Of the tuples, only those of any length (e.g. tuple[int, ...])
+    if origin is tuple and (len(args) != 2 or args[1] is not Ellipsis):
+        return None
+    item_type = args[0] if args else Any
+    for i, item in enumerate(value):
+        if (wrong := problem(item, item_type)) is not None:
+            inner = wrong.removeprefix('item ') if wrong.startswith(
+                'item [') else f' {wrong}'
+            return f"item [{i}]{inner}"
     return None
 
 

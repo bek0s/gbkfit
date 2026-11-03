@@ -218,6 +218,22 @@ def test_describe_type(type_, label):
     assert typeutils.describe_type(type_) == label
 
 
+def test_describe_type_keeps_modules_whose_names_end_in_types():
+    Foo = type('Foo', (), {'__module__': 'mytypes'})
+    assert typeutils.describe_type(list[Foo]) == 'list[mytypes.Foo]'
+
+
+@pytest.mark.parametrize('value, type_, message', [
+    ([1, -2], Sequence[Annotated[float, Gt(0)]],
+     "item [1] must be greater than 0; it is -2"),
+    ([[1, 2], [3, -1]], Sequence[Sequence[Annotated[float, Gt(0)]]],
+     "item [1][1] must be greater than 0; it is -1"),
+    ((1, 'x'), tuple[int, ...], "item [1] must be of type int; it is 'x'"),
+    (1, type(None), "must be of type None; it is 1")])
+def test_problems_say_which_item_is_wrong(value, type_, message):
+    assert typeutils.problem(value, type_) == message
+
+
 class Beam(parseutils.Serializable):
     """A beam given by its axes, or by a file."""
 
