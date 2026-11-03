@@ -36,4 +36,4 @@ target_compile_definitions(
   EXTENSION_NAME=_host
 )
 
-install(TARGETS _host LIBRARY DESTINATION ${GBKFIT_NATIVE_INSTALL_DIR})
+install(TARGETS _host LIBRARY DESTINATION gbkfit/driver/drivers/host)

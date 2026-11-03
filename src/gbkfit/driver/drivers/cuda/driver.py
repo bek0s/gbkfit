@@ -41,7 +41,7 @@ class DriverCuda(Driver):
     """
 
     requires = {
-        'gbkfit.driver.native._cuda':
+        'gbkfit.driver.drivers.cuda._cuda':
             "a build of gbkfit with its CUDA module (CMake option "
             "GBKFIT_CUDA, see the installation guide)",
         'cupy': "pip install 'gbkfit[cuda]'"}
@@ -198,8 +198,8 @@ class DriverCuda(Driver):
             out[..., indices] = x
 
     def native_module(self) -> types.ModuleType:
-        import gbkfit.driver.native._cuda as native_module
-        return native_module
+        from . import _cuda
+        return _cuda
 
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         from ._fft import DriverFFTCuda

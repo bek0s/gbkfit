@@ -52,4 +52,4 @@ target_compile_definitions(
   EXTENSION_NAME=_cuda
 )
 
-install(TARGETS _cuda LIBRARY DESTINATION ${GBKFIT_NATIVE_INSTALL_DIR})
+install(TARGETS _cuda LIBRARY DESTINATION gbkfit/driver/drivers/cuda)

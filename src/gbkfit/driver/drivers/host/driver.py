@@ -25,7 +25,7 @@ class DriverHost(Driver):
     """
 
     requires = {
-        'gbkfit.driver.native._host':
+        'gbkfit.driver.drivers.host._host':
             "a build of gbkfit with its host module (CMake option "
             "GBKFIT_HOST, on by default)"}
 
@@ -135,8 +135,8 @@ class DriverHost(Driver):
         out[..., indices] = x
 
     def native_module(self) -> types.ModuleType:
-        import gbkfit.driver.native._host as native_module
-        return native_module
+        from . import _host
+        return _host
 
     def fft(self, dtype: npt.DTypeLike) -> DriverFFT:
         from ._fft import DriverFFTHost

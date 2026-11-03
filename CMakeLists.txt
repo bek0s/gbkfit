@@ -25,10 +25,11 @@ endif()
 
 find_package(Python 3.12 REQUIRED
   COMPONENTS Interpreter Development.Module Development.SABIModule)
+# Ask Python where nanobind is, so that builds outside pip find it too
+execute_process(
+  COMMAND "${Python_EXECUTABLE}" -m nanobind --cmake_dir
+  OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE nanobind_ROOT)
 find_package(nanobind CONFIG REQUIRED)
-
-# Python package directory the native modules are installed into
-set(GBKFIT_NATIVE_INSTALL_DIR gbkfit/driver/native)
 
 add_subdirectory(src/native/core)
 
@@ -40,4 +41,6 @@ if(GBKFIT_CUDA)
   add_subdirectory(src/native/cuda)
 endif()
 
+# The bridge between Python and DNest4, always built.
+# The code of DNest4 itself is in src/native/third_party/dnest4.
 add_subdirectory(src/native/dnest4)
