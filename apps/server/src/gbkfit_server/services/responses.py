@@ -34,6 +34,19 @@ __all__ = [
 _ACROSS = 129
 _MOST = 1025
 
+# The most pixels across a PSF drawn at its own scale, of its core and as
+# much of its wings as they hold (a view, sent again as its options change)
+_OWN_MOST = 257
+
+# The fewest pixels across the core of a PSF (its region above half its
+# peak) drawn at its own scale; the pixels across the window about its
+# centre that finds them, how many times finer a core of one pixel is
+# drawn next, and the most tries (see _own_step)
+_CORE = 12
+_PROBE = 65
+_ZOOM = 16
+_TRIES = 30
+
 
 @dataclasses.dataclass
 class PSFView:
@@ -86,8 +99,8 @@ class Responses:
     ) -> PSFView:
         """
         Draw a PSF of the options of a piece of a project: on pixels of a
-        size (e.g. those of the data; arcsec), or of its own scale (about
-        _ACROSS pixels across).
+        size (e.g. those of the data; arcsec), or of its own scale (see
+        _own_step).
 
         Raises
         ------
@@ -96,19 +109,24 @@ class Responses:
             along the spectral axis, or it needs too many pixels.
         """
         psf = self._load(psf_parser, project, options, 'PSF')
-        if step is None:
-            extent = max(psf.size((1.0, 1.0)))
-            step = (extent / _ACROSS, extent / _ACROSS)
-        if min(step) <= 0:
-            raise Invalid(f"the size of the pixels must be positive: {step}")
         try:
-            size = psf.size(step)
-            if max(size) > _MOST:
-                raise Invalid(
-                    f"the PSF needs {size[0]} x {size[1]} pixels of "
-                    f"{step[0]:g} x {step[1]:g} arcsec; at most {_MOST}")
+            own = _own_step(psf)
+            if step is None:
+                step = (own, own)
+                size = _size_at_most(psf, step, _OWN_MOST)
+            else:
+                if min(step) <= 0:
+                    raise Invalid(
+                        f"the size of the pixels must be positive: {step}")
+                size = psf.size(step)
+                if max(size) > _MOST:
+                    raise Invalid(
+                        f"the PSF needs {size[0]} x {size[1]} pixels of "
+                        f"{step[0]:g} x {step[1]:g} arcsec; at most {_MOST}")
             values = psf.asarray(step, size)
-        except RuntimeError as e:
+        except (RuntimeError, OverflowError) as e:
+            # (an overflow: the extent of wings far too heavy, e.g. of a
+            # Moffat of a beta very close to 1)
             raise Invalid(f"cannot draw the PSF: {e}") from e
         try:
             beam_area = psf.beam_area()
@@ -119,7 +137,7 @@ class Responses:
             else float(np.sqrt(4 * np.log(2) * beam_area / np.pi))
         return PSFView(
             np.asarray(values, dtype=np.float32), tuple(step), beam_area,
-            fwhm, None if beam_area is None else _axes(psf))
+            fwhm, None if beam_area is None else _axes(psf, own))
 
     def lsf(
             self,
@@ -213,23 +231,63 @@ def _files(options: Any) -> Iterator[str]:
             yield from _files(item)
 
 
-# The pixels across a PSF drawn to measure its widths (see _axes)
-_FINE = 401
+# How many times finer than its own scale a PSF is drawn to measure its
+# widths (see _axes)
+_FINER = 3
 
 
-def _axes(psf: Any) -> tuple[float, float, float | None]:
+def _size_at_most(
+        psf: Any, step: tuple[float, float], most: int = _MOST
+) -> tuple[int, int]:
+    """
+    Return the size of the array of a PSF on pixels of a size, cut to the
+    most pixels (odd, as its sizes are) along each axis: the heavy wings
+    of some (e.g. a Moffat of a small beta) reach far beyond its core.
+    """
+    nx, ny = psf.size(step)
+    return min(nx, most), min(ny, most)
+
+
+def _core(values: np.ndarray) -> int:
+    """
+    Return the pixels across the core of a PSF drawn (its region above
+    half its peak), along x or y, the wider.
+    """
+    y, x = np.nonzero(values >= values.max() / 2)
+    return int(max(np.ptp(x), np.ptp(y))) + 1
+
+
+def _own_step(psf: Any) -> float:
+    """
+    Return the size of the pixels of a PSF at its own scale (arcsec):
+    those of the whole of it (its extent) across _ACROSS pixels, or finer,
+    so that its core is at least _CORE pixels across (e.g. a Moffat of a
+    small beta, whose wings reach far beyond its core: the whole of it on
+    _ACROSS pixels would put its core on one, or on a tiny part of one),
+    drawn then out to _OWN_MOST pixels. The core is measured on a window
+    about its centre, _ZOOM times finer while it is on one pixel.
+    """
+    step = max(psf.size((1.0, 1.0))) / _ACROSS
+    for _ in range(_TRIES):
+        core = _core(psf.asarray((step, step), (_PROBE, _PROBE)))
+        if core >= _CORE:
+            break
+        step *= 1 / _ZOOM if core == 1 else core / _CORE
+    return step
+
+
+def _axes(psf: Any, own: float) -> tuple[float, float, float | None]:
     """
     Return the full widths at half maximum of a PSF along its major and
     minor axes (arcsec), and the position angle of its major axis
     (degrees, from north through east, in [0, 180); none if it is round
     to 1%): those of the ellipse of the second moments of the region
-    above half its peak, drawn on pixels of 1/_FINE of its extent (for
-    a filled ellipse, the variance along an axis is a quarter of the
-    square of its semi-axis).
+    above half its peak, drawn on pixels _FINER times finer than those
+    of its own scale (own; see _own_step) (for a filled ellipse, the
+    variance along an axis is a quarter of the square of its semi-axis).
     """
-    extent = max(psf.size((1.0, 1.0)))
-    step = extent / _FINE
-    values = psf.asarray((step, step))
+    step = own / _FINER
+    values = psf.asarray((step, step), _size_at_most(psf, (step, step)))
     y, x = np.mgrid[:values.shape[0], :values.shape[1]]
     half = values >= values.max() / 2
     xs, ys = x[half] * step, y[half] * step
