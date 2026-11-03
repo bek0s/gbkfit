@@ -45,19 +45,19 @@ function glance(value: unknown): string {
 // What a stage of an observation is, at a glance (and its defaults)
 function stageGlance(key: string, options: Options): string {
   const value = options[key];
-  if (key === 'galaxies') return value ? glance(value) : 'all of the setup';
+  if (key === 'galaxies') return value ? glance(value) : 'All of the setup';
   if (key === 'instrument') {
     const instrument = (value ?? {}) as Options;
     const parts = ['psf', 'lsf', 'primary_beam'].filter((part) => instrument[part] != null).map((part) => `${part}: ${glance(instrument[part])}`);
-    return parts.join(' · ') || 'a perfect one';
+    return parts.join(' · ') || 'A perfect one';
   }
   if (key === 'observable') {
     const observable = (value ?? {}) as Options;
     const grid = Array.isArray(observable.size) ? ` · ${(observable.size as number[]).join(' × ')}` : options.data ? ' · the grid of the data' : '';
     return `${glance(observable.type)}${grid}`;
   }
-  if (key === 'data') return value == null ? 'none: a model, or mock data' : typeof value === 'string' ? `the dataset ${value}` : `in place · ${glance(value)}`;
-  if (key === 'likelihood') return value == null ? (options.data ? 'Gaussian (the default)' : 'none (no data)') : glance(value);
+  if (key === 'data') return value == null ? 'None: a model, or mock data' : typeof value === 'string' ? `The dataset ${value}` : `In place · ${glance(value)}`;
+  if (key === 'likelihood') return value == null ? (options.data ? 'Gaussian (the default)' : 'None (no data)') : glance(value);
   return glance(value);
 }
 

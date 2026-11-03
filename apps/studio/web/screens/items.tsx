@@ -328,14 +328,14 @@ export function FilesCard({
                         }))}
                         target={
                           <Button kind="small" title="An array of the file of the data, of its shape" right="▾">
-                            use an array of the data
+                            Use an array of the data
                           </Button>
                         }
                       />
                     ))}
                 </>
               ) : (
-                <span className="note">none</span>
+                <span className="note">None</span>
               )}
             </div>
           );
@@ -444,14 +444,14 @@ export function FileSources({ project, onFile }: { project: string; onFile: (pat
           if (file) send(file);
         }}
       />
-      {sent !== null && <span className="note">uploading {Math.round(100 * sent)}%</span>}
-      {importing.isPending && <span className="note">copying…</span>}
+      {sent !== null && <span className="note">Uploading {Math.round(100 * sent)}%</span>}
+      {importing.isPending && <span className="note">Copying…</span>}
       {error && <span className="error">{error}</span>}
       {picking && (
         <FilePicker
           title="Import a file"
           root="."
-          label="workspace"
+          label="Workspace"
           onClose={() => setPicking(false)}
           onChoose={(path) => {
             setPicking(false);
@@ -490,26 +490,26 @@ export function Facts({
   return (
     <Panel id="dataset-facts" title="What GBKFIT reads">
       <dl className="facts">
-        <dt>shape</dt>
+        <dt>Shape</dt>
         <dd>{z === undefined ? kept(array).join(' × ') : `${x} × ${y} pixels × ${z} channels`}</dd>
-        <dt>pixel</dt>
-        <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'unknown'}</dd>
+        <dt>Pixel</dt>
+        <dd>{array.step ? `${significant(Math.abs(array.step[0]), 3)}″ × ${significant(Math.abs(array.step[1]), 3)}″` : 'Unknown'}</dd>
         {z !== undefined && (
           <>
-            <dt>spectral</dt>
+            <dt>Spectral</dt>
             <dd>
-              {keptAxes(array)[2] || 'no type'}
+              {keptAxes(array)[2] || 'No type'}
               {array.step && array.step.length === 3 && ` · ${significant(Math.abs(array.step[2]), 3)} km/s a channel`}
             </dd>
           </>
         )}
-        <dt>unit</dt>
-        <dd>{array.unit ?? 'none in the header'}</dd>
-        <dt>beam</dt>
+        <dt>Unit</dt>
+        <dd>{array.unit ?? 'None in the header'}</dd>
+        <dt>Beam</dt>
         <dd>{beamText(array.beam)}</dd>
         {array.rms !== null && (
           <>
-            <dt>noise</dt>
+            <dt>Noise</dt>
             <dd>{significant(array.rms, 3)} (the header)</dd>
           </>
         )}

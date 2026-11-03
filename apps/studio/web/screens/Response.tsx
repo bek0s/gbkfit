@@ -9,12 +9,13 @@
 // Ctrl+S).
 import { Combobox, Menu, UnstyledButton } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useDescription, useLsfView, usePiece, useProject, usePsfView, useReferences, useSchema, useUpdateBlock } from '../api/queries';
 import { ColourBar } from '../components/ColourBar';
 import { joinPath } from '../components/FilePicker';
 import { significant } from '../components/format';
 import { CutPlot } from '../components/CutPlot';
+import { contourPath, widthAt, type Width } from '../components/contour';
 import { LinkIcon, UnlinkIcon } from '../components/icons';
 import { MapView } from '../components/MapView';
 import { SchemaForm, typeTitle, type Defs, type Options } from '../components/SchemaForm';
@@ -22,8 +23,7 @@ import { SpectrumPlot } from '../components/SpectrumPlot';
 import { Button, NavItem } from '../components/ui/basics';
 import { Segments } from '../components/ui/inputs';
 import { Panel } from '../components/ui/panel';
-import { SidePanes } from '../components/ui/panes';
-import { BlockMenu } from '../shell/BlockMenu';
+import { useBlockHead } from '../shell/BlockMenu';
 import { kindOf } from '../shell/blocks';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
@@ -120,17 +120,18 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   const psfView = usePsfView(project ?? '', settled ?? {}, pairOf(step), family === 'psf' && project !== null && settled !== undefined);
   const lsfView = useLsfView(project ?? '', settled ?? {}, widthOf(step), family === 'lsf' && project !== null && settled !== undefined);
   const used: Step = family === 'psf' ? (psfView.data?.step ?? null) : lsfView.data ? [lsfView.data.step] : null;
+  const head = useBlockHead(project ?? '', folder, name);
   if (project === null || path === null) return null;
   const defs = (schema.data?.$defs ?? {}) as Defs;
   return (
-    <section className="screen">
+    <section className="screen response-screen">
       <div className="screen-head">
         <div>
           <div className="eyebrow">
             {kindOf(folder)}
             {options && typeof options.type === 'string' ? ` · ${typeTitle(options.type)}` : ''}
           </div>
-          <h1>{name}</h1>
+          {head.title}
         </div>
         <div className="head-actions">
           {dirty && <span className="why">Not saved</span>}
@@ -139,51 +140,44 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
             Revert
           </Button>
           <Button kind="primary" title="Save (Ctrl+S)" disabled={!dirty || update.isPending} onClick={save}>
-            {update.isPending ? 'Saving…' : 'Save'}
+            Save
           </Button>
-          <BlockMenu project={project} folder={folder} name={name} />
+          {head.menu}
         </div>
       </div>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {schema.error && <p className="error screen-error">{schema.error.message}</p>}
       {options !== undefined && (
-        <div className="screen-body dataset">
-          <SidePanes
-            width={440}
-            main={(
-              <Preview
-                family={family}
-                project={project}
-                options={settled ?? options}
-                step={step}
-                pixels={<DrawnOn family={family} project={project} path={path} drawn={drawn} onDrawn={setDrawn} used={used} />}
-                problem={
-                  drawn.source === 'dataset' ? (
-                    <DatasetStep key={drawn.name} family={family} project={project} name={drawn.name} step={ofData} onStep={setOfData} />
-                  ) : drawn.source === 'observation' ? (
-                    <ObservationStep key={drawn.name} family={family} project={project} name={drawn.name} step={ofData} onStep={setOfData} />
-                  ) : null
-                }
-              />
-            )}
-            side={
-              <div className="col">
-                <Panel id={`${family}-options`} title="Options">
-                  {schema.data ? (
-                    <SchemaForm defs={defs} def={family} project={project} value={options} onChange={setDraft} starts={STARTS} sliders />
-                  ) : (
-                    <p className="note">Reading the options of the library…</p>
-                  )}
-                </Panel>
-                {family === 'psf' ? (
-                  <PsfProperties project={project} options={settled ?? options} step={step} />
-                ) : (
-                  <LsfProperties project={project} options={settled ?? options} step={step} />
-                )}
-                <NamedBy path={path} />
-              </div>
+        <div className="screen-body response-layout">
+          <Preview
+            family={family}
+            project={project}
+            options={settled ?? options}
+            step={step}
+            pixels={<DrawnOn family={family} project={project} path={path} drawn={drawn} onDrawn={setDrawn} used={used} />}
+            problem={
+              drawn.source === 'dataset' ? (
+                <DatasetStep key={drawn.name} family={family} project={project} name={drawn.name} step={ofData} onStep={setOfData} />
+              ) : drawn.source === 'observation' ? (
+                <ObservationStep key={drawn.name} family={family} project={project} name={drawn.name} step={ofData} onStep={setOfData} />
+              ) : null
             }
           />
+          <div className="col">
+            <Panel id={`${family}-options`} title="Options">
+              {schema.data ? (
+                <SchemaForm defs={defs} def={family} project={project} value={options} onChange={setDraft} starts={STARTS} sliders />
+              ) : (
+                <p className="note">Reading the options of the library…</p>
+              )}
+            </Panel>
+            {family === 'psf' ? (
+              <PsfProperties project={project} options={settled ?? options} step={step} />
+            ) : (
+              <LsfProperties project={project} options={settled ?? options} step={step} />
+            )}
+            <NamedBy path={path} />
+          </div>
         </div>
       )}
     </section>
@@ -228,7 +222,7 @@ function DrawnOn({
   useEffect(() => {
     if (drawn.source !== 'typed' && used !== null && used.length === 2 && used[0] !== used[1]) setLinked(false);
   }, [used?.join()]);
-  const source = drawn.source === 'own' ? 'fine' : drawn.source === 'typed' ? '' : drawn.name;
+  const source = drawn.source === 'own' ? 'Fine' : drawn.source === 'typed' ? '' : drawn.name;
   const choose = (next: Drawn) => {
     onDrawn(next);
     setOpened(false);
@@ -237,7 +231,7 @@ function DrawnOn({
   // marked; none, said)
   const items = (kind: 'dataset' | 'observation', names: string[], note?: (name: string) => string | undefined) =>
     names.length === 0 ? (
-      <Menu.Item disabled>none in the project</Menu.Item>
+      <Menu.Item disabled>None in the project</Menu.Item>
     ) : (
       names.map((name) => (
         <Menu.Item
@@ -250,15 +244,13 @@ function DrawnOn({
         </Menu.Item>
       ))
     );
-  const field = (value: string, onChange: (value: string) => void, label: string) => (
-    <input className="response-pixels-field" value={value} onChange={(event) => onChange(event.currentTarget.value)} inputMode="decimal" aria-label={label} title={label} />
-  );
+  const unit = psf ? '″' : 'km/s';
   return (
     <Menu opened={opened} onChange={(next) => !next && setOpened(false)} position="bottom-end" offset={4} width="target" classNames={{ dropdown: 'ui-menu' }}>
       <Menu.Target>
         <div className="response-pixels" data-family={family}>
-          <span className="response-pixels-label">{psf ? 'pixel size' : 'channel width'}</span>
-          {field(x, (next) => onDrawn({ source: 'typed', x: next, y: linked || !psf ? next : y }), psf ? 'The size of the pixels along x' : units.what)}
+          <span className="response-pixels-label">{psf ? 'Pixel size' : 'Channel width'}</span>
+          <SizeField value={x} unit={unit} label={psf ? 'The size of the pixels along x' : units.what} onChange={(next) => onDrawn({ source: 'typed', x: next, y: linked || !psf ? next : y })} />
           {psf && (
             <>
               <UnstyledButton
@@ -273,10 +265,9 @@ function DrawnOn({
               >
                 {linked ? <LinkIcon /> : <UnlinkIcon />}
               </UnstyledButton>
-              {field(y, (next) => onDrawn({ source: 'typed', x: linked ? next : x, y: next }), 'The size of the pixels along y')}
+              <SizeField value={y} unit={unit} label="The size of the pixels along y" onChange={(next) => onDrawn({ source: 'typed', x: linked ? next : x, y: next })} />
             </>
           )}
-          <span className="response-pixels-unit">{psf ? '″' : 'km/s'}</span>
           <span className="response-pixels-source" title={source}>
             {source}
           </span>
@@ -286,7 +277,7 @@ function DrawnOn({
         </div>
       </Menu.Target>
       <Menu.Dropdown>
-        <Menu.Item onClick={() => choose({ source: 'own' })} data-current={drawn.source === 'own' || undefined} rightSection={<small className="response-pixels-note">to see its shape</small>}>
+        <Menu.Item onClick={() => choose({ source: 'own' })} data-current={drawn.source === 'own' || undefined} rightSection={<small className="response-pixels-note">To see its shape</small>}>
           Fine
         </Menu.Item>
         <Menu.Sub>
@@ -294,7 +285,7 @@ function DrawnOn({
             <Menu.Sub.Item data-current={drawn.source === 'observation' || undefined}>From an observation</Menu.Sub.Item>
           </Menu.Sub.Target>
           <Menu.Sub.Dropdown className="ui-menu">
-            {items('observation', [...observations.filter((o) => users.has(o)), ...observations.filter((o) => !users.has(o))], (o) => (users.has(o) ? 'uses it' : undefined))}
+            {items('observation', [...observations.filter((o) => users.has(o)), ...observations.filter((o) => !users.has(o))], (o) => (users.has(o) ? 'Uses it' : undefined))}
           </Menu.Sub.Dropdown>
         </Menu.Sub>
         <Menu.Sub>
@@ -307,6 +298,50 @@ function DrawnOn({
         <Menu.Label className="response-pixels-hint">Or type a size in the box</Menu.Label>
       </Menu.Dropdown>
     </Menu>
+  );
+}
+
+// A size in the box of what it is drawn on, with its unit: typed, or
+// stepped by the wheel over it or the arrow keys in it, each step about 5%
+// of it (as those of the sliders of widths), to 3 significant digits
+function SizeField({ value, unit, label, onChange }: { value: string; unit: string; label: string; onChange: (value: string) => void }) {
+  const cell = useRef<HTMLLabelElement>(null);
+  // (the value and how it changes as they are now, for the listener of the
+  // wheel, added once)
+  const latest = useRef({ value, onChange });
+  latest.current = { value, onChange };
+  const step = (by: number) => {
+    const now = Number(latest.current.value);
+    if (now > 0) latest.current.onChange(String(Number((now * 10 ** (0.02 * by)).toPrecision(3))));
+  };
+  // (the wheel moves the value, not the page: a listener that is not
+  // passive, which React's is)
+  useEffect(() => {
+    const element = cell.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      step(event.deltaY < 0 ? 1 : -1);
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, []);
+  return (
+    <label ref={cell} className="response-pixels-cell" title={`${label}: type it, or turn the wheel over it`}>
+      <input
+        className="response-pixels-field"
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+          event.preventDefault();
+          step(event.key === 'ArrowUp' ? 1 : -1);
+        }}
+        inputMode="decimal"
+        aria-label={label}
+      />
+      <span className="response-pixels-suffix">{unit}</span>
+    </label>
   );
 }
 
@@ -457,8 +492,8 @@ function Preview({
       <div className="response-tools-end">
         <Segments
           items={[
-            { value: 'linear', label: 'linear' },
-            { value: 'log', label: 'log' },
+            { value: 'linear', label: 'Linear' },
+            { value: 'log', label: 'Log' },
           ]}
           value={scale}
           label="The scale of its values"
@@ -468,7 +503,7 @@ function Preview({
     </div>
   );
   return (
-    <div className="card viewer response">
+    <div className="viewer response">
       {family === 'psf' ? (
         <PsfPreview project={project} options={options} step={step} scale={scale} tools={tools} problem={problem} />
       ) : (
@@ -486,9 +521,18 @@ type PreviewProps = { project: string; options: Options; step: Step; scale: Scal
 function PsfPreview({ project, options, step, scale, tools, problem }: PreviewProps) {
   const view = usePsfView(project, options, pairOf(step));
   // The pixel the cuts go through: under the pointer, or else that clicked
-  // (none: the centre)
+  // (none: the centre), which is kept as its place on the sky (its offset
+  // from the centre, arcsec), so that it stays there on other pixels
   const [hover, setHover] = useState<[number, number] | null>(null);
-  const [pinned, setPinned] = useState<[number, number] | null>(null);
+  const [pin, setPin] = useState<[number, number] | null>(null);
+  // (Esc lets go of the pixel clicked)
+  useEffect(() => {
+    if (pin === null) return;
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setPin(null);
+    // (on the document: window is the window of the map here)
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [pin]);
   const data = view.data;
   if (data === undefined) return <Waiting error={view.error} tools={tools} problem={problem} />;
   const ny = data.values.length;
@@ -514,13 +558,27 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
   // (the map as wide and as tall as the window is on the sky)
   const aspect = ((window[1] - window[0] + 1) * dx) / ((window[3] - window[2] + 1) * dy);
   const inside = (p: [number, number] | null) => p !== null && p[0] < nx && p[1] < ny;
-  const [x, y] = inside(hover) ? hover! : inside(pinned) ? pinned! : [cx, cy];
-  const rowX = scaled(data.values[y] ?? [], peak, scale);
-  const colY = scaled(
-    data.values.map((row) => row[x]),
-    peak,
-    scale,
-  );
+  // (the pixel of the place clicked, on these pixels: the nearest)
+  const clamp = (i: number, n: number) => Math.min(n - 1, Math.max(0, i));
+  const pinned: [number, number] | null = pin === null ? null : [clamp(cx + Math.round(pin[0] / dx), nx), clamp(cy + Math.round(pin[1] / dy), ny)];
+  // (the cuts: through the peak always, through the pixel clicked, which
+  // stays, and through that under the pointer, which follows it; the
+  // readout is of the latter, or else of the former)
+  const shownHover = inside(hover) ? hover : null;
+  const [x, y] = shownHover ?? pinned ?? [cx, cy];
+  const rowOf = (j: number) => scaled(data.values[j] ?? [], peak, scale);
+  const columnOf = (i: number) =>
+    scaled(
+      data.values.map((row) => row[i]),
+      peak,
+      scale,
+    );
+  const through = (p: [number, number] | null, kind: string) => (p === null ? [] : [{ p, kind }]);
+  const cuts = [{ p: [cx, cy] as [number, number], kind: 'peak' }, ...through(pinned, 'pinned'), ...through(shownHover, 'hover')];
+  const linesX = cuts.map(({ p, kind }) => ({ values: rowOf(p[1]), kind }));
+  const linesY = cuts.map(({ p, kind }) => ({ values: columnOf(p[0]), kind }));
+  const marksX = cuts.filter(({ kind }) => kind !== 'peak').map(({ p, kind }) => ({ at: p[0], kind }));
+  const marksY = cuts.filter(({ kind }) => kind !== 'peak').map(({ p, kind }) => ({ at: p[1], kind }));
   // (the offset of a pixel from the centre, arcsec, and its value, in the
   // units of the colour bar: each to a fixed number of decimals, so that
   // they keep still as the pointer moves; a 0 has a blank for its sign)
@@ -530,6 +588,14 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
     return `${v > 0 ? '+' : v < 0 ? '−' : '\u2007'}${Math.abs(v).toFixed(decimals)}″`;
   };
   const fraction = peak > 0 ? (data.values[y]?.[x] ?? 0) / peak : 0;
+  // (the contour at half the peak, on the map, and the width at that level
+  // of the cuts through the peak: its FWHM; not on the cuts on a log scale,
+  // which is for the wings, where half the peak is at the top)
+  const half = contourPath(data.values, peak / 2);
+  const widthOn = (values: number[]): Width | null => {
+    const at = log ? null : widthAt(values, peak / 2);
+    return at && { level: 0.5, from: at[0], to: at[1] };
+  };
   const shown = log ? (fraction > 10 ** FLOOR ? Math.log10(fraction).toFixed(2).replace('-', '−') : `<${FLOOR}`.replace('-', '−')) : fraction.toFixed(3);
   return (
     <div className="response-body">
@@ -537,16 +603,16 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
       {problem}
       <div className="psf-grid" style={{ '--aspect': aspect } as CSSProperties}>
         <div className="psf-tools">{tools}</div>
-        <dl className="psf-at" title="The pixel the cuts go through: under the pointer, or the one clicked (click it again for the centre)">
+        <dl className="psf-at" data-idle={(!inside(hover) && pinned === null) || undefined} title="The pixel under the pointer, or else the one clicked (click it again, or Esc, to let it go)">
           <dt>x</dt>
           <dd>{offset(x, cx, data.step[0])}</dd>
           <dt>y</dt>
           <dd>{offset(y, cy, data.step[1])}</dd>
-          <dt>value</dt>
+          <dt>Value</dt>
           <dd>{shown}</dd>
         </dl>
         <div className="psf-xcut">
-          <CutPlot values={rowX} window={[window[0], window[1]]} limits={range} at={x} label="The cut along x" />
+          <CutPlot lines={linesX} window={[window[0], window[1]]} limits={range} marks={marksX} width={widthOn(data.values[cy] ?? [])} label="The cuts along x" />
         </div>
         <div className="psf-map">
           <MapView
@@ -556,18 +622,30 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
             window={nx > 1 ? window : null}
             drag="pan"
             mark={pinned ?? undefined}
+            contour={half}
             onHover={setHover}
-            onPick={(px, py) => setPinned(pinned && pinned[0] === px && pinned[1] === py ? null : [px, py])}
+            onPick={(px, py) => setPin(pinned && pinned[0] === px && pinned[1] === py ? null : [(px - cx) * dx, (py - cy) * dy])}
             label="The PSF"
           />
+          {half && <FwhmKey title="The contour at half the peak, and the widths at half the peak of the cuts through it: its FWHM" />}
         </div>
         <div className="psf-ycut">
-          <CutPlot values={colY} window={[window[2], window[3]]} limits={range} at={y} vertical label="The cut along y" />
+          <CutPlot lines={linesY} window={[window[2], window[3]]} limits={range} marks={marksY} width={widthOn(data.values.map((row) => row[cx]))} vertical label="The cuts along y" />
         </div>
         <div className="psf-bar">
-          <ColourBar range={range} diverging={false} horizontal unit={log ? 'log₁₀ of the fraction of the peak' : 'fraction of the peak'} />
+          <ColourBar range={range} diverging={false} horizontal unit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'} />
         </div>
       </div>
+    </div>
+  );
+}
+
+// The key of the FWHM drawn on a preview, in a corner of it
+function FwhmKey({ title }: { title: string }) {
+  return (
+    <div className="fwhm-key" title={title}>
+      <span className="fwhm-key-line" />
+      FWHM
     </div>
   );
 }
@@ -586,16 +664,26 @@ function PsfProperties({ project, options, step }: { project: string; options: O
         <dl className="facts">
             <dt title="The full width at half maximum, along the major and the minor axes">FWHM</dt>
             <dd>
-              {axes === null ? 'none: a point' : axes[2] === null ? `${significant(axes[0], 3)}″, round` : `${significant(axes[0], 3)}″ × ${significant(axes[1], 3)}″`}
+              {axes === null ? (
+                <span className="word">None (a point)</span>
+              ) : axes[2] === null ? (
+                <>
+                  {significant(axes[0], 3)}″<span className="word">, round</span>
+                </>
+              ) : (
+                `${significant(axes[0], 3)}″ × ${significant(axes[1], 3)}″`
+              )}
             </dd>
             {axes && axes[2] !== null && (
               <>
-                <dt title="The position angle of the major axis">major axis</dt>
-                <dd>at {significant(axes[2], 3)}° (east of north)</dd>
+                <dt title="The position angle of the major axis">Major axis</dt>
+                <dd>
+                  {significant(axes[2], 3)}° <span className="word">(east of north)</span>
+                </dd>
               </>
             )}
-            <dt title="The area under the PSF when its peak is 1 (its solid angle): it converts data in Jy/beam, as radio data are, to flux per arcsec²">beam area</dt>
-            <dd>{data.beam_area === null ? 'none' : `${significant(data.beam_area, 4)} arcsec²`}</dd>
+            <dt title="The area under the PSF when its peak is 1 (its solid angle): it converts data in Jy/beam, as radio data are, to flux per arcsec²">Beam area</dt>
+            <dd>{data.beam_area === null ? 'None' : `${significant(data.beam_area, 4)} arcsec²`}</dd>
           </dl>
       )}
     </Panel>
@@ -610,6 +698,9 @@ function LsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
   const centre = Math.floor(n / 2);
   const peak = Math.max(...data.values);
   const log = scale === 'log';
+  // (its width at half its peak: its FWHM; not on a log scale, which is
+  // for the wings, where half the peak is at the top)
+  const width = log ? null : widthAt(data.values, peak / 2);
   return (
     <div className="response-body">
       {view.error && <p className="error">{view.error.message}</p>}
@@ -620,11 +711,14 @@ function LsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
           values={scaled(data.values, peak, scale)}
           spectral={data.values.map((_, i) => (i - centre) * data.step)}
           unit="km/s"
-          valueUnit={log ? 'log₁₀ of the fraction of the peak' : 'fraction of the peak'}
+          valueUnit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'}
           channel={centre}
           limits={log ? [FLOOR, 0] : null}
+          width={width && { level: 0.5, from: width[0], to: width[1] }}
           onPick={() => {}}
-        />
+        >
+          {width && <FwhmKey title="The width at half the peak: its FWHM" />}
+        </SpectrumPlot>
       </div>
     </div>
   );
@@ -641,7 +735,7 @@ function LsfProperties({ project, options, step }: { project: string; options: O
       ) : (
         <dl className="facts">
           <dt title="The full width at half maximum">FWHM</dt>
-          <dd>{data.fwhm === null ? 'narrower than a channel' : `${significant(data.fwhm, 3)} km/s`}</dd>
+          <dd>{data.fwhm === null ? <span className="word">Narrower than a channel</span> : `${significant(data.fwhm, 3)} km/s`}</dd>
           {data.fwhm !== null && (
             <>
               <dt title="The σ of a Gaussian of the same FWHM">σ</dt>

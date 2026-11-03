@@ -1,7 +1,9 @@
 // Overlays (of Mantine; see theme.ts): a dialog over the page, shown while
 // it is mounted (Escape, or a click beside it, closes it; it keeps the
 // focus while open, and gives it back as it closes), and a menu that drops
-// from a button (its items move with the arrow keys).
+// from a button (its items move with the arrow keys): as wide as it, from
+// its left, or, of a small button (e.g. of an icon), as wide as its items,
+// from its right.
 import { Menu, Modal } from '@mantine/core';
 import type { ReactElement, ReactNode } from 'react';
 
@@ -17,9 +19,30 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
 // the items after it
 export type MenuEntry = { label: string; onClick: () => void; current?: boolean } | { section: string };
 
-export function DropMenu({ target, entries, label }: { target: ReactElement; entries: MenuEntry[]; label: string }) {
+export function DropMenu({
+  target,
+  entries,
+  label,
+  at = 'start',
+  returnFocus = true,
+}: {
+  target: ReactElement;
+  entries: MenuEntry[];
+  label: string;
+  at?: 'start' | 'end';
+  // Whether the target has the focus again as it closes (not when an entry
+  // gives it to something else, e.g. an input)
+  returnFocus?: boolean;
+}) {
   return (
-    <Menu position="bottom-start" width="target" offset={4} classNames={{ dropdown: 'ui-menu' }} aria-label={label}>
+    <Menu
+      position={at === 'end' ? 'bottom-end' : 'bottom-start'}
+      width={at === 'end' ? undefined : 'target'}
+      offset={4}
+      returnFocus={returnFocus}
+      classNames={{ dropdown: 'ui-menu' }}
+      aria-label={label}
+    >
       <Menu.Target>{target}</Menu.Target>
       <Menu.Dropdown>
         {entries.map((entry, i) =>

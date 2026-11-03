@@ -150,7 +150,7 @@ export function MapsViewer({
           </div>
           <div className="map-status">
             {hover !== null
-              ? `pixel ${hover[0]}, ${hover[1]} · ${hovered === undefined || !Number.isFinite(hovered) ? 'no value' : `${significant(hovered, 4)} ${layer.unit ?? ''}`}`
+              ? `Pixel ${hover[0]}, ${hover[1]} · ${hovered === undefined || !Number.isFinite(hovered) ? 'no value' : `${significant(hovered, 4)} ${layer.unit ?? ''}`}`
               : ''}
           </div>
         </div>

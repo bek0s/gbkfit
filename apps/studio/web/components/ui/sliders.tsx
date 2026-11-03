@@ -77,9 +77,9 @@ export function ValueSlider({
       step={step}
       value={value === null ? min : Math.min(max, Math.max(min, value))}
       onChange={(x) => onChange(x <= min ? null : x)}
-      label={(x) => (x <= min ? 'none' : format(x))}
+      label={(x) => (x <= min ? 'None' : format(x))}
       marks={[
-        { value: min, label: 'none' },
+        { value: min, label: 'None' },
         { value: max, label: format(max) },
       ]}
       thumbLabel={label}

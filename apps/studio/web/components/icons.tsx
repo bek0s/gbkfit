@@ -117,3 +117,12 @@ export const Logo = () => (
     <circle cx="12" cy="12" r="2.2" />
   </svg>
 );
+
+// More (the menu of a block): three dots, in a row
+export const MoreIcon = () => (
+  <Icon>
+    <circle cx="5" cy="12" r="1.3" fill="currentColor" />
+    <circle cx="12" cy="12" r="1.3" fill="currentColor" />
+    <circle cx="19" cy="12" r="1.3" fill="currentColor" />
+  </Icon>
+);

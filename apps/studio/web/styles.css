@@ -98,6 +98,21 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .name-input { margin-top: 2px; width: min(420px, 100%); border: 0; border-bottom: 1px dashed var(--line2); background: transparent; padding: 0 0 2px; font: 600 21px/1.2 var(--display); }
 .name-input:focus { outline: none; border-bottom-color: var(--accent); }
 .head-actions { margin-left: auto; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+/* (the menu of a block: a square button of its icon) */
+.head-actions .ui-button[data-more] { width: 30px; padding: 0; }
+.head-actions .ui-button[data-more] .icon { width: 16px; height: 16px; }
+/* (the name of a block, which a click renames: framed as it is hovered,
+   an input laid over the name typed as it is renamed, out of the flow, so
+   that only the name sizes the box, which keeps its place and size; a
+   little room past the name for the caret) */
+.block-title { display: flex; align-items: baseline; gap: 10px; }
+.block-title-box { position: relative; margin-left: -5px; border: 1px solid transparent; border-radius: 4px; cursor: text; }
+.block-title:not([data-renaming]) .block-title-box:hover { border-color: var(--line2); }
+.block-title[data-renaming] .block-title-box { border-color: var(--accent); background: var(--raise); }
+.block-title-text { display: block; padding: 0 6px 0 4px; white-space: pre; }
+.block-title[data-renaming] .block-title-text { visibility: hidden; }
+.block-title-input { position: absolute; inset: 0; box-sizing: border-box; width: 100%; height: 100%; margin: 0; padding: 0 4px; border: 0; background: transparent; color: var(--fg); font: inherit; letter-spacing: inherit; outline: none; }
+.block-title-error { font: 12px var(--sans); }
 .why { display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--fg); }
 .why::before { content: '!'; width: 16px; height: 16px; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 11px var(--sans); }
 .screen-error { padding: 8px 18px 0; }
@@ -110,18 +125,19 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .ui-panes > .mantine-Splitter-handle::after { content: ''; position: absolute; top: 12px; bottom: 12px; left: 50%; width: 2px; margin-left: -1px; border-radius: 1px; background: transparent; transition: background .12s; }
 .ui-panes > .mantine-Splitter-handle:hover::after, .ui-panes > .mantine-Splitter-handle[data-active]::after, .ui-panes > .mantine-Splitter-handle:focus-visible::after { background: var(--accent); }
 .ui-panes > .mantine-Splitter-handle:focus-visible { outline: none; }
-/* (the button that folds the side pane, in the gap before it, at its top;
-   it stays there, at the right edge, as the pane folds) */
-.ui-panes-side { position: relative; overflow: visible; }
-.ui-panes-fold { position: absolute; top: 14px; left: -14px; z-index: 2; width: 14px; height: 28px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line2); border-radius: 4px; background: var(--panel); color: var(--muted); font-size: 14px; line-height: 1; cursor: pointer; }
-.ui-panes-fold:hover { color: var(--fg); border-color: var(--accent); }
-.ui-panes-side[data-folded] > :not(.ui-panes-fold) { display: none; }
+.ui-panes-box { height: 100%; min-width: 0; min-height: 0; }
+/* (the side pane under the main one, of a window too narrow for both: the
+   main one fills the height, and the two scroll as one) */
+.ui-panes-stacked { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 14px; overflow: auto; }
+.ui-panes-stacked-main { flex: 0 0 100%; min-height: 480px; }
+/* (over the column of the screens of datasets, of a height of its own) */
+.screen-body .ui-panes-stacked > .col { flex: none; height: auto; overflow: visible; padding-right: 0; }
 .dataset .viewer { height: 100%; }
 .dataset .col { height: 100%; overflow: auto; padding-right: 4px; scrollbar-gutter: stable; }
 .viewer-empty { display: grid; place-items: center; min-height: 320px; }
 .files { display: grid; gap: 6px; }
 .file-row { display: grid; grid-template-columns: 52px minmax(0, 1fr); align-items: center; gap: 4px 10px; }
-.file-label { font: 11.5px var(--mono); color: var(--faint); }
+.file-label { font: 12px var(--sans); color: var(--faint); }
 .file-error { grid-column: 2; }
 .item-problem { margin: 0; }
 .edit-map { grid-column: 1 / -1; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
@@ -134,8 +150,12 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .slot-file { min-width: 0; font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .slot-value { width: 120px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); padding: 2px 6px; font: 12px var(--mono); color: var(--fg); text-align: right; }
 .facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px 14px; margin: 0; font-size: 12.5px; }
-.facts dt { padding-top: 1px; font: 11px var(--mono); color: var(--faint); }
-.facts dd { margin: 0; min-width: 0; }
+/* (fonts: words for people, e.g. labels, in sans; literal things, e.g.
+   the keys of options, names of files and blocks, and data, e.g. values
+   and sizes, in mono) */
+.facts dt { font: 12px var(--sans); color: var(--faint); }
+.facts dd { margin: 0; min-width: 0; font: 12px var(--mono); }
+.facts .word { font-family: var(--sans); color: var(--muted); }
 .facts + .note { margin-top: 10px; }
 .problems { margin: 0; padding-left: 16px; color: var(--accent); }
 
@@ -238,6 +258,9 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .spectrum { position: relative; margin: 4px 0 0; }
 .spectrum-y { position: absolute; left: 6px; padding: 0 3px; border-radius: 3px; background: color-mix(in srgb, var(--panel2) 85%, transparent); font: 10.5px var(--mono); color: var(--faint); pointer-events: none; }
 .spectrum-y.top { top: 2px; }
+/* (the unit of its values, over it, and its top value under that) */
+.spectrum-title { display: block; margin-bottom: 4px; font-size: 11px; line-height: 14px; color: var(--faint); }
+.spectrum-title ~ .spectrum-y.top { top: 20px; }
 .spectrum-y.bottom { bottom: 22px; }
 .spectrum svg { display: block; width: 100%; height: 110px; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .spectrum polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
@@ -280,7 +303,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
    it; Mantine's own track is the colour of a card in the dark scheme) */
 .ui-segments { height: 30px; padding: 2px; background: var(--panel2); border: 1px solid var(--line2); }
 .ui-segments .mantine-SegmentedControl-indicator { background: var(--raise); border: 1px solid var(--line2); box-shadow: none; }
-.ui-segments .mantine-SegmentedControl-label { padding: 0 10px; height: 24px; display: flex; align-items: center; font-size: 12px; font-weight: 400; color: var(--muted); }
+.ui-segments .mantine-SegmentedControl-label { padding: 0 10px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 400; color: var(--muted); }
 .ui-segments .mantine-SegmentedControl-label[data-active] { color: var(--fg); font-weight: 500; }
 .ui-choice-option { display: grid; gap: 1px; }
 /* (a long description, e.g. of a fitter, in three lines; all of it on hover) */
@@ -310,6 +333,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .schema-member { display: grid; gap: 6px; }
 .schema-row { display: grid; grid-template-columns: 88px minmax(0, 1fr); align-items: center; gap: 8px; }
 .schema-label { font: 12px var(--mono); color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.schema-label.text { font-family: var(--sans); }
 .schema-required { margin-left: 2px; color: var(--accent); }
 .schema-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .schema-field > * { min-width: 0; }
@@ -330,10 +354,23 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .schema-kept { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .schema-kept code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px var(--mono); color: var(--muted); }
 /* The drawn response of an instrument (see Response) */
-.response { overflow: auto; }
-.response > .response-body { flex: 1; min-height: 0; padding-top: 14px; }
-.response-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 14px; }
+/* (its figure and its form side by side, each of a fixed size, centred:
+   a window too small for them scrolls, never squeezes them (safe: from
+   their left edge, which centring would push out of reach); one larger
+   leaves page either side of them, as wide as its scroll bar is at its
+   right, so that they keep the centre. Its head is of their width, its
+   name over the left edge of the figure, its actions at the right edge
+   of the form. The figure is not a card, so that it frames no empty
+   space; its controls level with the top of the cards of the form) */
+.response-screen { --map-size: 440px; --figure: calc(var(--map-size) + 94px); --form: 400px; --layout: calc(var(--figure) + 14px + var(--form)); }
+.response-screen > .screen-head { padding-inline: max(18px, (100% - var(--layout)) / 2); }
+.response-layout { grid-template-columns: var(--figure) var(--form); justify-content: safe center; align-items: start; scrollbar-gutter: stable both-edges; }
+.response > .response-body { padding: 0; }
+.response-tools { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .response-tools-end { display: flex; align-items: center; gap: 8px; }
+/* (the scale, of two halves of one width, so that its chip does not
+   change width as it flips) */
+.response-tools .ui-segments { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; }
 /* (what it is drawn on: one box of a fixed width, framed as an input, of
    its label, its size (x and y, and the link that keeps them one, of a
    PSF), its unit, where it comes from and the button of its menu: its
@@ -344,14 +381,15 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .response-pixels[data-family='psf'] { width: 330px; }
 .response-pixels[data-family='lsf'] { width: 290px; }
 .response-pixels-label { font-size: 12px; color: var(--faint); white-space: nowrap; }
-.response-pixels-field { width: 54px; min-width: 0; padding: 2px 5px; border: 1px solid transparent; border-radius: 3px; background: var(--panel2); color: var(--fg); font: 12px var(--mono); text-align: right; outline: none; }
-.response-pixels-field:hover { border-color: var(--line2); }
-.response-pixels-field:focus { border-color: var(--accent); }
+.response-pixels-cell { display: inline-flex; align-items: baseline; gap: 1px; padding: 2px 5px; border: 1px solid transparent; border-radius: 3px; background: var(--panel2); cursor: text; }
+.response-pixels-cell:hover { border-color: var(--line2); }
+.response-pixels-cell:focus-within { border-color: var(--accent); }
+.response-pixels-field { width: 46px; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--fg); font: 12px var(--mono); text-align: right; outline: none; }
+.response-pixels-suffix { font: 12px var(--mono); color: var(--muted); }
 .response-pixels-link { align-self: center; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; color: var(--faint); }
 .response-pixels-link[data-linked] { color: var(--accent); }
 .response-pixels-link:hover { background: var(--panel2); }
 .response-pixels-link .icon { width: 14px; height: 14px; }
-.response-pixels-unit { margin-left: -3px; font: 12px var(--mono); color: var(--muted); }
 .response-pixels-source { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--faint); text-align: right; }
 .response-pixels-open { align-self: center; display: grid; place-items: center; width: 22px; height: 22px; border-radius: 4px; color: var(--muted); }
 .response-pixels-open:hover { background: var(--panel2); color: var(--fg); }
@@ -359,16 +397,11 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .ui-menu .response-pixels-hint { text-transform: none; letter-spacing: 0; font: 11px var(--sans); }
 .response-problem { margin: 0; }
 .response-body { display: grid; gap: 14px; padding: 0 14px 14px; }
-/* (the body of a preview is the box its plots fill, see container units) */
-.response > .response-body { container-type: size; align-content: center; }
 /* (the map of a PSF, its cut along y at its side and along x under it, as
    tall and as wide as it, and its colour bar) */
-/* (the map as large as the body holds it with its cuts and colour bar,
-   whatever the size of the window: 94px for the y-cut beside it, 168px for
-   its controls, the x-cut and the colour bar above and under it; its
-   width over its height is that on the sky, --aspect, for pixels that are
-   not square) */
-.psf-grid { --map: max(160px, min(100cqw - 94px, (100cqh - 168px) * var(--aspect, 1))); display: grid; grid-template-columns: var(--map) 84px; grid-template-rows: auto 84px auto auto; justify-content: center; gap: 8px 10px; }
+/* (the map --map-size wide, or narrower by its width over its height on
+   the sky, --aspect, for pixels that are not square) */
+.psf-grid { --map: calc(var(--map-size) * min(1, var(--aspect, 1))); display: grid; grid-template-columns: var(--map) 84px; grid-template-rows: auto 84px auto auto; gap: 8px 10px; }
 .psf-tools { grid-row: 1; grid-column: 1 / -1; }
 .psf-xcut { grid-row: 2; grid-column: 1; }
 .psf-map { grid-row: 3; grid-column: 1; }
@@ -378,15 +411,42 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 /* (the pixel the cuts go through, in the corner between them: its digits
    right-aligned and of one width, so that they keep still) */
 .psf-at { grid-row: 2; grid-column: 2; align-self: end; display: grid; grid-template-columns: auto 1fr; gap: 3px 6px; margin: 0; font: 10.5px var(--mono); font-variant-numeric: tabular-nums; }
-.psf-at dt { color: var(--faint); }
+.psf-at dt { font-family: var(--sans); color: var(--faint); }
+/* (blank while the cuts go through the centre, the peak, which it would
+   only repeat; it keeps its place) */
+.psf-at[data-idle] { visibility: hidden; }
 .psf-at dd { margin: 0; text-align: right; color: var(--fg); white-space: nowrap; }
 .cut { position: relative; margin: 0; width: 100%; height: 100%; }
 .cut svg { display: block; width: 100%; height: 100%; background: var(--panel2); border-radius: 4px; }
-.cut polyline { fill: none; stroke: var(--accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.cut .now { stroke: var(--faint); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.response-profiles { display: grid; gap: 8px; }
-/* (as tall as the body holds it, under its axis) */
-.response .spectrum svg { height: max(200px, 100cqh - 80px); }
+/* (its lines: through the peak, the strongest; through the pixel clicked,
+   which stays, a neutral; through that under the pointer, which follows
+   it, the faintest; their marks dashed, in their colours) */
+.cut polyline { fill: none; vector-effect: non-scaling-stroke; }
+.cut polyline.peak { stroke: var(--accent); stroke-width: 1.5; }
+.cut polyline.pinned { stroke: var(--fg2); stroke-width: 1.25; }
+.cut polyline.hover { stroke: var(--muted); stroke-width: 1; opacity: .7; }
+.cut .mark { stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.cut .mark.pinned { stroke: var(--fg2); opacity: .6; }
+.cut .mark.hover { stroke: var(--faint); opacity: .7; }
+/* (the pixel clicked, on the map, in the colour of its cuts) */
+.psf-map .map-mark { stroke: var(--fg2); }
+/* (its FWHM: the contour at half its peak on the map, that level on the
+   cuts, and their key in the corner by the colour bar) */
+.map-contour { fill: none; stroke: var(--fg); stroke-width: 1; opacity: .75; vector-effect: non-scaling-stroke; }
+.cut .width { stroke: var(--fg); stroke-width: 1; opacity: .75; vector-effect: non-scaling-stroke; }
+/* (and of an LSF, that level on its plot, and its key over the plot, at
+   its top right) */
+.response .spectrum .width { stroke: var(--fg); stroke-width: 1; opacity: .75; vector-effect: non-scaling-stroke; }
+/* (the key of the FWHM, in the top right corner of the map or the plot,
+   on a chip, as the map under it may not be dark there) */
+.psf-map { position: relative; }
+.fwhm-key { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; padding: 2px 6px; border-radius: 3px; background: color-mix(in srgb, var(--bg) 70%, transparent); font-size: 11px; color: var(--muted); pointer-events: none; }
+.fwhm-key-line { width: 14px; border-top: 1px solid var(--fg); opacity: .75; }
+.spectrum .fwhm-key { top: 30px; }
+/* (of the size of the figure of a PSF: as wide as its map and y-cut, as
+   tall as its cuts, map and colour bar) */
+.response-profiles { display: grid; gap: 8px; width: var(--figure); }
+.response .spectrum svg { height: calc(var(--map-size) + 100px); }
 /* The drafts of the screens of galaxies and observations (see Drafts) */
 .draft-text { margin: 0; padding: 8px 18px 0; font-size: 12px; }
 .draft-block { min-width: 220px; margin-top: 4px; }

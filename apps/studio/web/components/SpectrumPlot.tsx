@@ -2,13 +2,15 @@
 // spectral axis (or their numbers, if unknown; their range under it), as
 // steps (each channel a bin, to its edges halfway to its neighbours), with
 // a line at the channel shown. The range of its values (given, or else
-// that of the values shown, with 0; see valueRange) shows at its left, in
-// their unit. It shows a window of its channels (all of them by default; the
-// range of its values is that of the window), which the wheel asks to zoom
+// that of the values shown, with 0; see valueRange) shows at its left, and
+// their unit, if given, over it. It shows a window of its channels (all
+// of them by default; the range of its values is that of the window), which the wheel asks to zoom
 // about a channel. A click picks the nearest channel, and a drag a band of
 // channels (first and last, inclusive), which is shown with the channels
-// out of it dimmed. Another band (e.g. a crop) can be marked by its edges.
+// out of it dimmed. Another band (e.g. a crop) can be marked by its edges,
+// and its width at a level (e.g. at half its peak: its FWHM).
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import type { Width } from './contour';
 import { significant } from './format';
 
 const WIDTH = 800;
@@ -28,6 +30,7 @@ export function SpectrumPlot({
   marked = null,
   window = null,
   limits = null,
+  width = null,
   onPick,
   onBand,
   onZoom,
@@ -46,6 +49,7 @@ export function SpectrumPlot({
   window?: [number, number] | null;
   // The range of the values shown (low, high; null: that of the values)
   limits?: [number, number] | null;
+  width?: Width | null;
   onPick: (channel: number) => void;
   onBand?: (band: [number, number]) => void;
   onZoom?: (channel: number, factor: number) => void;
@@ -113,6 +117,7 @@ export function SpectrumPlot({
   const [left, right] = shown ? [Math.min(edge(shown[0], -1), edge(shown[1], 1)), Math.max(edge(shown[0], -1), edge(shown[1], 1))] : [0, 0];
   return (
     <figure className="spectrum">
+      {valueUnit && <span className="spectrum-title">{valueUnit}</span>}
       <svg
         ref={svg}
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
@@ -159,6 +164,7 @@ export function SpectrumPlot({
             <line key={i} className="marked" x1={x} x2={x} y1={0} y2={HEIGHT} />
           ))}
         <line className="zero" x1={PAD.left} x2={WIDTH - PAD.right} y1={Y(0)} y2={Y(0)} />
+        {width !== null && <line className="width" x1={X(xs[0] + width.from * step)} x2={X(xs[0] + width.to * step)} y1={Y(width.level)} y2={Y(width.level)} />}
         {inWindow(channel) && <line className="now" x1={X(xs[channel])} x2={X(xs[channel])} y1={PAD.top} y2={HEIGHT - PAD.bottom} />}
         <clipPath id={clip}>
           <rect x={0} y={PAD.top} width={WIDTH} height={HEIGHT - PAD.top - PAD.bottom} />
@@ -169,9 +175,7 @@ export function SpectrumPlot({
           ))}
         </g>
       </svg>
-      <span className="spectrum-y top">
-        {significant(y1, 3)} {valueUnit ?? ''}
-      </span>
+      <span className="spectrum-y top">{significant(y1, 3)}</span>
       <span className="spectrum-y bottom">{significant(y0, 3)}</span>
       {children}
       <figcaption>

@@ -7,7 +7,7 @@ import type { ComponentType } from 'react';
 import { useProject } from '../api/queries';
 import { Button } from '../components/ui/basics';
 import { Choice, Segments } from '../components/ui/inputs';
-import { BlockMenu } from '../shell/BlockMenu';
+import { useBlockHead } from '../shell/BlockMenu';
 import { kindOf } from '../shell/blocks';
 import { draft, draftsOf, type Draft } from '../shell/drafts';
 import { useRemembered } from '../shell/remember';
@@ -71,6 +71,7 @@ function DraftView({ shown, name, fixed = false }: { shown: Draft; name: string;
   const [chosen, choose] = useLayout(shown.folder);
   const names = useProject(project).data?.pieces[shown.folder] ?? [];
   const edited = useEditedBlock(project ?? '.', shown.folder, name);
+  const head = useBlockHead(project ?? '', shown.folder, name);
   const drafts = draftsOf(shown.folder);
   const Layout = LAYOUTS[shown.id];
   if (project === null) return null;
@@ -85,7 +86,7 @@ function DraftView({ shown, name, fixed = false }: { shown: Draft; name: string;
             {kindOf(shown.folder)} · draft {shown.letter}: {shown.title}
           </div>
           {fixed ? (
-            <h1>{name}</h1>
+            head.title
           ) : (
             <div className="draft-block">
               <Choice
@@ -110,7 +111,7 @@ function DraftView({ shown, name, fixed = false }: { shown: Draft; name: string;
             </Button>
           )}
           <SaveActions edited={edited} />
-          <BlockMenu project={project} folder={shown.folder} name={name} />
+          {head.menu}
         </div>
       </div>
       {edited.error && <p className="error screen-error">{edited.error.message}</p>}

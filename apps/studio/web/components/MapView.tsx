@@ -8,7 +8,7 @@
 // can show; a drag gives a region (x0, x1, y0, y1, inclusive), which is
 // shown with the pixels out of it dimmed, or pans the window. The pixel
 // under the pointer is given as it moves (none as it leaves, or drags).
-// Another region (e.g. a crop) can be outlined.
+// Another region (e.g. a crop) can be outlined, and a contour drawn.
 import { useEffect, useRef, useState } from 'react';
 import { rampColour, rampStops, token, useScheme } from './colours';
 
@@ -29,6 +29,7 @@ export function MapView({
   mark,
   region = null,
   outline = null,
+  contour = null,
   onPick,
   onRegion,
   onZoom,
@@ -50,6 +51,8 @@ export function MapView({
   mark?: [number, number];
   region?: Region | null;
   outline?: Region | null;
+  // (a path in its pixels, as of contourPath)
+  contour?: string | null;
   onPick?: (x: number, y: number) => void;
   onRegion?: (region: Region) => void;
   onZoom?: (x: number, y: number, factor: number) => void;
@@ -207,6 +210,7 @@ export function MapView({
             height={outline[3] - outline[2] + 1}
           />
         )}
+        {contour && <path className="map-contour" d={contour} />}
         {mark && <rect className="map-mark" x={mark[0]} y={ny - 1 - mark[1]} width={1} height={1} />}
       </svg>
     </div>

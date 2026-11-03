@@ -14,7 +14,7 @@ import { joinPath } from '../components/FilePicker';
 import type { Region } from '../components/MapView';
 import { Button } from '../components/ui/basics';
 import { SidePanes } from '../components/ui/panes';
-import { BlockMenu } from '../shell/BlockMenu';
+import { useBlockHead } from '../shell/BlockMenu';
 import { dataKind, dataKindOfType, type DataKind } from '../shell/blocks';
 import { useStudio } from '../studio';
 import {
@@ -154,16 +154,17 @@ export function Dataset({ name }: { name: string }) {
   const { project } = useStudio();
   const piece = usePiece(project === null ? null : joinPath(project, `datasets/${name}.yaml`));
   const kind = dataKindOfType(piece.data?.type);
+  const head = useBlockHead(project ?? '', 'datasets', name);
   return (
     <section className="screen">
       <div className="screen-head">
         <div>
           <div className="eyebrow">Dataset{kind ? ` · ${kind.title}` : ''}</div>
-          <h1>{name}</h1>
+          {project === null ? <h1>{name}</h1> : head.title}
         </div>
         {project !== null && (
           <div className="head-actions">
-            <BlockMenu project={project} folder="datasets" name={name} />
+            {head.menu}
           </div>
         )}
       </div>

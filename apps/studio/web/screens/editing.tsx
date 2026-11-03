@@ -76,7 +76,7 @@ export function SaveActions({ edited }: { edited: EditedBlock }) {
         Revert
       </Button>
       <Button kind="primary" disabled={!edited.dirty || edited.saving} onClick={edited.save}>
-        {edited.saving ? 'Saving…' : 'Save'}
+        Save
       </Button>
     </>
   );

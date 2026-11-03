@@ -160,7 +160,7 @@ function BlockField({ family, value, onChange }: { family: string; value: string
         items={[
           ...(names.includes(value) ? [] : [{ value, label: `${value} (missing)` }]),
           ...names.map((name) => ({ value: name, label: name })),
-          { value: '\u0000', label: 'options here instead…' },
+          { value: '\u0000', label: 'Options here instead…' },
         ]}
         value={value}
         label={`The ${family} of the project`}
@@ -229,10 +229,10 @@ function MemberField({
         <span className="schema-label">type</span>
         <Choice
           items={[
-            ...(nullable ? [{ value: '', label: 'none' }] : type === undefined ? [{ value: '', label: 'choose…' }] : []),
+            ...(nullable ? [{ value: '', label: 'None' }] : type === undefined ? [{ value: '', label: 'Choose…' }] : []),
             ...(type !== undefined && !types.includes(type) ? [{ value: type, label: type }] : []),
             ...types.map((t) => ({ value: t, label: typeTitle(t), description: members.find((m) => typeOf(m) === t)?.description as string | undefined })),
-            ...named.map((name) => ({ value: `block:${name}`, label: `the ${family} ${name}`, description: 'A block of the project' })),
+            ...named.map((name) => ({ value: `block:${name}`, label: name, description: `A block of the project (its ${family})` })),
           ]}
           value={type ?? ''}
           label={`The type of the ${family}`}
@@ -241,7 +241,7 @@ function MemberField({
       </div>
       {ofType.length > 1 && member && (
         <div className="schema-row">
-          <span className="schema-label">given by</span>
+          <span className="schema-label text">Given by</span>
           <Choice
             items={ofType.map((m, i) => ({ value: String(i), label: formLabel(m), description: m.form as string | undefined }))}
             value={String(ofType.indexOf(member))}
@@ -316,7 +316,7 @@ function ObjectFields({ node, value, onChange }: { node: Schema; value: Options;
           <Row key={key} name={key} node={property} required={required.includes(key)}>
             {optional && value[key] === undefined ? (
               <Button kind="small" title={typeof property.description === 'string' ? property.description : undefined} onClick={() => set(key, {})}>
-                + set
+                + Set
               </Button>
             ) : (
               <Field node={property} value={value[key]} onChange={(next) => set(key, next)} slider={slider} />
@@ -406,7 +406,7 @@ function AnyField({
   }
   const plain = find((b) => b.type === 'array' && resolve((b.items as Schema) ?? {}, defs).type === 'number');
   if (plain !== undefined && (value === undefined || value === null || (Array.isArray(value) && value.every((v) => typeof v === 'number')))) {
-    return <NumbersField value={value as number[] | undefined} onChange={onChange} placeholder={nullable ? 'none' : undefined} />;
+    return <NumbersField value={value as number[] | undefined} onChange={onChange} placeholder={nullable ? 'None' : undefined} />;
   }
   const list = find((b) => b.type === 'array');
   if (Array.isArray(value) && list !== undefined) return field(list);
@@ -441,8 +441,8 @@ function PlainField({
       <Choice
         items={[
           { value: '', label: node.default === undefined ? '—' : `default (${String(node.default)})` },
-          { value: 'true', label: 'yes' },
-          { value: 'false', label: 'no' },
+          { value: 'true', label: 'Yes' },
+          { value: 'false', label: 'No' },
         ]}
         value={value === undefined ? '' : String(value)}
         label="yes or no"
@@ -711,7 +711,7 @@ function FileField({ value, onChange }: { value: unknown; onChange: (value: unkn
 // A value the form cannot edit (e.g. a table along the spectral axis):
 // shown as it is, and kept; it can go
 function Kept({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
-  if (value === undefined) return <span className="note">(edit in the file)</span>;
+  if (value === undefined) return <span className="note">Edit it in the file</span>;
   return (
     <span className="schema-kept" title="The Studio cannot edit this yet; it is kept as it is">
       <code>{JSON.stringify(value)}</code>

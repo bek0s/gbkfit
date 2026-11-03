@@ -237,7 +237,7 @@ export function CubeViewer({
           )}
           {pixel !== null && (
             <Chip title="The pixel picked on the map" removeLabel="Clear the pixel" onRemove={() => setPixel(null)}>
-              pixel {pixel[0]}, {pixel[1]}
+              Pixel {pixel[0]}, {pixel[1]}
             </Chip>
           )}
           {band !== null && (
@@ -346,7 +346,7 @@ export function CubeViewer({
                 max={6}
                 step={0.5}
                 value={snr}
-                format={(x) => (x === 0 ? 'all' : `${x}σ`)}
+                format={(x) => (x === 0 ? 'All' : `${x}σ`)}
                 label="The signal-to-noise ratio of the mask of the moments"
                 onChange={setSnr}
               />
@@ -368,14 +368,14 @@ export function CubeViewer({
               }
             >
               {layer.key !== 'data' && `${layer.title} of `}
-              {shownPixel !== null ? `pixel ${shownPixel[0]}, ${shownPixel[1]}` : `Σ ${selection === null ? 'cube' : 'selection'}`}
+              {shownPixel !== null ? `Pixel ${shownPixel[0]}, ${shownPixel[1]}` : `Σ ${selection === null ? 'cube' : 'selection'}`}
               {layer.unit && <span className="spectrum-unit"> · {layer.unit}</span>}
             </span>
             <span className="spectrum-actions">
               <span className="spectrum-scale">
                 <Check
                   checked={autoscale}
-                  label="autoscale"
+                  label="Autoscale"
                   title="The range of the values is that of the spectrum shown; off, it is the one typed"
                   onChange={(on) => {
                     // (turned off: the ends typed start from those shown)

@@ -102,7 +102,7 @@ function summary(value: unknown): string {
 function rings(component: Options): string {
   const nodes = component.rnodes;
   if (Array.isArray(nodes) && nodes.length > 0) return `${nodes.length} rings to ${nodes[nodes.length - 1]}″`;
-  if (typeof component.rnmax === 'number') return `to ${component.rnmax}″${component.rnsep ? ` every ${component.rnsep}″` : ''}`;
+  if (typeof component.rnmax === 'number') return `To ${component.rnmax}″${component.rnsep ? `, every ${component.rnsep}″` : ''}`;
   return '—';
 }
 
@@ -288,20 +288,20 @@ export function GalaxyCards({ project, edited }: LayoutProps) {
                     <SchemaForm defs={defs} def="component" project={project} value={c} onChange={(next) => setComponent(i, next)} />
                   ) : (
                     <dl className="facts">
-                      <dt>density</dt>
+                      <dt>Density</dt>
                       <dd>{summary(density.ptraits ?? c.profile ?? c.density)}</dd>
-                      <dt>vertical</dt>
+                      <dt>Vertical</dt>
                       <dd>{summary(c.zptraits ?? density.zptraits ?? c.shape)}</dd>
-                      <dt>rotation</dt>
+                      <dt>Rotation</dt>
                       <dd>{summary(kinematics.vptraits ?? c.kinematics)}</dd>
-                      <dt>dispersion</dt>
+                      <dt>Dispersion</dt>
                       <dd>{summary(kinematics.dptraits)}</dd>
-                      <dt>light</dt>
+                      <dt>Light</dt>
                       <dd>{summary(c.emission)}</dd>
-                      <dt>rings</dt>
+                      <dt>Rings</dt>
                       <dd>{rings(c)}</dd>
-                      <dt>warps</dt>
-                      <dd>{[c.loose && 'loose (centre, vsys)', c.tilted && 'tilted (posa, incl)'].filter(Boolean).join(', ') || 'none'}</dd>
+                      <dt>Warps</dt>
+                      <dd>{[c.loose && 'Loose (centre, vsys)', c.tilted && 'Tilted (posa, incl)'].filter(Boolean).join(', ') || 'None'}</dd>
                     </dl>
                   )}
                 </div>
@@ -335,6 +335,7 @@ export function GalaxyCards({ project, edited }: LayoutProps) {
 }
 
 const VIEWS = ['intensity', 'velocity', 'dispersion', 'profiles', 'edge-on'] as const;
+const VIEW_TITLES: Record<(typeof VIEWS)[number], string> = { intensity: 'Intensity', velocity: 'Velocity', dispersion: 'Dispersion', profiles: 'Profiles', 'edge-on': 'Edge-on' };
 
 // C: the model takes the screen, with the components and the parameters
 // in a drawer under it
@@ -351,7 +352,7 @@ export function GalaxyCanvas({ project, edited }: LayoutProps) {
     <div className="screen-body draft-canvas">
       <div className="card canvas-stage">
         <div className="card-head viewer-head">
-          <Segments items={VIEWS.map((v) => ({ value: v, label: v }))} value={view} label="What the model shows" onChange={setView} />
+          <Segments items={VIEWS.map((v) => ({ value: v, label: VIEW_TITLES[v] }))} value={view} label="What the model shows" onChange={setView} />
           <Button kind="small" onClick={() => go({ kind: 'observe' })}>
             Observe it →
           </Button>
@@ -437,7 +438,7 @@ export function GalaxyParameters({ project, options }: { project: string; option
     <Panel id="galaxy-parameters" title="Its parameters">
       {blocks.length > 0 && (
         <div className="schema-row">
-          <span className="schema-label">values of</span>
+          <span className="schema-label text">Values of</span>
           <div className="schema-field">
             <Choice items={blocks.map((b) => ({ value: b, label: b }))} value={layer ?? ''} label="The block of parameters whose values are shown" onChange={setChosen} />
           </div>

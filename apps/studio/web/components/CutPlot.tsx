@@ -2,9 +2,13 @@
 // pixels, as steps, each pixel as wide as on the map, so that a cut beside
 // the map (under it, or at its side, vertical) lines up with it as it
 // resizes. It shows a window of the pixels (first and last, inclusive), as
-// the map does, over a range of values, with a line at a pixel (e.g. that
-// of the other cut). A vertical cut runs up, as the rows of a map do.
+// the map does, over a range of values: lines of several kinds (e.g.
+// through the peak, and through a pixel), and marks at pixels (e.g. where
+// the other cut of a pixel crosses it), and its width at a level (e.g. at
+// half the peak of the cut through it: its FWHM). A vertical cut runs up,
+// as the rows of a map do.
 import { useId } from 'react';
+import type { Width } from './contour';
 
 // (the plot is drawn on a square stretched to its box; its lines keep
 // their width)
@@ -14,19 +18,27 @@ const SIZE = 1000;
 // that a peak does not touch its edge)
 const HEADROOM = 0.1;
 
+// A line of a cut, of a kind (e.g. through the peak, or through a pixel
+// clicked or under the pointer), which its colour and weight say
+export type CutLine = { values: (number | null)[]; kind: string };
+
 export function CutPlot({
-  values,
+  lines,
   window: [i0, i1],
   limits: [low, high],
-  at,
+  marks = [],
+  width = null,
   vertical = false,
   label,
 }: {
-  values: (number | null)[];
+  // (drawn in their order, the last on top)
+  lines: CutLine[];
   window: [number, number];
   limits: [number, number];
-  // The pixel marked (none: none)
-  at?: number;
+  // The pixels marked, each of a kind (e.g. where the other cut of a pixel
+  // crosses this one)
+  marks?: { at: number; kind: string }[];
+  width?: Width | null;
   vertical?: boolean;
   label: string;
 }) {
@@ -40,35 +52,48 @@ export function CutPlot({
     vertical ? `${(v * SIZE).toFixed(1)},${((1 - u) * SIZE).toFixed(1)}` : `${(u * SIZE).toFixed(1)},${((1 - v) * SIZE).toFixed(1)}`;
   // (each pixel a step from edge to edge; a pixel without a value breaks
   // the line)
-  const lines: string[] = [];
-  let line: string[] = [];
-  for (let i = i0; i <= i1; i++) {
-    const value = values[i];
-    if (value === null || value === undefined || !Number.isFinite(value)) {
-      if (line.length) lines.push(line.join(' '));
-      line = [];
-      continue;
+  const runs = (values: (number | null)[]) => {
+    const out: string[] = [];
+    let run: string[] = [];
+    for (let i = i0; i <= i1; i++) {
+      const value = values[i];
+      if (value === null || value === undefined || !Number.isFinite(value)) {
+        if (run.length) out.push(run.join(' '));
+        run = [];
+        continue;
+      }
+      run.push(point(along(i), across(value)), point(along(i + 1), across(value)));
     }
-    line.push(point(along(i), across(value)), point(along(i + 1), across(value)));
-  }
-  if (line.length) lines.push(line.join(' '));
-  const mark = at !== undefined && at >= i0 && at <= i1 ? along(at) + 0.5 / n : null;
+    if (run.length) out.push(run.join(' '));
+    return out;
+  };
   return (
     <figure className={vertical ? 'cut vertical' : 'cut'}>
       <svg viewBox={`0 0 ${SIZE} ${SIZE}`} preserveAspectRatio="none" role="img" aria-label={label}>
-        {mark !== null &&
-          (vertical ? (
-            <line className="now" x1={0} x2={SIZE} y1={(1 - mark) * SIZE} y2={(1 - mark) * SIZE} />
-          ) : (
-            <line className="now" x1={mark * SIZE} x2={mark * SIZE} y1={0} y2={SIZE} />
-          ))}
+        {marks
+          .filter(({ at }) => at >= i0 && at <= i1)
+          .map(({ at, kind }) => {
+            const u = along(at) + 0.5 / n;
+            return vertical ? (
+              <line key={kind} className={`mark ${kind}`} x1={0} x2={SIZE} y1={(1 - u) * SIZE} y2={(1 - u) * SIZE} />
+            ) : (
+              <line key={kind} className={`mark ${kind}`} x1={u * SIZE} x2={u * SIZE} y1={0} y2={SIZE} />
+            );
+          })}
+        {width !== null &&
+          (() => {
+            const [a, b, v] = [along(width.from) + 0.5 / n, along(width.to) + 0.5 / n, across(width.level)];
+            return vertical ? (
+              <line className="width" x1={v * SIZE} x2={v * SIZE} y1={(1 - a) * SIZE} y2={(1 - b) * SIZE} />
+            ) : (
+              <line className="width" x1={a * SIZE} x2={b * SIZE} y1={(1 - v) * SIZE} y2={(1 - v) * SIZE} />
+            );
+          })()}
         <clipPath id={clip}>
           <rect x={0} y={0} width={SIZE} height={SIZE} />
         </clipPath>
         <g clipPath={`url(#${clip})`}>
-          {lines.map((points, i) => (
-            <polyline key={i} points={points} />
-          ))}
+          {lines.map(({ values, kind }) => runs(values).map((points, i) => <polyline key={`${kind}-${i}`} className={kind} points={points} />))}
         </g>
       </svg>
     </figure>

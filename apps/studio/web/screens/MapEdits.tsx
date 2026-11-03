@@ -275,7 +275,7 @@ export function MapEditsCard({
                 <div className="edits edit-map" key={key}>
                   <span className="edit-sub">{title}</span>
                   <span className="edit-label" title="Leave out the values out of this range (blank: no limit), shown blank on the map">
-                    keep values
+                    Keep values
                   </span>
                   <span className="edit-range">
                     <NumberField value={own.below} placeholder="−∞" label={`Keep the values of ${title} from`} onChange={(below) => setValues(key, { below })} />
@@ -299,7 +299,7 @@ export function MapEditsCard({
                     </div>
                   )}
                   <span className="edit-label" title={`Sigma clipping of the values of ${title}, ${SIGMA_ITERATIONS} times, on both sides`}>
-                    outliers beyond
+                    Outliers beyond
                   </span>
                   <NumberField value={own.sigma} label={`Outliers of ${title} beyond`} onChange={(sigma) => setValues(key, { sigma })} />
                   <span className="edit-unit">σ of them all</span>
@@ -313,7 +313,7 @@ export function MapEditsCard({
             {number('pixels', 'of at least', 'pixels', 'The pixels of a region kept, at least')}
             {number('ratio', 'and at least', '× the largest', 'The size of a region kept, at least, as a fraction of the largest')}
             <div className="edit-check">
-              <Check checked={edits.minify} label="crop to the pixels left" title="Crop the files to the pixels left" onChange={(minify) => set({ minify })} />
+              <Check checked={edits.minify} label="Crop to the pixels left" title="Crop the files to the pixels left" onChange={(minify) => set({ minify })} />
             </div>
             {number('pad', 'pad by', 'pixels', 'Pad the files by this many empty pixels on each side')}
           </div>

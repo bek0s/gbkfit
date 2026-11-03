@@ -329,7 +329,7 @@ export function EditsCard({
           <>
             <div className="edit-group">velocities</div>
             <span className="edit-label" title="The velocities of the channels are measured from the line at the redshift">
-              line
+              Line
             </span>
             <NumberField value={edits.line} label="The rest of the line" onChange={(text) => set({ line: text })} />
             <Choice
@@ -338,7 +338,7 @@ export function EditsCard({
               label="The unit of the line"
               onChange={(unit) => set({ lineUnit: unit })}
             />
-            <span className="edit-label">at redshift</span>
+            <span className="edit-label">At redshift</span>
             <NumberField value={edits.redshift} placeholder="0" label="The redshift" onChange={(text) => set({ redshift: text })} />
             <span />
           </>
@@ -349,7 +349,7 @@ export function EditsCard({
             <div className="edit-check">
               <Check
                 checked={edits.noise}
-                label="from the noise of each channel"
+                label="From the noise of each channel"
                 title="The robust noise of the negative values of each channel, before any are left out"
                 onChange={(noise) => set({ noise })}
               />
@@ -360,7 +360,7 @@ export function EditsCard({
           <summary className="edit-group">leave out values</summary>
           <div className="edits">
             <span className="edit-label" title="Leave out the values out of this range (blank: no limit), shown blank on the channel map">
-              keep values
+              Keep values
             </span>
             <span className="edit-range">
               <NumberField value={edits.below} placeholder="−∞" label="Keep the values from" onChange={(below) => set({ below })} />
@@ -407,7 +407,7 @@ export function EditsCard({
             {number('pixels', 'of at least', 'pixels', 'The pixels of a region kept, at least')}
             {number('ratio', 'and at least', '× the largest', 'The size of a region kept, at least, as a fraction of the largest')}
             <div className="edit-check">
-              <Check checked={edits.minify} label="crop to the pixels left" title="Crop the files to the pixels left" onChange={(minify) => set({ minify })} />
+              <Check checked={edits.minify} label="Crop to the pixels left" title="Crop the files to the pixels left" onChange={(minify) => set({ minify })} />
             </div>
             {number('pad', 'pad by', 'pixels', 'Pad the files by this many empty pixels on each side')}
           </div>
