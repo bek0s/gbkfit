@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, SpectraData, SpectralAxis
@@ -60,7 +60,7 @@ class RegionSpectra(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spatial grid is given for regions on a grid, or not for
         regions on the sky, or the spectral axis is not valid (see
         make_cube_grid).
@@ -122,7 +122,7 @@ class RegionSpectra(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of spectra in regions, or the options
             are not valid.
         """
@@ -171,7 +171,7 @@ class RegionSpectra(Observable):
         self._weights = flux_weights(regions, spatial)
         valid = regions.valid()
         if valid is not None and len(valid) != self.spectral_grid().size[0]:
-            raise ConfigError(
+            raise ValueError(
                 f"the valid pixels of the regions are of {len(valid)} "
                 f"channels; the spectral axis has "
                 f"{self.spectral_grid().size[0]}")
@@ -219,10 +219,10 @@ class RegionSpectra(Observable):
             self, dataset: DatasetRegionSpectra
     ) -> None:
         if dataset.regions() != self._regions:
-            raise ConfigError(
+            raise ValueError(
                 "the data and the observable have different regions")
         if dataset.spectral_grid() != self.spectral_grid():
-            raise ConfigError(
+            raise ValueError(
                 f"the spectra have the spectral axis "
                 f"{dataset.spectral_grid()}, but the observable has "
                 f"{self.spectral_grid()}")
@@ -237,7 +237,7 @@ class RegionSpectra(Observable):
             pixel_weights: 'Weights | None'
     ) -> None:
         if pixel_weights is not None:
-            raise ConfigError(
+            raise ValueError(
                 "region_spectra does not support pixel_weights yet")
 
     def plan(

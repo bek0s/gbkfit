@@ -11,7 +11,7 @@ import numpy as np
 from annotated_types import Gt, Le
 from astropy.table import Table
 
-from gbkfit.config import ConfigError, Unit, check_options
+from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
 from gbkfit.grid import make_grid
@@ -96,7 +96,7 @@ class ObservationProfile(Observation):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If it has data and functions, radii or a distance (which the data
         give), or neither data nor functions and radii, an item is not a
         function of radii, or its data are not in a unit of the kind of
@@ -170,11 +170,11 @@ class ObservationProfile(Observation):
         if data is not None:
             if functions is not None or radii is not None \
                     or distance is not None:
-                raise ConfigError(
+                raise ValueError(
                     "the data of a profile give its functions, its radii "
                     "and their distance")
             if not isinstance(data, DatasetProfile):
-                raise ConfigError(
+                raise ValueError(
                     f"the data of a profile are a table of it "
                     f"(DatasetProfile); they are {type(data).__name__}")
             functions, radii, distance = \
@@ -182,31 +182,31 @@ class ObservationProfile(Observation):
         elif distance is not None:
             distance = distance * u.Mpc
         elif functions is None or radii is None:
-            raise ConfigError(
+            raise ValueError(
                 "a profile without data needs its functions and its radii")
         keys = tuple(functions)
         for key in keys:
             if GalaxyFunctions.family(key) is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{key!r} is not a function of radii of galaxies (e.g. "
                     f"vcirc, vcirc_halo, mass, slope, rotation_gas, "
                     f"dispersion_gas; see GalaxyFunctions)")
         radii, distance = check_profile_radii(radii, distance)
         if any(radii == 0) and any(
                 GalaxyFunctions.family(key) == 'slope' for key in keys):
-            raise ConfigError("slopes need radii above 0")
+            raise ValueError("slopes need radii above 0")
         if galaxies is not None and len(galaxies) > 1:
-            raise ConfigError(
+            raise ValueError(
                 f"a profile is of one galaxy; it sees {list(galaxies)}")
         if inclination is not None:
             if name is None:
-                raise ConfigError(
+                raise ValueError(
                     "a profile with an inclination needs a name, which "
                     "names its parameter ('{name}_incl')")
             if not any(
                     GalaxyFunctions.family(key) in _ROTATIONS
                     for key in keys):
-                raise ConfigError(
+                raise ValueError(
                     "an inclination scales rotation velocities (e.g. vcirc, "
                     "rotation_gas); the profile has none")
         if data is not None:
@@ -308,14 +308,14 @@ class ObservationProfile(Observation):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the galaxy does not have a function, or a function of a
             disk is at radii of physical lengths, or out of its range.
         """
         galaxy, label = seen.galaxies[0], seen.labels[0]
         names = galaxy.function_names()
         if missing := [k for k in self.keys() if k not in names]:
-            raise ConfigError(
+            raise ValueError(
                 f"galaxy {label} has no functions {missing}; its functions "
                 f"are {list(names)}")
         arcsec, _ = self._radii_of()
@@ -324,11 +324,11 @@ class ObservationProfile(Observation):
             if bounds is None:
                 continue
             if arcsec is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{key} is a function of a disk, of radii in angles; the "
                     f"radii are physical lengths (they have no distance)")
             if not np.all((bounds[0] <= arcsec) & (arcsec <= bounds[1])):
-                raise ConfigError(
+                raise ValueError(
                     f"the radii of {key} must be from {bounds[0]:g} to "
                     f"{bounds[1]:g} arcsec; they are {arcsec} arcsec")
 
@@ -392,16 +392,16 @@ def _checked_data(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If it is not, or the unit of a data item is not of the kind of
         that of its function.
     """
     if not isinstance(dataset, DatasetProfile):
-        raise ConfigError(
+        raise ValueError(
             f"the data of a profile are a table of it (DatasetProfile); "
             f"they are {type(dataset).__name__}")
     if set(dataset.keys()) != set(keys):
-        raise ConfigError(
+        raise ValueError(
             f"the profile has the functions {sorted(keys)}, but the data "
             f"have {sorted(dataset.keys())}")
     same_distance = dataset.distance() is None if distance is None \
@@ -410,7 +410,7 @@ def _checked_data(
     if dataset.radii().unit != radii.unit \
             or not np.array_equal(dataset.radii(), radii) \
             or not same_distance:
-        raise ConfigError(
+        raise ValueError(
             "the data are not at the radii of the profile, or of their "
             "distance")
     items = {}
@@ -419,7 +419,7 @@ def _checked_data(
         unit = item.unit()
         expected = GalaxyFunctions.radial_units(key)[0]
         if unit is not None and not unit.is_equivalent(expected):
-            raise ConfigError(
+            raise ValueError(
                 f"the data of {key} are in {unit}; give them in a unit of "
                 f"{expected}, the unit of the function")
         items[key] = item if unit is None or unit == expected \

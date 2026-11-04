@@ -16,7 +16,7 @@ from annotated_types import Ge
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, Unit, check_options)
+    BasicParser, Serializable, Unit, check_options)
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, SpectralAxis, make_convention
@@ -255,7 +255,7 @@ class Exposure(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an offset is not two numbers.
     """
 
@@ -274,7 +274,7 @@ class Exposure(Serializable):
         for name, offset in (
                 ('sky_offset', sky_offset), ('image_offset', image_offset)):
             if len(offset) != 2:
-                raise ConfigError(
+                raise ValueError(
                     f"{name} must be two offsets (x, y); it is {offset}")
         self._sky_offset = tuple(float(value) for value in sky_offset)
         self._image_offset = tuple(float(value) for value in image_offset)
@@ -380,7 +380,7 @@ class SlitlessSpectra(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectral axis has no step or no rest wavelength, there are
         no exposures, or sky_sampling is not an integer of at least 1.
     """
@@ -435,7 +435,7 @@ class SlitlessSpectra(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of slitless spectra, or the options are
             not valid.
         """
@@ -488,7 +488,7 @@ class SlitlessSpectra(Observable):
         rest = spectral.rest()
         if spectral.step() is None or rest is None \
                 or rest.unit != astropy.units.m:
-            raise ConfigError(
+            raise ValueError(
                 "the spectral axis of slitless spectra needs the width of its "
                 "channels (step) and a rest wavelength (rest)")
         self._spectral = _moments.spectral_axis(spectral.replaced(
@@ -497,7 +497,7 @@ class SlitlessSpectra(Observable):
         exposures = (Exposure(),) if exposures is None \
             else iterutils.tuplify(exposures)
         if not exposures:
-            raise ConfigError("slitless spectra need at least one exposure")
+            raise ValueError("slitless spectra need at least one exposure")
         self._trace = trace
         self._aperture = aperture
         self._exposures = exposures
@@ -577,10 +577,10 @@ class SlitlessSpectra(Observable):
             pixel_weights: 'Weights | None'
     ) -> None:
         if pixel_weights is not None:
-            raise ConfigError(
+            raise ValueError(
                 "slitless spectra do not support pixel_weights yet")
         if instrument.lsf() is not None and self._aperture is None:
-            raise ConfigError(
+            raise ValueError(
                 "slitless spectra without an aperture have no LSF: the PSF "
                 "along the trace sets their resolution; remove the LSF of "
                 "the instrument, or give the aperture")
@@ -671,7 +671,7 @@ class SlitlessSpectra(Observable):
                 los.append(lo - sky_offset)
                 his.append(hi - sky_offset)
         if not los:
-            raise ConfigError(
+            raise ValueError(
                 "no light of the sky can land on the image of the slitless "
                 "spectra; check the aperture and the exposures")
         margin = 2 if self._resampled else 1

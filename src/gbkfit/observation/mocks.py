@@ -8,7 +8,7 @@ from typing import Annotated, Any
 
 from annotated_types import Ge
 
-from gbkfit.config import ConfigError, Serializable, check_options
+from gbkfit.config import Serializable, check_options
 from gbkfit.utils import iterutils
 from .likelihood import Likelihood, likelihood_parser
 from .noise import Noise, noise_parser
@@ -43,7 +43,7 @@ class MockOptions(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If nmocks is below 1, or nsamples below 2.
     """
 
@@ -102,7 +102,7 @@ class MockOptions(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the noise or the likelihood is a list of another length.
         """
         return (
@@ -118,7 +118,7 @@ def _per_observation(value: Any, option: str, nobservations: int) -> list:
     if not iterutils.is_sequence(value):
         return [value] * nobservations
     if len(value) != nobservations:
-        raise ConfigError(
+        raise ValueError(
             f"option '{option}' is one, or a list of one for each of the "
             f"{nobservations} observations; it is a list of {len(value)}")
     return list(value)

@@ -16,7 +16,7 @@ import numpy as np
 from annotated_types import Ge, Gt
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, Unit, check_options)
+    TypedParser, TypedSerializable, Unit, check_options)
 
 
 __all__ = [
@@ -107,7 +107,7 @@ class ApertureShutters(Aperture):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the size is not two positive widths, or several shutters have
         no pitch or one smaller than the length of a shutter.
     """
@@ -133,11 +133,11 @@ class ApertureShutters(Aperture):
         check_options(ApertureShutters.__init__, locals())
         size = tuple(float(value) for value in size)
         if len(size) != 2 or not min(size) > 0:
-            raise ConfigError(
+            raise ValueError(
                 f"the size of the shutters must be two positive widths; it "
                 f"is {size}")
         if count > 1 and (pitch is None or pitch < size[1]):
-            raise ConfigError(
+            raise ValueError(
                 f"several shutters need a pitch of at least their length "
                 f"({size[1]}); it is {pitch}")
         self._size = size

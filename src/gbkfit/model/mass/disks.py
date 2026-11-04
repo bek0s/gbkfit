@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.params import ParamDesc, ParamValues
 from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
 from .surfaces import DiskSurface, disk_surface_parser
@@ -80,7 +80,7 @@ class MassDisk(MassComponent):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is not valid, or the surface density and the vertical
         structure follow different components.
     """
@@ -102,7 +102,7 @@ class MassDisk(MassComponent):
             surface.followed_component(), vertical.followed_component()}
         followed.discard(None)
         if len(followed) > 1:
-            raise ConfigError(
+            raise ValueError(
                 f"a mass disk follows at most one component; its surface "
                 f"density follows {surface.followed_component()!r} and its "
                 f"vertical structure {vertical.followed_component()!r}")

@@ -16,7 +16,6 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
@@ -240,7 +239,7 @@ def make_lines(
         return None
     lines = emission.lines()
     if repeated := sorted(set(lines.pdescs()) & set(pdescs)):
-        raise ConfigError(
+        raise ValueError(
             f"the parameters of the lines have the names of other "
             f"parameters: {repeated}; rename the lines")
     return lines
@@ -257,7 +256,7 @@ def make_bands(
         return None
     bands = emission.bands()
     if repeated := sorted(set(bands.pdescs()) & set(pdescs)):
-        raise ConfigError(
+        raise ValueError(
             f"the parameters of the bands have the names of other "
             f"parameters: {repeated}; rename the bands")
     return bands

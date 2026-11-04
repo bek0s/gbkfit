@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
 from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
@@ -140,7 +139,7 @@ class OrbitRecording:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an observation of it has a bin with some of its moments masked
         and not others, or with a sigma that is not positive (what its
         instrument and its scene may have is checked by its plan, see
@@ -376,7 +375,7 @@ class _BinsData:
         masks = [np.asarray(dataset[key].mask(), bool)
                  for key in self.keys.values()]
         if not all(np.array_equal(mask, masks[0]) for mask in masks):
-            raise ConfigError(
+            raise ValueError(
                 f"the bins of observation {index}, of stars on orbits, have "
                 f"all their moments or none (their series is of their V and "
                 f"sigma)")
@@ -385,7 +384,7 @@ class _BinsData:
         # (the series of a bin is about its sigma, which scales it: a sigma
         # of 0 made every evaluation NaN, with a message of no use)
         if not np.all(self.values['moment2'][self.seen] > 0):
-            raise ConfigError(
+            raise ValueError(
                 f"the bins of observation {index}, of stars on orbits, have "
                 f"a positive sigma (the series of each bin is about its V "
                 f"and sigma); mask those that do not")
@@ -513,7 +512,7 @@ def orbit_recordings(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a recording cannot be made (see OrbitRecording).
     """
     seen: dict[tuple[int, int], list[int]] = {}

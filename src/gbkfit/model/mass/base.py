@@ -216,7 +216,7 @@ class MassComponent(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is not valid (see check_name).
     """
 

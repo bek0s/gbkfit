@@ -13,7 +13,7 @@ import numpy.typing as npt
 import scipy.interpolate
 from annotated_types import Gt
 
-from gbkfit.config import Column, ConfigError, FilePath, Unit, check_options
+from gbkfit.config import Column, FilePath, Unit, check_options
 from gbkfit.io import read_column, read_table
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
@@ -76,7 +76,7 @@ class MassTable(MassComponent):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the radii are not angles or lengths, finite, at least 0 and
         increasing, or the velocities are not finite and one per radius.
     """
@@ -150,18 +150,18 @@ class MassTable(MassComponent):
         if not isinstance(radii, u.Quantity) or radii.ndim != 1 \
                 or not (radii.unit.is_equivalent(u.arcsec)
                         or radii.unit.is_equivalent(u.kpc)):
-            raise ConfigError(
+            raise ValueError(
                 f"the radii are a vector of angles (e.g. arcsec) or lengths "
                 f"(e.g. kpc), with their unit; they are {radii!r}")
         if not np.all(np.isfinite(radii) & (radii >= 0)) \
                 or np.any(np.diff(radii) <= 0):
-            raise ConfigError(
+            raise ValueError(
                 f"the radii must be finite, at least 0 and increasing; they "
                 f"are {radii}")
         velocities = np.asarray(velocities, dtype=float)
         if velocities.shape != radii.shape \
                 or not np.all(np.isfinite(velocities)):
-            raise ConfigError(
+            raise ValueError(
                 f"the velocities must be finite, one per radius; they are "
                 f"{velocities}")
         self._radii = radii.astype(float)

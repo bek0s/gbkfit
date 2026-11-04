@@ -108,7 +108,7 @@ class SchwarzschildKinematics(SpheroidKinematics):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If norbits is not a positive integer, turns not a positive number,
         or seed not a non-negative integer.
     """

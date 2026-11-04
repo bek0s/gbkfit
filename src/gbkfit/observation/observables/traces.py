@@ -18,7 +18,7 @@ import numpy.typing as npt
 import scipy.interpolate
 
 from gbkfit.config import (
-    ConfigError, FilePath, TypedParser, TypedSerializable, Unit, check_options)
+    FilePath, TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.grid import make_rest
 
 
@@ -78,7 +78,7 @@ class TracePolynomial(Trace):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If wave is not a wavelength, or dx or dy has no coefficients.
     """
 
@@ -99,10 +99,10 @@ class TracePolynomial(Trace):
         check_options(TracePolynomial.__init__, locals())
         quantity = make_rest(wave)
         if quantity.unit.physical_type != 'length':
-            raise ConfigError(
+            raise ValueError(
                 f"the wave of a trace must be a wavelength; it is {wave!r}")
         if not len(dx) or not len(dy):
-            raise ConfigError("the dx and dy of a trace need coefficients")
+            raise ValueError("the dx and dy of a trace need coefficients")
         self._wave = quantity.to('m')
         self._dx = tuple(float(c) for c in dx)
         self._dy = tuple(float(c) for c in dy)
@@ -146,7 +146,7 @@ class TraceGrismConf(Trace):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a polynomial has no terms, or a polynomial of the place has a
         number of coefficients that is not (n + 1)(n + 2) / 2.
     """
@@ -186,7 +186,7 @@ class TraceGrismConf(Trace):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the file lacks the order or some of its coefficients, or
             gives its wavelengths in other units than micron.
         """
@@ -205,7 +205,7 @@ class TraceGrismConf(Trace):
                     unit = re.match(
                         r'#\s*wavelength unit:\s*(\S+)', line, re.I)
                     if unit and unit.group(1).lower() != 'micron':
-                        raise ConfigError(
+                        raise ValueError(
                             f"the GRISMCONF file {file!r} gives its "
                             f"wavelengths in {unit.group(1)}, not micron")
                     continue
@@ -217,13 +217,13 @@ class TraceGrismConf(Trace):
                 if name in terms and beam_ == beam and power.isdigit():
                     terms[name][int(power)] = [float(v) for v in values]
         if beam not in beams:
-            raise ConfigError(
+            raise ValueError(
                 f"the GRISMCONF file {file!r} has no order {beam!r}; its "
                 f"orders are {beams}")
         coefficients = {}
         for name, powers in terms.items():
             if sorted(powers) != list(range(len(powers))) or not powers:
-                raise ConfigError(
+                raise ValueError(
                     f"the GRISMCONF file {file!r} lacks coefficients "
                     f"{name}_{beam}_n: it has those of n = {sorted(powers)}")
             coefficients[name.lower()] = [powers[n] for n in sorted(powers)]
@@ -248,11 +248,11 @@ class TraceGrismConf(Trace):
         polynomials = dict(displ=displ, dispx=dispx, dispy=dispy)
         for name, terms in polynomials.items():
             if not len(terms):
-                raise ConfigError(f"{name} needs coefficients")
+                raise ValueError(f"{name} needs coefficients")
             for coefficients in terms:
                 _field_degree(len(coefficients), name)
         if len(origin) != 2:
-            raise ConfigError("origin must be (x0, y0)")
+            raise ValueError("origin must be (x0, y0)")
         self._displ, self._dispx, self._dispy = (
             tuple(tuple(float(c) for c in coefficients)
                   for coefficients in terms)
@@ -291,11 +291,11 @@ class TraceGrismConf(Trace):
 def _field_degree(ncoefficients: int, name: str) -> int:
     """
     Return the degree n of a polynomial of the place of ncoefficients =
-    (n + 1)(n + 2) / 2 (of a polynomial named name), or raise ConfigError.
+    (n + 1)(n + 2) / 2 (of a polynomial named name), or raise ValueError.
     """
     degree = int(round((np.sqrt(8 * ncoefficients + 1) - 3) / 2))
     if (degree + 1) * (degree + 2) // 2 != ncoefficients:
-        raise ConfigError(
+        raise ValueError(
             f"the polynomials of the place of {name} need (n + 1)(n + 2) / 2 "
             f"coefficients; one has {ncoefficients}")
     return degree
@@ -350,7 +350,7 @@ class TraceTable(Trace):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are fewer than 4 nodes along an axis, they are not
         ascending, or the offsets are not finite or not of their shape.
     """
@@ -377,14 +377,14 @@ class TraceTable(Trace):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the file lacks an extension of the trace.
         """
         check_options(TraceTable.from_file, locals())
         with fits.open(file) as hdus:
             names = [hdu.name for hdu in hdus]
             if missing := [n for n in _TABLE_EXTENSIONS if n not in names]:
-                raise ConfigError(
+                raise ValueError(
                     f"the trace file {file!r} lacks the extensions "
                     f"{missing}")
             return cls(*(np.array(hdus[n].data) for n in _TABLE_EXTENSIONS))
@@ -413,14 +413,14 @@ class TraceTable(Trace):
         for name, axis in zip(('wave', 'y', 'x'), nodes):
             if axis.ndim != 1 or len(axis) < 4 \
                     or not np.all(np.diff(axis) > 0):
-                raise ConfigError(
+                raise ValueError(
                     f"the nodes {name} of a trace table must be at least 4, "
                     f"ascending")
         shape = tuple(len(axis) for axis in nodes)
         offsets = [np.asarray(a, dtype=float) for a in (dx, dy)]
         for name, values in zip(('dx', 'dy'), offsets):
             if values.shape != shape or not np.all(np.isfinite(values)):
-                raise ConfigError(
+                raise ValueError(
                     f"the offsets {name} of a trace table must be finite, "
                     f"of the shape of its nodes {shape}; they are of the "
                     f"shape {values.shape}")
@@ -440,7 +440,7 @@ class TraceTable(Trace):
         if wavelength.size and not (
                 wavelength.min() >= self._wave[0]
                 and wavelength.max() <= self._wave[-1]):
-            raise ConfigError(
+            raise ValueError(
                 f"the trace table covers the wavelengths {self._wave[0]:.6g} "
                 f"to {self._wave[-1]:.6g} m; the spectral axis reaches "
                 f"{wavelength.min():.6g} to {wavelength.max():.6g} m")

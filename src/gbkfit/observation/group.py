@@ -12,7 +12,7 @@ from typing import Any, NamedTuple, Self
 from astropy.coordinates import SkyCoord
 
 from gbkfit.config import (
-    ConfigError, check_name, config_path, item_prefixes, warn)
+    check_name, config_path, item_prefixes, warn)
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import DepthUnit, Galaxy
@@ -142,7 +142,7 @@ class ObservationGroup:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no galaxies or no observations, several galaxies
         without names, names repeat, an observation does not name the
         galaxies it sees (when there are several) or names unknown ones,
@@ -161,12 +161,12 @@ class ObservationGroup:
         self._galaxies = iterutils.tuplify(galaxies)
         self._observations = iterutils.tuplify(observations)
         if not self._galaxies:
-            raise ConfigError("at least one galaxy is required")
+            raise ValueError("at least one galaxy is required")
         if not self._observations:
-            raise ConfigError("at least one observation is required")
+            raise ValueError("at least one observation is required")
         galaxy_names = [galaxy.name() for galaxy in self._galaxies]
         if len(galaxy_names) > 1 and None in galaxy_names:
-            raise ConfigError(
+            raise ValueError(
                 "the galaxies need names when there are several")
         observation_names = [obs.name() for obs in self._observations]
         self._prefixes = item_prefixes(
@@ -176,7 +176,7 @@ class ObservationGroup:
         repeated = sorted(
             set(galaxy_names) & set(observation_names) - {None})
         if repeated:
-            raise ConfigError(
+            raise ValueError(
                 f"the galaxies and the observations must have different "
                 f"names; repeated: {repeated}")
         # (as given, for copies; see with_data)
@@ -193,7 +193,7 @@ class ObservationGroup:
             if name is not None for g in members[1:]}
         if taken := sorted(
                 set(self._separations.values()) & self._pdescs.keys()):
-            raise ConfigError(
+            raise ValueError(
                 f"the parameters of the separations of galaxies have the "
                 f"names of parameters of the galaxies: {taken}; rename their "
                 f"components")
@@ -207,7 +207,7 @@ class ObservationGroup:
         for observation in self._observations:
             pdescs = observation.pdescs()
             if repeated := sorted(pdescs.keys() & self._pdescs.keys()):
-                raise ConfigError(
+                raise ValueError(
                     f"the parameters of the observations have the names of "
                     f"parameters of the galaxies: {repeated}; rename the "
                     f"observations")
@@ -251,13 +251,13 @@ class ObservationGroup:
         names = observation.galaxies()
         if names is None:
             if len(self._galaxies) > 1:
-                raise ConfigError(
+                raise ValueError(
                     f"observation {i} must name the galaxies it sees; there "
                     f"are {len(self._galaxies)} galaxies")
             return [0]
         known = [galaxy.name() for galaxy in self._galaxies]
         if unknown := [name for name in names if name not in known]:
-            raise ConfigError(
+            raise ValueError(
                 f"observation {i} refers to unknown galaxies {unknown}; the "
                 f"galaxies are {known}")
         return sorted(known.index(name) for name in names)
@@ -301,13 +301,13 @@ class ObservationGroup:
 
     def require_data(self) -> None:
         """
-        Raise ConfigError unless every observation has data (e.g. those of
+        Raise ValueError unless every observation has data (e.g. those of
         an objective, see Objective).
         """
         if missing := [
                 i for i, observation in enumerate(self._observations)
                 if observation.data() is None]:
-            raise ConfigError(
+            raise ValueError(
                 f"every observation of an objective needs data; these have "
                 f"none: {missing}")
 
@@ -362,7 +362,7 @@ class ObservationGroup:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If drivers names unknown galaxies or observations, or what an
             observation sees does not go with it (see Observation.plan), or
             a galaxy cannot plan its stage (see Galaxy.plan_stage).
@@ -381,7 +381,7 @@ class ObservationGroup:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If drivers names unknown galaxies or observations, or a label
             that is of a galaxy and of an observation.
         """
@@ -392,12 +392,12 @@ class ObservationGroup:
         drivers = dict(drivers or {})
         galaxies, observations = self._galaxy_labels, self._observation_labels
         if unknown := sorted(drivers.keys() - {*galaxies, *observations}):
-            raise ConfigError(
+            raise ValueError(
                 f"there are drivers of unknown galaxies or observations "
                 f"{unknown}; the galaxies are {galaxies} and the "
                 f"observations {observations}")
         if both := sorted(drivers.keys() & set(galaxies) & set(observations)):
-            raise ConfigError(
+            raise ValueError(
                 f"there are drivers of {both}, which are labels of a galaxy "
                 f"and of an observation; name them apart")
         return (
@@ -412,12 +412,12 @@ class ObservationGroup:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If there is not one dataset per observation, or a dataset does
             not suit its observation.
         """
         if len(datasets) != len(self._observations):
-            raise ConfigError(
+            raise ValueError(
                 f"there are {len(self._observations)} observations, but "
                 f"{len(datasets)} datasets")
         observations = [
@@ -670,7 +670,7 @@ def _check_offsets(
         seen: Sequence[Sequence[int]]
 ) -> None:
     """
-    Raise ConfigError if every observation on the sky that sees a galaxy
+    Raise ValueError if every observation on the sky that sees a galaxy
     has offsets of position, or of velocity (see ObservationSky): they
     would move its centre, or its systemic velocity, with nothing to place
     it.
@@ -682,7 +682,7 @@ def _check_offsets(
             if g in indices and obs.sky_origin() is not None]
         for kind, k in (('position', 0), ('velocity', 2)):
             if offsets and all(params[k] is not None for params in offsets):
-                raise ConfigError(
+                raise ValueError(
                     f"every observation of galaxy {galaxy.name() or g} has "
                     f"offsets of {kind}; one needs none, whose frame places "
                     f"the galaxy")
@@ -722,7 +722,7 @@ def _depth_order(
     """
     Return the items of a depth order (see ObservationGroup: depth_order)
     as the name of each group (None for a galaxy) and the indices of its
-    galaxies, among the names of the galaxies. Raise ConfigError if a name
+    galaxies, among the names of the galaxies. Raise ValueError if a name
     is unknown or repeats, or a group has fewer than two galaxies or the
     name of a galaxy or an observation.
     """
@@ -733,11 +733,11 @@ def _depth_order(
         if isinstance(item, DepthGroup):
             check_name(item.name)
             if len(item.galaxies) < 2:
-                raise ConfigError(
+                raise ValueError(
                     f"the group {item.name!r} of depth_order needs at least "
                     f"two galaxies; it has {list(item.galaxies)}")
             if item.name in [*galaxies, *observations]:
-                raise ConfigError(
+                raise ValueError(
                     f"the group {item.name!r} of depth_order has the name of "
                     f"a galaxy or an observation")
             items.append((item.name, tuple(item.galaxies)))
@@ -745,11 +745,11 @@ def _depth_order(
             items.append((None, (item,)))
     names = [name for _, members in items for name in members]
     if unknown := [name for name in names if name not in galaxies]:
-        raise ConfigError(
+        raise ValueError(
             f"depth_order names unknown galaxies {unknown}; the galaxies are "
             f"{list(galaxies)}")
     if len(set(names)) != len(names):
-        raise ConfigError(f"depth_order repeats galaxies: {names}")
+        raise ValueError(f"depth_order repeats galaxies: {names}")
     return tuple(
         (name, tuple(galaxies.index(galaxy) for galaxy in members))
         for name, members in items)

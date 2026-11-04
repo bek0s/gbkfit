@@ -11,7 +11,7 @@ import numpy as np
 import scipy.signal
 import scipy.sparse
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import Coords, Grid, GridData, SpectralAxis, sky_to_pixel
@@ -89,7 +89,7 @@ class RegionMoments(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spatial grid is given for regions on a grid, or not for
         regions on the sky, or the options of the moments are not valid
         (see PixelMoments).
@@ -158,7 +158,7 @@ class RegionMoments(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of moments in regions, or the options
             are not valid.
         """
@@ -215,7 +215,7 @@ class RegionMoments(Observable):
         # fluxes (an error if apertures are not inside the grid)
         self._weights = flux_weights(regions, spatial)
         if regions.valid() is not None:
-            raise ConfigError(
+            raise ValueError(
                 "the moments of regions are of whole spectra: their regions "
                 "take no valid pixels of each channel (those of the spectra "
                 "of regions)")
@@ -270,7 +270,7 @@ class RegionMoments(Observable):
             pixel_weights: 'Weights | None'
     ) -> None:
         if pixel_weights is not None:
-            raise ConfigError(
+            raise ValueError(
                 "region_moments does not support pixel_weights yet")
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
@@ -292,7 +292,7 @@ class RegionMoments(Observable):
             self, dataset: DatasetRegionMoments
     ) -> None:
         if dataset.regions() != self._regions:
-            raise ConfigError(
+            raise ValueError(
                 "the data and the observable have different regions")
 
     def output(self, data: np.ndarray) -> GridData | np.ndarray:
@@ -355,12 +355,12 @@ class RegionMoments(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If its regions are not bins (on a grid).
         """
         grid = self._regions.grid()
         if grid is None:
-            raise ConfigError(
+            raise ValueError(
                 "orbits are recorded in bins of the pixels of a grid, not in "
                 "apertures")
         fx, fy = oversampling[:2]
@@ -402,7 +402,7 @@ class RegionMoments(Observable):
             instrument: Instrument
     ) -> None:
         """
-        Raise ConfigError unless it can see stars on orbits whose weights
+        Raise ValueError unless it can see stars on orbits whose weights
         are solved (see OrbitMomentsPlan): only them, in bins, of the
         method gauss_hermite and the orders 1 to M (V, sigma, h3 ... hM),
         without a flux scale; through a PSF that does not vary, without an
@@ -420,32 +420,32 @@ class RegionMoments(Observable):
                 (foreground.lens() is not None, "a lens"),
                 (scene.has_dust(), "dust in the galaxies it sees")):
             if applies:
-                raise ConfigError(
+                raise ValueError(
                     f"moments of stars on orbits whose weights are solved "
                     f"are seen without {what}: their recording does not "
                     f"apply it")
         if sum(len(emitters) for emitters in scene.emitters()) != 1 \
                 or len(scene.orbit_emitters()) != 1:
-            raise ConfigError(
+            raise ValueError(
                 "moments of regions that see stars on orbits whose weights "
                 "are solved (e.g. of a spheroid of Schwarzschild kinematics) "
                 "see only them, of one component: give the observation that "
                 "component or the lines of its stars only")
         if self._regions.grid() is None:
-            raise ConfigError(
+            raise ValueError(
                 "moments of stars on orbits whose weights are solved are of "
                 "bins of the pixels of a grid (e.g. Voronoi bins), not of "
                 "apertures")
         orders = self._orders
         if self._method != 'gauss_hermite' or len(orders) < 2 \
                 or orders != tuple(range(1, len(orders) + 1)):
-            raise ConfigError(
+            raise ValueError(
                 f"moments of stars on orbits whose weights are solved are "
                 f"Gauss-Hermite series (method gauss_hermite) of the orders "
                 f"1 to M (V, sigma, h3 ... hM); they are of the method "
                 f"{self._method!r} and the orders {list(orders)}")
         if flux_scale is not None:
-            raise ConfigError(
+            raise ValueError(
                 "moments of stars on orbits whose weights are solved have "
                 "no flux scale")
 

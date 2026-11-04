@@ -6,7 +6,6 @@ from typing import Any, TypeAlias
 import astropy.units as u
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import (
     Coords, Grid, GridData, VelocityConvention, make_convention, make_medium,
     make_rest)
@@ -127,7 +126,7 @@ def _varying_padding(
         margin = 1e-6 * abs(step_lo[2])
         if (velocities_lo.min() < low - margin
                 or velocities_lo.max() > high + margin):
-            raise ConfigError(
+            raise ValueError(
                 f"the {desc} is given from {low:g} to {high:g} km/s, but "
                 f"the channels of the data go from {velocities_lo.min():g} "
                 f"to {velocities_lo.max():g} km/s")

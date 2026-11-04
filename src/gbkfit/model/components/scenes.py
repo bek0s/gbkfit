@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
@@ -182,7 +181,7 @@ class Scene:
         """
         Return the parameters that place the component of the given name
         (see named_components) in a frame (see Component.frame_params), by
-        their names among those of the group of galaxies. Raise ConfigError
+        their names among those of the group of galaxies. Raise ValueError
         if no component has the name.
         """
         g, i = named_components(self._galaxies, [name])[name]
@@ -295,7 +294,7 @@ class AdditiveScenePlan(ScenePlan):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot.
         """
         for galaxy, emitters in zip(scene._galaxies, scene._emitters):
@@ -349,7 +348,7 @@ class TransferScenePlan(ScenePlan):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot.
         """
         opacity_cubes(
@@ -470,7 +469,7 @@ def named_components(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a given name is not among them.
     """
     known = {}
@@ -482,7 +481,7 @@ def named_components(
                 else f'{galaxy.name()}.{cmp.name()}'
             known[key] = (g, i)
     if unknown := [name for name in names if name not in known]:
-        raise ConfigError(
+        raise ValueError(
             f"there are no components named {unknown}; the named components "
             f"are {list(known)}")
     return known

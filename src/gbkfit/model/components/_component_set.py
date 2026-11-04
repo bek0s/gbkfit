@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError, item_prefixes
+from gbkfit.config import item_prefixes
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
@@ -58,7 +58,7 @@ def _with_mass_params(
     the mass per unit of the density of a component (see
     MassModel.mass_ratios) in the unit that the emission of the component
     gives it (see _units.mass_ratio_unit).
-    Raise ConfigError if the gravity is given without mass (its only
+    Raise ValueError if the gravity is given without mass (its only
     user), the mass has no distance, a component needs what
     the galaxy does not give (see Component.needs: e.g. the mass), a mass
     component follows a component whose density it cannot follow (see
@@ -67,7 +67,7 @@ def _with_mass_params(
     fraction, or the names of the parameters repeat.
     """
     if gravity is not None and mass_model is None:
-        raise ConfigError(
+        raise ValueError(
             "the gravity of a galaxy is that of its mass; give the galaxy "
             "mass, or no gravity")
     gravity = GravityNewton() if gravity is None else gravity
@@ -80,7 +80,7 @@ def _with_mass_params(
         return params if distance is None \
             else _with_params(params, distance.pdescs())
     if distance is None:
-        raise ConfigError(
+        raise ValueError(
             "the mass of a galaxy needs its distance (e.g. distance: "
             "{type: direct})")
     kinds = {cmp.name(): cmp.density_kind() for cmp in components
@@ -88,7 +88,7 @@ def _with_mass_params(
     for mass_component in mass_model.components():
         for name in mass_component.followed_components():
             if kinds.get(name) is not mass_component.followed_kind():
-                raise ConfigError(_follow_error(mass_component, name, kinds))
+                raise ValueError(_follow_error(mass_component, name, kinds))
     # (of density height traits, as the densities that mass disks follow:
     # see DiskDensity.thick)
     thick = [cmp.name() for cmp in components
@@ -117,11 +117,11 @@ def _with_params(
 ) -> dict[str, ParamDesc]:
     """
     Return the parameters of the components of a galaxy with those of its
-    distance, its mass and its gravity (taken), or raise ConfigError if
+    distance, its mass and its gravity (taken), or raise ValueError if
     their names repeat.
     """
     if repeated := sorted(params.keys() & taken.keys()):
-        raise ConfigError(
+        raise ValueError(
             f"the parameters of the distance, the mass and the gravity have "
             f"the names of parameters of the components: {repeated}; rename "
             f"the components")
@@ -159,13 +159,13 @@ def _component_prefixes(components: Sequence[Component]) -> list[str]:
     """
     Return the prefix of the parameters and the constants of each
     component of a galaxy: its name and '_', or none for one
-    component without a name. Raise ConfigError if several components do
+    component without a name. Raise ValueError if several components do
     not all have names (see item_prefixes).
     """
     names = [cmp.name() for cmp in components]
     if len(names) > 1 and None in names:
         unnamed = [i for i, name in enumerate(names) if name is None]
-        raise ConfigError(
+        raise ValueError(
             f"the components of a galaxy need names when there are "
             f"several; the components {unnamed} have none")
     return item_prefixes(names, 'components', 'cmp', False)
@@ -177,14 +177,14 @@ def _shared_geometries(
     """
     Return the geometry that each component shares (see
     Component.geometry): that of the galaxy (geometry), a named one, or
-    None for its own. Raise ConfigError if the geometry of the galaxy has
+    None for its own. Raise ValueError if the geometry of the galaxy has
     a name, or is warped and a component takes it as 'galaxy' (a warped
     geometry is given to the components themselves, whose rings it
     makes), or a component holds a geometry without a name that is not
     that of the galaxy.
     """
     if geometry.name() is not None:
-        raise ConfigError(
+        raise ValueError(
             f"the geometry of a galaxy has no name; it is "
             f"{geometry.name()!r}")
     shared = []
@@ -194,12 +194,12 @@ def _shared_geometries(
             shared.append(None)
         elif choice == 'galaxy':
             if geometry.loose() or geometry.tilted():
-                raise ConfigError(
+                raise ValueError(
                     f"the geometry of the galaxy is warped: give it to its "
                     f"component {cmp.name()!r} itself (or geometry 'own')")
             shared.append(geometry)
         elif choice.name() is None and choice != geometry:
-            raise ConfigError(
+            raise ValueError(
                 f"the component {cmp.name()!r} has a geometry without a "
                 f"name that is not that of its galaxy; name it")
         else:
@@ -210,13 +210,13 @@ def _shared_geometries(
 def _geometries(shared: Sequence[Geometry | None]) -> list[Geometry]:
     """
     Return the geometries that components share (see _shared_geometries),
-    each once, in the order of the components. Raise ConfigError if two
+    each once, in the order of the components. Raise ValueError if two
     differ but have one name.
     """
     geometries = list(dict.fromkeys(g for g in shared if g is not None))
     names = [g.name() for g in geometries]
     if repeated := sorted({n for n in names if names.count(n) > 1}):
-        raise ConfigError(
+        raise ValueError(
             f"the components have different geometries of the names "
             f"{repeated}")
     return geometries
@@ -233,7 +233,7 @@ def _merge_params(
     prefixed (see _component_prefixes), except those they share through
     their geometries (see _shared_geometries), which are named after their
     geometry (e.g. disk_posa; plainly, e.g. posa, for that of the galaxy),
-    and come first. Raise ConfigError if a geometry has the name of a
+    and come first. Raise ValueError if a geometry has the name of a
     component, those names are taken, or the components have a shared
     parameter of different sizes.
     """
@@ -241,7 +241,7 @@ def _merge_params(
     if repeated := sorted(
             ({g.name() for g in geometries} - {None})
             & {c.name() for c in components}):
-        raise ConfigError(
+        raise ValueError(
             f"the geometries and the components must have different names; "
             f"repeated: {repeated}")
     names_of = {
@@ -265,12 +265,12 @@ def _merge_params(
                 else f'{geometry.name()}_{name}'
             pdesc = geometry_params.setdefault(full_name, pdescs[name])
             if pdesc.size() != pdescs[name].size():
-                raise ConfigError(
+                raise ValueError(
                     f"the components of {geometry_desc(geometry)} have "
                     f"{name} of different sizes")
             mapping[name] = full_name
     if taken := sorted(geometry_params.keys() & params.keys()):
-        raise ConfigError(
+        raise ValueError(
             f"the parameters of the geometries have the names of "
             f"parameters of the components: {taken}; rename the geometries")
     return geometry_params | params, tuple(mappings)
@@ -305,7 +305,7 @@ class ComponentSet:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no components and no mass, several components
         without names, or the names
         of the components, their geometries and their parameters
@@ -324,7 +324,7 @@ class ComponentSet:
     ):
         components = iterutils.tuplify(components)
         if not components and mass_model is None:
-            raise ConfigError("a galaxy needs at least one component, or mass")
+            raise ValueError("a galaxy needs at least one component, or mass")
         _units.check_line_units_agree(components)
         self._components = components
         self._geometry = Geometry() if geometry is None else geometry

@@ -20,7 +20,6 @@ from collections.abc import Callable
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
@@ -55,7 +54,7 @@ class Overdensity:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the overdensity is not valid.
     """
 
@@ -63,7 +62,7 @@ class Overdensity:
         match = re.fullmatch(r'(\d+(?:\.\d+)?)([cm])', spec) \
             if isinstance(spec, str) else None
         if spec != 'vir' and (match is None or float(match[1]) <= 0):
-            raise ConfigError(
+            raise ValueError(
                 f"overdensity must be '<number>c', '<number>m' or 'vir' "
                 f"(e.g. '200c'); it is {spec!r}")
         self._spec = spec

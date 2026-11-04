@@ -44,7 +44,7 @@ class ZPTraitNWUniform(ZPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -95,7 +95,7 @@ class ZPTraitNWHarmonic(ZPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 

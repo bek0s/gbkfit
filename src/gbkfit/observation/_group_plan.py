@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.config import ConfigError, config_path
+from gbkfit.config import config_path
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
@@ -113,7 +113,7 @@ class GroupPlan:
     ------
     ValueError
         If there is not one driver per galaxy and one per observation.
-    ConfigError
+    ValueError
         If what an observation sees does not go with it (see
         Observation.plan), or a galaxy cannot plan its stage (see
         Galaxy.plan_stage).
@@ -275,7 +275,7 @@ class GroupPlan:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If there is not one dataset per observation, or a dataset does
             not suit its observation.
         """
@@ -759,7 +759,7 @@ class GroupPlan:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If there is not one noise per observation, or one, a noise does
             not suit the data of its observation (see Noise.draw), or
             nmocks or nsamples (needed) is below 1 or 2.
@@ -768,11 +768,11 @@ class GroupPlan:
         noises = list(noises) if isinstance(noises, Sequence) \
             else [noises] * len(observations)
         if len(noises) != len(observations):
-            raise ConfigError(
+            raise ValueError(
                 f"there are {len(observations)} observations, but "
                 f"{len(noises)} noises")
         if nmocks < 1:
-            raise ConfigError(f"nmocks must be at least 1; it is {nmocks}")
+            raise ValueError(f"nmocks must be at least 1; it is {nmocks}")
         streams = np.random.SeedSequence(seed).spawn(len(observations))
         with self._lock:
             states = self._galaxy_states(params, None)
@@ -806,7 +806,7 @@ class GroupPlan:
         with config_path('observations', index):
             exact = plan.has_exact_errors()
             if not exact and nsamples < 2:
-                raise ConfigError(
+                raise ValueError(
                     f"the errors of measured data are the scatter of "
                     f"nsamples draws, at least 2; nsamples is {nsamples}")
             options = _mock_options(observation, noise, exact)
@@ -901,7 +901,7 @@ def _mock_options(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spatial correlation of their noise varies along the
         spectral axis (e.g. the PSF of the instrument), which their errors
         cannot take (see Data).
@@ -912,7 +912,7 @@ def _mock_options(
         # instrument; see Noise.draw)
         spatial = observation.instrument().psf()
     if spatial is not None and spatial.varies():
-        raise ConfigError(
+        raise ValueError(
             "the noise of the mock data is correlated on the sky by a PSF "
             "that varies along the spectral axis (e.g. that of the "
             "instrument), but the errors of data take one correlation for "

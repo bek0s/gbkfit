@@ -12,7 +12,7 @@ import numpy as np
 from astropy.table import Table
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_name)
+    TypedParser, TypedSerializable, check_name)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.grid import GridData, SpectraData
@@ -67,7 +67,7 @@ class Observation(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a name is invalid, there are no galaxies or they repeat, there
         is a likelihood without data, its model can lack values but its
         likelihood has no residual for them (see LikelihoodGaussian), its
@@ -91,13 +91,13 @@ class Observation(TypedSerializable, abc.ABC):
         if galaxies is not None:
             galaxies = tuple(galaxies)
             if not galaxies:
-                raise ConfigError("an observation sees at least one galaxy")
+                raise ValueError("an observation sees at least one galaxy")
             if len(set(galaxies)) != len(galaxies):
-                raise ConfigError(f"the galaxies repeat: {list(galaxies)}")
+                raise ValueError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
                 check_name(galaxy)
         if data is None and likelihood is not None:
-            raise ConfigError("a likelihood needs data")
+            raise ValueError("a likelihood needs data")
         if data is not None:
             if likelihood is None:
                 likelihood = LikelihoodGaussian()
@@ -107,7 +107,7 @@ class Observation(TypedSerializable, abc.ABC):
                 data.noise_correlation(key)
             likelihood.check(keys, data)
             if name is None and likelihood.pdescs():
-                raise ConfigError(
+                raise ValueError(
                     "an observation whose likelihood has parameters (e.g. "
                     "a fitted noise) needs a name, which names them (e.g. "
                     "'{name}_noise_scale_moment1')")
@@ -115,7 +115,7 @@ class Observation(TypedSerializable, abc.ABC):
                 '' if name is None else f'{name}_')
             if model_can_lack_values \
                     and not likelihood.takes_lacking_values():
-                raise ConfigError(
+                raise ValueError(
                     "the model of the observation can lack values where the "
                     "data have some (e.g. the velocity of a spectrum below "
                     "its flux_floor): its likelihood needs the residual of "
@@ -268,7 +268,7 @@ class Observation(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the data are not of the observation, or do not go with the
             likelihood (see __init__).
         """
@@ -312,7 +312,7 @@ class Observation(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot see them.
         """
 

@@ -11,7 +11,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
@@ -57,7 +57,7 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the parameterisation or the overdensity is not valid, or an
         overdensity is given for 'density_radius'.
     """
@@ -76,7 +76,7 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
         check_options(ProfileHalo.__init__, locals())
         if parameters == 'density_radius':
             if overdensity is not None:
-                raise ConfigError(
+                raise ValueError(
                     "the parameters 'density_radius' take no overdensity")
             self._overdensity = None
         else:

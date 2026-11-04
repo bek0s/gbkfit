@@ -86,7 +86,7 @@ class Line(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name or the rest is not valid.
     """
 
@@ -125,7 +125,7 @@ class Band(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name or the wavelength is not valid.
     """
 
@@ -183,7 +183,7 @@ class LineCatalogue:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a name or a rest is not valid.
 
     Examples
@@ -226,11 +226,11 @@ class LineCatalogue:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has no band of the name.
         """
         if name not in self._bands:
-            raise ConfigError(
+            raise ValueError(
                 f"there is no band {name!r} in the catalogue; its bands: "
                 f"{list(self._bands)}")
         return self._bands[name]
@@ -251,11 +251,11 @@ class LineCatalogue:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has no line of the name.
         """
         if name not in self._lines:
-            raise ConfigError(
+            raise ValueError(
                 f"there is no line {name!r} in the catalogue; its lines: "
                 f"{list(self._lines)}")
         return self._lines[name]
@@ -319,7 +319,7 @@ class Lines:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no lines, or their names repeat.
     """
 
@@ -327,10 +327,10 @@ class Lines:
         if lines is not None:
             lines = tuple(lines)
             if not lines:
-                raise ConfigError("lines needs at least one line")
+                raise ValueError("lines needs at least one line")
             names = [line.name() for line in lines]
             if repeated := sorted({n for n in names if names.count(n) > 1}):
-                raise ConfigError(
+                raise ValueError(
                     f"the lines must have different names; repeated: "
                     f"{repeated}")
         self._lines = lines
@@ -366,7 +366,7 @@ class Lines:
         selected = tuple(
             i for i, name in enumerate(self.names()) if name in names)
         if not selected:
-            raise ConfigError(
+            raise ValueError(
                 f"a component of the lines {list(self.names())} has none of "
                 f"the selected lines {list(names)}; leave it out with the "
                 f"components of the observation")
@@ -404,14 +404,14 @@ class Lines:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the lines have names, and the spectral axis has no rest.
         """
         if self._lines is None:
             return np.ones(1)
         rest = spectral.coords.rest
         if rest is None:
-            raise ConfigError(
+            raise ValueError(
                 "the lines of a component need the rest wavelength or "
                 "frequency that the velocities of the spectral axis refer "
                 "to: RESTWAV or RESTFRQ in the header of the data, or the "
@@ -447,7 +447,7 @@ class Lines:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the line has no name, and the spectral axis has no rest, or
             the galaxy has a redshift.
         """
@@ -460,14 +460,14 @@ class Lines:
         # would be off by 1 + z, and the light dimmed by up to (1 + z)^5;
         # refused rather than guessed)
         if redshift != 0:
-            raise ConfigError(
+            raise ValueError(
                 "a line without a name cannot have a unit in a galaxy with "
                 "a redshift: the rest of the spectral axis may be that of "
                 "the line as emitted or as observed, which the unit needs; "
                 "name the line (e.g. lines: [hi21])")
         rest = spectral.coords.rest
         if rest is None:
-            raise ConfigError(
+            raise ValueError(
                 "a line without a name is at the rest of the spectral axis, "
                 "which its frequency needs: RESTWAV or RESTFRQ in the header "
                 "of the data, or the rest of the spectral axis of the "
@@ -559,7 +559,7 @@ class Bands:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no bands, or their names repeat.
     """
 
@@ -567,10 +567,10 @@ class Bands:
         if bands is not None:
             bands = tuple(bands)
             if not bands:
-                raise ConfigError("bands needs at least one band")
+                raise ValueError("bands needs at least one band")
             names = [band.name() for band in bands]
             if repeated := sorted({n for n in names if names.count(n) > 1}):
-                raise ConfigError(
+                raise ValueError(
                     f"the bands must have different names; repeated: "
                     f"{repeated}")
         self._bands = bands
@@ -600,13 +600,13 @@ class Bands:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the band is not known, and the component has bands.
         """
         if self._bands is None:
             return True
         if band is None:
-            raise ConfigError(
+            raise ValueError(
                 f"a component emits in the bands {list(self.names())}; the "
                 f"image that sees it needs a band")
         return band.name() in self.names()

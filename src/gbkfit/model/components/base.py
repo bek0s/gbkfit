@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
 
 import numpy as np
 
-from gbkfit.config import ConfigError, TypedSerializable, check_name
+from gbkfit.config import TypedSerializable, check_name
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
@@ -141,7 +141,7 @@ class Component(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is not valid (see check_name), the geometry
         is not one of the above, or it has neither emission nor opacity.
     """
@@ -160,11 +160,11 @@ class Component(TypedSerializable, abc.ABC):
         check_name(name)
         if not isinstance(geometry, Geometry) \
                 and geometry not in ('galaxy', 'own'):
-            raise ConfigError(
+            raise ValueError(
                 f"geometry must be 'galaxy', 'own' or a geometry; it is "
                 f"{geometry!r}")
         if emission is None and opacity is None:
-            raise ConfigError(
+            raise ValueError(
                 "a component needs emission, opacity or both")
         self._name = name
         self._geometry = geometry
@@ -260,7 +260,7 @@ class Component(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the cube cannot see its light.
         """
 
@@ -388,7 +388,7 @@ class Component(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If its light has a unit that cannot become that of the data
             (see _units.LineFactors and BandFactors).
         """

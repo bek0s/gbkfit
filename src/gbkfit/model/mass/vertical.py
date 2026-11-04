@@ -358,7 +358,7 @@ class VerticalComponent(DiskVertical):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name of the component or rstep is not valid.
     """
 

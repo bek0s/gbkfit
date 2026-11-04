@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.grid import SpectralAxis
@@ -90,7 +90,7 @@ class PixelMoments(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the orders are not valid for the method, flux_floor is not from
         0 to below 1, the convention of the velocities is not known, or
         median_size is not an odd number of at least 3.
@@ -152,7 +152,7 @@ class PixelMoments(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of moment maps, or the options are not
             valid.
         """
@@ -253,7 +253,7 @@ class PixelMoments(Observable):
             pixel_weights: 'Weights | None'
     ) -> None:
         if pixel_weights is not None and self._method != 'moments':
-            raise ConfigError(
+            raise ValueError(
                 f"the method {self._method} does not support pixel_weights "
                 f"yet")
         _moments.warn_unmasked_noise(self._flux_floor, instrument)

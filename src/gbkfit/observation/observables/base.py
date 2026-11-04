@@ -12,7 +12,7 @@ import astropy.units
 import numpy as np
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, make_typed_desc)
+    TypedParser, TypedSerializable, make_typed_desc)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import (
@@ -136,7 +136,7 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of the dataset class of the observable.
         """
         pass
@@ -364,7 +364,7 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the observable cannot be seen so.
         """
         pass
@@ -385,7 +385,7 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot.
         """
         if scene.orbit_emitters() and self.orbit_stars is None:
@@ -393,7 +393,7 @@ class Observable(TypedSerializable, abc.ABC):
                 f"{type_} (their {cls.orbit_stars})" for type_, cls
                 in observable_parser.registered_classes().items()
                 if cls.orbit_stars is not None)
-            raise ConfigError(
+            raise ValueError(
                 f"stars on orbits whose weights are solved to fit the data "
                 f"(e.g. of Schwarzschild kinematics) are seen by "
                 f"{', '.join(seeing)}; {self.type()} does not see them")
@@ -413,34 +413,34 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset does not hold the data of this observable.
         """
         self._require_dataset_class(dataset)
         if set(dataset.keys()) != set(self.keys()):
             desc = make_typed_desc(self.__class__, 'observable')
-            raise ConfigError(
+            raise ValueError(
                 f"{desc} has the data items {sorted(self.keys())}, but the "
                 f"data have {sorted(dataset.keys())}")
         self._require_matching_coordinates(dataset)
 
     @classmethod
     def _require_dataset_class(cls, dataset: Dataset) -> None:
-        """Raise ConfigError unless the dataset is of the dataset class."""
+        """Raise ValueError unless the dataset is of the dataset class."""
         if not isinstance(dataset, cls.dataset_class):
             desc = make_typed_desc(cls, 'observable')
             dataset_desc = make_typed_desc(
                 dataset.__class__, 'dataset')
-            raise ConfigError(f"{desc} cannot be compared with {dataset_desc}")
+            raise ValueError(f"{desc} cannot be compared with {dataset_desc}")
 
     def _require_matching_coordinates(self, dataset: Dataset) -> None:
         """
-        Raise ConfigError unless the data were measured on the grid of this
+        Raise ValueError unless the data were measured on the grid of this
         observable. Observables of other data override this.
         """
         if dataset.grid() != self._grid:
             desc = make_typed_desc(self.__class__, 'observable')
-            raise ConfigError(
+            raise ValueError(
                 f"the data are on the grid {dataset.grid()}, but {desc} "
                 f"is on the grid {self._grid}")
 
@@ -581,7 +581,7 @@ class Observable(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it does not support pixel weights, or with the foreground (see
             DCubePlanBase).
         """
@@ -661,7 +661,7 @@ class ObservablePlan(abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the noise does not suit the recorded data (see
             Noise.draw).
         """

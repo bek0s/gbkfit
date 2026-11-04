@@ -8,7 +8,6 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.utils import iterutils
@@ -121,22 +120,22 @@ def make_cone(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the options are not valid, the cone does not take one of the
         traits (see CONE_TRAITS), or the parts and roles do not go
         together (e.g. lines without kinematics).
     """
     if not density.thick():
-        raise ConfigError(
+        raise ValueError(
             "a cone needs density height traits: its profile across its "
             "walls")
     if isinstance(emission, LineEmission) and kinematics is None:
-        raise ConfigError("a cone that emits lines needs kinematics")
+        raise ValueError("a cone that emits lines needs kinematics")
     if opacity is not None and not isinstance(opacity, DustOpacity):
-        raise ConfigError("the opacity of a cone is dust (type: dust)")
+        raise ValueError("the opacity of a cone is dust (type: dust)")
     sptraits = iterutils.tuplify(sptraits)
     if len(sptraits) > MAX_TRAITS:
-        raise ConfigError(
+        raise ValueError(
             f"at most {MAX_TRAITS} sptraits are supported; {len(sptraits)} "
             f"were given")
     traits_ = dict(rpt=density.ptraits(), rht=density.htraits(), spt=sptraits)

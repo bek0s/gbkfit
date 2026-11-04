@@ -11,7 +11,7 @@ from typing import Annotated, Any, Self
 import numpy as np
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, Unit, check_options, item_prefixes)
+    BasicParser, Serializable, Unit, check_options, item_prefixes)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, make_grid, sky_positions, sky_to_pixel
 from gbkfit.params import ParamScalarDesc, ParamValues
@@ -57,7 +57,7 @@ class Lens(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If it has no masses, or only some of its masses have names (see
         pdescs).
     """
@@ -84,7 +84,7 @@ class Lens(Serializable):
         check_options(Lens.__init__, locals())
         masses = iterutils.tuplify(masses)
         if not masses:
-            raise ConfigError("a lens needs at least one mass")
+            raise ValueError("a lens needs at least one mass")
         self._source_grid = make_grid(
             tuple(source_size), tuple(source_step))
         self._masses = masses

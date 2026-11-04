@@ -14,7 +14,7 @@ import numpy as np
 from annotated_types import Ge, Gt, Le
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, TypedParser, TypedSerializable,
+    BasicParser, Serializable, TypedParser, TypedSerializable,
     Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, sky_positions
@@ -155,7 +155,7 @@ class Weights(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no weight functions.
     """
 
@@ -172,7 +172,7 @@ class Weights(Serializable):
         check_options(Weights.__init__, locals())
         traits = iterutils.tuplify(traits)
         if not traits:
-            raise ConfigError(
+            raise ValueError(
                 "pixel weights need at least one weight function")
         self._component = component
         self._traits = traits
@@ -265,13 +265,13 @@ def plan_weights(
 def weights_geometry(weights: Weights, scene: 'Scene') -> dict[str, str]:
     """
     Return the parameters of the plane of the disk of pixel weights in a
-    scene, by role (xpos, ypos, posa, incl). Raise ConfigError unless
+    scene, by role (xpos, ypos, posa, incl). Raise ValueError unless
     their component is a disk of the scene.
     """
     frame = scene.frame_params(weights.component())
     names = dict(xpos=frame.x, ypos=frame.y, posa=frame.posa, incl=frame.incl)
     if missing := [role for role, name in names.items() if name is None]:
-        raise ConfigError(
+        raise ValueError(
             f"pixel weights need the plane of a disk; the component "
             f"{weights.component()!r} has no {missing}")
     return names

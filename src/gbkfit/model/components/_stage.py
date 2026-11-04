@@ -150,7 +150,7 @@ class GalaxyStage:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a component cannot plan its part (e.g. it has an image trait,
         but there is no sky origin).
     """

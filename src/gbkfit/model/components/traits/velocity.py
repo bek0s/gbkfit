@@ -12,7 +12,7 @@ import numpy as np
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_name, check_options)
+    TypedParser, TypedSerializable, check_name, check_options)
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
 from .options import (
@@ -100,7 +100,7 @@ class PressureSupport(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the names repeat, or there are none.
     """
 
@@ -115,7 +115,7 @@ class PressureSupport(TypedSerializable, abc.ABC):
         if mass is not None:
             mass = (mass,) if isinstance(mass, str) else tuple(mass)
             if not mass or len(set(mass)) != len(mass):
-                raise ConfigError(
+                raise ValueError(
                     f"the mass of a pressure support names mass components, "
                     f"at least one and each once; it is {list(mass)}")
             for name in mass:
@@ -181,7 +181,7 @@ class VPTraitUniform(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -220,7 +220,7 @@ class VPTraitArctan(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -261,7 +261,7 @@ class VPTraitBoissier(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -303,7 +303,7 @@ class VPTraitEpinat(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -346,7 +346,7 @@ class VPTraitLRamp(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -387,7 +387,7 @@ class VPTraitTanh(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -429,7 +429,7 @@ class VPTraitPolyex(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -473,7 +473,7 @@ class VPTraitRix(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -517,7 +517,7 @@ class VPTraitCourteau(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -561,7 +561,7 @@ class VPTraitBrandt(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -604,7 +604,7 @@ class VPTraitIso(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -646,7 +646,7 @@ class VPTraitNFW(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -690,7 +690,7 @@ class VPTraitNWUniform(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -739,7 +739,7 @@ class VPTraitNWHarmonic(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -795,7 +795,7 @@ class VPTraitWedge(VPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -903,7 +903,7 @@ class VPTraitNWBar(VPTraitPlanar):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -967,7 +967,7 @@ class VPTraitSpiral(VPTraitPlanar):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 

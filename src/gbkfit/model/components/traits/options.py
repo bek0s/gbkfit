@@ -12,7 +12,6 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.params.pdescs import (
     ParamColumn, ParamDesc, ParamScalarDesc, ParamTable, ParamVectorDesc)
 
@@ -161,7 +160,7 @@ class Zmax(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If zmax is not a positive length.
     """
     value: float
@@ -181,7 +180,7 @@ class Direction(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the direction is not one of VPT_DIRECTIONS.
     """
     name: str
@@ -198,7 +197,7 @@ class DispersionDirection(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the direction is not one of DPT_DIRECTIONS.
     """
     name: str = DPT_DIRECTION_DEFAULT
@@ -220,7 +219,7 @@ class Sampling(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the sampling is not one of SAMPLINGS.
     """
     name: str = SAMPLING_DEFAULT
@@ -252,7 +251,7 @@ class Blobs(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If nblobs is less than 1.
     """
     nblobs: int
@@ -321,7 +320,7 @@ class Harmonic(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the order is not an integer of at least 0.
     """
     order: int
@@ -401,7 +400,7 @@ class Spiral(TraitOption):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the order is less than 1, the wavenumber or the winding is not
         one of theirs, or a given wavenumber has a winding.
     """
@@ -411,7 +410,7 @@ class Spiral(TraitOption):
 
     def __post_init__(self) -> None:
         if self.wavenumber == 'given' and self.winding is not None:
-            raise ConfigError(
+            raise ValueError(
                 "a given wavenumber winds the arms by its sign: winding is "
                 "for the wavenumber of the dispersion relation")
 

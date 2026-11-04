@@ -21,7 +21,7 @@ import numpy as np
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .mass.units import G
@@ -52,11 +52,11 @@ _C = astropy.constants.c.to_value('km/s')
 def _cosmology(name: str) -> astropy.cosmology.Cosmology:
     """
     Return a cosmology of astropy by name (one of its realizations, e.g.
-    'Planck18'). Raise ConfigError for an unknown name.
+    'Planck18'). Raise ValueError for an unknown name.
     """
     available = astropy.cosmology.realizations.available
     if name not in available:
-        raise ConfigError(
+        raise ValueError(
             f"cosmology must be one of {list(available)}; it is {name!r}")
     return getattr(astropy.cosmology.realizations, name)
 
@@ -118,7 +118,7 @@ class Distance(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the cosmology is unknown.
     """
 
@@ -164,7 +164,7 @@ class Distance(TypedSerializable, abc.ABC):
 
     def check_redshift(self, redshift: float | None) -> None:
         """
-        Raise ConfigError unless it can be had for a galaxy of the given
+        Raise ValueError unless it can be had for a galaxy of the given
         redshift (None if not given): any here.
         """
         pass
@@ -237,7 +237,7 @@ class DistanceDirect(Distance):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the cosmology is unknown.
     """
 
@@ -277,7 +277,7 @@ class DistanceRedshift(Distance):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the redshift is negative, or the cosmology is unknown.
     """
 
@@ -315,7 +315,7 @@ class DistanceRedshift(Distance):
         # (without its own, that of the galaxy: none or 0 gave a distance
         # of 0, silently, and a blueshift a negative one)
         if self._redshift is None and not (redshift or 0) > 0:
-            raise ConfigError(
+            raise ValueError(
                 f"a distance by redshift needs a redshift above 0: give the "
                 f"galaxy its redshift, or the distance its own; the galaxy "
                 f"has {redshift}")

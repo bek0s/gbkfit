@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 import numpy as np
 from annotated_types import Ge, Lt
 
-from gbkfit.config import ConfigError, warn
+from gbkfit.config import warn
 from gbkfit.grid import SpectralAxis, check_convention
 import gbkfit.math
 from gbkfit.dataset import Data, Dataset
@@ -88,7 +88,7 @@ def spectral_axis(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the convention of its velocities is not known (see
         check_convention).
     """
@@ -131,16 +131,16 @@ def check_moment_orders(
         method: str
 ) -> tuple[int, ...]:
     """
-    Return the moment orders, sorted and unique. Raise ConfigError unless
+    Return the moment orders, sorted and unique. Raise ValueError unless
     they are valid for the method (see MOMENT_METHODS; a Gaussian has moments 0
     to 2, a Gauss-Hermite series 0 to 4).
     """
     max_order = _MAX_ORDERS[method]
     orders = tuple(sorted(set(orders)))
     if not orders:
-        raise ConfigError("at least one moment order is required")
+        raise ValueError("at least one moment order is required")
     if any(order < 0 or order > max_order for order in orders):
-        raise ConfigError(
+        raise ValueError(
             f"the moment orders of the method {method} must be between 0 "
             f"and {max_order}")
     return orders
@@ -176,7 +176,7 @@ def moment_maps(
 
 def check_moment_items(dataset: Dataset, method: str) -> None:
     """
-    Raise ConfigError if a dataset has moments that a method does not
+    Raise ValueError if a dataset has moments that a method does not
     measure: the coefficients h3 and h4 of a Gauss-Hermite series without
     the method gauss_hermite, or central moments of the orders 3 and 4 with
     it (see moment_item: of the same order, they are other numbers).
@@ -184,12 +184,12 @@ def check_moment_items(dataset: Dataset, method: str) -> None:
     hermite = method == 'gauss_hermite'
     for key in dataset:
         if key.startswith('h') and not hermite:
-            raise ConfigError(
+            raise ValueError(
                 f"{key}, a coefficient of a Gauss-Hermite series, is "
                 f"measured by the method gauss_hermite; the method is "
                 f"{method}")
         if hermite and key in ('moment3', 'moment4'):
-            raise ConfigError(
+            raise ValueError(
                 f"{key} is a central moment, in (km/s)^{key[-1]}; the method "
                 f"gauss_hermite measures h{key[-1]}, a coefficient of a "
                 f"Gauss-Hermite series (name the data h{key[-1]}, if they "

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 import numpy as np
 
 from gbkfit.config import (
-    ConfigError, TypedSerializable, check_name, check_options, make_typed_desc)
+    TypedSerializable, check_name, check_options, make_typed_desc)
 from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
 from .options import (
     Blobs, Direction, DispersionDirection, Nodewise, SAMPLING_DEFAULT, Sampling,
@@ -116,7 +116,7 @@ class Trait(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is invalid.
     """
 
@@ -218,7 +218,7 @@ class HTrait(Trait, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is invalid, or it has a sampling without nodewise.
     """
 
@@ -226,7 +226,7 @@ class HTrait(Trait, abc.ABC):
         check_options(HTrait.__init__, locals())
         super().__init__(*options, name=name)
         if not self.nodewise() and self.sampling() != SAMPLING_DEFAULT:
-            raise ConfigError(
+            raise ValueError(
                 f"sampling is '{self.sampling()}', but nodewise is False: "
                 f"the trait has no node-wise parameters")
 

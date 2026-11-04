@@ -673,7 +673,7 @@ class RPTraitMixtureExponential(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -725,7 +725,7 @@ class RPTraitMixtureGauss(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -778,7 +778,7 @@ class RPTraitMixtureGGauss(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -831,7 +831,7 @@ class RPTraitMixtureMoffat(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -883,7 +883,7 @@ class RPTraitNWUniform(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -944,7 +944,7 @@ class RPTraitNWHarmonic(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -1006,7 +1006,7 @@ class RPTraitNWDistortion(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -1084,7 +1084,7 @@ class RPTraitSpiral(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 

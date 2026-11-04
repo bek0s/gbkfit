@@ -24,7 +24,7 @@ import scipy.ndimage
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_name,
+    FitsFile, TypedParser, TypedSerializable, Unit, check_name,
     check_options, split_fits_file)
 from gbkfit.grid import (
     Grid, check_overlap, make_grid, pixels_on, sky_positions)
@@ -64,7 +64,7 @@ class LensMass(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is not valid (see check_name).
     """
 
@@ -141,7 +141,7 @@ class LensDeflectionMap(LensMass):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the maps are not two finite images of one shape.
     """
 
@@ -193,7 +193,7 @@ class LensDeflectionMap(LensMass):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the maps have different world coordinates.
         """
         check_options(LensDeflectionMap.from_files, locals())
@@ -202,7 +202,7 @@ class LensDeflectionMap(LensMass):
             for file in (alpha_x, alpha_y)]
         (data_x, coords), (data_y, coords_y) = maps
         if coords_y != coords:
-            raise ConfigError(
+            raise ValueError(
                 "the deflection maps have different world coordinates")
         return cls(
             data_x, data_y, coords.step if step is None else step,
@@ -240,11 +240,11 @@ class LensDeflectionMap(LensMass):
         alpha_x = np.asarray(alpha_x, dtype=float)
         alpha_y = np.asarray(alpha_y, dtype=float)
         if alpha_x.ndim != 2 or alpha_x.shape != alpha_y.shape:
-            raise ConfigError(
+            raise ValueError(
                 f"the deflection maps must be two images of one shape; they "
                 f"have the shapes {alpha_x.shape} and {alpha_y.shape}")
         if not (np.all(np.isfinite(alpha_x)) and np.all(np.isfinite(alpha_y))):
-            raise ConfigError("the deflection maps must be finite")
+            raise ValueError("the deflection maps must be finite")
         self._alpha_x = alpha_x
         self._alpha_y = alpha_y
         self._grid = make_grid(
@@ -453,7 +453,7 @@ class LensMultipole(LensMass):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the order is not an integer of at least 1.
     """
 

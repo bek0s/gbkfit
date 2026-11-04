@@ -111,7 +111,7 @@ class SPTraitNWAzimuthalRange(SPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 

@@ -11,7 +11,7 @@ import astropy.table
 import numpy as np
 import scipy.special
 
-from gbkfit.config import ConfigError, FilePath, check_options
+from gbkfit.config import FilePath, check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
@@ -52,7 +52,7 @@ def read_particles(file: str) -> dict[str, np.ndarray]:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the file cannot be read.
     """
     try:
@@ -63,31 +63,31 @@ def read_particles(file: str) -> dict[str, np.ndarray]:
             read = astropy.table.Table.read(file)
             table = {key: np.asarray(read[key]) for key in read.colnames}
     except (OSError, ValueError) as e:
-        raise ConfigError(f"cannot read the particles of {file}: {e}") from e
+        raise ValueError(f"cannot read the particles of {file}: {e}") from e
     return table
 
 
 def _columns(table: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
     """
     Return the columns of a table of particles (see Particles), as
-    floats, or raise ConfigError if a column is missing, the columns are
+    floats, or raise ValueError if a column is missing, the columns are
     not of one length or have no particles, a value is not finite, or a
     dispersion is negative.
     """
     if missing := [key for key in _COLUMNS if key not in table]:
-        raise ConfigError(
+        raise ValueError(
             f"the particles have no columns {missing} (see the component "
             f"particles)")
     names = _COLUMNS + ((_SIGMA,) if _SIGMA in table else ())
     columns = {key: np.asarray(table[key], dtype=float) for key in names}
     if len({len(column) for column in columns.values()}) > 1:
-        raise ConfigError("the columns of the particles differ in length")
+        raise ValueError("the columns of the particles differ in length")
     if not len(columns['x']):
-        raise ConfigError("the table of the particles has no particles")
+        raise ValueError("the table of the particles has no particles")
     if not all(np.all(np.isfinite(column)) for column in columns.values()):
-        raise ConfigError("the particles have values that are not finite")
+        raise ValueError("the particles have values that are not finite")
     if np.any(columns.get(_SIGMA, 0) < 0):
-        raise ConfigError("the particles have negative dispersions")
+        raise ValueError("the particles have negative dispersions")
     return columns
 
 
@@ -379,7 +379,7 @@ class Particles(Component):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the table is invalid, the geometry is loose or tilted, or the
         lines are not valid.
     """
@@ -416,7 +416,7 @@ class Particles(Component):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the file cannot be read, or the particles are not valid.
         """
         check_options(Particles.from_file, locals())
@@ -447,7 +447,7 @@ class Particles(Component):
         check_options(Particles.__init__, locals())
         if isinstance(geometry, Geometry) and (
                 geometry.loose() or geometry.tilted()):
-            raise ConfigError(
+            raise ValueError(
                 f"particles have one centre and orientation, but "
                 f"{geometry_desc(geometry)} is loose or tilted; give them "
                 f"geometry 'own'")
@@ -469,7 +469,7 @@ class Particles(Component):
         pdescs = {
             name: geometry_pdesc(name) for name in names}
         if repeated := sorted(set(light.pdescs()) & set(pdescs)):
-            raise ConfigError(
+            raise ValueError(
                 f"the parameters of the flux ratios have the names of other "
                 f"parameters: {repeated}; rename the lines or bands")
         self._pdescs = pdescs | light.pdescs()
@@ -495,7 +495,7 @@ class Particles(Component):
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines:
-            raise ConfigError(
+            raise ValueError(
                 "a spectral cube does not see the stars of particles: they "
                 "have no velocities to place in channels (particles of "
                 "lines have theirs)")

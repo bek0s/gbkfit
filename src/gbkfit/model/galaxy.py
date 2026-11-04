@@ -8,7 +8,7 @@ from typing import Any, Self
 import numpy as np
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, TypedParser, check_name,
+    BasicParser, Serializable, TypedParser, check_name,
     check_options, load_option)
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
@@ -115,7 +115,7 @@ class Galaxy(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no components and no mass, several components without
         names, the names or parameters conflict, the mass, the distance
         and the components do not go together (e.g. 'mass' velocity traits
@@ -146,6 +146,8 @@ class Galaxy(Serializable):
         ------
         ConfigError
             If the configuration has an error.
+        ValueError, TypeError
+            If an object it makes refuses its options.
         """
         info = dict(info)
         if info.get('geometry') is not None:
@@ -188,7 +190,7 @@ class Galaxy(Serializable):
         check_options(Galaxy.__init__, locals())
         check_name(name)
         if redshift is not None and not redshift > -1:
-            raise ConfigError(
+            raise ValueError(
                 f"the redshift must be above -1; it is {redshift}")
         self._redshift = redshift
         mass = iterutils.tuplify(mass)
@@ -332,7 +334,7 @@ class Galaxy(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has image traits, but there is no sky origin.
         """
         return self._component_set.plan_stage(
@@ -366,7 +368,7 @@ class Galaxy(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has image traits, but there is no sky origin.
         """
         return self._component_set.plan_functions(
@@ -476,7 +478,7 @@ def _or_host(driver: Driver | None) -> Driver:
 
 def _check_redshift_not_needed(components: Sequence[Component]) -> None:
     """
-    Raise ConfigError if a component of a galaxy without a redshift emits
+    Raise ValueError if a component of a galaxy without a redshift emits
     in bands with a unit and has no systemic velocity: the redshift by
     which images see its light dimmed is then not known (see
     _units.BandFactors).
@@ -487,7 +489,7 @@ def _check_redshift_not_needed(components: Sequence[Component]) -> None:
                 and emission.unit() is not None \
                 and 'vsys' not in component.pdescs():
             label = component.name() or f'component{i}'
-            raise ConfigError(
+            raise ValueError(
                 f"the light of component {label!r} is in a unit, as the "
                 f"galaxy emits it, which images see dimmed by its redshift: "
                 f"give the galaxy its redshift (the option redshift; 0 for "

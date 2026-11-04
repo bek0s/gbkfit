@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.params import ParamValues
@@ -200,7 +199,7 @@ class ComponentPlans:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the light of an emitter has a unit that cannot become that of
         the data (see Component.plan).
     ValueError
@@ -248,8 +247,8 @@ class ComponentPlans:
                 self.plans[i] = components[i].plan(
                     driver, spectral, dtype, lines, band, True,
                     self.ratios[i], data_unit, redshift)
-            except ConfigError as e:
-                raise ConfigError(f"{_label(components, i)}: {e}") from e
+            except ValueError as e:
+                raise ValueError(f"{_label(components, i)}: {e}") from e
         self.plans |= {
             i: components[i].plan(
                 driver, spectral, dtype, lines, band, False, None, None,
@@ -488,13 +487,13 @@ class _Dust(NamedTuple):
     def ratio(self, light: _Light) -> float:
         """
         Return the ratio of its optical depth at the wavelength of the
-        light in its rest frame to that at V. Raise ConfigError if it has a
+        light in its rest frame to that at V. Raise ValueError if it has a
         law and the wavelength is not known.
         """
         if self.law is None:
             return 1.0
         if light.wavelength is None:
-            raise ConfigError(
+            raise ValueError(
                 "dust of an extinction law dims light at its rest "
                 "wavelength: the emission of the components it dims must "
                 "name its lines (e.g. lines: [halpha]), and an image needs "
@@ -527,7 +526,7 @@ def opacity_cubes(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If dust of an extinction law dims light of a wavelength that is
         not known, or there are too many kinds of dust (see
         _opacity_cubes).
@@ -581,7 +580,7 @@ def _opacity_cubes(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If dust of a law dims light of a wavelength that is not known, or
         with several wavelengths, there are more kinds of dust than the
         kernels take.
@@ -595,7 +594,7 @@ def _opacity_cubes(
             (_GREY,), (0,) * len(dust),
             tuple(kind.ratio(light[0]) for kind in dust))
     if len(distinct) > _MAX_OPACITY_CUBES:
-        raise ConfigError(
+        raise ValueError(
             f"the dust that an observation of several wavelengths sees can "
             f"have at most {_MAX_OPACITY_CUBES} extinction laws (a law of "
             f"galaxies of different redshifts counts once for each); it has "

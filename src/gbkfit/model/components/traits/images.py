@@ -12,7 +12,7 @@ import scipy.ndimage
 import scipy.special
 
 from gbkfit.config import (
-    ConfigError, FitsFile, Unit, check_options, split_fits_file, warn)
+    FitsFile, Unit, check_options, split_fits_file, warn)
 from gbkfit.grid import Coords, frame_to_pixels, make_grid
 from gbkfit.instrument import PSF, psf_parser
 from gbkfit.io import read_data
@@ -36,18 +36,18 @@ def _check_map_grid(
 ) -> tuple[tuple[int, int], float]:
     """
     Return the numbers of cells (nx, ny) and the side (arcsec) of the grid
-    of a map trait (see RPTraitMap), or raise ConfigError if they are not
+    of a map trait (see RPTraitMap), or raise ValueError if they are not
     valid.
     """
     if not (isinstance(size, Sequence) and len(size) == 2 and all(
             isinstance(n, numbers.Integral) and not isinstance(n, bool)
             and n >= 1 for n in size)):
-        raise ConfigError(
+        raise ValueError(
             f"size must be the numbers of cells along x and y, [nx, "
             f"ny], each at least 1; it is {size!r}")
     if isinstance(step, bool) or not (
             isinstance(step, numbers.Real) and 0 < step < np.inf):
-        raise ConfigError(
+        raise ValueError(
             f"step must be a positive length; it is {step!r}")
     return (int(size[0]), int(size[1])), float(step)
 
@@ -116,7 +116,7 @@ class RPTraitMap(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -247,7 +247,7 @@ class RPTraitImage(RPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid, or the file is not of an image.
     """
 
@@ -304,7 +304,7 @@ class RPTraitImage(RPTrait):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an option is not valid, or the file is not of an image.
         """
         check_options(RPTraitImage.from_file, locals())
@@ -327,7 +327,7 @@ class RPTraitImage(RPTrait):
         super().__init__(name=name)
         self._size, self._step = _check_map_grid(size, step)
         if data.ndim != 2:
-            raise ConfigError(
+            raise ValueError(
                 f"the data of an image trait must be an image; they have "
                 f"{data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0).astype(float)

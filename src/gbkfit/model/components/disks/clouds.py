@@ -8,7 +8,7 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError, Serializable, check_options
+from gbkfit.config import Serializable, check_options
 from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ModelEvaluationError, ParamValues
@@ -54,7 +54,7 @@ class Clouds(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If cflux is not positive, or the seed is not in its range.
     """
 
@@ -64,11 +64,11 @@ class Clouds(Serializable):
     def __init__(self, cflux: float, seed: int = 0):
         check_options(Clouds.__init__, locals())
         if not cflux > 0:
-            raise ConfigError(f"cflux must be greater than 0; it is {cflux}")
+            raise ValueError(f"cflux must be greater than 0; it is {cflux}")
         # (the kernels take an unsigned 32-bit seed: a larger one failed
         # at the first evaluation, with a TypeError that ends a fit)
         if not 0 <= seed < 2 ** 32:
-            raise ConfigError(
+            raise ValueError(
                 f"seed must be from 0 to {2 ** 32 - 1}; it is {seed}")
         self._cflux = float(cflux)
         self._seed = seed

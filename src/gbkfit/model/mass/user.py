@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.config import ConfigError, FilePath, check_name, check_options
+from gbkfit.config import FilePath, check_name, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import funcutils
@@ -56,7 +56,7 @@ class MassUser(MassComponent):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a parameter name is not valid or repeats.
     """
 
@@ -118,7 +118,7 @@ class MassUser(MassComponent):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the file does not define the functions, or a parameter name
             is not valid or repeats.
         """
@@ -129,7 +129,7 @@ class MassUser(MassComponent):
                 else funcutils.load_function_from_file(file, x)
                 for x in (func, forces, mass)]
         except RuntimeError as e:
-            raise ConfigError(str(e)) from e
+            raise ValueError(str(e)) from e
         component = cls(name, functions[0], params, *functions[1:])
         component._source = (file, func, forces, mass)
         return component
@@ -148,7 +148,7 @@ class MassUser(MassComponent):
             check_name(param)
         names = list(params)
         if repeated := sorted({p for p in names if names.count(p) > 1}):
-            raise ConfigError(f"the parameters repeat: {repeated}")
+            raise ValueError(f"the parameters repeat: {repeated}")
         self._func = func
         self._forces = forces
         self._mass = mass

@@ -15,7 +15,7 @@ import scipy.integrate
 import scipy.interpolate
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
@@ -92,17 +92,17 @@ class HaloResponse(TypedSerializable, abc.ABC):
 
     def check_profile(self, profile: SpheroidProfile) -> None:
         """
-        Raise ConfigError, saying why, unless it takes the profile of its
+        Raise ValueError, saying why, unless it takes the profile of its
         halo; here, it does.
         """
 
     def check_baryons(self, baryons: Sequence[str]) -> None:
         """
-        Raise ConfigError, saying why, unless it takes the baryons its
+        Raise ValueError, saying why, unless it takes the baryons its
         halo responds to (by their names); here, it needs some.
         """
         if not baryons:
-            raise ConfigError(
+            raise ValueError(
                 f"the response '{self.type()}' needs the baryons that the "
                 f"spheroid responds to (baryons)")
 
@@ -168,7 +168,7 @@ class ResponseGnedin04(HaloResponse):
     def check_profile(self, profile: SpheroidProfile) -> None:
         if not (isinstance(profile, ProfileHalo)
                 and profile.parameterisation() != 'density_radius'):
-            raise ConfigError(
+            raise ValueError(
                 "the contraction 'gnedin04' takes the radius r_D of a halo: "
                 "it needs a halo of a parameterisation of a mass or a "
                 "velocity")
@@ -275,7 +275,7 @@ class ResponseSIDM(HaloResponse):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the contraction is that of SIDM.
     """
 
@@ -293,7 +293,7 @@ class ResponseSIDM(HaloResponse):
     def __init__(self, contraction: HaloResponse | None = None):
         check_options(ResponseSIDM.__init__, locals())
         if isinstance(contraction, ResponseSIDM):
-            raise ConfigError(
+            raise ValueError(
                 "the contraction of the halo before its SIDM core is not "
                 "SIDM")
         self._contraction = contraction

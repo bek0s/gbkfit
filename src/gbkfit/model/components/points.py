@@ -10,7 +10,7 @@ import astropy.units
 import numpy as np
 import scipy.special
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
@@ -32,9 +32,9 @@ __all__ = [
 
 
 def _check_geometry(geometry: Geometry | Literal['galaxy', 'own']) -> None:
-    """Raise ConfigError if the geometry of a point is loose."""
+    """Raise ValueError if the geometry of a point is loose."""
     if isinstance(geometry, Geometry) and geometry.loose():
-        raise ConfigError(
+        raise ValueError(
             f"a point has one centre, but {geometry_desc(geometry)} is "
             f"loose (a centre for each ring); give the point geometry "
             f"'own'")
@@ -77,7 +77,7 @@ def _light_pdescs(
     flux_unit = None if unit is None else unit * astropy.units.arcsec ** 2
     pdescs = point_pdescs(spectral, depth, flux_unit)
     if repeated := sorted(set(light.pdescs()) & set(pdescs)):
-        raise ConfigError(
+        raise ValueError(
             f"the parameters of the flux ratios have the names of other "
             f"parameters: {repeated}; rename the lines or bands")
     return pdescs | light.pdescs()
@@ -349,7 +349,7 @@ class Point(Component):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the geometry is loose, or the lines are not valid.
     """
 
@@ -403,7 +403,7 @@ class Point(Component):
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines:
-            raise ConfigError(
+            raise ValueError(
                 "a spectral cube does not see the stars of a point: they "
                 "have no velocities to place in channels (points of lines "
                 "have their vsys and dispersion)")

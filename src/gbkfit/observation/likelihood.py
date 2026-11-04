@@ -19,7 +19,7 @@ from annotated_types import Ge, Gt, Lt
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
-    ConfigError, FilePath, TypedParser, TypedSerializable, check_name,
+    FilePath, TypedParser, TypedSerializable, check_name,
     check_options)
 from gbkfit.dataset import Dataset, NoiseCorrelation
 from gbkfit.math.correlation import (
@@ -142,7 +142,7 @@ class Likelihood(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it does not (e.g. its options name items that the
             observation does not have); here, it suits any.
         """
@@ -324,7 +324,7 @@ class LikelihoodGaussian(Likelihood):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the noise of an item fits neither its scale nor its jitter, or
         has scale_min without the scale or the scale without it.
     """
@@ -409,7 +409,7 @@ class LikelihoodGaussian(Likelihood):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If its options name items that the observation does not have
             (e.g. a typo in the names of the weights, the upper limits or
             the fitted noise), it fits both the scale and the jitter of the
@@ -421,7 +421,7 @@ class LikelihoodGaussian(Likelihood):
         weights = () if isinstance(self._weights, Real) else self._weights
         named = {*weights, *(self._upper_limits or ()), *self._noise}
         if unknown := sorted(named - set(keys)):
-            raise ConfigError(
+            raise ValueError(
                 f"the options of the likelihood name data items that the "
                 f"observation does not have: {unknown}; its items are "
                 f"{list(keys)}")
@@ -433,7 +433,7 @@ class LikelihoodGaussian(Likelihood):
                 continue
             correlated_pixels(key, data[key].mask())
             if self.upper_limit(key) is not None:
-                raise ConfigError(
+                raise ValueError(
                     f"the noise of '{key}' is correlated, which does not go "
                     f"with upper limits")
 
@@ -542,12 +542,12 @@ def correlated_pixels(key: str, mask: np.ndarray) -> np.ndarray:
     """
     Return the flat indices of the pixels of the sky that a data item
     whose noise is correlated keeps (see Whitening), of its mask; raise
-    ConfigError unless it keeps the same pixels in every channel, and at
+    ValueError unless it keeps the same pixels in every channel, and at
     most MAX_CORRELATED_PIXELS.
     """
     channels = mask.reshape(-1, *mask.shape[-2:])
     if np.any(channels != channels[0]):
-        raise ConfigError(
+        raise ValueError(
             f"the noise of '{key}' is correlated, so its mask must keep "
             f"whole spectra (the same pixels in every channel, e.g. not a "
             f"mask of the emission); it does not. The option "
@@ -555,7 +555,7 @@ def correlated_pixels(key: str, mask: np.ndarray) -> np.ndarray:
             f"masked channel")
     pixels = np.flatnonzero(channels[0])
     if pixels.size > MAX_CORRELATED_PIXELS:
-        raise ConfigError(
+        raise ValueError(
             f"the noise of '{key}' is correlated over {pixels.size} pixels; "
             f"at most {MAX_CORRELATED_PIXELS} can be (mask more of them)")
     return pixels
@@ -574,7 +574,7 @@ def whitening(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If its mask is not one of correlated noise (see correlated_pixels),
         or its correlation is not positive definite with the white floor.
     """
@@ -619,14 +619,14 @@ def _whitening(
     Return the whitening of the values at points of a grid (see
     whitening_matrix), of the shape of the correlation of the noise of
     data item key on the separations of the grid (see NoiseCorrelation),
-    with a white floor; raise ConfigError if it is not positive definite.
+    with a white floor; raise ValueError if it is not positive definite.
     """
     matrix = correlation_matrix(
         periodic_correlation(shape, shape.shape), points)
     try:
         return whitening_matrix(matrix, white_floor)
     except np.linalg.LinAlgError:
-        raise ConfigError(
+        raise ValueError(
             f"the correlation of the noise of '{key}' is singular with the "
             f"white floor {white_floor} (see LikelihoodGaussian): raise it"
         ) from None
@@ -634,14 +634,14 @@ def _whitening(
 
 def _check_errors_differ(key: str, data: Dataset) -> None:
     """
-    Raise ConfigError unless the values of a data item whose scale and
+    Raise ValueError unless the values of a data item whose scale and
     jitter of the noise are fitted have errors that differ (with equal
     errors, or none, the two are one).
     """
     error = data[key].error()
     used = None if error is None else error[data[key].mask() != 0]
     if used is None or used.size == 0 or np.all(used == used[0]):
-        raise ConfigError(
+        raise ValueError(
             f"the scale and the jitter of the noise of '{key}' cannot both "
             f"be fitted: its errors are all equal, or it has none, so only "
             f"(scale error)^2 + jitter^2 counts; fit one of them")
@@ -649,15 +649,15 @@ def _check_errors_differ(key: str, data: Dataset) -> None:
 
 def _check_noise(key: str, noise: FittedNoise) -> None:
     """
-    Raise ConfigError unless the fitted noise of a data item fits its
+    Raise ValueError unless the fitted noise of a data item fits its
     scale, its jitter or both, and has scale_min with the scale, and only
     with it.
     """
     if not (noise.scale or noise.jitter):
-        raise ConfigError(
+        raise ValueError(
             f"noise of '{key}': fit its scale, its jitter, or both")
     if noise.scale != (noise.scale_min is not None):
-        raise ConfigError(
+        raise ValueError(
             f"noise of '{key}': 'scale_min' (the smallest scale of its "
             f"errors, e.g. 0.01) goes with 'scale', and only with it")
 
@@ -713,7 +713,7 @@ class LikelihoodUser(Likelihood):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the names of the parameters are not valid or repeat.
     """
 
@@ -763,7 +763,7 @@ class LikelihoodUser(Likelihood):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the file does not define the function, or the names of the
             parameters are not valid or repeat.
         """
@@ -771,7 +771,7 @@ class LikelihoodUser(Likelihood):
         try:
             function = funcutils.load_function_from_file(file, func)
         except RuntimeError as e:
-            raise ConfigError(str(e)) from e
+            raise ValueError(str(e)) from e
         likelihood = cls(function, form, params)
         likelihood._source = (file, func)
         return likelihood
@@ -787,7 +787,7 @@ class LikelihoodUser(Likelihood):
             check_name(param)
         names = list(params)
         if repeated := sorted({p for p in names if names.count(p) > 1}):
-            raise ConfigError(f"the parameters repeat: {repeated}")
+            raise ValueError(f"the parameters repeat: {repeated}")
         self._func = func
         self._func_name = getattr(func, '__name__', repr(func))
         self._form = form

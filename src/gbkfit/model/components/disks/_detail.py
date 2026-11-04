@@ -9,7 +9,7 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError, item_prefixes, warn
+from gbkfit.config import item_prefixes, warn
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
@@ -136,7 +136,7 @@ def make_disk(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the options are not valid, conflict with the geometry, or the
         parts and roles do not go together (e.g. lines without
         kinematics, or what only a thick disk can have on a thin one).
@@ -146,14 +146,14 @@ def make_disk(
         warps = dict(loose=geometry.loose(), tilted=geometry.tilted())
         if differ := [k for k, v in dict(loose=loose, tilted=tilted).items()
                       if v is not None and v != warps[k]]:
-            raise ConfigError(
+            raise ValueError(
                 f"the warps of a component are those of "
                 f"{geometry_desc(geometry)}, which differ: {differ}; remove "
                 f"them, or give the component geometry 'own'")
         loose, tilted = warps['loose'], warps['tilted']
         if geometry.rnodes() is not None:
             if given := [k for k, v in rings.items() if v is not None]:
-                raise ConfigError(
+                raise ValueError(
                     f"the rings of a component are those of "
                     f"{geometry_desc(geometry)}, which is warped; remove "
                     f"{given}, or give the component geometry 'own'")
@@ -186,7 +186,7 @@ def make_disk(
 
 def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
     """
-    Raise ConfigError if a disk has a spiral density wave that takes its
+    Raise ValueError if a disk has a spiral density wave that takes its
     rotation (see traits.Spiral) but no tangential velocity
     traits.
     """
@@ -196,7 +196,7 @@ def _check_waves(traits_: dict[str, tuple[traits.Trait, ...]]) -> None:
         for kind in ('rpt', 'vpt') for trait in traits_.get(kind, ()))
     if waves and not any(
             trait.direction() == 'tan' for trait in traits_.get('vpt', ())):
-        raise ConfigError(
+        raise ValueError(
             "the traits 'spiral' are a density wave in the rotation of "
             "their disk: give the disk tangential velocity traits")
 
@@ -214,7 +214,7 @@ def line_opacity_traits(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the component does not emit lines, or the coefficients do not
         go with its lines (the traits of one line without a name, or a
         mapping of each of its named lines to its traits), or there are
@@ -223,30 +223,30 @@ def line_opacity_traits(
     if not isinstance(opacity, LineOpacity):
         return (), (), ()
     if not isinstance(emission, LineEmission):
-        raise ConfigError(
+        raise ValueError(
             "line opacity is the opacity of the lines of a component: it "
             "needs emission lines (emission: {type: lines})")
     names = emission.lines().names()
     coefficients = opacity.coefficients()
     if not names:
         if isinstance(coefficients, dict):
-            raise ConfigError(
+            raise ValueError(
                 "the emission has one line without a name: the coefficients "
                 "of its line opacity are the traits of that line, not a "
                 "mapping of lines")
         lines = [('', coefficients)]
     else:
         if not isinstance(coefficients, dict):
-            raise ConfigError(
+            raise ValueError(
                 f"the emission has the lines {list(names)}: the coefficients "
                 f"of its line opacity are a mapping of each line to its "
                 f"traits")
         if missing := [name for name in names if name not in coefficients]:
-            raise ConfigError(
+            raise ValueError(
                 f"the line opacity needs the coefficients of every line "
                 f"(0 for a line that does not absorb); missing: {missing}")
         if unknown := [name for name in coefficients if name not in names]:
-            raise ConfigError(
+            raise ValueError(
                 f"the line opacity has coefficients of lines that the "
                 f"emission does not have: {unknown}; its lines: "
                 f"{list(names)}")
@@ -257,13 +257,13 @@ def line_opacity_traits(
             [trait.name() for trait in line_traits], 'traits', 'op', True)
         for trait, prefix in zip(line_traits, prefixes):
             if not isinstance(trait, traits.RPTrait):
-                raise ConfigError(
+                raise ValueError(
                     f"the coefficients of line opacity are density polar "
                     f"traits; {traits.trait_desc(trait.__class__)} is not")
             for values, value in zip(result, (trait, prefix + suffix, index)):
                 values.append(value)
     if len(result[0]) > MAX_TRAITS:
-        raise ConfigError(
+        raise ValueError(
             f"line opacity takes at most {MAX_TRAITS} coefficient "
             f"traits; {len(result[0])} were given")
     return tuple(result[0]), tuple(result[1]), tuple(result[2])
@@ -283,20 +283,20 @@ def _disk_traits(
     """
     thick = density.thick()
     if isinstance(emission, LineEmission) and kinematics is None:
-        raise ConfigError("a disk that emits lines needs kinematics")
+        raise ValueError("a disk that emits lines needs kinematics")
     if opacity is not None and not thick:
-        raise ConfigError(
+        raise ValueError(
             "a disk with opacity needs density height traits (a thick "
             "disk)")
     zptraits = iterutils.tuplify(zptraits)
     sptraits = iterutils.tuplify(sptraits)
     for name, value in (('zptraits', zptraits), ('sptraits', sptraits)):
         if len(value) > MAX_TRAITS:
-            raise ConfigError(
+            raise ValueError(
                 f"at most {MAX_TRAITS} {name} are supported; "
                 f"{len(value)} were given")
     if zptraits and not thick:
-        raise ConfigError(
+        raise ValueError(
             "vertical distortion traits (zptraits) need density height "
             "traits (a thick disk)")
     result = dict(
@@ -305,18 +305,18 @@ def _disk_traits(
     if kinematics is not None:
         heights = dict(vht=kinematics.vhtraits(), dht=kinematics.dhtraits())
         if not thick and any(value is not None for value in heights.values()):
-            raise ConfigError(
+            raise ValueError(
                 "the height traits of the kinematics need density height "
                 "traits (a thick disk)")
         if not thick and kinematics.equilibrium() is not None:
-            raise ConfigError(
+            raise ValueError(
                 "the vertical equilibrium of the kinematics needs density "
                 "height traits (a thick disk): the height of the disk sets "
                 "its dispersion")
         if not thick and any(
                 trait.direction() == 'away'
                 for trait in kinematics.vptraits()):
-            raise ConfigError(
+            raise ValueError(
                 "velocity traits away from the plane ('away') need density "
                 "height traits (a thick disk, whose faces they leave)")
         result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
@@ -325,7 +325,7 @@ def _disk_traits(
         zmax = max(trait.zmax() for trait in result['rht']) if thick else 0
         for trait in heights['vht'] or ():
             if isinstance(trait, traits.VHTraitMass) and trait.zmax() > zmax:
-                raise ConfigError(
+                raise ValueError(
                     f"the zmax of a velocity height trait 'mass' is the "
                     f"top of its table, which must not be above the zmax "
                     f"of the density height traits, {zmax}; it is "

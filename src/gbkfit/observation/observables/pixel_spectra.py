@@ -62,7 +62,7 @@ class PixelSpectra(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectral axis is not valid (see make_cube_grid),
         or median_size is not an odd number of at least 3.
     """
@@ -110,7 +110,7 @@ class PixelSpectra(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of spectra on pixels, or the options are
             not valid.
         """

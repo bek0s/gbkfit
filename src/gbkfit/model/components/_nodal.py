@@ -15,7 +15,7 @@ from typing import Any
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError, item_prefixes
+from gbkfit.config import item_prefixes
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math import interpolation
 from gbkfit.math.interpolation import Interpolator
@@ -50,14 +50,14 @@ class TraitTable:
 
     def check(self, traits_: dict[str, Sequence[Trait]]) -> None:
         """
-        Raise ConfigError if the component does not take one of the given
+        Raise ValueError if the component does not take one of the given
         traits (by kind), or two of them share a name.
         """
         names = [
             trait.name() for values in traits_.values() for trait in values
             if trait.name() is not None]
         if repeated := sorted({n for n in names if names.count(n) > 1}):
-            raise ConfigError(
+            raise ValueError(
                 f"two traits of a {self.component} cannot share a name; "
                 f"repeated: {repeated}")
         for kind, values in traits_.items():
@@ -65,18 +65,18 @@ class TraitTable:
             for trait in values:
                 desc = trait_desc(trait.__class__)
                 if trait.__class__ not in classes:
-                    raise ConfigError(
+                    raise ValueError(
                         f"a {self.component} does not take {desc}; it takes "
                         f"the types {[cls.type() for cls in classes]}")
                 if isinstance(trait, VPTrait) \
                         and trait.direction() not in self.directions:
-                    raise ConfigError(
+                    raise ValueError(
                         f"a {self.component} takes velocity traits along "
                         f"{list(self.directions)}; {desc} is along "
                         f"{trait.direction()!r}")
                 if isinstance(trait, DPTrait) and trait.direction() \
                         not in self.dispersion_directions:
-                    raise ConfigError(
+                    raise ValueError(
                         f"a {self.component} takes dispersion traits along "
                         f"{list(self.dispersion_directions)}; {desc} is "
                         f"along {trait.direction()!r}")
@@ -523,7 +523,7 @@ def parse_component_rnode_args(
     Return the radial nodes of a component (the rings of a disk, the
     shells of a cone; see parse_nodes), the step of its subnodes (by
     default half the smallest separation of the nodes, at most 1), and the
-    interpolation class of its node-wise parameters. Raise ConfigError for
+    interpolation class of its node-wise parameters. Raise ValueError for
     invalid options.
     """
     nodes = parse_nodes('r', rnmax, rnsep, rnlen, rnodes)
@@ -533,7 +533,7 @@ def parse_component_rnode_args(
         step = float(min(1, min(np.diff(nodes)) / 2))
     # (half the difference is allowed, also as it rounds)
     if step <= 0 or step > min(np.diff(nodes)) / 2 * (1 + 1e-9):
-        raise ConfigError(
+        raise ValueError(
             "rstep must be greater than zero and less than half the "
             "smallest difference between two consecutive rnodes")
     return dict(

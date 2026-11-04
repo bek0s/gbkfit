@@ -11,7 +11,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, TypedParser, check_options)
+    BasicParser, Serializable, TypedParser, check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import iterutils
 from .base import MassComponent, MassContext
@@ -56,7 +56,7 @@ class MassModel(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no components, their names repeat, or a component
         responds to one that the model does not have, to itself, or in a
         loop (see MassComponent.responds_to), or takes the enclosed mass
@@ -72,10 +72,10 @@ class MassModel(Serializable):
         check_options(MassModel.__init__, locals())
         components = iterutils.tuplify(components)
         if not components:
-            raise ConfigError("a mass model needs at least one component")
+            raise ValueError("a mass model needs at least one component")
         names = [component.name() for component in components]
         if repeated := sorted({n for n in names if names.count(n) > 1}):
-            raise ConfigError(
+            raise ValueError(
                 f"the components of a mass model must have different "
                 f"names; repeated: {repeated}")
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
@@ -86,7 +86,7 @@ class MassModel(Serializable):
 
     def _check_responses(self) -> None:
         """
-        Raise ConfigError if a component responds to one that the model
+        Raise ValueError if a component responds to one that the model
         does not have, or in a loop (itself included), or takes the
         enclosed mass of one that does not give it.
         """
@@ -96,14 +96,14 @@ class MassModel(Serializable):
             for component in self._components}
         for name, others in responses.items():
             if unknown := sorted(set(others) - set(names)):
-                raise ConfigError(
+                raise ValueError(
                     f"the mass component {name!r} responds to "
                     f"{unknown}, which the mass model does not have; its "
                     f"components: {names}")
 
         def visit(name: str, path: tuple[str, ...]) -> None:
             if name in path:
-                raise ConfigError(
+                raise ValueError(
                     f"the mass components respond to each other in a "
                     f"loop: {' -> '.join(path + (name,))}")
             for other in responses[name]:
@@ -116,7 +116,7 @@ class MassModel(Serializable):
             if massless := [
                     other for other in component.responds_to()
                     if not self.component(other).gives_enclosed_mass()]:
-                raise ConfigError(
+                raise ValueError(
                     f"the response of the mass component "
                     f"{component.name()!r} takes the masses within spheres "
                     f"of its baryons; {massless} do not give them (tables "

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import ConfigError, Unit, check_options
+from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis
@@ -77,7 +77,7 @@ class SlitSpectra(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectral axis is not valid (see make_cube_grid),
         slit_width is not positive, or sky_rval is not two numbers.
     """
@@ -127,7 +127,7 @@ class SlitSpectra(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of slit spectra, or the options are not
             valid.
         """
@@ -168,7 +168,7 @@ class SlitSpectra(Observable):
             slit_width = self.step()[0]
         sky_rval = tuple(sky_rval)
         if len(sky_rval) != 2:
-            raise ConfigError(
+            raise ValueError(
                 f"sky_rval is the RA and Dec of the reference point of the "
                 f"slit; it is {sky_rval}")
         self._sky_rval = float(sky_rval[0]), float(sky_rval[1])

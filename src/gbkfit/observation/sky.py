@@ -11,7 +11,7 @@ import astropy.units
 import numpy as np
 
 from gbkfit.config import (
-    ConfigError, check_name, check_options, config_path,
+    check_name, check_options, config_path,
     load_option_and_update_info, make_typed_desc, warn)
 from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
@@ -190,7 +190,7 @@ class ObservationSky(Observation):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a name is invalid, there are no galaxies or they repeat, a band
         is given to an observable that is not an image, it has a flux scale
         or offsets but no name, its flux scale is not one of its
@@ -237,6 +237,8 @@ class ObservationSky(Observation):
         ------
         ConfigError
             If the configuration has an error.
+        ValueError, TypeError
+            If an object it makes refuses its options.
         """
         info = dict(info)
         load_option_and_update_info(dataset_parser, info, 'data')
@@ -333,13 +335,13 @@ class ObservationSky(Observation):
         _check_flux_scale(flux_scale, observable, name)
         offsets = _check_offsets(offsets, name)
         if band is not None and observable.emission is not BandEmission:
-            raise ConfigError(
+            raise ValueError(
                 "only images have a band; the lines of spectral cubes are "
                 "their option lines")
         if foreground is None:
             foreground = Foreground()
         if name is None and foreground.pdescs():
-            raise ConfigError(
+            raise ValueError(
                 "an observation with a lens of parameters needs a name, "
                 "which names them (e.g. '{name}_lens_theta_e')")
         foreground = foreground.with_prefix(
@@ -350,7 +352,7 @@ class ObservationSky(Observation):
         oversampling = tuple(oversampling) if oversampling is not None \
             else (1,) * ndim
         if len(oversampling) != ndim or any(s < 1 for s in oversampling):
-            raise ConfigError(
+            raise ValueError(
                 f"oversampling must have {ndim} values, each at least 1; it "
                 f"is {oversampling}")
         if data is not None:
@@ -372,7 +374,7 @@ class ObservationSky(Observation):
         observable.check_observation(
             instrument, self._oversampling, pixel_weights)
         if pixel_weights is not None and foreground.lens() is not None:
-            raise ConfigError("a lens does not support pixel_weights yet")
+            raise ValueError("a lens does not support pixel_weights yet")
         self._light = None if unit is None \
             else _light_unit(unit, data, observable, instrument)
         if data is not None:
@@ -383,7 +385,7 @@ class ObservationSky(Observation):
         self._dtype = np.dtype(dtype)
         self._fft_dtype = np.dtype(fft_dtype)
         if self._fft_dtype.itemsize < self._dtype.itemsize:
-            raise ConfigError(
+            raise ValueError(
                 f"the fft_dtype ({self._fft_dtype.name}) is less precise "
                 f"than the dtype ({self._dtype.name})")
 
@@ -637,7 +639,7 @@ class ObservationSky(Observation):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If what it sees does not go with it (see make_scene), or with
             its observable (see Observable.plan).
         """
@@ -667,12 +669,12 @@ def _light_unit(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If it has data, which give the unit, the unit is not a unit, or a
         unit per beam has no PSF, or one without a beam.
     """
     if data is not None:
-        raise ConfigError(
+        raise ValueError(
             "the data of an observation give the unit of its model; remove "
             "its unit")
     with config_path('unit'):
@@ -681,14 +683,14 @@ def _light_unit(
         return LightUnit(unit)
     psf = instrument.psf()
     if psf is None:
-        raise ConfigError(
+        raise ValueError(
             f"a unit per beam ({unitutils.format_unit(unit)}) takes the beam "
             f"of the PSF of the instrument, which has none")
     if not psf.varies():
         return LightUnit(unit, psf.beam_area())
     spectral = observable.spectral()
     if spectral is None:
-        raise ConfigError(
+        raise ValueError(
             "a PSF that varies along the spectral axis needs an observable "
             "with one")
     velocities = (
@@ -706,7 +708,7 @@ def _check_offsets(
 ) -> dict[str, bool]:
     """
     Return the offsets of the frame of an observation (see Observation),
-    those it fits, or raise ConfigError if they are not position and
+    those it fits, or raise ValueError if they are not position and
     velocity, true or false, or it has some but no name.
     """
     if offsets is None:
@@ -714,12 +716,12 @@ def _check_offsets(
     if not isinstance(offsets, Mapping) \
             or not set(offsets) <= {'position', 'velocity'} \
             or not all(isinstance(v, bool) for v in offsets.values()):
-        raise ConfigError(
+        raise ValueError(
             f"offsets are 'position' and 'velocity', true or false; they "
             f"are {offsets!r}")
     fitted = {key: True for key, value in offsets.items() if value}
     if fitted and name is None:
-        raise ConfigError(
+        raise ValueError(
             "an observation with offsets needs a name, which names their "
             "parameters (e.g. '{name}_dx')")
     return fitted
@@ -731,7 +733,7 @@ def _check_flux_scale(
         name: str | None
 ) -> None:
     """
-    Raise ConfigError unless a flux scale is one of an observable (see
+    Raise ValueError unless a flux scale is one of an observable (see
     Observable.flux_scales), and the observation has a name.
     """
     if flux_scale is None:
@@ -739,10 +741,10 @@ def _check_flux_scale(
     kinds = observable.flux_scales()
     if flux_scale not in kinds:
         desc = make_typed_desc(observable.__class__, 'observable')
-        raise ConfigError(
+        raise ValueError(
             f"{desc} has the flux scales {list(kinds)}; not {flux_scale!r}")
     if name is None:
-        raise ConfigError(
+        raise ValueError(
             "an observation with a flux scale needs a name, which names its "
             "parameter ('{name}_flux_scale')")
 
@@ -808,11 +810,11 @@ class _FluxScaledPlan(ObservablePlan):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If a value of the scale is not 1.
         """
         if np.any(params[self._param] != 1):
-            raise ConfigError(
+            raise ValueError(
                 f"mock data take a flux scale per spectrum or per row of 1 "
                 f"only; '{self._param}' is not")
         return self._plan.mock(params, galaxies, noise, rng, ndraws)

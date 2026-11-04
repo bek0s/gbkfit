@@ -14,7 +14,7 @@ import numpy.typing as npt
 import scipy.special
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import (
@@ -310,7 +310,7 @@ class LightMGE(LightProfile):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If ngauss is not a positive integer.
     """
 
@@ -325,7 +325,7 @@ class LightMGE(LightProfile):
         check_options(LightMGE.__init__, locals())
         if isinstance(ngauss, bool) or not isinstance(ngauss, int) \
                 or ngauss < 1:
-            raise ConfigError(
+            raise ValueError(
                 f"ngauss must be a positive integer; it is {ngauss!r}")
         self._ngauss = ngauss
 
@@ -518,7 +518,7 @@ class Spheroid(Component):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If rmax is not positive, the emission is not in bands, the profile
         has its own axis ratios and a shape is given, the geometry is
         loose or tilted, or the kinematics cannot move in it (see
@@ -555,20 +555,20 @@ class Spheroid(Component):
         check_options(Spheroid.__init__, locals())
         if isinstance(geometry, Geometry) and (
                 geometry.loose() or geometry.tilted()):
-            raise ConfigError(
+            raise ValueError(
                 f"a spheroid has one centre and axis, but "
                 f"{geometry_desc(geometry)} is loose or tilted; give it "
                 f"geometry 'own'")
         if not isinstance(emission, BandEmission):
-            raise ConfigError(
+            raise ValueError(
                 "a spheroid emits in bands (emission type: band)")
         if isinstance(rmax, bool) or not isinstance(rmax, (int, float)) \
                 or not (math.isfinite(rmax) and rmax > 0):
-            raise ConfigError(
+            raise ValueError(
                 f"rmax must be a finite number greater than zero; it is "
                 f"{rmax!r}")
         if not profile.takes_shape() and shape is not None:
-            raise ConfigError(
+            raise ValueError(
                 f"the light profile '{profile.type()}' has the axis ratios "
                 f"of its terms: it takes no shape")
         super().__init__(name, geometry, emission, None)
@@ -730,7 +730,7 @@ class Spheroid(Component):
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines and self._kinematics is None:
-            raise ConfigError(
+            raise ValueError(
                 "a spectral cube sees the stars of a spheroid with "
                 "kinematics only (e.g. kinematics: {type: jeans}, or "
                 "{type: traits})")

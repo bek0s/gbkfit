@@ -145,7 +145,7 @@ class RHTraitUniform(RHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -183,7 +183,7 @@ class RHTraitExponential(RHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -222,7 +222,7 @@ class RHTraitGauss(RHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -261,7 +261,7 @@ class RHTraitGGauss(RHTraitP2):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -301,7 +301,7 @@ class RHTraitLorentz(RHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -340,7 +340,7 @@ class RHTraitMoffat(RHTraitP2):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -381,7 +381,7 @@ class RHTraitSech2(RHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -455,7 +455,7 @@ class VHTraitMass(VHTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If zmax is not a positive length.
     """
 
@@ -551,7 +551,7 @@ class VHTraitLinear(VHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -586,7 +586,7 @@ class VHTraitExponential(VHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -621,7 +621,7 @@ class VHTraitGauss(VHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -712,7 +712,7 @@ class DHTraitLinear(DHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -747,7 +747,7 @@ class DHTraitExponential(DHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -782,7 +782,7 @@ class DHTraitGauss(DHTraitP1):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 

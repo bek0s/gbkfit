@@ -21,7 +21,7 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, Unit, check_name,
+    TypedParser, TypedSerializable, Unit, check_name,
     check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
@@ -543,7 +543,7 @@ class SurfaceNodewise(DiskSurface):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the nodes are not valid.
     """
 
@@ -565,7 +565,7 @@ class SurfaceNodewise(DiskSurface):
         nodes = np.asarray(nodes, dtype=float)
         if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
                 or nodes[0] < 0 or np.any(np.diff(nodes) <= 0)):
-            raise ConfigError(
+            raise ValueError(
                 f"the nodes of a nodewise surface density must be at least "
                 f"two radii, from 0 up, increasing; they are "
                 f"{nodes.tolist()}")
@@ -681,7 +681,7 @@ class SurfaceComponent(DiskSurface):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name of the component or rstep is not valid.
     """
 

@@ -15,7 +15,7 @@ import scipy.fft
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, FitsFile, TypedParser, TypedSerializable, check_options,
+    FitsFile, TypedParser, TypedSerializable, check_options,
     split_fits_file)
 from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
@@ -98,7 +98,7 @@ class Noise(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the noise does not suit data of that shape.
         """
 
@@ -132,7 +132,7 @@ class Noise(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the noise does not suit the data or the instrument.
         """
 
@@ -176,7 +176,7 @@ class NoiseGauss(Noise):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If not exactly one of rms and error is given, the error map has
         negative values, or the spectral correlation varies.
     """
@@ -244,7 +244,7 @@ class NoiseGauss(Noise):
         check_options(NoiseGauss.__init__, locals())
         error = _check_dispersion(rms, error)
         if spectral_correlation is not None and spectral_correlation.varies():
-            raise ConfigError("the spectral correlation must not vary")
+            raise ValueError("the spectral correlation must not vary")
         self._rms = rms
         self._error = error
         self._spatial_correlation = spatial_correlation
@@ -311,12 +311,12 @@ class NoiseGauss(Noise):
         spatial = self._spatial_correlation
         sky_axes = len(grid.size) - (grid.spectral_axis is not None)
         if spatial is not None and sky_axes < 2:
-            raise ConfigError(
+            raise ValueError(
                 "the noise has a spatial correlation, but the data are not "
                 "on the sky (e.g. visibilities)")
         if spatial == INSTRUMENT:
             if psf is None:
-                raise ConfigError(
+                raise ValueError(
                     f"the spatial correlation of the noise is "
                     f"'{INSTRUMENT}', but the instrument has no PSF")
             spatial = psf
@@ -326,7 +326,7 @@ class NoiseGauss(Noise):
         if not spatial.varies():
             return spatial.asarray(step, rota=rota)
         if grid.spectral_axis is None:
-            raise ConfigError(
+            raise ValueError(
                 "the spatial correlation of the noise varies along the "
                 "spectral axis, but the data have none")
         psfs = spatial.at(
@@ -341,7 +341,7 @@ class NoiseGauss(Noise):
         if spectral is None:
             return None
         if grid.spectral_axis is None:
-            raise ConfigError(
+            raise ValueError(
                 "the noise has a spectral correlation, but the data have no "
                 "spectral axis")
         return spectral.asarray(abs(grid.coords.step[grid.spectral_axis]))
@@ -369,7 +369,7 @@ class NoiseStudentT(Noise):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If not exactly one of rms and error is given, or the error map has
         negative values.
     """
@@ -521,15 +521,15 @@ def _check_dispersion(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If not exactly one is given, or the error map has negative values.
     """
     if (rms is None) == (error is None):
-        raise ConfigError("give one of rms and error")
+        raise ValueError("give one of rms and error")
     if error is not None:
         error = np.asarray(error, dtype=float)
         if np.any(error < 0):
-            raise ConfigError("the error map has negative values")
+            raise ValueError("the error map has negative values")
     return error
 
 
@@ -544,7 +544,7 @@ def _dispersion(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the error map does not broadcast to the data.
     """
     shape = grid.size[::-1]
@@ -553,7 +553,7 @@ def _dispersion(
     try:
         return np.broadcast_to(error, shape).copy()
     except ValueError:
-        raise ConfigError(
+        raise ValueError(
             f"the error map, of shape {error.shape}, does not broadcast to "
             f"the data, of shape {shape}") from None
 

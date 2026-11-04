@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
@@ -91,7 +91,7 @@ class Disk(Component):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the options are not valid (e.g. the rings), conflict with its
         geometry, or its parts and roles do not go together (e.g. lines
         without kinematics, or opacity, zptraits or clouds on a thin
@@ -132,7 +132,7 @@ class Disk(Component):
         check_options(Disk.__init__, locals())
         super().__init__(name, geometry, emission, opacity)
         if clouds is not None and not density.thick():
-            raise ConfigError(
+            raise ValueError(
                 "a disk of clouds needs density height traits (it is "
                 "thick)")
         self._density = density
@@ -153,7 +153,7 @@ class Disk(Component):
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines and self.kinematics() is None:
-            raise ConfigError(
+            raise ValueError(
                 "a spectral cube sees the stars of a disk with kinematics "
                 "only (its stars have no velocities to place in channels)")
 

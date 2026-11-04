@@ -67,7 +67,7 @@ class DPTraitUniform(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -109,7 +109,7 @@ class DPTraitExponential(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -154,7 +154,7 @@ class DPTraitGauss(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -200,7 +200,7 @@ class DPTraitGGauss(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -246,7 +246,7 @@ class DPTraitLorentz(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -291,7 +291,7 @@ class DPTraitMoffat(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -336,7 +336,7 @@ class DPTraitSech2(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -386,7 +386,7 @@ class DPTraitMixtureExponential(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -436,7 +436,7 @@ class DPTraitMixtureGauss(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -487,7 +487,7 @@ class DPTraitMixtureGGauss(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -537,7 +537,7 @@ class DPTraitMixtureMoffat(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -585,7 +585,7 @@ class DPTraitNWUniform(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -639,7 +639,7 @@ class DPTraitNWHarmonic(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 
@@ -693,7 +693,7 @@ class DPTraitNWDistortion(DPTrait):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option is not valid.
     """
 

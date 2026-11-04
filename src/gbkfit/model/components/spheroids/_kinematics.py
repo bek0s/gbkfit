@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError, TypedSerializable, check_options
+from gbkfit.config import TypedSerializable, check_options
 from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
@@ -169,7 +169,7 @@ class SpheroidKinematics(TypedSerializable, abc.ABC):
     def motion(self, rmax: float) -> SpheroidMotion:
         """
         Return its motion in a spheroid of the given rmax (arcsec, see
-        Spheroid). Raise ConfigError if it cannot move so.
+        Spheroid). Raise ValueError if it cannot move so.
         """
         pass
 
@@ -267,7 +267,7 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the traits are not valid (see parts.KinematicTraits), a spheroid
         does not take one of them (see SPHEROID_TRAITS), or the nodes are
         not valid.
@@ -336,7 +336,7 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
                 self._interp)
         rnodes = nodes['rnodes']
         if rnodes[-1] < rmax:
-            raise ConfigError(
+            raise ValueError(
                 f"the nodes of the traits of a spheroid go to its rmax "
                 f"({rmax}) at least, where its light is; they go to "
                 f"{rnodes[-1]}")

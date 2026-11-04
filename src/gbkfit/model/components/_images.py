@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
-from gbkfit.config import ConfigError, warn
+from gbkfit.config import warn
 from gbkfit.params import ParamValues
 from ._detail import disk_to_sky
 from .disks._disk import TRAIT_KINDS
@@ -63,7 +63,7 @@ class ImageMaps:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there is no sky origin, or the image of a trait does not cover
         the disk (see RPTraitImage.check_coverage).
     """
@@ -86,7 +86,7 @@ class ImageMaps:
                     self._traits.append(_ImageTrait(
                         trait, names, x, y, np.hypot(x, y)))
         if sky_origin is None:
-            raise ConfigError(
+            raise ValueError(
                 "the light of an image trait is placed on the sky by the "
                 "world coordinates of its image, which need the origin of "
                 "the frame of the model: an observation on the sky")

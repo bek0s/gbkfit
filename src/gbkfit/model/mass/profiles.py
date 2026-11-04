@@ -12,7 +12,7 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
-from gbkfit.config import ConfigError, TypedSerializable, Unit, check_options
+from gbkfit.config import TypedSerializable, Unit, check_options
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
 from . import _numerics
@@ -295,7 +295,7 @@ class ProfileNodewise(SpheroidProfile):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the nodes are not valid.
     """
 
@@ -311,7 +311,7 @@ class ProfileNodewise(SpheroidProfile):
         nodes = np.asarray(nodes, dtype=float)
         if (nodes.ndim != 1 or len(nodes) < 2 or not np.all(np.isfinite(nodes))
                 or nodes[0] != 0 or np.any(np.diff(nodes) <= 0)):
-            raise ConfigError(
+            raise ValueError(
                 f"the nodes of a nodewise profile must be at least two "
                 f"radii, from 0, increasing; they are {nodes.tolist()}")
         self._nodes = nodes

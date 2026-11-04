@@ -7,7 +7,7 @@ sight (make_scene; see gbkfit.model.Scene).
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
-from gbkfit.config import ConfigError, check_name
+from gbkfit.config import check_name
 from gbkfit.model import (
     STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
     Galaxy, LineEmission, Scene, StarsEmission,
@@ -64,7 +64,7 @@ def make_scene(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a name is unknown or repeats, a component does not emit what it
         sees, it sees nothing, a line is not one of the components it
         sees, a component cannot be seen along its line of sight (see
@@ -88,7 +88,7 @@ def make_scene(
             else (LineEmission, StarsEmission)
     emitters = _select_emitters(galaxies, components, types, band, kind)
     if not any(emitters):
-        raise ConfigError(f"the observation is {kind}; it sees none")
+        raise ValueError(f"the observation is {kind}; it sees none")
     _check_lines(galaxies, emitters, lines)
     if data_unit is None:
         _check_one_unit(galaxies, emitters)
@@ -105,8 +105,8 @@ def make_scene(
                 line_of_sight.check(component, emission)
                 if emission is LineEmission and i in galaxy_emitters:
                     component.check_lines(lines)
-            except ConfigError as e:
-                raise ConfigError(
+            except ValueError as e:
+                raise ValueError(
                     f"component {_label(galaxy, i)}: {e}") from e
     return Scene(
         galaxies, seen.mappings, seen.labels, [tuple(e) for e in emitters],
@@ -153,19 +153,19 @@ def _select_emitters(
             [i for i, cmp in enumerate(galaxy.components()) if seen(cmp)]
             for galaxy in galaxies]
     if not names:
-        raise ConfigError("at least one component must be selected")
+        raise ValueError("at least one component must be selected")
     if len(set(names)) != len(names):
-        raise ConfigError(f"the selected components repeat names: {names}")
+        raise ValueError(f"the selected components repeat names: {names}")
     known = named_components(galaxies, names)
     selected = [[] for _ in galaxies]
     for name in names:
         g, i = known[name]
         if not isinstance(galaxies[g].components()[i].emission(), types):
-            raise ConfigError(
+            raise ValueError(
                 f"the component {name!r} is selected, but the observation "
                 f"is {kind}")
         if not seen(galaxies[g].components()[i]):
-            raise ConfigError(
+            raise ValueError(
                 f"the component {name!r} is selected, but it does not emit "
                 f"in the band {band.name()!r} of the image")
         selected[g].append(i)
@@ -178,7 +178,7 @@ def _check_lines(
         names: tuple[str, ...] | None
 ) -> None:
     """
-    Raise ConfigError unless each of the names of lines (None for all) is
+    Raise ValueError unless each of the names of lines (None for all) is
     a line of one of the components seen.
     """
     if names is None:
@@ -188,7 +188,7 @@ def _check_lines(
         for i in indices:
             known |= set(galaxy.components()[i].line_names())
     if unknown := [name for name in names if name not in known]:
-        raise ConfigError(
+        raise ValueError(
             f"no component has the lines {unknown}; the lines of the "
             f"components are {sorted(known)}")
 
@@ -197,7 +197,7 @@ def _check_one_unit(
         galaxies: Sequence[Galaxy], emitters: Sequence[Sequence[int]]
 ) -> None:
     """
-    Raise ConfigError if the emitters of the galaxies (by index) have
+    Raise ValueError if the emitters of the galaxies (by index) have
     light of different units: without data of light (no data, or e.g.
     only velocity moments), the model of an observation is in the unit
     of the components it sees (and of none, if they have none).
@@ -207,7 +207,7 @@ def _check_one_unit(
         for galaxy, indices in zip(galaxies, emitters) for i in indices
         if (unit := galaxy.components()[i].emission().unit()) is not None}
     if len(units) > 1:
-        raise ConfigError(
+        raise ValueError(
             f"without data of light (no data, or only velocity moments), "
             f"the model of an observation is in the unit of the components "
             f"it sees, which have several: "
@@ -218,13 +218,13 @@ def _check_one_unit(
 
 def check_component_names(names: Sequence[str]) -> None:
     """
-    Raise ConfigError unless each name is the name of a component, or that
+    Raise ValueError unless each name is the name of a component, or that
     of a galaxy and of one of its components ('galaxy.component').
     """
     for name in names:
         parts = name.split('.') if isinstance(name, str) else [name]
         if len(parts) > 2:
-            raise ConfigError(
+            raise ValueError(
                 f"a component is named 'component' or 'galaxy.component'; "
                 f"{name!r} is not")
         for part in parts:

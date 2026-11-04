@@ -10,7 +10,7 @@ from typing import Any
 import astropy.units
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options, config_path)
+    TypedParser, TypedSerializable, check_options, config_path)
 from gbkfit.utils import iterutils, unitutils
 from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
@@ -121,7 +121,7 @@ class LineEmission(Emission):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no lines, a name is not in the catalogue, the names
         repeat, or the unit is not one of lines (see
         _units.check_line_unit).
@@ -146,7 +146,7 @@ class LineEmission(Emission):
         self._lines = Lines(None if lines is None else _named(
             lines, catalogue_in_use().line, 'lines'))
         if STARS in self._lines.names():
-            raise ConfigError(
+            raise ValueError(
                 f"no line can be named {STARS!r}: that is the light of "
                 f"stars (see StarsEmission)")
         self._unit = _parse_unit(unit)
@@ -200,7 +200,7 @@ class BandEmission(Emission):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no bands, a name is not in the catalogue, the names
         repeat, or the unit is not one of bands (see
         _units.check_band_unit).
@@ -268,7 +268,7 @@ class StarsEmission(BandEmission):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no bands, a name is not in the catalogue, the names
         repeat, or the unit is not one of bands (see
         _units.check_band_unit).

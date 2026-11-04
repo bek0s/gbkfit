@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import numpy as np
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
@@ -78,7 +78,7 @@ class Cone(Component):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the options are not valid (e.g. the shells), the cone does not
         take one of the traits, or its parts and roles do not go together
         (e.g. lines without kinematics, or a density without height
@@ -113,7 +113,7 @@ class Cone(Component):
         check_options(Cone.__init__, locals())
         if isinstance(geometry, Geometry) and (
                 geometry.loose() or geometry.tilted()):
-            raise ConfigError(
+            raise ValueError(
                 f"a cone has one apex and axis, but "
                 f"{geometry_desc(geometry)} is loose or tilted; give it "
                 f"geometry 'own'")
@@ -133,7 +133,7 @@ class Cone(Component):
 
     def check_lines(self, lines: tuple[str, ...] | None) -> None:
         if lines is not None and STARS in lines and self.kinematics() is None:
-            raise ConfigError(
+            raise ValueError(
                 "a spectral cube sees the stars of a cone with kinematics "
                 "only (its stars have no velocities to place in channels)")
 

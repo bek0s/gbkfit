@@ -21,7 +21,7 @@ import numpy.typing as npt
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from ._field_grid import FieldGradient
@@ -176,7 +176,7 @@ class Gravity(TypedSerializable, abc.ABC):
             self, mass_model: MassModel, thick: Collection[str]
     ) -> None:
         """
-        Raise ConfigError, saying why, unless it takes the mass model of
+        Raise ValueError, saying why, unless it takes the mass model of
         its galaxy, whose thick components have the given names (e.g. the
         names of mass components it refers to, or what it takes of them,
         see MassComponent.gives_density); here, it does.
@@ -312,7 +312,7 @@ class GravityMOND(Gravity):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the interpolation function or the form is not one of them.
     """
 
@@ -380,7 +380,7 @@ class GravityMOND(Gravity):
         if cellless := [
                 component.name() for component in mass_model.components()
                 if not component.gives_cell_masses(thick)]:
-            raise ConfigError(
+            raise ValueError(
                 f"the field of QUMOND (the form 'qumond' of MOND) is "
                 f"sourced by where the mass is; the mass components "
                 f"{cellless} do not give it (e.g. tables of the circular "
@@ -502,7 +502,7 @@ class GravityHuSawicki(Gravity):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If n is not positive.
     """
 
@@ -597,14 +597,14 @@ class GravityHuSawicki(Gravity):
     ) -> None:
         names = [component.name() for component in mass_model.components()]
         if unknown := [name for name in self._screened if name not in names]:
-            raise ConfigError(
+            raise ValueError(
                 f"the screened mass components {unknown} are not in the "
                 f"mass model; its components: {names}")
         if massless := [
                 component.name() for component in mass_model.components()
                 if component.name() not in self._screened
                 and not component.gives_cell_masses(thick)]:
-            raise ConfigError(
+            raise ValueError(
                 f"the field of f(R) gravity is sourced by the mass of the "
                 f"mass components that are not screened; the mass "
                 f"components {massless} do not give where their mass is "
@@ -731,7 +731,7 @@ class GravityPalatini(Gravity):
         if densityless := [
                 component.name() for component in mass_model.components()
                 if not component.gives_density(thick)]:
-            raise ConfigError(
+            raise ValueError(
                 f"Palatini f(R) gravity takes the density of every mass "
                 f"component; the mass components {densityless} do not give "
                 f"it (e.g. thin disks, tables, user components or halos "

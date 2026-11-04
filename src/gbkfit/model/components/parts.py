@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, TypedParser, TypedSerializable,
+    BasicParser, Serializable, TypedParser, TypedSerializable,
     check_name, check_options)
 from gbkfit.utils import iterutils
 from . import traits
@@ -37,14 +37,14 @@ def _polar_traits(
         value: traits.PTrait | Sequence[traits.PTrait] | None
 ) -> tuple[traits.PTrait, ...]:
     """
-    Return the polar traits of an option as a tuple. Raise ConfigError if
+    Return the polar traits of an option as a tuple. Raise ValueError if
     there are none or too many.
     """
     value = iterutils.tuplify(value)
     if not value:
-        raise ConfigError(f"at least one of {option} is required")
+        raise ValueError(f"at least one of {option} is required")
     if len(value) > MAX_TRAITS:
-        raise ConfigError(
+        raise ValueError(
             f"at most {MAX_TRAITS} {option} are supported; {len(value)} "
             f"were given")
     return value
@@ -58,14 +58,14 @@ def _height_traits(
 ) -> tuple[traits.HTrait | None, ...] | None:
     """
     Return the height traits of an option as a tuple (None if not given),
-    in which an item can be None (a default trait). Raise ConfigError if
+    in which an item can be None (a default trait). Raise ValueError if
     there is not one for each polar trait.
     """
     if value is None:
         return None
     value = iterutils.tuplify(value)
     if len(value) != npolar:
-        raise ConfigError(
+        raise ValueError(
             f"the number of {option} must be equal to the number of "
             f"{polar_option} ({len(value)} != {npolar})")
     return value
@@ -73,19 +73,19 @@ def _height_traits(
 
 def _check_rotation_at_heights(vptrait: traits.VPTrait) -> None:
     """
-    Raise ConfigError unless the velocity polar trait can pair with the
+    Raise ValueError unless the velocity polar trait can pair with the
     velocity height trait 'mass': the trait 'mass', whose pressure support
     at the heights has the density it takes (see traits.VHTraitMass).
     """
     if not isinstance(vptrait, traits.VPTraitMass):
-        raise ConfigError(
+        raise ValueError(
             f"the velocity height trait 'mass' is the rotation in the "
             f"gravity at each height: it pairs with the velocity trait "
             f"'mass' only, not {vptrait.type()!r}")
     support = vptrait.from_galaxy().support
     if support is not None and support.type() == 'self_gravitating' \
             and support.mass() is None:
-        raise ConfigError(
+        raise ValueError(
             "the velocity height trait 'mass' takes the self_gravitating "
             "pressure support at each height in the sheet of the surface "
             "density of a mass component, of the scale height sigma^2 / "
@@ -96,7 +96,7 @@ def _check_dispersion_directions(
         dptraits: tuple[traits.DPTrait, ...]
 ) -> None:
     """
-    Raise ConfigError unless every direction of the dispersion has a
+    Raise ValueError unless every direction of the dispersion has a
     dispersion polar trait, its own or an isotropic one (see traits),
     once a trait is along a direction.
     """
@@ -106,7 +106,7 @@ def _check_dispersion_directions(
     for direction in traits.DPT_DIRECTIONS:
         if direction != traits.DPT_DIRECTION_DEFAULT \
                 and direction not in given:
-            raise ConfigError(
+            raise ValueError(
                 f"no dispersion trait for the direction {direction!r}; give "
                 f"one, or an {traits.DPT_DIRECTION_DEFAULT!r} trait")
 
@@ -140,7 +140,7 @@ class Density(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no polar traits or too many, or not one height trait
         for each polar trait.
     """
@@ -161,7 +161,7 @@ class Density(Serializable):
         self._htraits = _height_traits(
             'htraits', htraits, len(self._ptraits), 'ptraits')
         if self._htraits is not None and None in self._htraits:
-            raise ConfigError("htraits cannot have empty items")
+            raise ValueError("htraits cannot have empty items")
 
     def ptraits(self) -> tuple[traits.RPTrait, ...]:
         """Return the polar traits."""
@@ -211,7 +211,7 @@ class KinematicTraits:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no polar traits or too many, not one height trait
         for each polar trait, a direction of the dispersion without a
         dispersion trait, several velocity traits 'mass' (the rotation in
@@ -244,7 +244,7 @@ class KinematicTraits:
         self._vptraits = _polar_traits('vptraits', vptraits)
         if sum(isinstance(trait, traits.VPTraitMass)
                for trait in self._vptraits) > 1:
-            raise ConfigError(
+            raise ValueError(
                 "a disk takes at most one velocity trait 'mass': each "
                 "adds the whole rotation in the gravity")
         self._dptraits = _polar_traits('dptraits', dptraits)
@@ -298,7 +298,7 @@ class Equilibrium(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the direction is not one of those.
     """
 
@@ -361,7 +361,7 @@ class SelfGravitatingEquilibrium(Equilibrium):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name or the direction is not valid.
     """
 
@@ -437,7 +437,7 @@ class DiskTraitsKinematics(TypedSerializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the traits are not valid (see KinematicTraits).
     """
 
@@ -498,7 +498,7 @@ class ConeTraitsKinematics(TypedSerializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the traits are not valid (see KinematicTraits).
     """
 

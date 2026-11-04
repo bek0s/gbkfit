@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData
@@ -61,7 +61,7 @@ class PixelBrightness(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If median_size is not an odd number of at least 3.
     """
 
@@ -107,7 +107,7 @@ class PixelBrightness(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of brightness, or the options are not
             valid.
         """
@@ -181,7 +181,7 @@ class PixelBrightness(Observable):
             pixel_weights: 'Weights | None'
     ) -> None:
         if instrument.lsf() is not None:
-            raise ConfigError(
+            raise ValueError(
                 "an image has no spectral axis for an LSF; remove the LSF "
                 "of the instrument")
 

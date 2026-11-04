@@ -11,7 +11,7 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import ConfigError, Unit, check_options
+from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
@@ -129,7 +129,7 @@ class Visibilities(Observable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the field is not positive, the transform is not one of those,
         or eps is not positive.
     """
@@ -190,7 +190,7 @@ class Visibilities(Observable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the dataset is not of visibilities, or the options are not
             valid.
         """
@@ -232,7 +232,7 @@ class Visibilities(Observable):
         check_options(Visibilities.__init__, locals())
         fov = (fov,) * 2 if np.ndim(fov) == 0 else tuple(fov)
         if len(fov) != 2 or not all(value > 0 for value in fov):
-            raise ConfigError(
+            raise ValueError(
                 f"fov is the field of the cube on the sky (arcsec), of x and "
                 f"y, or one for both, positive; it is {fov}")
         if step is None:
@@ -311,19 +311,19 @@ class Visibilities(Observable):
             pixel_weights: 'Weights | None'
     ) -> None:
         if instrument.psf() is not None:
-            raise ConfigError(
+            raise ValueError(
                 "visibilities have no PSF: their baselines sample the "
                 "transform of the sky itself (the dirty beam is their "
                 "sampling); remove the psf of the instrument")
         if tuple(oversampling[:2]) != (1, 1):
-            raise ConfigError(
+            raise ValueError(
                 f"the pixels of visibilities are the points of their "
                 f"transform, not oversampled (the means of their subpixels "
                 f"would damp the long baselines): give a smaller step "
                 f"instead; the spatial oversampling is "
                 f"{tuple(oversampling[:2])}")
         if pixel_weights is not None:
-            raise ConfigError(
+            raise ValueError(
                 "pixel_weights do not apply to visibilities, which are not "
                 "on pixels")
 
@@ -331,7 +331,7 @@ class Visibilities(Observable):
             self, dataset: DatasetVisibilities
     ) -> None:
         if dataset.coverage() != self._coverage:
-            raise ConfigError(
+            raise ValueError(
                 "the data and the observable have different coverages")
 
     def output(self, data: np.ndarray) -> np.ndarray:
@@ -615,7 +615,7 @@ def _default_step(coverage: UVCoverage) -> float:
     uv = np.hypot(*coverage.uvw()[:, :2].T).max(initial=0)
     u_max = uv * coverage.frequencies().max() / _C
     if u_max == 0:
-        raise ConfigError(
+        raise ValueError(
             "the baselines are all of zero length; give the step of the "
             "pixels")
     return float(_ARCSEC / (2 * _NYQUIST_RATE * u_max))

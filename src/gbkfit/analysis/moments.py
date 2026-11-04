@@ -9,7 +9,6 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.observation.observables import (
@@ -145,10 +144,7 @@ def moment_maps(
     if not 0 <= flux_floor < 1:
         raise ValueError(
             f"the flux floor must be from 0 to below 1; it is {flux_floor}")
-    try:
-        orders = check_moment_orders(orders, method)
-    except ConfigError as e:
-        raise ValueError(str(e)) from None
+    orders = check_moment_orders(orders, method)
     # (the velocities from the lowest, so that moment 0 is positive)
     if steps[0] < 0:
         cube, velocities = cube[::-1], velocities[::-1]

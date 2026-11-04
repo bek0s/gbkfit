@@ -8,7 +8,6 @@ be asked before (see galaxy_gives).
 from collections.abc import Collection, Iterable, Sequence
 from typing import NamedTuple
 
-from gbkfit.config import ConfigError
 from ..gravity import Capability, Gravity
 from ..mass import MassModel
 
@@ -101,7 +100,7 @@ def check_needs(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the galaxy does not give a need, saying what needs it.
     """
     gives = galaxy_gives(mass_model, gravity)
@@ -110,14 +109,14 @@ def check_needs(
     for need in needs:
         if mass_model is None:
             if need.capability is Capability.MASS and not need.densities:
-                raise ConfigError(need.what)
+                raise ValueError(need.what)
             continue
         if unknown := [name for name in need.densities if name not in names]:
-            raise ConfigError(
+            raise ValueError(
                 f"{need.what} of the mass components {unknown}, which its "
                 f"galaxy does not have; its mass components: {names}")
         if (reason := gives[need.capability]) is not None:
-            raise ConfigError(
+            raise ValueError(
                 f"{need.what}, which it does not give: {reason}")
 
 
@@ -134,7 +133,7 @@ def check_densities(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If one does not, saying what takes it.
     """
     # (at load, not as an error of the first evaluation, which would end a
@@ -146,7 +145,7 @@ def check_densities(
             gives = component.gives_surface_density() if need.surface \
                 else component.gives_density(thick)
             if not gives:
-                raise ConfigError(
+                raise ValueError(
                     f"{need.what} of the mass component {name!r}, which "
                     f"does not give its {kind} (e.g. a halo of a profile "
                     f"without a projection, a thin disk, a table or a user "

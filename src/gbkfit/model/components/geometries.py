@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from typing import Any, Literal
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, check_name, check_options)
+    BasicParser, Serializable, check_name, check_options)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from . import _detail
 
@@ -69,7 +69,7 @@ class Geometry(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name is not valid, the parameters are not geometric or
         repeat, or the rings are given without warps or not given with
         them.
@@ -100,15 +100,15 @@ class Geometry(Serializable):
         if params is not None:
             params = tuple(params)
             if not params:
-                raise ConfigError("a geometry needs at least one parameter")
+                raise ValueError("a geometry needs at least one parameter")
             if len(set(params)) != len(params):
-                raise ConfigError(
+                raise ValueError(
                     f"the parameters of a geometry repeat: {list(params)}")
         given = [rnmax, rnsep, rnlen, rnodes]
         if loose or tilted:
             rnodes = _detail.parse_nodes('r', rnmax, rnsep, rnlen, rnodes)
         elif any(value is not None for value in given):
-            raise ConfigError(
+            raise ValueError(
                 "the rings of a geometry are those of its warps; without "
                 "warps (loose or tilted), each component has its own")
         self._name = name

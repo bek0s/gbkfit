@@ -156,7 +156,7 @@ class DiskStage(ComponentStage):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If it has an image trait, but there is no sky origin.
     """
 

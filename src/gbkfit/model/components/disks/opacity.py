@@ -6,7 +6,7 @@ component at its own lines, of coefficients that are traits of its disk.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.utils import iterutils
 from ..roles import Opacity, opacity_parser
 from ..traits import RPTrait, rpt_parser
@@ -61,7 +61,7 @@ class LineOpacity(Opacity):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no traits, or a line has none.
     """
 
@@ -92,12 +92,12 @@ class LineOpacity(Opacity):
                 for name, traits in coefficients.items()}
             if empty := [name for name, traits in coefficients.items()
                          if not traits]:
-                raise ConfigError(
+                raise ValueError(
                     f"the lines {empty} have no coefficient traits")
         else:
             coefficients = iterutils.tuplify(coefficients)
         if not coefficients:
-            raise ConfigError("line opacity needs coefficient traits")
+            raise ValueError("line opacity needs coefficient traits")
         self._coefficients = coefficients
 
     def dims_others(self) -> bool:

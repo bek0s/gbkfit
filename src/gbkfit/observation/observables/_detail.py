@@ -139,12 +139,12 @@ def without_options_from_data(
 
 def check_median_size(median_size: int | None) -> None:
     """
-    Raise ConfigError unless the size of a median filter (see
+    Raise ValueError unless the size of a median filter (see
     DCube.median_size) is an odd number of pixels (a window centred on
     each pixel), or None.
     """
     if median_size is not None and median_size % 2 != 1:
-        raise ConfigError(
+        raise ValueError(
             f"median_size must be an odd number of pixels; it is "
             f"{median_size}")
 
@@ -183,12 +183,12 @@ def spatial_grid_of_regions(
             SPATIAL_OPTIONS, (size, step, rpix, rval, rota))
         if value is not None]
     if grid is not None and given:
-        raise ConfigError(
+        raise ValueError(
             f"the regions are on a grid, which is that of the model; "
             f"remove the options {given}")
     if grid is None:
         if size is None:
-            raise ConfigError(
+            raise ValueError(
                 "the regions are on the sky; the size of the grid of the "
                 "model is required")
         grid = make_grid(
@@ -271,11 +271,11 @@ def flux_per_area(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     """
     Return the unit of light per arcsec^2 whose sums over the area of
     regions are data of the given unit, a flux (e.g. Jy, 1e-20
-    erg/s/cm2/Angstrom, Jy km/s). Raise ConfigError if the unit is per
+    erg/s/cm2/Angstrom, Jy km/s). Raise ValueError if the unit is per
     beam or per solid angle (the light of a pixel, not of a region).
     """
     if unitutils.spatial_unit(unit) != astropy.units.dimensionless_unscaled:
-        raise ConfigError(
+        raise ValueError(
             f"the data of regions are fluxes, sums over their pixels: their "
             f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
             f"'Jy km/s'); {unitutils.format_unit(unit)!r} is not")
@@ -298,7 +298,7 @@ class DCubePlanBase(ObservablePlan):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are pixel weights and a lens (not supported yet), or the
         pixel weights are not in the plane of a disk of the scene.
     """

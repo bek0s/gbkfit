@@ -12,7 +12,7 @@ import numpy as np
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, Unit, check_options)
+    TypedParser, TypedSerializable, Unit, check_options)
 
 
 __all__ = [
@@ -63,12 +63,12 @@ class ExtinctionLaw(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the wavelength is outside its range.
         """
         low, high = self.range()
         if not low <= wavelength <= high:
-            raise ConfigError(
+            raise ValueError(
                 f"the extinction law {self.type()!r} is defined from {low} "
                 f"to {high} um; a wavelength is {wavelength:.6g} um")
         return float(self._ratio(wavelength))
@@ -86,7 +86,7 @@ class ExtinctionCCM(ExtinctionLaw):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If rv is not positive.
     """
 
@@ -147,7 +147,7 @@ class ExtinctionCalzetti(ExtinctionLaw):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If rv is not positive.
     """
 
@@ -188,7 +188,7 @@ class ExtinctionTable(ExtinctionLaw):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are fewer than two wavelengths, they do not increase,
         or there is not a ratio for each.
     """
@@ -211,11 +211,11 @@ class ExtinctionTable(ExtinctionLaw):
         wavelengths = tuple(float(w) for w in wavelengths)
         ratios = tuple(float(r) for r in ratios)
         if len(wavelengths) < 2 or len(ratios) != len(wavelengths):
-            raise ConfigError(
+            raise ValueError(
                 "an extinction table needs at least two wavelengths and a "
                 "ratio for each")
         if not all(a < b for a, b in zip(wavelengths, wavelengths[1:])):
-            raise ConfigError(
+            raise ValueError(
                 f"the wavelengths of an extinction table must increase; "
                 f"they are {list(wavelengths)}")
         self._wavelengths = wavelengths

@@ -17,7 +17,6 @@ import astropy.constants as const
 import astropy.units as u
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import Grid, VelocityConvention, doppler
 from gbkfit.utils import unitutils
 from .lines import Band, LinePlacement
@@ -99,7 +98,7 @@ def is_hi_unit(unit: u.UnitBase) -> bool:
 
 def check_line_unit(unit: u.UnitBase, lines: Sequence[str] | None) -> None:
     """
-    Raise ConfigError unless a unit is one of the light of emission lines
+    Raise ValueError unless a unit is one of the light of emission lines
     of the given names (None: one line, whatever it is): integrated over
     the line, per solid angle (e.g. 'erg/s/cm2/arcsec2', 'Jy km/s/arcsec2',
     'K km/s'), or of HI only, whose first line must then be hi21 (e.g.
@@ -107,13 +106,13 @@ def check_line_unit(unit: u.UnitBase, lines: Sequence[str] | None) -> None:
     """
     if is_hi_unit(unit):
         if not lines or lines[0] != HI_LINE:
-            raise ConfigError(
+            raise ValueError(
                 f"the unit {unitutils.format_unit(unit)!r} is one of HI only: "
                 f"its first line must be {HI_LINE!r} (lines: [{HI_LINE}]); "
                 f"the lines are {lines}")
         return
     if not any(unit.is_equivalent(kind) for kind in _LINE_UNITS):
-        raise ConfigError(
+        raise ValueError(
             f"the unit of emission lines is that of their light integrated "
             f"over the line, per solid angle (e.g. 'erg/s/cm2/arcsec2', "
             f"'Jy km/s/arcsec2', 'K km/s'), or of HI only ('Msun/pc2', "
@@ -123,12 +122,12 @@ def check_line_unit(unit: u.UnitBase, lines: Sequence[str] | None) -> None:
 
 def check_band_unit(unit: u.UnitBase) -> None:
     """
-    Raise ConfigError unless a unit is one of light in bands: flux density
+    Raise ValueError unless a unit is one of light in bands: flux density
     per solid angle (e.g. 'Jy/arcsec2', 'MJy/sr', 'erg/s/cm2/Angstrom/
     arcsec2'), or brightness temperature ('K').
     """
     if not any(unit.is_equivalent(kind) for kind in _BAND_UNITS):
-        raise ConfigError(
+        raise ValueError(
             f"the unit of light in bands is a flux density per solid angle "
             f"(e.g. 'Jy/arcsec2', 'MJy/sr', 'erg/s/cm2/Angstrom/arcsec2') or "
             f"a brightness temperature ('K'); "
@@ -138,7 +137,7 @@ def check_band_unit(unit: u.UnitBase) -> None:
 
 def check_line_units_agree(components: Sequence['Component']) -> None:
     """
-    Raise ConfigError if components of a galaxy give one named line
+    Raise ValueError if components of a galaxy give one named line
     different units (e.g. a typo: hi21 beside halpha in a component of
     another unit). The lines of a component have the unit of its emission
     (its further lines are ratios); unnamed lines can be different lines,
@@ -157,7 +156,7 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
             if line in seen and seen[line][0] != unit:
                 first, other = (
                     unitutils.format_unit(x) for x in (seen[line][0], unit))
-                raise ConfigError(
+                raise ValueError(
                     f"the line {line!r} has the unit {first!r} in component "
                     f"{seen[line][1]!r} and {other!r} in component "
                     f"{label!r}: give it one unit, or emit it from a "
@@ -351,7 +350,7 @@ def line_factor(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the target is not a unit of the light of lines, or it is per
         beam and there is no beam.
     """
@@ -364,7 +363,7 @@ def line_factor(
         channel = target / (u.km / u.s) if integrated else target
         return _channel(light / (u.km / u.s), channel, frame, beam, pixel)
     except u.UnitConversionError as e:
-        raise ConfigError(
+        raise ValueError(
             f"the light of a line in {unitutils.format_unit(source)!r} "
             f"cannot be data in {unitutils.format_unit(target)!r}: {e}") from e
 
@@ -384,14 +383,14 @@ def line_factors(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the component has a unit and the data have none, or a factor
         cannot be computed (see LineFactors).
     """
     if source is None or target is None:
         return None
     if target.unit is None:
-        raise ConfigError(
+        raise ValueError(
             f"the light of the component is in "
             f"{unitutils.format_unit(source)!r}, but the data have no unit: "
             f"give them one (BUNIT in the header, or the option unit of the "
@@ -420,7 +419,7 @@ class LineFactors:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a factor cannot be computed (see line_factor), or the spectral
         axis has no rest: the data see the light of the component dimmed
         by the redshift of each line, which takes where the line is.
@@ -436,7 +435,7 @@ class LineFactors:
     ):
         coords = spectral.coords
         if coords.rest is None:
-            raise ConfigError(
+            raise ValueError(
                 f"the light of the component in "
                 f"{unitutils.format_unit(source)!r} is that of the galaxy as "
                 f"it emits it, which the data see dimmed by the redshift of "
@@ -522,7 +521,7 @@ class OpacityScales:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a factor cannot be computed (see LineFactors).
     """
 
@@ -563,14 +562,14 @@ def band_factors(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the component has a unit and the data have none, or the factor
         cannot be computed (see BandFactors).
     """
     if source is None or target is None:
         return None
     if target.unit is None:
-        raise ConfigError(
+        raise ValueError(
             f"the light of the component is in "
             f"{unitutils.format_unit(source)!r}, but the data have no unit: "
             f"give them one (BUNIT in the header, or the option unit of the "
@@ -597,7 +596,7 @@ class BandFactors:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the target is not a unit of light in bands, it is per beam and
         there is no beam, or the factor depends on the frequency and the
         band is not known.
@@ -619,7 +618,7 @@ class BandFactors:
                     _band_factor(source, target, frequency, one_plus_z),
                     _band_factor(source, target, other, one_plus_z),
                     rtol=1e-9, atol=0):
-                raise ConfigError(
+                raise ValueError(
                     f"light in a band in {unitutils.format_unit(source)!r} "
                     f"becomes data in {unitutils.format_unit(target.unit)!r} "
                     f"at the wavelength of the band: the image needs its band")
@@ -667,7 +666,7 @@ def _band_factor(
         return _element(intensity, spatial, beam, target.pixel).to_value(
             target.unit * spatial, u.spectral_density(frequency))
     except u.UnitConversionError as e:
-        raise ConfigError(
+        raise ValueError(
             f"light in a band in {unitutils.format_unit(source)!r} cannot be "
             f"data in {unitutils.format_unit(target.unit)!r}: {e}") from e
 
@@ -806,7 +805,7 @@ def _element(
     """
     if spatial == u.beam:
         if beam is None:
-            raise ConfigError(
+            raise ValueError(
                 "the data are per beam, but have no beam (BMAJ and BMIN in "
                 "the header, or the option beam of the data)")
         return light * beam * u.arcsec ** 2

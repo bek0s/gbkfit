@@ -15,7 +15,7 @@ import numpy as np
 from annotated_types import Ge, Gt, Le
 
 from gbkfit.config import (
-    ConfigError, Serializable, TypedParser, TypedSerializable, Unit,
+    Serializable, TypedParser, TypedSerializable, Unit,
     check_options, warn)
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
@@ -145,7 +145,7 @@ class LineOfSight(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot.
         """
         pass
@@ -163,10 +163,10 @@ class LineOfSight(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot.
         """
-        raise ConfigError(
+        raise ValueError(
             "an observation of several galaxies with opacity needs a line "
             "of sight of radiative transfer (transfer), which orders them "
             "along it")
@@ -179,7 +179,7 @@ class LineOfSight(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it cannot.
         """
         AdditiveScenePlan.check(scene)
@@ -208,13 +208,13 @@ class LineOfSight(TypedSerializable, abc.ABC):
 
 def _check_no_line_opacity(component: Component) -> None:
     """
-    Raise ConfigError if the component has line opacity (opacity that dims
+    Raise ValueError if the component has line opacity (opacity that dims
     only its own light; see Opacity.dims_others), which only a line of
     sight of radiative transfer sees.
     """
     opacity = component.opacity()
     if opacity is not None and not opacity.dims_others():
-        raise ConfigError(
+        raise ValueError(
             "a component with line opacity needs a line of sight of "
             "radiative transfer (transfer)")
 
@@ -239,11 +239,11 @@ class LineOfSightFlat(LineOfSight):
     ) -> None:
         _check_no_line_opacity(component)
         if component.opacity() is not None:
-            raise ConfigError(
+            raise ValueError(
                 "a component with opacity needs a line of sight with a "
                 "depth axis (grid or transfer)")
         if component.thick(seen_by):
-            raise ConfigError(
+            raise ValueError(
                 "a thick component needs a line of sight with a depth axis "
                 "(grid or transfer)")
 
@@ -378,7 +378,7 @@ class LineOfSightTransfer(LineOfSight):
         if missing := [
                 galaxy.name() for g, galaxy in enumerate(galaxies)
                 if g not in ordered]:
-            raise ConfigError(
+            raise ValueError(
                 f"radiative transfer marches several galaxies with opacity "
                 f"one after the other, front to back: the depth_order of the "
                 f"observation group must give the place of the galaxies "

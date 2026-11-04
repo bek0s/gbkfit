@@ -16,7 +16,7 @@ import numpy.typing as npt
 import scipy.optimize
 
 from gbkfit.config import (
-    BasicParser, ConfigError, Serializable, TypedParser, check_name,
+    BasicParser, Serializable, TypedParser, check_name,
     check_options)
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
@@ -68,7 +68,7 @@ class DarkFraction(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name or the bounds are not valid.
     """
 
@@ -82,7 +82,7 @@ class DarkFraction(Serializable):
                 isinstance(b, (int, float)) and not isinstance(b, bool)
                 and math.isfinite(b) for b in bounds)
                 and bounds[0] < bounds[1]):
-            raise ConfigError(
+            raise ValueError(
                 f"the bounds of a dark fraction must be two finite numbers, "
                 f"increasing; they are {bounds!r}")
         self._solve = solve
@@ -139,7 +139,7 @@ class MassSpheroid(MassComponent):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name or the names of the baryons are not valid, it has a
         response but is not spherical, or of a profile that the response
         does not take, or without the baryons it needs, or parameters of
@@ -180,25 +180,25 @@ class MassSpheroid(MassComponent):
         for baryon in baryons:
             check_name(baryon)
         if repeated := sorted({b for b in baryons if baryons.count(b) > 1}):
-            raise ConfigError(f"the baryons repeat: {repeated}")
+            raise ValueError(f"the baryons repeat: {repeated}")
         own = profile.pdescs() | shape.pdescs()
         if response is not None:
             if not shape.spherical():
-                raise ConfigError(
+                raise ValueError(
                     "the response of a spheroid is that of spherical "
                     "shells: it needs a spherical shape")
             response.check_profile(profile)
             response.check_baryons(baryons)
             if repeated := sorted(own.keys() & response.pdescs().keys()):
-                raise ConfigError(
+                raise ValueError(
                     f"the parameters of the response repeat those of the "
                     f"profile and the shape: {repeated}")
         if dark_fraction is not None and not baryons:
-            raise ConfigError(
+            raise ValueError(
                 "a dark fraction needs the baryons that the spheroid "
                 "responds to (baryons)")
         if dark_fraction is not None and dark_fraction.solve() not in own:
-            raise ConfigError(
+            raise ValueError(
                 f"the dark fraction sets {dark_fraction.solve()!r}, which "
                 f"is not a parameter of the spheroid; its parameters: "
                 f"{list(own)}")
@@ -451,7 +451,7 @@ class MassLightSpheroid(MassComponent):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the name or the name of the component is not valid.
     """
 

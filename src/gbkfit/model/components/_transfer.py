@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ModelEvaluationError, ParamValues
@@ -157,11 +156,11 @@ class TransferMember(NamedTuple):
 
 def check_emitters(count: int) -> None:
     """
-    Raise ConfigError if radiative transfer would take more components
+    Raise ValueError if radiative transfer would take more components
     that emit than it can (_MAX_EMITTERS).
     """
     if count > _MAX_EMITTERS:
-        raise ConfigError(
+        raise ValueError(
             f"radiative transfer takes at most {_MAX_EMITTERS} components "
             f"that emit; there are {count}")
 
@@ -202,7 +201,7 @@ class TransferPlan:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are more emitters than the march takes.
     """
 
