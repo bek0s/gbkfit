@@ -5,6 +5,7 @@ migration rewrites those of older ones (files, with their comments, and
 projects) and leaves the current ones as they are.
 """
 
+import importlib
 import json
 import subprocess
 import sys
@@ -251,6 +252,19 @@ def test_radii_of_mass_tables_are_migrated_to_a_quantity():
         velocities=[50, 80])
 
 
+def test_each_version_has_the_module_of_its_rules():
+    # The rules of version N rewrite configurations of version N - 1, in
+    # the order of the versions
+    modules = [
+        importlib.import_module(f'gbkfit.migration.v{version}')
+        for version in range(2, project.FORMAT_VERSION + 1)]
+    for version, module in enumerate(modules, 2):
+        assert module.RULES
+        assert {rule.version() for rule in module.RULES} == {version}
+    assert migration.RULES == tuple(
+        rule for module in modules for rule in module.RULES)
+
+
 def test_a_mass_table_alone_is_migrated_too():
     # Only the tables of a list of components used to be migrated
     table = dict(type='table', radii=[1, 2], radius_unit='kpc')
@@ -280,7 +294,7 @@ def test_a_file_that_cannot_be_written_is_left_as_it_was(
     filename = tmp_path / 'config.yaml'
     text = "observations:\n- {type: sky, scale: 2}\n"
     filename.write_text(text)
-    new_yaml = migration._yaml
+    new_yaml = migration.core._yaml
 
     class Failing:
         def load(self, f):
@@ -290,7 +304,7 @@ def test_a_file_that_cannot_be_written_is_left_as_it_was(
             f.write("observ")
             raise RuntimeError("the disk is full")
 
-    monkeypatch.setattr(migration, '_yaml', Failing)
+    monkeypatch.setattr(migration.core, '_yaml', Failing)
     with pytest.raises(RuntimeError, match="disk is full"):
         migration.migrate_file(str(filename), from_version=2)
     assert filename.read_text() == text
