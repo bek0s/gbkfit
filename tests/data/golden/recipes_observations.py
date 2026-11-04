@@ -150,7 +150,7 @@ def _write_voronoi_bins(folder: pathlib.Path) -> None:
     seeded generators denser near the centre; no bin beyond 5.5 arcsec.
     """
     from gbkfit.io import write_data
-    from gbkfit.utils import gridutils
+    from gbkfit.grid import Coords
     rng = np.random.default_rng(3)
     radius = 5.5 * rng.uniform(0, 1, 40) ** 0.75
     angle = rng.uniform(0, 2 * np.pi, 40)
@@ -165,7 +165,7 @@ def _write_voronoi_bins(folder: pathlib.Path) -> None:
         inside, np.searchsorted(np.unique(index[inside]), index), -1)
     write_data(
         str(folder / 'bins.fits'), index,
-        gridutils.Coords((0.5, 0.5), (11.5, 11.5), (0, 0), 0), overwrite=True)
+        Coords((0.5, 0.5), (11.5, 11.5), (0, 0), 0), overwrite=True)
 
 
 def _write_uv_coverage(folder: pathlib.Path) -> None:

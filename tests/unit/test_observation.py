@@ -8,11 +8,11 @@ import pytest
 
 from gbkfit.config import ConfigError, config_path
 from gbkfit.dataset import Data, DatasetPixelMoments
+from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
     LikelihoodGaussian, LineOfSightFlat, ObservationSky, PixelBrightness,
     PixelMoments, UpperLimit, observable_parser, observation_parser)
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 def test_observable_from_data():

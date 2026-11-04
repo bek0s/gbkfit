@@ -13,8 +13,8 @@ import scipy.special
 
 from gbkfit.config import ConfigError, FilePath, check_options
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils
 from ._detail import (
     Fluxes, disk_to_sky, dump_geometry, dump_name, geometry_desc)
 from ._units import DataUnit
@@ -503,7 +503,7 @@ class Particles(Component):
     def plan(
             self,
             driver: Driver,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,

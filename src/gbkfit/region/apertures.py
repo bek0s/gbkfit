@@ -14,8 +14,8 @@ from annotated_types import Gt
 from gbkfit.config import (
     ConfigError, TypedParser, TypedSerializable, Unit, check_options,
     make_typed_desc)
+from gbkfit.grid import Grid, sky_to_pixel
 from gbkfit.math import overlap
-from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -55,7 +55,7 @@ def _axes(posa: float) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _pixels_in_box(
-        grid: gridutils.Grid,
+        grid: Grid,
         lower: np.ndarray,
         upper: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -116,7 +116,7 @@ class Aperture(TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         """
         The pixels of a spatial grid (flat indices, x fastest) that overlap
         the aperture, and the fraction of the area of each inside it.
@@ -150,7 +150,7 @@ class ApertureEllipse(Aperture):
     def centre(self) -> tuple[float, float]:
         return self._x, self._y
 
-    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         return _ellipse_overlaps(
             self, grid, (self._x, self._y), self._a, self._b, self._posa)
 
@@ -174,14 +174,14 @@ class ApertureCircle(Aperture):
     def centre(self) -> tuple[float, float]:
         return self._x, self._y
 
-    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         return _ellipse_overlaps(
             self, grid, (self._x, self._y), self._radius, self._radius, 0)
 
 
 def _ellipse_overlaps(
         aperture: Aperture,
-        grid: gridutils.Grid,
+        grid: Grid,
         centre: tuple[float, float],
         a: float,
         b: float,
@@ -195,7 +195,7 @@ def _ellipse_overlaps(
     """
     along, across = _axes(posa)
     ellipse = np.array([along / a, across / b])
-    matrix, offset = gridutils.sky_to_pixel(grid)
+    matrix, offset = sky_to_pixel(grid)
     inverse = np.linalg.inv(matrix)
     disk_matrix = ellipse @ inverse
     disk_offset = -ellipse @ (inverse @ offset + np.asarray(centre, float))
@@ -240,7 +240,7 @@ class AperturePolygon(Aperture):
         return (float(((x + np.roll(x, -1)) * cross).sum() / (6 * area)),
                 float(((y + np.roll(y, -1)) * cross).sum() / (6 * area)))
 
-    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         return _polygon_overlaps(self, grid, self._vertices)
 
 
@@ -269,7 +269,7 @@ class ApertureRectangle(Aperture):
     def centre(self) -> tuple[float, float]:
         return self._x, self._y
 
-    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         along, across = _axes(self._posa)
         half_along = along * self._length / 2
         half_across = across * self._width / 2
@@ -284,14 +284,14 @@ class ApertureRectangle(Aperture):
 
 def _polygon_overlaps(
         aperture: Aperture,
-        grid: gridutils.Grid,
+        grid: Grid,
         vertices: np.ndarray
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     The overlaps of a polygon aperture (vertices on the sky) with the
     pixels of a grid (see Aperture.overlaps).
     """
-    matrix, offset = gridutils.sky_to_pixel(grid)
+    matrix, offset = sky_to_pixel(grid)
     pixel_vertices = vertices @ matrix.T + offset
     i, j, indices = _pixels_in_box(
         grid, pixel_vertices.min(axis=0), pixel_vertices.max(axis=0))
@@ -316,7 +316,7 @@ class ApertureField(Aperture):
     def centre(self) -> tuple[float, float]:
         raise ConfigError("a field (the whole grid) has no centre")
 
-    def overlaps(self, grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+    def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         npix = int(np.prod(grid.size[:2]))
         return np.arange(npix), np.ones(npix)
 

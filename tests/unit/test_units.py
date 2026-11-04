@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords, Grid
 from gbkfit.model.components._units import (
     BandFactors, DataUnit, LineFactors, line_factors, mass_per_unit)
 from gbkfit.model.components.lines import Band
 from gbkfit.observation.observables._detail import flux_per_area
-from gbkfit.utils import gridutils
 from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
 
 
@@ -144,7 +144,7 @@ def factors(
     redshift, in data of the target unit, on an axis of the rest and the
     convention.
     """
-    spectral = gridutils.Grid((11,), gridutils.Coords(
+    spectral = Grid((11,), Coords(
         (10,), (5,), (0,), 0, rest, None, convention), 0)
     lines = np.array(lines, dtype=float)
     # (the frequency at which the galaxy emits each line: 1 + redshift
@@ -286,7 +286,7 @@ def test_data_must_tell_their_unit_and_beam(target, message):
     with pytest.raises(ConfigError, match=message):
         line_factors(
             parse_unit('K km/s'), target, np.ones(1),
-            gridutils.Grid((11,), gridutils.Coords(
+            Grid((11,), Coords(
                 (10,), (5,), (0,), 0, HI), 0),
             np.array([HI.to_value(u.Hz)]))
 

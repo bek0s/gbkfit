@@ -7,7 +7,7 @@ the light (c / R for a resolving power R), as instruments give their
 resolution. A spectral axis whose velocities refer to a rest far from
 the light (e.g. the rest wavelength of a line of a galaxy at redshift z)
 spans other km/s of its own per km/s of the light (1 + z on an axis of
-optical velocities; see gridutils.VelocityConvention.stretch), and the
+optical velocities; see VelocityConvention.stretch), and the
 LSF is stretched to it (see LSF.stretched): once, at the middle of the
 data, or at each channel if it varies; the Hanning smoothing, of the
 channels of the axis, is not (see LSFHanning). The options of the
@@ -32,9 +32,9 @@ from annotated_types import Gt
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
+from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import has_wcs, read_data, write_data
 import gbkfit.math
-from gbkfit.utils import gridutils
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -141,7 +141,7 @@ class LSF(TypedSerializable, abc.ABC):
     def stretched(self, factor: float) -> 'LSF':
         """
         Return the LSF on a spectral axis that spans factor km/s per km/s
-        of the light (see gridutils.VelocityConvention.stretch): its
+        of the light (see VelocityConvention.stretch): its
         widths times factor.
 
         Parameters
@@ -230,7 +230,7 @@ class LSF(TypedSerializable, abc.ABC):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         """
         Return the LSF at points of the spectral axis.
@@ -253,7 +253,7 @@ class LSF(TypedSerializable, abc.ABC):
         return varying.per_point(points, lambda points_: [self] * len(points_))
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         """
         Return the range of velocities of the spectral axis that the LSF
@@ -623,7 +623,7 @@ class LSFImage(LSF):
     ) -> dict[str, Any]:
         filename = f'{prefix}lsf.fits'
         rpix = self._data.size / 2 - 0.5
-        coords = gridutils.Coords((self._step,), (rpix,), (0.0,), 0.0)
+        coords = Coords((self._step,), (rpix,), (0.0,), 0.0)
         write_data(filename, self._data, coords, 0, overwrite)
         return dict(
             type=self.type(),
@@ -710,7 +710,7 @@ class LSFSum(LSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         if not self.varies():
             return super().at(points, convention)
@@ -719,7 +719,7 @@ class LSFSum(LSF):
             _detail.terms_at(self._lsfs, points_, convention)])
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._lsfs, convention)
 
@@ -772,7 +772,7 @@ class LSFConvolution(LSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         if not self.varies():
             return super().at(points, convention)
@@ -781,7 +781,7 @@ class LSFConvolution(LSF):
             _detail.terms_at(self._lsfs, points_, convention)])
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._lsfs, convention)
 
@@ -1004,7 +1004,7 @@ class LSFImages(LSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         return varying.per_point(
             points, lambda points_: self._at(points_, convention))
@@ -1012,7 +1012,7 @@ class LSFImages(LSF):
     def _at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None
+            convention: VelocityConvention | None
     ) -> list[LSFImage]:
         """The image of each of the points (1D)."""
         blends = varying.blend(self._points, points, convention)
@@ -1023,7 +1023,7 @@ class LSFImages(LSF):
         return [lsfs[blend] for blend in blends]
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         points = varying.to_velocities(self._points, convention)
         return float(points.min()), float(points.max())
@@ -1070,13 +1070,13 @@ class LSFVarying(LSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'LSF | list[LSF]':
         return varying.per_point(
             points, lambda points_: self._options.at(points_, convention))
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         return self._options.velocity_range(convention)
 

@@ -15,6 +15,7 @@ from gbkfit.config import (
     load_option_and_update_info, make_typed_desc, warn)
 from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import GridData, SpectraData, VelocityConvention
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
 from gbkfit.model import (
     Band, BandEmission, DataUnit, Extras, GalaxyState, LightUnit,
@@ -22,7 +23,7 @@ from gbkfit.model import (
 from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from ._scene import SeenGalaxies, check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, likelihood_parser
@@ -488,7 +489,7 @@ class ObservationSky(Observation):
     def velocity_frame(self) -> str | None:
         """
         Return the frame of rest of the velocities of its spectral axis
-        (see gridutils.SpectralAxis), if it has one that gives it.
+        (see SpectralAxis), if it has one that gives it.
         """
         spectral = self._observable.spectral()
         return None if spectral is None else spectral.frame()
@@ -520,7 +521,7 @@ class ObservationSky(Observation):
             self,
             data: np.ndarray,
             unit: astropy.units.UnitBase | None = None
-    ) -> gridutils.GridData | gridutils.SpectraData | np.ndarray:
+    ) -> GridData | SpectraData | np.ndarray:
         """
         Return an array of the form of its data as an output, as its
         observable gives it (see Observable.output), with the unit, if
@@ -528,7 +529,7 @@ class ObservationSky(Observation):
         """
         output = self._observable.output(data)
         if unit is None or not isinstance(
-                output, (gridutils.GridData, gridutils.SpectraData)):
+                output, (GridData, SpectraData)):
             return output
         return output._replace(unit=unitutils.format_unit(unit))
 
@@ -538,7 +539,7 @@ class ObservationSky(Observation):
             values: Mapping[str, np.ndarray],
             weights: Mapping[str, np.ndarray] | None,
             units: Mapping[str, astropy.units.UnitBase | None] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         """
         Return the images of values of its data items that its observable
         makes (see Observable.images), on a driver.
@@ -549,7 +550,7 @@ class ObservationSky(Observation):
             self,
             driver: Driver,
             weights: Mapping[str, np.ndarray] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         """
         Return the images of the PSF of its data that its observable makes
         (see Observable.psf_images), on a driver.
@@ -694,7 +695,7 @@ def _light_unit(
         spectral.rval() + spectral.step()
         * (np.arange(spectral.size()) - spectral.rpix())) \
         * astropy.units.km / astropy.units.s
-    convention = gridutils.VelocityConvention(
+    convention = VelocityConvention(
         spectral.rest(), spectral.medium(), spectral.convention())
     areas = [beam.beam_area() for beam in psf.at(velocities, convention)]
     return LightUnit(unit, np.array(areas), velocities)

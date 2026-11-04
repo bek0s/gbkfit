@@ -11,9 +11,10 @@ import astropy.units
 import numpy as np
 
 from gbkfit.config import ConfigError, DataFile, parse_options, warn
+from gbkfit.grid import Coords
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.io import ErrorKind, coords_from_header, read_arrays
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 
 
 __all__ = [
@@ -272,7 +273,7 @@ class Data:
             velocity: str | None = None,
             error_kind: ErrorKind = 'sigma',
             footprint: DataFile | None = None
-    ) -> tuple['Data', gridutils.Coords]:
+    ) -> tuple['Data', Coords]:
         """
         Read a data item from files, with the unit and the beam of the
         header of the file of its values unless given (a unit of the
@@ -319,7 +320,7 @@ class Data:
 
         Returns
         -------
-        tuple of Data and gridutils.Coords
+        tuple of Data and Coords
             The data item, and the world coordinates of the file of its
             values.
 

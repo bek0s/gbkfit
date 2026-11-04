@@ -14,10 +14,11 @@ from astropy.table import Table
 from gbkfit.config import ConfigError, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
+from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan
@@ -461,7 +462,7 @@ class _ProfilePlan(ObservablePlan):
         self._model = {
             key: driver.mem_alloc_d(size, np.float64) for key in keys}
         # (the grid of the noise of mock data)
-        self._noise_grid = gridutils.make_grid((size,), (1,), (0,), (0,))
+        self._noise_grid = make_grid((size,), (1,), (0,), (0,))
 
     def evaluate(
             self,

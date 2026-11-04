@@ -17,8 +17,9 @@ from gbkfit.config import (
     BasicParser, ConfigError, Serializable, TypedParser, TypedSerializable,
     Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid, sky_positions
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.utils import iterutils
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -192,7 +193,7 @@ class Weights(Serializable):
     ) -> np.ndarray:
         """
         Return the weight of points on the sky (arcsec, in the frame of the
-        model; see gridutils.sky_positions), in the plane of a disk of the
+        model; see sky_positions), in the plane of a disk of the
         given geometry (xpos, ypos, posa and incl), as the disk kernels
         place them.
         """
@@ -224,13 +225,13 @@ class WeightsPlan:
             self,
             weights: Weights,
             geometry: dict[str, str],
-            grid: gridutils.Grid,
+            grid: Grid,
             driver: Driver,
             dtype: np.dtype
     ):
         self._weights = weights
         self._geometry = geometry
-        self._x, self._y = gridutils.sky_positions(grid)
+        self._x, self._y = sky_positions(grid)
         self._driver = driver
         self._dtype = dtype
         self._weight_d = driver.mem_alloc_d(self._x.shape, dtype)
@@ -249,7 +250,7 @@ class WeightsPlan:
 def plan_weights(
         weights: Weights,
         scene: 'Scene',
-        grid: gridutils.Grid,
+        grid: Grid,
         driver: Driver,
         dtype: np.dtype
 ) -> WeightsPlan:

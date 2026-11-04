@@ -12,18 +12,18 @@ from astropy.table import Table
 
 import gbkfit
 from gbkfit import outputs
+from gbkfit.grid import Coords, GridData
 from gbkfit.io import read_data
-from gbkfit.utils import gridutils
 
 
-COORDS = gridutils.Coords((2.0, 3.0), (11.5, 9.5), (150.0, 2.0), 30.0)
+COORDS = Coords((2.0, 3.0), (11.5, 9.5), (150.0, 2.0), 30.0)
 
 
 def test_products_are_found_by_kind_and_ids_and_read_back():
     with outputs.create('run', 'eval', options=dict(mode='model')) as run:
         run.write(
             'observations/ngc1313/model/vlos.fits', 'model',
-            gridutils.GridData(np.ones((20, 24)), COORDS, None, 'km/s'),
+            GridData(np.ones((20, 24)), COORDS, None, 'km/s'),
             observation='ngc1313', item='vlos')
         run.write(
             'observations/ngc1313/model/mmap0.fits', 'model',
@@ -111,7 +111,7 @@ def test_values_must_suit_the_format():
     with pytest.raises(TypeError, match='carries its own'):
         run.write(
             'out.fits', 'model',
-            gridutils.GridData(np.ones((20, 24)), COORDS, None), unit='K')
+            GridData(np.ones((20, 24)), COORDS, None), unit='K')
 
 
 def test_lookups_of_one_product_need_exactly_one():

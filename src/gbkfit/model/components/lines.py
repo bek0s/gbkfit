@@ -14,8 +14,9 @@ import numpy as np
 
 from gbkfit.config import (
     BasicParser, ConfigError, Serializable, check_name, check_options)
+from gbkfit.grid import (
+    Grid, VelocityConvention, air_refractive_index, doppler, make_rest)
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -81,7 +82,7 @@ class Line(Serializable):
         Its name, which names its flux ratio (see Lines).
     rest : str or Quantity
         Its rest wavelength (in vacuum) or frequency (see
-        gridutils.make_rest).
+        make_rest).
 
     Raises
     ------
@@ -96,7 +97,7 @@ class Line(Serializable):
         check_options(Line.__init__, locals())
         check_name(name)
         self._name = name
-        self._rest = gridutils.make_rest(rest)
+        self._rest = make_rest(rest)
 
     def name(self) -> str:
         """Return its name."""
@@ -307,7 +308,7 @@ class Lines:
     The emission lines of a spectral component. Without lines, it has one
     line at the velocity of the spectral axis, whatever the line is. With
     lines, each is at its place on the spectral axis, whose velocities
-    refer to a rest (see gridutils.Coords), at the redshift of the galaxy
+    refer to a rest (see Coords), at the redshift of the galaxy
     of the component, and the flux of each line after the first, relative
     to the first, is a parameter ('{name}_ratio').
 
@@ -379,7 +380,7 @@ class Lines:
         return None if index == 0 else f'{self.names()[index]}_ratio'
 
     def factors(
-            self, spectral: gridutils.Grid, redshift: float
+            self, spectral: Grid, redshift: float
     ) -> np.ndarray:
         """
         Return the 1 + z of each line on a spectral axis, of a component of
@@ -395,7 +396,7 @@ class Lines:
         (1), whatever the redshift.
 
         The rest wavelengths of the lines are in vacuum. If those of the
-        axis are in air (see gridutils.Coords), w (1 + z) is that of each
+        axis are in air (see Coords), w (1 + z) is that of each
         line in air: divided by the refractive index of air at its
         wavelength (in vacuum), with the galaxy at the velocity at which
         its first line is at the centre of the axis. (The index changes by
@@ -423,19 +424,19 @@ class Lines:
         factors = emitted * (1 + redshift) \
             / rest.to_value(astropy.units.m, astropy.units.spectral())
         if spectral.coords.medium == 'air':
-            convention = gridutils.VelocityConvention.of(spectral.coords)
+            convention = VelocityConvention.of(spectral.coords)
             centre = spectral.zero()[0] \
                 + (spectral.size[0] - 1) / 2 * spectral.coords.step[0]
             # (1 + v / c of the galaxy at the velocity v at which its first
             # line is at the centre of the axis)
             shift = convention.factor(centre) / factors[0]
             factors = factors / np.array([
-                gridutils.air_refractive_index(w * (1 + redshift) * shift)
+                air_refractive_index(w * (1 + redshift) * shift)
                 for w in emitted])
         return factors
 
     def frequencies(
-            self, spectral: gridutils.Grid, redshift: float
+            self, spectral: Grid, redshift: float
     ) -> np.ndarray:
         """
         Return the frequency (Hz, in vacuum) at which a galaxy of the given
@@ -473,7 +474,7 @@ class Lines:
                 "observable (spectral: {rest: ...})")
         frequency = rest.to_value(astropy.units.Hz, astropy.units.spectral())
         if spectral.coords.medium == 'air':
-            frequency /= gridutils.air_refractive_index(
+            frequency /= air_refractive_index(
                 rest.to_value(astropy.units.m))
         return np.array([frequency * (1 + redshift)])
 
@@ -495,7 +496,7 @@ class LinePlacement:
     the axis uniform in ln w), c (1 - 1 / D) on one of radio velocities (a
     rest frequency), and c (D^2 - 1) / (D^2 + 1) on an axis without a rest,
     whose velocities are relativistic, as those of the galaxy (VELO); the
-    convention of the axis says which (see gridutils.VelocityConvention).
+    convention of the axis says which (see VelocityConvention).
     So one systemic velocity places a galaxy alike on axes of every
     convention (e.g. its cubes of HI and of Halpha; read in the convention
     of each axis, as an optical velocity on one and a radio one on the
@@ -517,8 +518,8 @@ class LinePlacement:
     do not change its rotation), which are left out.
     """
 
-    def __init__(self, factors: np.ndarray, spectral: gridutils.Grid):
-        self._convention = gridutils.VelocityConvention.of(spectral.coords)
+    def __init__(self, factors: np.ndarray, spectral: Grid):
+        self._convention = VelocityConvention.of(spectral.coords)
         # The 1 + z of each line at the systemic velocity 0
         self._factors = np.array(factors, dtype=float)
 
@@ -531,7 +532,7 @@ class LinePlacement:
         with the component at the given systemic velocity (km/s).
         """
         return self._convention.velocity(
-            self._factors * gridutils.doppler(vsys))
+            self._factors * doppler(vsys))
 
     def __call__(self, vsys: float) -> np.ndarray:
         """

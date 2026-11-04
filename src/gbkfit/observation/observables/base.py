@@ -15,11 +15,13 @@ from gbkfit.config import (
     ConfigError, TypedParser, TypedSerializable, make_typed_desc)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import (
+    Grid, GridData, SpectraData, SpectralAxis, check_convention,
+    make_cube_grid, make_grid, per_axis)
 from gbkfit.instrument import Instrument
 from gbkfit.model import (
     DataUnit, Emission, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -80,18 +82,18 @@ class Observable(TypedSerializable, abc.ABC):
     size : int or Sequence of int
         The number of pixels of each axis of the grid.
     step, rpix, rval : float or Sequence of float
-        The world coordinates of the grid (see gridutils.Coords); rpix is
+        The world coordinates of the grid (see Coords); rpix is
         the centre if None.
     rota : float
         The rotation of the grid on the sky.
     rest : str or Quantity, optional
-        The rest of the spectral axis, if any (see gridutils.make_rest).
+        The rest of the spectral axis, if any (see make_rest).
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
-        gridutils.make_medium).
+        make_medium).
     convention : str, optional
         The convention of the velocities of the rest (see
-        gridutils.make_convention).
+        make_convention).
     """
 
     spectral_axis: int | None
@@ -168,27 +170,27 @@ class Observable(TypedSerializable, abc.ABC):
             rpix: float | Sequence[float] | None,
             rval: float | Sequence[float],
             rota: float,
-            spectral: gridutils.SpectralAxis | None = None
+            spectral: SpectralAxis | None = None
     ):
         """
         The grid of the data: its axes on the sky (size, step, rpix, rval,
         rota), and of an observable with a spectral axis (see
         spectral_axis), the spectral axis after them (see
-        gridutils.make_cube_grid), whose velocities need their convention
-        (see gridutils.check_convention).
+        make_cube_grid), whose velocities need their convention
+        (see check_convention).
         """
         # (the axes on the sky are those before the spectral axis, or
         # without one, those of an image)
         naxes = 2 if self.spectral_axis is None else self.spectral_axis
-        size = gridutils.per_axis('size', size, naxes)
+        size = per_axis('size', size, naxes)
         if self.spectral_axis is None:
-            self._grid = gridutils.make_grid(size, step, rpix, rval, rota)
+            self._grid = make_grid(size, step, rpix, rval, rota)
         else:
-            self._grid = gridutils.make_cube_grid(
+            self._grid = make_cube_grid(
                 size, step, rpix, rval, rota, spectral)
-            gridutils.check_convention(spectral)
+            check_convention(spectral)
 
-    def grid(self) -> gridutils.Grid:
+    def grid(self) -> Grid:
         """Return the grid of the data."""
         return self._grid
 
@@ -221,11 +223,11 @@ class Observable(TypedSerializable, abc.ABC):
         rval = self.rval()
         return float(rval[0]), float(rval[1])
 
-    def spectral(self) -> gridutils.SpectralAxis | None:
+    def spectral(self) -> SpectralAxis | None:
         """Return the spectral axis, if any."""
         if self.spectral_axis is None:
             return None
-        return gridutils.SpectralAxis.of(self._grid)
+        return SpectralAxis.of(self._grid)
 
     def rest(self) -> astropy.units.Quantity | None:
         """Return the rest of the spectral axis, if any."""
@@ -241,7 +243,7 @@ class Observable(TypedSerializable, abc.ABC):
     def convention(self) -> str | None:
         """
         Return the convention of the velocities of the spectral axis, if
-        given (see gridutils.make_convention).
+        given (see make_convention).
         """
         return self._grid.coords.convention
 
@@ -444,7 +446,7 @@ class Observable(TypedSerializable, abc.ABC):
 
     def output(
             self, data: np.ndarray
-    ) -> gridutils.GridData | gridutils.SpectraData | np.ndarray:
+    ) -> GridData | SpectraData | np.ndarray:
         """
         Return an array of the form of the data as an output.
 
@@ -461,7 +463,7 @@ class Observable(TypedSerializable, abc.ABC):
         GridData or SpectraData or np.ndarray
             The output.
         """
-        return gridutils.GridData(
+        return GridData(
             data, self._grid.coords, self._grid.spectral_axis)
 
     def images(
@@ -470,7 +472,7 @@ class Observable(TypedSerializable, abc.ABC):
             values: Mapping[str, np.ndarray],
             weights: Mapping[str, np.ndarray] | None,
             units: Mapping[str, astropy.units.UnitBase | None] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         """
         Return images of values of its data items, as outputs (e.g. the
         dirty images of visibilities).
@@ -504,7 +506,7 @@ class Observable(TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             weights: Mapping[str, np.ndarray] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         """
         Return images of the PSF of its data (e.g. the dirty beam of
         visibilities), which its images (see images) are seen through.

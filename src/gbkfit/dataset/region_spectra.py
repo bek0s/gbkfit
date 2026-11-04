@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import ConfigError, DataFile, check_options
+from gbkfit.grid import Grid, SpectralAxis, make_cube_grid
 from gbkfit.io import ErrorKind, write_spectra
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import gridutils
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, dump_data
@@ -43,7 +43,7 @@ class DatasetRegionSpectra(Dataset):
     regions : Regions
         The regions.
     spectral : SpectralAxis, optional
-        The spectral axis (see gridutils.make_cube_grid): its world
+        The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
         medium; the data give its size.
 
@@ -73,7 +73,7 @@ class DatasetRegionSpectra(Dataset):
             error: DataFile | float | None = None,
             unit: str | None = None,
             beam: Mapping[str, Any] | None = None,
-            spectral: gridutils.SpectralAxis | None = None,
+            spectral: SpectralAxis | None = None,
             outliers: Mapping[str, Any] | None = None,
             error_kind: ErrorKind = 'sigma'
     ) -> 'DatasetRegionSpectra':
@@ -147,7 +147,7 @@ class DatasetRegionSpectra(Dataset):
                 overwrite=overwrite),
             # (the convention of the velocities is in the header of the file)
             spectral={
-                key: value for key, value in gridutils.SpectralAxis.of(
+                key: value for key, value in SpectralAxis.of(
                     self._spectral_grid).dump().items()
                 if key not in ('size', 'convention')}) | item
 
@@ -155,7 +155,7 @@ class DatasetRegionSpectra(Dataset):
             self,
             spectra: Data,
             regions: Regions,
-            spectral: gridutils.SpectralAxis | None = None
+            spectral: SpectralAxis | None = None
     ):
         check_options(DatasetRegionSpectra.__init__, locals())
         super().__init__(dict(spectra=spectra))
@@ -165,20 +165,20 @@ class DatasetRegionSpectra(Dataset):
                 f"the spectra are of {nregions} regions, but there are "
                 f"{regions.nregions()} regions")
         self._regions = regions
-        spectral = spectral or gridutils.SpectralAxis()
+        spectral = spectral or SpectralAxis()
         if spectral.size() not in (None, nchannels):
             raise ConfigError(
                 f"the spectra have {nchannels} channels; the spectral axis "
                 f"has {spectral.size()}")
-        self._spectral_grid = gridutils.make_cube_grid(
+        self._spectral_grid = make_cube_grid(
             (), None, None, None, None,
-            spectral.replaced(gridutils.SpectralAxis(size=nchannels)))
+            spectral.replaced(SpectralAxis(size=nchannels)))
 
     def regions(self) -> Regions:
         """Return the regions."""
         return self._regions
 
-    def spectral_grid(self) -> gridutils.Grid:
+    def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""
         return self._spectral_grid
 

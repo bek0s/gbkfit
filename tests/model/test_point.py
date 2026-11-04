@@ -173,9 +173,9 @@ def test_point_plan_takes_a_dtype_or_its_type(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.model.components._component_plans import opacity_cubes
     from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
-    from gbkfit.utils import gridutils
+    from gbkfit.grid import make_grid
     galaxy = galaxy_parser.load(copy.deepcopy(BAND_POINT))
-    grid = gridutils.make_grid((6, 4))
+    grid = make_grid((6, 4))
     image = driver.mem_alloc_d((4, 6), np.float32)
     driver.mem_fill(image, 0)
     plan = galaxy.plan(

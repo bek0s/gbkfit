@@ -18,11 +18,11 @@ from gbkfit.config import (
     ConfigError, Serializable, TypedParser, TypedSerializable, Unit,
     check_options, warn)
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid
 from gbkfit.model import (
     MAX_SUBCHANNELS, AdditiveScenePlan, DepthUnit, Emission, Galaxy,
     Scene, ScenePlan, TransferScenePlan)
 from gbkfit.model.components.base import Component, DepthAxis
-from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -87,7 +87,7 @@ class Depth(Serializable):
         return self._step
 
     def axis(
-            self, grid: gridutils.Grid, bounding_radius: float
+            self, grid: Grid, bounding_radius: float
     ) -> DepthAxis:
         """
         Return the axis on the given grid of the x and y axes, for
@@ -126,7 +126,7 @@ class LineOfSight(TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def depth_axis(
-            self, grid: gridutils.Grid, bounding_radius: float
+            self, grid: Grid, bounding_radius: float
     ) -> DepthAxis | None:
         """
         Return the depth axis of the grid of the galaxies, on the given
@@ -188,7 +188,7 @@ class LineOfSight(TypedSerializable, abc.ABC):
             self,
             scene: Scene,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             dtype: np.dtype,
             smoothing: float | None
     ) -> ScenePlan:
@@ -230,7 +230,7 @@ class LineOfSightFlat(LineOfSight):
         return 'flat'
 
     def depth_axis(
-            self, grid: gridutils.Grid, bounding_radius: float
+            self, grid: Grid, bounding_radius: float
     ) -> None:
         return None
 
@@ -278,7 +278,7 @@ class LineOfSightGrid(LineOfSight):
         return self._depth
 
     def depth_axis(
-            self, grid: gridutils.Grid, bounding_radius: float
+            self, grid: Grid, bounding_radius: float
     ) -> DepthAxis:
         return self._depth.axis(grid, bounding_radius)
 
@@ -360,7 +360,7 @@ class LineOfSightTransfer(LineOfSight):
         return self._subchannels
 
     def depth_axis(
-            self, grid: gridutils.Grid, bounding_radius: float
+            self, grid: Grid, bounding_radius: float
     ) -> DepthAxis:
         return self._depth.axis(grid, bounding_radius)
 
@@ -392,7 +392,7 @@ class LineOfSightTransfer(LineOfSight):
             self,
             scene: Scene,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             dtype: np.dtype,
             smoothing: float | None
     ) -> TransferScenePlan:

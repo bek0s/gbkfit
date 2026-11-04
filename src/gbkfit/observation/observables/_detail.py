@@ -14,11 +14,12 @@ from gbkfit.config import (
     ConfigError, Unit, make_typed_desc, parse_options_for_callable, warn)
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid, per_axis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from ..weights import plan_weights
 from ._dcube import DCube, cube_extra
 from .base import HostModelData, ModelData, Observable, ObservablePlan
@@ -36,8 +37,8 @@ if TYPE_CHECKING:
 SPATIAL_OPTIONS = ('size', 'step', 'rpix', 'rval', 'rota')
 
 # The types of the options of the grid of an observable on the sky (see
-# gridutils.Coords; size and rpix are in pixels): one value for all its
-# axes, or one for each (see gridutils.per_axis); and of the size of a
+# Coords; size and rpix are in pixels): one value for all its
+# axes, or one for each (see per_axis); and of the size of a
 # median filter (see check_median_size)
 Size: TypeAlias = int | Sequence[int]
 Step: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
@@ -65,7 +66,7 @@ def load_observable(
         info, cls.from_data, ignore_params=['dataset']))
 
 
-def grid_options(grid: gridutils.Grid) -> dict[str, Any]:
+def grid_options(grid: Grid) -> dict[str, Any]:
     """
     Return the options of the grid of an observable (size, step, rpix,
     rval and rota, of the axes on the sky, and spectral, its spectral axis
@@ -78,11 +79,11 @@ def grid_options(grid: gridutils.Grid) -> dict[str, Any]:
         size=grid.size[axes], step=coords.step[axes], rpix=coords.rpix[axes],
         rval=coords.rval[axes], rota=coords.rota)
     if grid.spectral_axis is not None:
-        options.update(spectral=gridutils.SpectralAxis.of(grid))
+        options.update(spectral=SpectralAxis.of(grid))
     return options
 
 
-def dump_grid(grid: gridutils.Grid) -> dict[str, Any]:
+def dump_grid(grid: Grid) -> dict[str, Any]:
     """Return the configuration of the grid of an observable."""
     options = grid_options(grid)
     if 'spectral' in options:
@@ -90,7 +91,7 @@ def dump_grid(grid: gridutils.Grid) -> dict[str, Any]:
     return options
 
 
-def dataset_grid_options(grid: gridutils.Grid) -> dict[str, Any]:
+def dataset_grid_options(grid: Grid) -> dict[str, Any]:
     """
     Return the options of the grid of a dataset on the grid of an
     observable: its grid options but the sizes, which the data give.
@@ -98,7 +99,7 @@ def dataset_grid_options(grid: gridutils.Grid) -> dict[str, Any]:
     options = grid_options(grid)
     del options['size']
     if 'spectral' in options:
-        options['spectral'] = gridutils.SpectralAxis(**{
+        options['spectral'] = SpectralAxis(**{
             key: value for key, value in options['spectral'].dump().items()
             if key != 'size'})
     return options
@@ -169,12 +170,12 @@ def spatial_grid_of_regions(
         rpix: Rpix | None,
         rval: Rval | None,
         rota: float | None
-) -> gridutils.Grid:
+) -> Grid:
     """
     Return the spatial grid of the cube of an observable of data in
     regions: that of the regions if they have one (bins), when the grid
     options must not be given; else (apertures) the grid of the options
-    (see gridutils.make_grid), of which size is required.
+    (see make_grid), of which size is required.
     """
     grid = regions.grid()
     given = [
@@ -190,8 +191,8 @@ def spatial_grid_of_regions(
             raise ConfigError(
                 "the regions are on the sky; the size of the grid of the "
                 "model is required")
-        grid = gridutils.make_grid(
-            gridutils.per_axis('size', size, 2), step, rpix, rval, rota)
+        grid = make_grid(
+            per_axis('size', size, 2), step, rpix, rval, rota)
     return grid
 
 
@@ -348,13 +349,13 @@ class DCubePlanBase(ObservablePlan):
         self._model_plan = line_of_sight.plan_scene(
             scene, driver, grid, dtype, smoothing)
 
-    def _model_grid(self) -> gridutils.Grid:
+    def _model_grid(self) -> Grid:
         """Return the grid the model is evaluated on: the high-res grid."""
         return self._dcube_plan.scratch_grid()
 
     def _model_extra(
-            self, value: gridutils.GridData
-    ) -> gridutils.GridData | np.ndarray:
+            self, value: GridData
+    ) -> GridData | np.ndarray:
         """Return an extra output of the model as this observable gives it."""
         return value
 

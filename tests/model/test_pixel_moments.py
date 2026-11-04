@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
-from gbkfit.utils.gridutils import SpectralAxis
+from gbkfit.grid import SpectralAxis
 
 
 REFERENCE_DIR = pathlib.Path(__file__).parents[1] / 'data' / 'reference_models'

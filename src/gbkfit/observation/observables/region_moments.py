@@ -14,12 +14,12 @@ import scipy.sparse
 from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
+from gbkfit.grid import Coords, Grid, GridData, SpectralAxis, sky_to_pixel
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import gridutils
 from . import _dcube, _detail, _moments, _orbit_outputs
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method
@@ -80,7 +80,7 @@ class RegionMoments(Observable):
     spectral : SpectralAxis
         As that of PixelMoments.
     size, step, rpix, rval, rota : optional
-        The spatial grid of the cube (see gridutils.make_grid), for
+        The spatial grid of the cube (see make_grid), for
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
     flux_floor, orders, method : optional
@@ -126,7 +126,7 @@ class RegionMoments(Observable):
     def from_data(
             cls,
             dataset: DatasetRegionMoments,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             size: Size | None = None,
             step: Step | None = None,
             rpix: Rpix | None = None,
@@ -190,7 +190,7 @@ class RegionMoments(Observable):
     def __init__(
             self,
             regions: Regions,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             size: Size | None = None,
             step: Step | None = None,
             rpix: Rpix | None = None,
@@ -233,7 +233,7 @@ class RegionMoments(Observable):
     def method(self) -> str:
         return self._method
 
-    def spectral(self) -> gridutils.SpectralAxis:
+    def spectral(self) -> SpectralAxis:
         """
         Return the spectral axis of the cube the moments are measured from.
         """
@@ -295,7 +295,7 @@ class RegionMoments(Observable):
             raise ConfigError(
                 "the data and the observable have different regions")
 
-    def output(self, data: np.ndarray) -> gridutils.GridData | np.ndarray:
+    def output(self, data: np.ndarray) -> GridData | np.ndarray:
         """
         Return a vector of the regions (e.g. a moment) as an output.
 
@@ -316,7 +316,7 @@ class RegionMoments(Observable):
         index = self._regions.index()
         image = np.full(index.shape, np.nan, dtype=data.dtype)
         image[index >= 0] = data[index[index >= 0]]
-        return gridutils.GridData(image, grid.coords, None)
+        return GridData(image, grid.coords, None)
 
     def plan(
             self,
@@ -385,7 +385,7 @@ class RegionMoments(Observable):
             bins.append(np.full(len(yy), b))
             shares.append(share[yy, xx])
         # (pixel p covers [p - 1/2, p + 1/2), and f cells along each axis)
-        matrix, offset = gridutils.sky_to_pixel(grid)
+        matrix, offset = sky_to_pixel(grid)
         f = np.array([fx, fy], dtype=float)
         to_cells = np.column_stack((
             f[:, None] * matrix, f * (offset + 0.5) + (mx, my)))
@@ -537,13 +537,13 @@ class OrbitMomentsPlan(ObservablePlan):
         self._pixels = _orbit_outputs.PixelCube(
             grid, shape, instrument, oversampling)
         coords = grid.coords
-        self._cube_coords = gridutils.Coords(
+        self._cube_coords = Coords(
             coords.step[:2] + (self._step,),
             coords.rpix[:2] + (spectral.rpix(),),
             coords.rval[:2] + (spectral.rval(),), coords.rota,
             spectral.rest(), spectral.medium(), spectral.convention())
         self._map_coords = coords
-        self._cube_grid = gridutils.Grid(
+        self._cube_grid = Grid(
             (shape[1], shape[0], self._nchannels), self._cube_coords, 2)
         self._bin_weights = moments.regions().weights(grid)
         self._psf = instrument.psf()
@@ -659,7 +659,7 @@ class OrbitMomentsPlan(ObservablePlan):
         _, moments = self._outputs_of(state)
         cube = self._pixels.cube(records.spectra[:, self._nregions:])
         out_extra.add(
-            'cube', gridutils.GridData(cube, self._cube_coords, 2),
+            'cube', GridData(cube, self._cube_coords, 2),
             "Cube of the stars on orbits",
             "The spectra of the light of the stars on their orbits (at the "
             "solved weights) in each pixel of the grid of the bins, "
@@ -676,7 +676,7 @@ class OrbitMomentsPlan(ObservablePlan):
             image[mask == 0] = np.nan
             out_extra.add(
                 f'unbinned_{key}',
-                gridutils.GridData(image, self._map_coords, None),
+                GridData(image, self._map_coords, None),
                 f"Unbinned {key} of the stars on orbits",
                 f"The {key} of the spectrum of each pixel of the cube of the "
                 f"stars on orbits, measured as those of the bins (NaN where "

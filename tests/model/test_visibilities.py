@@ -7,6 +7,8 @@ import copy
 import logging
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import make_grid, sky_positions
+from gbkfit.grid.coords import _to_sky
 import gbkfit.params
 import numpy as np
 import pytest
@@ -14,7 +16,6 @@ import scipy.special
 from modelutils import group_plan
 
 from gbkfit.dataset import UVCoverage
-from gbkfit.utils import gridutils
 
 
 C = 299792458.0
@@ -72,8 +73,8 @@ def phases(grid):
     Return exp(-2 pi i b . (s - p)) of the pixels of a grid (TAN) at the
     baselines of each channel, (nchannels, nrows, ny * nx).
     """
-    ra, dec = gridutils._to_sky(
-        *gridutils.sky_positions(grid), grid.coords.rval)
+    ra, dec = _to_sky(
+        *sky_positions(grid), grid.coords.rval)
     directions = unit_vectors(ra, dec).reshape(-1, 3)
     centre = unit_vectors(*np.radians(COVERAGE.phase_centre()))
     east = np.cross([0, 0, 1], centre)
@@ -113,7 +114,7 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
     result = visibilities(driver, point, dict(
         xpos=4.5, ypos=-3.5, flux=2, vsys=0, disp=5))
     channel = list(VELOCITIES).index(0)
-    grid = gridutils.make_grid((32, 28), 1, rval=(150, -30))
+    grid = make_grid((32, 28), 1, rval=(150, -30))
     part = scipy.special.erf(10 / (5 * np.sqrt(2)))
     expected = 2 * part / 20 * phases(grid)[channel][:, 10 * 32 + 20]
     np.testing.assert_allclose(result[channel], expected, rtol=1e-5)

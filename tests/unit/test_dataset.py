@@ -7,7 +7,7 @@ from astropy.io import fits
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import *
-from gbkfit.utils.gridutils import Coords, SpectralAxis
+from gbkfit.grid import Coords, SpectralAxis, make_grid
 
 
 def test_data():
@@ -443,8 +443,7 @@ def test_data_mask_values_that_are_not_finite():
 def test_datasets_from_files_in_python(tmp_path):
     # Reading the files from Python gives what the configuration gives
     from gbkfit.io import write_data
-    from gbkfit.utils import gridutils
-    grid = gridutils.make_grid(
+    grid = make_grid(
         (6, 5, 4), (0.5, 0.5, 10), rval=(150, 2, 1000), spectral_axis=2,
         rest='6562.8 Angstrom')
     write_data(

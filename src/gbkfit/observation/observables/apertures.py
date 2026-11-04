@@ -5,7 +5,7 @@ multi-object spectrograph, or a long slit), whose open parts let the
 light of the sky through.
 
 An aperture is placed along the axes of the image, x along the
-dispersion, in arcsec from its reference pixel (see gridutils.Coords).
+dispersion, in arcsec from its reference pixel (see Coords).
 """
 
 import abc

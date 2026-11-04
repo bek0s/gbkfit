@@ -10,12 +10,12 @@ import numpy as np
 from annotated_types import Ge, Lt
 
 from gbkfit.config import ConfigError, warn
+from gbkfit.grid import SpectralAxis, check_convention
 import gbkfit.math
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.params import ModelEvaluationError
-from gbkfit.utils import gridutils
 from . import _dcube
 from .base import ModelData
 
@@ -64,9 +64,9 @@ _PERCENTILES = (0.5, 99.5)
 
 
 def spectral_axis(
-        spectral: gridutils.SpectralAxis,
+        spectral: SpectralAxis,
         dataset: Dataset | None = None
-) -> gridutils.SpectralAxis:
+) -> SpectralAxis:
     """
     Return the spectral axis of the cube that moments are measured from:
     the given one, with the defaults of the options not given: the step
@@ -90,9 +90,9 @@ def spectral_axis(
     ------
     ConfigError
         If the convention of its velocities is not known (see
-        gridutils.check_convention).
+        check_convention).
     """
-    gridutils.check_convention(spectral)
+    check_convention(spectral)
     step = spectral.step() or SPEC_STEP
     size, rval = spectral.size(), spectral.rval()
     if dataset is not None and 'moment1' in dataset:
@@ -120,7 +120,7 @@ def spectral_axis(
             size = int(gbkfit.math.roundu_odd(2 * half / step))
     if size is None:
         size = int(gbkfit.math.roundu_odd(SPEC_RANGE / step))
-    return spectral.replaced(gridutils.SpectralAxis(
+    return spectral.replaced(SpectralAxis(
         size=size, step=step,
         rpix=size / 2 - 0.5 if spectral.rpix() is None else spectral.rpix(),
         rval=0.0 if rval is None else rval))
@@ -298,7 +298,7 @@ class MomentsPlan:
     ) -> ModelData:
         """
         Return the moments of cube (and its weights, wcube, if any), whose
-        world coordinates are step and zero (see gridutils.Grid): for each
+        world coordinates are step and zero (see Grid): for each
         order, its map (d), the mask (m) and its weights (w).
 
         Raises

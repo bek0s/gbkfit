@@ -10,9 +10,9 @@ import numpy as np
 from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid, GridData
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission, DataUnit, LightUnit
-from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from .base import ModelData, Observable
@@ -30,9 +30,9 @@ __all__ = [
 ]
 
 
-def _image_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
+def _image_extra(data: np.ndarray, grid: Grid) -> GridData:
     """Make an extra output on a grid of DCube an image (its one channel)."""
-    return gridutils.GridData(data[0], grid.spatial().coords, None)
+    return GridData(data[0], grid.spatial().coords, None)
 
 
 class PixelBrightness(Observable):
@@ -48,7 +48,7 @@ class PixelBrightness(Observable):
     size : int or Sequence of int
         The number of pixels of the image (nx, ny).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the image (see gridutils.Coords); rpix is
+        The world coordinates of the image (see Coords); rpix is
         the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
@@ -222,7 +222,7 @@ class PixelBrightness(Observable):
 
 class PixelBrightnessPlan(_detail.DCubePlanBase):
 
-    def _model_grid(self) -> gridutils.Grid:
+    def _model_grid(self) -> Grid:
         # Image models are evaluated on the x and y axes
         return self._dcube_plan.scratch_grid().spatial()
 

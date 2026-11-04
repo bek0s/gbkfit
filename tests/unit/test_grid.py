@@ -9,8 +9,10 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import (
+    CONVENTIONS, Grid, VelocityConvention, check_overlap, make_convention,
+    make_grid, make_rest, pixels_on)
 from gbkfit.io import coords_from_wcs, read_data, write_data
-from gbkfit.utils import gridutils
 
 
 def celestial_wcs(crval, crpix, rota):
@@ -31,22 +33,22 @@ def test_grids_are_placed_by_their_sky_positions():
     # on the second of each pixel of the first is that of astropy
     wcs_a = celestial_wcs([150.0, 50.0], [20, 15], 30)
     wcs_b = celestial_wcs([150.004, 50.002], [5, 8], -10)
-    grid_a = gridutils.Grid(
+    grid_a = Grid(
         (40, 30), coords_from_wcs('a', wcs_a), None)
-    grid_b = gridutils.Grid(
+    grid_b = Grid(
         (25, 20), coords_from_wcs('b', wcs_b), None)
     j, i = np.mgrid[0:30, 0:40]
     expected = wcs_b.world_to_pixel(wcs_a.pixel_to_world(i, j))
     np.testing.assert_allclose(
-        gridutils.pixels_on(grid_a, grid_b), expected, atol=1e-6)
+        pixels_on(grid_a, grid_b), expected, atol=1e-6)
 
 
 def test_grids_must_overlap():
-    grid = gridutils.make_grid((10, 10), rval=(150.0, 2.0))
-    gridutils.check_overlap(grid, grid, 'the image')
-    far = gridutils.make_grid((10, 10), rval=(150.0, 2.1))
+    grid = make_grid((10, 10), rval=(150.0, 2.0))
+    check_overlap(grid, grid, 'the image')
+    far = make_grid((10, 10), rval=(150.0, 2.1))
     with pytest.raises(ConfigError, match="the image does not cover"):
-        gridutils.check_overlap(grid, far, 'the image')
+        check_overlap(grid, far, 'the image')
 
 
 @pytest.mark.parametrize('options, message', [
@@ -58,24 +60,24 @@ def test_grids_must_overlap():
     (dict(size=(10, 10), rest='1 GHz'), "has no rest")])
 def test_make_grid_errors(options, message):
     with pytest.raises(ConfigError, match=message):
-        gridutils.make_grid(**options)
+        make_grid(**options)
 
 
 def test_velocity_conventions_follow_the_rest():
     # Of a rest wavelength, optical by default or log; of a frequency,
     # radio; without a rest, any, none by default
-    wave = gridutils.make_rest('6563 Angstrom')
-    freq = gridutils.make_rest('1420 MHz')
-    assert gridutils.make_convention(None, wave) == 'optical'
-    assert gridutils.make_convention('log', wave) == 'log'
-    assert gridutils.make_convention(None, freq) == 'radio'
-    assert gridutils.make_convention(None, None) is None
-    for convention in gridutils.CONVENTIONS:
-        assert gridutils.make_convention(convention, None) == convention
+    wave = make_rest('6563 Angstrom')
+    freq = make_rest('1420 MHz')
+    assert make_convention(None, wave) == 'optical'
+    assert make_convention('log', wave) == 'log'
+    assert make_convention(None, freq) == 'radio'
+    assert make_convention(None, None) is None
+    for convention in CONVENTIONS:
+        assert make_convention(convention, None) == convention
     for convention, rest in (
             ('radio', wave), ('log', freq), ('fast', None)):
         with pytest.raises(ConfigError, match="convention"):
-            gridutils.make_convention(convention, rest)
+            make_convention(convention, rest)
 
 
 @pytest.mark.parametrize('rest, convention', [
@@ -86,8 +88,8 @@ def test_velocity_conventions_place_light(rest, convention):
     # back, and a km/s of motion (which changes 1 + z by D / c) moves the
     # light by its stretch in velocity of the axis
     c = 299792.458
-    rest = None if rest is None else gridutils.make_rest(rest)
-    velocities = gridutils.VelocityConvention(rest, None, convention)
+    rest = None if rest is None else make_rest(rest)
+    velocities = VelocityConvention(rest, None, convention)
     v = np.array([-3000.0, 0.0, 12000.0])
     d = velocities.factor(v)
     np.testing.assert_allclose(velocities.velocity(d), v, atol=1e-8)
@@ -100,8 +102,8 @@ def test_log_velocities_are_of_logarithmic_wavelengths():
     # wavelength rest exp(v / c), in its frequencies and in the equivalency
     # of the points of tables (e.g. of a varying LSF) too
     c = 299792.458
-    rest = gridutils.make_rest('6564.61 Angstrom')
-    velocities = gridutils.VelocityConvention(rest, None, 'log')
+    rest = make_rest('6564.61 Angstrom')
+    velocities = VelocityConvention(rest, None, 'log')
     wavelength = 6564.61e-10 * np.exp(3000 / c)
     assert velocities.wavelength(3000) == pytest.approx(wavelength, rel=1e-12)
     assert velocities.frequency(3000) == pytest.approx(

@@ -13,10 +13,11 @@ import astropy.units
 import astropy.wcs
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords
 from gbkfit.io import (
     centre_missing_crpix, header_shape, model_axis_order, read_beam,
     read_coords, read_unit, velocity_is_ambiguous)
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from .data import Beam
 
 
@@ -79,7 +80,7 @@ class HDUDescription:
     axes: tuple[str, ...]
     unit: str | None
     beam: Beam | None
-    coords: gridutils.Coords | None
+    coords: Coords | None
     rms: float | None
     ambiguous_velocity: bool
     problems: tuple[str, ...]

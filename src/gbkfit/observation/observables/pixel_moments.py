@@ -11,9 +11,9 @@ import numpy as np
 from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
+from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from gbkfit.utils import gridutils
 from . import _dcube, _detail, _moments
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method
@@ -51,14 +51,14 @@ class PixelMoments(Observable):
         The number of pixels of the maps (nx, ny).
     spectral : SpectralAxis
         The spectral axis of the cube the maps are measured from (see
-        gridutils.SpectralAxis), and the convention of the velocities of
+        SpectralAxis), and the convention of the velocities of
         the maps, as the data were measured, which is required (or its
-        rest; see gridutils.check_convention): none is right for all data
+        rest; see check_convention): none is right for all data
         (e.g. radio for HI, optical for lines of ionised gas, log for the
         stars of pPXF). By default, its channels are of 1 km/s and span
         1000 km/s, centred on 0.
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the maps (see gridutils.Coords); rpix is
+        The world coordinates of the maps (see Coords); rpix is
         the centre by default.
     rota : float, optional
         The rotation of the maps on the sky.
@@ -124,7 +124,7 @@ class PixelMoments(Observable):
     def from_data(
             cls,
             dataset: DatasetPixelMoments,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             flux_floor: FluxFloor = 1e-6,
             method: Method = 'moments',
             median_size: MedianSize | None = None
@@ -186,7 +186,7 @@ class PixelMoments(Observable):
     def __init__(
             self,
             size: Size,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             step: Step = (1, 1),
             rpix: Rpix | None = None,
             rval: Rval = (0, 0),
@@ -240,7 +240,7 @@ class PixelMoments(Observable):
     def method(self) -> str:
         return self._method
 
-    def spectral(self) -> gridutils.SpectralAxis:
+    def spectral(self) -> SpectralAxis:
         """
         Return the spectral axis of the cube the maps are measured from.
         """

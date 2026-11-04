@@ -12,8 +12,8 @@ import scipy.special
 
 from gbkfit.config import ConfigError, check_options
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils
 from ._detail import (
     Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors
@@ -84,7 +84,7 @@ def _light_pdescs(
 
 
 def line_light(
-        spectral: gridutils.Grid,
+        spectral: Grid,
         lines: Lines,
         unit: astropy.units.UnitBase | None,
         names: Sequence[str] | None,
@@ -411,7 +411,7 @@ class Point(Component):
     def plan(
             self,
             driver: Driver,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,

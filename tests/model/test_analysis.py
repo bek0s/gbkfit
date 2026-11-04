@@ -316,14 +316,14 @@ def test_the_geometry_of_a_model_is_found(driver):
     np.testing.assert_allclose(rings.q, 0.5, atol=0.03)
     # On a map rotated on the sky, at the sky positions of its pixels (in
     # its pixel axes, 25 degrees less)
-    from gbkfit.utils import gridutils
+    from gbkfit.grid import sky_positions
     observation = plan.group().observations()[0]
     rotated = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'),
         observable=observation.observable().dump() | dict(rota=25))])
     v = rotated.model_h(params.evaluate())[0]['moment1']['d']
-    sky_x, sky_y = gridutils.sky_positions(
+    sky_x, sky_y = sky_positions(
         rotated.group().observations()[0].observable().grid())
     assert kinematic_pa(v, sky_x, sky_y, (0, 0)).pa == pytest.approx(
         40, abs=0.5)

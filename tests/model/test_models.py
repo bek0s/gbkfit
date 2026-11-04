@@ -15,12 +15,12 @@ change of the models.
 import numpy as np
 import pytest
 from modelutils import split_case
+from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.model.components._component_set import IMAGE_SPECTRAL_AXIS
 from gbkfit.observation import Depth, LineOfSightGrid
 from gbkfit.params import ParamModeOffsets
-from gbkfit.utils import gridutils
 
 
 RNODES = list(range(0, 10, 2))
@@ -205,7 +205,7 @@ def test_model(driver, name, evaluate_cases, ndarrays_regression):
         f'data_{key}': data_[key]['d']
         for data_ in data for key in data_} | {
         '.'.join([*x.ids.values(), x.name]):
-            x.value.data if isinstance(x.value, gridutils.GridData)
+            x.value.data if isinstance(x.value, GridData)
             else x.value
         for x in extra}
     # Every driver is compared with the outputs of the host (written with
@@ -254,7 +254,7 @@ def image_plan(driver, galaxy, size):
     grid.
     """
     rpix = tuple(n / 2 - 0.5 for n in size)
-    grid = gridutils.Grid(size, gridutils.Coords((1, 1), rpix, (0, 0), 0), None)
+    grid = Grid(size, Coords((1, 1), rpix, (0, 0), 0), None)
     return galaxy.plan(
         driver, grid, IMAGE_SPECTRAL_AXIS,
         LineOfSightGrid(Depth(extent='legacy')).depth_axis(grid, 0),

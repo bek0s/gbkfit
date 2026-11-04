@@ -18,7 +18,8 @@ import astropy.units as u
 import numpy as np
 
 from gbkfit.config import ConfigError
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.grid import Grid, VelocityConvention, doppler
+from gbkfit.utils import unitutils
 from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:
@@ -184,7 +185,7 @@ def mass_per_unit(emission: 'Emission | None') -> float | None:
     if not _emits_hi(emission):
         return (1 * u.Msun / u.pc ** 2).to_value(per_kpc2)
     frequency = emission.lines().lines()[0].rest().to(u.Hz, u.spectral())
-    frame = _frame(gridutils.VelocityConvention(frequency), 0.0, frequency)
+    frame = _frame(VelocityConvention(frequency), 0.0, frequency)
     intensity = _axis_integral(1 * unit, frame) / (u.km / u.s)
     temperature = intensity.to(u.K, u.brightness_temperature(frequency))
     column = temperature * (u.km / u.s) * _HI_COLUMN
@@ -372,7 +373,7 @@ def line_factors(
         source: u.UnitBase | None,
         target: DataUnit | None,
         redshifts: np.ndarray,
-        spectral: gridutils.Grid,
+        spectral: Grid,
         frequencies: np.ndarray | None
 ) -> 'LineFactors | None':
     """
@@ -430,7 +431,7 @@ class LineFactors:
             source: u.UnitBase,
             target: DataUnit,
             redshifts: np.ndarray,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             frequencies: np.ndarray
     ):
         coords = spectral.coords
@@ -442,7 +443,7 @@ class LineFactors:
                 f"each line: the spectral axis needs its rest (RESTFRQ or "
                 f"RESTWAV in the header of the data, or spectral: {{rest: "
                 f"...}})")
-        self._convention = gridutils.VelocityConvention.of(coords)
+        self._convention = VelocityConvention.of(coords)
         self._placement = LinePlacement(redshifts, spectral)
         # (the velocity of each line on the axis at the systemic velocity 0)
         self._offsets = self._convention.velocity(redshifts)
@@ -530,7 +531,7 @@ class OpacityScales:
             source: u.UnitBase,
             target: DataUnit | None,
             redshifts: np.ndarray,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             frequencies: np.ndarray
     ):
         self._kelvin = LineFactors(
@@ -633,7 +634,7 @@ class BandFactors:
         given systemic velocity (km/s).
         """
         return np.array(
-            [self._factor * gridutils.doppler(vsys) ** self._power])
+            [self._factor * doppler(vsys) ** self._power])
 
 
 def _band_factor(
@@ -672,7 +673,7 @@ def _band_factor(
 
 
 def _frame(
-        convention: gridutils.VelocityConvention,
+        convention: VelocityConvention,
         velocity: float,
         emitted: u.Quantity
 ) -> LineFrame:
@@ -700,7 +701,7 @@ class _BeamCurve:
     """
 
     def __init__(
-            self, target: DataUnit, convention: gridutils.VelocityConvention
+            self, target: DataUnit, convention: VelocityConvention
     ):
         self._velocities = None
         self._areas = 1.0

@@ -14,6 +14,7 @@ import pytest
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetRegionMoments
+from gbkfit.grid import SpectralAxis, sky_positions
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -23,8 +24,6 @@ from gbkfit.observation import (
 from gbkfit.observation._orbits import _bins_light
 from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
-from gbkfit.utils import gridutils
-from gbkfit.utils.gridutils import SpectralAxis
 from test_spheroids import hernquist_mge
 
 
@@ -303,7 +302,7 @@ def test_the_sky_grid_of_bins_holds_their_pixels(rota, oversampling):
     # each pixel is 1, on a grid rotated and oversampled
     regions = bins(rota)
     grid = sky_grid(observation(regions, None, oversampling))
-    x, y = gridutils.sky_positions(regions.grid())
+    x, y = sky_positions(regions.grid())
     cx, cy = grid.cells @ np.stack((x.ravel(), y.ravel(), np.ones(x.size)))
     cells = np.floor(cy).astype(int) * grid.shape[1] \
         + np.floor(cx).astype(int)
@@ -326,7 +325,7 @@ def test_the_light_of_bins_is_that_of_the_spheroid():
     values = {name[len('stars_'):] if name.startswith('stars_') else name:
               value for name, value in PROPERTIES.items()}
     centre = np.array([PROPERTIES['xpos'], PROPERTIES['ypos']])
-    x, y = gridutils.sky_positions(regions.grid())
+    x, y = sky_positions(regions.grid())
     index = regions.index()
     inside = index >= 0
     offsets = 2 * ((np.arange(64) + 0.5) / 64 - 0.5)

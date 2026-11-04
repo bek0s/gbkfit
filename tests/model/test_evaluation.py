@@ -240,7 +240,7 @@ def two_observations(driver):
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import (
         LineOfSightFlat, ObservationGroup, ObservationSky, PixelSpectra)
-    from gbkfit.utils.gridutils import SpectralAxis
+    from gbkfit.grid import SpectralAxis
     return ObservationGroup(
         [galaxy_parser.load(line_disk(dict(type='arctan', direction='tan')))],
         [ObservationSky(

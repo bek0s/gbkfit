@@ -14,6 +14,7 @@ from modelutils import config_group_plan
 from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
 from gbkfit.fitting import FitProblem
+from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
@@ -21,7 +22,6 @@ from gbkfit.observation import (
     ObservationSky, PixelMoments, PixelSpectra, line_of_sight_parser,
     noise_parser)
 from gbkfit.params import ParamSpace, SolveGaussian
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 SIZE = (12, 12, 31)

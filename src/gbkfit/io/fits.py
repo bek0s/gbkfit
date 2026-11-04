@@ -22,8 +22,7 @@ import astropy.wcs.utils
 import numpy as np
 
 from gbkfit.config import ConfigError, warn
-from gbkfit.utils.gridutils import (
-    FRAMES, Coords, make_convention, make_medium, make_rest)
+from gbkfit.grid import Coords, FRAMES, make_convention, make_medium, make_rest
 
 
 __all__ = [
@@ -81,7 +80,7 @@ _KM_S = astropy.units.km / astropy.units.s
 _C = astropy.constants.c.to_value('km/s')
 
 # The values of the header keyword AIRORVAC of each medium of
-# wavelengths, as gridutils.make_medium names them
+# wavelengths, as make_medium names them
 _HEADER_MEDIUMS = dict(vacuum='vac', air='air')
 
 # The frames of the velocity axes of the AIPS convention (VELO-LSR, ...)
@@ -511,7 +510,7 @@ def model_header(
     shape : tuple of int
         The shape of the array (numpy order).
     rest : str or Quantity, optional
-        The rest of the spectral axis (see gridutils.make_rest).
+        The rest of the spectral axis (see make_rest).
     velocity : str, optional
         The convention of the velocities of a spectral axis that the
         header leaves ambiguous: 'radio' or 'optical' (see
@@ -606,7 +605,7 @@ def coords_from_header(
         must have.
     medium : str, optional
         The medium of the wavelengths of the spectral axis, instead of
-        that of the header (see gridutils.make_medium).
+        that of the header (see make_medium).
     rest : str or Quantity, optional
         The rest of the spectral axis (see coords_from_wcs): that of the
         header, after model_header gave it, or of a spectral axis that the
@@ -899,10 +898,10 @@ def coords_from_wcs(
         The reference pixel or value, in the units of the model, a value
         for each axis (None: not given) or one for all.
     rest : str or Quantity, optional
-        The rest of the spectral axis (see gridutils.make_rest).
+        The rest of the spectral axis (see make_rest).
     medium : str, optional
         The medium of the wavelengths of a rest wavelength (see
-        gridutils.make_medium).
+        make_medium).
 
     Returns
     -------
@@ -969,7 +968,7 @@ def coords_from_wcs(
 def _frame(source: str, wcs: astropy.wcs.WCS) -> str | None:
     """
     Return the frame of rest of the velocities of a WCS (SPECSYS, see
-    gridutils.FRAMES), if it gives one of FITS; a warning says when it
+    FRAMES), if it gives one of FITS; a warning says when it
     gives another (see warn), which is left out.
     """
     frame = wcs.wcs.specsys.strip().upper()
@@ -1494,7 +1493,7 @@ def write_spectra(
     Write spectra of regions to a FITS file.
 
     The regions are along x (an index, without world coordinates), and
-    the velocity along y (see gridutils.SpectraData).
+    the velocity along y (see SpectraData).
 
     Parameters
     ----------
@@ -1609,7 +1608,7 @@ def _header_medium(
 ) -> str | None:
     """
     Return the medium of the wavelengths of a header (its keyword
-    AIRORVAC, see gridutils.make_medium), if it has one.
+    AIRORVAC, see make_medium), if it has one.
     """
     value = header.get('AIRORVAC')
     if value is None:

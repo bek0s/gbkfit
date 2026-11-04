@@ -19,7 +19,7 @@ import scipy.interpolate
 
 from gbkfit.config import (
     ConfigError, FilePath, TypedParser, TypedSerializable, Unit, check_options)
-from gbkfit.utils import gridutils
+from gbkfit.grid import make_rest
 
 
 __all__ = [
@@ -97,7 +97,7 @@ class TracePolynomial(Trace):
             dy: Annotated[Sequence[float], Unit('pixel')] = (0.0,)
     ):
         check_options(TracePolynomial.__init__, locals())
-        quantity = gridutils.make_rest(wave)
+        quantity = make_rest(wave)
         if quantity.unit.physical_type != 'length':
             raise ConfigError(
                 f"the wave of a trace must be a wavelength; it is {wave!r}")

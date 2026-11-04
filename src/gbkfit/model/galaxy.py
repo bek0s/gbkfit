@@ -11,8 +11,9 @@ from gbkfit.config import (
     BasicParser, ConfigError, Serializable, TypedParser, check_name,
     check_options, load_option)
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.utils import iterutils
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._functions import GalaxyFunctions
@@ -391,8 +392,8 @@ class Galaxy(Serializable):
     def plan(
             self,
             driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
+            grid: Grid,
+            spectral: Grid,
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],

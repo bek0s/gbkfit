@@ -7,13 +7,13 @@ import numpy as np
 import pytest
 from modelutils import observation_group
 
+from gbkfit.grid import Coords, Grid
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import DepthGroup
-from gbkfit.utils import gridutils
 
 
 # A spectral axis of velocities (the fields do not depend on it)
-SPECTRAL = gridutils.Grid((11,), gridutils.Coords((10,), (5,), (0,), 0), 0)
+SPECTRAL = Grid((11,), Coords((10,), (5,), (0,), 0), 0)
 
 DISK_PARAMS = dict(
     vsys=0, xpos=0.5, ypos=-1, posa=30, incl=60, pt_a=1, pt_s=3, ht_s=1,

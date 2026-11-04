@@ -7,8 +7,8 @@ import numpy.typing as npt
 import scipy.sparse
 
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.region import Regions
-from gbkfit.utils import gridutils
 
 
 # The most pixels a thread sums: larger regions (e.g. the whole field) are
@@ -18,7 +18,7 @@ _CHUNK = 256
 
 
 def flux_weights(
-        regions: Regions, grid: gridutils.Grid
+        regions: Regions, grid: Grid
 ) -> scipy.sparse.csr_array:
     """
     Return the weights of the pixels of a spatial grid in regions (see

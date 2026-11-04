@@ -24,7 +24,7 @@ SpectralTable.from_file), e.g.
     alpha: {file: psf.ecsv, column: alpha}
 
 Values without units are in the units of the option. Velocities are in
-the convention of the spectral axis (see gridutils.VelocityConvention):
+the convention of the spectral axis (see VelocityConvention):
 optical or log for a rest wavelength, radio for a rest frequency.
 """
 
@@ -39,7 +39,7 @@ import numpy as np
 from gbkfit.config import (
     ConfigError, FilePath, Serializable, check_options, config_path,
     option_types, parse_options_for_callable, unit_of, varying_options)
-from gbkfit.utils import gridutils
+from gbkfit.grid import VelocityConvention
 
 
 __all__ = [
@@ -60,7 +60,7 @@ _Thing = TypeVar('_Thing')
 def _convert(
         points: u.Quantity,
         unit: u.UnitBase,
-        convention: gridutils.VelocityConvention | None
+        convention: VelocityConvention | None
 ) -> np.ndarray:
     """
     Points of the spectral axis in the unit of another kind of point (e.g.
@@ -73,7 +73,7 @@ def _convert(
 
 
 def _equivalency(
-        convention: gridutils.VelocityConvention | None
+        convention: VelocityConvention | None
 ) -> u.Equivalency:
     """
     Return the equivalency of the velocities of the spectral axis of a
@@ -147,7 +147,7 @@ def per_point(
 
 def to_velocities(
         points: u.Quantity,
-        convention: gridutils.VelocityConvention | None = None
+        convention: VelocityConvention | None = None
 ) -> np.ndarray:
     """
     Return points of the spectral axis as velocities.
@@ -175,7 +175,7 @@ def to_velocities(
 
 def to_frequencies(
         points: u.Quantity,
-        convention: gridutils.VelocityConvention | None = None
+        convention: VelocityConvention | None = None
 ) -> np.ndarray:
     """
     Return points of the spectral axis as frequencies.
@@ -204,7 +204,7 @@ def to_frequencies(
 def blend(
         points: u.Quantity,
         at: u.Quantity,
-        convention: gridutils.VelocityConvention | None = None
+        convention: VelocityConvention | None = None
 ) -> list[tuple[int, int, float]]:
     """
     Return how to blend things given at points of the spectral axis (e.g.
@@ -406,7 +406,7 @@ class SpectralTable(Serializable):
 
     def at(
             self, points: u.Quantity, unit: str | u.UnitBase,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> np.ndarray:
         """
         Return the values at points of the spectral axis.
@@ -443,7 +443,7 @@ class SpectralTable(Serializable):
             values, x * self._points.unit, u.Unit(unit), convention)
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         """
         Return the range of the points as velocities of a spectral axis.
@@ -467,7 +467,7 @@ class SpectralTable(Serializable):
             values: np.ndarray,
             points: u.Quantity,
             unit: u.UnitBase,
-            convention: gridutils.VelocityConvention | None
+            convention: VelocityConvention | None
     ) -> np.ndarray:
         """Values of the table at points of the spectral axis in a unit."""
         if self._unit is None:
@@ -580,7 +580,7 @@ class _VaryingOptions:
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> list[Any]:
         """Return an object of the class at each of the points (1D)."""
         values = {
@@ -592,7 +592,7 @@ class _VaryingOptions:
             for i in range(len(points))]
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         """Return the range of velocities that all the tables cover."""
         ranges = [

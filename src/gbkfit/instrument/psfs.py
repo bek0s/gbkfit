@@ -25,9 +25,9 @@ from annotated_types import Gt, Le
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
+from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import has_wcs, read_data, to_model_axes, write_data
 import gbkfit.math
-from gbkfit.utils import gridutils
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -173,7 +173,7 @@ class PSF(TypedSerializable, abc.ABC):
             along x and y. Each size + offset must be odd.
         rota : float, optional
             The rotation of the pixels on the sky (degrees, see
-            gridutils.Coords): a PSF of position angle posa is drawn at
+            Coords): a PSF of position angle posa is drawn at
             posa - rota.
 
         Returns
@@ -244,7 +244,7 @@ class PSF(TypedSerializable, abc.ABC):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         """
         Return the PSF at points of the spectral axis.
@@ -267,7 +267,7 @@ class PSF(TypedSerializable, abc.ABC):
         return varying.per_point(points, lambda points_: [self] * len(points_))
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         """
         Return the range of velocities of the spectral axis that the PSF
@@ -661,7 +661,7 @@ class PSFImage(PSF):
     ) -> dict[str, Any]:
         filename = f'{prefix}psf.fits'
         rpix = tuple(np.array(self._data.shape[::-1]) / 2 - 0.5)
-        coords = gridutils.Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
+        coords = Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
         write_data(filename, self._data, coords, None, overwrite)
         return dict(
             type=self.type(),
@@ -770,7 +770,7 @@ class PSFSum(PSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         if not self.varies():
             return super().at(points, convention)
@@ -779,7 +779,7 @@ class PSFSum(PSF):
             _detail.terms_at(self._psfs, points_, convention)])
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._psfs, convention)
 
@@ -836,7 +836,7 @@ class PSFConvolution(PSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         if not self.varies():
             return super().at(points, convention)
@@ -845,7 +845,7 @@ class PSFConvolution(PSF):
             _detail.terms_at(self._psfs, points_, convention)])
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         return _detail.terms_velocity_range(self._psfs, convention)
 
@@ -1123,7 +1123,7 @@ class PSFImages(PSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         return varying.per_point(
             points, lambda points_: self._at(points_, convention))
@@ -1131,7 +1131,7 @@ class PSFImages(PSF):
     def _at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None
+            convention: VelocityConvention | None
     ) -> list[PSFImage]:
         """The image of each of the points (1D)."""
         blends = varying.blend(self._points, points, convention)
@@ -1142,7 +1142,7 @@ class PSFImages(PSF):
         return [psfs[blend] for blend in blends]
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         points = varying.to_velocities(self._points, convention)
         return float(points.min()), float(points.max())
@@ -1188,13 +1188,13 @@ class PSFVarying(PSF):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PSF | list[PSF]':
         return varying.per_point(
             points, lambda points_: self._options.at(points_, convention))
 
     def velocity_range(
-            self, convention: gridutils.VelocityConvention | None = None
+            self, convention: VelocityConvention | None = None
     ) -> tuple[float, float]:
         return self._options.velocity_range(convention)
 

@@ -10,8 +10,9 @@ import numpy as np
 
 from gbkfit.config import ConfigError, item_prefixes
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Coords, Grid
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.utils import iterutils
 from ..distance import Distance
 from ..extras import Extras
 from ..gravity import Capability, Gravity, GravityNewton
@@ -40,8 +41,8 @@ __all__ = [
 
 
 # The spectral axis of an image: one channel, without a width
-IMAGE_SPECTRAL_AXIS = gridutils.Grid(
-    (1,), gridutils.Coords((0,), (0,), (0,), 0), 0)
+IMAGE_SPECTRAL_AXIS = Grid(
+    (1,), Coords((0,), (0,), (0,), 0), 0)
 
 
 def _with_mass_params(
@@ -422,8 +423,8 @@ class ComponentSet:
     def plan(
             self,
             driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
+            grid: Grid,
+            spectral: Grid,
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
@@ -459,8 +460,8 @@ class ComponentSetPlan:
             self,
             component_set: ComponentSet,
             driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
+            grid: Grid,
+            spectral: Grid,
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],

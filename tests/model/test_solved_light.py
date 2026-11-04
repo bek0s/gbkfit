@@ -14,13 +14,13 @@ import scipy.optimize
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelBrightness
+from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     LikelihoodGaussian, ObservationGroup, ObservationSky, PixelBrightness,
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 # A core of two Gaussians (an MGE) and a Sersic envelope, in a band

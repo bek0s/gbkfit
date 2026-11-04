@@ -7,8 +7,8 @@ observable.
 import numpy as np
 import pytest
 
+from gbkfit.grid import Coords, GridData
 from gbkfit.model import Extras
-from gbkfit.utils import gridutils
 
 
 DISK = dict(
@@ -65,7 +65,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_cases, name):
         if name != 'pixel_brightness' or not k.startswith(('v', 'd'))}
     _, extra = evaluate_cases([case], properties)
     dcube_lo = extra.get('dcube_lo')
-    assert isinstance(dcube_lo, gridutils.GridData)
+    assert isinstance(dcube_lo, GridData)
     assert dcube_lo.data.shape == shape
     assert dcube_lo.spectral_axis == spectral_axis
     assert len(dcube_lo.coords.step) == len(shape)
@@ -74,7 +74,7 @@ def test_dcube_extras_have_the_layout_of_the_data(evaluate_cases, name):
     if name == 'slit_spectra':
         assert isinstance(dcube_hi, np.ndarray)
     else:
-        assert isinstance(dcube_hi, gridutils.GridData)
+        assert isinstance(dcube_hi, GridData)
         assert dcube_hi.spectral_axis == spectral_axis
     # The PSF is an array of offsets, not on the grid
     assert isinstance(extra.get('psf_hi'), np.ndarray)
@@ -106,7 +106,7 @@ def test_model_extras_are_on_the_sky(evaluate_cases, name):
         assert isinstance(bdata, np.ndarray)
         return
     dcube_hi = extra.get('dcube_hi')
-    assert isinstance(bdata, gridutils.GridData)
+    assert isinstance(bdata, GridData)
     assert bdata.data.ndim == 2 and bdata.spectral_axis is None
     # (the sky of the cube, without the convention of its spectral axis)
     assert bdata.coords == dcube_hi.coords.axes(0, 1)._replace(
@@ -150,7 +150,7 @@ def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
     assert bdata.data.shape[0] == 10 and bdata.spectral_axis is None
     sky = extra.get('dcube_hi').coords.axes(0, 1)._replace(convention=None)
     assert bdata.coords.axes(0, 1) == sky
-    assert bdata.coords.axes(2) == gridutils.Coords((0.5,), (4.5,), (0.0,), 0)
+    assert bdata.coords.axes(2) == Coords((0.5,), (4.5,), (0.0,), 0)
 
 
 def test_extras_have_the_ids_of_their_scopes():

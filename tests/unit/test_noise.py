@@ -7,14 +7,14 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import make_grid
 from gbkfit.instrument import LSFConvolution, LSFHanning, PSFGauss
 from gbkfit.observation.noise import (
     NoiseGauss, NoisePoisson, NoiseStudentT, noise_parser)
-from gbkfit.utils import gridutils
 
 
 # A cube of 128 by 128 pixels of 5 arcsec and 64 channels of 10 km/s
-GRID = gridutils.make_grid((128, 128, 64), (5, 5, 10), None, (0, 0, 0), 0, 2)
+GRID = make_grid((128, 128, 64), (5, 5, 10), None, (0, 0, 0), 0, 2)
 
 # The data of GRID without noise (of no account to signal-free noise)
 SIGNAL = np.zeros((64, 128, 128))

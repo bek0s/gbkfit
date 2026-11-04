@@ -26,9 +26,10 @@ from annotated_types import Ge
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_name,
     check_options, split_fits_file)
+from gbkfit.grid import (
+    Grid, check_overlap, make_grid, pixels_on, sky_positions)
 from gbkfit.io import read_data, write_data
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -92,7 +93,7 @@ class LensMass(TypedSerializable, abc.ABC):
 
     @abc.abstractmethod
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return the deflection at the pixels of a grid of the image plane.
@@ -128,7 +129,7 @@ class LensDeflectionMap(LensMass):
         The deflection (arcsec) along x and y of the frame of the model
         (like xpos and ypos), each of shape (ny, nx).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the maps (see gridutils.make_grid).
+        The world coordinates of the maps (see make_grid).
     rota : float, optional
         The rotation of the maps on the sky.
     scaled : bool, optional
@@ -172,7 +173,7 @@ class LensDeflectionMap(LensMass):
             The files of the maps: each a filename, or a filename and the
             HDU.
         step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the maps (see gridutils.make_grid); by
+            The world coordinates of the maps (see make_grid); by
             default, those of the headers. Either rpix or rval can be
             given, and the other comes from the headers (see
             read_data).
@@ -246,7 +247,7 @@ class LensDeflectionMap(LensMass):
             raise ConfigError("the deflection maps must be finite")
         self._alpha_x = alpha_x
         self._alpha_y = alpha_y
-        self._grid = gridutils.make_grid(
+        self._grid = make_grid(
             alpha_x.shape[::-1], step, rpix, rval, rota)
         self._scaled = scaled
 
@@ -258,10 +259,10 @@ class LensDeflectionMap(LensMass):
             unit='', default=0.5))
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
-        gridutils.check_overlap(grid, self._grid, "the deflection maps")
-        pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
+        check_overlap(grid, self._grid, "the deflection maps")
+        pixel_x, pixel_y = pixels_on(grid, self._grid)
         scale = params['scale'] if self._scaled else 1.0
 
         def sample(data: np.ndarray) -> np.ndarray:
@@ -309,7 +310,7 @@ class LensSIE(LensMass):
         ) | _ellipse_pdescs()
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         u, v = _on_axes(grid, params)
         alpha_u, alpha_v = _sie_deflection(
@@ -359,7 +360,7 @@ class LensEPL(LensMass):
                 min=1, max=3, unit='', default=2)) | _ellipse_pdescs()
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         u, v = _on_axes(grid, params)
         alpha_u, alpha_v = _epl_deflection(
@@ -409,7 +410,7 @@ class LensNFW(LensMass):
         ) | _ellipse_pdescs()
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         u, v = _on_axes(grid, params)
         kappa_s, r_s, q = params['kappa_s'], params['r_s'], params['q']
@@ -486,7 +487,7 @@ class LensMultipole(LensMass):
         ) | _centre_pdescs()
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         x, y = _centred(grid, params)
         r = np.hypot(x, y)
@@ -539,9 +540,9 @@ class LensShear(LensMass):
                 "the position angle", unit='deg', default=0, period=180))
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
-        x, y = gridutils.sky_positions(grid)
+        x, y = sky_positions(grid)
         # (the angle from +x of the position angle is 90 degrees more)
         angle = 2 * math.radians(params['pa'] + 90)
         gamma1 = params['gamma'] * math.cos(angle)
@@ -572,18 +573,18 @@ def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
 
 
 def _centred(
-        grid: gridutils.Grid, params: ParamValues
+        grid: Grid, params: ParamValues
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Return the positions of the pixels of a grid from the centre of a
     mass, along x and y.
     """
-    x, y = gridutils.sky_positions(grid)
+    x, y = sky_positions(grid)
     return x - params['x'], y - params['y']
 
 
 def _on_axes(
-        grid: gridutils.Grid, params: ParamValues
+        grid: Grid, params: ParamValues
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Return the positions of the pixels of a grid from the centre of a

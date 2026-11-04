@@ -16,10 +16,10 @@ import scipy.special
 from gbkfit.config import (
     ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues,
     ParamVectorDesc, pdescs_with_units)
-from gbkfit.utils import gridutils
 from ...mass._numerics import (
     sersic_b, sersic_density_table, sersic_tables)
 from ...mass import SpheroidDensity
@@ -738,7 +738,7 @@ class Spheroid(Component):
     def plan(
             self,
             driver: Driver,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,

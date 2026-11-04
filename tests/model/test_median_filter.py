@@ -8,12 +8,12 @@ import pytest
 import scipy.ndimage
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
     LineOfSightFlat, ObservationGroup, ObservationSky, PixelBrightness,
     PixelMoments, PixelSpectra, observable_parser)
 from gbkfit.params import ParamSpace
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 def disk(emission):

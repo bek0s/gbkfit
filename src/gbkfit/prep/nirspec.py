@@ -428,7 +428,7 @@ def _on_sky(image: np.ndarray, rota: float) -> np.ndarray:
     """
     Return places along the axes of an image of the rotation rota (arcsec,
     of shape (2, ...)) on the sky, in the frame of the model (see
-    gridutils.sky_positions).
+    sky_positions).
     """
     angle = np.radians(rota)
     cos, sin = np.cos(angle), np.sin(angle)

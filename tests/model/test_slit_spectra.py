@@ -4,9 +4,9 @@ along a slit, which must match a row of a spectral cube.
 """
 
 import copy
+from gbkfit.grid import SpectralAxis
 import gbkfit.model
 import gbkfit.params
-from gbkfit.utils.gridutils import SpectralAxis
 import numpy as np
 import pytest
 from modelutils import group_plan

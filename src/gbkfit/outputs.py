@@ -33,8 +33,9 @@ import ruamel.yaml
 from astropy.table import Table
 
 import gbkfit
+from gbkfit.grid import GridData, SpectraData
 from gbkfit.io import write_data, write_spectra
-from gbkfit.utils import gridutils, numutils, pathutils
+from gbkfit.utils import numutils, pathutils
 
 if TYPE_CHECKING:
     import astropy.units
@@ -455,18 +456,18 @@ class RunWriter:
         its shape.
         """
         carries_unit = isinstance(
-            value, (gridutils.GridData, gridutils.SpectraData))
+            value, (GridData, SpectraData))
         if unit is not None and not isinstance(value, np.ndarray):
             raise TypeError(
                 f"{path}: a unit is given only for an array; a "
                 f"{type(value).__name__} carries its own, or has none")
         cards = self._cards(kind)
-        if format_ == 'fits' and isinstance(value, gridutils.GridData):
+        if format_ == 'fits' and isinstance(value, GridData):
             return (lambda f: write_data(
                 f, value.data, value.coords, value.spectral_axis,
                 overwrite=True, unit=value.unit, cards=cards),
                 value.unit, value.data.shape)
-        if format_ == 'fits' and isinstance(value, gridutils.SpectraData):
+        if format_ == 'fits' and isinstance(value, SpectraData):
             return (lambda f: write_spectra(
                 f, value.data, value.coords, overwrite=True, unit=value.unit,
                 cards=cards), value.unit, value.data.shape)
@@ -914,7 +915,7 @@ def _extension(value: Any) -> str:
         If the type is not of these.
     """
     if isinstance(
-            value, (gridutils.GridData, gridutils.SpectraData, np.ndarray)):
+            value, (GridData, SpectraData, np.ndarray)):
         return '.fits'
     if isinstance(value, Table):
         return '.ecsv'

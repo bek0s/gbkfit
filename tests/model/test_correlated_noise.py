@@ -8,6 +8,7 @@ import pytest
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelSpectra
+from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -15,7 +16,6 @@ from gbkfit.observation import (
     LikelihoodGaussian, ObservationGroup, ObservationSky, PixelSpectra,
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 SIZE = (12, 12, 31)

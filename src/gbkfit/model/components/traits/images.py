@@ -13,10 +13,10 @@ import scipy.special
 
 from gbkfit.config import (
     ConfigError, FitsFile, Unit, check_options, split_fits_file, warn)
+from gbkfit.grid import Coords, frame_to_pixels, make_grid
 from gbkfit.instrument import PSF, psf_parser
 from gbkfit.io import read_data
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import gridutils
 from .base import ImageInput, RPTrait
 
 
@@ -233,7 +233,7 @@ class RPTraitImage(RPTrait):
     data : ndarray
         The image.
     coords : Coords
-        Its world coordinates (see gridutils.Coords).
+        Its world coordinates (see Coords).
     size : Sequence of int
         The number of cells along x and along y, [nx, ny].
     step : float
@@ -316,7 +316,7 @@ class RPTraitImage(RPTrait):
     def __init__(
             self,
             data: np.ndarray,
-            coords: gridutils.Coords,
+            coords: Coords,
             size: Sequence[int],
             step: Annotated[float, Unit('arcsec')],
             psf: PSF | None = None,
@@ -331,7 +331,7 @@ class RPTraitImage(RPTrait):
                 f"the data of an image trait must be an image; they have "
                 f"{data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0).astype(float)
-        self._grid = gridutils.make_grid(
+        self._grid = make_grid(
             data.shape[::-1], coords.step, coords.rpix, coords.rval,
             coords.rota)
         pixel = min(abs(s) for s in coords.step[:2])
@@ -428,7 +428,7 @@ class RPTraitImage(RPTrait):
             The values of its parameters a, and dx and dy if offsets.
         x, y : np.ndarray
             The positions on the sky of the centres of the cells (arcsec,
-            in the frame of origin; see gridutils.frame_to_pixels), of
+            in the frame of origin; see frame_to_pixels), of
             shape (ny, nx).
         incl : np.ndarray
             The inclination of the disk at each cell (degrees), of their
@@ -442,7 +442,7 @@ class RPTraitImage(RPTrait):
             The densities.
         """
         dx, dy = (params['dx'], params['dy']) if self._offsets else (0, 0)
-        px, py = gridutils.frame_to_pixels(
+        px, py = frame_to_pixels(
             x - dx, y - dy, origin, self._grid)
         image = scipy.ndimage.map_coordinates(
             self._data, [py, px], order=1, mode='constant', cval=0)
@@ -474,12 +474,12 @@ class RPTraitImage(RPTrait):
             What has the trait, for the message (e.g. "the disk of
             'gas'").
         """
-        px, py = gridutils.frame_to_pixels(x, y, origin, self._grid)
+        px, py = frame_to_pixels(x, y, origin, self._grid)
         nx, ny = self._grid.size[:2]
         if np.any((px >= -0.5) & (px <= nx - 0.5)
                   & (py >= -0.5) & (py <= ny - 0.5)):
             return
-        centre_x, centre_y = gridutils.frame_to_pixels(
+        centre_x, centre_y = frame_to_pixels(
             np.zeros(1), np.zeros(1), origin, self._grid)
         warn(
             f"the image of the image trait of {label} "

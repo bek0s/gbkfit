@@ -6,8 +6,9 @@ sums over their pixels at their directions on the sky.
 import numpy as np
 import pytest
 
+from gbkfit.grid import make_grid, sky_positions
+from gbkfit.grid.coords import _to_sky
 from gbkfit.observation.observables._uv_transforms import uv_transforms
-from gbkfit.utils import gridutils
 
 
 C = 299792458.0
@@ -16,7 +17,7 @@ EPS, ERROR = 1e-12, 1e-10
 # A grid of 12 x 10 pixels of 60 arcsec, rotated by 30 deg, and a phase
 # centre 0.28 deg from its reference pixel; two channels of HI, and
 # baselines of up to 2e4 wavelengths, whose w-term reaches 0.33 rad
-GRID = gridutils.make_grid((12, 10), 60, rval=(150, -30), rota=30)
+GRID = make_grid((12, 10), 60, rval=(150, -30), rota=30)
 PHASE_CENTRE = (150.2, -29.8)
 FREQUENCIES = np.array([1.40e9, 1.42e9])
 UVW = np.random.default_rng(1).uniform(-4000, 4000, (50, 3))
@@ -42,14 +43,14 @@ def baseline_vectors(uvw, frequency, centre):
 
 
 def tan_directions():
-    ra, dec = gridutils._to_sky(*gridutils.sky_positions(GRID), GRID.coords.rval)
+    ra, dec = _to_sky(*sky_positions(GRID), GRID.coords.rval)
     return unit_vectors(ra, dec)
 
 
 def sin_directions():
     # The inverse of the orthographic projection of the offsets about the
     # reference pixel
-    x, y = gridutils.sky_positions(GRID)
+    x, y = sky_positions(GRID)
     east, north = -np.radians(x / 3600), np.radians(y / 3600)
     n = np.sqrt(1 - east ** 2 - north ** 2)
     ra0, dec0 = np.radians(GRID.coords.rval[:2])

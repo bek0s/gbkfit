@@ -9,8 +9,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError, check_options
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
-from gbkfit.utils import gridutils
 from .. import traits
 from .._native import make_bands, make_lines
 from .._detail import Interp, RNodes, RnMax, RnSep, RStep
@@ -163,7 +163,7 @@ class Cone(Component):
     def plan(
             self,
             driver: Driver,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,

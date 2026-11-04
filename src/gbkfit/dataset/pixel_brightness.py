@@ -8,9 +8,9 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import DataFile, check_options
+from gbkfit.grid import Grid
 from gbkfit.instrument import PSF
 from gbkfit.io import ErrorKind
-from gbkfit.utils import gridutils
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
 from .data import Data
@@ -38,10 +38,10 @@ class DatasetPixelBrightness(Dataset):
     brightness : Data
         The image, of shape (ny, nx).
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the grid (see gridutils.Coords); their
-        defaults are those of gridutils.make_grid.
+        The world coordinates of the grid (see Coords); their
+        defaults are those of make_grid.
     rota : float, optional
-        The rotation of the grid on the sky (see gridutils.Coords).
+        The rotation of the grid on the sky (see Coords).
     """
 
     # An image has no spectral axis
@@ -90,7 +90,7 @@ class DatasetPixelBrightness(Dataset):
             The options of their beam (see Beam); by default, that of the
             header.
         step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the grid (see gridutils.Coords); by
+            The world coordinates of the grid (see Coords); by
             default, those of the header. Either rpix or rval can be given,
             and the other comes from the header (see read_data).
         rota : float, optional
@@ -139,9 +139,9 @@ class DatasetPixelBrightness(Dataset):
     ):
         check_options(DatasetPixelBrightness.__init__, locals())
         super().__init__(dict(brightness=brightness))
-        self._grid = _detail.make_grid(self, step, rpix, rval, rota)
+        self._grid = _detail.dataset_grid(self, step, rpix, rval, rota)
 
-    def grid(self) -> gridutils.Grid:
+    def grid(self) -> Grid:
         """Return the grid of the pixels."""
         return self._grid
 

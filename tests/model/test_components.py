@@ -7,10 +7,10 @@ and traits), and their errors.
 import numpy as np
 import pytest
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords, Grid
 from gbkfit.model import BandEmission, LineEmission, galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.observation import Depth, LineOfSightGrid
-from gbkfit.utils import gridutils
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -219,7 +219,7 @@ def test_thick_disk_with_several_velocity_traits(name):
         pname: np.ones(pdesc.size()) if pdesc.type() == 'vector' else 1.0
         for pname, pdesc in galaxy.pdescs().items()}
     scube = np.zeros((11, 16, 16), np.float32)
-    grid = gridutils.Grid((16, 16, 11), gridutils.Coords(
+    grid = Grid((16, 16, 11), Coords(
         (1, 1, 10), (7.5, 7.5, 5), (0, 0, 0), 0), 2)
     spatial = grid.spatial()
     plan = galaxy.plan(

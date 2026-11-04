@@ -8,9 +8,9 @@ import pytest
 from modelutils import config_group_plan
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras
 from gbkfit.observation import WeightAzimuthPower, WeightAzimuthRange
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 def test_weight_functions():

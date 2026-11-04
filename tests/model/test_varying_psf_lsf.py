@@ -158,13 +158,13 @@ def test_points_in_wavelength_on_axes_of_log_velocities():
     # - 1) on one of optical velocities
     import astropy.units as u
     from gbkfit.instrument import varying
-    from gbkfit.utils import gridutils
+    from gbkfit.grid import VelocityConvention, make_rest
     c = 299792.458
-    rest = gridutils.make_rest('6564.61 Angstrom')
+    rest = make_rest('6564.61 Angstrom')
     points = [6564.61 * 2.5] * u.Angstrom
     for convention, velocity in (('log', c * np.log(2.5)), (None, c * 1.5)):
         assert varying.to_velocities(
-            points, gridutils.VelocityConvention(rest, None, convention)) \
+            points, VelocityConvention(rest, None, convention)) \
             == pytest.approx([velocity], rel=1e-12)
 
 

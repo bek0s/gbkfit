@@ -12,9 +12,9 @@ import pytest
 import scipy.ndimage
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import VelocityConvention
 from gbkfit.io import read_data
 from gbkfit.tasks import prep
-from gbkfit.utils import gridutils
 
 
 # A spectral cube with a degenerate Stokes axis, as radio cubes often have:
@@ -678,7 +678,7 @@ def test_lsf_of_muse(tmp_path):
     lsf = lsf_parser.load(dict(
         type='gauss', sigma=dict(file=table, column='sigma')))
     # (a width in wavelength becomes a velocity with the rest)
-    gauss = lsf.at(7000 * u.AA, gridutils.VelocityConvention(7000 * u.AA))
+    gauss = lsf.at(7000 * u.AA, VelocityConvention(7000 * u.AA))
     # A FWHM of 2.48 Angstrom at 7000 Angstrom, in km/s
     fwhm = 5.866e-8 * 7000 ** 2 - 9.187e-4 * 7000 + 6.040
     assert gauss.dump()['sigma'] == pytest.approx(

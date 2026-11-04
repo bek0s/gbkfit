@@ -6,13 +6,13 @@ mmaps and bmaps), as the maps of data often are.
 import copy
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords, SpectralAxis
 import gbkfit.params
 import numpy as np
 import pytest
 from modelutils import group_plan
 
 from gbkfit.observation.observables._moments import MomentsPlan
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 GALAXY = dict(components=[dict(
@@ -177,10 +177,9 @@ def test_gaussian_fit_differs_from_the_moments_with_beam_smearing(driver):
 def test_gaussian_fit_of_bins(driver):
     # The fits of single-pixel bins are those of the maps
     from gbkfit.io import write_data
-    from gbkfit.utils import gridutils
     write_data(
         'bins.fits', np.arange(32 * 41).reshape(41, 32),
-        gridutils.Coords((1, 1), (15.5, 20), (0, 0), 0))
+        Coords((1, 1), (15.5, 20), (0, 0), 0))
     options = dict(
         spectral=dict(size=161, step=5, convention='relativistic'),
         orders=[1, 2], flux_floor=1e-4, method='gaussian_fit')

@@ -11,8 +11,9 @@ import numpy as np
 import pytest
 
 from gbkfit.dataset import DatasetVisibilities
+from gbkfit.grid import make_grid
+from gbkfit.grid.coords import _to_sky
 from gbkfit.observation.observables._uv_transforms import uv_transforms
-from gbkfit.utils import gridutils
 
 
 pytest.importorskip('casacore')
@@ -33,8 +34,8 @@ def test_transforms_are_the_visibilities_that_casa_predicts(driver, name):
     dataset = DatasetVisibilities.from_ms(str(MS), rest=REST)
     coverage = dataset.coverage()
     expected = dataset['re'].data() + 1j * dataset['im'].data()
-    point = np.degrees(gridutils._to_sky(-20, 15, coverage.phase_centre()))
-    grid = gridutils.make_grid((3, 3), 1, rval=point)
+    point = np.degrees(_to_sky(-20, 15, coverage.phase_centre()))
+    grid = make_grid((3, 3), 1, rval=point)
     cube = np.zeros((coverage.nchannels(), 3, 3))
     cube[:, 1, 1] = 1
     transform = uv_transforms[name](

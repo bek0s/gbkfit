@@ -121,8 +121,8 @@ def test_lines_in_vacuum_on_an_axis_in_air(medium, offset):
     # 0, and on an axis in vacuum it is 83 km/s above it (at 6564.61)
     from gbkfit.model import LineCatalogue
     from gbkfit.model.components.lines import LinePlacement, Lines
-    from gbkfit.utils import gridutils
-    spectral = gridutils.make_grid(
+    from gbkfit.grid import make_grid
+    spectral = make_grid(
         (41,), 10, spectral_axis=0, rest='6562.80 Angstrom', medium=medium)
     lines = Lines([LineCatalogue().line('halpha')])
     (line_offset, scale), = LinePlacement(
@@ -139,9 +139,9 @@ def halpha_nii(rest, convention=None):
     """
     from gbkfit.model import LineCatalogue
     from gbkfit.model.components.lines import LinePlacement, Lines
-    from gbkfit.utils import gridutils
+    from gbkfit.grid import make_grid
     catalogue = LineCatalogue()
-    spectral = gridutils.make_grid(
+    spectral = make_grid(
         (41,), 10, spectral_axis=0, rest=f'{rest} Angstrom',
         convention=convention)
     lines = Lines([catalogue.line('halpha'), catalogue.line('nii6583')])
@@ -190,8 +190,8 @@ def test_the_systemic_velocity_is_one_on_every_axis(
     # galaxy spans 1 - u / c, 1 + u / c, 1 - (u / c)^2 and 1 km/s of them
     # (1 / D, D, 1 - (vsys / c)^2 and 1)
     from gbkfit.model.components.lines import LinePlacement, Lines
-    from gbkfit.utils import gridutils
-    spectral = gridutils.make_grid(
+    from gbkfit.grid import make_grid
+    spectral = make_grid(
         (41,), 10, spectral_axis=0, rest=rest, convention=convention)
     factors = Lines(None).factors(spectral, 0.0)
     (offset, scale), = LinePlacement(factors, spectral)(10000)

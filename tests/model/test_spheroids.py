@@ -16,14 +16,13 @@ import scipy.optimize
 import scipy.special
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords, SpectralAxis
 from gbkfit.io import write_data
 from gbkfit.model import (
     MassSpheroid, ProfileSersic, ShapeFlattened, Spheroid, component_parser,
     galaxy_parser)
 from gbkfit.model.mass import G, _numerics
 from gbkfit.params import ModelEvaluationError
-from gbkfit.utils import gridutils
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 BAND = dict(type='band')
@@ -841,7 +840,7 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
         -1)
     write_data(
         str(tmp_path / 'bins.fits'), index,
-        gridutils.Coords((2, 2), (15.5, 15.5), (0, 0), 0))
+        Coords((2, 2), (15.5, 15.5), (0, 0), 0))
     spheroid = TRAITS_SPHEROID | dict(geometry='galaxy', kinematics=dict(
         type='traits', vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform')))

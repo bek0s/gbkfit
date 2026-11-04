@@ -13,8 +13,9 @@ import numpy as np
 
 from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ModelEvaluationError, ParamValues
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from ..extras import Extras
 from ._component_plans import ComponentPlans
 from ._units import DataUnit
@@ -209,8 +210,8 @@ class TransferPlan:
             self,
             members: Sequence[TransferMember],
             driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
+            grid: Grid,
+            spectral: Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,

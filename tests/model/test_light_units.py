@@ -9,12 +9,12 @@ import pytest
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import Beam, Data, DatasetPixelSpectra
+from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, PSFGaussBeam
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
     ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 HI = 1420.405751768 * u.MHz

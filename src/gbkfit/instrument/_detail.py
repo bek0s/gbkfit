@@ -10,7 +10,7 @@ import astropy.wcs
 import numpy as np
 
 from gbkfit.config import ConfigError, TypedParser
-from gbkfit.utils import gridutils
+from gbkfit.grid import VelocityConvention
 
 if TYPE_CHECKING:
     from .lsfs import LSF
@@ -94,7 +94,7 @@ def sum_weights(
 def terms_at(
         terms: Sequence[_Term],
         points: u.Quantity,
-        convention: gridutils.VelocityConvention | None
+        convention: VelocityConvention | None
 ) -> list[list[_Term]]:
     """
     Return the terms of a sum or a convolution (PSFs or LSFs) at each of
@@ -105,7 +105,7 @@ def terms_at(
 
 
 def terms_velocity_range(
-        terms: Sequence[_Term], convention: gridutils.VelocityConvention | None
+        terms: Sequence[_Term], convention: VelocityConvention | None
 ) -> tuple[float, float]:
     """
     Return the range of velocities that the terms of a sum or a

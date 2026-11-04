@@ -14,10 +14,11 @@ from annotated_types import Gt
 from gbkfit.config import ConfigError, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
@@ -117,7 +118,7 @@ class Visibilities(Observable):
         The RA and Dec of the reference pixel (degrees); by default the
         phase centre.
     rota : float, optional
-        The rotation of the grid on the sky (see gridutils.Coords).
+        The rotation of the grid on the sky (see Coords).
     transform : str, optional
         The transform (see uv_transforms): 'exact' (by default), 'sin'
         (the pixels of a SIN projection), or 'flat' (those, without the
@@ -253,7 +254,7 @@ class Visibilities(Observable):
         channel = _C_KMS * abs(frequencies[1] - frequencies[0]) / rest
         velocity = _C_KMS * (1 - frequencies.max() / rest)
         super().__init__(
-            size, step, rpix, rval, rota, gridutils.SpectralAxis(
+            size, step, rpix, rval, rota, SpectralAxis(
                 size=coverage.nchannels(), step=channel, rpix=0,
                 rval=velocity, convention='radio', rest=coverage.rest()))
         self._fov = fov
@@ -342,7 +343,7 @@ class Visibilities(Observable):
             values: Mapping[str, np.ndarray],
             weights: Mapping[str, np.ndarray] | None,
             units: Mapping[str, astropy.units.UnitBase | None] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         # (of visibilities in Jy, a dirty image is in Jy/beam)
         image = self._dirty_image(
             driver, values['re'] + 1j * values['im'], weights)
@@ -356,7 +357,7 @@ class Visibilities(Observable):
             self,
             driver: Driver,
             weights: Mapping[str, np.ndarray] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         # (the dirty image of a point of 1 at the phase centre)
         shape = (self._coverage.nchannels(), self._coverage.nrows())
         return dict(dirty_beam=self._dirty_image(
@@ -367,7 +368,7 @@ class Visibilities(Observable):
             driver: Driver,
             visibilities: np.ndarray,
             weights: Mapping[str, np.ndarray] | None
-    ) -> gridutils.GridData:
+    ) -> GridData:
         """
         Return the dirty image of visibilities, of natural weights: the
         adjoint of the transform of the weighted visibilities, over the sum
@@ -394,7 +395,7 @@ class Visibilities(Observable):
         with np.errstate(divide='ignore', invalid='ignore'):
             image = driver.mem_copy_d2h(images).real \
                 / w.sum(axis=1)[:, None, None]
-        return gridutils.GridData(image, self._grid.coords, 2)
+        return GridData(image, self._grid.coords, 2)
 
     def plan(
             self,
@@ -510,7 +511,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
         self._reversed = reversed_
         shape = (dcube.size()[2], transform.nrows())
         spectral = dcube.grid().spectral().coords
-        self._noise_grid = gridutils.make_grid(
+        self._noise_grid = make_grid(
             shape[::-1], (1, spectral.step[0]), (0, 0), (0, spectral.rval[0]),
             spectral_axis=1, rest=spectral.rest)
         self._visibilities = driver.mem_alloc_d(shape, np.complex128)
@@ -584,7 +585,7 @@ class VisibilitiesPlan(_detail.DCubePlanBase):
     def has_exact_errors(self) -> bool:
         return True
 
-    def noise_grid(self) -> gridutils.Grid:
+    def noise_grid(self) -> Grid:
         """
         Return the grid of the noise of the visibilities: the rows along x
         and the channels along y, of their velocity step (as the arrays of

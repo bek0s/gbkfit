@@ -17,10 +17,10 @@ from annotated_types import Gt
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, check_options,
     split_fits_file)
+from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.io import read_data
 from gbkfit.math.correlation import periodic_correlation
-from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -77,7 +77,7 @@ class Noise(TypedSerializable, abc.ABC):
         return None, None
 
     @abc.abstractmethod
-    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
+    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
         """
         Return the dispersion of the noise of each value of data on a grid.
 
@@ -106,7 +106,7 @@ class Noise(TypedSerializable, abc.ABC):
     def draw(
             self,
             rng: np.random.Generator,
-            grid: gridutils.Grid,
+            grid: Grid,
             psf: PSF | None,
             signal: np.ndarray
     ) -> np.ndarray:
@@ -269,13 +269,13 @@ class NoiseGauss(Noise):
     def correlations(self) -> tuple[PSF | str | None, LSF | None]:
         return self._spatial_correlation, self._spectral_correlation
 
-    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
+    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
         return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
             rng: np.random.Generator,
-            grid: gridutils.Grid,
+            grid: Grid,
             psf: PSF | None,
             signal: np.ndarray
     ) -> np.ndarray:
@@ -302,7 +302,7 @@ class NoiseGauss(Noise):
         return noise[tuple(slice(0, n) for n in shape)] * sigma
 
     def _spatial_kernels(
-            self, grid: gridutils.Grid, psf: PSF | None
+            self, grid: Grid, psf: PSF | None
     ) -> np.ndarray | None:
         """
         Return the spatial correlation on the pixels of a grid: one image
@@ -331,11 +331,11 @@ class NoiseGauss(Noise):
                 "spectral axis, but the data have none")
         psfs = spatial.at(
             _velocities(grid) * u.km / u.s,
-            gridutils.VelocityConvention.of(grid.coords))
+            VelocityConvention.of(grid.coords))
         size = tuple(np.max([p.size(step) for p in psfs], axis=0).tolist())
         return np.stack([p.asarray(step, size, rota=rota) for p in psfs])
 
-    def _spectral_kernel(self, grid: gridutils.Grid) -> np.ndarray | None:
+    def _spectral_kernel(self, grid: Grid) -> np.ndarray | None:
         """Return the spectral correlation on the channels of a grid."""
         spectral = self._spectral_correlation
         if spectral is None:
@@ -427,13 +427,13 @@ class NoiseStudentT(Noise):
         """Return the degrees of freedom."""
         return self._dof
 
-    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
+    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
         return _dispersion(self._rms, self._error, grid)
 
     def draw(
             self,
             rng: np.random.Generator,
-            grid: gridutils.Grid,
+            grid: Grid,
             psf: PSF | None,
             signal: np.ndarray
     ) -> np.ndarray:
@@ -476,13 +476,13 @@ class NoisePoisson(Noise):
         """Return the counts per unit of the data."""
         return self._gain
 
-    def sigma(self, grid: gridutils.Grid, signal: np.ndarray) -> np.ndarray:
+    def sigma(self, grid: Grid, signal: np.ndarray) -> np.ndarray:
         return np.sqrt(np.maximum(signal, 0) * self._gain) / self._gain
 
     def draw(
             self,
             rng: np.random.Generator,
-            grid: gridutils.Grid,
+            grid: Grid,
             psf: PSF | None,
             signal: np.ndarray
     ) -> np.ndarray:
@@ -536,7 +536,7 @@ def _check_dispersion(
 def _dispersion(
         rms: float | None,
         error: np.ndarray | None,
-        grid: gridutils.Grid
+        grid: Grid
 ) -> np.ndarray:
     """
     Return the dispersion of each value of data on a grid, of rms or of
@@ -558,7 +558,7 @@ def _dispersion(
             f"the data, of shape {shape}") from None
 
 
-def _velocities(grid: gridutils.Grid) -> np.ndarray:
+def _velocities(grid: Grid) -> np.ndarray:
     """Return the velocities of the channels of a grid (km/s)."""
     step = grid.coords.step[2]
     return grid.zero()[2] + step * np.arange(grid.size[2])

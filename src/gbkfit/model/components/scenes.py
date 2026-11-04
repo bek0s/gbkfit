@@ -14,8 +14,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils
 from ..extras import Extras
 from ._component_plans import opacity_cubes
 from ._component_set import IMAGE_SPECTRAL_AXIS, ComponentSetPlan
@@ -201,7 +201,7 @@ class ScenePlan(abc.ABC):
     cube.
     """
 
-    def __init__(self, scene: Scene, grid: gridutils.Grid):
+    def __init__(self, scene: Scene, grid: Grid):
         image = grid.spectral_axis is None
         self._scene = scene
         self._key = 'image' if image else 'scube'
@@ -271,7 +271,7 @@ class AdditiveScenePlan(ScenePlan):
             self,
             scene: Scene,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             depth: DepthAxis | None,
             dtype: np.dtype,
             smoothing: float | None
@@ -363,7 +363,7 @@ class TransferScenePlan(ScenePlan):
             self,
             scene: Scene,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             depths: Sequence[DepthAxis],
             dtype: np.dtype,
             slab: int | None,

@@ -11,8 +11,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError, TypedSerializable, check_name
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import gridutils
 from .geometries import Geometry
 from .lines import Band
 from .roles import STARS, Emission, LineEmission, Opacity, StarsEmission
@@ -337,7 +337,7 @@ class Component(TypedSerializable, abc.ABC):
     def plan(
             self,
             driver: Driver,
-            spectral: gridutils.Grid,
+            spectral: Grid,
             dtype: np.dtype,
             lines: tuple[str, ...] | None,
             band: Band | None,

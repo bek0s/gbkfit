@@ -11,9 +11,9 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords, Grid, make_convention, make_grid, make_rest
 from gbkfit.io import (
     centre_missing_crpix, read_array, read_data, read_hdu, write_data)
-from gbkfit.utils import gridutils
 
 
 def position_angle(header, pixel_from, pixel_to):
@@ -44,7 +44,7 @@ def test_write_and_read_back(rota, shape):
     step = (2.0, 3.0, 10.0)[:len(shape)]
     rpix = (11.5, 9.5, 5.0)[:len(shape)]
     rval = (150.0, 2.0, 1500.0)[:len(shape)]
-    coords = gridutils.Coords(step, rpix, rval, rota)
+    coords = Coords(step, rpix, rval, rota)
     spectral_axis = 2 if len(shape) == 3 else None
     write_data(
         'data.fits', np.ones(shape, np.float32), coords, spectral_axis)
@@ -61,7 +61,7 @@ def test_rota_is_the_position_angle_of_the_y_axis(rota):
     # Independently of the readers of FITS files: astropy's position angle from a pixel
     # to the next one along y is rota, and along x it is rota - 90 (east
     # is to the left of north)
-    coords = gridutils.Coords((2.0, 2.0), (10, 10), (150.0, 2.0), rota)
+    coords = Coords((2.0, 2.0), (10, 10), (150.0, 2.0), rota)
     write_data('data.fits', np.ones((20, 20), np.float32), coords)
     header = fits.getheader('data.fits')
     assert same_angle(position_angle(header, (10, 10), (10, 11)), rota)
@@ -70,7 +70,7 @@ def test_rota_is_the_position_angle_of_the_y_axis(rota):
 
 def test_write_and_read_back_long_slit():
     # The position along the slit is an offset from its reference pixel
-    coords = gridutils.Coords(
+    coords = Coords(
         (2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0,
         convention='relativistic')
     write_data(
@@ -82,7 +82,7 @@ def test_write_and_read_back_long_slit():
 def test_write_and_read_back_line_of_sight_axis():
     # A cube without a spectral axis has a third spatial axis, along the
     # line of sight: an offset in arcsec from its reference pixel
-    coords = gridutils.Coords((2.0, 3.0, 0.5), (11.5, 9.5, 7.5),
+    coords = Coords((2.0, 3.0, 0.5), (11.5, 9.5, 7.5),
                               (150.0, 2.0, 0.0), 30.0)
     write_data('data.fits', np.ones((16, 20, 24), np.float32),
                          coords, spectral_axis=None)
@@ -163,7 +163,7 @@ def test_axes_without_a_type_are_as_given():
     # (the world position of the second axis at the reference pixel of
     # FITS, 0, 1-based)
     coords = write(dict(CDELT1=2.0, CDELT2=3.0, CRPIX1=4.0, CRVAL2=7.0))
-    assert coords == gridutils.Coords((2.0, 3.0), (3.0, -1.0), (0.0, 7.0), 0.0)
+    assert coords == Coords((2.0, 3.0), (3.0, -1.0), (0.0, 7.0), 0.0)
 
 
 def test_rpix_or_rval_can_be_given():
@@ -313,13 +313,13 @@ def test_hdu_without_data():
 def test_grid_zero_and_spatial_axes():
     # The spatial axes are measured from the reference pixel, and the
     # spectral axis from its world value there
-    coords = gridutils.Coords((2.0, 3.0, 10.0), (4.0, 5.0, 6.0),
+    coords = Coords((2.0, 3.0, 10.0), (4.0, 5.0, 6.0),
                               (150.0, 2.0, 1500.0), 30.0)
-    grid = gridutils.Grid((8, 10, 12), coords, 2)
+    grid = Grid((8, 10, 12), coords, 2)
     assert grid.zero() == (-8.0, -15.0, 1440.0)
     spatial = grid.spatial()
     assert spatial.size == (8, 10) and spatial.spectral_axis is None
-    assert spatial.coords == gridutils.Coords(
+    assert spatial.coords == Coords(
         (2.0, 3.0), (4.0, 5.0), (150.0, 2.0), 30.0)
 
 
@@ -396,7 +396,7 @@ def test_rest_can_be_given():
     (None, 'optical', 'VOPT', None),
     (None, 'log', 'VLOG', None)])
 def test_rest_round_trip(rest, convention, ctype, keyword):
-    grid = gridutils.make_grid(
+    grid = make_grid(
         (24, 20, 6), (1, 1, 10), spectral_axis=2, rest=rest,
         convention=convention)
     write_data(
@@ -406,7 +406,7 @@ def test_rest_round_trip(rest, convention, ctype, keyword):
     assert keyword is None or keyword in header
     coords = read_data('data.fits')[1]
     assert coords.convention == (
-        gridutils.make_convention(convention, coords.rest) or 'relativistic')
+        make_convention(convention, coords.rest) or 'relativistic')
     if rest is None:
         assert coords.rest is None
     else:
@@ -432,7 +432,7 @@ def test_medium_of_the_wavelengths(ctype, keywords, medium, expected):
 
 
 def test_medium_round_trip():
-    grid = gridutils.make_grid(
+    grid = make_grid(
         (24, 20, 6), (1, 1, 10), spectral_axis=2, rest='6562.8 Angstrom',
         medium='air')
     write_data('data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
@@ -446,7 +446,7 @@ def test_medium_round_trip():
     (None, 'vacuum', "only the wavelengths of a rest wavelength")])
 def test_invalid_medium(rest, medium, message):
     with pytest.raises(ConfigError, match=message):
-        gridutils.make_grid(
+        make_grid(
             (24, 20, 6), spectral_axis=2, rest=rest, medium=medium)
 
 
@@ -454,7 +454,7 @@ def test_invalid_medium(rest, medium, message):
     '6562.8', '3 km/s', '-1 Angstrom', 'Halpha', [1, 2] * u.m])
 def test_invalid_rest(value):
     with pytest.raises(ConfigError, match="positive wavelength or frequency"):
-        gridutils.make_rest(value)
+        make_rest(value)
 
 
 def test_nonlinear_velocity_axes_are_rejected():

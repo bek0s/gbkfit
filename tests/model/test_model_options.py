@@ -9,10 +9,10 @@ import re
 
 import pytest
 from gbkfit.config import ConfigError, config_path, strict_mode
+from gbkfit.grid import Coords, Grid
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
-from gbkfit.utils import gridutils
 from modelutils import config_group_plan
 
 
@@ -209,8 +209,8 @@ def test_invalid_depths_are_rejected(options, message):
     (Depth(extent='legacy'), (12, 0.5, -2.75)),
     (Depth(extent='legacy', step=0.25), (12, 0.25, -1.375))])
 def test_depth_axis(depth, axis):
-    grid = gridutils.Grid(
-        (8, 12), gridutils.Coords((1, 0.5), (3.5, 5.5), (0, 0), 0), None)
+    grid = Grid(
+        (8, 12), Coords((1, 0.5), (3.5, 5.5), (0, 0), 0), None)
     assert depth.axis(grid, 5) == axis
 
 

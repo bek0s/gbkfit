@@ -15,9 +15,9 @@ from gbkfit.config import (
     ConfigError, TypedParser, TypedSerializable, check_name)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
+from gbkfit.grid import GridData, SpectraData
 from gbkfit.model import DataUnit
 from gbkfit.params import ParamDesc, pdescs_with_units
-from gbkfit.utils import gridutils
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, LikelihoodGaussian
 from .observables import FluxScale, ObservablePlan
@@ -168,7 +168,7 @@ class Observation(TypedSerializable, abc.ABC):
     def velocity_frame(self) -> str | None:
         """
         Return the frame of rest of its velocities (FITS SPECSYS, see
-        gridutils.FRAMES), if known; here, it is not.
+        FRAMES), if known; here, it is not.
         """
         return None
 
@@ -339,7 +339,7 @@ class Observation(TypedSerializable, abc.ABC):
             self,
             data: np.ndarray,
             unit: astropy.units.UnitBase | None = None
-    ) -> gridutils.GridData | gridutils.SpectraData | Table | np.ndarray:
+    ) -> GridData | SpectraData | Table | np.ndarray:
         """
         Return an array of the form of its data as an output (e.g. on the
         grid of its data, with their world coordinates).
@@ -364,7 +364,7 @@ class Observation(TypedSerializable, abc.ABC):
             values: Mapping[str, np.ndarray],
             weights: Mapping[str, np.ndarray] | None,
             units: Mapping[str, astropy.units.UnitBase | None] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         """
         Return images of values of its data items, as outputs (e.g. the
         dirty images of visibilities; see Observable.images), made on a
@@ -395,7 +395,7 @@ class Observation(TypedSerializable, abc.ABC):
             self,
             driver: Driver,
             weights: Mapping[str, np.ndarray] | None
-    ) -> dict[str, gridutils.GridData]:
+    ) -> dict[str, GridData]:
         """
         Return images of the PSF of its data (e.g. the dirty beam of
         visibilities; see Observable.psf_images), which its images are

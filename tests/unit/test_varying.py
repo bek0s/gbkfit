@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError, paths_relative_to
+from gbkfit.grid import VelocityConvention
 from gbkfit.instrument import lsf_parser, psf_parser
-from gbkfit.utils import gridutils
 
 
 C = 299792.458
@@ -44,7 +44,7 @@ def test_psf_options_vary_with_wavelength(tmp_path, source):
     assert psf.varies()
     rest = 6562.8 * u.AA
     velocities = np.array([-100000.0, 0.0, 20000.0, 200000.0])
-    psfs = psf.at(velocities * KMS, gridutils.VelocityConvention(rest))
+    psfs = psf.at(velocities * KMS, VelocityConvention(rest))
     wavelengths = 6562.8 * (1 + velocities / C)
     np.testing.assert_allclose(
         [p.dump()['alpha'] for p in psfs],
@@ -66,7 +66,7 @@ def test_beams_vary_with_frequency():
     frequencies = 1420.405752 * (1 - velocities / C)
     np.testing.assert_allclose(
         [b.dump()['bmaj'] for b in beam.at(
-            velocities * KMS, gridutils.VelocityConvention(rest))],
+            velocities * KMS, VelocityConvention(rest))],
         np.interp(frequencies, [1419.0, 1421.0], [3.0, 2.0]), rtol=1e-9)
 
 
@@ -76,7 +76,7 @@ def test_lsf_widths_in_wavelength_are_converted_to_km_s_of_the_light():
     lsf = lsf_parser.load(dict(type='gauss', sigma=dict(
         points=dict(value=[-100, 100], unit='km/s'), values=[1.0, 2.0],
         unit='Angstrom')))
-    convention = gridutils.VelocityConvention(6562.8 * u.AA)
+    convention = VelocityConvention(6562.8 * u.AA)
     velocities = np.array([0.0, 100.0])
     wavelengths = 6562.8 * (1 + velocities / C)
     lsfs = lsf.at(velocities * KMS, convention)
@@ -120,7 +120,7 @@ def test_varying_psfs_round_trip():
     assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
     # (an angle in radians is converted to the degrees of posa)
     np.testing.assert_allclose(
-        psf.at(10 * KMS, gridutils.VelocityConvention(6000 * u.AA)).dump()[
+        psf.at(10 * KMS, VelocityConvention(6000 * u.AA)).dump()[
             'posa'],
         np.degrees(0.2))
 
@@ -190,7 +190,7 @@ def test_psf_images_from_files(tmp_path):
     np.testing.assert_allclose(dumped['points']['value'], [6.5e-7, 6.6e-7])
     again = psf_parser.load(dict(dumped))
     rest = 6.5e-7 * u.m
-    convention = gridutils.VelocityConvention(rest)
+    convention = VelocityConvention(rest)
     for a, b in zip(psf.at([0, 1e3, 1e4] * KMS, convention),
                     again.at([0, 1e3, 1e4] * KMS, convention)):
         np.testing.assert_allclose(
@@ -240,7 +240,7 @@ def test_varying_psfs_in_python(tmp_path):
     assert psf_parser.dump(psf) == psf_parser.dump(loaded)
     assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)
     velocity = (5900 * u.AA).to(KMS, u.doppler_optical(6000 * u.AA))
-    convention = gridutils.VelocityConvention(6000 * u.AA)
+    convention = VelocityConvention(6000 * u.AA)
     assert psf.at([velocity], convention)[0].dump()['alpha'] == (
         pytest.approx(0.7))
     with pytest.raises(ConfigError, match="of PSFImage cannot vary"):

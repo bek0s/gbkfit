@@ -17,8 +17,10 @@ from annotated_types import Gt
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
     split_fits_file)
+from gbkfit.grid import (
+    Grid, VelocityConvention, check_overlap, make_grid, pixels_on,
+    sky_positions)
 from gbkfit.io import read_data, write_data
-from gbkfit.utils import gridutils
 from . import varying
 
 
@@ -82,7 +84,7 @@ class PrimaryBeam(TypedSerializable, abc.ABC):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PrimaryBeam | list[PrimaryBeam]':
         """
         Return the primary beam at points of the spectral axis.
@@ -104,14 +106,14 @@ class PrimaryBeam(TypedSerializable, abc.ABC):
         return varying.per_point(points, lambda points_: [self] * len(points_))
 
     @abc.abstractmethod
-    def response(self, grid: gridutils.Grid) -> np.ndarray:
+    def response(self, grid: Grid) -> np.ndarray:
         """
         Return the response at the pixels of a grid (at the frequency of
         its fwhm, for a beam that varies).
 
         Parameters
         ----------
-        grid : gridutils.Grid
+        grid : Grid
             The grid; only its x and y axes are used.
 
         Returns
@@ -172,7 +174,7 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
     def at(
             self,
             points: u.Quantity,
-            convention: gridutils.VelocityConvention | None = None
+            convention: VelocityConvention | None = None
     ) -> 'PrimaryBeam | list[PrimaryBeam]':
         if not self.varies():
             return super().at(points, convention)
@@ -181,8 +183,8 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
                        self._y)
             for frequency in varying.to_frequencies(points_, convention)])
 
-    def response(self, grid: gridutils.Grid) -> np.ndarray:
-        x, y = gridutils.sky_positions(grid)
+    def response(self, grid: Grid) -> np.ndarray:
+        x, y = sky_positions(grid)
         radius = np.hypot(x - self._x, y - self._y)
         return self._response_impl(radius / self._fwhm)
 
@@ -231,9 +233,9 @@ class PrimaryBeamImage(PrimaryBeam):
     data : ndarray
         The image; its pixels that are not finite are 0.
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the image (see gridutils.make_grid).
+        The world coordinates of the image (see make_grid).
     rota : float, optional
-        The rotation of the image on the sky (see gridutils.Coords).
+        The rotation of the image on the sky (see Coords).
     """
 
     # TODO: a cube of an image for each channel (e.g. a CASA .pb cube),
@@ -265,12 +267,12 @@ class PrimaryBeamImage(PrimaryBeam):
         file : str or tuple
             The file: a filename, or a filename and the HDU of the image.
         step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the image (see gridutils.make_grid);
+            The world coordinates of the image (see make_grid);
             by default, those of the header. Either rpix or rval can be
             given, and the other comes from the header (see
             read_data).
         rota : float, optional
-            The rotation of the image on the sky (see gridutils.Coords); by
+            The rotation of the image on the sky (see Coords); by
             default, that of the header.
 
         Returns
@@ -311,12 +313,12 @@ class PrimaryBeamImage(PrimaryBeam):
             raise ConfigError(
                 f"the primary beam must be an image; it has {data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0)
-        self._grid = gridutils.make_grid(
+        self._grid = make_grid(
             data.shape[::-1], step, rpix, rval, rota)
 
-    def response(self, grid: gridutils.Grid) -> np.ndarray:
-        gridutils.check_overlap(grid, self._grid, "the primary beam image")
-        pixel_x, pixel_y = gridutils.pixels_on(grid, self._grid)
+    def response(self, grid: Grid) -> np.ndarray:
+        check_overlap(grid, self._grid, "the primary beam image")
+        pixel_x, pixel_y = pixels_on(grid, self._grid)
         return scipy.ndimage.map_coordinates(
             self._data, [pixel_y, pixel_x], order=1, mode='constant', cval=0)
 

@@ -8,7 +8,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import check_options
-from gbkfit.utils import gridutils
+from gbkfit.grid import Grid
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
 from .data import Data, DataFiles
@@ -45,10 +45,10 @@ class DatasetPixelMoments(Dataset):
         The map of the coefficient of each order (3 and 4) of a
         Gauss-Hermite series; with moments, at least one map.
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the grid (see gridutils.Coords); their
-        defaults are those of gridutils.make_grid.
+        The world coordinates of the grid (see Coords); their
+        defaults are those of make_grid.
     rota : float, optional
-        The rotation of the grid on the sky (see gridutils.Coords).
+        The rotation of the grid on the sky (see Coords).
     """
 
     # Moment maps have no spectral axis
@@ -91,7 +91,7 @@ class DatasetPixelMoments(Dataset):
             their options (e.g. their unit; by default, that of the
             header).
         step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the grid (see gridutils.Coords); by
+            The world coordinates of the grid (see Coords); by
             default, those of the headers. Either rpix or rval can be
             given, and the other comes from the headers (see
             read_data).
@@ -132,9 +132,9 @@ class DatasetPixelMoments(Dataset):
     ):
         check_options(DatasetPixelMoments.__init__, locals())
         super().__init__(_detail.moment_items(moments, hermite))
-        self._grid = _detail.make_grid(self, step, rpix, rval, rota)
+        self._grid = _detail.dataset_grid(self, step, rpix, rval, rota)
 
-    def grid(self) -> gridutils.Grid:
+    def grid(self) -> Grid:
         """Return the grid of the pixels."""
         return self._grid
 

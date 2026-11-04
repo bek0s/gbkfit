@@ -7,6 +7,7 @@ position less the deflection there.
 import copy
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import Coords, make_grid, sky_positions
 from gbkfit.io import write_data
 import gbkfit.params
 import numpy as np
@@ -16,7 +17,6 @@ from modelutils import observation_group
 from gbkfit.observation import (
     Foreground, Lens, LensDeflectionMap, LensEPL, LensMultipole, LensNFW,
     LensSIE, LensShear, foreground_parser)
-from gbkfit.utils import gridutils
 
 
 DISK = dict(
@@ -63,7 +63,7 @@ def lens_params(**params):
 def on_axes(grid, params):
     # The positions of the pixels of a grid along the major and minor axes
     # of a mass (see lens_masses)
-    x, y = gridutils.sky_positions(grid)
+    x, y = sky_positions(grid)
     x = x - params['x']
     y = y - params['y']
     pa = np.radians(params['pa'])
@@ -118,14 +118,14 @@ def test_deflection_of_a_rotated_map():
     alpha_y = 10.0 * j
     lens = LensDeflectionMap(alpha_x, alpha_y, rota=90)
     # (a grid with the pixels of the maps, and more beyond them)
-    grid = gridutils.make_grid((20, 20), rpix=(2, 1.5), rota=90)
+    grid = make_grid((20, 20), rpix=(2, 1.5), rota=90)
     deflection_x, deflection_y = lens.deflection(grid, {})
     np.testing.assert_allclose(deflection_x[:4, :5], alpha_x)
     np.testing.assert_allclose(deflection_y[:4, :5], alpha_y)
     np.testing.assert_allclose(
         [deflection_x[13, 14], deflection_y[13, 14]], [4, 30])
     # (a pixel between the pixels 1 and 2 of x, at the pixel 1 of y)
-    middle = gridutils.make_grid((1, 1), rpix=(0.5, 0.5), rota=90)
+    middle = make_grid((1, 1), rpix=(0.5, 0.5), rota=90)
     np.testing.assert_allclose(lens.deflection(middle, {}), [[[1.5]], [[10]]])
 
 
@@ -185,8 +185,8 @@ def test_point_mass_makes_an_einstein_ring(driver):
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     source = evaluate(driver, None, properties, image)
     lensed = evaluate(driver, lens, properties, image)
-    grid = gridutils.make_grid((64, 64), 0.5)
-    sky_x, sky_y = gridutils.sky_positions(grid)
+    grid = make_grid((64, 64), 0.5)
+    sky_x, sky_y = sky_positions(grid)
     radius = np.hypot(sky_x, sky_y)
     ring = np.abs(radius - einstein) < 0.5
     assert lensed[ring].mean() > 20 * lensed[radius < 3].mean()
@@ -194,7 +194,7 @@ def test_point_mass_makes_an_einstein_ring(driver):
 
 
 # The masses: a grid around their centre, and their elliptical radius
-GRID = gridutils.make_grid((5, 5), 0.37)
+GRID = make_grid((5, 5), 0.37)
 
 ELLIPSE = dict(q=0.6, pa=30, x=0.2, y=-0.1)
 
@@ -212,7 +212,7 @@ def test_the_deflection_of_an_sie_is_that_of_its_convergence():
     np.testing.assert_allclose(
         divergence(LensSIE(), GRID, params), 2 * kappa, rtol=1e-5)
     sphere = LensSIE().deflection(GRID, params | dict(q=1))
-    x, y = gridutils.sky_positions(GRID)
+    x, y = sky_positions(GRID)
     r = np.hypot(x - 0.2, y + 0.1)
     np.testing.assert_allclose(
         sphere, [1.3 * (x - 0.2) / r, 1.3 * (y + 0.1) / r])
@@ -234,7 +234,7 @@ def test_the_deflection_of_an_epl_is_that_of_its_convergence():
 def test_the_deflection_of_an_nfw_halo_is_that_of_its_convergence(q):
     # kappa = 2 kappa_s (1 - F(x)) / (x^2 - 1), x = xi / r_s; on a grid
     # within and beyond r_s
-    grid = gridutils.make_grid((7, 7), 0.5)
+    grid = make_grid((7, 7), 0.5)
     params = ELLIPSE | dict(q=q, kappa_s=0.3, r_s=0.8)
     x = elliptical_radius(grid, params) / 0.8
     root = np.sqrt(np.abs(x ** 2 - 1))
@@ -259,7 +259,7 @@ def test_the_deflection_of_a_multipole_is_that_of_its_convergence(order):
     # kappa = theta_e a / (2 r) cos(m (phi - phi_m)), with phi_m the angle
     # of the position angle
     params = dict(theta_e=1.3, a=0.05, pa=30, x=0.2, y=-0.1)
-    x, y = gridutils.sky_positions(GRID)
+    x, y = sky_positions(GRID)
     phi = np.arctan2(y + 0.1, x - 0.2)
     kappa = 1.3 * 0.05 / (2 * np.hypot(x - 0.2, y + 0.1)) * np.cos(
         order * (phi - np.radians(30 + 90)))
@@ -275,7 +275,7 @@ def test_a_shear_stretches_along_its_position_angle():
     across = np.array([np.cos(pa), np.sin(pa)])
     for direction, sign in ((along, 1), (across, -1)):
         # (a grid of one pixel at 2 direction)
-        point = gridutils.make_grid((1, 1), rpix=tuple(-2 * direction))
+        point = make_grid((1, 1), rpix=tuple(-2 * direction))
         alpha = LensShear().deflection(point, dict(gamma=0.1, pa=30))
         np.testing.assert_allclose(
             np.ravel(alpha), sign * 0.1 * 2 * direction, atol=1e-15)
@@ -322,7 +322,7 @@ def test_an_isothermal_sphere_makes_an_einstein_ring(driver):
         theta_e=einstein, q=1, pa=0, x=0, y=0)
     image = dict(type='pixel_brightness', size=[64, 64], step=[0.5, 0.5])
     lensed = evaluate(driver, lens, properties, image)
-    sky_x, sky_y = gridutils.sky_positions(gridutils.make_grid((64, 64), 0.5))
+    sky_x, sky_y = sky_positions(make_grid((64, 64), 0.5))
     radius = np.hypot(sky_x, sky_y)
     ring = np.abs(radius - einstein) < 0.5
     assert lensed[ring].mean() > 20 * lensed[radius < 3].mean()
@@ -376,13 +376,13 @@ def test_a_scaled_map_scales_its_deflection():
     lens = LensDeflectionMap(
         np.full((5, 5), 2.0), np.full((5, 5), -1.0), scaled=True)
     assert set(lens.pdescs()) == {'scale'}
-    grid = gridutils.make_grid((3, 3), 1)
+    grid = make_grid((3, 3), 1)
     np.testing.assert_allclose(
         lens.deflection(grid, dict(scale=0.5)),
         [np.full((3, 3), 1.0), np.full((3, 3), -0.5)])
 
 def test_deflection_maps_from_files(tmp_path):
-    coords = gridutils.Coords((0.5, 0.5), (9.5, 7.5), (150.0, 2.0), 0)
+    coords = Coords((0.5, 0.5), (9.5, 7.5), (150.0, 2.0), 0)
     write_data(str(tmp_path / 'ax.fits'), np.ones((16, 20)), coords)
     write_data(
         str(tmp_path / 'ay.fits'), np.full((16, 20), 2.0), coords)
@@ -394,7 +394,7 @@ def test_deflection_maps_from_files(tmp_path):
                 alpha_y=str(tmp_path / 'ay.fits'), **options))))
     foreground = load()
     lens = foreground.lens()
-    grid = gridutils.make_grid((3, 2), 0.5, rval=(150.0, 2.0))
+    grid = make_grid((3, 2), 0.5, rval=(150.0, 2.0))
     deflection = lens.deflection(grid, {})
     np.testing.assert_allclose(
         deflection, [np.ones((2, 3)), np.full((2, 3), 2)])

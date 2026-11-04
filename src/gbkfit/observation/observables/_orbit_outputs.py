@@ -13,9 +13,9 @@ import scipy.signal
 import scipy.sparse
 from astropy.table import Table
 
+from gbkfit.grid import Grid, sky_to_pixel
 from gbkfit.instrument import Instrument
 from gbkfit.model.components.spheroids import OrbitLibraryState, SkyGrid
-from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -70,7 +70,7 @@ class PixelCube:
 
     Parameters
     ----------
-    grid : gridutils.Grid
+    grid : Grid
         The grid of the bins.
     shape : tuple of int
         Its shape (ny, nx).
@@ -89,7 +89,7 @@ class PixelCube:
 
     def __init__(
             self,
-            grid: gridutils.Grid,
+            grid: Grid,
             shape: tuple[int, int],
             instrument: Instrument,
             oversampling: Sequence[int]
@@ -108,7 +108,7 @@ class PixelCube:
         padded = (shape[0] * fy + 2 * my, shape[1] * fx + 2 * mx)
         # (pixel p covers [p - 1/2, p + 1/2), and f cells along each axis;
         # as RegionMoments.sky_grid)
-        matrix, offset = gridutils.sky_to_pixel(grid)
+        matrix, offset = sky_to_pixel(grid)
         f = np.array([fx, fy], dtype=float)
         cells = np.column_stack(
             (f[:, None] * matrix, f * (offset + 0.5) + (mx, my)))

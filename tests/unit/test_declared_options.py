@@ -12,6 +12,7 @@ import pytest
 
 from gbkfit.config import option_types
 import gbkfit.fitting
+import gbkfit.grid
 import gbkfit.instrument
 import gbkfit.model
 import gbkfit.model.components.disks
@@ -42,7 +43,7 @@ CLASSES = [
     gbkfit.observation.Foreground,
     gbkfit.observation.Lens,
     gbkfit.observation.Weights,
-    gbkfit.utils.gridutils.SpectralAxis]
+    gbkfit.grid.SpectralAxis]
 
 
 def constructors():

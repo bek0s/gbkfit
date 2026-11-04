@@ -11,12 +11,12 @@ import pytest
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetProfile
+from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
 from gbkfit.observation import (
     LineOfSightFlat, NoiseGauss, ObservationGroup, ObservationProfile,
     ObservationSky, PixelBrightness, PixelSpectra, observation_parser)
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 # A galaxy of mass alone: a black hole and a halo, at 10 Mpc

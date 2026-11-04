@@ -18,8 +18,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import gridutils
 from ._detail import Fluxes, systemic_velocity
 from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .base import ComponentPlan, ComponentState, FieldsLayout, NativeGrid
@@ -285,7 +285,7 @@ def emission_setup(
         lines: Lines | None,
         bands: Bands | None,
         unit: astropy.units.UnitBase | None,
-        spectral: gridutils.Grid,
+        spectral: Grid,
         names: tuple[str, ...] | None,
         band: Band | None,
         emits: bool,

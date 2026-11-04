@@ -11,8 +11,10 @@ import numpy as np
 from astropy.table import Table
 
 from gbkfit.config import ConfigError, config_path, parse_options, warn
+from gbkfit.grid import (
+    Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis)
 from gbkfit.io import read_column, write_data
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.utils import unitutils
 from .data import Data, DataColumns, DataFiles, dump_data
 
 if TYPE_CHECKING:
@@ -220,7 +222,7 @@ def read_moments(
         files: Mapping[str, DataFiles],
         rpix: float | Sequence[float] | None = None,
         rval: float | Sequence[float] | None = None
-) -> tuple[dict[str, Data], gridutils.Coords]:
+) -> tuple[dict[str, Data], Coords]:
     """
     Read the moments of the given names from their files (see
     MOMENT_ITEMS and Data.from_files), and return them with the world
@@ -244,7 +246,7 @@ def read_moments(
 
 
 def grid_coords(
-        coords: gridutils.Coords,
+        coords: Coords,
         step: float | Sequence[float] | None,
         rota: float | None
 ) -> dict[str, Any]:
@@ -264,7 +266,7 @@ def file_references(
         nspatial: int,
         rpix: float | Sequence[float] | None,
         rval: float | Sequence[float] | None,
-        spectral: gridutils.SpectralAxis | None
+        spectral: SpectralAxis | None
 ) -> dict[str, Any]:
     """
     Return the options of the reading of the files of a dataset of
@@ -280,33 +282,33 @@ def file_references(
         If the spectral axis has a size: its data give it; or rpix or
         rval has neither one value nor one for each axis on the sky.
     """
-    spectral = spectral or gridutils.SpectralAxis()
+    spectral = spectral or SpectralAxis()
     if spectral.size() is not None:
         raise ConfigError(
             "the data give the number of channels of their spectral axis; "
             "remove its size")
 
-    def per_axis(
+    def with_spectral(
             option: str,
             spatial: float | Sequence[float] | None,
             value: float | None
     ) -> list[float | None] | None:
         values = [None] * nspatial if spatial is None \
-            else gridutils.per_axis(option, spatial, nspatial)
+            else per_axis(option, spatial, nspatial)
         values = [*values, value]
         return None if all(v is None for v in values) else values
     return dict(
-        rpix=per_axis('rpix', rpix, spectral.rpix()),
-        rval=per_axis('rval', rval, spectral.rval()),
+        rpix=with_spectral('rpix', rpix, spectral.rpix()),
+        rval=with_spectral('rval', rval, spectral.rval()),
         rest=spectral.rest(), medium=spectral.medium(),
         velocity=spectral.convention())
 
 
 def cube_coords(
-        coords: gridutils.Coords,
+        coords: Coords,
         step: float | Sequence[float] | None,
         rota: float | None,
-        spectral: gridutils.SpectralAxis | None
+        spectral: SpectralAxis | None
 ) -> dict[str, Any]:
     """
     Return the world coordinates of the grid of a dataset of axes on the
@@ -320,7 +322,7 @@ def cube_coords(
     mistake puts the lines off (by 3.4% at 5000 km/s), and a frame the
     velocities (by up to some 30 km/s).
     """
-    spectral = spectral or gridutils.SpectralAxis()
+    spectral = spectral or SpectralAxis()
     given, stated = spectral.convention(), coords.convention
     if given is not None and stated is not None and given != stated:
         warn(
@@ -340,7 +342,7 @@ def cube_coords(
         rpix=coords.rpix[:nspatial],
         rval=coords.rval[:nspatial],
         rota=coords.rota if rota is None else rota,
-        spectral=gridutils.SpectralAxis(
+        spectral=SpectralAxis(
             step=spectral.step() or coords.step[nspatial],
             rpix=coords.rpix[nspatial], rval=coords.rval[nspatial],
             convention=given or stated,
@@ -348,18 +350,18 @@ def cube_coords(
             frame=frame or coords.frame))
 
 
-def make_grid(
+def dataset_grid(
         dataset: 'Dataset',
         step: float | Sequence[float] | None,
         rpix: float | Sequence[float] | None,
         rval: float | Sequence[float] | None,
         rota: float | None
-) -> gridutils.Grid:
+) -> Grid:
     """
     Return the grid of the items of a dataset, with the given world
-    coordinates or their defaults (see gridutils.make_grid).
+    coordinates or their defaults (see make_grid).
     """
-    return gridutils.make_grid(dataset.shape()[::-1], step, rpix, rval, rota)
+    return make_grid(dataset.shape()[::-1], step, rpix, rval, rota)
 
 
 def cube_grid(
@@ -368,12 +370,12 @@ def cube_grid(
         rpix: float | Sequence[float] | None,
         rval: float | Sequence[float] | None,
         rota: float | None,
-        spectral: gridutils.SpectralAxis | None
-) -> gridutils.Grid:
+        spectral: SpectralAxis | None
+) -> Grid:
     """
     Return the grid of the items of a dataset of axes on the sky and a
     spectral axis after them, its last, with the given world coordinates
-    or their defaults (see gridutils.make_cube_grid). The data give the
+    or their defaults (see make_cube_grid). The data give the
     number of channels.
 
     Raises
@@ -383,14 +385,14 @@ def cube_grid(
         not valid.
     """
     shape = dataset.shape()[::-1]
-    spectral = spectral or gridutils.SpectralAxis()
+    spectral = spectral or SpectralAxis()
     if spectral.size() not in (None, shape[-1]):
         raise ConfigError(
             f"the data have {shape[-1]} channels; the spectral axis has "
             f"{spectral.size()}")
-    return gridutils.make_cube_grid(
+    return make_cube_grid(
         shape[:-1], step, rpix, rval, rota,
-        spectral.replaced(gridutils.SpectralAxis(size=shape[-1])))
+        spectral.replaced(SpectralAxis(size=shape[-1])))
 
 
 def dump_grid_dataset(
@@ -417,7 +419,7 @@ def dump_grid_dataset(
         rval=coords.rval[axes],
         rota=coords.rota)
     if grid.spectral_axis is not None:
-        spectral = gridutils.SpectralAxis.of(grid).dump()
+        spectral = SpectralAxis.of(grid).dump()
         info.update(spectral={
             key: value for key, value in spectral.items()
             if key not in ('size', 'convention')})

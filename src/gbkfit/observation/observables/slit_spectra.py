@@ -11,9 +11,9 @@ from annotated_types import Gt
 from gbkfit.config import ConfigError, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid, GridData, SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval, Size, Step
 from .base import FluxScale, ModelData, Observable
@@ -35,12 +35,12 @@ __all__ = [
 _Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 
 
-def _slit_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
+def _slit_extra(data: np.ndarray, grid: Grid) -> GridData:
     """
     Make an extra output on the low-res grid of DCube a slit (the position
     along the slit and the velocity; the slit is one pixel wide).
     """
-    return gridutils.GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
+    return GridData(data[:, 0, :], grid.coords.axes(0, 2), 1)
 
 
 class SlitSpectra(Observable):
@@ -57,12 +57,12 @@ class SlitSpectra(Observable):
         The number of positions along the slit (one value).
     spectral : SpectralAxis
         The spectral axis: its size, its world coordinates and the
-        convention of its velocities (see gridutils.make_cube_grid).
+        convention of its velocities (see make_cube_grid).
     step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the positions along the slit (see
-        gridutils.Coords; one value each); rpix is the centre by default.
+        Coords; one value each); rpix is the centre by default.
     rota : float, optional
-        The rotation of the frame of the slit (see gridutils.Coords): the
+        The rotation of the frame of the slit (see Coords): the
         position angle (degrees) of its +y axis, across the slit, which
         lies along its x axis.
     slit_width : float, optional
@@ -78,7 +78,7 @@ class SlitSpectra(Observable):
     Raises
     ------
     ConfigError
-        If the spectral axis is not valid (see gridutils.make_cube_grid),
+        If the spectral axis is not valid (see make_cube_grid),
         slit_width is not positive, or sky_rval is not two numbers.
     """
 
@@ -153,7 +153,7 @@ class SlitSpectra(Observable):
     def __init__(
             self,
             size: Size,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             step: Step = (1,),
             rpix: Rpix | None = None,
             rval: Rval = (0,),
@@ -265,7 +265,7 @@ class SlitSpectra(Observable):
 
 class SlitSpectraPlan(_detail.DCubePlanBase):
 
-    def _model_extra(self, value: gridutils.GridData) -> np.ndarray:
+    def _model_extra(self, value: GridData) -> np.ndarray:
         # The slit has no position on the sky, so the extra outputs of the
         # model, which are on the sky, are plain arrays
         return value.data

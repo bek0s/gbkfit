@@ -7,11 +7,13 @@ import astropy.units as u
 import numpy as np
 
 from gbkfit.config import ConfigError
+from gbkfit.grid import (
+    Coords, Grid, GridData, VelocityConvention, make_convention, make_medium,
+    make_rest)
 import gbkfit.math
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
 from gbkfit.model import Extras
-from gbkfit.utils import gridutils
 
 
 # The unit of the velocities of the spectral axis
@@ -28,7 +30,7 @@ _MIN_PSF_SPREAD = 0.55
 # How an extra output is made from an array of a cube of DCube and the
 # grid of the cube (e.g. cube_extra)
 ExtraFunction: TypeAlias = Callable[
-    [np.ndarray, gridutils.Grid], gridutils.GridData | np.ndarray]
+    [np.ndarray, Grid], GridData | np.ndarray]
 
 # The grids of the extra outputs of DCube: that of the data, and the
 # high-res one, on which the model is evaluated
@@ -85,12 +87,12 @@ _CUBE_EXTRAS = dict(
         f"each channel). {_ON_THE_HIGH_RES}"))
 
 
-def cube_extra(data: np.ndarray, grid: gridutils.Grid) -> gridutils.GridData:
+def cube_extra(data: np.ndarray, grid: Grid) -> GridData:
     """Make an extra output on a grid of DCube a sky and velocity cube."""
-    return gridutils.GridData(data, grid.coords, grid.spectral_axis)
+    return GridData(data, grid.coords, grid.spectral_axis)
 
 
-def plain_extra(data: np.ndarray, grid: gridutils.Grid) -> np.ndarray:
+def plain_extra(data: np.ndarray, grid: Grid) -> np.ndarray:
     """Make an extra output on a grid of DCube a plain array."""
     return data
 
@@ -115,7 +117,7 @@ def _varying_padding(
     the PSF or the LSF is known.
     """
     psf, lsf = dcube.psf(), dcube.lsf()
-    convention = gridutils.VelocityConvention.of(dcube.grid().coords)
+    convention = VelocityConvention.of(dcube.grid().coords)
     step_lo = dcube.step()
     velocities_lo = dcube.zero()[2] + step_lo[2] * np.arange(dcube.size()[2])
     for kernel, desc in ((psf, 'PSF'), (lsf, 'LSF')):
@@ -175,7 +177,7 @@ def _equivalent_dispersion(lsf: LSF, step: float) -> float:
 
 
 def _varying_kernels(
-        dcube: 'DCube', grid_hi: gridutils.Grid, lsf_size: int
+        dcube: 'DCube', grid_hi: Grid, lsf_size: int
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """
     Return the images of the PSF of a DCube on its high-res grid: one for
@@ -187,7 +189,7 @@ def _varying_kernels(
     channels of the data.
     """
     psf, lsf = dcube.psf(), dcube.lsf()
-    convention = gridutils.VelocityConvention.of(grid_hi.coords)
+    convention = VelocityConvention.of(grid_hi.coords)
     size, step = grid_hi.size, grid_hi.coords.step
     velocities = grid_hi.zero()[2] + step[2] * np.arange(size[2])
     psf_images = None
@@ -237,7 +239,7 @@ def _warn_narrow_psf(
             f"raise the oversampling of the observation to {needed}")
 
 
-def _kernel_cube(dcube: 'DCube', grid_hi: gridutils.Grid) -> np.ndarray:
+def _kernel_cube(dcube: 'DCube', grid_hi: Grid) -> np.ndarray:
     """
     Return the PSF/LSF cube of a DCube whose PSF and LSF do not vary, on
     its (padded) high-res grid: the product of the PSF and the LSF (on the
@@ -294,11 +296,11 @@ class DCube:
     ):
         # The low-res grid (the grid of the data); the high-res one is made
         # by the plan
-        rest = gridutils.make_rest(rest)
-        coords = gridutils.Coords(
-            step, rpix, rval, rota, rest, gridutils.make_medium(medium, rest),
-            gridutils.make_convention(convention, rest))
-        self._grid_lo = gridutils.Grid(size, coords, 2)
+        rest = make_rest(rest)
+        coords = Coords(
+            step, rpix, rval, rota, rest, make_medium(medium, rest),
+            make_convention(convention, rest))
+        self._grid_lo = Grid(size, coords, 2)
         self._oversampling = oversampling
         self._primary_beam = primary_beam
         self._psf = psf
@@ -312,9 +314,9 @@ class DCube:
         if lsf is not None and not lsf.varies():
             middle = self.zero()[2] + step[2] * (size[2] - 1) / 2
             self._axis_lsf = lsf.stretched(float(
-                gridutils.VelocityConvention.of(coords).stretch(middle)))
+                VelocityConvention.of(coords).stretch(middle)))
 
-    def grid(self) -> gridutils.Grid:
+    def grid(self) -> Grid:
         return self._grid_lo
 
     def size(self) -> tuple[int, int, int]:
@@ -369,7 +371,7 @@ class DCube:
         """
         if self._axis_lsf is not None:
             return [self._axis_lsf] * len(velocities)
-        convention = gridutils.VelocityConvention.of(self._grid_lo.coords)
+        convention = VelocityConvention.of(self._grid_lo.coords)
         lsfs = self._lsf.at(velocities * _KMS, convention)
         return [
             x.stretched(float(k))
@@ -463,7 +465,7 @@ class DCubePlan:
         rpix_hi = tuple(
             (rpix_lo[i] + 0.5) * oversampling[i] - 0.5 + edge_hi[i]
             for i in range(3))
-        grid_hi = gridutils.Grid(
+        grid_hi = Grid(
             tuple(size_hi), dcube.grid().coords._replace(
                 step=step_hi, rpix=rpix_hi), 2)
         if psf is not None and not isinstance(psf, PSFPoint) \
@@ -515,7 +517,7 @@ class DCubePlan:
                 + step_hi[2] * np.arange(size_hi[2])
             beams = beam.at(
                 velocities * _KMS,
-                gridutils.VelocityConvention.of(grid_hi.coords)) \
+                VelocityConvention.of(grid_hi.coords)) \
                 if beam.varies() else [beam]
             pbeam_hi = np.array([x.response(grid_hi) for x in beams])
             self._pbeam_hi = driver.mem_copy_h2d(pbeam_hi.astype(dtype))
@@ -552,7 +554,7 @@ class DCubePlan:
         self._driver = driver
         self._backend_dmodel = driver.native_class('DModel', dtype)()
 
-    def scratch_grid(self) -> gridutils.Grid:
+    def scratch_grid(self) -> Grid:
         return self._grid_hi
 
     def scratch_edge(self) -> tuple[int, int, int]:
@@ -676,17 +678,17 @@ class DCubePlan:
         has_weights = self._has_weights
         driver = self._driver
 
-        def lo(data: DeviceArray) -> gridutils.GridData | np.ndarray:
+        def lo(data: DeviceArray) -> GridData | np.ndarray:
             return extra_lo(driver.mem_copy_d2h(data), dcube.grid())
 
-        def hi(data: DeviceArray) -> gridutils.GridData | np.ndarray:
+        def hi(data: DeviceArray) -> GridData | np.ndarray:
             return extra_hi(driver.mem_copy_d2h(data), self._grid_hi)
 
         def add(name: str, value: Any) -> None:
             out_extra.add(name, value, *_CUBE_EXTRAS[name])
 
         def light(value: Any) -> Any:
-            if unit is None or not isinstance(value, gridutils.GridData):
+            if unit is None or not isinstance(value, GridData):
                 return value
             return value._replace(unit=unit)
 

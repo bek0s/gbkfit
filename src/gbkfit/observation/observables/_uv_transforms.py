@@ -12,7 +12,7 @@ import numpy as np
 import scipy.special
 
 from gbkfit.driver import DeviceArray, Driver, NUFFT
-from gbkfit.utils import gridutils
+from gbkfit.grid import Grid, sky_positions
 
 
 __all__ = [
@@ -80,7 +80,7 @@ class UVTransform(abc.ABC):
     def __init__(
             self,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             uvw: np.ndarray,
             frequencies: Sequence[float],
             phase_centre: Sequence[float],
@@ -221,14 +221,14 @@ class UVTransformExact(UVTransform):
     The exact visibilities (see UVTransform): the pixels at their
     directions on the sky, those of a gnomonic (TAN) projection of the grid
     about its reference pixel, as for all the observables (see
-    gridutils.pixels_on); the w-term exact. A type-3 NUFFT from the
+    pixels_on); the w-term exact. A type-3 NUFFT from the
     (l, m, n - 1) of the pixels to the baselines of each channel.
     """
 
     def __init__(
             self,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             uvw: np.ndarray,
             frequencies: Sequence[float],
             phase_centre: Sequence[float],
@@ -288,7 +288,7 @@ class _UVTransformGrid(UVTransform):
     def __init__(
             self,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             uvw: np.ndarray,
             frequencies: Sequence[float],
             phase_centre: Sequence[float],
@@ -479,7 +479,7 @@ def _moved(
 
 
 def _grid_baselines(
-        grid: gridutils.Grid,
+        grid: Grid,
         uvw: np.ndarray,
         frequencies: Sequence[float],
         phase_centre: Sequence[float]
@@ -524,16 +524,16 @@ def _frame(position: Sequence[float]) -> np.ndarray:
         [np.cos(dec) * np.cos(ra), np.cos(dec) * np.sin(ra), np.sin(dec)]])
 
 
-def _offsets(grid: gridutils.Grid) -> tuple[np.ndarray, np.ndarray]:
+def _offsets(grid: Grid) -> tuple[np.ndarray, np.ndarray]:
     """
     Return the offsets of the pixels of a grid from its reference pixel, to
     the east and to the north (radians), of shape (ny, nx).
     """
-    x, y = gridutils.sky_positions(grid)
+    x, y = sky_positions(grid)
     return -x / _ARCSEC, y / _ARCSEC
 
 
-def _steps(grid: gridutils.Grid) -> np.ndarray:
+def _steps(grid: Grid) -> np.ndarray:
     """
     Return the offsets (radians, east and north; see _offsets) of a step
     of the pixels of a grid along x and along y, as the columns of a

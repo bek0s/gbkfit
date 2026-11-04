@@ -10,7 +10,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.grid import Grid
+from gbkfit.utils import iterutils
 from .. import traits
 from .._detail import dump_geometry, dump_name
 from .._native import NativeComponentPlan, emission_setup
@@ -162,7 +163,7 @@ def cone_plan(
         bands: Bands | None,
         unit: astropy.units.UnitBase | None,
         driver: Driver,
-        spectral: gridutils.Grid,
+        spectral: Grid,
         dtype: np.dtype,
         names: tuple[str, ...] | None,
         band: Band | None,

@@ -13,8 +13,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils
 from ..extras import Extras
 from ._units import DataUnit
 from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes
@@ -212,8 +212,8 @@ class ComponentPlans:
             self,
             component_set: 'ComponentSet',
             driver: Driver,
-            grid: gridutils.Grid,
-            spectral: gridutils.Grid,
+            grid: Grid,
+            spectral: Grid,
             depth: DepthAxis | None,
             dtype: np.dtype,
             emitters: Sequence[int],
@@ -387,7 +387,7 @@ class ComponentPlans:
             data: np.ndarray,
             depth_zero: float | None = None,
             unit: str | None = None
-    ) -> gridutils.GridData:
+    ) -> GridData:
         """
         Return an extra output on the grid: an image without a depth axis,
         a cube with one (along the line of sight, from z = 0 at the plane
@@ -397,28 +397,28 @@ class ComponentPlans:
         """
         grid = self._grid
         if self._depth is None:
-            return gridutils.GridData(
+            return GridData(
                 data.reshape(data.shape[-2:]), grid.coords, None, unit)
         depth = self._depth
         zero = depth.zero if depth_zero is None else depth_zero
-        coords = gridutils.Coords(
+        coords = Coords(
             tuple(grid.coords.step) + (depth.step,),
             tuple(grid.coords.rpix) + (-zero / depth.step,),
             tuple(grid.coords.rval) + (0.0,), grid.coords.rota)
-        return gridutils.GridData(data, coords, None, unit)
+        return GridData(data, coords, None, unit)
 
     def output_extra(
             self, data: np.ndarray, unit: str | None = None
-    ) -> gridutils.GridData:
+    ) -> GridData:
         """
         Return an extra output of the shape of the output on the grid: an
         image (2d data), or a cube along the spectral axis (3d data).
         """
         coords = self._grid.coords
         if data.ndim == 2:
-            return gridutils.GridData(data, coords, None, unit)
+            return GridData(data, coords, None, unit)
         spectral = self._spectral.coords
-        return gridutils.GridData(data, coords._replace(
+        return GridData(data, coords._replace(
             step=tuple(coords.step) + tuple(spectral.step),
             rpix=tuple(coords.rpix) + tuple(spectral.rpix),
             rval=tuple(coords.rval) + tuple(spectral.rval),
@@ -436,8 +436,8 @@ def _label(components: Sequence['Component'], index: int) -> str:
 
 
 def _native_grid(
-        grid: gridutils.Grid,
-        spectral: gridutils.Grid,
+        grid: Grid,
+        spectral: Grid,
         depth: DepthAxis | None
 ) -> NativeGrid:
     """

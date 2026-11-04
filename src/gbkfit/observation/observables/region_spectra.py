@@ -11,10 +11,10 @@ import numpy as np
 from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid, SpectraData, SpectralAxis
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import gridutils
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan, flux_weights
@@ -52,9 +52,9 @@ class RegionSpectra(Observable):
         The regions.
     spectral : SpectralAxis
         The spectral axis of the cube: its size, its world coordinates and
-        the convention of its velocities (see gridutils.make_cube_grid).
+        the convention of its velocities (see make_cube_grid).
     size, step, rpix, rval, rota : optional
-        The spatial grid of the cube (see gridutils.make_grid), for
+        The spatial grid of the cube (see make_grid), for
         regions on the sky (apertures): size is then required. Regions on
         a grid (bins) give it, and it must not be given.
 
@@ -63,7 +63,7 @@ class RegionSpectra(Observable):
     ConfigError
         If the spatial grid is given for regions on a grid, or not for
         regions on the sky, or the spectral axis is not valid (see
-        gridutils.make_cube_grid).
+        make_cube_grid).
     """
 
     dataset_class = DatasetRegionSpectra
@@ -129,7 +129,7 @@ class RegionSpectra(Observable):
         check_options(RegionSpectra.from_data, locals())
         return cls(
             dataset.regions(),
-            gridutils.SpectralAxis.of(dataset.spectral_grid()),
+            SpectralAxis.of(dataset.spectral_grid()),
             size, step, rpix, rval, rota)
 
     def dump(
@@ -151,7 +151,7 @@ class RegionSpectra(Observable):
     def __init__(
             self,
             regions: Regions,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             size: Size | None = None,
             step: Step | None = None,
             rpix: Rpix | None = None,
@@ -180,7 +180,7 @@ class RegionSpectra(Observable):
         """Return the regions."""
         return self._regions
 
-    def spectral_grid(self) -> gridutils.Grid:
+    def spectral_grid(self) -> Grid:
         """Return the grid of the spectral axis (one axis)."""
         return self._grid.spectral()
 
@@ -227,8 +227,8 @@ class RegionSpectra(Observable):
                 f"{dataset.spectral_grid()}, but the observable has "
                 f"{self.spectral_grid()}")
 
-    def output(self, data: np.ndarray) -> gridutils.SpectraData:
-        return gridutils.SpectraData(data, self.spectral_grid().coords)
+    def output(self, data: np.ndarray) -> SpectraData:
+        return SpectraData(data, self.spectral_grid().coords)
 
     def check_observation(
             self,

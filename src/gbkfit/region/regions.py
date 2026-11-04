@@ -16,8 +16,8 @@ from astropy.io import fits
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
     split_fits_file)
+from gbkfit.grid import Grid, make_grid, sky_positions
 from gbkfit.io import read_data, write_data
-from gbkfit.utils import gridutils
 from .apertures import Aperture, aperture_parser
 
 
@@ -30,7 +30,7 @@ __all__ = [
 
 
 # The world coordinates of a grid with one value per axis, x and y, or one
-# for both (see gridutils.Coords), and its rotation
+# for both (see Coords), and its rotation
 _PerAxis: TypeAlias = float | Sequence[float] | None
 _Angle: TypeAlias = Annotated[float, Unit('deg')]
 
@@ -53,7 +53,7 @@ class Regions(TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def grid(self) -> gridutils.Grid | None:
+    def grid(self) -> Grid | None:
         """
         The spatial grid on which the regions are defined, or None if they
         are defined on the sky (and can be put on any grid that covers
@@ -72,7 +72,7 @@ class Regions(TypedSerializable, abc.ABC):
         pass
 
     @abc.abstractmethod
-    def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
+    def weights(self, grid: Grid) -> scipy.sparse.csr_array:
         """
         The weights of the pixels of a spatial grid in the regions: a
         matrix of one row for each region and one column for each pixel
@@ -127,7 +127,7 @@ class RegionsBins(Regions):
             The file of the bin of each pixel (see the class): a filename,
             or a filename and the HDU.
         step, rpix, rval : float or Sequence of float, optional
-            The world coordinates of the grid (see gridutils.Coords); by
+            The world coordinates of the grid (see Coords); by
             default, those of the header. Either rpix or rval can be given,
             and the other comes from the header (see read_data).
         rota : float, optional
@@ -185,7 +185,7 @@ class RegionsBins(Regions):
     ):
         """
         The world coordinates of the grid of the bins (see
-        gridutils.Coords) have defaults (see gridutils.make_grid).
+        Coords) have defaults (see make_grid).
         """
         check_options(RegionsBins.__init__, locals())
         index = np.asarray(index)
@@ -215,7 +215,7 @@ class RegionsBins(Regions):
         self._index = index
         self._nbins = nbins
         self._valid = valid
-        self._grid = gridutils.make_grid(
+        self._grid = make_grid(
             index.shape[::-1], step, rpix, rval, rota)
 
     def __eq__(self, other: object) -> bool:
@@ -234,17 +234,17 @@ class RegionsBins(Regions):
     def nregions(self) -> int:
         return self._nbins
 
-    def grid(self) -> gridutils.Grid:
+    def grid(self) -> Grid:
         return self._grid
 
     def centres(self) -> np.ndarray:
         weights = self.weights(self._grid)
-        x, y = gridutils.sky_positions(self._grid)
+        x, y = sky_positions(self._grid)
         totals = np.asarray(weights.sum(axis=1)).ravel()
         return np.column_stack(
             [weights @ x.ravel(), weights @ y.ravel()]) / totals[:, None]
 
-    def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
+    def weights(self, grid: Grid) -> scipy.sparse.csr_array:
         if grid != self._grid:
             raise RuntimeError(
                 f"the bins are defined on the grid {self._grid}, not on "
@@ -294,7 +294,7 @@ class RegionsApertures(Regions):
     def centres(self) -> np.ndarray:
         return np.array([aperture.centre() for aperture in self._apertures])
 
-    def weights(self, grid: gridutils.Grid) -> scipy.sparse.csr_array:
+    def weights(self, grid: Grid) -> scipy.sparse.csr_array:
         npix = int(np.prod(grid.size[:2]))
         rows, columns, values = [], [], []
         for region, aperture in enumerate(self._apertures):

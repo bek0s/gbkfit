@@ -16,7 +16,8 @@ from annotated_types import Ge
 
 from gbkfit.config import (
     ConfigError, FilePath, Serializable, Unit, check_options)
-from gbkfit.utils import gridutils, unitutils
+from gbkfit.grid import make_rest
+from gbkfit.utils import unitutils
 from .base import Dataset
 from .data import Data
 
@@ -73,7 +74,7 @@ class UVCoverage(Serializable):
         time of each row).
     rest : str or Quantity
         The rest frequency of the line, of the radio velocities of the
-        channels (see gridutils.make_rest; e.g. '1420.405752 MHz').
+        channels (see make_rest; e.g. '1420.405752 MHz').
 
     Raises
     ------
@@ -172,7 +173,7 @@ class UVCoverage(Serializable):
             raise ConfigError(
                 f"the phase centre must be an RA and a Dec; it is "
                 f"{phase_centre}")
-        rest = gridutils.make_rest(rest)
+        rest = make_rest(rest)
         if rest is None or rest.unit != astropy.units.Hz:
             raise ConfigError(
                 f"the rest of visibilities must be a frequency; it is {rest}")

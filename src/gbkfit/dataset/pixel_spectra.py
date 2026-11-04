@@ -8,9 +8,9 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import DataFile, check_options
+from gbkfit.grid import Grid, SpectralAxis
 from gbkfit.instrument import LSF, PSF
 from gbkfit.io import ErrorKind
-from gbkfit.utils import gridutils
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
 from .data import Data
@@ -39,11 +39,11 @@ class DatasetPixelSpectra(Dataset):
         The cube, of shape (nz, ny, nx): x, y and the spectral axis.
     step, rpix, rval : float or Sequence of float, optional
         The world coordinates of the axes on the sky (x and y; see
-        gridutils.Coords); their defaults are those of gridutils.make_grid.
+        Coords); their defaults are those of make_grid.
     rota : float, optional
-        The rotation of the grid on the sky (see gridutils.Coords).
+        The rotation of the grid on the sky (see Coords).
     spectral : SpectralAxis, optional
-        The spectral axis (see gridutils.make_cube_grid): its world
+        The spectral axis (see make_cube_grid): its world
         coordinates, the convention of its velocities, its rest and its
         medium; the data give its size.
     """
@@ -70,7 +70,7 @@ class DatasetPixelSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spectral: gridutils.SpectralAxis | None = None,
+            spectral: SpectralAxis | None = None,
             spatial_correlation: PSF | None = None,
             spectral_correlation: LSF | None = None,
             outliers: Mapping[str, Any] | None = None,
@@ -98,7 +98,7 @@ class DatasetPixelSpectra(Dataset):
             header.
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the axes on the sky (see
-            gridutils.Coords); by default, those of the header. Either rpix
+            Coords); by default, those of the header. Either rpix
             or rval can be given, and the other comes from the header (see
             read_data).
         rota : float, optional
@@ -158,14 +158,14 @@ class DatasetPixelSpectra(Dataset):
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
             rota: float | None = None,
-            spectral: gridutils.SpectralAxis | None = None
+            spectral: SpectralAxis | None = None
     ):
         check_options(DatasetPixelSpectra.__init__, locals())
         super().__init__(dict(spectra=spectra))
         self._grid = _detail.cube_grid(
             self, step, rpix, rval, rota, spectral)
 
-    def grid(self) -> gridutils.Grid:
+    def grid(self) -> Grid:
         """Return the grid of the pixels and channels."""
         return self._grid
 

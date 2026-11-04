@@ -13,8 +13,9 @@ import numpy as np
 from gbkfit.config import (
     BasicParser, ConfigError, Serializable, Unit, check_options, item_prefixes)
 from gbkfit.driver import DeviceArray, Driver
+from gbkfit.grid import Coords, Grid, make_grid, sky_positions, sky_to_pixel
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.utils import iterutils
 
 from .lens_masses import LensMass, lens_mass_parser
 
@@ -38,7 +39,7 @@ class Lens(Serializable):
     deflection there (surface brightness is conserved). The model is
     evaluated on a grid of the source plane, centred on the origin of the
     frame of the model and aligned with the sky (see
-    gridutils.sky_positions); each pixel of the image takes the bilinear
+    sky_positions); each pixel of the image takes the bilinear
     interpolation of the source at its position on the source plane.
 
     Its parameters are those of its masses (see pdescs), of the
@@ -84,7 +85,7 @@ class Lens(Serializable):
         masses = iterutils.tuplify(masses)
         if not masses:
             raise ConfigError("a lens needs at least one mass")
-        self._source_grid = gridutils.make_grid(
+        self._source_grid = make_grid(
             tuple(source_size), tuple(source_step))
         self._masses = masses
         self._prefixes = item_prefixes(
@@ -92,7 +93,7 @@ class Lens(Serializable):
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [mass.pdescs() for mass in masses], self._prefixes)
 
-    def source_grid(self) -> gridutils.Grid:
+    def source_grid(self) -> Grid:
         """Return the grid of the source plane (x and y)."""
         return self._source_grid
 
@@ -120,7 +121,7 @@ class Lens(Serializable):
             if mass.centred())
 
     def deflection(
-            self, grid: gridutils.Grid, params: ParamValues
+            self, grid: Grid, params: ParamValues
     ) -> tuple[np.ndarray, np.ndarray]:
         """
         Return the deflection at the pixels of a grid of the image plane:
@@ -151,7 +152,7 @@ class Lens(Serializable):
     def plan(
             self,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             dtype: np.dtype,
             names: Mapping[str, str] | None = None
     ) -> 'LensPlan':
@@ -190,7 +191,7 @@ class LensPlan:
             self,
             lens: Lens,
             driver: Driver,
-            grid: gridutils.Grid,
+            grid: Grid,
             dtype: np.dtype,
             names: Mapping[str, str]
     ):
@@ -203,8 +204,8 @@ class LensPlan:
         self._grid = grid
         self._dtype = dtype
         self._names = dict(names)
-        self._sky = gridutils.sky_positions(grid)
-        self._matrix, self._offset = gridutils.sky_to_pixel(
+        self._sky = sky_positions(grid)
+        self._matrix, self._offset = sky_to_pixel(
             lens.source_grid())
         self._source_x = driver.mem_alloc_d(self._sky[0].shape, dtype)
         self._source_y = driver.mem_alloc_d(self._sky[0].shape, dtype)
@@ -227,16 +228,16 @@ class LensPlan:
         self._driver.mem_copy_h2d(pixel_x.astype(self._dtype), self._source_x)
         self._driver.mem_copy_h2d(pixel_y.astype(self._dtype), self._source_y)
 
-    def source_grid(self, grid: gridutils.Grid) -> gridutils.Grid:
+    def source_grid(self, grid: Grid) -> Grid:
         """
         Return the grid of the source plane for a model evaluated on the
         given grid of the image plane: the x and y of the source plane, and
         the other axes of the grid (e.g. the spectral axis).
         """
         source = self._lens.source_grid()
-        return gridutils.Grid(
+        return Grid(
             source.size + grid.size[2:],
-            gridutils.Coords(
+            Coords(
                 source.coords.step + grid.coords.step[2:],
                 source.coords.rpix + grid.coords.rpix[2:],
                 source.coords.rval + grid.coords.rval[2:],
@@ -331,7 +332,7 @@ class Foreground(Serializable):
             for x, y in self._lens.centre_params())
 
     def plan_lens(
-            self, driver: Driver, grid: gridutils.Grid, dtype: np.dtype
+            self, driver: Driver, grid: Grid, dtype: np.dtype
     ) -> LensPlan | None:
         """
         Plan the lensing of cubes on a grid of the image plane (see

@@ -19,9 +19,10 @@ from gbkfit.config import (
     BasicParser, ConfigError, Serializable, Unit, check_options)
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
+from gbkfit.grid import Grid, SpectralAxis, make_convention
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from gbkfit.utils import gridutils, iterutils
+from gbkfit.utils import iterutils
 from . import _dcube, _detail, _moments
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan
@@ -354,7 +355,7 @@ class SlitlessSpectra(Observable):
     size : int or Sequence of int
         The number of pixels of the image (nx, ny).
     spectral : SpectralAxis
-        The spectral axis of the model (see gridutils.SpectralAxis): its
+        The spectral axis of the model (see SpectralAxis): its
         step, the width of its channels (km/s), is required (a channel
         narrower than a pixel of the detector along the trace is needed
         to resolve the lines), and its rest wavelength, which the trace
@@ -363,7 +364,7 @@ class SlitlessSpectra(Observable):
     trace : Trace
         The trace of the disperser.
     step, rpix, rval : float or Sequence of float, optional
-        The world coordinates of the image (see gridutils.Coords); rpix
+        The world coordinates of the image (see Coords); rpix
         is the centre by default.
     rota : float, optional
         The rotation of the image on the sky.
@@ -408,7 +409,7 @@ class SlitlessSpectra(Observable):
     def from_data(
             cls,
             dataset: DatasetSlitlessSpectra,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             trace: Trace,
             aperture: Aperture | None = None,
             exposures: Exposure | Sequence[Exposure] | None = None,
@@ -471,7 +472,7 @@ class SlitlessSpectra(Observable):
     def __init__(
             self,
             size: Size,
-            spectral: gridutils.SpectralAxis,
+            spectral: SpectralAxis,
             trace: Trace,
             step: Step = (1, 1),
             rpix: Rpix | None = None,
@@ -491,7 +492,7 @@ class SlitlessSpectra(Observable):
                 "the spectral axis of slitless spectra needs the width of its "
                 "channels (step) and a rest wavelength (rest)")
         self._spectral = _moments.spectral_axis(spectral.replaced(
-            gridutils.SpectralAxis(convention=gridutils.make_convention(
+            SpectralAxis(convention=make_convention(
                 spectral.convention(), rest))))
         exposures = (Exposure(),) if exposures is None \
             else iterutils.tuplify(exposures)
@@ -503,7 +504,7 @@ class SlitlessSpectra(Observable):
         self._sky_sampling = sky_sampling
         self._resampled = resampled
 
-    def spectral(self) -> gridutils.SpectralAxis:
+    def spectral(self) -> SpectralAxis:
         """Return the spectral axis of the model."""
         return self._spectral
 
@@ -824,7 +825,7 @@ class SlitlessSpectraPlan(_detail.DCubePlanBase):
             self,
             dcube: _dcube.DCube,
             dispersion: scipy.sparse.csr_array,
-            grid: gridutils.Grid,
+            grid: Grid,
             driver: Driver,
             scene: 'Scene',
             line_of_sight: 'LineOfSight',

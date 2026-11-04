@@ -7,6 +7,7 @@ import copy
 
 from gbkfit.config import ConfigError
 import gbkfit.dataset
+from gbkfit.grid import Coords, SpectralAxis, make_grid
 from gbkfit.io import write_data
 import gbkfit.region
 import gbkfit.params
@@ -18,8 +19,6 @@ from modelutils import group_plan
 from gbkfit.dataset import Data
 from gbkfit.dataset import DatasetRegionSpectra
 from gbkfit.region import RegionsApertures, RegionsBins
-from gbkfit.utils import gridutils
-from gbkfit.utils.gridutils import SpectralAxis
 
 
 GALAXY = dict(components=[dict(
@@ -83,7 +82,7 @@ def test_region_spectra_of_apertures_are_the_sums_of_pixel_spectra(driver):
     scube = evaluate(driver, SCUBE)
     aspec = evaluate(driver, aspec_of_apertures(APERTURES))
     assert aspec.shape == (51, 3)
-    grid = gridutils.make_grid((32, 41))
+    grid = make_grid((32, 41))
     weights = gbkfit.region.regions_parser.load(
         dict(type='apertures', apertures=APERTURES)).weights(grid)
     expected = (weights @ scube.reshape(51, -1).T).T
@@ -105,7 +104,7 @@ def test_region_spectra_of_bins_are_the_sums_of_pixel_spectra(driver):
         type='region_spectra',
         spectral=dict(size=51, step=10, convention='relativistic'),
         **INSTRUMENT, regions=dict(type='bins', file='bins.fits'))
-    write_data('bins.fits', index, gridutils.Coords(
+    write_data('bins.fits', index, Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
     aspec = evaluate(driver, observable)
     expected = np.stack(
@@ -124,7 +123,7 @@ def test_region_spectra_of_bins_sum_their_valid_pixels(driver):
     valid[20:30, 12, 5:10] = 0
     valid[:, 25, 20] = 0
     scube = evaluate(driver, SCUBE)
-    write_data('bins.fits', index, gridutils.Coords(
+    write_data('bins.fits', index, Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
     fits.writeto('valid.fits', valid, overwrite=True)
     observable = dict(
