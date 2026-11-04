@@ -18,6 +18,7 @@ __all__ = [
     'FileEntry',
     'FolderInfo',
     'GalaxyInfo',
+    'GalaxyRenderRequest',
     'GalaxyRequest',
     'ImportRequest',
     'JobInfo',
@@ -94,6 +95,21 @@ class GalaxyInfo(BaseModel):
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
+
+
+class GalaxyRenderRequest(BaseModel):
+    """
+    A galaxy to render (see Renders.galaxy): the project of its piece, its
+    options (its files relative to the project), the values of its
+    parameters (numbers, or lists of them for vectors; the defaults for
+    those not given), how it is seen ('sky', 'face-on' or 'edge-on'), and
+    the pixels across.
+    """
+    project: str
+    galaxy: dict[str, Any]
+    properties: dict[str, Any] = {}
+    view: Literal['sky', 'face-on', 'edge-on'] = 'sky'
+    size: int = 160
 
 
 class PSFRequest(BaseModel):

@@ -7,6 +7,7 @@ from .events import Events
 from .galaxies import Galaxies
 from .executors import Executor
 from .jobs import Jobs
+from .renders import Renders
 from .responses import Responses
 from .sessions import Sessions
 from .views import Views
@@ -39,6 +40,7 @@ class Server:
     views : Views
     responses : Responses
     galaxies : Galaxies
+    renders : Renders
     """
 
     def __init__(self, root: str, executor: Executor):
@@ -50,6 +52,7 @@ class Server:
         self.views = Views(self.workspace)
         self.responses = Responses(self.workspace)
         self.galaxies = Galaxies(self.workspace)
+        self.renders = Renders(self.workspace)
 
     async def close(self) -> None:
         """Close the sessions, and stop the jobs."""

@@ -311,6 +311,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/views/galaxy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Galaxy
+         * @description Render a galaxy of the options of a piece of a project at values of
+         *     its parameters, through an ideal observation (see Renders.galaxy): a
+         *     frame of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',
+         *     'dispersion' and '{component}/{map}'; NaN where there is no light),
+         *     whose header has the size of the pixels (step, arcsec), the pixels
+         *     across (size), its curves (by name, with 'radius'; null where not
+         *     defined) and the problems of those that could not be drawn.
+         */
+        post: operations["view_galaxy_api_v1_views_galaxy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/schema": {
         parameters: {
             query?: never;
@@ -749,6 +775,40 @@ export interface components {
             problems: {
                 [key: string]: unknown;
             }[];
+        };
+        /**
+         * GalaxyRenderRequest
+         * @description A galaxy to render (see Renders.galaxy): the project of its piece, its
+         *     options (its files relative to the project), the values of its
+         *     parameters (numbers, or lists of them for vectors; the defaults for
+         *     those not given), how it is seen ('sky', 'face-on' or 'edge-on'), and
+         *     the pixels across.
+         */
+        GalaxyRenderRequest: {
+            /** Project */
+            project: string;
+            /** Galaxy */
+            galaxy: {
+                [key: string]: unknown;
+            };
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /**
+             * View
+             * @default sky
+             * @enum {string}
+             */
+            view: "sky" | "face-on" | "edge-on";
+            /**
+             * Size
+             * @default 160
+             */
+            size: number;
         };
         /**
          * GalaxyRequest
@@ -1696,6 +1756,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GalaxyInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_galaxy_api_v1_views_galaxy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalaxyRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
                 };
             };
             /** @description Validation Error */

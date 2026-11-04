@@ -27,7 +27,7 @@ from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
     ArrayInfo, CheckRequest, CheckResult, FolderInfo, GalaxyInfo,
-    GalaxyRequest, ImportRequest,
+    GalaxyRenderRequest, GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
@@ -280,6 +280,29 @@ def galaxy_parameters(server: ServerDep, request: GalaxyRequest) -> GalaxyInfo:
     return GalaxyInfo.model_validate(
         server.galaxies.describe(request.project, request.galaxy),
         from_attributes=True)
+
+
+@router.post('/views/galaxy', response_class=Response, responses=_FRAME)
+def view_galaxy(server: ServerDep, request: GalaxyRenderRequest) -> Response:
+    """
+    Render a galaxy of the options of a piece of a project at values of
+    its parameters, through an ideal observation (see Renders.galaxy): a
+    frame of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',
+    'dispersion' and '{component}/{map}'; NaN where there is no light),
+    whose header has the size of the pixels (step, arcsec), the pixels
+    across (size), its curves (by name, with 'radius'; null where not
+    defined) and the problems of those that could not be drawn.
+    """
+    render = server.renders.galaxy(
+        request.project, request.galaxy, request.properties, request.view,
+        request.size)
+    header = dict(
+        step=render.step, size=render.size, curves=render.curves,
+        problems=render.problems)
+    arrays = [(dict(name=name), data) for name, data in render.maps.items()]
+    return Response(
+        frames.array_frame(header, arrays),
+        media_type='application/octet-stream')
 
 
 @router.get('/schema')

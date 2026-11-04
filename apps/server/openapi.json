@@ -908,6 +908,41 @@
         }
       }
     },
+    "/api/v1/views/galaxy": {
+      "post": {
+        "summary": "View Galaxy",
+        "description": "Render a galaxy of the options of a piece of a project at values of\nits parameters, through an ideal observation (see Renders.galaxy): a\nframe of its maps (ny, nx; named 'light', 'velocity', 'vx', 'vy',\n'dispersion' and '{component}/{map}'; NaN where there is no light),\nwhose header has the size of the pixels (step, arcsec), the pixels\nacross (size), its curves (by name, with 'radius'; null where not\ndefined) and the problems of those that could not be drawn.",
+        "operationId": "view_galaxy_api_v1_views_galaxy_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalaxyRenderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/schema": {
       "get": {
         "summary": "Config Schema",
@@ -1831,6 +1866,47 @@
         ],
         "title": "GalaxyInfo",
         "description": "A galaxy as the library describes it (see Galaxies.describe): its\nparameters ({name, size, default, unit, range, period}, in its order)\nand its problems ({severity, path, message}; paths in the galaxy)."
+      },
+      "GalaxyRenderRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "galaxy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Galaxy"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Properties",
+            "default": {}
+          },
+          "view": {
+            "type": "string",
+            "enum": [
+              "sky",
+              "face-on",
+              "edge-on"
+            ],
+            "title": "View",
+            "default": "sky"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size",
+            "default": 160
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "galaxy"
+        ],
+        "title": "GalaxyRenderRequest",
+        "description": "A galaxy to render (see Renders.galaxy): the project of its piece, its\noptions (its files relative to the project), the values of its\nparameters (numbers, or lists of them for vectors; the defaults for\nthose not given), how it is seen ('sky', 'face-on' or 'edge-on'), and\nthe pixels across."
       },
       "GalaxyRequest": {
         "properties": {

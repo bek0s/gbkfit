@@ -567,3 +567,80 @@ def test_the_files_of_moment_maps_are_lists(client):
             break
         time.sleep(0.1)
     assert job['state'] == 'failed' and 'a list' in job['output']
+
+
+def render(client, galaxy, **request):
+    """The header and the maps (by name) of a render of a galaxy."""
+    response = client.post('/api/v1/views/galaxy', json=dict(
+        project='study', galaxy=galaxy) | request)
+    assert response.status_code == 200, response.text
+    header, data = frames.decode(response.content)
+    maps = dict(zip(
+        [info['name'] for info in header['arrays']],
+        frames.arrays(header, data)))
+    return header, maps
+
+
+# A rotating gas disk and a stellar disk in a band
+RENDERED = dict(components=[
+    dict(type='disk', name='gas', rnodes=dict(max=10, sep=2),
+         density=dict(ptraits=dict(type='exponential')),
+         kinematics=dict(
+             type='traits', vptraits=dict(type='arctan', direction='tan'),
+             dptraits=dict(type='uniform')),
+         emission=dict(type='lines')),
+    dict(type='disk', name='stars', rnodes=[0, 2, 4, 6, 8],
+         density=dict(ptraits=dict(type='exponential')),
+         emission=dict(type='band'))])
+
+
+def test_a_galaxy_is_rendered_as_it_is_built(client):
+    header, maps = render(
+        client, RENDERED, properties=dict(gas_vpt_vt=200, gas_posa=0),
+        size=64)
+    assert {'light', 'velocity', 'dispersion', 'gas/light', 'gas/velocity',
+            'stars/light'} <= set(maps)
+    assert 'stars/velocity' not in maps
+    assert maps['light'].shape == (64, 64)
+    # The field holds the largest radius (10 arcsec, with a margin)
+    assert header['size'] * header['step'] > 20
+    # Its light is that of both disks, and it rotates about its centre
+    np.testing.assert_allclose(
+        maps['light'], maps['gas/light'] + maps['stars/light'], rtol=1e-5)
+    velocity = maps['velocity']
+    assert np.nanmax(velocity) > 50
+    np.testing.assert_allclose(
+        np.nanmax(velocity), -np.nanmin(velocity), rtol=0.05)
+    # Its curves: the rotation and the dispersion of the gas disk
+    curves = header['curves']
+    assert len(curves['rotation_gas']) == len(curves['radius'])
+    assert curves['rotation_gas'][-1] > 100
+    assert header['problems'] == []
+
+
+def test_a_galaxy_is_rendered_face_on_and_edge_on(client):
+    _, face_on = render(
+        client, RENDERED, properties=dict(gas_vpt_vt=200), view='face-on',
+        size=64)
+    # No motion along the line of sight, and its motion in the plane of
+    # the sky (vx, vy)
+    assert np.nanmax(np.abs(face_on['velocity'])) < 1e-3
+    assert np.nanmax(np.hypot(face_on['vx'], face_on['vy'])) > 100
+    _, edge_on = render(client, RENDERED, view='edge-on', size=64)
+    # A thin disk edge-on has no light
+    assert np.all(edge_on['gas/light'] == 0)
+
+
+@pytest.mark.parametrize('galaxy, request_, message', [
+    (dict(components=[]), {}, "at least one component"),
+    # (a galaxy of mass alone has nothing to see)
+    (dict(mass=dict(type='point', name='bh'), distance=dict(type='direct')),
+     {}, "no component that emits light"),
+    (RENDERED, dict(properties=dict(nonsense=1)), "unknown parameters"),
+    (RENDERED, dict(view='sideways'), None)])
+def test_invalid_renders_are_refused(client, galaxy, request_, message):
+    response = client.post('/api/v1/views/galaxy', json=dict(
+        project='study', galaxy=galaxy) | request_)
+    assert response.status_code in (400, 422)
+    if message is not None:
+        assert message in response.text
