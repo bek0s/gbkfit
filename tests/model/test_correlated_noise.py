@@ -6,7 +6,6 @@ correlated on the sky and along the channels at once.
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelSpectra
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import LSFGauss, PSFGauss
@@ -91,7 +90,7 @@ def test_cubes_of_correlated_noise_keep_whole_spectra(driver):
     mask = np.ones(SIZE[::-1])
     mask[3, 5, 5] = 0
     data = noisy_cube(rng, mask)
-    with pytest.raises(ConfigError, match="mask_whole_spectra"):
+    with pytest.raises(ValueError, match="mask_whole_spectra"):
         objective(driver, data, LikelihoodGaussian())
     # The option masks the spectrum of the masked value
     whole = DatasetPixelSpectra(data, step=STEP[:2], spectral=SPECTRAL).mask_whole_spectra()
@@ -111,6 +110,6 @@ def test_cubes_of_correlated_noise_go_without_solved_scales(driver):
             PixelSpectra.from_data(dataset),
             line_of_sight_parser.load(dict(type='flat')), data=dataset,
             flux_scale='one', name='obs')])
-    with pytest.raises(ConfigError, match="has correlated noise"):
+    with pytest.raises(ValueError, match="has correlated noise"):
         Objective(group.plan(driver),
                   dict(obs_flux_scale=SolveGaussian(1, 0.5, 0)))

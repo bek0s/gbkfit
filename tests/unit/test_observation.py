@@ -55,7 +55,7 @@ def test_a_model_that_can_lack_values_needs_their_residual():
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
     observable = PixelMoments.from_data(
         data, spectral=SpectralAxis(step=5, convention='relativistic'))
-    with pytest.raises(ConfigError, match="option missing_residual"):
+    with pytest.raises(ValueError, match="option missing_residual"):
         ObservationSky(observable, LineOfSightFlat(), data=data)
 
 
@@ -64,7 +64,7 @@ def test_observable_options_are_checked():
         PixelMoments(
             size=(8, 8), flux_floor=1,
             spectral=SpectralAxis(convention='relativistic'))
-    with pytest.raises(ConfigError, match="no spectral axis for an LSF"):
+    with pytest.raises(ValueError, match="no spectral axis for an LSF"):
         ObservationSky(
             PixelBrightness(size=(8, 8)), LineOfSightFlat(),
             instrument=Instrument(lsf=LSFGauss(10)))
@@ -121,7 +121,7 @@ def test_ffts_are_float64_by_default_and_not_less_precise_than_models():
     observable = PixelBrightness(size=(8, 8))
     assert ObservationSky(
         observable, LineOfSightFlat()).fft_dtype() == np.float64
-    with pytest.raises(ConfigError, match=r"fft_dtype \(float32\) is less"):
+    with pytest.raises(ValueError, match=r"fft_dtype \(float32\) is less"):
         ObservationSky(
             observable, LineOfSightFlat(
                 ), dtype='float64', fft_dtype='float32')
@@ -136,7 +136,7 @@ def test_likelihoods_name_items_of_their_observation(options, message):
     # leave the option out without a word
     data = DatasetPixelMoments(
         {0: Data(np.ones((8, 20))), 1: Data(np.full((8, 20), 1500.0))})
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         ObservationSky(
             PixelMoments.from_data(
                 data, spectral=SpectralAxis(step=5, convention='relativistic')),

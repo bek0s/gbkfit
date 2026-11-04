@@ -43,17 +43,15 @@ def test_cuda_drivers_are_of_the_gpus_there_are(driver):
         pytest.skip("a test of the cuda driver")
     import cupy
     from gbkfit.driver import driver_parser
-    from gbkfit.config import ConfigError
     assert driver_parser.load(dict(type='cuda', device=0)).dump() \
         == dict(type='cuda', device=0)
     ndevices = cupy.cuda.runtime.getDeviceCount()
-    with pytest.raises(ConfigError, match="device"):
+    with pytest.raises(ValueError, match="device"):
         driver_parser.load(dict(type='cuda', device=ndevices))
 
 
 def test_arrays_too_large_for_the_kernels_are_refused(driver):
     # The kernels index arrays by 32-bit integers: an array of more values
     # is refused before it is allocated
-    from gbkfit.config import ConfigError
-    with pytest.raises(ConfigError, match="32-bit"):
+    with pytest.raises(ValueError, match="32-bit"):
         driver.mem_alloc_d((2 ** 16, 2 ** 16), np.float32)

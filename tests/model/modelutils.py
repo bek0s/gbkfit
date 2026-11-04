@@ -88,3 +88,16 @@ def config_group_plan(config):
     from gbkfit.driver.drivers.host import DriverHost
     return group.plan(*setup._load_placement(
         config, group, setup._load_drivers(config), DriverHost()))
+
+
+def located_message(error):
+    """
+    The message of an error of a configuration with its path in it: that
+    of a ConfigError, and that of any other after its path, if any (see
+    gbkfit.config.config_path).
+    """
+    from gbkfit.config import ConfigError, error_location, format_location
+    where = format_location(*error_location(error))
+    if isinstance(error, ConfigError) or not where:
+        return str(error)
+    return f"{where}: {error}"

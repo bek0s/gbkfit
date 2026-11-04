@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 import scipy.optimize
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
@@ -151,7 +150,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
                    for name in pdescs if pdescs[name].size() > 1}
     properties['core_i0'] = SOLVE
     params = ParamSpace(pdescs, properties)
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         Objective(group.plan(driver), params.solves())
 
 
@@ -169,7 +168,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
         xpos=0, ypos=0, posa=0, incl=0, core_sigma=[1, 2], core_q=[1, 1],
         core_i0=SOLVE, obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.5, min=0))))
-    with pytest.raises(ConfigError, match="not linear in both"):
+    with pytest.raises(ValueError, match="not linear in both"):
         Objective(group.plan(driver), params.solves())
 
 

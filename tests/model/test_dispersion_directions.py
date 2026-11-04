@@ -108,7 +108,7 @@ def kinematics(**options):
      "'direction' must be one of 'iso', 'ver'"),
 ])
 def test_dispersion_directions_are_checked(options, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         galaxy_parser.load(kinematics(**options))
 
 
@@ -123,7 +123,7 @@ def test_a_cone_has_isotropic_dispersion_only():
             dptraits=DIRECTIONS),
         emission=dict(type='lines'))
     with pytest.raises(
-            ConfigError, match=r"takes dispersion traits along \['iso'\]"):
+            ValueError, match=r"takes dispersion traits along \['iso'\]"):
         galaxy_parser.load(dict(components=[cone]))
 
 

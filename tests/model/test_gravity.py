@@ -73,7 +73,7 @@ def test_newtonian_gravity_by_default():
 def test_gravity_without_mass_refused():
     disk = DISK | dict(kinematics=DISK['kinematics'] | dict(
         vptraits=dict(type='arctan', direction='tan')))
-    with pytest.raises(ConfigError, match='give the galaxy mass, or no grav'):
+    with pytest.raises(ValueError, match='give the galaxy mass, or no grav'):
         galaxy_parser.load(dict(
             components=[copy.deepcopy(disk)], gravity=dict(type='newton')))
 
@@ -244,7 +244,7 @@ def test_mond_without_a0_is_newtonian_gravity(form):
      r"the mass components \['gas'\] do not give it"),
 ])
 def test_what_mond_does_not_give_refused(disk, mass, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         galaxy(disk, mass=mass, distance=DISTANCE,
                gravity=dict(type='mond', interpolation='simple'))
     # (Newtonian gravity gives them)
@@ -259,7 +259,7 @@ def test_algebraic_mond_gives_the_plane_only():
                  velocities=[20, 30, 40])
     gravity = dict(type='mond', interpolation='simple', form='algebraic')
     galaxy(mass=MASS + [table], distance=DISTANCE, gravity=gravity)
-    with pytest.raises(ConfigError, match="in the plane only"):
+    with pytest.raises(ValueError, match="in the plane only"):
         galaxy(with_kinematics(equilibrium=dict(type='jeans')), mass=MASS,
                distance=DISTANCE, gravity=gravity)
 
@@ -378,14 +378,14 @@ def test_hu_sawicki_options(tmp_path):
     # The screened components are of the mass model; those not screened
     # give where their mass is (not user components); n is positive; the
     # depth of the potential of the environment is a parameter with it
-    with pytest.raises(ConfigError, match="screened mass components"):
+    with pytest.raises(ValueError, match="screened mass components"):
         galaxy(mass=THICK, distance=DISTANCE,
                gravity=dict(type='hu_sawicki', screened=['gas']))
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n    return 100 * R\n")
     user = THICK + [dict(type='user', name='mine',
                          file=str(tmp_path / 'curve.py'), func='vcirc2')]
-    with pytest.raises(ConfigError, match=r"\['mine'\] do not give where"):
+    with pytest.raises(ValueError, match=r"\['mine'\] do not give where"):
         galaxy(mass=user, distance=DISTANCE, gravity=dict(type='hu_sawicki'))
     galaxy(mass=user, distance=DISTANCE,
            gravity=dict(type='hu_sawicki', screened=['mine']))
@@ -457,7 +457,7 @@ def test_palatini_needs_the_density(tmp_path, disk, mass, message):
     if mass == 'user':
         mass = [dict(type='user', name='mine',
                      file=str(tmp_path / 'curve.py'), func='vcirc2')]
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         galaxy(disk, mass=mass, distance=DISTANCE,
                gravity=dict(type='palatini'))
     galaxy(mass=[GAS_MASS], distance=DISTANCE, gravity=dict(type='palatini'))
@@ -465,7 +465,7 @@ def test_palatini_needs_the_density(tmp_path, disk, mass, message):
 
 def test_palatini_takes_newtonian_shares():
     # (those of the dark fraction)
-    with pytest.raises(ConfigError, match="dark fraction"):
+    with pytest.raises(ValueError, match="dark fraction"):
         galaxy(mass=[THICK[0], dict(
             type='spheroid', name='halo', profile=dict(type='nfw'),
             baryons=['stars'],

@@ -88,11 +88,11 @@ def test_a_setup_takes_the_parameters_of_its_group():
     from gbkfit.params import ParamScalarDesc, ParamSpace
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), observation_parser.load(observation()))
-    with pytest.raises(ConfigError, match="they lack"):
+    with pytest.raises(ValueError, match="they lack"):
         gbkfit.Setup(group, ParamSpace(dict(a=ParamScalarDesc()), dict(a=1)))
     params = ParamSpace(
         group.pdescs(), PARAMS['properties'], function_names=['vcirc'])
-    with pytest.raises(ConfigError, match=r"no functions \['vcirc'\]"):
+    with pytest.raises(ValueError, match=r"no functions \['vcirc'\]"):
         gbkfit.Setup(group, params)
 
 
@@ -116,7 +116,7 @@ def test_a_configuration_without_data_cannot_fit():
     assert loaded.objective is None
     model = loaded.group_plan.model_h(loaded.evaluate().values)[0]
     assert model['brightness']['d'].sum() > 0
-    with pytest.raises(ConfigError, match="a fit needs a fitter"):
+    with pytest.raises(ValueError, match="a fit needs a fitter"):
         loaded.fit()
     # (a configuration of a fit, with workers even of MPI outside a job,
     # loads without data, e.g. to draw mocks, but does not fit: audit
@@ -127,7 +127,7 @@ def test_a_configuration_without_data_cannot_fit():
         workers=dict(type='mpi')))
     assert loaded.objective is None and loaded.pool is None
     loaded.evaluate()
-    with pytest.raises(ConfigError, match="a fit needs data"):
+    with pytest.raises(ValueError, match="a fit needs data"):
         loaded.fit()
 
 

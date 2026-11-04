@@ -7,7 +7,6 @@ gbkfit.migration), and log the changes.
 import logging
 import os
 
-from gbkfit.config import ConfigError
 import gbkfit.migration
 
 
@@ -44,20 +43,20 @@ def migrate(
 
     Raises
     ------
+    OSError
+        If a file cannot be read.
     ConfigError
-        If a file cannot be read, the version of a file is not valid, the
-        folder is not a project of a version that this one reads, or an
-        output or a version is given for a project.
+        If a file is not a configuration, or its version is not valid.
+    ValueError
+        If the folder is not a project of a version that this one reads,
+        or an output or a version is given for a project.
     """
     if os.path.isdir(path):
         if output is not None or from_version is not None:
-            raise ConfigError(
+            raise ValueError(
                 "a project is migrated in place, from the version of its "
                 "marker; it takes no output and no from_version")
-        try:
-            changes = gbkfit.migration.migrate_project(path)
-        except ValueError as e:
-            raise ConfigError(str(e)) from e
+        changes = gbkfit.migration.migrate_project(path)
     else:
         changes = {path: gbkfit.migration.migrate_file(
             path, output, from_version)}

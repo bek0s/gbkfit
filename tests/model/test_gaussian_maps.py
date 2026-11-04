@@ -5,7 +5,6 @@ mmaps and bmaps), as the maps of data often are.
 
 import copy
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, SpectralAxis
 import gbkfit.params
 import numpy as np
@@ -196,9 +195,9 @@ def test_gaussian_fit_of_bins(driver):
 
 @pytest.mark.parametrize('options, error, message', [
     (dict(method='gauss'), ValueError, "'method' must be one of"),
-    (dict(method='gaussian_fit', orders=[1, 3]), ConfigError,
+    (dict(method='gaussian_fit', orders=[1, 3]), ValueError,
      "between 0 and 2"),
-    (dict(method='gauss_hermite', orders=[1, 5]), ConfigError,
+    (dict(method='gauss_hermite', orders=[1, 5]), ValueError,
      "between 0 and 4")])
 def test_method_options_are_checked(options, error, message):
     from gbkfit.observation import PixelMoments

@@ -14,7 +14,7 @@ import astropy.wcs
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.config import ConfigError, DataFile
+from gbkfit.config import DataFile
 from gbkfit.io import ErrorKind, has_wcs, read_arrays, with_wcs
 from .masks import bounding_box
 
@@ -110,7 +110,7 @@ class FitsArrays:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the files cannot be read as data, errors and mask (see
             read_arrays), or the rest is given for data without
             a spectral axis.
@@ -122,7 +122,7 @@ class FitsArrays:
         if rest is not None and not (
                 has_wcs(header)
                 and astropy.wcs.WCS(header).wcs.spec >= 0):
-            raise ConfigError(
+            raise ValueError(
                 f"the data have no spectral axis to give the rest {rest}")
         return cls(
             arrays.data, arrays.error, arrays.mask, header, arrays.beam)
@@ -159,7 +159,7 @@ class FitsArrays:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If no pixel is valid.
         """
         return self.crop(bounding_box(self.mask))

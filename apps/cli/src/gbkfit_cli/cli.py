@@ -9,7 +9,6 @@ import re
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
-from gbkfit.config import ConfigError
 from gbkfit.tasks import exit_on_user_errors, log_to_console, run
 
 _log = logging.getLogger(__name__)
@@ -622,23 +621,30 @@ def _run_prep(args: argparse.Namespace) -> None:
         output_dir=args.output_dir, output_dir_mode=args.output_dir_mode))
 
 
-def _run_fit(args: argparse.Namespace) -> None:
-    """Run the fit task (or resume a fit, or bootstrap one)."""
+def _check_fit_arguments(
+        parser: argparse.ArgumentParser,
+        args: argparse.Namespace
+) -> None:
+    """
+    Exit with an error unless the arguments of the fit task are those of
+    one of its forms: a configuration, a fit to resume, or a fit and a
+    configuration of its bootstrap.
+    """
     if args.resume is not None and args.bootstrap is not None:
-        raise ConfigError(
+        parser.error(
             "give the output directory of a fit to resume (--resume) or to "
             "bootstrap (--bootstrap), not both")
     if args.bootstrap is not None and args.config is None:
-        raise ConfigError(
+        parser.error(
             "a bootstrap (--bootstrap) needs the configuration of its "
             "section 'bootstrap'")
     if args.bootstrap is None and (args.config is None) == (
             args.resume is None):
-        raise ConfigError(
+        parser.error(
             "give a configuration, or the output directory of a fit to "
             "resume (--resume), not both")
-    # (a resumed or bootstrapped fit writes into its own directory, with
-    # its own log: these options were taken and ignored)
+    # A resumed or bootstrapped fit writes into its own directory, with its
+    # own log: these options would be taken and ignored
     ignored = [
         option for option, given in (
             ('--output-dir', args.output_dir is not None),
@@ -646,9 +652,13 @@ def _run_fit(args: argparse.Namespace) -> None:
             ('--no-evaluation-log', args.no_evaluation_log))
         if given]
     if (args.resume is not None or args.bootstrap is not None) and ignored:
-        raise ConfigError(
+        parser.error(
             f"a fit resumed (--resume) or bootstrapped (--bootstrap) writes "
             f"into its own output directory; {ignored} do not apply")
+
+
+def _run_fit(args: argparse.Namespace) -> None:
+    """Run the fit task (or resume a fit, or bootstrap one)."""
     if args.resume is not None:
         run('resume', dict(output_dir=args.resume), args.lenient)
     elif args.bootstrap is not None:
@@ -688,6 +698,8 @@ def main() -> None:
     if args.task == 'prep' and args.prep_task in (
             'pixel_moments', 'region_moments'):
         _check_moment_counts(parser, args)
+    if args.task == 'fit':
+        _check_fit_arguments(parser, args)
 
     # Configure log level before doing anything else
     log_to_console(

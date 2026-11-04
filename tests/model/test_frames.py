@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from astropy.coordinates import SkyCoord
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
@@ -84,10 +83,10 @@ def test_offsets_are_parameters_of_named_observations():
     assert set(observation.pdescs()) == {'sinfoni_dx', 'sinfoni_dy'}
     loaded = observation_parser.load(observation_parser.dump(observation))
     assert loaded.offset_params() == ('sinfoni_dx', 'sinfoni_dy', None)
-    with pytest.raises(ConfigError, match="needs a name"):
+    with pytest.raises(ValueError, match="needs a name"):
         ObservationSky(
             observable, LineOfSightFlat(), offsets=dict(velocity=True))
-    with pytest.raises(ConfigError, match="'position' and 'velocity'"):
+    with pytest.raises(ValueError, match="'position' and 'velocity'"):
         ObservationSky(
             observable, LineOfSightFlat(), name='a', offsets=dict(x=True))
 
@@ -102,7 +101,7 @@ def test_a_galaxy_needs_an_observation_without_offsets():
                 orders=(0,)), LineOfSightFlat(),
             name=name, offsets=dict(position=True))
         for name in ('a', 'b')]
-    with pytest.raises(ConfigError, match="offsets of position; one needs"):
+    with pytest.raises(ValueError, match="offsets of position; one needs"):
         ObservationGroup([galaxy_parser.load(GALAXY)], observations)
 
 

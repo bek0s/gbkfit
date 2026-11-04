@@ -106,7 +106,7 @@ def test_dataset_items_must_have_the_same_world_coordinates(tmp_path):
 
 
 def test_dataset_items_must_have_the_same_shape():
-    with pytest.raises(ConfigError, match="must have one shape"):
+    with pytest.raises(ValueError, match="must have one shape"):
         DatasetPixelMoments(
             {0: Data(np.ones((8, 20))), 1: Data(np.ones((8, 21)))})
 
@@ -250,7 +250,7 @@ def test_data_mask_errors_of_0_and_reject_negative_ones():
     assert data.mask().sum() == 4
     assert np.isnan(data.data()[0, :2]).all()
     error[0, 1] = -1
-    with pytest.raises(ConfigError, match="errors cannot be negative"):
+    with pytest.raises(ValueError, match="errors cannot be negative"):
         Data(np.ones((2, 3)), error=error)
 
 
@@ -372,10 +372,10 @@ def test_observation_data_must_be_on_the_grid_of_the_observable():
         LineOfSightFlat, ObservationSky, PixelBrightness)
     data = DatasetPixelBrightness(Data(np.ones((8, 20))), rota=30)
     moments = DatasetPixelMoments({0: Data(np.ones((8, 20)))})
-    with pytest.raises(ConfigError, match="the data are on the grid"):
+    with pytest.raises(ValueError, match="the data are on the grid"):
         ObservationSky(
             PixelBrightness(size=(20, 8)), LineOfSightFlat(), data=data)
-    with pytest.raises(ConfigError, match="cannot be compared"):
+    with pytest.raises(ValueError, match="cannot be compared"):
         ObservationSky(
             PixelBrightness(size=(20, 8)), LineOfSightFlat(), data=moments)
     ObservationSky(
@@ -472,7 +472,7 @@ def test_datasets_from_files_in_python(tmp_path):
     (lambda: DatasetPixelMoments.from_files(),
      "a dataset needs at least one moment")])
 def test_moments_of_datasets_are_checked(call, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         call()
 
 
@@ -522,12 +522,12 @@ def test_moments_of_velocity_are_in_km_s():
         {}, {3: Data(np.full((4, 4), 5.0), unit='%')})
     np.testing.assert_allclose(hermite['h3'].data(), 0.05)
     assert hermite['h3'].unit() == u.dimensionless_unscaled
-    with pytest.raises(ConfigError, match="not a unit of velocity"):
+    with pytest.raises(ValueError, match="not a unit of velocity"):
         DatasetPixelMoments({1: Data(np.ones((4, 4)), unit='Jy')})
     # (h3 has no unit, and the central moment of order 3 one of velocity)
-    with pytest.raises(ConfigError, match="is the item h3"):
+    with pytest.raises(ValueError, match="is the item h3"):
         DatasetPixelMoments({3: Data(np.ones((4, 4)), unit='%')})
-    with pytest.raises(ConfigError, match="it is dimensionless"):
+    with pytest.raises(ValueError, match="it is dimensionless"):
         DatasetPixelMoments({}, {3: Data(np.ones((4, 4)), unit='Jy')})
 
 
@@ -581,16 +581,16 @@ def test_noise_correlations_only_where_the_data_have_them(tmp_path):
             spectral_correlation=dict(type='gauss', sigma=10)))
     image = DatasetPixelBrightness(
         Data(np.ones((8, 20)), spectral_correlation=LSFGauss(10)))
-    with pytest.raises(ConfigError, match="no spectral axis"):
+    with pytest.raises(ValueError, match="no spectral axis"):
         image.noise_correlation('brightness')
     # Spectra along a slit are not on a grid of the sky
     slit = DatasetSlitSpectra(
         Data(np.ones((8, 20)), spatial_correlation=PSFGauss(1)))
-    with pytest.raises(ConfigError, match="cannot be correlated"):
+    with pytest.raises(ValueError, match="cannot be correlated"):
         slit.noise_correlation('spectra')
     # A correlation does not vary along the spectral axis
     sigma = SpectralTable([5000, 7000] * u.AA, [1, 2])
-    with pytest.raises(ConfigError, match="must not vary"):
+    with pytest.raises(ValueError, match="must not vary"):
         Data(np.ones((8, 20)), spatial_correlation=PSFGauss.varying(
             sigma=sigma))
 

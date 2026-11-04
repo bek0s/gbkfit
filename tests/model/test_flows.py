@@ -8,7 +8,6 @@ the density of a spiral density wave (the density trait spiral).
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.model import component_parser, galaxy_parser
 from gbkfit.model.components.disks._profiles import NodalDiskDensity
 from gbkfit.model.components.traits import RPTraitSpiral, VPTraitSpiral
@@ -108,7 +107,7 @@ def test_a_wedge_has_its_speed_within_its_two_wedges(driver):
 
 def test_cones_take_no_flows_of_the_plane_of_a_disk():
     for trait in (dict(type='bar'), dict(type='wedge', direction='tan')):
-        with pytest.raises(ConfigError, match="a cone does not take"):
+        with pytest.raises(ValueError, match="a cone does not take"):
             component_parser.load(dict(
                 type='cone', rnodes=RNODES,
                 density=dict(
@@ -229,7 +228,7 @@ def test_a_spiral_wave_needs_the_rotation_of_its_disk():
             (None, [dict(type='spiral', order=2),
                     dict(type='uniform', direction='rad')]),
             (WAVE_PTRAITS, dict(type='uniform', direction='rad'))):
-        with pytest.raises(ConfigError, match="give the disk tangential"):
+        with pytest.raises(ValueError, match="give the disk tangential"):
             disk(vptraits, ptraits)
 
 
@@ -291,7 +290,7 @@ def test_the_parameters_of_the_wavenumbers():
         == ['a', 'f', 'k']
     assert RPTraitSpiral(2, wavenumber='given').dump() == dict(
         type='spiral', order=2, wavenumber='given')
-    with pytest.raises(ConfigError, match="winds the arms by its sign"):
+    with pytest.raises(ValueError, match="winds the arms by its sign"):
         VPTraitSpiral(2, winding='leading', wavenumber='given')
 
 

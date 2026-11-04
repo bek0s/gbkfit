@@ -8,7 +8,6 @@ import astropy.table
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError
 
 
 __all__ = [
@@ -29,7 +28,7 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the header has no PSF of MUSE.
     """
     wavelengths = _MUSE_WAVELENGTHS
@@ -37,7 +36,7 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
     fields = [f for f in (*range(10), 99) if f'FSF{f:02d}BET' in header
               or f'FSF{f:02d}FNC' in header]
     if mode not in ('MOFFAT1', 'MOFFAT2') or not fields:
-        raise ConfigError(
+        raise ValueError(
             f"the header has no PSF of MUSE (FSFMODE MOFFAT1 or MOFFAT2); "
             f"FSFMODE is {mode!r}")
     key = f'FSF{fields[0]:02d}'

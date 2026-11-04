@@ -8,7 +8,6 @@ midplane; and for the radial range selection trait (e.g. truncations).
 import copy
 import logging
 
-from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
@@ -306,7 +305,7 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     # valid value. The kernels limit the displacement to zmax all the same
     # (e.g. where an interpolation of the amplitude overshoots it): given
     # past the parameters, a lift of 30 stops at 20, and a warning says so
-    with pytest.raises(ConfigError, match="outside its valid range"):
+    with pytest.raises(ValueError, match="outside its valid range"):
         gbkfit.params.ParamSpace(
             plan.group().pdescs(), properties | dict(zpt_a=[30] * 14))
     at_zmax = evaluate_with(plan, properties | dict(zpt_a=[20] * 14))
@@ -387,5 +386,5 @@ def test_speeds_away_from_the_plane_need_a_thick_disk():
         kinematics=DISK['kinematics'] | dict(
             vptraits=dict(type='uniform', direction='away')))
     from gbkfit.model import component_parser
-    with pytest.raises(ConfigError, match="need density height traits"):
+    with pytest.raises(ValueError, match="need density height traits"):
         component_parser.load(thin)

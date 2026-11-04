@@ -87,9 +87,9 @@ def test_inclination_scales_rotation_velocities():
     np.testing.assert_allclose(
         at_30['vcirc'], at_60['vcirc'] * 0.5 / np.sin(np.radians(60)))
     np.testing.assert_array_equal(at_30['mass'], at_60['mass'])
-    with pytest.raises(ConfigError, match="needs a name"):
+    with pytest.raises(ValueError, match="needs a name"):
         ObservationProfile(['vcirc'], radii, inclination=60)
-    with pytest.raises(ConfigError, match="has none"):
+    with pytest.raises(ValueError, match="has none"):
         ObservationProfile(['mass'], radii, inclination=60, name='rc')
 
 
@@ -125,7 +125,7 @@ def test_profile_of_a_table_file(tmp_path):
     # (one error for all the values must be positive, not a bool)
     for error, message in ((0, "must be positive"), (True, "is True")):
         info['data']['vcirc']['error'] = error
-        with pytest.raises(ConfigError, match=message):
+        with pytest.raises((ConfigError, ValueError), match=message):
             observation_parser.load(copy.deepcopy(info))
 
 
@@ -193,15 +193,15 @@ def test_mock_profiles():
 def test_profiles_refuse_what_they_cannot_measure():
     galaxy = mass_galaxy(components=[copy.deepcopy(GAS)])
     radii = [1.0, 3.0] * u.kpc
-    with pytest.raises(ConfigError, match="not a function of radii"):
+    with pytest.raises(ValueError, match="not a function of radii"):
         ObservationProfile(['vrot'], radii)
-    with pytest.raises(ConfigError, match="has no functions"):
+    with pytest.raises(ValueError, match="has no functions"):
         ObservationGroup(
             galaxy, ObservationProfile(['vcirc_disk'], radii)).plan()
-    with pytest.raises(ConfigError, match="physical lengths"):
+    with pytest.raises(ValueError, match="physical lengths"):
         ObservationGroup(
             galaxy, ObservationProfile(['rotation_gas'], radii)).plan()
-    with pytest.raises(ConfigError, match="in a unit of km / s"):
+    with pytest.raises(ValueError, match="in a unit of km / s"):
         ObservationProfile(data=DatasetProfile(
             {'vcirc': Data(np.ones(2), unit='kpc')}, radii))
 

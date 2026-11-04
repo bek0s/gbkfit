@@ -392,7 +392,7 @@ def test_unresolved_heights_are_errors():
 @pytest.mark.parametrize('nodes', [[1], [0, 2, 1], [-1, 1], [0, np.inf]])
 def test_nodes_of_nodewise_disks_are_checked(nodes):
     with pytest.raises(
-            ConfigError, match="the nodes of a nodewise surface density"):
+            ValueError, match="the nodes of a nodewise surface density"):
         SurfaceNodewise(nodes)
 
 
@@ -453,7 +453,7 @@ class Layers:
 def test_mass_disks_follow_one_component():
     disk = MassDisk('d', SurfaceExponential(), VerticalComponent('hi'))
     assert disk.followed_components() == ('hi',)
-    with pytest.raises(ConfigError, match="follows at most one component"):
+    with pytest.raises(ValueError, match="follows at most one component"):
         MassDisk('d', SurfaceComponent('hi'), VerticalComponent('co'))
 
 
@@ -679,7 +679,7 @@ def test_nodewise_spheroids_load_and_check_their_nodes():
     assert spheroid.pdescs()['log_sigma'].size() == 4
     for nodes in ([0.5, 1], [0, 2, 1], [0]):
         with pytest.raises(
-                ConfigError, match="the nodes of a nodewise profile"):
+                ValueError, match="the nodes of a nodewise profile"):
             ProfileNodewise(nodes)
 
 
@@ -881,7 +881,7 @@ def test_gnedin_and_cautun_contractions():
     with pytest.raises(ValueError, match="cosmic baryon fraction"):
         mass_model(BARYONS + [responding_halo(response=dict(type='cautun20'))]
                    ).vcirc2(radius, params, CONTEXT)
-    with pytest.raises(ConfigError, match="takes the radius r_D"):
+    with pytest.raises(ValueError, match="takes the radius r_D"):
         MassSpheroid('h', ProfileNFW('density_radius'), baryons=['stars'],
                      response=ResponseGnedin04())
 
@@ -915,24 +915,24 @@ def test_responding_halos_are_checked(tmp_path):
     # components without a function of it, nor tables)
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n    return 100 * R\n")
-    with pytest.raises(ConfigError, match=r"\['mine'\] do not give them"):
+    with pytest.raises(ValueError, match=r"\['mine'\] do not give them"):
         mass_model([
             dict(type='user', name='mine', file=str(tmp_path / 'curve.py'),
                  func='vcirc2'),
             responding_halo(
                 baryons=['mine'], response=dict(type='blumenthal86'))])
-    with pytest.raises(ConfigError, match="needs the baryons"):
+    with pytest.raises(ValueError, match="needs the baryons"):
         MassSpheroid('h', ProfileNFW(), response=ResponseBlumenthal86())
-    with pytest.raises(ConfigError, match="spherical shape"):
+    with pytest.raises(ValueError, match="spherical shape"):
         MassSpheroid(
             'h', ProfileNFW(), ShapeFlattened(), baryons=['stars'],
             response=ResponseBlumenthal86())
-    with pytest.raises(ConfigError, match="not a parameter"):
+    with pytest.raises(ValueError, match="not a parameter"):
         MassSpheroid('h', ProfileNFW(), baryons=['stars'],
                      dark_fraction=DarkFraction('q', [0.1, 1]))
-    with pytest.raises(ConfigError, match="does not have"):
+    with pytest.raises(ValueError, match="does not have"):
         mass_model([responding_halo(response=dict(type='blumenthal86'))])
-    with pytest.raises(ConfigError, match="in a loop"):
+    with pytest.raises(ValueError, match="in a loop"):
         mass_model([
             responding_halo(name='a', baryons=['b']),
             responding_halo(name='b', baryons=['a'])])
@@ -1035,10 +1035,10 @@ def test_sidm_responses_are_checked():
         mass_component_parser.load(copy.deepcopy(info)))
     assert dumped['response'] == info['response']
     MassSpheroid('h', ProfileNFW(), response=ResponseSIDM())
-    with pytest.raises(ConfigError, match="needs the baryons"):
+    with pytest.raises(ValueError, match="needs the baryons"):
         MassSpheroid('h', ProfileNFW(), response=ResponseSIDM(
             ResponseBlumenthal86()))
-    with pytest.raises(ConfigError, match="is not SIDM"):
+    with pytest.raises(ValueError, match="is not SIDM"):
         ResponseSIDM(ResponseSIDM())
 
 
@@ -1112,8 +1112,8 @@ def test_zhao_is_nfw_for_its_shape():
 
 @pytest.mark.parametrize('options, error, message', [
     (dict(parameters='mass'), ValueError, "'parameters' must be one of"),
-    (dict(overdensity='200x'), ConfigError, "overdensity must be"),
-    (dict(parameters='density_radius', overdensity='200c'), ConfigError,
+    (dict(overdensity='200x'), ValueError, "overdensity must be"),
+    (dict(parameters='density_radius', overdensity='200c'), ValueError,
      "take no overdensity")])
 def test_halo_options_are_checked(options, error, message):
     with pytest.raises(error, match=message):
@@ -1247,7 +1247,7 @@ def test_user_component_is_its_function(tmp_path):
     np.testing.assert_allclose(
         component.vcirc2(radius, dict(v=100, r=1), CONTEXT),
         1e4 * radius / (radius + 1))
-    with pytest.raises(ConfigError, match="does not define a function"):
+    with pytest.raises(ValueError, match="does not define a function"):
         MassUser.from_file('mine', str(tmp_path / 'curve.py'), 'other')
 
 
@@ -1324,7 +1324,7 @@ def test_distances_give_the_length_of_an_arcsec():
         DistanceRedshift(cosmology='Planck99')
     # (by the redshift of a galaxy without one, or blueshifted: no length)
     for redshift in ({}, dict(redshift=-0.001)):
-        with pytest.raises(ConfigError, match="needs a redshift above 0"):
+        with pytest.raises(ValueError, match="needs a redshift above 0"):
             galaxy_parser.load(dict(
                 components=[], mass=[dict(type='point', name='bh')],
                 distance=dict(type='redshift')) | redshift)
@@ -1481,12 +1481,12 @@ def test_mass_trait_parameters_and_round_trip():
 def test_mass_trait_mass_and_distance():
     # (mass that no component uses is for profiles or derived values: see
     # ObservationGroup, which warns of it unused)
-    with pytest.raises(ConfigError, match="need the mass of their galaxy"):
+    with pytest.raises(ValueError, match="need the mass of their galaxy"):
         disk_galaxy('smooth', dict(type='mass'))
     assert not disk_galaxy(
         'smooth', dict(type='arctan', direction='tan'), MASS, DISTANCE
     ).components_use_mass()
-    with pytest.raises(ConfigError, match="needs its distance"):
+    with pytest.raises(ValueError, match="needs its distance"):
         disk_galaxy('smooth', dict(type='mass'), MASS)
     # (a distance without mass gives the length of an arcsec to the
     # derived values, e.g. of an arctan disk at z ~ 1.5: audit 2026-10-31
@@ -1733,7 +1733,7 @@ def test_disks_follow_components_of_their_galaxy():
              vertical=dict(type='component', component='hi', rstep=None))]
     loaded = mass_component_parser.load(copy.deepcopy(mass))
     assert mass_component_parser.dump(loaded) == mass
-    with pytest.raises(ConfigError, match="has no component 'hi'"):
+    with pytest.raises(ValueError, match="has no component 'hi'"):
         disk_galaxy('smooth', dict(type='mass'), mass, DISTANCE)
 
 
@@ -1917,7 +1917,7 @@ def test_pressure_support_option():
     several = dict(type='mass', pressure_support=dict(
         type='self_gravitating', mass=['hi', 'h2']))
     assert traits.vpt_parser.dump(traits.vpt_parser.load(several)) == several
-    with pytest.raises(ConfigError, match="each once"):
+    with pytest.raises(ValueError, match="each once"):
         traits.PressureSupportJeans(['hi', 'hi'])
 
 
@@ -2020,11 +2020,11 @@ def test_pressure_support_takes_the_density_of_a_mass_disk_of_its_disk(mode):
 def test_pressure_density_is_a_mass_component_that_gives_it():
     vptraits = dict(
         type='mass', pressure_support=dict(type='jeans', mass='dust'))
-    with pytest.raises(ConfigError, match="which its galaxy does not have"):
+    with pytest.raises(ValueError, match="which its galaxy does not have"):
         disk_galaxy('smooth', vptraits, MASS, DISTANCE)
     # (a thin disk has no density at its midplane: refused at load, not at
     # the first evaluation of a fit, audit 2026-10-31 #30a)
-    with pytest.raises(ConfigError, match="does not give its density"):
+    with pytest.raises(ValueError, match="does not give its density"):
         disk_galaxy(
             'smooth', vptraits | dict(
                 pressure_support=dict(type='jeans', mass='stars')),
@@ -2056,7 +2056,7 @@ def test_a_self_gravitating_density_needs_a_projection():
         DISK, vptraits=dict(
             type='mass', pressure_support=dict(type='self_gravitating',
             mass='halo'))) | dict(type='disk', name='gas')
-    with pytest.raises(ConfigError, match="does not give its surface"):
+    with pytest.raises(ValueError, match="does not give its surface"):
         galaxy_parser.load(dict(
             components=[disk], mass=[dict(
                 type='spheroid', name='halo', profile=dict(type='nfw'))],
@@ -2070,7 +2070,7 @@ def test_the_table_of_rotation_at_heights_stays_within_the_density():
         DISK, vptraits=dict(type='mass', pressure_support=dict(type='jeans')),
         htraits=dict(type='sech2', zmax=6))
     disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=7))
-    with pytest.raises(ConfigError, match="must not be above the zmax"):
+    with pytest.raises(ValueError, match="must not be above the zmax"):
         galaxy_parser.load(dict(
             components=[disk | dict(type='disk')], mass=[dict(
                 type='point', name='bh')], distance=copy.deepcopy(DISTANCE)))
@@ -2175,7 +2175,7 @@ def test_rotation_at_each_height_is_checked(
         DISK, vptraits=vptraits, htraits=dict(type='sech2', zmax=8)
     ) | dict(type='disk')
     disk['kinematics'] |= dict(vhtraits=dict(type='mass', zmax=8))
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
             components=[disk], mass=copy.deepcopy(mass),
             distance=copy.deepcopy(DISTANCE)))
@@ -2196,7 +2196,7 @@ def test_one_mass_trait_per_disk():
     KinematicTraits(
         [traits.VPTraitMass(), traits.VPTraitNWUniform('rad')],
         traits.DPTraitUniform())
-    with pytest.raises(ConfigError, match="at most one velocity trait"):
+    with pytest.raises(ValueError, match="at most one velocity trait"):
         KinematicTraits(
             [traits.VPTraitMass(),
              traits.VPTraitMass(traits.PressureSupportJeans())],

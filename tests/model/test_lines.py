@@ -54,7 +54,6 @@ def test_narrow_lines_keep_their_flux(driver, evaluate_cases, dispersion):
 
 def test_the_catalogue_has_lines_and_those_of_the_user():
     from gbkfit.model import LineCatalogue
-    from gbkfit.config import ConfigError
     catalogue = LineCatalogue(
         {'mgii2796': '2796.35 Angstrom', 'halpha': '6562.80 Angstrom'})
     # Rest wavelengths in vacuum, or rest frequencies
@@ -65,7 +64,7 @@ def test_the_catalogue_has_lines_and_those_of_the_user():
     assert rest['mgii2796'].to_value('Angstrom') == pytest.approx(2796.35)
     # The lines of the user replace those of the catalogue
     assert rest['halpha'].to_value('Angstrom') == pytest.approx(6562.80)
-    with pytest.raises(ConfigError, match="there is no line 'oi6300'"):
+    with pytest.raises(ValueError, match="there is no line 'oi6300'"):
         catalogue.line('oi6300')
 
 
@@ -106,12 +105,12 @@ def test_configurations_name_lines_of_the_catalogue():
 
 
 def test_configurations_name_known_lines():
-    from modelutils import config_group_plan
-    from gbkfit.config import ConfigError
-    with pytest.raises(ConfigError) as error:
+    from modelutils import config_group_plan, located_message
+    with pytest.raises(ValueError) as error:
         config_group_plan(lines_config(['halpha', 'oi6300']))
-    assert "there is no line 'oi6300' in the catalogue" in str(error.value)
-    assert "emission.lines[1]" in str(error.value)
+    message = located_message(error.value)
+    assert "there is no line 'oi6300' in the catalogue" in message
+    assert "emission.lines[1]" in message
 
 
 @pytest.mark.parametrize('medium, offset', [('air', 0), ('vacuum', 82.7)])

@@ -212,7 +212,6 @@ def test_workers_of_mpi_are_made_outside_their_job():
     # (the configuration of a cluster fit is evaluated anywhere; the job
     # is needed on first use: audit 2026-10-31 #28)
     from gbkfit.parallel import WorkersMPI
-    from gbkfit.config import ConfigError
     pool = WorkersMPI().start(mock_objective(DriverHost()))
-    with pytest.raises(ConfigError, match="launcher of GBKFIT"):
+    with pytest.raises(RuntimeError, match="launcher of GBKFIT"):
         pool.size()

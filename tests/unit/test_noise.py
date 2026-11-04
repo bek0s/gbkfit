@@ -6,7 +6,6 @@ on the sky and along the spectral axis, and its configuration.
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import make_grid
 from gbkfit.instrument import LSFConvolution, LSFHanning, PSFGauss
 from gbkfit.observation.noise import (
@@ -124,6 +123,6 @@ def test_the_configuration_of_the_noise(tmp_path):
     (dict(rms=1, spatial_correlation='instrument'), None,
      "the instrument has no PSF")])
 def test_what_the_noise_refuses(options, psf, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         NoiseGauss(**options).draw(
             np.random.default_rng(), GRID, psf, SIGNAL)

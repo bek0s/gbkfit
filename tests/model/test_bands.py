@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from modelutils import config_group_plan, group_plan
 
-from gbkfit.config import ConfigError
 from gbkfit.model import LineCatalogue
 
 
@@ -50,7 +49,7 @@ def test_the_catalogue_has_bands_and_those_of_the_user():
         == pytest.approx(2.159)
     assert catalogue.band('mine').wavelength().to_value('um') \
         == pytest.approx(0.5)
-    with pytest.raises(ConfigError, match="there is no band 'sdss_y'"):
+    with pytest.raises(ValueError, match="there is no band 'sdss_y'"):
         catalogue.band('sdss_y')
 
 
@@ -72,7 +71,7 @@ def test_light_in_each_band(driver, evaluate_cases, emitter):
     (None, "the image that sees it needs a band"),
     ('sdss_i', "it sees none")])
 def test_images_see_components_in_their_band(driver, band, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         group_plan([image_case(driver, [STARS], band)])
 
 
@@ -89,7 +88,7 @@ def test_only_images_have_a_band(driver):
                 type='traits', vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform')))]),
         band='sdss_r')
-    with pytest.raises(ConfigError, match="only images have a band"):
+    with pytest.raises(ValueError, match="only images have a band"):
         group_plan([case])
 
 

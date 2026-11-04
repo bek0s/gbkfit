@@ -5,7 +5,6 @@ cube in regions (apertures or bins), which must match those of an scube.
 
 import copy
 
-from gbkfit.config import ConfigError
 import gbkfit.dataset
 from gbkfit.grid import Coords, SpectralAxis, make_grid
 from gbkfit.io import write_data
@@ -270,7 +269,7 @@ def test_region_spectra_of_spectra_with_another_spectral_axis_is_an_error():
     dataset = DatasetRegionSpectra(
         Data(np.ones((51, 3))), observable.regions(),
         spectral=SpectralAxis(step=5, convention='relativistic'))
-    with pytest.raises(ConfigError, match="spectral axis"):
+    with pytest.raises(ValueError, match="spectral axis"):
         ObservationSky(observable, LineOfSightFlat(), data=dataset)
 
 
@@ -300,13 +299,13 @@ def test_region_spectra_observation_of_data_on_a_rotated_grid(kind):
 def test_region_spectra_spatial_grid_options():
     from gbkfit.observation import RegionSpectra
     bins = RegionsBins(np.zeros((4, 4)))
-    with pytest.raises(ConfigError, match="remove the options \\['step'\\]"):
+    with pytest.raises(ValueError, match="remove the options \\['step'\\]"):
         RegionSpectra(
             bins, spectral=SpectralAxis(size=5, convention='relativistic'),
             step=[1, 1])
     apertures = RegionsApertures([
         gbkfit.region.aperture_parser.load(dict(type='field'))])
-    with pytest.raises(ConfigError, match="size of the grid"):
+    with pytest.raises(ValueError, match="size of the grid"):
         RegionSpectra(
             apertures,
             spectral=SpectralAxis(size=5, convention='relativistic'))

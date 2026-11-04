@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 from modelutils import config_group_plan
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras
 from gbkfit.observation import WeightAzimuthPower, WeightAzimuthRange
@@ -127,5 +126,5 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
 def test_weights_are_checked(driver, observable, component, message):
     weights = dict(
         component='gas', traits=dict(type='azimuth_range', half_width=20))
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         config_group_plan(config(driver, observable, weights, component))

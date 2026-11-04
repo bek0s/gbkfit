@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 import scipy.signal
 
-from gbkfit.config import ConfigError
 import gbkfit.params
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
@@ -120,7 +119,7 @@ def test_each_channel_has_its_lsf(driver):
 def test_the_psf_must_be_known_at_the_channels_of_the_data(driver):
     psf = dict(type='gauss', sigma=dict(
         points=dict(value=[-100, 500], unit='km/s'), values=[1, 2]))
-    with pytest.raises(ConfigError, match="from -100 to 500 km/s"):
+    with pytest.raises(ValueError, match="from -100 to 500 km/s"):
         spectra(driver, psf=psf)
 
 

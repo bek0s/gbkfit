@@ -9,7 +9,6 @@ import astropy.stats
 import numpy as np
 import scipy.ndimage
 
-from gbkfit.config import ConfigError
 
 
 __all__ = [
@@ -104,11 +103,11 @@ def grown_mask(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If seed is below grow.
     """
     if seed < grow:
-        raise ConfigError(
+        raise ValueError(
             f"the seed threshold ({seed}) must be at least the threshold "
             f"of growth ({grow})")
     with np.errstate(invalid='ignore'):
@@ -149,7 +148,7 @@ def signal_mask(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If seed is below grow.
     """
     noise = noise_errors(cube, np.isfinite(cube))
@@ -188,12 +187,12 @@ def subtract_continuum(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If line is not one value per channel, or the degree is negative.
     """
     line = np.asarray(line, dtype=bool)
     if line.shape != data.shape[:1] or degree < 0:
-        raise ConfigError(
+        raise ValueError(
             "line must have one value per channel, and the degree be at "
             "least 0")
     nz = data.shape[0]
@@ -250,12 +249,12 @@ def bounding_box(mask: np.ndarray) -> tuple[slice, ...]:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the mask keeps no pixel.
     """
     nonzero = np.nonzero(mask)
     if not nonzero[0].size:
-        raise ConfigError(
+        raise ValueError(
             "no valid pixels are left to crop the data to; relax the "
             "clipping, or do not minify")
     return tuple(slice(i.min(), i.max() + 1) for i in nonzero)

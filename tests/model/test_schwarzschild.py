@@ -137,7 +137,7 @@ def test_invalid_schwarzschild_kinematics_are_refused(options, message):
 def test_orbits_take_the_forces_of_a_potential():
     # (the algebraic form of MOND gives the plane only: off it, the
     # Newtonian forces times its function have curl; QUMOND is a field)
-    with pytest.raises(ConfigError, match="in the plane only"):
+    with pytest.raises(ValueError, match="in the plane only"):
         galaxy(gravity=dict(
             type='mond', interpolation='simple', form='algebraic'))
     galaxy(gravity=dict(type='mond', interpolation='simple'))
@@ -182,7 +182,7 @@ def test_spectral_cubes_do_not_see_stars_on_orbits(driver):
         line_of_sight_parser.load(dict(type='grid', depth=dict(step=2))),
         lines=['stars'])
     # (the message names those that see them; see Observable.orbit_stars)
-    with pytest.raises(ConfigError, match=(
+    with pytest.raises(ValueError, match=(
             r"seen by pixel_brightness \(their light\), region_moments "
             r"\(their moments\); pixel_spectra does not see them")):
         ObservationGroup([galaxy()], [spectra]).plan(driver)
@@ -198,7 +198,7 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
         instrument=Instrument(psf=PSFGauss(1.0), lsf=LSFGauss(20.0)),
         lines=['stars'], data=seen.data(), dtype='float64',
         likelihood=seen.likelihood())
-    with pytest.raises(ConfigError, match="without an LSF"):
+    with pytest.raises(ValueError, match="without an LSF"):
         ObservationGroup([galaxy()], [with_lsf]).plan(driver)
 
 
@@ -271,7 +271,7 @@ def test_bins_of_stars_on_orbits_have_a_positive_sigma(driver):
     group = ObservationGroup([galaxy()], [observation(bins(), data=data)])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
-    with pytest.raises(ConfigError, match="have a positive sigma"):
+    with pytest.raises(ValueError, match="have a positive sigma"):
         Objective(group.plan(driver), params.solves())
 
 
@@ -292,7 +292,7 @@ def test_the_weights_of_the_orbits_are_solved(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace(group.pdescs(), PROPERTIES | dict(
         stars_weights=[1.0] * 400))
-    with pytest.raises(ConfigError, match="give them a solve"):
+    with pytest.raises(ValueError, match="give them a solve"):
         Objective(group.plan(driver), params.solves())
 
 

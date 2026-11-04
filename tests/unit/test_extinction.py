@@ -4,7 +4,6 @@ Tests for the extinction laws of dust.
 
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.model import (
     ExtinctionCCM, ExtinctionCalzetti, ExtinctionTable,
     extinction_law_parser)
@@ -38,7 +37,7 @@ def test_table_interpolates_linearly():
     (ExtinctionCalzetti(), 0.1), (ExtinctionCalzetti(), 2.5),
     (ExtinctionTable([0.5, 0.6], [1, 1]), 0.7)])
 def test_laws_raise_outside_their_range(law, wavelength):
-    with pytest.raises(ConfigError, match="is defined from"):
+    with pytest.raises(ValueError, match="is defined from"):
         law.ratio(wavelength)
 
 

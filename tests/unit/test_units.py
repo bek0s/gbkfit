@@ -6,7 +6,6 @@ import astropy.units as u
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, Grid
 from gbkfit.model.components._units import (
     BandFactors, DataUnit, LineFactors, line_factors, mass_per_unit)
@@ -101,7 +100,7 @@ def test_emission_takes_the_units_of_its_kind(info):
     (dict(type='lines', lines=['halpha'], unit='cm-2'), "one of HI only"),
     (dict(type='band', unit='K km/s'), "is not")])
 def test_emission_refuses_units_of_other_kinds(info, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         emission(info)
 
 
@@ -113,7 +112,7 @@ def test_a_line_has_one_unit_in_a_galaxy():
                 kinematics=dict(type='traits',
                                 vptraits=dict(type='arctan', direction='tan'),
                                 dptraits=dict(type='uniform')))
-    with pytest.raises(ConfigError, match="the line 'hi21' has the unit"):
+    with pytest.raises(ValueError, match="the line 'hi21' has the unit"):
         galaxy_parser.load(dict(components=[
             disk | dict(name='hi', emission=dict(
                 type='lines', lines=['hi21'], unit='Msun/pc2')),
@@ -248,7 +247,7 @@ def test_the_beam_of_each_channel_at_the_line():
 
 def test_light_with_a_unit_needs_the_rest_of_the_axis():
     # (the data see it dimmed by the redshift of each line)
-    with pytest.raises(ConfigError, match="needs its rest"):
+    with pytest.raises(ValueError, match="needs its rest"):
         factors('Jy km/s/arcsec2', 'Jy/beam', None, beam=BEAM)
 
 
@@ -260,7 +259,7 @@ def test_bands_per_beam_and_per_pixel():
     assert BandFactors(
         jy, DataUnit(u.Jy, PIXEL), Band('j', '1.2 um'), 0.0)(0) \
         == pytest.approx(PIXEL)
-    with pytest.raises(ConfigError, match="needs its band"):
+    with pytest.raises(ValueError, match="needs its band"):
         BandFactors(jy, DataUnit(u.K, PIXEL), None, 0.0)
 
 
@@ -283,7 +282,7 @@ def test_bands_dimmed_by_the_redshift():
     (DataUnit(parse_unit('Jy/beam'), PIXEL), "have no beam"),
     (DataUnit(None, PIXEL), "the data have no unit")])
 def test_data_must_tell_their_unit_and_beam(target, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         line_factors(
             parse_unit('K km/s'), target, np.ones(1),
             Grid((11,), Coords(
@@ -293,7 +292,7 @@ def test_data_must_tell_their_unit_and_beam(target, message):
 
 def test_regions_are_fluxes():
     assert flux_per_area(u.Jy) == u.Jy / u.arcsec ** 2
-    with pytest.raises(ConfigError, match="are fluxes"):
+    with pytest.raises(ValueError, match="are fluxes"):
         flux_per_area(parse_unit('Jy/beam'))
 
 

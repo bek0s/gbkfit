@@ -125,9 +125,10 @@ def migrate_file(
 
     Raises
     ------
+    OSError
+        If the file cannot be read.
     ConfigError
-        If the file cannot be read, or its version is not valid (see
-        migrate).
+        If it is not YAML, or its version is not valid (see migrate).
     """
     config = _read(path)
     if not isinstance(config, MutableMapping):
@@ -165,8 +166,10 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
     ------
     ValueError
         If the folder is not a project of a version that this one reads.
-    ConfigError
+    OSError
         If a piece or a setup cannot be read.
+    ConfigError
+        If a piece or a setup is not YAML.
     """
     project = gbkfit.project.open(path)
     if (version := project.version()) == FORMAT_VERSION:
@@ -250,13 +253,13 @@ def _folder(section: str) -> str:
 def _read(path: str) -> Any:
     """
     Read a configuration file (YAML or JSON), with its comments; raise
-    ConfigError if it cannot be read.
+    ConfigError if it is neither (and its OSError if it cannot be read).
     """
-    try:
-        with open(path) as f:
+    with open(path) as f:
+        try:
             return _yaml().load(f)
-    except (OSError, ruamel.yaml.YAMLError) as e:
-        raise ConfigError(f"cannot read {path}: {e}") from e
+        except ruamel.yaml.YAMLError as e:
+            raise ConfigError(f"{path} is not YAML: {e}") from e
 
 
 def _write(path: str, config: Any) -> None:

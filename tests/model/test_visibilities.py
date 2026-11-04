@@ -6,7 +6,6 @@ the model (that of pixel_spectra on its grid), and analytic sources.
 import copy
 import logging
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import make_grid, sky_positions
 from gbkfit.grid.coords import _to_sky
 import gbkfit.params
@@ -123,14 +122,14 @@ def test_a_point_source_is_its_flux_at_its_phase(driver):
 def test_visibilities_have_no_psf():
     from gbkfit.instrument import Instrument, PSFGauss
     from gbkfit.observation import Visibilities
-    with pytest.raises(ConfigError, match="no PSF"):
+    with pytest.raises(ValueError, match="no PSF"):
         Visibilities(COVERAGE, 8).check_observation(
             Instrument(psf=PSFGauss(sigma=1)), (1, 1, 1), None)
 
 
 def test_the_pixels_of_visibilities_are_not_oversampled(driver):
     COVERAGE.write('coverage.npz', overwrite=True)
-    with pytest.raises(ConfigError, match="not oversampled"):
+    with pytest.raises(ValueError, match="not oversampled"):
         evaluate(driver, DISK, dict(
             type='visibilities', coverage=dict(file='coverage.npz'),
             oversampling=[2, 2, 1]) | GRID, DISK_PROPERTIES)
@@ -211,7 +210,7 @@ def test_the_noise_of_visibilities_is_not_correlated_on_the_sky(driver):
     from gbkfit.observation import NoiseGauss
     plan, params = observation_of_data(driver, 0)
     noise = NoiseGauss(rms=0.1, spatial_correlation=PSFGauss(sigma=1))
-    with pytest.raises(ConfigError, match="not on the sky"):
+    with pytest.raises(ValueError, match="not on the sky"):
         plan.mock(params, noise, seed=1)
 
 

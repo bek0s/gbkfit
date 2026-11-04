@@ -7,7 +7,6 @@ import astropy.units as u
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import Beam, Data, DatasetPixelSpectra
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, PSFGaussBeam
@@ -134,7 +133,7 @@ def test_the_units_of_model_and_data_must_go_together(
         disk('K km/s', ['co10']) | dict(name='co')]
     if data_unit is not None:
         components = components[:1]
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         model(driver, components, data_unit, beam)
 
 
@@ -144,7 +143,7 @@ def test_a_line_without_a_name_has_no_unit_with_a_redshift(driver):
     # as observed (its dimming then off by 1 + z or more), which named
     # lines do not leave open
     unnamed = disk() | dict(emission=dict(type='lines', unit='K km/s'))
-    with pytest.raises(ConfigError, match="a line without a name"):
+    with pytest.raises(ValueError, match="a line without a name"):
         model(driver, [unnamed], 'K', redshift=0.02)
     # (a named line is fine; at this redshift it is off the axis)
     model(driver, [disk('K km/s')], 'K', redshift=0.02)
@@ -157,7 +156,7 @@ def test_light_in_bands_with_a_unit_needs_the_redshift():
         type='disk', rnodes=list(range(0, 121, 20)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band', unit='Jy/arcsec2'))
-    with pytest.raises(ConfigError, match="give the galaxy its redshift"):
+    with pytest.raises(ValueError, match="give the galaxy its redshift"):
         galaxy_parser.load(dict(components=[stars]))
     galaxy = galaxy_parser.load(dict(components=[stars], redshift=0))
     assert galaxy.dump()['redshift'] == 0
@@ -170,7 +169,7 @@ def test_a_model_without_data_is_in_its_unit(driver):
     np.testing.assert_allclose(
         model(driver, components, psf=psf, unit='Jy/beam'),
         model(driver, components, 'Jy/beam', psf=psf), rtol=1e-12)
-    with pytest.raises(ConfigError, match="give the unit of its model"):
+    with pytest.raises(ValueError, match="give the unit of its model"):
         model(driver, components, 'Jy/beam', unit='Jy/beam')
-    with pytest.raises(ConfigError, match="which has none"):
+    with pytest.raises(ValueError, match="which has none"):
         model(driver, components, unit='Jy/beam')

@@ -13,7 +13,6 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.config import ConfigError
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra
@@ -111,7 +110,7 @@ def nirspec_msa_spectra(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the file is not of the exposures of a source of the
         micro-shutter array, or a slitlet has closed shutters between
         open ones or no shutter of the source.
@@ -120,7 +119,7 @@ def nirspec_msa_spectra(
     with datamodels.open(filename) as model:
         exposures = getattr(model, 'exposures', None)
         if not exposures or model.meta.exposure.type != 'NRS_MSASPEC':
-            raise ConfigError(
+            raise ValueError(
                 f"{filename!r} is not a cal file of the exposures of a "
                 f"source of the micro-shutter array of NIRSpec")
         slitlets = [_NirspecSlitlet(exposure) for exposure in exposures]
@@ -261,7 +260,7 @@ def nirspec_msa_rectified(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the files are not of a source of the micro-shutter array, the
         bar shadows were corrected, or a slitlet has closed shutters
         between open ones or no shutter of the source.
@@ -274,12 +273,12 @@ def nirspec_msa_rectified(
         exposures = getattr(cal, 'exposures', None)
         if not exposures or cal.meta.exposure.type != 'NRS_MSASPEC' \
                 or s2d.meta.exposure.type != 'NRS_MSASPEC':
-            raise ConfigError(
+            raise ValueError(
                 f"{cal_filename!r} and {s2d_filename!r} are not the cal and "
                 f"s2d files of a source of the micro-shutter array of "
                 f"NIRSpec")
         if s2d.barshadow_corrected:
-            raise ConfigError(
+            raise ValueError(
                 "the bar shadows of rectified spectra cannot be undone; "
                 "reduce them without the step barshadow")
         slitlets = [_NirspecSlitlet(exposure) for exposure in exposures]
@@ -479,7 +478,7 @@ def _nirspec_trace(
         slit_x[None], slit_y[None], wave[:, None, None]))
     dx, dy = np.asarray(image_x) - xx, np.asarray(image_y) - yy
     if not (np.all(np.isfinite(dx)) and np.all(np.isfinite(dy))):
-        raise ConfigError(
+        raise ValueError(
             "the model of the instrument does not reach the detector from "
             "every place and wavelength of the slitlet")
     return TraceTable(wave, x, y, dx, dy)
@@ -495,7 +494,7 @@ def _nirspec_shutters(slitlet: _NirspecSlitlet) -> 'ApertureShutters':
     from gbkfit.observation.observables.apertures import ApertureShutters
     state = slitlet.state
     if 'x' not in state or set(state) - {'1', 'x'}:
-        raise ConfigError(
+        raise ValueError(
             f"the slitlet of the shutters {state!r} has closed shutters "
             f"between open ones, or none of the source")
     width, length = np.hypot(*slitlet.axes)

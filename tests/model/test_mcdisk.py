@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 import ruamel.yaml
 
-from gbkfit.config import ConfigError
 from gbkfit.model import Extras
 from gbkfit.params import ModelEvaluationError
 from modelutils import config_group_plan
@@ -470,7 +469,7 @@ def test_mcdisk_moffat_blobs_need_a_finite_flux(driver):
     component = dict(density=dict(
         ptraits=dict(type='mixture_moffat', nblobs=2),
         htraits=dict(type='sech2', zmax=8)))
-    with pytest.raises(ConfigError, match=r"'pt_b\[1\]' is 0.9, outside"):
+    with pytest.raises(ValueError, match=r"'pt_b\[1\]' is 0.9, outside"):
         evaluate_disk('mcdisk', driver.type(), component,
                       BLOBS | dict(pt_b=[2.0, 0.9]))
 

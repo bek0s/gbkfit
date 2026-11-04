@@ -11,7 +11,6 @@ import pytest
 import scipy.stats
 from modelutils import config_group_plan
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelMoments, DatasetPixelSpectra
 from gbkfit.fitting import FitProblem
 from gbkfit.grid import SpectralAxis
@@ -273,11 +272,11 @@ def test_flux_scales_need_light_and_a_name():
     data = DatasetPixelMoments({1: Data(np.zeros((4, 4)))})
     observable = PixelMoments.from_data(
         data, spectral=SpectralAxis(convention='relativistic'))
-    with pytest.raises(ConfigError, match=r"has the flux scales \[\]"):
+    with pytest.raises(ValueError, match=r"has the flux scales \[\]"):
         ObservationSky(
             observable, line_of_sight_parser.load(dict(type='flat')),
             data=data, flux_scale='one', name='obs')
-    with pytest.raises(ConfigError, match="needs a name"):
+    with pytest.raises(ValueError, match="needs a name"):
         ObservationSky(
             PixelSpectra.from_data(DatasetPixelSpectra(
                 Data(np.zeros((5, 4, 4))),
@@ -290,14 +289,14 @@ def test_only_linear_parameters_of_gaussian_likelihoods_are_solved(
         driver, tmp_path):
     spectra = model(driver)
     plan = group_plan(driver, spectra, 1.0)
-    with pytest.raises(ConfigError, match="vsys cannot be solved"):
+    with pytest.raises(ValueError, match="vsys cannot be solved"):
         Objective(plan, dict(vsys=SolveGaussian(0, 10)))
     (tmp_path / 'like.py').write_text(
         "def like(key, data, model, error, mask, params):\n"
         "    return model - data\n")
     user = LikelihoodUser.from_file(
         str(tmp_path / 'like.py'), 'like', 'residuals')
-    with pytest.raises(ConfigError, match="not known to be linear"):
+    with pytest.raises(ValueError, match="not known to be linear"):
         objective(driver, spectra, 1.0, likelihood=user)
     # (and a fit needs an objective that solves those of its parameters)
     obj, params = objective(driver, spectra, 1.0, vsys=dict(value=0))
@@ -311,7 +310,7 @@ def test_mocks_take_flux_scales_per_spectrum_of_1_only(driver):
     obj.group_plan().mock(params.evaluate(), noise, nsamples=2, seed=1)
     values = params.evaluate() | dict(
         obs_flux_scale=np.full(SIZE[0] * SIZE[1], 2.0))
-    with pytest.raises(ConfigError, match="of 1 only"):
+    with pytest.raises(ValueError, match="of 1 only"):
         obj.group_plan().mock(values, noise, nsamples=2, seed=1)
 
 

@@ -9,7 +9,6 @@ import logging
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.io import write_data
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
@@ -155,7 +154,7 @@ def rotating_disk_of_image(path):
 def test_images_need_an_observation_on_the_sky(tmp_path):
     write_truth(tmp_path / 'truth.fits')
     galaxy = rotating_disk_of_image(tmp_path / 'truth.fits')
-    with pytest.raises(ConfigError, match="an observation on the sky"):
+    with pytest.raises(ValueError, match="an observation on the sky"):
         ObservationGroup(
             galaxy_parser.load(galaxy), observation_parser.load(PROFILE)
         ).plan()

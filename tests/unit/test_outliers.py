@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
     DatasetRegionMoments, DatasetRegionSpectra)
@@ -57,7 +56,7 @@ def test_a_spike_in_a_cube_is_masked():
 ])
 def test_screening_options_refused(size, nsigma, message):
     image = DatasetPixelBrightness(Data(np.ones((5, 5))))
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         image.screen_outliers(size, nsigma)
 
 

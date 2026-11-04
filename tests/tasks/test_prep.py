@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 import scipy.ndimage
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import VelocityConvention
 from gbkfit.io import read_data
 from gbkfit.tasks import prep
@@ -389,7 +388,7 @@ def test_inputs_of_one_name_are_an_error():
     for folder in ('a', 'b'):
         os.makedirs(folder)
         fits.writeto(f'{folder}/vel.fits', np.ones((4, 5), np.float32))
-    with pytest.raises(ConfigError, match="two inputs"):
+    with pytest.raises(ValueError, match="two inputs"):
         prep.prep_pixel_moments(
             ['a/vel.fits', 'b/vel.fits'], None, None, *[None] * 8, False,
             None, 'float32')
@@ -803,7 +802,7 @@ def test_the_errors_of_a_prepared_cube_can_be_its_noise():
     prep_pixel_spectra('cube.fits', noise_error=True)
     np.testing.assert_allclose(
         fits.getdata('prep_cube_error.fits'), 0.05, rtol=0.3)
-    with pytest.raises(ConfigError, match="not both"):
+    with pytest.raises(ValueError, match="not both"):
         prep.prep_pixel_spectra(
             'cube.fits', 'errors.fits', None, *[None] * 9, False, None,
             'float32', noise_error=True)
@@ -819,7 +818,7 @@ def test_grown_masks_keep_faint_values_next_to_bright_ones():
     snr[0, 8] = 3
     mask = gbkfit.prep.grown_mask(snr, 5, 2)
     assert mask[3, 2:6].all() and mask.sum() == 4
-    with pytest.raises(ConfigError, match="at least the threshold"):
+    with pytest.raises(ValueError, match="at least the threshold"):
         gbkfit.prep.grown_mask(snr, 1, 2)
 
 
@@ -862,7 +861,7 @@ def test_voronoi_bins_are_of_the_target_sn(tessellation):
           / np.sqrt(np.bincount(bins[binned], noise[binned] ** 2)))
     assert np.median(sn) == pytest.approx(20, rel=0.1)
     assert sn.min() > 0.6 * 20
-    with pytest.raises(ConfigError, match="below the target"):
+    with pytest.raises(ValueError, match="below the target"):
         gbkfit.prep.voronoi_bins(signal, noise, 1e6)
 
 

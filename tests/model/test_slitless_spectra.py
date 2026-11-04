@@ -157,12 +157,12 @@ def test_slitless_spectra_objective_residual(driver):
 
 
 def test_slitless_spectra_refuse_an_lsf_and_frequencies():
-    with pytest.raises(ConfigError, match="no LSF"):
+    with pytest.raises(ValueError, match="no LSF"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
             line_of_sight=dict(type='flat'),
             observable=SLITLESS | dict(lsf=dict(type='gauss', sigma=15)))])
-    with pytest.raises(ConfigError, match="rest wavelength"):
+    with pytest.raises(ValueError, match="rest wavelength"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
             line_of_sight=dict(type='flat'),
@@ -215,10 +215,10 @@ def test_grismconf_traces_from_files(tmp_path):
         trace.offsets(wavelength, x, y), expected.offsets(wavelength, x, y))
     second = TraceGrismConf.from_file(str(path), order=2)
     np.testing.assert_allclose(second.offsets(2.5e-6, 0.0, 0.0), [49.5, 0])
-    with pytest.raises(ConfigError, match="no order '-1'"):
+    with pytest.raises(ValueError, match="no order '-1'"):
         TraceGrismConf.from_file(str(path), order=-1)
     path.write_text("# Wavelength unit: Angstrom\nBEAM_+1\n")
-    with pytest.raises(ConfigError, match="not micron"):
+    with pytest.raises(ValueError, match="not micron"):
         TraceGrismConf.from_file(str(path))
 
 
@@ -409,7 +409,7 @@ def test_apertures_and_exposures_from_configurations():
     assert [e.weight() for e in observable.exposures()] == [1, -1]
     dumped = observable_parser.dump(observable)
     assert observable_parser.dump(observable_parser.load(dumped)) == dumped
-    with pytest.raises(ConfigError, match="pitch"):
+    with pytest.raises(ValueError, match="pitch"):
         observable_parser.load(SLITLESS | dict(aperture=dict(
             type='shutters', size=[0.2, 0.46], count=3)))
     with pytest.raises(ConfigError, match="sky_sampling"):
@@ -436,7 +436,7 @@ def test_trace_tables_interpolate_their_nodes():
     np.testing.assert_allclose(dy, [1e-3 * 12, 1e-3 * 3.5 * 4.5], rtol=1e-6)
     np.testing.assert_allclose(
         table.offsets(4e-6, 100.0, -100.0)[1], 1e-3 * 24 * -5, rtol=1e-9)
-    with pytest.raises(ConfigError, match="covers the wavelengths"):
+    with pytest.raises(ValueError, match="covers the wavelengths"):
         table.offsets(4.02e-6, 0.0, 0.0)
 
 

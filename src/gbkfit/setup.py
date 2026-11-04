@@ -266,7 +266,7 @@ class Setup:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the parameters are not of the group, the fitter cannot fit
         them (see Fitter.check), or the group cannot be planned (see
         ObservationGroup.plan).
@@ -292,12 +292,12 @@ class Setup:
             workers: Workers | None = None
     ):
         if missing := [n for n in group.pdescs() if n not in params.pdescs()]:
-            raise ConfigError(
+            raise ValueError(
                 f"the parameters are not those of the group: they lack "
                 f"{missing}")
         if unknown := sorted(
                 set(params.function_names()) - set(group.function_names())):
-            raise ConfigError(
+            raise ValueError(
                 f"the galaxies have no functions {unknown}; they have "
                 f"{list(group.function_names())}")
         if fitter is not None:
@@ -437,14 +437,14 @@ class Setup:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has no fitter, or no objective (an observation has no
             data), or the fit cannot start (see Fitter.fit).
         """
         if self.fitter is None:
-            raise ConfigError("a fit needs a fitter (section 'fitter')")
+            raise ValueError("a fit needs a fitter (section 'fitter')")
         if self.objective is None:
-            raise ConfigError("a fit needs data for every observation")
+            raise ValueError("a fit needs data for every observation")
         return self.fitter.fit(
             self.objective, self.params, observers, control, log, self.pool)
 
@@ -500,11 +500,13 @@ def read_config(
 
     Raises
     ------
+    OSError
+        If the file cannot be read (e.g. it is missing).
     ConfigError
-        If the file cannot be read, its project is invalid, it is not of
-        the current version of the format (see _check_version), a required
-        section is missing, or a section is unknown (see
-        report_unknown) or of the wrong type.
+        If it is not YAML, its project is invalid, it is not of the
+        current version of the format (see _check_version), a required
+        section is missing, or a section is unknown (see report_unknown)
+        or of the wrong type.
     """
     filename = os.path.abspath(filename)
     texts = texts or {}
@@ -515,9 +517,9 @@ def read_config(
         else:
             with open(filename) as f:
                 cfg = ruamel.yaml.YAML().load(f)
-    except (OSError, ruamel.yaml.YAMLError) as e:
+    except ruamel.yaml.YAMLError as e:
         raise ConfigError(
-            f"cannot read the configuration file {filename}: {e}") from e
+            f"the configuration file {filename} is not YAML: {e}") from e
     root = _root(cfg)
     try:
         project = gbkfit.project.find(filename)

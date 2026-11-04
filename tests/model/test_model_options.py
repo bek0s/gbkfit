@@ -13,7 +13,7 @@ from gbkfit.grid import Coords, Grid
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
-from modelutils import config_group_plan
+from modelutils import config_group_plan, located_message
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -91,10 +91,14 @@ def with_dust(kind):
 
 
 def load_error(info):
-    """The error message of loading a bad configuration."""
-    with pytest.raises(ConfigError) as error:
+    """
+    The error message of loading a bad configuration: of a mistake
+    that the parsing finds (ConfigError), or a constructor
+    (ValueError, TypeError).
+    """
+    with pytest.raises((ConfigError, ValueError, TypeError)) as error:
         config_group_plan(info)
-    return str(error.value)
+    return located_message(error.value)
 
 
 def galaxy_error(info):
@@ -104,7 +108,7 @@ def galaxy_error(info):
     """
     with pytest.raises((ConfigError, ValueError, TypeError)) as error:
         galaxy_parser.load(info)
-    return str(error.value)
+    return located_message(error.value)
 
 
 @pytest.mark.parametrize('kind', OBSERVATIONS)
@@ -273,7 +277,7 @@ def test_radial_nodes_from_a_range(rnmax, rnsep, nodes):
 
 
 def test_radial_nodes_start_at_the_centre():
-    with pytest.raises(ConfigError, match="must start at 0"):
+    with pytest.raises(ValueError, match="must start at 0"):
         parse_component_rnode_args(
             None, None, None, [1, 2, 3], None, 'linear')
 
@@ -281,7 +285,7 @@ def test_radial_nodes_start_at_the_centre():
 
 def test_a_ring_option_beside_another_set_is_refused():
     # (rnsep beside rnodes was ignored silently: audit 2026-10-31 #30b)
-    with pytest.raises(ConfigError, match="alone"):
+    with pytest.raises(ValueError, match="alone"):
         parse_component_rnode_args(
             None, 0.5, None, [0, 1, 2], None, 'linear')
 

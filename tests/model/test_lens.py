@@ -362,7 +362,7 @@ def test_a_lens_refuses_pixel_weights_as_the_observation_is_made():
         driver=dict(type='host'), galaxy=GALAXY,
         line_of_sight=dict(type='flat'), observable=copy.deepcopy(IMAGE))
     ]).observations()[0]
-    with pytest.raises(ConfigError, match="a lens does not support"):
+    with pytest.raises(ValueError, match="a lens does not support"):
         ObservationSky(
             plain.observable(), plain.line_of_sight(),
             foreground=Foreground(Lens((40, 40), (0.5, 0.5), LensSIE())),
@@ -427,5 +427,5 @@ def test_lenses_from_configurations():
 
 
 def test_deflection_maps_must_match():
-    with pytest.raises(ConfigError, match="one shape"):
+    with pytest.raises(ValueError, match="one shape"):
         LensDeflectionMap(np.zeros((4, 4)), np.zeros((4, 5)))

@@ -10,7 +10,6 @@ import pytest
 import scipy.optimize
 import scipy.special
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.grid import SpectralAxis
@@ -279,7 +278,7 @@ def test_a_fitted_noise_is_exact_to_a_constant(driver):
 def test_fitted_noise_options_are_checked(noise, name, error, message):
     errors = None if error is None else np.full((24, 32), error)
     data = Data(np.ones((24, 32)), error=errors)
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         make_objective(
             DriverHost(), data, LikelihoodGaussian(noise=noise), name)
 
@@ -307,7 +306,7 @@ def test_an_observation_without_data_is_an_error(driver):
     observation = ObservationSky(
         PixelBrightness.from_data(dataset), LineOfSightFlat())
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
-    with pytest.raises(ConfigError, match="needs data"):
+    with pytest.raises(ValueError, match="needs data"):
         Objective(group.plan(driver))
 
 
@@ -477,14 +476,14 @@ def test_correlated_noise_is_in_float64_by_default():
 def test_correlated_noise_goes_without_upper_limits_and_a_floor_of_0():
     from gbkfit.instrument import PSFGauss
     data = correlated_data(np.random.default_rng(6), PSFGauss(4))
-    with pytest.raises(ConfigError, match="does not go with upper limits"):
+    with pytest.raises(ValueError, match="does not go with upper limits"):
         make_objective(DriverHost(), data, LikelihoodGaussian(
             upper_limits=dict(brightness=UpperLimit(limit=0.01, error=0.2))))
     # (a Gaussian beam of sigma 4 pixels alone is singular on them: its
     # power at the shortest wavelength, of 2 pixels, is exp(-8 pi^2))
     objective, params = make_objective(
         DriverHost(), data, LikelihoodGaussian(white_floor=0))
-    with pytest.raises(ConfigError, match="singular"):
+    with pytest.raises(ValueError, match="singular"):
         objective.chi2(params)
 
 
@@ -588,7 +587,7 @@ def test_values_solved_together_above_a_minimum_are_profiled():
     # above it; their integral has no exact formula, so 'profiled' only
     pieces, data, normal, rhs = least_squares_problem(2)
     mean, sigma, minimum = 0.0, 3.0, 0.0
-    with pytest.raises(ConfigError, match="'profiled'"):
+    with pytest.raises(ValueError, match="'profiled'"):
         SolveGaussian(mean, sigma, minimum).solve_coupled(normal, rhs)
     solve = SolveGaussian(mean, sigma, minimum, 'profiled')
     solution = solve.solve_coupled(normal, rhs)
@@ -673,7 +672,7 @@ def test_a_sigma_chosen_by_aicp_has_the_least_aicp():
     (dict(sigma_aicp=[0.1, 10]), "'profiled'"),
 ])
 def test_invalid_sigmas_chosen_by_aicp_are_refused(options, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         SolveGaussian(1.0, **options)
 
 
@@ -783,7 +782,7 @@ def test_user_likelihoods_of_gaussian_noise_are_the_gaussian(
     assert log_likelihood.chi2(params) == pytest.approx(chi2, rel=1e-5)
     assert log_likelihood.log_likelihood(params) == pytest.approx(
         -chi2 / 2, rel=1e-5)
-    with pytest.raises(ConfigError, match="has no residuals"):
+    with pytest.raises(ValueError, match="has no residuals"):
         log_likelihood.residuals(params)
     from gbkfit.observation import likelihood_parser
     info = dict(type='user', file=str(file), func='gaussian_log_likelihood',
@@ -807,7 +806,7 @@ def test_user_likelihoods_take_parameters_of_their_observation(
     kept = user_data().mask() != 0
     assert objective.chi2(params) == pytest.approx(
         np.sum(2 * np.log1p(x[kept] ** 2)), rel=1e-5)
-    with pytest.raises(ConfigError, match="needs a name"):
+    with pytest.raises(ValueError, match="needs a name"):
         make_objective(driver, user_data(), cauchy)
 
 

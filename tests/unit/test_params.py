@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 
 import gbkfit
-from gbkfit.config import ConfigError
 from gbkfit.params._expressions import Expression, InvalidExpressionError
 from gbkfit.params._keys import InvalidKeyError, parse_key
 from gbkfit.params.pdescs import (
@@ -75,18 +74,18 @@ def test_param_desc_exclusive_bounds_and_period():
     (lambda: ParamVectorDesc(-1), ValueError, "'size' must be at least 1"),
     (lambda: ParamVectorDesc(1.5), TypeError, "'size' must be of type int"),
     (lambda: ParamVectorDesc(True), TypeError, "'size' must be of type int"),
-    (lambda: ParamScalarDesc(min=1, max=0), ConfigError,
+    (lambda: ParamScalarDesc(min=1, max=0), ValueError,
      r"\[1, 0\], is empty"),
-    (lambda: ParamScalarDesc(min=0, max=0, max_exclusive=True), ConfigError,
+    (lambda: ParamScalarDesc(min=0, max=0, max_exclusive=True), ValueError,
      "is empty"),
-    (lambda: ParamScalarDesc(min_exclusive=True), ConfigError,
+    (lambda: ParamScalarDesc(min_exclusive=True), ValueError,
      "needs a min"),
-    (lambda: ParamScalarDesc(min=0, default=-1), ConfigError,
+    (lambda: ParamScalarDesc(min=0, default=-1), ValueError,
      "in its valid range"),
     (lambda: ParamScalarDesc(min=0, min_exclusive=True, default=0),
-     ConfigError, "in its valid range"),
-    (lambda: ParamScalarDesc(period=0), ConfigError, "must be positive"),
-    (lambda: ParamVectorDesc(2, default=np.nan), ConfigError,
+     ValueError, "in its valid range"),
+    (lambda: ParamScalarDesc(period=0), ValueError, "must be positive"),
+    (lambda: ParamVectorDesc(2, default=np.nan), ValueError,
      "must be finite")],
     ids=['size_zero', 'size_negative', 'size_float', 'size_bool',
          'bounds_empty', 'bounds_empty_exclusive', 'exclusive_without_min',

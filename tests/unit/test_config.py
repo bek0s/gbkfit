@@ -17,9 +17,9 @@ from gbkfit.config import (
     ConfigError, FitsFile, Problem, Serializable, TypedParser,
     TypedSerializable, Unit, UnknownNamesError, check_name, check_options,
     collect_problems, config_path, describe_type, describe_unknown,
-    error_location, item_prefixes, matches_type, missing_modules,
-    parse_options, parse_options_for_callable, paths_relative_to,
-    strict_mode, type_problem, warn)
+    error_location, error_message, item_prefixes, matches_type,
+    missing_modules, parse_options, parse_options_for_callable,
+    paths_relative_to, strict_mode, type_problem, warn)
 
 
 def test_config_error_paths():
@@ -45,6 +45,7 @@ def test_other_errors_pass_config_paths_with_the_path():
     assert error_location(error.value) == (['models', 0], 'disk')
     assert error.value.__notes__ == [
         "in the configuration at models[0] [disk]"]
+    assert error_message(error.value) == "models[0] [disk]: KeyError: 'key'"
 
 
 def test_config_error_context_is_for_the_part_itself():

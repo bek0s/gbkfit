@@ -4,11 +4,11 @@ goes in where its instrument records the data, and the errors of the
 data are those of the noise, or the scatter of the measured data.
 """
 
-from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras
 from gbkfit.observation import NoiseGauss, NoisePoisson
 from modelutils import group_plan
@@ -126,7 +126,7 @@ def test_mocks_refuse_noise_of_a_varying_correlation(driver):
             points=dict(value=[-500, 500], unit='km/s'), values=[1, 2])))
         | RECORDED['pixel_spectra'])
     _, _, params = evaluate(plan)
-    with pytest.raises(ConfigError, match="varies along the spectral axis"):
+    with pytest.raises(ValueError, match="varies along the spectral axis"):
         plan.mock(params, NoiseGauss(
             rms=0.01, spatial_correlation='instrument'), seed=1)
 
@@ -171,7 +171,7 @@ def test_mock_options_are_checked_as_they_load(options, message):
     # (they were checked only by the task eval, after it evaluated the
     # model: audit 2026-10-31 #42)
     from gbkfit.observation import MockOptions
-    with pytest.raises(ConfigError) as error:
+    with pytest.raises((ConfigError, ValueError)) as error:
         MockOptions.load(
             dict(noise=dict(type='gauss', rms=1)) | options).per_observation(3)
     assert str(error.value) == message

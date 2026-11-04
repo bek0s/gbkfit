@@ -132,19 +132,20 @@ def resume(output_dir: str) -> None:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the directory is not the run of a fit with a configuration and
-        a log, or the configuration is invalid.
+        a log.
+    FileNotFoundError
+        If a file of the run is missing.
+    ConfigError
+        If the configuration is invalid.
     """
     config, evaluations = _products_of_fit(
         output_dir, 'resume', 'config', 'evaluations')
     file = _read_config(config)
-    try:
-        log = gbkfit.fitting.EvaluationLog.resume(evaluations)
-        bootstrap_log = gbkfit.fitting.SubFitLog.resume(os.path.join(
-            output_dir, _BOOTSTRAP_LOG))
-    except ValueError as e:
-        raise ConfigError(str(e)) from e
+    log = gbkfit.fitting.EvaluationLog.resume(evaluations)
+    bootstrap_log = gbkfit.fitting.SubFitLog.resume(os.path.join(
+        output_dir, _BOOTSTRAP_LOG))
     with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run), \
             gbkfit.setup.load(file) as setup:
         _fit(file.config, file.root, setup, run, log, bootstrap_log)
@@ -171,9 +172,13 @@ def bootstrap(output_dir: str, config: str) -> None:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the directory is not the run of a fit with a configuration and
-        a result, or a configuration is invalid.
+        a result.
+    FileNotFoundError
+        If a file of the run is missing.
+    ConfigError
+        If a configuration is invalid.
     """
     config_file, _ = _products_of_fit(
         output_dir, 'bootstrap', 'config', 'fit_result')
@@ -206,9 +211,11 @@ def _products_of_fit(output_dir: str, action: str, *kinds: str) -> list[str]:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the directory is not the run of a fit, or it has not one of
-        each of the products, or their files are missing.
+        each of the products.
+    FileNotFoundError
+        If their files are missing.
     """
     try:
         run = gbkfit.outputs.open(output_dir)
@@ -216,10 +223,10 @@ def _products_of_fit(output_dir: str, action: str, *kinds: str) -> list[str]:
             raise ValueError(f"it is a run of the task {run.task!r}")
         files = [run.filename(run.product(kind)) for kind in kinds]
     except (ValueError, LookupError) as e:
-        raise ConfigError(f"cannot {action} the fit in {output_dir}: {e}") \
+        raise ValueError(f"cannot {action} the fit in {output_dir}: {e}") \
             from e
     if missing := [f for f in files if not os.path.isfile(f)]:
-        raise ConfigError(
+        raise FileNotFoundError(
             f"cannot {action} the fit in {output_dir}: missing {missing}")
     return files
 
@@ -403,7 +410,7 @@ def _write_config(
     """
     try:
         config = params.with_values(values).dump()
-    except ConfigError as e:
+    except (TypeError, ValueError) as e:
         _log.warning(f"{path} is not written: {e}")
         return
     _detail.write_config(

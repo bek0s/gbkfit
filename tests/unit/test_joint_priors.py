@@ -82,7 +82,7 @@ def test_smooth2d_needs_a_value_per_cell():
     params = ParamSpace(PDESCS, PROPERTIES, priors=[dict(
         type='smooth2d', expr='v', size=[4, 3], order=1, std=1)])
     (function,) = joint_prior_residuals(params)
-    with pytest.raises(ConfigError, match="needs 12 values; there are 5"):
+    with pytest.raises(ValueError, match="needs 12 values; there are 5"):
         function(VALUES)
 
 
@@ -99,7 +99,7 @@ def test_the_parameter_space_keeps_its_priors():
     assert params.priors() == [info]
     assert ParamSpace.load(params.dump(), PDESCS).priors() == [info]
     assert params.with_values({}).priors() == [info]
-    with pytest.raises(ConfigError, match="must be dicts"):
+    with pytest.raises(ValueError, match="must be dicts"):
         ParamSpace(PDESCS, PROPERTIES, priors=['smooth'])
 
 
@@ -113,6 +113,6 @@ def test_the_parameter_space_keeps_its_priors():
     (dict(type='mvn', exprs=['a', 'b'], mean=[0, 0], cov=[[1, 2], [2, 1]]),
      "positive definite"),
 ])
-def test_invalid_priors_are_config_errors(info, message):
-    with pytest.raises(ConfigError, match=message):
+def test_invalid_priors_are_refused(info, message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         residuals(info)

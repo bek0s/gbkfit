@@ -6,7 +6,6 @@ moments of the sums of a spectral cube in regions (bins or apertures).
 import copy
 
 import astropy.units as u
-from gbkfit.config import ConfigError
 import gbkfit.dataset
 from gbkfit.grid import Coords, SpectralAxis
 from gbkfit.io import write_data
@@ -256,6 +255,6 @@ def test_the_moments_above_2_are_those_of_the_method(method, other, message):
         spectral=SpectralAxis(convention='relativistic'))
     observable.require_matching(observable.make_dataset(
         {observable.keys()[0]: Data(np.zeros(2))}))
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         observable.require_matching(
             DatasetRegionMoments(regions=regions, **other))

@@ -443,9 +443,8 @@ def test_dust_dims_each_line_by_its_law(
 
 
 def test_dust_of_a_law_needs_named_lines(driver):
-    from gbkfit.config import ConfigError
     case = spectral_cube_case(driver, with_opacity=True)
     case['galaxy']['components'][1]['opacity'] = dict(
         type='dust', law=dict(type='ccm'))
-    with pytest.raises(ConfigError, match="must name its lines"):
+    with pytest.raises(ValueError, match="must name its lines"):
         group_plan([case])

@@ -293,14 +293,14 @@ def test_jeans_equilibrium_of_a_thin_self_gravitating_layer():
      dict(mass=[dict(type='point', name='gas')],
           distance=dict(type='direct')), "which its galaxy does not have")])
 def test_self_gravitating_equilibrium_is_checked(disk, info, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk, **info)
 
 
 def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
     (tmp_path / 'curve.py').write_text(
         "def vcirc2(R, params):\n    return 100 * R\n")
-    with pytest.raises(ConfigError, match=r"\['mine'\] do not give"):
+    with pytest.raises(ValueError, match=r"\['mine'\] do not give"):
         galaxy(
             with_kinematics(DISK, equilibrium=dict(type='jeans')),
             mass=[dict(type='user', name='mine',
@@ -318,5 +318,5 @@ def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
       if key not in ('loose', 'tilted')} | dict(type='cone'),
      "unknown options")])
 def test_equilibrium_is_checked(disk, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         galaxy(disk)

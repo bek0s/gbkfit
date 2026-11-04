@@ -10,7 +10,6 @@ import threading
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.control import StopControl
 from gbkfit.fitting.fitters._tables import table_layout
 from gbkfit.fitting.fitters.dnest4 import FitterDNest4, _dnest4
@@ -63,9 +62,9 @@ def test_min_rows_keeps_the_first_rows_always_used():
     assert [names[i] for i in lay.fixed] == [
         'pt_a', 'pt1_r[0]', 'pt1_t[0]', 'pt1_a[0]']
     assert not layout(PROPERTIES, dict(pt1=3))[0].tables
-    with pytest.raises(ConfigError, match='which has 3'):
+    with pytest.raises(ValueError, match='which has 3'):
         layout(PROPERTIES, dict(pt1=4))
-    with pytest.raises(ConfigError, match='cannot vary'):
+    with pytest.raises(ValueError, match='cannot vary'):
         layout(PROPERTIES, dict(pt2=1))
 
 

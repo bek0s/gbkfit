@@ -15,7 +15,6 @@ import scipy.integrate
 import scipy.optimize
 import scipy.special
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, SpectralAxis
 from gbkfit.io import write_data
 from gbkfit.model import (
@@ -248,7 +247,7 @@ def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
         if profile['type'] == 'sersic' else {}
     spheroid = dict(
         type='spheroid', profile=profile, rmax=8, emission=BAND) | shape
-    with pytest.raises(ConfigError, match="invalid parameter properties"):
+    with pytest.raises(ValueError, match="invalid parameter properties"):
         evaluate_cases([image(driver, spheroid)], GEOMETRY | properties)
     with pytest.raises(ModelEvaluationError, match="above 0"):
         _checked_terms(np.array([[1.0, 2.0, 0.5], [1.0, 0.0, 0.5]]))
@@ -296,7 +295,7 @@ def test_a_spheroid_round_trips():
 def test_invalid_spheroids_are_refused(options, message):
     info = dict(profile=dict(type='sersic'), rmax=10, emission=BAND) \
         | options
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         Spheroid.load(info)
 
 
@@ -440,7 +439,7 @@ def test_a_mass_follows_components_of_its_kind(mass, message):
     disk = dict(
         type='disk', name='gas', rnodes=[0, 2, 4],
         density=dict(ptraits=dict(type='exponential')), emission=BAND)
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
             components=[BULGE, disk], mass=[mass], distance=DISTANCE))
 
@@ -712,7 +711,7 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
         name: value for name, value in JEANS_PROPERTIES.items()
         if 'kinematics' not in change
         or name not in ('vsys', 'stars_beta_z', 'stars_kappa')}
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         evaluate_cases([case], properties)
 
 
@@ -727,7 +726,7 @@ def test_a_cube_sees_only_stars_that_move(driver, component, message):
     # (stars without velocities have none to place in its channels: a disk
     # without kinematics gave an all-zero model, a point a KeyError)
     from modelutils import group_plan
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         group_plan([stars_cube(driver, component)])
 
 
@@ -745,7 +744,7 @@ def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
 
 
 def test_no_line_is_named_stars():
-    with pytest.raises(ConfigError, match="no line can be named 'stars'"):
+    with pytest.raises(ValueError, match="no line can be named 'stars'"):
         galaxy_parser.load(dict(components=[dict(
             type='disk', rnodes=[0, 1, 2],
             density=dict(ptraits=dict(type='exponential')),

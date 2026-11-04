@@ -115,7 +115,7 @@ def test_fitters_say_what_they_are_give_and_need():
     one_free = ParamSpace(
         objective.pdescs(), bounded_properties() | dict(
             xpos=0, ypos=0, posa=40, incl=55, pt_a=1))
-    with pytest.raises(ConfigError, match="at least 2 free elements"):
+    with pytest.raises(ValueError, match="at least 2 free elements"):
         fitter_parser.load(dict(type='nautilus')).load_fit_params(one_free)
 
 @pytest.mark.parametrize('prior', [
@@ -192,11 +192,11 @@ def test_priors_of_scipy_distributions():
     info = dict(type='scipy', distribution='lognorm',
                 params=dict(s=s, scale=scale))
     assert prior_parser.dump(prior_parser.load(info)) == info
-    with pytest.raises(ConfigError, match="continuous distribution"):
+    with pytest.raises(ValueError, match="continuous distribution"):
         PriorScipy('poisson', dict(mu=3))
-    with pytest.raises(ConfigError, match="are not valid"):
+    with pytest.raises(ValueError, match="are not valid"):
         PriorScipy('lognorm', dict(s=-1))
-    with pytest.raises(ConfigError, match="are not valid"):
+    with pytest.raises(ValueError, match="are not valid"):
         PriorScipy('lognorm', dict(shape=1))
 
 
@@ -213,9 +213,9 @@ def test_free_elements_mean_the_same_for_every_fitter():
     for param in (FitParamBounded.of(cut, {}), FitParamPrior.of(cut, {})):
         assert isinstance(param.prior(), PriorTruncated)
         assert (param.minimum(), param.maximum()) == (-2, 5)
-    with pytest.raises(ConfigError, match="needs a prior, or both"):
+    with pytest.raises(ValueError, match="needs a prior, or both"):
         FitParamPrior.of(FreeElement.load(dict(min=0, value=1)), {})
-    with pytest.raises(ConfigError, match="needs option 'value'"):
+    with pytest.raises(ValueError, match="needs option 'value'"):
         FitParamBounded.of(FreeElement.load(dict(min=0, max=1)), {})
 
 
@@ -226,7 +226,7 @@ def test_the_tuning_of_an_element_or_else_of_its_fitter():
     element = FreeElement.load(dict(value=1, min=0, max=4, sigma=0.3))
     assert FitParamCMAES.of(element, dict(sigma=1)).sigma() == 0.3
     assert FitParamGrid.of(element, dict(n=5)).values().size == 5
-    with pytest.raises(ConfigError, match="a grid needs option 'n'"):
+    with pytest.raises(ValueError, match="a grid needs option 'n'"):
         FitParamGrid.of(element, {})
     # (the width of the walkers of the fitter, for the elements with a
     # value only: the others start from their prior)
@@ -236,7 +236,7 @@ def test_the_tuning_of_an_element_or_else_of_its_fitter():
     assert FitParamWalkers.of(unstarted, dict(width=0.5)).width() is None
     # (a property of another fitter is known; a typo is not)
     with pytest.raises(
-            ConfigError, match=r"'sigmaa' \(did you mean 'sigma'\?\)"):
+            ValueError, match=r"'sigmaa' \(did you mean 'sigma'\?\)"):
         ParamSpace(
             dict(a=ParamScalarDesc()), dict(a=dict(value=1, n=5, sigmaa=1)))
 
@@ -373,7 +373,7 @@ def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
             type='gaussian', mean=1, sigma_aicp=[0.1, 10], min=0,
             likelihood='profiled'))))
     objective = Objective(plan, params.solves())
-    with pytest.raises(ConfigError, match="minimises the aicp"):
+    with pytest.raises(ValueError, match="minimises the aicp"):
         fitter_parser.load(dict(type='cmaes')).fit(objective, params)
     result = fitter_parser.load(dict(
         type='cmaes', merit='aicp', maxfevals=100)).fit(objective, params)
@@ -657,7 +657,7 @@ def test_workers_take_placements_of_their_copies(driver):
         np.testing.assert_allclose(
             FitProblem(objective, params, pool=pool).chi2_batch(xs),
             FitProblem(objective, params).chi2_batch(xs), rtol=1e-5)
-    with pytest.raises(ConfigError, match="unknown galaxies or observations"):
+    with pytest.raises(ValueError, match="unknown galaxies or observations"):
         WorkersThreads([(driver, dict(hi=driver))]).start(objective)
 
 
@@ -767,7 +767,7 @@ def test_evaluations_that_are_not_numbers_are_outside(tmp_path, caplog):
     # (without residuals, a fit has no covariance by default, and one
     # asked for is refused before the fit, not after it)
     fitter = dict(type='emcee', nwalkers=16, nsteps=20, burnin=10)
-    with pytest.raises(ConfigError, match="has no residuals"):
+    with pytest.raises(ValueError, match="has no residuals"):
         fitter_parser.load(fitter | dict(
             uncertainty=dict(covariance=True))).fit(objective, params)
     result = fitter_parser.load(fitter).fit(objective, params)
@@ -839,9 +839,9 @@ def test_zeus_is_seeded_and_leaves_the_global_random_numbers_alone():
     np.testing.assert_array_equal(chains[0], chains[1])
     np.testing.assert_array_equal(np.random.get_state()[1], numpy_state)
     assert random.getstate() == random_state
-    with pytest.raises(ConfigError, match="must be even"):
+    with pytest.raises(ValueError, match="must be even"):
         FitterZeus(nwalkers=15)
-    with pytest.raises(ConfigError, match="start after a burn-in"):
+    with pytest.raises(ValueError, match="start after a burn-in"):
         FitterZeus(nsteps=10, burnin=0, moves='global')
 
 
@@ -887,10 +887,10 @@ def test_a_stopped_grid_keeps_the_points_it_evaluated():
     chi2 = np.array(result.diagnostics['grid']['cost'])
     assert not result.success and result.message.startswith('stopped')
     assert np.count_nonzero(np.isfinite(chi2)) == 20
-    with pytest.raises(ConfigError, match="more than max_points"):
+    with pytest.raises(ValueError, match="more than max_points"):
         FitterGrid(max_points=50).fit(objective, params)
     from gbkfit.fitting.fitters.grid import FitParamGrid
-    with pytest.raises(ConfigError, match="at least 2"):
+    with pytest.raises(ValueError, match="at least 2"):
         FitParamGrid(0, 1, 1)
 
 
@@ -923,7 +923,7 @@ def test_optimizers_of_the_aicp_minimise_it():
         objective.aicp(params.evaluate(list(best.free.values()))) + 2)
     assert best.covariance is None and best.laplace is None
     assert FitterMultiStart(FitterCMAES(merit='aicp')).merit() == 'aicp'
-    with pytest.raises(ConfigError, match="not a likelihood"):
+    with pytest.raises(ValueError, match="not a likelihood"):
         FitterCMAES(merit='aicp', uncertainty=UncertaintyOptions())
     with pytest.raises(ValueError, match="option 'merit'"):
         FitterGrid(merit='bic')
@@ -934,7 +934,7 @@ def test_least_squares_take_priors_with_residuals_only():
     element = FreeElement.load(dict(
         value=1.0, min=0, max=3, prior=dict(type='gauss', mean=1, std=0.5)))
     assert FitParamLeastSquares.of(element, {}).prior().has_residual()
-    with pytest.raises(ConfigError, match="least squares cannot take"):
+    with pytest.raises(ValueError, match="least squares cannot take"):
         FitParamLeastSquares.of(FreeElement.load(dict(
             value=2, prior=dict(type='log_uniform', min=1, max=10))), {})
 
@@ -1242,7 +1242,7 @@ def test_bootstrap_options_that_do_not_suit_the_fit_refused(scheme, message):
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         run_bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
             dict(nsamples=5, scheme=scheme)))
 
@@ -1360,7 +1360,7 @@ def test_a_fit_beyond_the_valid_range_of_a_parameter_fails():
     pdescs = objective.pdescs() | dict(pt_s=ParamScalarDesc(min=2))
     params = ParamSpace(pdescs, bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
-    with pytest.raises(ConfigError, match=r"'pt_s' \[1, 10\] \(valid: "):
+    with pytest.raises(ValueError, match=r"'pt_s' \[1, 10\] \(valid: "):
         fitter.fit(objective, params)
 
 
@@ -1652,7 +1652,7 @@ def test_multistart_needs_what_its_local_fitter_needs(tmp_path):
     params = ParamSpace(objective.pdescs(), bounded_properties())
     fitter = FitterMultiStart(FitterScipyLeastSquares())
     assert fitter.info.needs == ('residuals',)
-    with pytest.raises(ConfigError, match="function of the log-likelihood"):
+    with pytest.raises(ValueError, match="function of the log-likelihood"):
         fitter.fit(objective, params)
 
 
@@ -1668,7 +1668,7 @@ def test_multistart_runs_any_optimizer_with_its_options():
     start = FitParamCMAES(1, 0, 4, sigma=0.3).with_value(2.5)
     assert (start.value(), start.sigma(), start.maximum()) == (2.5, 0.3, 4)
     pytest.importorskip('dynesty')
-    with pytest.raises(ConfigError, match="must be an optimizer"):
+    with pytest.raises(ValueError, match="must be an optimizer"):
         fitter_parser.load(dict(
             type='multistart', local=dict(type='dynesty.static')))
 

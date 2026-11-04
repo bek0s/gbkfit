@@ -212,7 +212,6 @@ def test_functions_of_a_galaxy_of_mass_alone():
     from gbkfit.observation import (
         LineOfSightFlat, ObservationGroup, ObservationSky)
     from gbkfit.observation import PixelBrightness
-    from gbkfit.config import ConfigError
     info = dict(mass=copy.deepcopy(MASS), distance=dict(type='direct'))
     galaxy = galaxy_parser.load(copy.deepcopy(info))
     assert galaxy.components() == ()
@@ -224,12 +223,12 @@ def test_functions_of_a_galaxy_of_mass_alone():
     bound = galaxy.plan_functions().bind(PARAMS)
     np.testing.assert_allclose(
         bound['vcirc_bh'](2.0), np.sqrt(G * 1e10 / 2.0), rtol=1e-9)
-    with pytest.raises(ConfigError, match="it sees none"):
+    with pytest.raises(ValueError, match="it sees none"):
         ObservationGroup(
             galaxy,
             ObservationSky(PixelBrightness(size=(4, 4)), LineOfSightFlat())
         ).plan()
-    with pytest.raises(ConfigError, match="at least one component, or mass"):
+    with pytest.raises(ValueError, match="at least one component, or mass"):
         galaxy_parser.load(dict())
 
 

@@ -1,7 +1,6 @@
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import make_grid
 from gbkfit.region import (
     ApertureCircle, ApertureEllipse, ApertureField, AperturePolygon,
@@ -159,7 +158,7 @@ def test_regions_of_bins(tmp_path):
     (np.full((2, 2), -1), "no pixel is in a bin"),
     (np.zeros((2, 2, 2)), "must be an image")])
 def test_bins_are_checked(index, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         RegionsBins(index)
 
 

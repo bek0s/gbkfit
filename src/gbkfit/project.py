@@ -249,9 +249,13 @@ class Project:
 
         Raises
         ------
+        ValueError
+            If the name is not a path in the folder of the pieces.
         ConfigError
-            If the name is not a path in the folder of the pieces, or the
-            piece does not exist, cannot be read, or is not a dictionary.
+            If the piece does not exist (a configuration names it), is
+            not YAML, or is not a dictionary.
+        OSError
+            If the piece cannot be read.
         """
         filename = self.piece_file(section, name)
         text = self._texts.get(filename)
@@ -261,8 +265,8 @@ class Project:
             raise ConfigError(
                 f"the project has no piece '{name}' of {_FOLDERS[section]} "
                 f"({os.path.relpath(filename, self._path)})") from None
-        except (OSError, ruamel.yaml.YAMLError) as e:
-            raise ConfigError(f"cannot read the piece {filename}: {e}") \
+        except ruamel.yaml.YAMLError as e:
+            raise ConfigError(f"the piece {filename} is not YAML: {e}") \
                 from e
         if not isinstance(piece, dict):
             raise ConfigError(
@@ -276,7 +280,7 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the name is not a path in the folder of the pieces.
         """
         return self._file(_FOLDERS[section], name)
@@ -333,14 +337,14 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the folder is not one of pieces or setups, or the name is
             not a path in it.
         FileExistsError
             If the piece exists.
         """
         if folder not in TEMPLATES:
-            raise ConfigError(
+            raise ValueError(
                 f"pieces are in the folders {list(TEMPLATES)}; not {folder!r}")
         filename = self._file(folder, name)
         text = TEMPLATES[folder]
@@ -367,7 +371,7 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the folder is not one of pieces or setups, or the name is
             not a path in it.
         FileNotFoundError
@@ -432,7 +436,7 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the folder is not one of pieces or setups, or a name is
             not a path in it.
         FileNotFoundError
@@ -469,7 +473,7 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the folder is not one of pieces or setups, or the name is
             not a path in it.
         FileNotFoundError
@@ -489,12 +493,12 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the folder is not one of pieces or setups, or the name is
             not a path in it.
         """
         if folder not in TEMPLATES:
-            raise ConfigError(
+            raise ValueError(
                 f"pieces are in the folders {list(TEMPLATES)}; not {folder!r}")
         return self._file(folder, name)
 
@@ -518,13 +522,13 @@ class Project:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the name is not a path in the folder.
         """
         base = os.path.join(self._path, folder)
         filename = os.path.normpath(os.path.join(base, f'{name}.yaml'))
         if os.path.isabs(name) or not filename.startswith(base + os.sep):
-            raise ConfigError(
+            raise ValueError(
                 f"the name of a piece must be a path in {folder}/; it is "
                 f"'{name}'")
         return filename

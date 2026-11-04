@@ -216,5 +216,5 @@ KINEMATICS = dict(
 def test_what_a_cone_does_not_take(options, message):
     # What disks take, but cones do not
     cone = HOLLOW | dict(kinematics=KINEMATICS, emission=LINES) | options
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         galaxy_parser.load(dict(components=[cone]))

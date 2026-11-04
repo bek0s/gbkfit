@@ -11,6 +11,7 @@ from gbkfit.grid import Coords, Grid
 from gbkfit.model import BandEmission, LineEmission, galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.observation import Depth, LineOfSightGrid
+from modelutils import located_message
 
 
 EXPONENTIAL = dict(type='exponential')
@@ -92,10 +93,14 @@ def part_info(name, part, **options):
 
 
 def load_error(component):
-    """The error message of loading a galaxy with a bad component."""
-    with pytest.raises(ConfigError) as error:
+    """
+    The error message of loading a galaxy with a bad component: of a
+    mistake that the parsing finds (ConfigError), or a constructor
+    (ValueError, TypeError).
+    """
+    with pytest.raises((ConfigError, ValueError, TypeError)) as error:
         galaxy_parser.load(dict(components=[component]))
-    return str(error.value)
+    return located_message(error.value)
 
 
 def part_error(name, part, **options):

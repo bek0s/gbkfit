@@ -6,7 +6,6 @@ face-on thin disk has them at the radii of its pixels.
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 
 
 # The profiles, of a = 2 and s = 3 (and b = 1.5), at the radius r
@@ -130,11 +129,11 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
 
 
 @pytest.mark.parametrize('options, error, message', [
-    (dict(size=[3], step=1.0), ConfigError, "size must be"),
-    (dict(size=[3, 0], step=1.0), ConfigError, "size must be"),
+    (dict(size=[3], step=1.0), ValueError, "size must be"),
+    (dict(size=[3, 0], step=1.0), ValueError, "size must be"),
     (dict(size=[3, 2.5], step=1.0), TypeError,
      r"'size' item \[1\] must be of type"),
-    (dict(size=[3, 2], step=0), ConfigError, "step must be")])
+    (dict(size=[3, 2], step=0), ValueError, "step must be")])
 def test_map_options_are_checked(options, error, message):
     from gbkfit.model.components import traits
     with pytest.raises(error, match=message):

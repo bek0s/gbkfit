@@ -177,9 +177,8 @@ def test_particles_in_an_image(driver, tmp_path):
      "has no particles")])
 def test_particles_need_their_columns(tmp_path, columns, message):
     from gbkfit.model import galaxy_parser
-    from gbkfit.config import ConfigError
     np.savez(tmp_path / 'some.npz', **columns)
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(components=[dict(
             type='particles', file=str(tmp_path / 'some.npz'),
             emission=dict(type='band'))]))

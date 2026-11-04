@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 import scipy.ndimage
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import SpectralAxis
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import (
@@ -117,7 +116,7 @@ def test_the_median_size_is_an_odd_number_of_at_least_3():
         == observable.dump()
     for size, error, message in (
             (1, ValueError, "at least 3"),
-            (4, ConfigError, "odd number of pixels"),
+            (4, ValueError, "odd number of pixels"),
             (2.0, TypeError, "of type int")):
         with pytest.raises(error, match=message):
             PixelBrightness(size=(8, 8), median_size=size)

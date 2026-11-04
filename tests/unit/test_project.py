@@ -127,7 +127,7 @@ def test_a_layer_replaces_all_the_properties_of_a_parameter():
                                    "be a dictionary")])
 def test_invalid_names_and_layers(study, setup, message):
     filename = os.path.join(study.path, 'setups/fit.yaml')
-    with pytest.raises(ConfigError) as e:
+    with pytest.raises((ConfigError, ValueError)) as e:
         project.resolve(setup, filename, study)
     assert message in str(e.value)
 
@@ -160,9 +160,9 @@ def test_pieces_are_made_from_templates_in_their_folders(study):
         study.create_piece('observations', 'ngc1313/halpha')
     path = study.create_piece('psfs', 'beam', PSF)
     assert yaml.load(Path(path)) == PSF
-    with pytest.raises(ConfigError, match="pieces are in the folders"):
+    with pytest.raises(ValueError, match="pieces are in the folders"):
         study.create_piece('runs', 'x')
-    with pytest.raises(ConfigError, match="must be a path in setups/"):
+    with pytest.raises(ValueError, match="must be a path in setups/"):
         study.create_piece('setups', '../x')
 
 
@@ -207,7 +207,7 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         study.rename_piece('galaxies', 'arctan', 'arctan')
     with pytest.raises(FileNotFoundError):
         study.rename_piece('galaxies', 'nothing', 'other')
-    with pytest.raises(ConfigError, match="must be a path in galaxies/"):
+    with pytest.raises(ValueError, match="must be a path in galaxies/"):
         study.rename_piece('galaxies', 'arctan', '../arctan')
     # (deleted, the names of it stay)
     study.delete_piece('psfs', 'beam')
@@ -216,7 +216,7 @@ def test_pieces_are_renamed_with_the_names_of_them(study):
         ('observations', 'hi'), ('setups', 'fit')]
     with pytest.raises(FileNotFoundError):
         study.delete_piece('psfs', 'beam')
-    with pytest.raises(ConfigError, match="pieces are in the folders"):
+    with pytest.raises(ValueError, match="pieces are in the folders"):
         study.delete_piece('runs', 'x')
 
 

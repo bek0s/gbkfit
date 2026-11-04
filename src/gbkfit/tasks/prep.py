@@ -23,7 +23,7 @@ import numpy as np
 import numpy.typing as npt
 from astropy.io import fits
 
-from gbkfit.config import ConfigError, DataFile
+from gbkfit.config import DataFile
 from gbkfit.io import ErrorKind, casa_beam_table, read_column, read_table
 import gbkfit.outputs
 from gbkfit import prep
@@ -81,11 +81,11 @@ def _output(output_dir: str, file: DataFile, role: str = '') -> str:
 
 
 def _check_distinct(outputs: Sequence[str]) -> None:
-    """Raise ConfigError if two inputs have one prepared file."""
+    """Raise ValueError if two inputs have one prepared file."""
     seen = set()
     for output in outputs:
         if output in seen:
-            raise ConfigError(
+            raise ValueError(
                 f"two inputs would be prepared into {output}: inputs of one "
                 f"name (e.g. in two directories) must be renamed")
         seen.add(output)
@@ -294,11 +294,11 @@ def prep_pixel_spectra(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If both noise_error and an errors file are given.
     """
     if noise_error and file_e is not None:
-        raise ConfigError(
+        raise ValueError(
             "give a file of the errors or estimate them from the noise "
             "(noise_error), not both")
     output_dir = _output_dir(output_dir, output_dir_mode)
@@ -396,13 +396,13 @@ def _read_bins(filename: str) -> tuple[FitsArrays, np.ndarray, int]:
     """
     bins = FitsArrays.read(filename)
     if bins.data.ndim != 2:
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: the bins must be an image; they have "
             f"{bins.data.ndim} axes")
     try:
         index, nbins = prep.bin_index(bins.data)
-    except ConfigError as e:
-        raise ConfigError(f"{filename}: {e}") from e
+    except ValueError as e:
+        raise ValueError(f"{filename}: {e}") from e
     _log.info(f"{nbins} bins")
     return bins, index, nbins
 
@@ -452,7 +452,7 @@ def prep_region_moments(
         arrays = FitsArrays.read(
             file_d[i], file_e[i], file_m[i], error_kind=error_kind)
         if arrays.data.shape != index.shape:
-            raise ConfigError(
+            raise ValueError(
                 f"{file_d[i]}: the maps must have the shape of the bins "
                 f"{index.shape}; they have {arrays.data.shape}")
         for filename, data, role in (
@@ -462,8 +462,8 @@ def prep_region_moments(
                 continue
             try:
                 values = prep.bin_values(index, nbins, data)
-            except ConfigError as e:
-                raise ConfigError(f"{filename}: {e}") from e
+            except ValueError as e:
+                raise ValueError(f"{filename}: {e}") from e
             fits.writeto(
                 _output(output_dir, file_d[i], role), values.astype(dtype),
                 overwrite=True)
@@ -476,7 +476,7 @@ def _spectral_header(cube: FitsArrays, nbins: int) -> fits.Header:
     """
     wcs = astropy.wcs.WCS(cube.header)
     if wcs.wcs.spec < 0:
-        raise ConfigError("the cube has no spectral axis")
+        raise ValueError("the cube has no spectral axis")
     spectral = wcs.sub([wcs.wcs.spec + 1])
     points = spectral.pixel_to_world_values(np.arange(2))
     header = fits.Header()
@@ -539,7 +539,7 @@ def prep_region_spectra(
         if fluxes is not None and np.ndim(fluxes[0]):
             fluxes = (fluxes[0][slice(*roi_spec)], fluxes[1])
     if cube.data.shape[1:] != index.shape:
-        raise ConfigError(
+        raise ValueError(
             f"{file_d}: the cube must have the spatial shape of the bins "
             f"{index.shape}; it has {cube.data.shape[1:]}")
     spectra, errors = prep.bin_spectra(index, nbins, cube)
@@ -606,7 +606,7 @@ def prep_gauss_hermite_moments(
         The output directory (see the module).
     """
     if len(columns) != 4 or (errors is not None and len(errors) != 4):
-        raise ConfigError(
+        raise ValueError(
             "give the columns of V, sigma, h3 and h4, and of their errors "
             "if any, four each")
     table = read_table(file, format_)

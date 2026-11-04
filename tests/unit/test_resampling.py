@@ -54,9 +54,9 @@ def test_blocks_redraw_whole_blocks_of_residuals():
 
 def test_blocks_refused_without_room():
     r = dict(moment0=residuals(SHAPE), moment1=residuals(SHAPE))
-    with pytest.raises(ConfigError, match='make the blocks smaller'):
+    with pytest.raises(ValueError, match='make the blocks smaller'):
         moments().resample_blocks(r, [8, 2], np.random.default_rng())
-    with pytest.raises(ConfigError, match='each of x and y'):
+    with pytest.raises(ValueError, match='each of x and y'):
         moments().resample_blocks(r, [2, 2, 2], np.random.default_rng())
 
 
@@ -75,7 +75,7 @@ def test_grids_of_every_kind_redraw_in_blocks(dataset, key, size):
         {key: r}, size, np.random.default_rng(3))[key]
     assert np.array_equal(np.isnan(drawn), np.isnan(r))
     assert np.isin(drawn[np.isfinite(r)], r).all()
-    with pytest.raises(ConfigError, match='positive integer for each of'):
+    with pytest.raises(ValueError, match='positive integer for each of'):
         dataset.check_blocks(size + [1])
 
 
@@ -109,5 +109,5 @@ def test_visibilities_redraw_in_cells_of_the_uv_plane():
             == tuple(cell[source])
         if not np.array_equal(place[row], place[0]):
             np.testing.assert_array_equal(place[source], place[row])
-    with pytest.raises(ConfigError, match='one positive number'):
+    with pytest.raises(ValueError, match='one positive number'):
         dataset.check_blocks([20, 3])

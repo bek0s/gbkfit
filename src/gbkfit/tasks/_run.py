@@ -57,7 +57,7 @@ def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:
 
     Raises
     ------
-    ConfigError
+    TypeError
         If the options are not the arguments of the function of the task.
     """
     module, name = TASKS[task]
@@ -65,7 +65,7 @@ def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:
     try:
         bound = inspect.signature(function).bind(**options)
     except TypeError as e:
-        raise ConfigError(f"invalid options of task {task}: {e}") from None
+        raise TypeError(f"invalid options of task {task}: {e}") from None
     with strict_mode(not lenient):
         function(*bound.args, **bound.kwargs)
 

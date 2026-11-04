@@ -388,7 +388,6 @@ def test_a_uniform_coefficient_is_not_discouraged(caplog):
         GAS | dict(emission=dict(type='band')), dict(type='uniform')),
      'transfer', "needs emission lines")])
 def test_line_opacity_errors(driver, component, line_of_sight, message):
-    from gbkfit.config import ConfigError
     from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
@@ -397,7 +396,7 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=31, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         group_plan([case])
 
 
@@ -637,11 +636,10 @@ def test_a_group_far_apart_is_its_galaxies_in_order(driver, separation):
     ('transfer', [DepthGroup('a', ('a', 'b'))], "the name of a galaxy")])
 def test_several_galaxies_errors(
         driver, line_of_sight, depth_order, message):
-    from gbkfit.config import ConfigError
     galaxies = [
         dict(name='a', components=[GAS, DUST]),
         dict(name='b', components=[DUST])]
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         galaxies_model(
             driver, galaxies, {}, depth_order,
             line_of_sight=dict(type=line_of_sight))

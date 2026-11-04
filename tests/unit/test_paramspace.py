@@ -151,7 +151,7 @@ def test_dump_keeps_the_transforms(tmp_path):
     # A function that is not at the top level of a file cannot be dumped
     params = ParamSpace(
         pdescs, {'a': 3, 'b': None}, transforms=lambda p: p.update(b=1))
-    with pytest.raises(ConfigError, match="cannot be dumped"):
+    with pytest.raises(TypeError, match="cannot be dumped"):
         params.dump()
 
 
@@ -336,7 +336,7 @@ def test_constants():
 
 
 def test_constants_cannot_have_the_names_of_parameters():
-    with pytest.raises(ConfigError, match="constants cannot have the names"):
+    with pytest.raises(ValueError, match="constants cannot have the names"):
         ParamSpace(
             make_pdescs(a=S), {'a': 1}, constants=dict(a=1))
 
@@ -447,21 +447,21 @@ def test_solved_elements_refused(properties, modes, pattern):
     info = dict(
         properties=dict(s=dict(solve=SOLVE), t=1, v=1) | properties,
         modes=modes)
-    with pytest.raises(ConfigError, match=pattern):
+    with pytest.raises(ValueError, match=pattern):
         param_space_parser.load(info, pdescs=pdescs)
 
 
 def test_expressions_cannot_read_solved_elements():
     params = load_params(
         dict(s=ParamScalarDesc(min=0)), dict(s=dict(solve=SOLVE)))
-    with pytest.raises(ConfigError, match="it has solved elements"):
+    with pytest.raises(ValueError, match="it has solved elements"):
         params.expression('s * 2')
 
 
 def test_error_types():
     # Invalid properties are configuration errors; failed evaluations are
     # evaluation errors
-    with pytest.raises(ConfigError, match="have no value"):
+    with pytest.raises(ValueError, match="have no value"):
         ParamSpace(make_pdescs(a=S), {})
     space = ParamSpace(make_pdescs(a=S, b=S), {'a': 1, 'b': 'np.inf * a'})
     with pytest.raises(ParamEvaluationError, match="finite"):
@@ -473,7 +473,7 @@ def test_valid_ranges():
         s=ParamScalarDesc(min=0),
         v=ParamVectorDesc(3, min=0, max=1))
     # A fixed value outside its range is a configuration error
-    with pytest.raises(ConfigError, match=r"'v\[1\]' is 2.0, outside"):
+    with pytest.raises(ValueError, match=r"'v\[1\]' is 2.0, outside"):
         ParamSpace(pdescs, {'s': 1, 'v': [0, 2, 1]})
     # An evaluated one fails its evaluation
     space = ParamSpace(pdescs, {'s': {'value': 1}, 'v': 's * 0.5'})
@@ -589,7 +589,7 @@ def test_derived_values():
     (dict(v='unknown(b)'), None, "'unknown' cannot be called"),
 ])
 def test_derived_values_refused(derived, properties, message):
-    with pytest.raises(ConfigError, match=re.escape(message)):
+    with pytest.raises(ValueError, match=re.escape(message)):
         derived_params(derived, properties)
 
 
@@ -600,7 +600,7 @@ def test_expressions_read_derived_values():
     values = params.evaluate()
     np.testing.assert_array_equal(
         params.expression('v / 2', Functions())(values), [3])
-    with pytest.raises(ConfigError, match='derive a value with it'):
+    with pytest.raises(ValueError, match='derive a value with it'):
         params.expression('vcirc(1)')
     with pytest.raises(ParamEvaluationError, match="'w' is nan"):
         params.expression('w', Functions())(values)
@@ -624,5 +624,5 @@ def test_parameters_and_derived_values_have_units():
     assert params.derived_values(params.evaluate())['z'] == 100
     assert params.dump()['derived'] == dict(
         w='2 * v', z=dict(expr='v / 2', unit='km / s'))
-    with pytest.raises(ConfigError, match="must be an astropy unit"):
+    with pytest.raises(ValueError, match="must be an astropy unit"):
         ParamScalarDesc(unit='km per s')

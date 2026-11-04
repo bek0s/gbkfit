@@ -14,7 +14,6 @@ import astropy.wcs.utils
 import numpy as np
 import scipy.spatial
 
-from gbkfit.config import ConfigError
 from gbkfit.utils import unitutils
 from .arrays import FitsArrays
 
@@ -84,30 +83,30 @@ def voronoi_bins(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the signal and the noise are not maps of the same shape, the
         tessellation is unknown, or no bin reaches the target.
     """
     signal = np.asarray(signal, dtype=float)
     noise = np.asarray(noise, dtype=float)
     if signal.ndim != 2 or signal.shape != noise.shape:
-        raise ConfigError(
+        raise ValueError(
             f"the signal and the noise must be maps of the same shape; "
             f"they have shapes {signal.shape} and {noise.shape}")
     if tessellation not in ('wvt', 'cvt', None):
-        raise ConfigError(
+        raise ValueError(
             f"the tessellation must be 'wvt', 'cvt' or None, not "
             f"{tessellation!r}")
     with np.errstate(invalid='ignore'):
         valid = np.isfinite(signal) & np.isfinite(noise) & (noise > 0)
     total = signal[valid].sum() / np.sqrt(np.sum(noise[valid] ** 2))
     if not total >= target:
-        raise ConfigError(
+        raise ValueError(
             f"all the pixels together have a S/N of {total:.3g}, below the "
             f"target ({target})")
     labels, kept = _voronoi_accretion(signal, noise, valid, target)
     if not kept.any():
-        raise ConfigError(
+        raise ValueError(
             f"no bin of the accretion reaches "
             f"{_VORONOI_KEPT_FRACTION:.0%} of the target ({target})")
     # (np.argwhere goes through the pixels in the order of labels[valid])
@@ -310,12 +309,12 @@ def bin_index(bins: np.ndarray) -> tuple[np.ndarray, int]:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the bins are not integers.
     """
     valid = np.isfinite(bins) & (bins >= 0)
     if np.any(bins[valid] != np.round(bins[valid])):
-        raise ConfigError("the bins must be integers")
+        raise ValueError("the bins must be integers")
     numbers = np.unique(bins[valid])
     index = np.full(bins.shape, -1, dtype=np.int32)
     index[valid] = np.searchsorted(numbers, bins[valid])
@@ -329,7 +328,7 @@ def bin_values(index: np.ndarray, nbins: int, data: np.ndarray) -> np.ndarray:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the finite pixels of a bin hold different values.
     """
     values = np.full(nbins, np.nan)
@@ -338,7 +337,7 @@ def bin_values(index: np.ndarray, nbins: int, data: np.ndarray) -> np.ndarray:
         if pixels.size == 0:
             continue
         if not np.allclose(pixels, pixels[0], rtol=1e-6, atol=0):
-            raise ConfigError(
+            raise ValueError(
                 f"the pixels of bin {i} hold different values; the map must "
                 f"hold the value of each bin on its pixels")
         values[i] = pixels[0]
@@ -375,7 +374,7 @@ def pixel_fluxes(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the unit is not a unit, is a brightness temperature (whose
         sums over pixels are not fluxes), or is per beam and the data
         have no beam.
@@ -386,7 +385,7 @@ def pixel_fluxes(
         return None
     unit = unitutils.parse_unit(text)
     if unit.is_equivalent(u.K):
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: the data are a brightness temperature ({text!r}), "
             f"whose sums over pixels are not fluxes: convert them to flux "
             f"density (e.g. Jy/beam) first")
@@ -403,7 +402,7 @@ def pixel_fluxes(
                 angles = angles * base ** power
         return float((pixel * angles).decompose()), unit / angles
     if beam is None:
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: the data are per beam, but have no beam (BMAJ and "
             f"BMIN in the header, or a table BEAMS)")
     area = np.pi / (4 * np.log(2)) * np.multiply(beam['bmaj'], beam['bmin'])
