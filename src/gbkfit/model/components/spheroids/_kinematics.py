@@ -26,7 +26,7 @@ from .._nodal import (
     subring_radii, with_default_height_traits)
 from .._stage import GalaxyMass
 from ..base import ComponentState
-from ..nodes import EvenNodes, dump_nodes
+from ..nodes import Nodes, as_nodes
 from ..parts import KinematicTraits
 
 
@@ -255,10 +255,10 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     dhtraits : DHTrait or Sequence of DHTrait, optional
         The dispersion height traits, one for each dispersion polar trait
         (parameters 'dht_*'; as vhtraits).
-    rnodes : Sequence of float or EvenNodes, optional
-        The radii of its nodes, of R (arcsec), from 0: a list, or evenly
-        spaced (see EvenNodes), which its configuration keeps; by default
-        0 and the rmax of the spheroid.
+    rnodes : Nodes or Sequence of float, optional
+        The radii of its nodes, of R (arcsec), from 0: given, or evenly
+        spaced (see Nodes), which its configuration keeps; by default 0
+        and the rmax of the spheroid.
     rstep : float, optional
         The width of the rings it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
@@ -281,8 +281,7 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     def dump(self) -> dict[str, Any]:
         info = super().dump() | self._traits.dump()
         if self._nodes is not None:
-            info.update(rnodes=dump_nodes(
-                self._rnodes, self._nodes['rnodes']))
+            info.update(rnodes=self._rnodes.dump())
         if self._rstep is not None:
             info.update(rstep=self._rstep)
         info.update(interp=self._interp)
@@ -296,17 +295,17 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
             VHTrait | Sequence[VHTrait | None] | None = None,
             dhtraits:
             DHTrait | Sequence[DHTrait | None] | None = None,
-            rnodes: RNodes | EvenNodes | None = None,
+            rnodes: Nodes | RNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear'
     ):
         check_options(SpheroidTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
         SPHEROID_TRAITS.check(self.traits())
-        # As given, for its configuration (see dump)
-        self._rnodes = rnodes
-        self._nodes = parse_component_rnode_args(rnodes, rstep, interp) \
-            if rnodes is not None else None
+        # In the form it was given in, for its configuration (see dump)
+        self._rnodes = None if rnodes is None else as_nodes(rnodes)
+        self._nodes = None if self._rnodes is None \
+            else parse_component_rnode_args(self._rnodes, rstep, interp)
         self._rstep = rstep
         self._interp = interp
 
@@ -331,7 +330,7 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     def motion(self, rmax: float) -> 'TraitsMotion':
         nodes = self._nodes if self._nodes is not None \
             else parse_component_rnode_args(
-                (0.0, rmax), self._rstep, self._interp)
+                Nodes((0.0, rmax)), self._rstep, self._interp)
         rnodes = nodes['rnodes']
         if rnodes[-1] < rmax:
             raise ValueError(

@@ -21,7 +21,7 @@ from gbkfit.math import interpolation
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
 from gbkfit.utils import iterutils
-from .nodes import EvenNodes, node_radii
+from .nodes import Nodes
 from ._native import ParamBuffer
 from .traits import (
     DPT_DIRECTION_DEFAULT, DPTrait, GalaxyInput, HTrait, ImageInput,
@@ -512,18 +512,18 @@ def native_traits(
 
 
 def parse_component_rnode_args(
-        rnodes: Sequence[float] | EvenNodes | None,
+        rnodes: Nodes,
         rstep: float | None,
         interp: str
 ) -> dict[str, Any]:
     """
     Return the radial nodes of a component (the rings of a disk, the
-    shells of a cone; see node_radii), the step of its subnodes (by
+    shells of a cone), the step of its subnodes (by
     default half the smallest separation of the nodes, at most 1), and the
     interpolation class of its node-wise parameters. Raise ValueError for
     invalid options.
     """
-    nodes = node_radii(rnodes)
+    nodes = rnodes.radii()
     step = rstep
     if step is None:
         # (a float, as configurations take it)

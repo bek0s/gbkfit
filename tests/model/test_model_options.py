@@ -10,7 +10,7 @@ import re
 import pytest
 from gbkfit.config import ConfigError, config_path, strict_mode
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import EvenNodes, galaxy_parser
+from gbkfit.model import Nodes, galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
 from modelutils import config_group_plan, located_message
@@ -270,20 +270,20 @@ def test_trait_names_are_all_or_none_and_unique(vptraits, dptraits, message):
     (10, 3, 5)])
 def test_radial_nodes_from_a_range(rnmax, rnsep, nodes):
     args = parse_component_rnode_args(
-        EvenNodes.every(rnmax, rnsep), None, 'linear')
+        Nodes.every(rnmax, rnsep), None, 'linear')
     assert len(args['rnodes']) == nodes
     assert args['rnodes'][0] == 0
     assert args['rnodes'][-1] == pytest.approx((nodes - 1) * rnsep)
 
 
 def test_radial_nodes_of_a_count():
-    args = parse_component_rnode_args(EvenNodes.count(8, 5), None, 'linear')
+    args = parse_component_rnode_args(Nodes.count(8, 5), None, 'linear')
     assert args['rnodes'] == (0, 2, 4, 6, 8)
 
 
 def test_radial_nodes_start_at_the_centre():
     with pytest.raises(ValueError, match="must start at 0"):
-        parse_component_rnode_args([1, 2, 3], None, 'linear')
+        Nodes([1, 2, 3])
 
 
 @pytest.mark.parametrize('rnodes, message', [
@@ -311,7 +311,7 @@ def test_radial_nodes_keep_their_form(rnodes):
 def test_radial_step_can_be_half_the_node_separation():
     # (half of 0.19999999999999996, the separation as it rounds)
     args = parse_component_rnode_args(
-        [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
+        Nodes([0, 0.2, 0.4, 0.6, 0.8, 1.0]), 0.1, 'linear')
     assert args['rstep'] == 0.1
 
 

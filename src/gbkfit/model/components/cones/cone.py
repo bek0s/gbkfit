@@ -17,7 +17,7 @@ from .._detail import Interp, RNodes, RStep
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
-from ..nodes import EvenNodes
+from ..nodes import Nodes, as_nodes
 from ..parts import ConeTraitsKinematics, Density
 from ..roles import STARS, Emission, Opacity
 from . import _cone, _detail
@@ -57,9 +57,9 @@ class Cone(Component):
         Its sides: 'both', 'positive' (along the positive side of its axis,
         away from the viewer for inclinations below 90 degrees) or
         'negative'.
-    rnodes : Sequence of float or EvenNodes
-        The radii of its shells (arcsec), from its apex (0): a list, or
-        evenly spaced (see EvenNodes), which its configuration keeps.
+    rnodes : Nodes or Sequence of float
+        The radii of its shells (arcsec), from its apex (0): given, or
+        evenly spaced (see Nodes), which its configuration keeps.
         Beyond its last radius, it goes on as a disk does beyond its last
         ring (see Disk).
     rstep : float, optional
@@ -96,7 +96,7 @@ class Cone(Component):
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             sides: Literal[_cone.SIDES] = 'both',
-            rnodes: RNodes | EvenNodes | None = None,
+            rnodes: Nodes | RNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',
             name: str | None = None
@@ -105,8 +105,8 @@ class Cone(Component):
         super().__init__(name, emission, opacity)
         self._density = density
         self._kinematics = kinematics
-        # As given, for its configuration (see dump)
-        self._rnodes = rnodes
+        # In the form it was given in, for its configuration (see dump)
+        self._rnodes = rnodes = as_nodes(rnodes)
         self._cone = _detail.make_cone(
             _cone.SmoothCone, density, kinematics, emission, opacity,
             sptraits, sides, rnodes=rnodes, rstep=rstep, interp=interp)

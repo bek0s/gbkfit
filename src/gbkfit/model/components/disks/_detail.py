@@ -24,7 +24,7 @@ from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, Lines
-from ..nodes import EvenNodes, dump_nodes
+from ..nodes import Nodes
 from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
 from . import _disk
@@ -75,7 +75,7 @@ DISK_TRAITS = TraitTable('disk', {
 def dump_disk_component(
         component: Component,
         disk: _disk.NodalDisk,
-        rnodes: Sequence[float] | EvenNodes | None,
+        rnodes: Nodes,
         density: Density,
         kinematics: DiskTraitsKinematics | None
 ) -> dict[str, Any]:
@@ -86,7 +86,7 @@ def dump_disk_component(
     info = dict(type=component.type()) | dump_name(component)
     info.update(
         loose=disk.loose(), tilted=disk.tilted(),
-        rnodes=dump_nodes(rnodes, disk.rnodes()), rstep=disk.rstep(),
+        rnodes=rnodes.dump(), rstep=disk.rstep(),
         interp=disk.interp().type(), density=density.dump())
     if kinematics is not None:
         info.update(kinematics=disk_kinematics_parser.dump(kinematics))
@@ -111,7 +111,7 @@ def make_disk(
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         loose: bool,
         tilted: bool,
-        rnodes: Sequence[float] | EvenNodes | None,
+        rnodes: Nodes,
         rstep: float | None,
         interp: str,
         clouds: Clouds | None

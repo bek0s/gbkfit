@@ -21,7 +21,7 @@ from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, Lines
-from ..nodes import EvenNodes, dump_nodes
+from ..nodes import Nodes
 from ..parts import (
     ConeTraitsKinematics, Density, cone_kinematics_parser)
 from ..roles import (
@@ -80,7 +80,7 @@ CONE_TRAITS = TraitTable('cone', dict(
 def dump_cone_component(
         component: Component,
         cone: _cone.NodalCone,
-        rnodes: Sequence[float] | EvenNodes | None,
+        rnodes: Nodes,
         density: Density,
         kinematics: ConeTraitsKinematics | None
 ) -> dict[str, Any]:
@@ -89,7 +89,7 @@ def dump_cone_component(
     with its shells in the form they were given (rnodes).
     """
     info = dict(type=component.type()) | dump_name(component) | dict(
-        sides=cone.sides(), rnodes=dump_nodes(rnodes, cone.rnodes()),
+        sides=cone.sides(), rnodes=rnodes.dump(),
         rstep=cone.rstep(),
         interp=cone.interp().type(), density=density.dump())
     if kinematics is not None:
@@ -111,7 +111,7 @@ def make_cone(
         opacity: Opacity | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         sides: str,
-        rnodes: Sequence[float] | EvenNodes | None,
+        rnodes: Nodes,
         rstep: float | None,
         interp: str
 ) -> _cone.NodalCone:

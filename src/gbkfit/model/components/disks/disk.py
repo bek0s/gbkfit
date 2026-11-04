@@ -20,7 +20,7 @@ from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
-from ..nodes import EvenNodes
+from ..nodes import Nodes, as_nodes
 from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
@@ -65,10 +65,10 @@ class Disk(Component):
         for each ring).
     tilted : bool, optional
         Whether its position angle and inclination are node-wise.
-    rnodes : Sequence of float or EvenNodes
-        The radii of its rings (arcsec), from 0: a list, or evenly spaced
-        (in configurations {max, sep} or {max, len}; see EvenNodes), which
-        its configuration keeps. They say where its node-wise parameters
+    rnodes : Nodes or Sequence of float
+        The radii of its rings (arcsec), from 0: given, or evenly spaced
+        (in configurations {max, sep} or {max, len}; see Nodes), which its
+        configuration keeps. They say where its node-wise parameters
         are given, not where it ends: beyond its last radius, its density
         goes on as an exponential of the density and its slope there (see
         traits.RPTrait.tail_scale), and its other node-wise parameters
@@ -113,7 +113,7 @@ class Disk(Component):
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool = False,
             tilted: bool = False,
-            rnodes: RNodes | EvenNodes | None = None,
+            rnodes: Nodes | RNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',
             clouds: Clouds | None = None,
@@ -128,8 +128,8 @@ class Disk(Component):
         self._density = density
         self._kinematics = kinematics
         self._clouds = clouds
-        # As given, for its configuration (see dump)
-        self._rnodes = rnodes
+        # In the form it was given in, for its configuration (see dump)
+        self._rnodes = rnodes = as_nodes(rnodes)
         self._disk = _detail.make_disk(
             density, kinematics, emission, opacity, zptraits, sptraits,
             loose=loose, tilted=tilted, rnodes=rnodes, rstep=rstep,

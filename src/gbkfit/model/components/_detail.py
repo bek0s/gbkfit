@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 INTERPOLATIONS = ('linear', 'akima', 'pchip')
 
 # The options of the radii of the nodes of a component (its rings or
-# shells; see nodes.node_radii), of its subnodes (rstep), and of the
+# shells; see nodes.Nodes), of its subnodes (rstep), and of the
 # interpolation between them, as the components take them: one definition
 # of each
 RnMax: TypeAlias = Annotated[float, Unit('arcsec')]
