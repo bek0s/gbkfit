@@ -12,6 +12,7 @@ WorkersMPI): mpiexec -n N python -m gbkfit.parallel (file | -m module)
 """
 
 import abc
+import collections
 import concurrent.futures
 import itertools
 import math
@@ -196,15 +197,15 @@ class WorkerPool:
     """
     Workers of copies of an objective (see Workers.start), which evaluate
     functions of it at the same time (see map). Item i of a map goes to
-    worker i mod N (of N), so that a fit gives the same results each time
-    it runs (to the rounding of the sums that its kernels make in
-    parallel), also with workers on different devices.
+    worker i mod N (of N), so that a run gives the same results each time
+    (to the rounding of the sums that kernels make in parallel), also with
+    workers on different devices.
 
     The placements are checked when it is made, as far as that needs no
     running job (see Workers.check); they are made, and the workers start,
     on first use (e.g. the first batch of a fit), so that workers that are
-    not used (e.g. those of the configuration of a fit that is only
-    evaluated or checked, also outside its MPI job) take no memory.
+    not used (e.g. those of a configuration that is only evaluated or
+    checked, also outside its MPI job) take no memory.
 
     Parameters
     ----------
@@ -270,10 +271,10 @@ class WorkerPool:
         so that at most N items exist at once (e.g. the data of the refits
         of a bootstrap), and its result goes to on_result, if given, as it
         comes. Workers of threads run one item at a time (see
-        WorkersThreads). make and on_result are called in threads of this process,
-        one per worker. It returns once every worker has finished, also
-        when one raises an exception (then it raises that of the first
-        worker that raised one).
+        WorkersThreads). make and on_result are called in threads of this
+        process, one per worker. It returns once every worker has
+        finished, also when one raises an exception (then it raises that
+        of the first worker that raised one).
 
         The function takes the control of its worker (control_k; see
         StopControl), which stops it (e.g. a sub-fit; see run_subfits) once
@@ -289,9 +290,9 @@ class WorkerPool:
         def stopped() -> bool:
             return control is not None and control.stopped()
 
-        # (set by the first feeder that raises, e.g. of a bug in an item:
+        # Set by the first feeder that raises, e.g. of a bug in an item:
         # the others take no new items, so that the error comes at once,
-        # not after the rest of the items)
+        # not after the rest of the items
         failed = threading.Event()
 
         def run(k: int) -> list[_Result]:
@@ -361,11 +362,11 @@ class WorkersThreads(Workers):
     kernels use every core), nor do the parts of the models that run in
     Python (see WorkersProcesses).
 
-    Its sub-fits (see WorkerPool.map_lazily; e.g. the refits of a
-    bootstrap) run one after the other: fitters and their libraries keep
-    state of their process (e.g. CMA-ES its random numbers, of numpy), so
-    that two at once in one process would not give the results of each
-    alone. Workers of processes run them at once.
+    Its stoppable functions (see WorkerPool.map_lazily; e.g. the refits of
+    a bootstrap) run one after the other: the libraries they use may keep
+    state of their process (e.g. the random numbers of numpy, which CMA-ES
+    draws), so that two at once in one process would not give the results
+    of each alone. Workers of processes run them at once.
 
     Parameters
     ----------
@@ -378,7 +379,7 @@ class WorkersThreads(Workers):
         If there are no placements.
     """
 
-    # (see Workers)
+    # Configurations name the drivers of the placements, see Workers
     config_options = {'drivers': Sequence[str | Driver]}
 
     @staticmethod
@@ -403,7 +404,7 @@ class WorkersThreads(Workers):
             placements: Sequence[_Drivers]
     ) -> list[_Worker]:
         own = _own_placement(objective)
-        # (one sub-fit at a time, see the class)
+        # One stoppable function at a time, see the class
         lock = threading.Lock()
         workers = []
         for placement in placements:
@@ -491,7 +492,7 @@ class WorkersProcesses(Workers):
         placements.
     """
 
-    # (see Workers)
+    # Configurations name the drivers of the placements, see Workers
     config_options = {'drivers': Sequence[str | Driver] | None}
 
     @staticmethod
@@ -625,7 +626,8 @@ class WorkersMPI(Workers):
     its copy of the objective, which goes to it pickled (see Objective).
     Like processes (see WorkersProcesses), they evaluate at the same time
     the parts of the models that run in Python and models on the host,
-    and run sub-fits at once, on the machines of the job.
+    and run stoppable functions at once (e.g. sub-fits), on the machines
+    of the job.
 
     Parameters
     ----------
@@ -644,7 +646,7 @@ class WorkersMPI(Workers):
 
     requires = {'mpi4py': "pip install 'gbkfit[mpi]'"}
 
-    # (see Workers)
+    # Configurations name the drivers of the placements, see Workers
     config_options = {'drivers': Sequence[str | Driver] | None}
 
     @staticmethod
@@ -671,9 +673,9 @@ class WorkersMPI(Workers):
         return info
 
     def check(self, objective: Objective) -> None:
-        # (the number of workers is that of the job, known only under its
-        # launcher: the configuration of a cluster fit loads anywhere,
-        # e.g. to be evaluated on a login node)
+        # The number of workers is that of the job, known only under its
+        # launcher, so that the configuration of a run on a cluster loads
+        # anywhere, e.g. to be evaluated on a login node
         for placement in self._drivers or ():
             _placement(objective, placement)
 
@@ -708,8 +710,9 @@ _mpi_launched = False
 _mpi_pools = itertools.count()
 
 # The tags of the messages of MPI: of the first rank to a worker, and of a
-# worker to the first rank. The first rank sends a worker one message at a
-# time (to stop the function it runs, the second), in order
+# worker to the first rank. As a function runs on a worker, the first rank
+# sends it stops, and the other pools of the program may send it messages
+# of their own (see _serve_mpi)
 _MPI_TO_WORKER = 1
 _MPI_TO_FIRST = 2
 
@@ -779,7 +782,7 @@ class _MPIWorker(_Worker):
         self._send(('stop',))
 
     def clear(self) -> None:
-        # (a function on a rank has a flag of its own, see _serve_mpi)
+        # A function on a rank has a flag of its own, see _serve_mpi
         pass
 
     def close(self) -> None:
@@ -815,44 +818,78 @@ def _serve_mpi(comm: Any) -> None:
     """
     Serve the workers of the pools of the program on a rank of an MPI job
     (see WorkersMPI), until the first rank says to exit.
+
+    Every call gets a reply, so that the first rank never waits for a
+    rank that failed: a copy that cannot be made fails the calls of its
+    pool with its error.
     """
-    copies: dict[int, Objective] = {}
+    copies: dict[int, Objective | Exception] = {}
+    # The messages that came as a function ran (see _mpi_stop_sent)
+    pending: collections.deque[tuple] = collections.deque()
     while True:
-        kind, *args = comm.recv(source=0, tag=_MPI_TO_WORKER)
+        kind, *args = pending.popleft() if pending \
+            else comm.recv(source=0, tag=_MPI_TO_WORKER)
         if kind == 'exit':
             return
         if kind == 'start':
             key, group, solves, placement, threads = args
-            copies[key] = Objective(GroupPlan(group, *placement), solves)
+            try:
+                copies[key] = Objective(GroupPlan(group, *placement), solves)
+            except Exception as e:
+                copies[key] = e
             if threads is not None:
                 threadpoolctl.threadpool_limits(threads)
         elif kind == 'close':
-            copies.pop(args[0]).close()
+            copy = copies.pop(args[0])
+            if isinstance(copy, Objective):
+                copy.close()
         elif kind in ('run', 'run_controlled'):
             key, function, payload = args
             try:
+                copy = copies[key]
+                if isinstance(copy, Exception):
+                    raise copy
                 if kind == 'run':
-                    value = [function(copies[key], item) for item in payload]
+                    value = [function(copy, item) for item in payload]
                 else:
                     control = StopControl(_PolledFlag(
-                        lambda: _mpi_stop_sent(comm)))
-                    value = function(copies[key], payload, control)
+                        lambda: _mpi_stop_sent(comm, pending)))
+                    value = function(copy, payload, control)
                 reply = (True, value)
             except Exception as e:
                 reply = (False, e)
-            comm.send(reply, dest=0, tag=_MPI_TO_FIRST)
-        # (else a stop that came after the function ended)
+            _mpi_reply(comm, reply)
+        # Else a stop that came after its function ended, which is dropped
 
 
-def _mpi_stop_sent(comm: Any) -> bool:
+def _mpi_reply(comm: Any, reply: tuple[bool, Any]) -> None:
+    """
+    Send the reply of a call to the first rank: a value or an error that
+    cannot be pickled goes as a RuntimeError that says what it was.
+    """
+    try:
+        comm.send(reply, dest=0, tag=_MPI_TO_FIRST)
+    except Exception as e:
+        ok, value = reply
+        what = f"the result of type {type(value).__name__}" if ok \
+            else f"the error {type(value).__name__}: {value}"
+        comm.send(
+            (False, RuntimeError(f"{what} could not be sent: {e}")),
+            dest=0, tag=_MPI_TO_FIRST)
+
+
+def _mpi_stop_sent(comm: Any, pending: collections.deque[tuple]) -> bool:
     """
     Return whether the first rank sent a rank a stop (and take it), as a
-    function runs there: it sends nothing else then.
+    function runs there; the other messages that came (e.g. of another
+    pool) are kept for after it, in order.
     """
-    if not comm.iprobe(source=0, tag=_MPI_TO_WORKER):
-        return False
-    kind, *_ = comm.recv(source=0, tag=_MPI_TO_WORKER)
-    return kind == 'stop'
+    while comm.iprobe(source=0, tag=_MPI_TO_WORKER):
+        message = comm.recv(source=0, tag=_MPI_TO_WORKER)
+        if message[0] == 'stop':
+            return True
+        pending.append(message)
+    return False
 
 
 def _main(argv: Sequence[str]) -> None:
@@ -868,11 +905,12 @@ def _main(argv: Sequence[str]) -> None:
     if comm.Get_rank() != 0:
         _serve_mpi(comm)
         return
-    if not argv or (argv[0] == '-m' and len(argv) < 2):
-        raise SystemExit(
-            "usage: mpiexec -n N python -m gbkfit.parallel "
-            "(file | -m module) [arguments]")
+    # The other ranks exit however the program ends, a wrong command too
     try:
+        if not argv or (argv[0] == '-m' and len(argv) < 2):
+            raise SystemExit(
+                "usage: mpiexec -n N python -m gbkfit.parallel "
+                "(file | -m module) [arguments]")
         if argv[0] == '-m':
             sys.argv = list(argv[1:])
             runpy.run_module(argv[1], run_name='__main__', alter_sys=True)
@@ -959,8 +997,8 @@ class WorkersRay(Workers):
     pickled (see Objective). Ray gives an actor its GPUs: the CUDA drivers
     of its copy of device 0 are on the first. Like processes (see
     WorkersProcesses), they evaluate at the same time the parts of the
-    models that run in Python, and run sub-fits at once, on the machines
-    of the cluster.
+    models that run in Python, and run stoppable functions at once (e.g.
+    sub-fits), on the machines of the cluster.
 
     The cluster is that of Ray in this process, if it has one (see
     ray.init), or else that of the address.
@@ -1023,7 +1061,7 @@ class WorkersRay(Workers):
         import ray
         if not ray.is_initialized():
             ray.init(address=self._address)
-        # (two at once: a function, and its interruption)
+        # Two calls at once: a function, and its interruption
         actor = ray.remote(_ActorCopy).options(
             num_cpus=self._cpus, num_gpus=self._gpus, max_concurrency=2)
         threads = self._threads or max(1, math.floor(self._cpus))
@@ -1071,8 +1109,8 @@ class WorkersDask(Workers):
     of the cluster (of its own, while there are enough), with its copy of
     the objective, which goes to it pickled (see Objective). Like
     processes (see WorkersProcesses), they evaluate at the same time the
-    parts of the models that run in Python, and run sub-fits at once, on
-    the machines of the cluster.
+    parts of the models that run in Python, and run stoppable functions
+    at once (e.g. sub-fits), on the machines of the cluster.
 
     The cluster is that of the client of this process (see
     distributed.get_client), or else that of the address of its scheduler.
@@ -1124,14 +1162,18 @@ class WorkersDask(Workers):
             placements: Sequence[_Drivers]
     ) -> list[_Worker]:
         import distributed
-        client = distributed.get_client() if self._address is None \
-            else distributed.Client(self._address)
+        # A client of the address is the pool's, which closes it; it is
+        # the default client meanwhile, through which actors call theirs
+        own = self._address is not None
+        client = distributed.Client(self._address) if own \
+            else distributed.get_client()
         hosts = list(client.scheduler_info()['workers'])
         return [
             _DaskWorker(client.submit(
                 _ActorCopy, objective.group(), objective.solves(),
                 placement, self._threads, actor=True, pure=False,
-                workers=[hosts[k % len(hosts)]]).result())
+                workers=[hosts[k % len(hosts)]]).result(),
+                client, own)
             for k, placement in enumerate(placements)]
 
 
@@ -1139,11 +1181,15 @@ class _DaskWorker(_Worker):
     """
     A worker that is an actor of Dask (see WorkersDask): a thread of its
     own waits for its results. The flag of each function it runs is an
-    event of the cluster of its own (see distributed.Event).
+    event of the cluster of its own (see distributed.Event), which it sets
+    through its client. A client it owns is closed with it: the workers of
+    a pool share it, and closing a closed client does nothing.
     """
 
-    def __init__(self, actor: Any):
+    def __init__(self, actor: Any, client: Any, owned: bool):
         self._actor = actor
+        self._client = client
+        self._owned = owned
         self._event: str | None = None
         self._executor = concurrent.futures.ThreadPoolExecutor(
             1, thread_name_prefix='gbkfit-dask')
@@ -1169,14 +1215,16 @@ class _DaskWorker(_Worker):
     def interrupt(self) -> None:
         if self._event is not None:
             import distributed
-            distributed.Event(self._event).set()
+            distributed.Event(self._event, client=self._client).set()
 
     def clear(self) -> None:
-        # (each function has a flag of its own)
+        # Each function has a flag of its own
         pass
 
     def close(self) -> None:
         self._executor.shutdown()
+        if self._owned:
+            self._client.close()
 
 
 class _DaskFlag(_PolledFlag):
@@ -1239,6 +1287,6 @@ workers_parser.register([
 
 
 if __name__ == '__main__':
-    # (in the module itself, not this copy of it: see _main)
+    # In the module itself, not this copy of it, see _main
     import gbkfit.parallel
     gbkfit.parallel._main(sys.argv[1:])
