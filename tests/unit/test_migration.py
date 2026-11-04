@@ -520,3 +520,34 @@ def test_the_rings_of_a_shared_geometry_are_migrated_to_one_option():
     config = dict(galaxies=[dict(geometries=[geometry], components=[disk])])
     migration.migrate(config, 3)
     assert disk['rnodes'] == dict(max=2, sep=1) and 'rnmax' not in disk
+
+
+def test_a_project_of_one_galaxy_has_its_params_renamed(tmp_path):
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=3),
+              tmp_path / 'study' / project.MARKER)
+    yaml.dump(dict(components=[DISK | dict(name='gas')]),
+              tmp_path / 'study' / 'galaxies' / 'gas.yaml')
+    yaml.dump(dict(properties=dict(posa=30)),
+              tmp_path / 'study' / 'params' / 'start.yaml')
+    migration.migrate_project(study.path)
+    assert study.piece('params', 'start') == dict(
+        properties=dict(gas_posa=30))
+
+
+def test_the_galaxies_of_a_project_have_their_params_renamed_by_hand(
+        tmp_path):
+    # Which params are of which galaxy is in the setups
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(dict(format=project.FORMAT, version=3),
+              tmp_path / 'study' / project.MARKER)
+    for name in ('gas', 'ion'):
+        yaml.dump(dict(components=[DISK | dict(name=name)]),
+                  tmp_path / 'study' / 'galaxies' / f'{name}.yaml')
+    yaml.dump(dict(properties=dict(posa=30)),
+              tmp_path / 'study' / 'params' / 'start.yaml')
+    changes = migration.migrate_project(study.path)
+    assert study.piece('params', 'start') == dict(properties=dict(posa=30))
+    assert migration.Change([], (
+        "by hand: rename the parameter posa to gas_posa")) in \
+        changes['galaxies/gas.yaml']

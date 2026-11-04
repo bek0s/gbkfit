@@ -40,7 +40,9 @@ class OwnGeometries(Rule):
     (e.g. stars_posa: disk_posa), which keeps the model; without one,
     the changes say what to rename and tie by hand. The rings of a warped
     geometry, which expressions name (e.g. rnodes, {geometry}_rnodes),
-    are those of its first component (e.g. disk_rnodes).
+    are those of its first component (e.g. disk_rnodes). The galaxies of
+    a project, which have no names, have their parameters renamed by hand:
+    which params are of which galaxy is in the setups.
     """
 
     @staticmethod
@@ -49,13 +51,24 @@ class OwnGeometries(Rule):
 
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
-        for path, galaxy in items(config, 'galaxies'):
+        galaxies = list(items(config, 'galaxies'))
+        # Galaxies without names among several are the pieces of a project
+        # (those of one configuration have names), each of its own setups:
+        # which params are of which is not known here, so that their
+        # parameters are renamed by hand
+        alone = len(galaxies) == 1
+        for path, galaxy in galaxies:
             shared, rings, galaxy_changes = self._galaxy(galaxy, path)
             changes += galaxy_changes
+            sections = _sections(config) if alone or 'name' in galaxy \
+                else []
             for old, new in shared.items():
-                changes += _share(config, path, old, new)
+                changes += _share(sections, path, old, new)
             for old, new in rings.items():
-                for params_path, params in _sections(config):
+                if not sections:
+                    changes.append(Change(path, (
+                        f"by hand: rename {old} to {new} in expressions")))
+                for params_path, params in sections:
                     changes += _renamed_in_expressions(
                         params, params_path, old, new)
         return changes
@@ -191,20 +204,19 @@ def _geometric_params(component: Mapping[str, Any]) -> list[str] | None:
 
 
 def _share(
-        config: MutableMapping[str, Any],
+        sections: list[tuple[list[str | int], MutableMapping[str, Any]]],
         galaxy_path: list[str | int],
         old: str,
         new: list[str]
 ) -> list[Change]:
     """
     Rewrite a parameter that components shared, in the params sections
-    of a configuration: renamed to that of the first component (new[0]),
-    with the others tied to it; or say what to do by hand without one.
+    of its galaxy: renamed to that of the first component (new[0]), with
+    the others tied to it; or say what to do by hand without one.
     """
     first, others = new[0], new[1:]
     if first == old and not others:
         return []
-    sections = _sections(config)
     if not sections:
         ties = ''.join(f", {other}: {first}" for other in others)
         return [Change(galaxy_path, (
