@@ -357,8 +357,8 @@ class TypedParser(Parser):
     ) -> TypedSerializable:
         if 'type' not in x:
             raise ConfigError(
-                f"option 'type' is required but not provided; the types "
-                f"are: {quoted_names(self.types())}")
+                f"missing required options: 'type'; the types are: "
+                f"{quoted_names(self.types())}")
         type_ = x.pop('type')
         cls = self.registered_class(type_)
         with config_path(context=type_):

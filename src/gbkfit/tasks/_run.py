@@ -11,7 +11,8 @@ import sys
 from collections.abc import Generator, Mapping
 from typing import Any
 
-from gbkfit.config import ConfigError, strict_mode
+from gbkfit.config import (
+    ConfigError, error_location, format_location, strict_mode)
 
 
 __all__ = [
@@ -75,12 +76,18 @@ def exit_on_user_errors(verbose: bool) -> Generator[None]:
     In the block, end the program (status 1) at an error that a user
     fixes, logged without a traceback (with one if verbose): of a
     configuration (ConfigError), or of files and folders (OSError, e.g.
-    one not found, or an output directory that exists).
+    one not found, or an output directory that exists), with the path in
+    the configuration that it happened in, if any (see config_path).
     """
     try:
         yield
+    # Only these are certainly mistakes of the user; any other error (e.g.
+    # a ValueError of a constructor) may be a bug, so it keeps its
+    # traceback, which ends with its path in the configuration
     except (ConfigError, OSError) as e:
         if verbose:
             raise
-        _log.error(f"error: {e}")
+        where = '' if isinstance(e, ConfigError) \
+            else format_location(*error_location(e))
+        _log.error(f"error: {where}: {e}" if where else f"error: {e}")
         sys.exit(1)

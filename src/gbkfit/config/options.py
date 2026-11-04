@@ -105,7 +105,7 @@ def item_prefixes(
 
 
 def parse_options(
-        info: dict[str, Any],
+        info: Mapping[str, Any],
         required: Iterable[str] | None = None,
         optional: Iterable[str] | None = None
 ) -> dict[str, Any]:
@@ -116,7 +116,7 @@ def parse_options(
 
     Parameters
     ----------
-    info : dict
+    info : Mapping
         The options.
     required : Iterable of str, optional
         The names of the required options.
@@ -131,19 +131,25 @@ def parse_options(
     Raises
     ------
     ConfigError
-        If a required option is missing, or an option is unknown (unless
-        in lenient mode, see strict_mode).
+        If the options are not a dictionary, a required option is
+        missing, or an option is unknown (unless in lenient mode, see
+        strict_mode).
     """
     required = iterutils.setify(required)
     optional = iterutils.setify(optional)
     if both := required & optional:
         raise RuntimeError(
-            f"options cannot be both required and optional: {quoted_names(both)}")
+            f"options cannot be both required and optional: "
+            f"{quoted_names(both)}")
+    if not isinstance(info, Mapping):
+        raise ConfigError(
+            f"the options must be a dictionary; they are {info!r}")
     known = required | optional
     if unknown := set(info) - known:
         report_unknown("unknown options", unknown, known)
     if missing := required - set(info):
-        raise ConfigError(f"missing required options: {quoted_names(missing)}")
+        raise ConfigError(
+            f"missing required options: {quoted_names(missing)}")
     return {k: v for k, v in info.items() if k in known}
 
 
@@ -222,7 +228,7 @@ def load_option(
         if required:
             raise ConfigError(
                 f"option '{key}' cannot be null" if key in info else
-                f"option '{key}' is required but not provided")
+                f"missing required options: '{key}'")
         return None
     with config_path(key):
         return loader(info[key], **kwargs)

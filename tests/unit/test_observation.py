@@ -87,7 +87,7 @@ def test_observations_need_their_type():
     info = dict(
         line_of_sight=dict(type='flat'),
         observable=dict(type='pixel_brightness', size=[4, 4]))
-    with pytest.raises(ConfigError, match="'type' is required.*'sky'"):
+    with pytest.raises(ConfigError, match="missing required options: 'type'.*'sky'"):
         observation_parser.load(info)
     observation = observation_parser.load(info | dict(type='sky'))
     assert observation_parser.dump(observation)['type'] == 'sky'

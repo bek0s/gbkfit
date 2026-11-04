@@ -14,11 +14,12 @@ import pytest
 from annotated_types import Gt, Le
 
 from gbkfit.config import (
-    ConfigError, FitsFile, Serializable, TypedParser, TypedSerializable, Unit,
-    UnknownNamesError, check_name, check_options, collect_problems,
-    config_path, describe_type, describe_unknown, item_prefixes, matches_type,
-    missing_modules, parse_options, parse_options_for_callable,
-    paths_relative_to, strict_mode, type_problem, warn)
+    ConfigError, FitsFile, Problem, Serializable, TypedParser,
+    TypedSerializable, Unit, UnknownNamesError, check_name, check_options,
+    collect_problems, config_path, describe_type, describe_unknown,
+    error_location, item_prefixes, matches_type, missing_modules,
+    parse_options, parse_options_for_callable, paths_relative_to,
+    strict_mode, type_problem, warn)
 
 
 def test_config_error_paths():
@@ -29,8 +30,21 @@ def test_config_error_paths():
             with config_path(0, context='outer'):
                 with config_path('traits'):
                     with config_path(1, context='inner'):
-                        raise ValueError("a bad value")
+                        raise ConfigError("a bad value")
     assert str(error.value) == "models[0].traits[1] [inner]: a bad value"
+
+
+def test_other_errors_pass_config_paths_with_the_path():
+    # Of their own type: each was a ConfigError of its message (that of a
+    # KeyError was "x: 'key'"), so that bugs and failed runs read as
+    # mistakes of the configuration
+    with pytest.raises(KeyError) as error:
+        with config_path('models'):
+            with config_path(0, context='disk'):
+                raise KeyError('key')
+    assert error_location(error.value) == (['models', 0], 'disk')
+    assert error.value.__notes__ == [
+        "in the configuration at models[0] [disk]"]
 
 
 def test_config_error_context_is_for_the_part_itself():
@@ -321,6 +335,35 @@ def test_options_of_classes_are_loaded_by_their_annotation():
 def test_configurations_have_the_options_of_one_constructor(info, message):
     with pytest.raises(ConfigError, match=message):
         Beam.load(info)
+
+
+def test_problems_have_the_paths_of_the_blocks_around():
+    # As warnings have: the error had only the path within the block of
+    # collect_problems
+    with config_path('galaxies'), collect_problems() as problems:
+        with config_path(0):
+            warn("a warning")
+            raise ConfigError("an error")
+    assert problems == [
+        Problem('warning', ['galaxies', 0], "a warning"),
+        Problem('error', ['galaxies', 0], "an error")]
+
+
+def test_problems_are_errors_of_any_type(caplog):
+    # A bug, or an error of a constructor, with its type and its path
+    with collect_problems() as problems, config_path('galaxies', 0):
+        raise ValueError("rnmax must be greater than rnmin")
+    assert problems == [Problem(
+        'error', ['galaxies', 0],
+        "ValueError: rnmax must be greater than rnmin")]
+    assert "Traceback" in caplog.text
+
+
+@pytest.mark.parametrize('info', ['gauss', [dict(sigma=1)], 3])
+def test_options_must_be_a_dictionary(info):
+    # A string was read as the options of its characters
+    with pytest.raises(ConfigError, match="must be a dictionary"):
+        parse_options(info, optional={'sigma'})
 
 
 def test_problems_are_collected_per_thread():
