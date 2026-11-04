@@ -8,11 +8,11 @@ midplane; and for the radial range selection trait (e.g. truncations).
 import copy
 import logging
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
 from gbkfit.model import Extras
-from gbkfit.utils.parseutils import ConfigError
 from modelutils import group_plan
 
 
@@ -295,6 +295,10 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     flat = flux(plan, properties | dict(zpt_a=[0] * 14))
     extra = Extras()
     lifted = flux(plan, properties | dict(zpt_a=[12] * 14), extra)
+    # TODO: the clouds on the host driver fail this now and then under
+    # load, with one voxel off by a relative 1.02e-5; probably the order
+    # of the sums of the threads. Decide whether the tolerance or the
+    # claim of exactness is wrong.
     np.testing.assert_allclose(lifted, flat, rtol=1e-5)
     bdata = extra.get('bdata', component='component0')
     assert mean_depth(bdata) == pytest.approx(12, abs=0.05)
