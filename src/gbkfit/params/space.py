@@ -121,7 +121,7 @@ class FreeElement:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the bounds, with the support of the prior, are empty, the
         value is not finite or not within them, sigma or width is not
         finite and positive, or n is not an integer of at least 2.
@@ -143,7 +143,7 @@ class FreeElement:
             n: int | None = None
     ):
         if not min < max:
-            raise ConfigError(
+            raise ValueError(
                 f"the bounds must not be empty; they are [{min}, {max}]")
         minimum, maximum = min, max
         if prior is not None:
@@ -153,21 +153,21 @@ class FreeElement:
             minimum, maximum = prior.support()
         if value is not None:
             if not math.isfinite(value):
-                raise ConfigError(
+                raise ValueError(
                     f"option 'value' must be finite; it is {value}")
             if not minimum <= value <= maximum:
-                raise ConfigError(
+                raise ValueError(
                     f"option 'value' ({value}) must be in the range "
                     f"[{minimum}, {maximum}]")
         for name, option in (('sigma', sigma), ('width', width)):
             if option is not None and not (
                     math.isfinite(option) and option > 0):
-                raise ConfigError(
+                raise ValueError(
                     f"option '{name}' must be finite and positive; it is "
                     f"{option}")
         if n is not None and (
                 isinstance(n, bool) or not isinstance(n, int) or n < 2):
-            raise ConfigError(
+            raise ValueError(
                 f"option 'n' must be an integer of at least 2 (a fixed "
                 f"value is not free); it is {n!r}")
         self._value = None if value is None else float(value)
@@ -207,13 +207,13 @@ class FreeElement:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If there is no prior, and a bound is missing.
         """
         if self._prior is not None:
             return self._prior
         if not (math.isfinite(self._minimum) and math.isfinite(self._maximum)):
-            raise ConfigError(
+            raise ValueError(
                 "a sampler needs a prior, or both options 'min' and 'max' "
                 "(a uniform prior)")
         return PriorUniform(self._minimum, self._maximum)
@@ -298,18 +298,28 @@ def _load_transforms(info: dict[str, Any]) -> Transforms:
 def _dump_transforms(transforms: Transforms) -> dict[str, str]:
     """
     Return the file and the name of a transforms function. It must be
-    defined at the top level of a file, from which it loads again.
+    defined at the top level of a file, from which it loads again. Raise
+    TypeError for another function, which has no configuration.
     """
-    # (that of a file, see load_function_from_file)
+    # The function itself, of the wrapper of a function of a file (see
+    # load_function_from_file)
     transforms = inspect.unwrap(transforms)
     code = getattr(transforms, '__code__', None)
     name = getattr(transforms, '__name__', None)
     if (code is None or code.co_filename.startswith('<')
             or getattr(transforms, '__qualname__', None) != name):
-        raise ConfigError(
+        raise TypeError(
             f"the transforms function {transforms!r} cannot be dumped: it "
             f"must be a function defined at the top level of a file")
     return dict(file=code.co_filename, func=name)
+
+
+def _message(error: Exception) -> str:
+    """
+    Return the message of an error without its path in the configuration,
+    which the problems of the properties give by their keys.
+    """
+    return error.message if isinstance(error, ConfigError) else str(error)
 
 
 class ParamSpace(Serializable):
@@ -398,7 +408,7 @@ class ParamSpace(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the properties, constants, modes, transforms or derived values
         are invalid (one error lists all the problems), or the priors are
         not dicts.
@@ -502,12 +512,12 @@ class ParamSpace(Serializable):
         priors = list(priors or [])
         if bad := [i for i, prior in enumerate(priors)
                    if not isinstance(prior, Mapping)]:
-            raise ConfigError(
+            raise ValueError(
                 f"the priors must be dicts (the configurations of priors on "
                 f"several parameters); these are not: {bad}")
         self._priors = copy.deepcopy([dict(prior) for prior in priors])
         if derived is not None and not isinstance(derived, Mapping):
-            raise ConfigError(
+            raise ValueError(
                 "option 'derived' must be a dict of the expressions of the "
                 "derived values, by name")
         self._derived, self._derived_units = _derived_values(derived or {})
@@ -549,7 +559,7 @@ class ParamSpace(Serializable):
         if not errors:
             errors += self._order_steps()
         if errors:
-            raise ConfigError(
+            raise ValueError(
                 "invalid parameter properties:\n- " + "\n- ".join(errors))
         self._lay_out_buffer()
 
@@ -634,7 +644,7 @@ class ParamSpace(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the expression is invalid.
         """
         unavailable = {
@@ -648,7 +658,7 @@ class ParamSpace(Serializable):
                 source, self._pdescs, self._constants, tuple(self._derived),
                 unavailable)
         except InvalidExpressionError as e:
-            raise ConfigError(f"invalid expression '{source}': {e}") from None
+            raise ValueError(f"invalid expression '{source}': {e}") from None
         constants = self._constants
 
         def evaluate(values: ParamValues) -> np.ndarray:
@@ -1163,18 +1173,19 @@ class ParamSpace(Serializable):
                 raise ValueError(
                     f"a solved element takes its 'solve' alone (its prior "
                     f"is in it); not {others}")
+            # Of the parsing, or of the constructor of the solve
             try:
                 solve = solve_parser.load(value['solve'])
-            except ConfigError as e:
-                raise ValueError(f"its solve: {e.message}") from None
+            except (ConfigError, ValueError) as e:
+                raise ValueError(f"its solve: {_message(e)}") from e
             self._solves.update(dict.fromkeys(elements, solve))
         elif isinstance(value, Mapping):
             kind = ParamKind.FREE
             try:
                 with config_path(key):
                     free = FreeElement.load(value)
-            except ConfigError as e:
-                raise ValueError(e.message) from None
+            except (ConfigError, ValueError) as e:
+                raise ValueError(_message(e)) from e
             self._free.update(
                 {e: copy.deepcopy(dict(value)) for e in elements})
             self._free_parsed.update(dict.fromkeys(elements, free))
@@ -1258,8 +1269,8 @@ class ParamSpace(Serializable):
             else:
                 try:
                     mode.check(pdesc.size())
-                except ConfigError as e:
-                    errors.append(f"the mode of '{name}': {e.message}")
+                except ValueError as e:
+                    errors.append(f"the mode of '{name}': {e}")
                 if any(self._kinds.get((name, i)) is ParamKind.TRANSFORMED
                        for i in range(pdesc.size())):
                     errors.append(
@@ -1526,7 +1537,7 @@ def _derived_values(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a value is neither an expression nor {expr, unit}, or its unit
         is not a unit.
     """
@@ -1535,7 +1546,7 @@ def _derived_values(
         with config_path('derived', name):
             if isinstance(value, Mapping):
                 if set(value) - {'expr', 'unit'} or 'expr' not in value:
-                    raise ConfigError(
+                    raise ValueError(
                         f"a derived value is its expression, or {{expr: "
                         f"..., unit: ...}}; it is {dict(value)!r}")
                 if value.get('unit') is not None:

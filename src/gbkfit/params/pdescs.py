@@ -21,7 +21,7 @@ import numpy as np
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options, load_option)
+    TypedParser, TypedSerializable, check_options, load_option)
 
 
 __all__ = [
@@ -157,7 +157,7 @@ class ParamDesc(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the unit is not a unit, a bound is exclusive but not given, the
         valid range is empty, the default is not finite or outside it, or
         the period is not positive.
@@ -201,7 +201,7 @@ class ParamDesc(TypedSerializable, abc.ABC):
         for name, bound, exclusive in (
                 ('min', min, min_exclusive), ('max', max, max_exclusive)):
             if exclusive and bound is None:
-                raise ConfigError(
+                raise ValueError(
                     f"a parameter with {name}_exclusive needs a {name}")
         valid = ValidRange(
             -np.inf if min is None else float(min),
@@ -209,15 +209,15 @@ class ParamDesc(TypedSerializable, abc.ABC):
             bool(min_exclusive), bool(max_exclusive))
         if not (valid.min < valid.max or valid.min == valid.max and not (
                 valid.min_exclusive or valid.max_exclusive)):
-            raise ConfigError(
+            raise ValueError(
                 f"the valid range of a parameter, {valid}, is empty")
         if default is not None and not (
                 np.isfinite(default) and valid.contains(default)):
-            raise ConfigError(
+            raise ValueError(
                 f"the default of a parameter ({default}) must be finite and "
                 f"in its valid range {valid}")
         if period is not None and not (np.isfinite(period) and period > 0):
-            raise ConfigError(
+            raise ValueError(
                 f"the period of a parameter ({period}) must be positive")
         self._size = int(size)
         self._desc = desc
@@ -262,7 +262,7 @@ class ParamDesc(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the unit is not a unit.
         """
         pdesc = copy.copy(self)
@@ -303,7 +303,7 @@ class ParamScalarDesc(ParamDesc):
 
     Raises
     ------
-    ConfigError
+    ValueError
         See ParamDesc.
     """
 
@@ -357,7 +357,7 @@ class ParamVectorDesc(ParamDesc):
 
     Raises
     ------
-    ConfigError
+    ValueError
         See ParamDesc.
     """
 
@@ -473,6 +473,8 @@ def load_pdescs_dict(info: Mapping[str, Any]) -> dict[str, ParamDesc]:
     ------
     ConfigError
         If a configuration is invalid.
+    ValueError, TypeError
+        If an object it makes refuses its options.
     """
     return {
         name: load_option(
@@ -522,7 +524,7 @@ def pdescs_with_units(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a unit is not a unit.
     """
     return {
@@ -542,6 +544,6 @@ def make_param_unit(
     try:
         return astropy.units.Unit(unit)
     except (TypeError, ValueError) as e:
-        raise ConfigError(
+        raise ValueError(
             f"the unit of a parameter must be an astropy unit (e.g. "
             f"'km/s'); it is {unit!r}") from e

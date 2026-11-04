@@ -17,7 +17,7 @@ from pydantic import FiniteFloat
 from ._errors import ParamEvaluationError
 from .space import ParamFunctions, ParamSpace, ParamValues
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options, config_path)
+    TypedParser, TypedSerializable, check_options, config_path)
 
 
 __all__ = [
@@ -41,7 +41,7 @@ def _check_std(std: float | Sequence[float]) -> None:
     """Check that standard deviations are finite and positive."""
     values = np.asarray(std, dtype=float)
     if not (np.all(np.isfinite(values)) and np.all(values > 0)):
-        raise ConfigError(
+        raise ValueError(
             f"std must be finite and positive; it is {std}")
 
 
@@ -76,7 +76,7 @@ class JointPrior(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an expression is invalid.
         """
 
@@ -97,7 +97,7 @@ class JointPriorGauss(JointPrior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If std is not finite and positive.
     """
 
@@ -162,7 +162,7 @@ class JointPriorSmooth(JointPrior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the order is not 1 or 2, or std is not finite and positive.
     """
 
@@ -214,14 +214,14 @@ class JointPriorSmooth(JointPrior):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the positions are not one per element.
         ParamEvaluationError
             If they are not increasing (a point that cannot be evaluated,
             of positions that are parameters).
         """
         if positions.shape != (n,):
-            raise ConfigError(
+            raise ValueError(
                 f"{self._positions}: there must be one position per element "
                 f"of {self._expr} ({n}); there are {positions.size}")
         spacing = np.diff(positions)
@@ -238,11 +238,11 @@ class JointPriorSmooth(JointPrior):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If there are not more values than the order.
         """
         if len(x) <= self._order:
-            raise ConfigError(
+            raise ValueError(
                 f"{self._expr}: a smoothness prior of order {self._order} "
                 f"needs more than {self._order} values; there are {len(x)}")
         slope = np.diff(x) / h
@@ -281,7 +281,7 @@ class JointPriorSmooth2D(JointPrior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the size is not two numbers of at least 1, the order is not 1
         or 2, or std is not finite and positive.
     """
@@ -306,7 +306,7 @@ class JointPriorSmooth2D(JointPrior):
         if not (isinstance(size, Sequence) and len(size) == 2 and all(
                 isinstance(n, numbers.Integral) and not isinstance(n, bool)
                 and n >= 1 for n in size)):
-            raise ConfigError(
+            raise ValueError(
                 f"size must be the numbers of cells along x and y, [nx, "
                 f"ny], each at least 1; it is {size!r}")
         self._expr = expr
@@ -325,7 +325,7 @@ class JointPriorSmooth2D(JointPrior):
         def residuals(values: ParamValues) -> np.ndarray:
             x = np.asarray(expression(values), dtype=float)
             if x.size != nx * ny:
-                raise ConfigError(
+                raise ValueError(
                     f"{self._expr}: a map of {nx} by {ny} cells needs "
                     f"{nx * ny} values; there are {x.size}")
             c = x.reshape(ny, nx)
@@ -359,7 +359,7 @@ class JointPriorBound(JointPrior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If neither bound is given, the lower is not below the upper, or
         std is not finite and positive.
     """
@@ -385,9 +385,9 @@ class JointPriorBound(JointPrior):
     ):
         check_options(JointPriorBound.__init__, locals())
         if lower is None and upper is None:
-            raise ConfigError("a bound needs lower, upper or both")
+            raise ValueError("a bound needs lower, upper or both")
         if lower is not None and upper is not None and not lower < upper:
-            raise ConfigError(
+            raise ValueError(
                 f"lower must be below upper; they are {lower} and {upper}")
         self._expr = expr
         self._std = std
@@ -431,7 +431,7 @@ class JointPriorMVN(JointPrior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the sizes do not match, or the covariance is not symmetric
         positive definite.
     """
@@ -455,15 +455,15 @@ class JointPriorMVN(JointPrior):
         n = len(exprs)
         cov_ = np.asarray(cov, dtype=float)
         if len(mean) != n or cov_.shape != (n, n):
-            raise ConfigError(
+            raise ValueError(
                 f"mean must have {n} values and cov {n} x {n}, one per "
                 f"expression; they have {len(mean)} and {cov_.shape}")
         if not np.allclose(cov_, cov_.T):
-            raise ConfigError("cov must be symmetric")
+            raise ValueError("cov must be symmetric")
         try:
             self._cholesky = np.linalg.cholesky(cov_)
         except np.linalg.LinAlgError:
-            raise ConfigError("cov must be positive definite") from None
+            raise ValueError("cov must be positive definite") from None
         self._exprs = tuple(exprs)
         self._mean = tuple(float(m) for m in mean)
         self._cov = tuple(tuple(float(c) for c in row) for row in cov)
@@ -488,7 +488,7 @@ class JointPriorMVN(JointPrior):
     def _scalar(value: np.ndarray, expr: str) -> float:
         """Return the value of an expression, which must be one number."""
         if value.size != 1:
-            raise ConfigError(
+            raise ValueError(
                 f"{expr}: each expression of an mvn prior must give one "
                 f"value; it gives {value.size}")
         return float(value[0])
@@ -514,7 +514,7 @@ def joint_prior_residuals(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a prior is invalid (with the path 'priors[i]').
     """
     residuals = []

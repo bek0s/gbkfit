@@ -12,7 +12,7 @@ import abc
 import numpy as np
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, check_options)
 from gbkfit.utils import numutils
 
 
@@ -25,9 +25,9 @@ __all__ = [
 
 
 def _check_origin_in(origin: int, size: int) -> None:
-    """Raise ConfigError unless the origin is an index of size elements."""
+    """Raise ValueError unless the origin is an index of size elements."""
     if not -size <= origin < size:
-        raise ConfigError(
+        raise ValueError(
             f"origin must be an index of the {size} elements of the "
             f"parameter; it is {origin}")
 
@@ -50,7 +50,7 @@ class ParamMode(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the mode does not suit the parameter.
         """
         pass
@@ -105,7 +105,7 @@ class ParamModeOffsets(ParamMode):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the origin is not an integer.
     """
 
@@ -155,7 +155,7 @@ class ParamModeIncrements(ParamMode):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the origin is not an integer.
     """
 

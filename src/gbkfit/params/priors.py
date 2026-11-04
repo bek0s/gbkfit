@@ -18,7 +18,7 @@ from annotated_types import Ge, Gt, Le
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, Unit, check_options)
+    TypedParser, TypedSerializable, Unit, check_options)
 
 
 __all__ = [
@@ -39,7 +39,7 @@ __all__ = [
 def _check_range(min: float, max: float) -> None:
     """Check that a range is not empty."""
     if not min < max:
-        raise ConfigError(
+        raise ValueError(
             f"option 'min' must be less than option 'max'; they are {min} "
             f"and {max}")
 
@@ -185,7 +185,7 @@ class PriorUniform(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the range is not finite or is empty.
     """
 
@@ -244,7 +244,7 @@ class PriorLogUniform(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the range is not finite and positive, or is empty.
     """
 
@@ -309,7 +309,7 @@ class PriorSine(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the range is not within [0, 180], or is empty.
     """
 
@@ -383,7 +383,7 @@ class PriorGauss(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the mean is not finite, or the standard deviation is not
         finite and positive.
     """
@@ -449,7 +449,7 @@ class PriorGaussTrunc(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the mean or the range is not finite, the range is empty, or
         the standard deviation is not finite and positive.
     """
@@ -529,7 +529,7 @@ class PriorHalfGauss(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the standard deviation is not finite and positive.
     """
 
@@ -593,7 +593,7 @@ class PriorHalfCauchy(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the scale is not finite and positive.
     """
 
@@ -684,7 +684,7 @@ class PriorScipy(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the distribution is not a continuous one of scipy.stats, or its
         parameters are not valid for it.
     """
@@ -706,7 +706,7 @@ class PriorScipy(Prior):
         check_options(PriorScipy.__init__, locals())
         family = getattr(scipy.stats, distribution, None)
         if not isinstance(family, scipy.stats.rv_continuous):
-            raise ConfigError(
+            raise ValueError(
                 f"distribution must be the name of a continuous distribution "
                 f"of scipy.stats; it is {distribution!r}")
         params = {name: float(value) for name, value in (params or {}).items()}
@@ -714,11 +714,11 @@ class PriorScipy(Prior):
             frozen = family(**params)
             median = float(frozen.ppf(0.5))
         except TypeError as e:
-            raise ConfigError(
+            raise ValueError(
                 f"the parameters of the distribution {distribution!r} are not "
                 f"valid: {e}") from e
         if not math.isfinite(median):
-            raise ConfigError(
+            raise ValueError(
                 f"the parameters of the distribution {distribution!r} are not "
                 f"valid: {params}")
         self._distribution = distribution
@@ -763,7 +763,7 @@ class PriorTruncated(Prior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the range holds none of the probability of the prior.
     """
 
@@ -785,7 +785,7 @@ class PriorTruncated(Prior):
         self._cdf_minimum = float(prior.cdf(self._minimum))
         self._mass = float(prior.cdf(self._maximum)) - self._cdf_minimum
         if not (self._minimum < self._maximum and self._mass > 0):
-            raise ConfigError(
+            raise ValueError(
                 f"the bounds [{min}, {max}] hold none of the probability of "
                 f"the prior")
 

@@ -22,7 +22,7 @@ from annotated_types import Gt
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options)
+    TypedParser, TypedSerializable, check_options)
 from gbkfit.params._errors import ModelEvaluationError
 
 
@@ -118,7 +118,7 @@ class Solve(TypedSerializable, abc.ABC):
     @abc.abstractmethod
     def check_coupled(self, size: int) -> None:
         """
-        Raise ConfigError unless it can solve size values together (see
+        Raise ValueError unless it can solve size values together (see
         solve_coupled).
         """
         pass
@@ -209,7 +209,7 @@ class SolveGaussian(Solve):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If not one of sigma and sigma_aicp is given, sigma_aicp is not two
         finite positive numbers, increasing, or the likelihood is
         'integrated' with sigma_aicp.
@@ -242,18 +242,18 @@ class SolveGaussian(Solve):
     ):
         check_options(SolveGaussian.__init__, locals())
         if (sigma is None) == (sigma_aicp is None):
-            raise ConfigError(
+            raise ValueError(
                 "a Gaussian solve has sigma, or sigma_aicp (a range of sigma "
                 "chosen by AICp), not both")
         if sigma_aicp is not None:
             if not (len(sigma_aicp) == 2
                     and all(math.isfinite(s) and s > 0 for s in sigma_aicp)
                     and sigma_aicp[0] < sigma_aicp[1]):
-                raise ConfigError(
+                raise ValueError(
                     f"sigma_aicp must be two finite positive numbers, "
                     f"increasing; it is {sigma_aicp!r}")
             if likelihood != 'profiled':
-                raise ConfigError(
+                raise ValueError(
                     "values of a prior of sigma chosen by AICp take the "
                     "likelihood 'profiled'")
         self._mean = float(mean)
@@ -350,29 +350,29 @@ class SolveGaussian(Solve):
 
 def check_together(solves: Sequence[Solve], sizes: Sequence[int]) -> None:
     """
-    Raise ConfigError unless values of the given solves, the given number
+    Raise ValueError unless values of the given solves, the given number
     of each, can be solved together (see solve_together): of Gaussian
     priors and one likelihood, and 'profiled' if more than one value has
     a minimum (their integral has no exact formula).
     """
     if not all(isinstance(solve, SolveGaussian) for solve in solves):
-        raise ConfigError(
+        raise ValueError(
             "values solved together take Gaussian priors (solves of type "
             "'gaussian')")
     likelihoods = {solve.likelihood() for solve in solves}
     if len(likelihoods) > 1:
-        raise ConfigError(
+        raise ValueError(
             f"values solved together take one likelihood; they have "
             f"{sorted(likelihoods)}")
     if sum(sizes) > 1 and likelihoods == {'integrated'} and any(
             solve.minimum() is not None for solve in solves):
-        raise ConfigError(
+        raise ValueError(
             f"{sum(sizes)} values solved together above a minimum have no "
             f"exact integral for the log-likelihood: give their solves the "
             f"likelihood 'profiled' (the log-likelihood at their best "
             f"values), or no minimum")
     if len({solve.sigma_aicp() for solve in solves}) > 1:
-        raise ConfigError(
+        raise ValueError(
             "values solved together take one sigma chosen by AICp: their "
             "solves have the same sigma_aicp, or none")
 
@@ -398,7 +398,7 @@ def solve_together(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If they cannot be solved together (see check_together).
     """
     check_together(solves, sizes)
@@ -503,7 +503,7 @@ def solve_together_rows(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If they cannot be solved together (see check_together).
     ModelEvaluationError
         If the Newton steps do not reach the solution, or their matrix is
