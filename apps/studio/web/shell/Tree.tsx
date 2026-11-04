@@ -254,7 +254,7 @@ function NewBlock({ project, folder, onDone }: AdderProps) {
   );
 }
 
-// The drafts of the layouts of the screens of galaxies and observations,
+// The drafts of the layouts of the screens of observations,
 // to compare (see drafts), until one of each is chosen
 function DraftsSection() {
   const { screen, go } = useStudio();

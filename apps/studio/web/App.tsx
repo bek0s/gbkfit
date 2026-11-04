@@ -6,6 +6,7 @@ import { useJobs } from './api/queries';
 import { Logo } from './components/icons';
 import { SchemeMenu } from './components/ui/scheme';
 import { Dataset, NewDataset } from './screens/Dataset';
+import { GalaxyScreen } from './screens/GalaxyScreen';
 import { BlockInLayout, DraftScreen } from './screens/Drafts';
 import { Home } from './screens/Home';
 import { NewImage } from './screens/Image';
@@ -68,7 +69,8 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'datasets') return <Dataset key={address(screen)} name={screen.name} />;
       if (screen.folder === 'psfs') return <ResponseScreen key={address(screen)} family="psf" name={screen.name} />;
       if (screen.folder === 'lsfs') return <ResponseScreen key={address(screen)} family="lsf" name={screen.name} />;
-      if (screen.folder === 'galaxies' || screen.folder === 'observations') {
+      if (screen.folder === 'galaxies') return <GalaxyScreen key={address(screen)} name={screen.name} />;
+      if (screen.folder === 'observations') {
         return <BlockInLayout key={address(screen)} folder={screen.folder} name={screen.name} />;
       }
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} folder={screen.folder} />;

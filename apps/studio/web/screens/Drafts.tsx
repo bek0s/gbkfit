@@ -1,5 +1,5 @@
-// The screen of a galaxy or an observation in one of the drafts of its
-// layout (see shell/drafts): its head names the block (one of its folder,
+// The screen of an observation in one of the drafts of its layout (see
+// shell/drafts): its head names the block (one of its folder,
 // on the screen of a draft), switches between the drafts, chooses one for
 // the blocks of the folder, and saves; its edits stay as the draft
 // changes.
@@ -13,13 +13,9 @@ import { draft, draftsOf, type Draft } from '../shell/drafts';
 import { useRemembered } from '../shell/remember';
 import { useStudio } from '../studio';
 import { SaveActions, useEditedBlock } from './editing';
-import { GalaxyCanvas, GalaxyCards, GalaxyOutline, type LayoutProps } from './Galaxy';
-import { ObservationForm, ObservationPipeline } from './Observation';
+import { ObservationForm, ObservationPipeline, type LayoutProps } from './Observation';
 
 const LAYOUTS: Record<string, ComponentType<LayoutProps>> = {
-  'galaxy-outline': GalaxyOutline,
-  'galaxy-cards': GalaxyCards,
-  'galaxy-canvas': GalaxyCanvas,
   'observation-pipeline': ObservationPipeline,
   'observation-form': ObservationForm,
 };

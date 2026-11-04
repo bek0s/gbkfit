@@ -311,3 +311,45 @@ export function useGalaxyParameters(project: string, galaxy: Record<string, unkn
     queryFn: () => data(api.POST('/api/v1/parameters', { body: { project, galaxy: galaxy ?? {} } })),
   });
 }
+
+// A render of a galaxy of options of a block of a project at values of its
+// parameters (see the server's /views/galaxy): its maps by name (light,
+// velocity, vx, vy, dispersion, of all and '{component}/{map}'), the size
+// of its pixels and their number across, its curves by name (with
+// 'radius') and the problems of those not drawn; the last stays while the
+// next comes
+export interface GalaxyRender {
+  maps: Record<string, Float32Array>;
+  size: number;
+  step: number;
+  curves: Record<string, (number | null)[]>;
+  problems: string[];
+}
+
+export function useGalaxyRender(
+  project: string,
+  galaxy: Record<string, unknown> | undefined,
+  properties: Record<string, unknown>,
+  view: 'sky' | 'face-on' | 'edge-on',
+  size = 160,
+) {
+  return useQuery({
+    queryKey: keys.view('galaxy', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), view, size),
+    enabled: galaxy !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    queryFn: async (): Promise<GalaxyRender> => {
+      const frame = decodeFrame(
+        await data(
+          api.POST('/api/v1/views/galaxy', {
+            body: { project, galaxy: galaxy ?? {}, properties, view, size },
+            parseAs: 'arrayBuffer',
+          }),
+        ),
+      );
+      const header = frame.header as { size: number; step: number; curves: GalaxyRender['curves']; problems: string[] };
+      const maps = Object.fromEntries(frame.arrays.map((a) => [String(a.info.name), a.values]));
+      return { maps, size: header.size, step: header.step, curves: header.curves, problems: header.problems };
+    },
+  });
+}

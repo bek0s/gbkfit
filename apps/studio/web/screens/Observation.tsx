@@ -12,7 +12,15 @@ import { membersOf, propertiesOf, SchemaForm, typeOf, type Options, type Schema 
 import { Button } from '../components/ui/basics';
 import { Panel } from '../components/ui/panel';
 import { useStudio } from '../studio';
-import type { LayoutProps } from './Galaxy';
+import type { EditedBlock } from './editing';
+
+// What the screen of an observation in a draft is given (see Drafts): its
+// project, its name and its options as edited
+export interface LayoutProps {
+  project: string;
+  name: string;
+  edited: EditedBlock;
+}
 
 // The stages of an observation of the sky, from the galaxy to the data,
 // and what each is
