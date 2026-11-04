@@ -9,7 +9,6 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 
 
 def block_size(
@@ -18,7 +17,7 @@ def block_size(
     """
     Return the size of blocks of the options, along the axes of the data
     (FITS order, e.g. x, y and the channels), in numpy order. Raise
-    ConfigError unless it is a positive integer for each axis.
+    ValueError unless it is a positive integer for each axis.
     """
     size = tuple(size)
     if len(size) != len(axes) or not all(
@@ -26,7 +25,7 @@ def block_size(
             and n >= 1 for n in size):
         names = axes[0] if len(axes) == 1 \
             else f"{', '.join(axes[:-1])} and {axes[-1]}"
-        raise ConfigError(
+        raise ValueError(
             f"the size of the blocks of these data is a positive integer for "
             f"each of {names}; it is {list(size)}")
     return size[::-1]
@@ -80,7 +79,7 @@ def resample_blocks(
         [np.isfinite(r) for r in residuals.values()]).astype(np.int64)
     origins = np.argwhere(_window_sums(valid, size) == np.prod(size))
     if not len(origins):
-        raise ConfigError(
+        raise ValueError(
             f"no block of the size {list(size[::-1])} has residuals in all of "
             f"its pixels; make the blocks smaller")
     blocks, nblocks, positions = _tiles(shape, size)

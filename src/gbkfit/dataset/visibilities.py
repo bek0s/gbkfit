@@ -15,7 +15,7 @@ import scipy.spatial
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, FilePath, Serializable, Unit, check_options)
+    FilePath, Serializable, Unit, check_options)
 from gbkfit.grid import make_rest
 from gbkfit.utils import unitutils
 from .base import Dataset
@@ -78,7 +78,7 @@ class UVCoverage(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the baselines are not finite, of shape (nrows, 3), the
         frequencies are not at least two, positive and uniform, the phase
         centre is not an RA and a Dec, the frame is not one of those, or
@@ -98,12 +98,12 @@ class UVCoverage(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an array is missing, or they are invalid (see the class).
         """
         missing = set(cls._ARRAYS) - set(arrays)
         if missing:
-            raise ConfigError(
+            raise ValueError(
                 f"the coverage of visibilities needs the arrays "
                 f"{sorted(missing)}")
         return cls(
@@ -119,7 +119,7 @@ class UVCoverage(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an array is missing, or they are invalid (see the class).
         """
         check_options(UVCoverage.from_file, locals())
@@ -157,7 +157,7 @@ class UVCoverage(Serializable):
         uvw = np.array(uvw, float)
         frequencies = np.array(frequencies, float)
         if uvw.ndim != 2 or uvw.shape[1] != 3 or not np.isfinite(uvw).all():
-            raise ConfigError(
+            raise ValueError(
                 f"the baselines must be finite, one (u, v, w) for each row; "
                 f"their shape is {uvw.shape}")
         # TODO: continuum visibilities, of one channel (an observable of
@@ -166,16 +166,16 @@ class UVCoverage(Serializable):
         if frequencies.ndim != 1 or frequencies.size < 2 \
                 or not np.all(frequencies > 0) or steps[0] == 0 \
                 or not np.allclose(steps, steps[0], rtol=1e-6, atol=0):
-            raise ConfigError(
+            raise ValueError(
                 "the frequencies must be at least two, positive and uniform "
                 "(e.g. regridded by CASA mstransform)")
         if np.shape(phase_centre) != (2,):
-            raise ConfigError(
+            raise ValueError(
                 f"the phase centre must be an RA and a Dec; it is "
                 f"{phase_centre}")
         rest = make_rest(rest)
         if rest is None or rest.unit != astropy.units.Hz:
-            raise ConfigError(
+            raise ValueError(
                 f"the rest of visibilities must be a frequency; it is {rest}")
         self._uvw = uvw
         self._frequencies = frequencies
@@ -249,7 +249,7 @@ class DatasetVisibilities(Dataset):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the items have no errors, or are not of the channels and rows
         of the coverage.
     """
@@ -283,7 +283,7 @@ class DatasetVisibilities(Dataset):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an array is missing (see the class).
         """
         check_options(DatasetVisibilities.from_file, locals())
@@ -291,7 +291,7 @@ class DatasetVisibilities(Dataset):
             arrays = dict(arrays)
         missing = {'data', 'error'} - set(arrays)
         if missing:
-            raise ConfigError(
+            raise ValueError(
                 f"the file of visibilities {file} has no arrays "
                 f"{sorted(missing)}")
         data, mask = arrays['data'], arrays.get('mask')
@@ -364,7 +364,7 @@ class DatasetVisibilities(Dataset):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the field, the spectral window or the column are not in the
             measurement set, it has neither Stokes I nor a pair of parallel
             hands, its frequencies are not in a rest frame of UVCoverage,
@@ -391,7 +391,7 @@ class DatasetVisibilities(Dataset):
             source = fields.getcol('SOURCE_ID')[index]
         with subtable('SPECTRAL_WINDOW') as windows:
             if not 0 <= spw < windows.nrows():
-                raise ConfigError(
+                raise ValueError(
                     f"the measurement set has {windows.nrows()} spectral "
                     f"windows; spw {spw} is not one")
             frequencies = windows.getcell('CHAN_FREQ', spw)
@@ -400,7 +400,7 @@ class DatasetVisibilities(Dataset):
         # TODO: TOPO frequencies, with the Doppler shift of the time of
         # each row (for now, regridded to LSRK by CASA mstransform)
         if frame not in _FRAMES:
-            raise ConfigError(
+            raise ValueError(
                 f"the frequencies must be in the rest frame "
                 f"{' or '.join(_FRAMES)}; they are in {frame} (regrid them, "
                 f"e.g. by CASA mstransform with outframe='LSRK')")
@@ -414,7 +414,7 @@ class DatasetVisibilities(Dataset):
             rest = _ms_rest(subtable, source)
         with tables.table(ms, ack=False) as main:
             if column not in main.colnames():
-                raise ConfigError(
+                raise ValueError(
                     f"the measurement set has no column {column}")
             rows = main.query(
                 f'FIELD_ID == {index} && DATA_DESC_ID == {description} '
@@ -460,12 +460,12 @@ class DatasetVisibilities(Dataset):
         check_options(DatasetVisibilities.__init__, locals())
         super().__init__(dict(re=re, im=im))
         if re.error() is None or im.error() is None:
-            raise ConfigError(
+            raise ValueError(
                 "visibilities need the errors of their parts (e.g. 1 / "
                 "sqrt(weight) of a measurement set)")
         shape = (coverage.nchannels(), coverage.nrows())
         if re.shape() != shape:
-            raise ConfigError(
+            raise ValueError(
                 f"the visibilities must be of the {shape[0]} channels and the "
                 f"{shape[1]} rows of their coverage; their shape is "
                 f"{re.shape()}")
@@ -477,7 +477,7 @@ class DatasetVisibilities(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of visibilities: the
+        Raise ValueError unless the size is of blocks of visibilities: the
         side of square cells of the uv plane (m, as the baselines; see
         resample_blocks).
         """
@@ -508,7 +508,7 @@ class DatasetVisibilities(Dataset):
         valid = np.logical_and.reduce(
             [np.isfinite(r).all(axis=0) for r in residuals.values()])
         if not valid.any():
-            raise ConfigError(
+            raise ValueError(
                 "no row of the visibilities has residuals in every channel")
         corner = np.floor(np.column_stack([u, v]) / cell)
         place = np.column_stack([u, v]) - corner * cell
@@ -541,13 +541,13 @@ def _uv_cell(size: Sequence[float]) -> float:
     """
     Return the side of the cells of the uv plane (m) of the size of the
     blocks of visibilities (see DatasetVisibilities.resample_blocks).
-    Raise ConfigError unless it is one positive number.
+    Raise ValueError unless it is one positive number.
     """
     size = tuple(size)
     if len(size) != 1 or not (
             isinstance(size[0], numbers.Real)
             and not isinstance(size[0], bool) and size[0] > 0):
-        raise ConfigError(
+        raise ValueError(
             f"the size of the blocks of visibilities is the side of the "
             f"cells of the uv plane (m), one positive number; it is "
             f"{list(size)}")
@@ -568,16 +568,16 @@ def _ms_field(field: int | str | None, names: list[str]) -> int:
     """Return the index of a field of a measurement set of the names."""
     if field is None:
         if len(names) != 1:
-            raise ConfigError(
+            raise ValueError(
                 f"the measurement set has the fields {names}; give one")
         return 0
     if isinstance(field, str):
         if field not in names:
-            raise ConfigError(
+            raise ValueError(
                 f"the measurement set has the fields {names}, not {field!r}")
         return names.index(field)
     if not 0 <= field < len(names):
-        raise ConfigError(
+        raise ValueError(
             f"the measurement set has {len(names)} fields; field {field} is "
             f"not one")
     return field
@@ -588,7 +588,7 @@ def _ms_rest(subtable: Any, source: int) -> astropy.units.Quantity:
     Return the rest frequency of a source of a measurement set (the first
     of the table SOURCE, if it has one).
     """
-    error = ConfigError(
+    error = ValueError(
         "the measurement set has no rest frequency for the field; give it "
         "(option rest)")
     try:
@@ -661,6 +661,6 @@ def _ms_stokes_i(
             stokes = (visibilities[..., a] + visibilities[..., b]) / 2
             error = np.sqrt(sigmas[..., a] ** 2 + sigmas[..., b] ** 2) / 2
             return stokes, error, ~(flags[..., a] | flags[..., b])
-    raise ConfigError(
+    raise ValueError(
         f"the measurement set has neither Stokes I nor a pair of parallel "
         f"hands; its products are {products} (CASA codes)")

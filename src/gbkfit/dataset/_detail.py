@@ -10,7 +10,7 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
-from gbkfit.config import ConfigError, config_path, parse_options, warn
+from gbkfit.config import config_path, parse_options, warn
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis)
 from gbkfit.io import read_column, write_data
@@ -108,14 +108,14 @@ def moment_items(
     (moment0 to moment7) and of the given coefficients of a Gauss-Hermite
     series (h3 and h4; see MOMENT_ITEMS), as the models give them: those of
     the orders of 1 and above in km/s (see _in_kms), and the coefficients
-    dimensionless. Raise ConfigError for other orders, or units.
+    dimensionless. Raise ValueError for other orders, or units.
     """
     hermite = hermite or {}
     if invalid := sorted(set(moments) - set(_ORDERS), key=str):
-        raise ConfigError(
+        raise ValueError(
             f"the orders of the moments are 0 to 7; they include {invalid}")
     if invalid := sorted(set(hermite) - set(_HERMITE_ORDERS), key=str):
-        raise ConfigError(
+        raise ValueError(
             f"the coefficients of a Gauss-Hermite series are h3 and h4; "
             f"they include the orders {invalid}")
     items = {
@@ -132,7 +132,7 @@ def _in_kms(data: Data, order: int) -> Data:
     Return the data of a moment of an order of 1 and above in km/s: the
     mean velocity (1) and the dispersion (2) in km/s, the central moments
     of an order k above 2 in (km/s)^k; converted from their unit (e.g.
-    m/s), if they have one, or taken to be in km/s. Raise ConfigError if
+    m/s), if they have one, or taken to be in km/s. Raise ValueError if
     their unit is not one of velocity (to the power k; a dimensionless one
     is of h_k of a Gauss-Hermite series, an item of its own).
     """
@@ -145,7 +145,7 @@ def _in_kms(data: Data, order: int) -> Data:
         hermite = f" (h{order} of a Gauss-Hermite series is the item " \
             f"h{order})" if order in _HERMITE_ORDERS and unit.is_equivalent(
                 astropy.units.dimensionless_unscaled) else ""
-        raise ConfigError(
+        raise ValueError(
             f"moment {order} is in {unitutils.format_unit(unit)!r}, which is "
             f"not a unit of velocity^{power} (e.g. "
             f"{unitutils.format_unit(kms)!r}){hermite}")
@@ -156,13 +156,13 @@ def _dimensionless(data: Data, order: int) -> Data:
     """
     Return the data of the coefficient h_k of a Gauss-Hermite series,
     dimensionless (converted from a dimensionless unit, e.g. percent), or
-    taken to be. Raise ConfigError if its unit is not dimensionless.
+    taken to be. Raise ValueError if its unit is not dimensionless.
     """
     unit = data.unit()
     if unit is None:
         return data
     if not unit.is_equivalent(astropy.units.dimensionless_unscaled):
-        raise ConfigError(
+        raise ValueError(
             f"h{order} is in {unitutils.format_unit(unit)!r}; it is "
             f"dimensionless (a central moment is the item moment{order})")
     dimensionless = astropy.units.dimensionless_unscaled
@@ -181,12 +181,12 @@ def table_item(table: Table, columns: DataColumns) -> Data:
         else values.unit
     error = columns.error
     if isinstance(error, bool):
-        raise ConfigError(
+        raise ValueError(
             f"the error must be a column, or one error for all the values; "
             f"it is {error}")
     if isinstance(error, int | float):
         if not error > 0:
-            raise ConfigError(
+            raise ValueError(
                 f"one error for all the values must be positive; it is "
                 f"{error}")
         error = np.full(values.shape, float(error))
@@ -197,7 +197,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
                 try:
                     error = error.to(values.unit)
                 except astropy.units.UnitConversionError:
-                    raise ConfigError(
+                    raise ValueError(
                         f"the errors are in {error.unit}, but the values in "
                         f"{values.unit}") from None
             error = error.value
@@ -236,10 +236,10 @@ def read_moments(
             spectral_correlation=item.spectral_correlation,
             error_kind=item.error_kind, footprint=item.footprint)
     if not coords:
-        raise ConfigError("a dataset needs at least one moment")
+        raise ValueError("a dataset needs at least one moment")
     first = next(iter(coords.values()))
     if any(value != first for value in coords.values()):
-        raise ConfigError(
+        raise ValueError(
             f"the files of the moments have different world coordinates: "
             f"{coords}")
     return items, first
@@ -278,13 +278,13 @@ def file_references(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectral axis has a size: its data give it; or rpix or
         rval has neither one value nor one for each axis on the sky.
     """
     spectral = spectral or SpectralAxis()
     if spectral.size() is not None:
-        raise ConfigError(
+        raise ValueError(
             "the data give the number of channels of their spectral axis; "
             "remove its size")
 
@@ -380,14 +380,14 @@ def cube_grid(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectral axis has another number of channels, or the grid is
         not valid.
     """
     shape = dataset.shape()[::-1]
     spectral = spectral or SpectralAxis()
     if spectral.size() not in (None, shape[-1]):
-        raise ConfigError(
+        raise ValueError(
             f"the data have {shape[-1]} channels; the spectral axis has "
             f"{spectral.size()}")
     return make_cube_grid(
@@ -442,7 +442,7 @@ def grid_noise_correlation(
     grid (see Dataset.noise_correlation): the shapes of its correlations
     on the pixels and the channels of the grid, out to the largest
     separations of the data, divided by their values at their centres.
-    Raise ConfigError if it has a spectral correlation but the grid no
+    Raise ValueError if it has a spectral correlation but the grid no
     spectral axis, or a shape is not largest at its centre.
     """
     from .base import NoiseCorrelation
@@ -452,7 +452,7 @@ def grid_noise_correlation(
         return None
     grid = dataset.grid()
     if spectral is not None and grid.spectral_axis is None:
-        raise ConfigError(
+        raise ValueError(
             f"the noise of '{key}' has a spectral correlation, but the "
             f"data have no spectral axis")
     if spatial is not None:
@@ -470,12 +470,12 @@ def grid_noise_correlation(
 def _centred(shape: np.ndarray, key: str) -> np.ndarray:
     """
     Return the shape of a correlation of the noise of data item key (of
-    odd sizes) divided by its value at its centre, or raise ConfigError
+    odd sizes) divided by its value at its centre, or raise ValueError
     unless that is its largest (the variance of the noise).
     """
     centre = shape[tuple(n // 2 for n in shape.shape)]
     if not centre > 0 or np.any(shape > centre):
-        raise ConfigError(
+        raise ValueError(
             f"the correlation of the noise of '{key}' must be largest at "
             f"its centre (at a separation of 0)")
     return shape / centre

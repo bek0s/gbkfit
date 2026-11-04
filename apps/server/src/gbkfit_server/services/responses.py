@@ -129,8 +129,8 @@ class Responses:
             raise Invalid(f"cannot draw the PSF: {e}") from e
         try:
             beam_area = psf.beam_area()
-        except ConfigError:
-            # (a point has none)
+        # A point has none
+        except ValueError:
             beam_area = None
         fwhm = None if beam_area is None \
             else float(np.sqrt(4 * np.log(2) * beam_area / np.pi))

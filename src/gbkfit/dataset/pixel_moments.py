@@ -144,7 +144,7 @@ class DatasetPixelMoments(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of pixels: a positive
+        Raise ValueError unless the size is of blocks of pixels: a positive
         integer for each of x and y (see resample_blocks).
         """
         _resampling.block_size(size, _AXES)

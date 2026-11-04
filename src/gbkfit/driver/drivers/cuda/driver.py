@@ -10,7 +10,7 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Ge
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.driver.base import (
     DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape, check_array_size)
 
@@ -36,7 +36,7 @@ class DriverCuda(Driver):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the machine has no GPU of that number.
     """
 
@@ -60,7 +60,7 @@ class DriverCuda(Driver):
                 name='cupy') from e
         ndevices = cp.cuda.runtime.getDeviceCount()
         if not 0 <= device < ndevices:
-            raise ConfigError(
+            raise ValueError(
                 f"device must be the number of a GPU of this machine, from 0 "
                 f"to {ndevices - 1}; it is {device}")
         self._device = cp.cuda.Device(device)

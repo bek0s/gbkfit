@@ -20,6 +20,7 @@ __all__ = [
     'config_path',
     'describe_unknown',
     'error_location',
+    'error_message',
     'format_location',
     'is_strict',
     'quoted_names',
@@ -129,6 +130,30 @@ def error_location(
     return (
         list(getattr(error, 'config_path', [])),
         getattr(error, 'config_context', None))
+
+
+def error_message(error: BaseException) -> str:
+    """
+    Return the message of an error raised while a configuration was
+    loaded, with its path in the configuration, if any (see config_path).
+
+    Parameters
+    ----------
+    error : BaseException
+        The error: a ConfigError, or any other.
+
+    Returns
+    -------
+    str
+        That of a ConfigError, or that of another error after its type
+        (e.g. "galaxies[0]: ValueError: rnmax must be greater than
+        rnmin").
+    """
+    if isinstance(error, ConfigError):
+        return str(error)
+    where = format_location(*error_location(error))
+    message = f"{type(error).__name__}: {error}"
+    return f"{where}: {message}" if where else message
 
 
 # The parts of the configuration being loaded (see config_path): the

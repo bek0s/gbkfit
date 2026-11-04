@@ -10,7 +10,7 @@ from typing import Any, NamedTuple
 import astropy.units
 import numpy as np
 
-from gbkfit.config import ConfigError, DataFile, parse_options, warn
+from gbkfit.config import DataFile, parse_options, warn
 from gbkfit.grid import Coords
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.io import ErrorKind, coords_from_header, read_arrays
@@ -182,7 +182,7 @@ class Data:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the mask is not finite, an error is negative, the footprint has
         values other than 0 and 1, the arrays are not of one shape, the
         unit is not a unit, the widths of the beam are not positive, or a
@@ -206,27 +206,27 @@ class Data:
         if error is not None:
             error = _as_float(error, data.dtype)
         if np.any(~np.isfinite(mask)):
-            raise ConfigError("the mask must be finite")
+            raise ValueError("the mask must be finite")
         if data.shape != mask.shape:
-            raise ConfigError(
+            raise ValueError(
                 f"the data and the mask must have one shape; their shapes "
                 f"are {data.shape} and {mask.shape}")
         if error is not None and data.shape != error.shape:
-            raise ConfigError(
+            raise ValueError(
                 f"the data and the error must have one shape; their shapes "
                 f"are {data.shape} and {error.shape}")
         if footprint is not None:
             footprint = _as_float(footprint, data.dtype)
             if data.shape != footprint.shape:
-                raise ConfigError(
+                raise ValueError(
                     f"the data and the footprint must have one shape; their "
                     f"shapes are {data.shape} and {footprint.shape}")
             if not np.all(np.isin(footprint, (0, 1))):
-                raise ConfigError(
+                raise ValueError(
                     "the footprint must be 1 where the instrument looked and "
                     "0 elsewhere")
         if error is not None and np.any(error < 0):
-            raise ConfigError(
+            raise ValueError(
                 f"errors cannot be negative; {np.count_nonzero(error < 0)} "
                 f"are, down to {np.nanmin(error):g}")
         # The total mask: the values that are finite, not masked, and
@@ -249,7 +249,7 @@ class Data:
                 ('spatial', spatial_correlation),
                 ('spectral', spectral_correlation)):
             if correlation is not None and correlation.varies():
-                raise ConfigError(
+                raise ValueError(
                     f"the {kind} correlation of the noise must not vary")
         self._spatial_correlation = spatial_correlation
         self._spectral_correlation = spectral_correlation
@@ -326,21 +326,21 @@ class Data:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the error is not positive, the error is one error and
             error_kind is not 'sigma', the files cannot be read (see
             read_arrays), or the arrays are invalid (see Data).
         """
         error_file = None
         if isinstance(error, bool):
-            raise ConfigError(
+            raise ValueError(
                 "the error must be a number or a file; it is a bool")
         if isinstance(error, (int, float)):
             # (an error that is not positive would mask every value)
             if not error > 0:
-                raise ConfigError(f"the error must be positive; it is {error}")
+                raise ValueError(f"the error must be positive; it is {error}")
             if error_kind != 'sigma':
-                raise ConfigError(
+                raise ValueError(
                     f"one error for all the values is a standard deviation; "
                     f"the kind of the errors (error_kind: {error_kind!r}) is "
                     f"that of a file of errors")
@@ -424,12 +424,12 @@ class Data:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has no unit, or its unit is not of the kind of the
             other.
         """
         if self._unit is None or not self._unit.is_equivalent(unit):
-            raise ConfigError(
+            raise ValueError(
                 f"data in {self._unit} cannot be given in {unit}")
         factor = self._unit.to(unit)
         return Data(
@@ -446,7 +446,7 @@ class Data:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the values are not of its shape.
         """
         return Data(
@@ -457,7 +457,7 @@ class Data:
 
 def _make_beam(beam: Beam | Mapping[str, Any] | None) -> Beam | None:
     """
-    Return a beam from itself or its options. Raise ConfigError if its
+    Return a beam from itself or its options. Raise ValueError if its
     widths are not positive.
     """
     if beam is None:
@@ -467,7 +467,7 @@ def _make_beam(beam: Beam | Mapping[str, Any] | None) -> Beam | None:
             beam, required={'bmaj', 'bmin'}, optional={'bpa', 'spectral'}))
     if not (np.all(np.asarray(beam.bmaj) > 0)
             and np.all(np.asarray(beam.bmin) > 0)):
-        raise ConfigError(
+        raise ValueError(
             f"the widths of a beam must be positive; they are {beam.bmaj} "
             f"and {beam.bmin}")
     return beam

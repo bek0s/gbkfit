@@ -163,7 +163,7 @@ class DatasetSlitSpectra(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of positions along the
+        Raise ValueError unless the size is of blocks of positions along the
         slit and channels: a positive integer for each of the position along
         the slit and the channels (see resample_blocks).
         """

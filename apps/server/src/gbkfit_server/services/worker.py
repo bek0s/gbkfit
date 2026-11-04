@@ -42,24 +42,25 @@ def main() -> None:
     os.dup2(2, 1)
     from gbkfit import load
     from gbkfit.tasks import log_handler
-    from gbkfit.params import ParamEvaluationError
-    from gbkfit.config import ConfigError
+    from gbkfit.config import ConfigError, error_message
 
     logger = logging.getLogger('gbkfit')
     logger.setLevel(logging.INFO)
     logger.addHandler(log_handler())
+    # Errors of any type, so that the session shows every error, with its
+    # path in the configuration; those that may be bugs are logged with
+    # their traceback
     try:
         setup = load(sys.argv[1])
-    except ConfigError as e:
-        _write(out, frames.encode(dict(type='error', message=str(e))))
-        sys.exit(1)
-    params, objective = setup.params, setup.objective
-    free = params.free_properties()
-    try:
+        params, objective = setup.params, setup.objective
+        free = params.free_properties()
         values = _start_values(params)
         outputs = setup.outputs(setup.evaluate(values), data=True)
-    except (ConfigError, ParamEvaluationError) as e:
-        _write(out, frames.encode(dict(type='error', message=str(e))))
+    except Exception as e:
+        if not isinstance(e, ConfigError):
+            logger.exception("the configuration cannot be evaluated")
+        _write(out, frames.encode(
+            dict(type='error', message=error_message(e))))
         sys.exit(1)
     _write(out, frames.array_frame(
         dict(type='ready', free=free, data=objective is not None),

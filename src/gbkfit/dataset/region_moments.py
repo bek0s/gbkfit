@@ -9,7 +9,7 @@ from typing import Any
 import astropy.io.fits
 import numpy as np
 
-from gbkfit.config import ConfigError, FilePath, check_options, config_path
+from gbkfit.config import FilePath, check_options, config_path
 from gbkfit.io import read_table
 from gbkfit.region import Regions, regions_parser
 from . import _detail, _outliers, _resampling
@@ -51,7 +51,7 @@ class DatasetRegionMoments(Dataset):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the moments do not have a value for each region.
     """
 
@@ -156,7 +156,7 @@ class DatasetRegionMoments(Dataset):
             with config_path(name):
                 items[name] = _detail.table_item(table, columns)
         if not items:
-            raise ConfigError("a dataset needs at least one moment")
+            raise ValueError("a dataset needs at least one moment")
         moments, hermite = _detail.split_moments(items)
         dataset = cls(moments, regions, hermite)
         return _detail.cleaned(dataset, outliers)
@@ -186,7 +186,7 @@ class DatasetRegionMoments(Dataset):
         check_options(DatasetRegionMoments.__init__, locals())
         super().__init__(_detail.moment_items(moments, hermite))
         if self.shape() != (regions.nregions(),):
-            raise ConfigError(
+            raise ValueError(
                 f"the moments have {self.shape()[0]} values, but there are "
                 f"{regions.nregions()} regions")
         self._regions = regions
@@ -201,7 +201,7 @@ class DatasetRegionMoments(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of regions: a positive
+        Raise ValueError unless the size is of blocks of regions: a positive
         integer for each of the regions (see resample_blocks).
         """
         _resampling.block_size(size, _BLOCK_AXES)

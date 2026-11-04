@@ -171,7 +171,7 @@ class DatasetPixelSpectra(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of pixels and channels:
+        Raise ValueError unless the size is of blocks of pixels and channels:
         a positive integer for each of x, y and the channels (see
         resample_blocks).
         """

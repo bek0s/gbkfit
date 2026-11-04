@@ -12,7 +12,7 @@ import numpy as np
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, Unit, check_options,
+    TypedParser, TypedSerializable, Unit, check_options,
     make_typed_desc)
 from gbkfit.grid import Grid, sky_to_pixel
 from gbkfit.math import overlap
@@ -111,7 +111,7 @@ class Aperture(TypedSerializable, abc.ABC):
     def centre(self) -> tuple[float, float]:
         """
         The centre of the aperture, x and y (arcsec): of a polygon, the
-        centroid of its area. Raise ConfigError if it has none (a field).
+        centroid of its area. Raise ValueError if it has none (a field).
         """
         pass
 
@@ -226,11 +226,11 @@ class AperturePolygon(Aperture):
         vertices = np.array(vertices, dtype=float)
         if vertices.ndim != 2 or vertices.shape[1] != 2 \
                 or vertices.shape[0] < 3:
-            raise ConfigError(
+            raise ValueError(
                 f"a polygon needs at least three vertices, each with x and "
                 f"y; its vertices have the shape {vertices.shape}")
         if overlap.polygon_area(vertices) == 0:
-            raise ConfigError("the polygon has no area")
+            raise ValueError("the polygon has no area")
         self._vertices = vertices
 
     def centre(self) -> tuple[float, float]:
@@ -314,7 +314,7 @@ class ApertureField(Aperture):
         check_options(ApertureField.__init__, locals())
 
     def centre(self) -> tuple[float, float]:
-        raise ConfigError("a field (the whole grid) has no centre")
+        raise ValueError("a field (the whole grid) has no centre")
 
     def overlaps(self, grid: Grid) -> tuple[np.ndarray, np.ndarray]:
         npix = int(np.prod(grid.size[:2]))

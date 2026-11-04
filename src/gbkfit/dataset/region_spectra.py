@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 
-from gbkfit.config import ConfigError, DataFile, check_options
+from gbkfit.config import DataFile, check_options
 from gbkfit.grid import Grid, SpectralAxis, make_cube_grid
 from gbkfit.io import ErrorKind, write_spectra
 from gbkfit.region import Regions, regions_parser
@@ -49,7 +49,7 @@ class DatasetRegionSpectra(Dataset):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectra are not of one region each.
     """
 
@@ -161,13 +161,13 @@ class DatasetRegionSpectra(Dataset):
         super().__init__(dict(spectra=spectra))
         nchannels, nregions = spectra.shape()
         if nregions != regions.nregions():
-            raise ConfigError(
+            raise ValueError(
                 f"the spectra are of {nregions} regions, but there are "
                 f"{regions.nregions()} regions")
         self._regions = regions
         spectral = spectral or SpectralAxis()
         if spectral.size() not in (None, nchannels):
-            raise ConfigError(
+            raise ValueError(
                 f"the spectra have {nchannels} channels; the spectral axis "
                 f"has {spectral.size()}")
         self._spectral_grid = make_cube_grid(
@@ -184,7 +184,7 @@ class DatasetRegionSpectra(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of regions and channels:
+        Raise ValueError unless the size is of blocks of regions and channels:
         a positive integer for each of the regions and the channels (see
         resample_blocks).
         """

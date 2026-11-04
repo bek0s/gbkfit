@@ -63,12 +63,12 @@ def check_array_size(shape: Shape) -> None:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If it has more (e.g. a model cube oversampled too much).
     """
     size = int(np.prod(shape, dtype=np.int64))
     if size > MAX_ARRAY_SIZE:
-        raise ConfigError(
+        raise ValueError(
             f"an array of the model of shape {tuple(np.atleast_1d(shape))} "
             f"has {size:.4g} values, more than the {MAX_ARRAY_SIZE:.4g} that "
             f"the native kernels index (by 32-bit integers): lower the "

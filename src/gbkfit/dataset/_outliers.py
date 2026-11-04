@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import scipy.spatial
 
-from gbkfit.config import ConfigError
 
 if TYPE_CHECKING:
     from .base import Dataset
@@ -29,10 +28,10 @@ _CHUNK = 2 ** 22
 
 
 def check_nsigma(nsigma: float) -> float:
-    """Return nsigma; raise ConfigError unless it is a positive number."""
+    """Return nsigma; raise ValueError unless it is a positive number."""
     if not (isinstance(nsigma, numbers.Real) and not isinstance(nsigma, bool)
             and nsigma > 0):
-        raise ConfigError(
+        raise ValueError(
             f"nsigma of the outliers is a positive number; it is {nsigma!r}")
     return float(nsigma)
 
@@ -84,7 +83,7 @@ def window_size(
     """
     Return the size of windows of the options, along the axes of the data
     (FITS order, e.g. x, y and the channels), in numpy order. Raise
-    ConfigError unless it is an odd positive integer for each axis (so
+    ValueError unless it is an odd positive integer for each axis (so
     that a window has a centre).
     """
     size = tuple(size)
@@ -93,7 +92,7 @@ def window_size(
             and n >= 1 and n % 2 == 1 for n in size):
         names = axes[0] if len(axes) == 1 \
             else f"{', '.join(axes[:-1])} and {axes[-1]}"
-        raise ConfigError(
+        raise ValueError(
             f"the size of the windows of these data is an odd positive "
             f"integer for each of {names}; it is {list(size)}")
     return size[::-1]
@@ -131,7 +130,7 @@ def region_size(
 ) -> tuple[int, int]:
     """
     Return the number of nearest regions and the size of the window of
-    channels (1 without channels) of the options. Raise ConfigError
+    channels (1 without channels) of the options. Raise ValueError
     unless the first is a positive integer below the number of regions,
     and the second, with channels, an odd positive integer.
     """
@@ -143,7 +142,7 @@ def region_size(
         and n >= 1 for n in size)
     if len(size) != 1 + channels or not integers or size[0] >= nregions \
             or (channels and size[1] % 2 == 0):
-        raise ConfigError(
+        raise ValueError(
             f"the size of the neighbourhoods of these data is {shape}, "
             f"positive integers (fewer regions than the {nregions}); it is "
             f"{list(size)}")

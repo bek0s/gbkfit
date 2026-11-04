@@ -13,7 +13,7 @@ from annotated_types import Gt
 from astropy.table import Table
 
 from gbkfit.config import (
-    Column, ConfigError, FilePath, Unit, check_options, config_path)
+    Column, FilePath, Unit, check_options, config_path)
 from gbkfit.io import read_column, read_table
 from . import _detail, _resampling
 from .base import Dataset
@@ -35,29 +35,29 @@ def check_profile_radii(
 ) -> tuple[u.Quantity, u.Quantity | None]:
     """
     Return the radii of a profile (see DatasetProfile) and their distance,
-    as 1d arrays of floats and a length; or raise ConfigError if the radii
+    as 1d arrays of floats and a length; or raise ValueError if the radii
     are not angles or lengths, finite and at least 0, or the distance is
     not a positive length, or is given for radii in angles.
     """
     if not isinstance(radii, u.Quantity) or radii.ndim != 1 \
             or not (radii.unit.is_equivalent(u.arcsec)
                     or radii.unit.is_equivalent(u.kpc)):
-        raise ConfigError(
+        raise ValueError(
             f"the radii are a vector of angles (e.g. arcsec) or lengths "
             f"(e.g. kpc), with their unit; they are {radii!r}")
     radii = radii.astype(float)
     if not np.all(np.isfinite(radii) & (radii >= 0)):
-        raise ConfigError(
+        raise ValueError(
             f"the radii must be finite and at least 0; they are {radii}")
     if distance is not None:
         if radii.unit.is_equivalent(u.arcsec):
-            raise ConfigError(
+            raise ValueError(
                 "a distance is that of radii in lengths, measured at it; "
                 "the radii are angles")
         if not isinstance(distance, u.Quantity) or distance.size != 1 \
                 or not distance.unit.is_equivalent(u.Mpc) \
                 or not distance > 0:
-            raise ConfigError(
+            raise ValueError(
                 f"the distance must be a positive length; it is "
                 f"{distance!r}")
     return radii, distance
@@ -87,7 +87,7 @@ class DatasetProfile(Dataset):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the items do not have one value per radius, or the radii or the
         distance are invalid (see check_profile_radii).
     """
@@ -139,7 +139,7 @@ class DatasetProfile(Dataset):
         with config_path('radius'):
             radii = read_column(table, radius.column, radius.unit)
             if radii.unit is u.dimensionless_unscaled:
-                raise ConfigError(
+                raise ValueError(
                     "the radii need their unit (e.g. unit: kpc), which their "
                     "column does not have")
         data = {}
@@ -188,7 +188,7 @@ class DatasetProfile(Dataset):
         radii, distance = check_profile_radii(
             radii, None if distance is None else distance * u.Mpc)
         if self.shape() != radii.shape:
-            raise ConfigError(
+            raise ValueError(
                 f"the data items have {self.shape()[0]} values, but there "
                 f"are {radii.size} radii")
         self._radii = radii
@@ -207,7 +207,7 @@ class DatasetProfile(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of radii: a positive
+        Raise ValueError unless the size is of blocks of radii: a positive
         integer for each of the radii (see resample_blocks).
         """
         _resampling.block_size(size, _BLOCK_AXES)

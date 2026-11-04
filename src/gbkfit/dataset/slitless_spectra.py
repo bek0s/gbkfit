@@ -150,7 +150,7 @@ class DatasetSlitlessSpectra(Dataset):
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless the size is of blocks of pixels of the
+        Raise ValueError unless the size is of blocks of pixels of the
         detector: a positive integer for each of x and y (see resample_blocks).
         """
         _resampling.block_size(size, _AXES)

@@ -18,7 +18,6 @@ import numpy as np
 import ruamel.yaml
 from astropy.io import fits
 
-from gbkfit.config import ConfigError
 import gbkfit.dataset
 import gbkfit.outputs
 import gbkfit.project
@@ -196,7 +195,7 @@ class Workspace:
             raise NotFound(str(e)) from e
         try:
             return self.relative(target.create_piece(folder, name, content))
-        except (ConfigError, OSError) as e:
+        except (ValueError, OSError) as e:
             raise Invalid(f"cannot create the piece '{name}': {e}") from e
 
     def rename_project(self, relative: str, to: str) -> ProjectInfo:
@@ -277,7 +276,7 @@ class Workspace:
         target, folder, old = self._piece_of(relative)
         try:
             return self.relative(target.rename_piece(folder, old, name))
-        except (ConfigError, FileExistsError) as e:
+        except (ValueError, FileExistsError) as e:
             raise Invalid(f"cannot rename the piece '{old}': {e}") from e
 
     def update_piece(self, relative: str, content: dict[str, Any]) -> None:
@@ -668,5 +667,5 @@ def _readable_unit(text: str | None) -> str | None:
         return None
     try:
         return unitutils.parse_unit(text).to_string()
-    except ConfigError:
+    except ValueError:
         return text

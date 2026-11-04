@@ -11,7 +11,7 @@ from typing import Any, NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.config import ConfigError, TypedParser, TypedSerializable
+from gbkfit.config import TypedParser, TypedSerializable
 from gbkfit.utils import iterutils
 from .data import Data
 
@@ -54,7 +54,7 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no items, or they are not of one shape with ndim axes.
     """
 
@@ -64,19 +64,19 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
     def __init__(self, items: Mapping[str, Data]):
         if not items:
-            raise ConfigError("a dataset needs at least one data item")
+            raise ValueError("a dataset needs at least one data item")
         invalid = [k for k, v in items.items() if not isinstance(v, Data)]
         if invalid:
-            raise ConfigError(f"the data items {invalid} are not Data")
+            raise ValueError(f"the data items {invalid} are not Data")
         for key, item in items.items():
             if item.ndim() != self.ndim:
-                raise ConfigError(
+                raise ValueError(
                     f"the data item {key} has {item.ndim()} axes; expected "
                     f"{self.ndim} (axes of length 1 can be removed with "
                     f"gbkfit-cli prep)")
         shapes = {k: v.shape() for k, v in items.items()}
         if len(set(shapes.values())) > 1:
-            raise ConfigError(
+            raise ValueError(
                 f"the data items must have one shape; their shapes are "
                 f"{shapes}")
         self._items = dict(items)
@@ -157,11 +157,11 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If they are not the values of its items.
         """
         if set(data) != set(self._items):
-            raise ConfigError(
+            raise ValueError(
                 f"the values must be those of the data items "
                 f"{list(self._items)}; they are of {list(data)}")
         dataset = copy.copy(self)
@@ -184,7 +184,7 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         them; a value with fewer than 3 is kept. Each item is screened by
         itself. The kinds of data
         that offer it say what the neighbours of a value are (e.g. the
-        other pixels of a window about it); the others raise ConfigError.
+        other pixels of a window about it); the others raise ValueError.
 
         It is for values that no sky can give: e.g. failed fits of moment
         maps, hot pixels, cosmic rays, spikes of interference. Of data
@@ -208,20 +208,20 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the kind of data does not offer it, the size is not of its
             neighbourhoods, or nsigma is not positive.
         """
-        raise ConfigError(
+        raise ValueError(
             f"the data of {self.type()} cannot be screened for outliers")
 
     def check_blocks(self, size: Sequence[float]) -> None:
         """
-        Raise ConfigError unless its data can be redrawn in blocks of a
+        Raise ValueError unless its data can be redrawn in blocks of a
         size (see resample_blocks): the kinds of data that offer it say
         what their blocks are; the others raise it.
         """
-        raise ConfigError(
+        raise ValueError(
             f"the residuals of {self.type()} data cannot be redrawn in blocks")
 
     def resample_blocks(
@@ -237,7 +237,7 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         residuals in all of their values, in every item. The items share
         the draws, so that the correlations of their residuals remain.
         The kinds of data that offer it say what their blocks are (see
-        check_blocks); the others raise ConfigError.
+        check_blocks); the others raise ValueError.
 
         Parameters
         ----------
@@ -258,11 +258,11 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the kind of data does not offer it, the size is not one of
             its blocks, or no block has residuals in all of its values.
         """
-        raise ConfigError(
+        raise ValueError(
             f"the residuals of {self.type()} data cannot be redrawn in blocks")
 
     def noise_correlation(self, key: str) -> NoiseCorrelation | None:
@@ -270,7 +270,7 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         Return the correlation of the noise of a data item on the
         separations of its values (see Data), or None if it has none. The
         kinds of data whose noise can be correlated say where (e.g. on the
-        sky, for the pixels of an image); the others raise ConfigError.
+        sky, for the pixels of an image); the others raise ValueError.
 
         Parameters
         ----------
@@ -284,14 +284,14 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the kind of data, or its axes, cannot have it.
         """
         item = self[key]
         if item.spatial_correlation() is None \
                 and item.spectral_correlation() is None:
             return None
-        raise ConfigError(
+        raise ValueError(
             f"the noise of {self.type()} data cannot be correlated")
 
     def mask_whole_spectra(self) -> Self:
@@ -300,7 +300,7 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         whole where they mask any of its values (the union of the masks
         of the channels), as correlated noise needs (see
         LikelihoodGaussian). The kinds of data with spectra on the sky
-        offer it; the others raise ConfigError.
+        offer it; the others raise ValueError.
 
         Returns
         -------
@@ -309,10 +309,10 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the kind of data does not offer it.
         """
-        raise ConfigError(
+        raise ValueError(
             f"the spectra of {self.type()} data cannot be masked whole")
 
 
