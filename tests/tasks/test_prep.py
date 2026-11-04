@@ -12,8 +12,9 @@ import pytest
 import scipy.ndimage
 
 from gbkfit.config import ConfigError
+from gbkfit.io import read_data
 from gbkfit.tasks import prep
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 
 
 # A spectral cube with a degenerate Stokes axis, as radio cubes often have:
@@ -252,7 +253,7 @@ def test_decreasing_velocity_is_reversed(header):
         .pixel_to_world_values(*flipped)
     np.testing.assert_allclose(world_out, world_in, rtol=0, atol=1e-9)
     # The model reads the prepared cube
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     assert coords.step[2] == pytest.approx(10)
 
 
@@ -267,8 +268,8 @@ def test_missing_reference_pixel_stays_at_the_centre(roi_spat, offset):
     fits.writeto('image.fits', np.ones((20, 24), np.float32),
                  fits.Header(header))
     prep_pixel_brightness('image.fits', roi_spat=roi_spat)
-    _, coords_in = fitsutils.read_data('image.fits')
-    _, coords_out = fitsutils.read_data('prep_image.fits')
+    _, coords_in = read_data('image.fits')
+    _, coords_out = read_data('prep_image.fits')
     np.testing.assert_allclose(
         coords_out.rpix, np.subtract(coords_in.rpix, offset))
     np.testing.assert_allclose(coords_out.rval, coords_in.rval)
@@ -305,7 +306,7 @@ def test_wavelength_axis_to_optical_velocities(cd):
     write_cube('cube.fits', with_cd(header) if cd else header)
     _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='6562.8 Angstrom')
     assert header_out['CTYPE3'] == 'VOPT'
-    data, coords = fitsutils.read_data('prep_cube.fits')
+    data, coords = read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('Angstrom'), 6562.8)
     wavelength = 6500 + 1.25 * np.arange(SHAPE[1])
     velocity = coords.rval[2] + (np.arange(SHAPE[1]) - coords.rpix[2]) \
@@ -323,7 +324,7 @@ def test_wavelength_axis_keeps_its_medium(ctype, medium):
         CRPIX3=1.0, CDELT3=1.25)
     write_cube('cube.fits', header)
     prep_pixel_spectra('cube.fits', velocity_rest='6562.8 Angstrom')
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     assert coords.medium == medium
 
 
@@ -336,7 +337,7 @@ def test_frequency_axis_to_radio_velocities():
     write_cube('cube.fits', header)
     data, _ = prep_pixel_spectra('cube.fits', velocity_rest='1420.405752 MHz')
     np.testing.assert_array_equal(data, fits.getdata('cube.fits')[0, ::-1])
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('Hz'), 1.420405752e9)
     frequency = (1.419e9 + 2e4 * np.arange(SHAPE[1]))[::-1]
     velocity = coords.rval[2] + (np.arange(SHAPE[1]) - coords.rpix[2]) \
@@ -404,7 +405,7 @@ def test_data_in_an_extension_keep_their_world_coordinates():
         fits.ImageHDU(data, fits.Header(header), name='DATA')]).writeto(
             'cube.fits')
     prep_pixel_spectra('cube.fits', roi_spat=[2, 22, 2, 18])
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.step, (1, 1, 10))
 
 def test_data_and_errors_can_be_hdus_of_one_file():
@@ -439,7 +440,7 @@ def test_velocity_axis_gets_the_rest():
     assert header_out['CTYPE3'] == 'VRAD'
     assert header_out['RESTFRQ'] == pytest.approx(
         C * 1e3 / 0.21106, rel=1e-9)
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     assert coords.rval[2] == pytest.approx(HEADER['CRVAL3'])
 
 
@@ -476,7 +477,7 @@ def test_converted_axis_keeps_no_old_rest():
     write_cube('cube.fits', header)
     _, header_out = prep_pixel_spectra('cube.fits', velocity_rest='115.271 GHz')
     assert 'RESTWAV' not in header_out and 'RESTFREQ' not in header_out
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('GHz'), 115.271)
 
 
@@ -484,7 +485,7 @@ def test_rest_of_the_convention_of_the_axis_first():
     # A header with both rests gives that of the convention of its axis
     write_cube('cube.fits', dict(
         HEADER, CTYPE3='VRAD', RESTWAV=2.6e-3, RESTFRQ=1.420405752e9))
-    _, coords = fitsutils.read_data('cube.fits')
+    _, coords = read_data('cube.fits')
     np.testing.assert_allclose(coords.rest.to_value('Hz'), 1.420405752e9)
 
 @pytest.mark.parametrize('velocity, ctype', [
@@ -497,12 +498,12 @@ def test_aips_velocity_axes_need_their_convention(velocity, ctype):
         HEADER, CTYPE3='VELO-HEL', CUNIT3='m/s', CRVAL3=1.5e6, CDELT3=1e4,
         RESTFREQ=1.420405752e9)
     write_cube('cube.fits', header)
-    for read in (fitsutils.read_data, prep_pixel_spectra):
+    for read in (read_data, prep_pixel_spectra):
         with pytest.raises(Exception, match="may be radio or optical"):
             read('cube.fits')
     _, header_out = prep_pixel_spectra('cube.fits', velocity=velocity)
     assert header_out['CTYPE3'] == ctype
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     assert coords.step[2] == pytest.approx(10)
 
 
@@ -549,8 +550,8 @@ def test_slit_spectra_crops_positions_and_channels():
         'slit.fits', None, None, roi_spat=[10, 30], roi_spec=[2, 6],
         **defaults, minify=False, dtype='float32')
     assert fits.getdata('prep_slit.fits').shape == (4, 20)
-    _, coords_in = fitsutils.read_data('slit.fits')
-    _, coords_out = fitsutils.read_data('prep_slit.fits')
+    _, coords_in = read_data('slit.fits')
+    _, coords_out = read_data('prep_slit.fits')
     np.testing.assert_allclose(
         coords_out.rpix, np.subtract(coords_in.rpix, (10, 2)))
 
@@ -586,7 +587,7 @@ def test_binned_maps_to_one_value_per_bin():
     np.testing.assert_array_equal(dataset['moment1'].mask(), [1, 1, 0])
     np.testing.assert_array_equal(dataset['moment1'].error()[:2], [3, 2])
     # The world coordinates of the bins are kept
-    _, coords = fitsutils.read_data('prep_bins.fits')
+    _, coords = read_data('prep_bins.fits')
     assert coords.rpix == (11.5, 9.5)
 
 
@@ -751,7 +752,7 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
     assert valid.shape == cube.shape and valid[:, 2, 5].sum() == 0
     assert valid.sum() == valid.size - len(cube)
 
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     np.testing.assert_allclose(
         coords.rval[1] + coords.step[1] * (np.arange(3) - coords.rpix[1]),
         1500 + 10 * (np.arange(3) - 5))
@@ -900,7 +901,7 @@ def test_logarithmic_wavelengths_get_the_rest():
     out = fits.getheader('prep_cube.fits')
     assert out['CTYPE3'] == 'WAVE-LOG'
     assert out['RESTWAV'] == pytest.approx(6564.61e-10)
-    _, coords = fitsutils.read_data('prep_cube.fits')
+    _, coords = read_data('prep_cube.fits')
     assert coords.convention == 'log'
     assert coords.step[2] == pytest.approx(
         299792.458 * 1e-13 / 6600e-10, rel=1e-9)

@@ -16,7 +16,8 @@ from astropy.io import fits
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
     split_fits_file)
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.io import read_data, write_data
+from gbkfit.utils import gridutils
 from .apertures import Aperture, aperture_parser
 
 
@@ -128,7 +129,7 @@ class RegionsBins(Regions):
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the header. Either rpix or rval can be given,
-            and the other comes from the header (see fitsutils.read_data).
+            and the other comes from the header (see read_data).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
@@ -142,10 +143,10 @@ class RegionsBins(Regions):
             The bins.
         """
         check_options(RegionsBins.from_file, locals())
-        index, coords = fitsutils.read_data(
+        index, coords = read_data(
             *split_fits_file(file), _per_axis(rpix), _per_axis(rval))
         if valid is not None:
-            valid, _ = fitsutils.read_data(*split_fits_file(valid))
+            valid, _ = read_data(*split_fits_file(valid))
         return cls(
             index, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota, valid)
@@ -156,7 +157,7 @@ class RegionsBins(Regions):
     ) -> dict[str, Any]:
         filename = f'{prefix}bins.fits'
         coords = self._grid.coords
-        fitsutils.write_data(
+        write_data(
             filename, self._index.astype(np.int32), coords, None, overwrite)
         info = dict(
             type=self.type(),

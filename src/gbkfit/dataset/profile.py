@@ -14,7 +14,7 @@ from astropy.table import Table
 
 from gbkfit.config import (
     Column, ConfigError, FilePath, Unit, check_options, config_path)
-from gbkfit.utils import tableutils
+from gbkfit.io import read_column, read_table
 from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, DataColumns
@@ -135,9 +135,9 @@ class DatasetProfile(Dataset):
             The dataset.
         """
         check_options(DatasetProfile.from_file, locals())
-        table = tableutils.read_table(file, format)
+        table = read_table(file, format)
         with config_path('radius'):
-            radii = tableutils.read_column(table, radius.column, radius.unit)
+            radii = read_column(table, radius.column, radius.unit)
             if radii.unit is u.dimensionless_unscaled:
                 raise ConfigError(
                     "the radii need their unit (e.g. unit: kpc), which their "

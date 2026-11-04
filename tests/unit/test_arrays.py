@@ -1,5 +1,5 @@
 """
-Tests for the reading of data with their errors and mask (datafiles).
+Tests for the reading of data with their errors and mask.
 """
 
 import astropy.wcs
@@ -9,7 +9,7 @@ from astropy.io import fits
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import describe_fits
-from gbkfit.utils import datafiles, fitsutils
+from gbkfit.io import coords_from_header, read_array, read_arrays, read_data
 
 
 # A cube of 5 channels of radio velocities that decrease along the file,
@@ -41,7 +41,7 @@ def test_errors_of_each_kind_become_standard_deviations(
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
     write(tmp_path / 'error.fits', np.full(SHAPE, values),
           {} if unit is None else dict(BUNIT=unit))
-    arrays = datafiles.read_arrays(
+    arrays = read_arrays(
         str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'),
         error_kind=kind)
     np.testing.assert_allclose(arrays.error, 2.0, rtol=1e-6)
@@ -52,7 +52,7 @@ def test_errors_in_the_unit_of_another_kind_are_an_error(tmp_path):
     write(tmp_path / 'error.fits', np.full(SHAPE, 4.0),
           dict(BUNIT='Jy2 / beam2'))
     with pytest.raises(ConfigError, match="error_kind: variance"):
-        datafiles.read_arrays(
+        read_arrays(
             str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'))
 
 
@@ -61,7 +61,7 @@ def test_inverse_variances_of_zero_are_values_without_data(tmp_path):
     inverse = np.full(SHAPE, 4.0)
     inverse[0, 0, 0] = 0
     write(tmp_path / 'error.fits', inverse)
-    arrays = datafiles.read_arrays(
+    arrays = read_arrays(
         str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'),
         error_kind='inverse_variance')
     assert arrays.mask.sum() == arrays.mask.size - 1
@@ -82,7 +82,7 @@ def test_errors_follow_their_own_world_coordinates(tmp_path):
     write(tmp_path / 'plain.fits',
           np.broadcast_to(velocities[:, None, None], SHAPE))
     for error in ('error.fits', 'plain.fits'):
-        arrays = datafiles.read_arrays(
+        arrays = read_arrays(
             str(tmp_path / 'data.fits'), str(tmp_path / error))
         np.testing.assert_array_equal(arrays.data[:, 0, 0], velocities[::-1])
         np.testing.assert_array_equal(arrays.error, arrays.data)
@@ -96,7 +96,7 @@ def test_a_footprint_follows_the_data(tmp_path):
     footprint = np.zeros(SHAPE)
     footprint[0] = 1
     write(tmp_path / 'footprint.fits', footprint)
-    arrays = datafiles.read_arrays(
+    arrays = read_arrays(
         str(tmp_path / 'data.fits'),
         footprint=str(tmp_path / 'footprint.fits'))
     np.testing.assert_array_equal(arrays.footprint, footprint[::-1])
@@ -106,7 +106,7 @@ def test_errors_on_other_pixels_are_an_error(tmp_path):
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
     write(tmp_path / 'error.fits', np.ones(SHAPE), CUBE | dict(CRVAL3=990.0))
     with pytest.raises(ConfigError, match="pixels"):
-        datafiles.read_arrays(
+        read_arrays(
             str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'))
 
 
@@ -131,7 +131,7 @@ def test_the_beams_of_the_channels_follow_them(tmp_path):
             (np.arange(5.0)[:, None, None] * np.ones(SHAPE)).astype(
                 np.float32), fits.Header(CUBE | dict(CASAMBM=True))),
         beams]).writeto(path)
-    arrays = datafiles.read_arrays(path)
+    arrays = read_arrays(path)
     np.testing.assert_array_equal(arrays.data[:, 0, 0], [4, 3, 2, 1, 0])
     np.testing.assert_allclose(arrays.beam['bmaj'], bmaj[::-1])
     np.testing.assert_allclose(
@@ -171,7 +171,7 @@ def test_the_beams_follow_the_channels_past_an_axis_of_stokes(tmp_path):
     fits.HDUList([
         fits.PrimaryHDU(values.astype(np.float32), header), beams
     ]).writeto(path)
-    arrays = datafiles.read_arrays(path, rest='1.420405752 GHz')
+    arrays = read_arrays(path, rest='1.420405752 GHz')
     np.testing.assert_array_equal(arrays.data[:, 0, 0], [3, 2, 1, 0])
     np.testing.assert_allclose(arrays.beam['bmaj'], [4, 3, 2, 1])
 
@@ -179,7 +179,7 @@ def test_the_beams_follow_the_channels_past_an_axis_of_stokes(tmp_path):
 def test_a_bunit_that_is_not_a_unit_is_left_out_with_a_warning(
         tmp_path, caplog):
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE | dict(BUNIT='Jy/bm'))
-    arrays = datafiles.read_arrays(str(tmp_path / 'data.fits'))
+    arrays = read_arrays(str(tmp_path / 'data.fits'))
     assert arrays.unit is None
     assert "BUNIT is left out" in caplog.text
 
@@ -189,9 +189,9 @@ def test_world_axes_beyond_the_array_are_flat(tmp_path):
     # spectral axis) reads as a map
     filename = str(tmp_path / 'moment.fits')
     write(filename, np.ones(SHAPE[1:]), CUBE | dict(BMAJ=1e-3, BMIN=1e-3))
-    data, coords = fitsutils.read_data(filename)
+    data, coords = read_data(filename)
     assert data.shape == SHAPE[1:] and len(coords.step) == 2
-    assert fitsutils.read_array(filename)[0].shape == SHAPE[1:]
+    assert read_array(filename)[0].shape == SHAPE[1:]
     description, = describe_fits(filename)
     assert description.problems == ()
 
@@ -259,8 +259,8 @@ def test_asdf_files_read_as_their_fits_twins(tmp_path, kind):
     # coordinates (here as the velocities of the rest of Halpha)
     fits_file, asdf_file = twin_files(tmp_path, kind)
     rest = '6564.61 Angstrom'
-    from_fits = datafiles.read_arrays(fits_file, rest=rest)
-    from_asdf = datafiles.read_arrays(
+    from_fits = read_arrays(fits_file, rest=rest)
+    from_asdf = read_arrays(
         (asdf_file, 'roman/data'), (asdf_file, 'roman/err'), rest=rest)
     np.testing.assert_array_equal(from_asdf.data, from_fits.data)
     np.testing.assert_allclose(from_asdf.error, 0.1)
@@ -274,7 +274,7 @@ def test_asdf_files_read_as_their_fits_twins(tmp_path, kind):
             astropy.wcs.WCS(from_asdf.header))]
     np.testing.assert_allclose(world[1], world[0], rtol=1e-9)
     coords = [
-        fitsutils.coords_from_header('cube', arrays.header)
+        coords_from_header('cube', arrays.header)
         for arrays in (from_fits, from_asdf)]
     np.testing.assert_allclose(coords[1].step, coords[0].step, rtol=1e-6)
     assert coords[1].rota == pytest.approx(coords[0].rota)
@@ -285,7 +285,7 @@ def test_asdf_files_off_a_grid_are_refused(tmp_path):
     # Wavelengths of a curved axis: no linear header stands for them
     _, asdf_file = twin_files(tmp_path, 'curved')
     with pytest.raises(ConfigError, match="resample"):
-        datafiles.read_arrays((asdf_file, 'roman/data'))
+        read_arrays((asdf_file, 'roman/data'))
 
 
 def test_datasets_read_asdf_files(tmp_path):

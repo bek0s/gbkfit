@@ -12,7 +12,8 @@ from astropy.table import Table
 
 import gbkfit
 from gbkfit import outputs
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.io import read_data
+from gbkfit.utils import gridutils
 
 
 COORDS = gridutils.Coords((2.0, 3.0), (11.5, 9.5), (150.0, 2.0), 30.0)
@@ -42,7 +43,7 @@ def test_products_are_found_by_kind_and_ids_and_read_back():
     assert vlos.header['BUNIT'] == 'km/s'
     assert vlos.header['GBKFKIND'] == 'model'
     assert vlos.header['GBKFVER'] == gbkfit.__version__
-    _, coords = fitsutils.read_data(
+    _, coords = read_data(
         run.filename(run.product('model', item='vlos')))
     np.testing.assert_allclose(coords.rval, COORDS.rval)
     assert run.read(run.product('model', item='mmap0')).header['BUNIT'] == \

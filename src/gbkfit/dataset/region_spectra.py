@@ -9,9 +9,9 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import ConfigError, DataFile, check_options
+from gbkfit.io import ErrorKind, write_spectra
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.datafiles import ErrorKind
+from gbkfit.utils import gridutils
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, dump_data
@@ -102,7 +102,7 @@ class DatasetRegionSpectra(Dataset):
             The world coordinates of the spectral axis, the convention of
             its velocities, its rest and its medium, given instead of
             those of the header (either rpix or rval can be given, and the
-            other comes from the header; see fitsutils.read_data); not its
+            other comes from the header; see read_data); not its
             size, which the data give.
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
@@ -110,7 +110,7 @@ class DatasetRegionSpectra(Dataset):
         error_kind : str, optional
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
-            datafiles.read_arrays).
+            read_arrays).
 
         Returns
         -------
@@ -136,7 +136,7 @@ class DatasetRegionSpectra(Dataset):
         coords = self._spectral_grid.coords
 
         def write(filename: str, array: np.ndarray) -> None:
-            fitsutils.write_spectra(filename, array, coords, overwrite)
+            write_spectra(filename, array, coords, overwrite)
         item = dump_data(
             self['spectra'], _detail.item_filenames(prefix, 'spectra'), write,
             dump_path)

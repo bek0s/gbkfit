@@ -7,6 +7,7 @@ position less the deflection there.
 import copy
 
 from gbkfit.config import ConfigError
+from gbkfit.io import write_data
 import gbkfit.params
 import numpy as np
 import pytest
@@ -15,7 +16,7 @@ from modelutils import observation_group
 from gbkfit.observation import (
     Foreground, Lens, LensDeflectionMap, LensEPL, LensMultipole, LensNFW,
     LensSIE, LensShear, foreground_parser)
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 
 
 DISK = dict(
@@ -382,8 +383,8 @@ def test_a_scaled_map_scales_its_deflection():
 
 def test_deflection_maps_from_files(tmp_path):
     coords = gridutils.Coords((0.5, 0.5), (9.5, 7.5), (150.0, 2.0), 0)
-    fitsutils.write_data(str(tmp_path / 'ax.fits'), np.ones((16, 20)), coords)
-    fitsutils.write_data(
+    write_data(str(tmp_path / 'ax.fits'), np.ones((16, 20)), coords)
+    write_data(
         str(tmp_path / 'ay.fits'), np.full((16, 20), 2.0), coords)
     def load(**options):
         return foreground_parser.load(dict(lens=dict(

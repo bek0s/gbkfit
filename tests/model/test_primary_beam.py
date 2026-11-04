@@ -7,6 +7,7 @@ import copy
 
 import astropy.units as u
 from gbkfit.config import ConfigError
+from gbkfit.io import write_data
 import gbkfit.params
 import numpy as np
 import pytest
@@ -15,7 +16,7 @@ from modelutils import group_plan
 
 from gbkfit.instrument import (
     Instrument, PrimaryBeamAiry, PrimaryBeamGauss, instrument_parser)
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 
 
 GALAXY = dict(components=[dict(
@@ -170,7 +171,7 @@ def test_primary_beam_from_an_image(tmp_path):
     from gbkfit.instrument import PrimaryBeamImage, primary_beam_parser
     beam_grid = gridutils.make_grid((81, 81), 0.25, rota=25)
     gauss = PrimaryBeamGauss(6, 1, -0.5)
-    fitsutils.write_data(
+    write_data(
         str(tmp_path / 'pb.fits'), gauss.response(beam_grid),
         beam_grid.coords)
     image = primary_beam_parser.load(dict(
@@ -237,7 +238,7 @@ def test_observation_dumps_the_image_of_its_primary_beam(tmp_path):
 def test_primary_beam_image_options_are_checked(tmp_path):
     # (an option of a wrong type is an error with its path when loaded)
     from gbkfit.instrument import primary_beam_parser
-    fitsutils.write_data(
+    write_data(
         str(tmp_path / 'pb.fits'), np.ones((4, 4)),
         gridutils.make_grid((4, 4)).coords)
     with pytest.raises(ConfigError, match="image: option 'step' must be"):

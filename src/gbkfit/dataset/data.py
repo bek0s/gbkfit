@@ -12,7 +12,8 @@ import numpy as np
 
 from gbkfit.config import ConfigError, DataFile, parse_options, warn
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
-from gbkfit.utils import datafiles, fitsutils, gridutils, unitutils
+from gbkfit.io import ErrorKind, coords_from_header, read_arrays
+from gbkfit.utils import gridutils, unitutils
 
 
 __all__ = [
@@ -69,7 +70,7 @@ class DataFiles(NamedTuple):
     error_kind : str, optional
         What the file of the errors holds: 'sigma' (standard
         deviations), 'variance' or 'inverse_variance' (see
-        datafiles.read_arrays).
+        read_arrays).
     footprint : str or tuple, optional
         The file of where the instrument looked (see Data).
     """
@@ -81,7 +82,7 @@ class DataFiles(NamedTuple):
     beam: Mapping[str, Any] | None = None
     spatial_correlation: PSF | None = None
     spectral_correlation: LSF | None = None
-    error_kind: datafiles.ErrorKind = 'sigma'
+    error_kind: ErrorKind = 'sigma'
     footprint: DataFile | None = None
 
 
@@ -269,7 +270,7 @@ class Data:
             spatial_correlation: PSF | None = None,
             spectral_correlation: LSF | None = None,
             velocity: str | None = None,
-            error_kind: datafiles.ErrorKind = 'sigma',
+            error_kind: ErrorKind = 'sigma',
             footprint: DataFile | None = None
     ) -> tuple['Data', gridutils.Coords]:
         """
@@ -279,9 +280,9 @@ class Data:
         noise, if any.
 
         The values, their mask, errors and footprint are read in the
-        orientation of the model (see datafiles.read_arrays), and the
+        orientation of the model (see read_arrays), and the
         world coordinates of the values are those of the model (see
-        fitsutils.coords_from_header).
+        coords_from_header).
 
         Parameters
         ----------
@@ -294,25 +295,25 @@ class Data:
             The file of the errors, or one error (a standard deviation)
             for all the values.
         rpix, rval, spectral_axis, medium : optional
-            Passed to fitsutils.coords_from_header.
+            Passed to coords_from_header.
         rest : str or Quantity, optional
             The rest of the spectral axis, which turns one of wavelengths
-            or frequencies into velocities (see fitsutils.model_header).
+            or frequencies into velocities (see model_header).
         unit : str, optional
             The unit of the values (see Data).
         beam : Mapping, optional
             The options of their beam (see Beam); by default, that of the
-            file of the values, if any (see datafiles.read_arrays).
+            file of the values, if any (see read_arrays).
         spatial_correlation : PSF, optional
             The correlation of their noise on the sky (see Data).
         spectral_correlation : LSF, optional
             The correlation of their noise along the spectral axis.
         velocity : str, optional
             The convention of the velocities of a spectral axis that the
-            headers leave ambiguous (see fitsutils.model_header).
+            headers leave ambiguous (see model_header).
         error_kind : str, optional
             What the file of the errors holds (see
-            datafiles.read_arrays).
+            read_arrays).
         footprint : str or tuple, optional
             The file of where the instrument looked (see Data).
 
@@ -327,7 +328,7 @@ class Data:
         ConfigError
             If the error is not positive, the error is one error and
             error_kind is not 'sigma', the files cannot be read (see
-            datafiles.read_arrays), or the arrays are invalid (see Data).
+            read_arrays), or the arrays are invalid (see Data).
         """
         error_file = None
         if isinstance(error, bool):
@@ -344,11 +345,11 @@ class Data:
                     f"that of a file of errors")
         elif error is not None:
             error_file = error
-        arrays = datafiles.read_arrays(
+        arrays = read_arrays(
             data, error_file, mask, error_kind=error_kind, unit=unit,
             rest=rest, velocity=velocity, footprint=footprint)
         filename = data if isinstance(data, str) else data[0]
-        coords = fitsutils.coords_from_header(
+        coords = coords_from_header(
             filename, arrays.header, rpix, rval, spectral_axis, medium, rest)
         errors = arrays.error
         if isinstance(error, (int, float)):

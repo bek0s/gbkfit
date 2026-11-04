@@ -14,8 +14,9 @@ import scipy.special
 from gbkfit.config import (
     ConfigError, FitsFile, Unit, check_options, split_fits_file, warn)
 from gbkfit.instrument import PSF, psf_parser
+from gbkfit.io import read_data
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 from .base import ImageInput, RPTrait
 
 
@@ -307,7 +308,7 @@ class RPTraitImage(RPTrait):
             If an option is not valid, or the file is not of an image.
         """
         check_options(RPTraitImage.from_file, locals())
-        data, coords = fitsutils.read_data(*split_fits_file(file))
+        data, coords = read_data(*split_fits_file(file))
         trait = cls(data, coords, size, step, psf, offsets, name)
         trait._file = file
         return trait

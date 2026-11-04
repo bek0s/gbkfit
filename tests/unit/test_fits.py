@@ -1,6 +1,6 @@
 """
 Tests for reading and writing data with world coordinates in the units
-of the model (gbkfit.utils.fitsutils).
+of the model.
 """
 
 import astropy.coordinates
@@ -11,7 +11,9 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.io import (
+    centre_missing_crpix, read_array, read_data, read_hdu, write_data)
+from gbkfit.utils import gridutils
 
 
 def position_angle(header, pixel_from, pixel_to):
@@ -28,7 +30,7 @@ def same_angle(a, b, tolerance=1e-6):
 
 def write(header, shape=(20, 24)):
     fits.writeto('data.fits', np.zeros(shape, np.float32), fits.Header(header))
-    return fitsutils.read_data('data.fits')[1]
+    return read_data('data.fits')[1]
 
 
 CELESTIAL = dict(
@@ -44,9 +46,9 @@ def test_write_and_read_back(rota, shape):
     rval = (150.0, 2.0, 1500.0)[:len(shape)]
     coords = gridutils.Coords(step, rpix, rval, rota)
     spectral_axis = 2 if len(shape) == 3 else None
-    fitsutils.write_data(
+    write_data(
         'data.fits', np.ones(shape, np.float32), coords, spectral_axis)
-    data, coords_read = fitsutils.read_data('data.fits')
+    data, coords_read = read_data('data.fits')
     assert data.shape == shape
     np.testing.assert_allclose(coords_read.step, step, rtol=1e-12)
     np.testing.assert_allclose(coords_read.rpix, rpix, rtol=1e-12)
@@ -56,11 +58,11 @@ def test_write_and_read_back(rota, shape):
 
 @pytest.mark.parametrize('rota', [0, 30, -60, 135])
 def test_rota_is_the_position_angle_of_the_y_axis(rota):
-    # Independently of fitsutils: astropy's position angle from a pixel
+    # Independently of the readers of FITS files: astropy's position angle from a pixel
     # to the next one along y is rota, and along x it is rota - 90 (east
     # is to the left of north)
     coords = gridutils.Coords((2.0, 2.0), (10, 10), (150.0, 2.0), rota)
-    fitsutils.write_data('data.fits', np.ones((20, 20), np.float32), coords)
+    write_data('data.fits', np.ones((20, 20), np.float32), coords)
     header = fits.getheader('data.fits')
     assert same_angle(position_angle(header, (10, 10), (10, 11)), rota)
     assert same_angle(position_angle(header, (10, 10), (11, 10)), rota - 90)
@@ -71,9 +73,9 @@ def test_write_and_read_back_long_slit():
     coords = gridutils.Coords(
         (2.0, 10.0), (15.5, 5.0), (0.0, 1500.0), 0.0,
         convention='relativistic')
-    fitsutils.write_data(
+    write_data(
         'data.fits', np.ones((11, 32), np.float32), coords, spectral_axis=1)
-    _, coords_read = fitsutils.read_data('data.fits')
+    _, coords_read = read_data('data.fits')
     assert coords_read == coords
 
 
@@ -82,11 +84,11 @@ def test_write_and_read_back_line_of_sight_axis():
     # line of sight: an offset in arcsec from its reference pixel
     coords = gridutils.Coords((2.0, 3.0, 0.5), (11.5, 9.5, 7.5),
                               (150.0, 2.0, 0.0), 30.0)
-    fitsutils.write_data('data.fits', np.ones((16, 20, 24), np.float32),
+    write_data('data.fits', np.ones((16, 20, 24), np.float32),
                          coords, spectral_axis=None)
     header = fits.getheader('data.fits')
     assert header['CTYPE3'] == 'OFFSET' and header['CUNIT3'] == 'arcsec'
-    _, coords_read = fitsutils.read_data('data.fits')
+    _, coords_read = read_data('data.fits')
     np.testing.assert_allclose(coords_read.step, coords.step, rtol=1e-12)
     np.testing.assert_allclose(coords_read.rpix, coords.rpix, rtol=1e-12)
     np.testing.assert_allclose(coords_read.rval, coords.rval, rtol=1e-12)
@@ -168,11 +170,11 @@ def test_rpix_or_rval_can_be_given():
     header = CELESTIAL | dict(CDELT1=-1 / 3600, CDELT2=1 / 3600)
     write(header)
     # The world position at a given pixel, and the pixel at that position
-    _, coords = fitsutils.read_data('data.fits', rpix=(5.0, 6.0))
+    _, coords = read_data('data.fits', rpix=(5.0, 6.0))
     expected = astropy.wcs.WCS(fits.Header(header)).pixel_to_world_values(
         5.0, 6.0)
     np.testing.assert_allclose(coords.rval, expected, rtol=1e-12)
-    _, coords = fitsutils.read_data('data.fits', rval=coords.rval)
+    _, coords = read_data('data.fits', rval=coords.rval)
     np.testing.assert_allclose(coords.rpix, (5.0, 6.0), atol=1e-9)
 
 
@@ -183,7 +185,7 @@ def test_hdu_can_be_chosen():
         fits.PrimaryHDU(),
         fits.ImageHDU(np.ones((20, 24), np.float32), header, name='SCI')
     ]).writeto('data.fits')
-    data, coords = fitsutils.read_data('data.fits', hdu='SCI')
+    data, coords = read_data('data.fits', hdu='SCI')
     assert data.shape == (20, 24)
     assert coords.rval == (150.0, 2.0)
 
@@ -211,7 +213,7 @@ def test_coordinates_the_model_cannot_represent(header, shape, message):
 def test_rounding_of_a_matrix_is_not_a_coupling():
     # e.g. what tools that compute the matrices of headers leave
     write(dict(CDELT1=1.0, CDELT2=1.0, CDELT3=1.0, PC3_1=1e-17), (6, 20, 24))
-    _, coords = fitsutils.read_data('data.fits')
+    _, coords = read_data('data.fits')
     assert coords.step == (1.0, 1.0, 1.0)
 
 
@@ -221,10 +223,10 @@ def test_the_first_image_is_read_past_tables():
         fits.BinTableHDU.from_columns([fits.Column('a', 'K', array=[1, 2])]),
         fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
     ]).writeto('data.fits')
-    data, _ = fitsutils.read_hdu('data.fits')
+    data, _ = read_hdu('data.fits')
     assert data.shape == (20, 24)
     with pytest.raises(ConfigError, match="HDU 1 is not an image"):
-        fitsutils.read_hdu('data.fits', 1)
+        read_hdu('data.fits', 1)
 
 
 # A cube in the orientation of the model: RA, Dec and increasing velocity,
@@ -263,8 +265,8 @@ def test_data_are_read_in_the_orientation_of_the_model(header, data):
     # The same sky, stored in another legal way, reads the same
     fits.writeto('model.fits', CUBE_DATA, fits.Header(CUBE))
     fits.writeto('other.fits', data, fits.Header(header))
-    expected_data, expected = fitsutils.read_data('model.fits')
-    result_data, result = fitsutils.read_data('other.fits')
+    expected_data, expected = read_data('model.fits')
+    result_data, result = read_data('other.fits')
     np.testing.assert_array_equal(result_data, expected_data)
     for field in ('step', 'rpix', 'rval'):
         np.testing.assert_allclose(
@@ -279,7 +281,7 @@ def test_spectral_axis_is_read_last():
         CDELT2=1.0)
     data = np.arange(8 * 40, dtype=np.float32).reshape(8, 40)
     fits.writeto('data.fits', data, fits.Header(header))
-    result, coords = fitsutils.read_data('data.fits', spectral_axis=1)
+    result, coords = read_data('data.fits', spectral_axis=1)
     assert coords.step == (1.0, 10.0)
     np.testing.assert_array_equal(result, data.T)
 
@@ -294,7 +296,7 @@ def test_a_position_axis_in_degrees_is_in_arcsec():
             CUNIT2='km/s', CDELT2=10.0)
         fits.writeto('data.fits', np.ones((8, 40)), fits.Header(header),
                      overwrite=True)
-        _, coords = fitsutils.read_data('data.fits')
+        _, coords = read_data('data.fits')
         assert coords.step[0] == pytest.approx(0.25)
 
 
@@ -305,7 +307,7 @@ def test_hdu_without_data():
         fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
     ]).writeto('data.fits')
     with pytest.raises(ConfigError, match="HDU 0 has no data"):
-        fitsutils.read_data('data.fits')
+        read_data('data.fits')
 
 
 def test_grid_zero_and_spatial_axes():
@@ -325,7 +327,7 @@ def test_a_missing_reference_pixel():
     # Of an axis without a world position (e.g. only the size of its
     # pixels), the centre (the convention of the model); of one with one,
     # 0 (that of FITS, as other tools read it)
-    header = fitsutils.centre_missing_crpix(
+    header = centre_missing_crpix(
         fits.Header(dict(CTYPE1='RA---TAN', CRVAL1=150.0, CDELT2=1.0)),
         (20, 24))
     assert 'CRPIX1' not in header
@@ -336,7 +338,7 @@ def test_the_frame_of_rest_of_the_velocities():
     # (SPECSYS, read and written back)
     coords = write(_spectral_header('VRAD', SPECSYS='LSRK'), shape=(6, 20, 24))
     assert coords.frame == 'LSRK'
-    fitsutils.write_data('out.fits', np.zeros((6, 20, 24)), coords, 2)
+    write_data('out.fits', np.zeros((6, 20, 24)), coords, 2)
     assert fits.getheader('out.fits')['SPECSYS'] == 'LSRK'
 
 
@@ -372,17 +374,17 @@ def test_rest_can_be_given():
     # spectral axis type it keeps its kind
     fits.writeto('data.fits', np.zeros((6, 20, 24), np.float32),
                  fits.Header(_spectral_header('VOPT', RESTWAV=1e-7)))
-    coords = fitsutils.read_data('data.fits', rest='1420.405752 MHz')[1]
+    coords = read_data('data.fits', rest='1420.405752 MHz')[1]
     np.testing.assert_allclose(
         coords.rest.to_value(u.m), (1420.405752 * u.MHz).to_value(
             u.m, u.spectral()), rtol=1e-12)
     fits.writeto('plain.fits', np.zeros((6, 20, 24), np.float32))
-    coords = fitsutils.read_data('plain.fits', rest='6562.8 Angstrom')[1]
+    coords = read_data('plain.fits', rest='6562.8 Angstrom')[1]
     assert coords.rest == 6562.8 * u.Angstrom
     with pytest.raises(ConfigError, match="relativistic velocities"):
         fits.writeto('velo.fits', np.zeros((6, 20, 24), np.float32),
                      fits.Header(_spectral_header('VELO')))
-        fitsutils.read_data('velo.fits', rest='6562.8 Angstrom')
+        read_data('velo.fits', rest='6562.8 Angstrom')
 
 
 @pytest.mark.parametrize('rest, convention, ctype, keyword', [
@@ -397,12 +399,12 @@ def test_rest_round_trip(rest, convention, ctype, keyword):
     grid = gridutils.make_grid(
         (24, 20, 6), (1, 1, 10), spectral_axis=2, rest=rest,
         convention=convention)
-    fitsutils.write_data(
+    write_data(
         'data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
     header = fits.getheader('data.fits')
     assert header['CTYPE3'] == ctype
     assert keyword is None or keyword in header
-    coords = fitsutils.read_data('data.fits')[1]
+    coords = read_data('data.fits')[1]
     assert coords.convention == (
         gridutils.make_convention(convention, coords.rest) or 'relativistic')
     if rest is None:
@@ -425,7 +427,7 @@ def test_rest_round_trip(rest, convention, ctype, keyword):
 def test_medium_of_the_wavelengths(ctype, keywords, medium, expected):
     fits.writeto('data.fits', np.zeros((6, 20, 24), np.float32),
                  fits.Header(_spectral_header(ctype, **keywords)))
-    coords = fitsutils.read_data('data.fits', medium=medium)[1]
+    coords = read_data('data.fits', medium=medium)[1]
     assert coords.medium == expected
 
 
@@ -433,9 +435,9 @@ def test_medium_round_trip():
     grid = gridutils.make_grid(
         (24, 20, 6), (1, 1, 10), spectral_axis=2, rest='6562.8 Angstrom',
         medium='air')
-    fitsutils.write_data('data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
+    write_data('data.fits', np.zeros((6, 20, 24)), grid.coords, 2)
     assert fits.getheader('data.fits')['AIRORVAC'] == 'air'
-    assert fitsutils.read_data('data.fits')[1].medium == 'air'
+    assert read_data('data.fits')[1].medium == 'air'
 
 
 @pytest.mark.parametrize('rest, medium, message', [
@@ -472,13 +474,13 @@ def test_read_array_of_maps_cubes_and_stale_axes(tmp_path):
         CUNIT1='deg', CUNIT2='deg'))
     image = np.arange(12.0).reshape(3, 4)
     fits.writeto(tmp_path / 'map.fits', image, header)
-    data, wcs = fitsutils.read_array(str(tmp_path / 'map.fits'))
+    data, wcs = read_array(str(tmp_path / 'map.fits'))
     assert data.shape == (3, 4) and wcs.naxis == 2
     stale = header.copy()
     stale.update(CTYPE3='VRAD', CRVAL3=0.0, CRPIX3=1.0, CDELT3=1e3)
     fits.writeto(tmp_path / 'stale.fits', image, stale)
-    data, _ = fitsutils.read_array(str(tmp_path / 'stale.fits'))
+    data, _ = read_array(str(tmp_path / 'stale.fits'))
     assert data.shape == (3, 4)
     fits.writeto(tmp_path / 'cube.fits', np.ones((5, 3, 4)), stale)
-    data, wcs = fitsutils.read_array(str(tmp_path / 'cube.fits'))
+    data, wcs = read_array(str(tmp_path / 'cube.fits'))
     assert data.shape == (5, 3, 4) and wcs.naxis == 3

@@ -505,11 +505,12 @@ def test_psfs_from_files_in_python(tmp_path):
     from astropy.io import fits
     from gbkfit.instrument import (
         PSFGauss, PSFGaussBeam, PSFImage, psf_parser)
-    from gbkfit.utils import fitsutils, gridutils
+    from gbkfit.io import write_data
+    from gbkfit.utils import gridutils
     header = fits.Header(dict(BMAJ=3 / 3600, BMIN=1.5 / 3600, BPA=30.0))
     fits.writeto(tmp_path / 'cube.fits', np.zeros((2, 2)), header)
     image = PSFGauss(1.5).asarray((0.5, 0.5))
-    fitsutils.write_data(
+    write_data(
         str(tmp_path / 'psf.fits'), image,
         gridutils.make_grid(image.shape[::-1], 0.5).coords)
     for psf, info in (

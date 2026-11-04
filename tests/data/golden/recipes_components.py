@@ -375,7 +375,7 @@ def _write_image(folder: pathlib.Path) -> None:
     from gbkfit.driver.drivers.host import DriverHost
     from gbkfit.model import galaxy_parser
     from gbkfit.observation import ObservationGroup, observation_parser
-    from gbkfit.utils import fitsutils
+    from gbkfit.io import write_data
     galaxy = dict(components=[dict(
         type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=dict(ptraits=dict(type='exponential')),
@@ -389,7 +389,7 @@ def _write_image(folder: pathlib.Path) -> None:
     params = dict(xpos=0.27, ypos=-0.38, posa=40, incl=55, pt_a=1, pt_s=2.5)
     image = group.plan(DriverHost()).model_h(params)[0]['brightness']['d']
     coords = group.observations()[0].observable().grid().coords
-    fitsutils.write_data(
+    write_data(
         str(folder / 'image.fits'), image.astype(np.float32), coords, None,
         True)
 

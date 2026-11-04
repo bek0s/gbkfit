@@ -8,8 +8,8 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import DataFile, check_options
+from gbkfit.io import ErrorKind
 from gbkfit.utils import gridutils
-from gbkfit.utils.datafiles import ErrorKind
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data
@@ -99,7 +99,7 @@ class DatasetSlitSpectra(Dataset):
             The world coordinates of the axes on the sky (see
             gridutils.Coords); by default, those of the header. Either rpix
             or rval can be given, and the other comes from the header (see
-            fitsutils.read_data).
+            read_data).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
@@ -107,7 +107,7 @@ class DatasetSlitSpectra(Dataset):
             The world coordinates of the spectral axis, the convention of
             its velocities, its rest and its medium, given instead of
             those of the header (as those of the axes on the sky; the
-            medium of the header, see fitsutils.read_data); not its size,
+            medium of the header, see read_data); not its size,
             which the data give.
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
@@ -115,7 +115,7 @@ class DatasetSlitSpectra(Dataset):
         error_kind : str, optional
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
-            datafiles.read_arrays).
+            read_arrays).
         footprint : str or tuple, optional
             The file of where the instrument looked (see Data).
 

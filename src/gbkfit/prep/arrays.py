@@ -15,7 +15,7 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.config import ConfigError, DataFile
-from gbkfit.utils import datafiles, fitsutils
+from gbkfit.io import ErrorKind, has_wcs, read_arrays, with_wcs
 from .masks import bounding_box
 
 
@@ -30,11 +30,11 @@ def _shift_axes(header: fits.Header, offset: npt.ArrayLike) -> fits.Header:
     given offset (on each numpy axis) of the original data: positive where
     the data were cropped, negative where they were padded.
     """
-    if not fitsutils.has_wcs(header):
+    if not has_wcs(header):
         return header
     wcs = astropy.wcs.WCS(header)
     wcs.wcs.crpix -= np.asarray(offset)[::-1]
-    return fitsutils.with_wcs(header, wcs)
+    return with_wcs(header, wcs)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -43,7 +43,7 @@ class FitsArrays:
     Data read from files, being prepared for a dataset: the data, their
     errors (if any: standard deviations) and mask (1 where valid), with
     the header of the data (their world coordinates, if any), in the
-    orientation of the model (see datafiles.read_arrays; e.g. RA before
+    orientation of the model (see read_arrays; e.g. RA before
     Dec, and velocities increasing). The data and errors are NaN where the
     mask is 0.
 
@@ -61,7 +61,7 @@ class FitsArrays:
     header : fits.Header
         The header of the data.
     beam : dict or None
-        The beam of the data, if any (see datafiles.Arrays): of a cube of
+        The beam of the data, if any (see Arrays): of a cube of
         CASA, that of each of its channels, in their order.
     """
     data: np.ndarray
@@ -79,11 +79,11 @@ class FitsArrays:
             velocity: str | None = None,
             *,
             rest: str | astropy.units.Quantity | None = None,
-            error_kind: datafiles.ErrorKind = 'sigma'
+            error_kind: ErrorKind = 'sigma'
     ) -> 'FitsArrays':
         """
         Read the data, errors and mask from files in the orientation of
-        the model, as the model reads them (see datafiles.read_arrays):
+        the model, as the model reads them (see read_arrays):
         ranges of pixels (see crop) are those of the data it sees, with
         the spectral axis in velocities of the rest, if given.
 
@@ -99,9 +99,9 @@ class FitsArrays:
             or 'optical', where the header does not state it.
         rest : str or Quantity, optional
             The rest that turns a spectral axis of wavelengths or
-            frequencies into velocities (see fitsutils.model_header).
+            frequencies into velocities (see model_header).
         error_kind : str, optional
-            What the file of the errors holds (see datafiles.read_arrays).
+            What the file of the errors holds (see read_arrays).
 
         Returns
         -------
@@ -112,15 +112,15 @@ class FitsArrays:
         ------
         ConfigError
             If the files cannot be read as data, errors and mask (see
-            datafiles.read_arrays), or the rest is given for data without
+            read_arrays), or the rest is given for data without
             a spectral axis.
         """
-        arrays = datafiles.read_arrays(
+        arrays = read_arrays(
             data, error, mask, error_kind=error_kind, rest=rest,
             velocity=velocity)
         header = arrays.header
         if rest is not None and not (
-                fitsutils.has_wcs(header)
+                has_wcs(header)
                 and astropy.wcs.WCS(header).wcs.spec >= 0):
             raise ConfigError(
                 f"the data have no spectral axis to give the rest {rest}")

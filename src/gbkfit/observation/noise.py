@@ -18,8 +18,9 @@ from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, check_options,
     split_fits_file)
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
+from gbkfit.io import read_data
 from gbkfit.math.correlation import periodic_correlation
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -211,7 +212,7 @@ class NoiseGauss(Noise):
     ) -> 'NoiseGauss':
         """
         Make a noise of an error map read from a FITS file, in the
-        orientation of the model (see fitsutils.read_data): by its world
+        orientation of the model (see read_data): by its world
         coordinates, or without them as the file has it, which must then
         be that of the model (e.g. as gbkfit.prep writes data).
 
@@ -491,7 +492,7 @@ class NoisePoisson(Noise):
 
 def _read_error(file: FitsFile) -> np.ndarray:
     """Return the error map of a noise, read from its FITS file."""
-    return fitsutils.read_data(*split_fits_file(file))[0]
+    return read_data(*split_fits_file(file))[0]
 
 
 def _dump_dispersion(

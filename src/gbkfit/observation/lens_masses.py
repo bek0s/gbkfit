@@ -26,8 +26,9 @@ from annotated_types import Ge
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_name,
     check_options, split_fits_file)
+from gbkfit.io import read_data, write_data
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -174,7 +175,7 @@ class LensDeflectionMap(LensMass):
             The world coordinates of the maps (see gridutils.make_grid); by
             default, those of the headers. Either rpix or rval can be
             given, and the other comes from the headers (see
-            fitsutils.read_data).
+            read_data).
         rota : float, optional
             The rotation of the maps on the sky; by default, that of the
             headers.
@@ -196,7 +197,7 @@ class LensDeflectionMap(LensMass):
         """
         check_options(LensDeflectionMap.from_files, locals())
         maps = [
-            fitsutils.read_data(*split_fits_file(file), rpix, rval)
+            read_data(*split_fits_file(file), rpix, rval)
             for file in (alpha_x, alpha_y)]
         (data_x, coords), (data_y, coords_y) = maps
         if coords_y != coords:
@@ -215,7 +216,7 @@ class LensDeflectionMap(LensMass):
         for key, data in (
                 ('alpha_x', self._alpha_x), ('alpha_y', self._alpha_y)):
             filename = f'{prefix}{key}.fits'
-            fitsutils.write_data(
+            write_data(
                 filename, data, self._grid.coords, None, overwrite)
             info[key] = filename if dump_path else os.path.basename(filename)
         if self._scaled:

@@ -9,7 +9,8 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.io import coords_from_wcs, read_data, write_data
+from gbkfit.utils import gridutils
 
 
 def celestial_wcs(crval, crpix, rota):
@@ -31,9 +32,9 @@ def test_grids_are_placed_by_their_sky_positions():
     wcs_a = celestial_wcs([150.0, 50.0], [20, 15], 30)
     wcs_b = celestial_wcs([150.004, 50.002], [5, 8], -10)
     grid_a = gridutils.Grid(
-        (40, 30), fitsutils.coords_from_wcs('a', wcs_a), None)
+        (40, 30), coords_from_wcs('a', wcs_a), None)
     grid_b = gridutils.Grid(
-        (25, 20), fitsutils.coords_from_wcs('b', wcs_b), None)
+        (25, 20), coords_from_wcs('b', wcs_b), None)
     j, i = np.mgrid[0:30, 0:40]
     expected = wcs_b.world_to_pixel(wcs_a.pixel_to_world(i, j))
     np.testing.assert_allclose(
@@ -122,20 +123,20 @@ def test_logarithmic_wavelengths_are_log_velocities(tmp_path):
         CTYPE3='WAVE-LOG', CUNIT3='m', CRVAL3=crval, CRPIX3=5,
         CDELT3=cdelt, RESTWAV=rest))
     fits.writeto(tmp_path / 'cube.fits', np.zeros((9, 5, 5)), header)
-    data, coords = fitsutils.read_data(str(tmp_path / 'cube.fits'))
+    data, coords = read_data(str(tmp_path / 'cube.fits'))
     assert coords.convention == 'log'
     assert coords.step[2] == pytest.approx(c * cdelt / crval, rel=1e-12)
     assert coords.rpix[2] == pytest.approx(4)
     assert coords.rval[2] == pytest.approx(c * np.log(crval / rest),
                                            rel=1e-12)
-    fitsutils.write_data(str(tmp_path / 'out.fits'), data, coords, 2)
+    write_data(str(tmp_path / 'out.fits'), data, coords, 2)
     out = fits.getheader(tmp_path / 'out.fits')
     assert out['CTYPE3'] == 'WAVE-LOG'
     # (in air, AWAV-LOG, as FITS has it)
-    fitsutils.write_data(
+    write_data(
         str(tmp_path / 'air.fits'), data, coords._replace(medium='air'), 2)
     assert fits.getheader(tmp_path / 'air.fits')['CTYPE3'] == 'AWAV-LOG'
-    _, air = fitsutils.read_data(str(tmp_path / 'air.fits'))
+    _, air = read_data(str(tmp_path / 'air.fits'))
     assert (air.convention, air.medium) == ('log', 'air')
     assert air.rval[2] == pytest.approx(coords.rval[2], rel=1e-12)
     assert out['CRVAL3'] == pytest.approx(crval, rel=1e-12)

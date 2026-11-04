@@ -356,7 +356,7 @@ def pixel_fluxes(
     pixel; per beam (e.g. Jy/beam), times that of a pixel over that of
     the Gaussian beam of the data, pi / (4 ln 2) bmaj bmin: of their
     header, or of each channel of a cube of CASA (a factor for each of
-    its channels, in their order; see datafiles.Arrays).
+    its channels, in their order; see Arrays).
 
     Parameters
     ----------

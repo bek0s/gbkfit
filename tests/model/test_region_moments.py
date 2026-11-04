@@ -8,6 +8,7 @@ import copy
 import astropy.units as u
 from gbkfit.config import ConfigError
 import gbkfit.dataset
+from gbkfit.io import write_data
 import gbkfit.params
 import numpy as np
 import pytest
@@ -17,7 +18,7 @@ from modelutils import group_plan
 from gbkfit.dataset import Data
 from gbkfit.dataset import DatasetRegionMoments
 from gbkfit.region import RegionsBins
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 from gbkfit.utils.gridutils import SpectralAxis
 
 
@@ -54,7 +55,7 @@ def evaluate(driver, observable):
 
 def write_bins(index):
     """A file of bins on the grid of the tests' cubes (32 x 41 pixels)."""
-    fitsutils.write_data('bins.fits', index, gridutils.Coords(
+    write_data('bins.fits', index, gridutils.Coords(
         (1, 1), (15.5, 20), (0, 0), 0))
     return dict(type='bins', file='bins.fits')
 
@@ -221,7 +222,7 @@ def test_region_moments_of_the_columns_of_a_table(tmp_path):
         SIGMA=[100.0, 120, 140] * u.km / u.s,
         H3=[0.01, -0.02, 0.03], H4=[0.0, 0.05, -0.01],
     )).write(tmp_path / 'kinematics.fits')
-    fitsutils.write_data(
+    write_data(
         str(tmp_path / 'bins.fits'), np.array([[0, 0, -1], [1, 2, 2]]),
         gridutils.Coords((1, 1), (1, 0.5), (0, 0), 0))
     dataset = gbkfit.dataset.dataset_parser.load(dict(

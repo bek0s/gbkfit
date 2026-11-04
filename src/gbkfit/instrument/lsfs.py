@@ -32,8 +32,9 @@ from annotated_types import Gt
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
+from gbkfit.io import has_wcs, read_data, write_data
 import gbkfit.math
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -605,10 +606,10 @@ class LSFImage(LSF):
         """
         check_options(LSFImage.from_file, locals())
         filename, hdu = split_fits_file(file)
-        data, coords = fitsutils.read_data(filename, hdu)
+        data, coords = read_data(filename, hdu)
         if step is None:
             header = astropy.io.fits.getheader(filename, hdu)
-            if not (fitsutils.has_wcs(header)
+            if not (has_wcs(header)
                     and astropy.wcs.WCS(header).wcs.spec >= 0):
                 raise ConfigError(
                     f"{filename}: the image has no spectral axis; give the "
@@ -623,7 +624,7 @@ class LSFImage(LSF):
         filename = f'{prefix}lsf.fits'
         rpix = self._data.size / 2 - 0.5
         coords = gridutils.Coords((self._step,), (rpix,), (0.0,), 0.0)
-        fitsutils.write_data(filename, self._data, coords, 0, overwrite)
+        write_data(filename, self._data, coords, 0, overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),

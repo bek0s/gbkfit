@@ -4,7 +4,7 @@ the model: the one reader of the datasets (see dataset.Data.from_files)
 and of prep (see prep.FitsArrays).
 
 The files are FITS files, or ASDF files, whose world coordinates (a gwcs)
-become those of a FITS header (see fitsutils.linear_header): past that,
+become those of a FITS header (see linear_header): past that,
 both are read alike.
 """
 
@@ -19,7 +19,10 @@ import gwcs
 import numpy as np
 
 from gbkfit.config import ConfigError, DataFile, is_asdf_file, warn
-from gbkfit.utils import fitsutils, unitutils
+from gbkfit.utils import unitutils
+from .fits import (
+    Orientation, has_wcs, header_beam, header_shape, linear_header,
+    model_header, read_hdu)
 
 
 __all__ = [
@@ -59,12 +62,12 @@ class Arrays:
         The mask: 1 where valid, 0 elsewhere.
     header : astropy.io.fits.Header
         The header of the values, in the orientation of the model (see
-        fitsutils.model_header).
+        model_header).
     unit : astropy.units.UnitBase or None
         The unit of the values, if known.
     beam : dict or None
         The beam of the values, if they have one (see
-        fitsutils.header_beam): of a cube of CASA, that of each of its
+        header_beam): of a cube of CASA, that of each of its
         channels, in the order of the channels of the values.
     footprint : np.ndarray or None
         Where the instrument looked, if given (see Data): as the file
@@ -95,11 +98,11 @@ def read_arrays(
     orientation of the model.
 
     A file is a FITS file and its HDU, or, by default, its first HDU with
-    data (see fitsutils.read_hdu); or an ASDF file and the path of its
+    data (see read_hdu); or an ASDF file and the path of its
     array in its tree (e.g. 'roman/data'), whose unit is that of a
     Quantity, and world coordinates those of the WCS of the file, if it
     has one (see _read_asdf). Each is put in the orientation of the
-    model by its own world coordinates (see fitsutils.model_header). The
+    model by its own world coordinates (see model_header). The
     errors, the mask and the footprint follow the axes of the file of the
     data, whose shape they must have, if they or the data have no world
     coordinates; else theirs must put their pixels on those of the data.
@@ -116,7 +119,7 @@ def read_arrays(
     with 0 are invalid: NaN, with the mask 0.
 
     The beam of the values is that of the header of their file, or of
-    each channel of a cube of CASA (see fitsutils.header_beam), in the
+    each channel of a cube of CASA (see header_beam), in the
     order of the channels of the values (reversed with the spectral axis,
     e.g. of decreasing frequency).
 
@@ -134,7 +137,7 @@ def read_arrays(
         if it is a unit.
     rest : str or Quantity, optional
         The rest of the spectral axis, which turns one of wavelengths or
-        frequencies into velocities (see fitsutils.model_header).
+        frequencies into velocities (see model_header).
     velocity : str, optional
         The convention of the velocities of a spectral axis that the
         headers leave ambiguous: 'radio' or 'optical'.
@@ -150,7 +153,7 @@ def read_arrays(
     ------
     ConfigError
         If a file cannot be read, or has world coordinates the model
-        cannot take (see fitsutils.model_header); error_kind is not one of
+        cannot take (see model_header); error_kind is not one of
         ERROR_KINDS, the errors are negative, or their unit is not that of
         their kind; the errors or the mask are not on the pixels of the
         data; or the beams of a cube are not one for each channel.
@@ -198,16 +201,16 @@ def _read(
         rest: typing.Any,
         velocity: str | None
 ) -> tuple[
-        np.ndarray, astropy.io.fits.Header, fitsutils.Orientation,
+        np.ndarray, astropy.io.fits.Header, Orientation,
         dict[str, typing.Any] | None]:
     """
     Return the values of a file in the orientation of the model, their
-    header in it, how they were put in it (see fitsutils.model_header),
+    header in it, how they were put in it (see model_header),
     and their beam (see _beam).
     """
     filename = _filename(file)
     values, header = _read_file(file)
-    model, orientation = fitsutils.model_header(
+    model, orientation = model_header(
         filename, header, values.shape, rest, velocity)
     return (_floats(orientation.apply(values)), model, orientation,
             _beam(filename, header, model, orientation))
@@ -217,11 +220,11 @@ def _beam(
         filename: str,
         header: astropy.io.fits.Header,
         model: astropy.io.fits.Header,
-        orientation: fitsutils.Orientation
+        orientation: Orientation
 ) -> dict[str, typing.Any] | None:
     """
     Return the beam of the values of a file of the given header (see
-    fitsutils.header_beam; the header of an ASDF file has none), the
+    header_beam; the header of an ASDF file has none), the
     beams of the channels of a cube of CASA in the order of its channels
     in the orientation of the model (of the header model).
 
@@ -230,7 +233,7 @@ def _beam(
     ConfigError
         If the beams of a cube are not one for each channel.
     """
-    beam = fitsutils.header_beam(
+    beam = header_beam(
         header, None if is_asdf_file(filename) else filename)
     if beam is None or 'spectral' not in beam:
         return beam
@@ -257,7 +260,7 @@ def _read_file(file: DataFile) -> tuple[np.ndarray, astropy.io.fits.Header]:
     filename, key = (file, None) if isinstance(file, str) else file
     if is_asdf_file(filename):
         return _read_asdf(filename, key)
-    return fitsutils.read_hdu(filename, key)
+    return read_hdu(filename, key)
 
 
 def _read_asdf(
@@ -267,7 +270,7 @@ def _read_asdf(
     Return the array of an ASDF file at a path of its tree (e.g.
     'roman/data'), and a FITS header of its unit (BUNIT, of a Quantity)
     and of the world coordinates of the only WCS of the file (a gwcs), if
-    it has one (see fitsutils.linear_header).
+    it has one (see linear_header).
 
     Raises
     ------
@@ -298,7 +301,7 @@ def _read_asdf(
             f"{filename}: its tree has {len(wcss)} WCSs; files of one are "
             f"read")
     if wcss:
-        header.update(fitsutils.linear_header(filename, wcss[0], values.shape))
+        header.update(linear_header(filename, wcss[0], values.shape))
     return values, header
 
 
@@ -317,7 +320,7 @@ def _instances(node: typing.Any, cls: type) -> typing.Iterator[typing.Any]:
 def _read_companion(
         file: DataFile,
         data_header: astropy.io.fits.Header,
-        data_orientation: fitsutils.Orientation,
+        data_orientation: Orientation,
         rest: typing.Any,
         velocity: str | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
@@ -327,8 +330,8 @@ def _read_companion(
     """
     filename = _filename(file)
     values, header = _read_file(file)
-    if fitsutils.has_wcs(header) and fitsutils.has_wcs(data_header):
-        header, orientation = fitsutils.model_header(
+    if has_wcs(header) and has_wcs(data_header):
+        header, orientation = model_header(
             filename, header, values.shape, rest, velocity)
         values = orientation.apply(values)
         _check_same_pixels(filename, header, values.shape, data_header)
@@ -353,7 +356,7 @@ def _check_same_pixels(
     the model (of the given shape) are on the pixels of the data of
     another: of their shape, and their world coordinates at the corners.
     """
-    data_shape = fitsutils.header_shape(data_header)
+    data_shape = header_shape(data_header)
     if shape != data_shape:
         raise ConfigError(
             f"{source}: its values must be of the shape of the data, "

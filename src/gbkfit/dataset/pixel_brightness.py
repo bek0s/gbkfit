@@ -9,8 +9,8 @@ import numpy as np
 
 from gbkfit.config import DataFile, check_options
 from gbkfit.instrument import PSF
+from gbkfit.io import ErrorKind
 from gbkfit.utils import gridutils
-from gbkfit.utils.datafiles import ErrorKind
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
 from .data import Data
@@ -92,7 +92,7 @@ class DatasetPixelBrightness(Dataset):
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the header. Either rpix or rval can be given,
-            and the other comes from the header (see fitsutils.read_data).
+            and the other comes from the header (see read_data).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
@@ -104,7 +104,7 @@ class DatasetPixelBrightness(Dataset):
         error_kind : str, optional
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
-            datafiles.read_arrays).
+            read_arrays).
         footprint : str or tuple, optional
             The file of where the instrument looked (see Data).
 

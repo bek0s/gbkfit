@@ -33,7 +33,8 @@ import ruamel.yaml
 from astropy.table import Table
 
 import gbkfit
-from gbkfit.utils import fitsutils, gridutils, numutils, pathutils
+from gbkfit.io import write_data, write_spectra
+from gbkfit.utils import gridutils, numutils, pathutils
 
 if TYPE_CHECKING:
     import astropy.units
@@ -461,12 +462,12 @@ class RunWriter:
                 f"{type(value).__name__} carries its own, or has none")
         cards = self._cards(kind)
         if format_ == 'fits' and isinstance(value, gridutils.GridData):
-            return (lambda f: fitsutils.write_data(
+            return (lambda f: write_data(
                 f, value.data, value.coords, value.spectral_axis,
                 overwrite=True, unit=value.unit, cards=cards),
                 value.unit, value.data.shape)
         if format_ == 'fits' and isinstance(value, gridutils.SpectraData):
-            return (lambda f: fitsutils.write_spectra(
+            return (lambda f: write_spectra(
                 f, value.data, value.coords, overwrite=True, unit=value.unit,
                 cards=cards), value.unit, value.data.shape)
         if format_ == 'fits' and isinstance(value, np.ndarray):

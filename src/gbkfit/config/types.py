@@ -93,7 +93,7 @@ FilePath: TypeAlias = Annotated[str, _ConfigForm('path')]
 FitsFile: TypeAlias = Annotated[
     str | tuple[str, int | str], _ConfigForm('fits_file')]
 
-# A file of data (see datafiles.read_arrays): a FITS file, as FitsFile
+# A file of data (see read_arrays): a FITS file, as FitsFile
 # (by default its first HDU with data), or an ASDF file and the path of
 # its array in its tree (e.g. 'roman/data'); in a configuration, a
 # filename, or a dict with the filename (file) and the HDU (hdu) or the

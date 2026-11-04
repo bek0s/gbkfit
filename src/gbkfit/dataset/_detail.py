@@ -11,7 +11,8 @@ import numpy as np
 from astropy.table import Table
 
 from gbkfit.config import ConfigError, config_path, parse_options, warn
-from gbkfit.utils import fitsutils, gridutils, tableutils, unitutils
+from gbkfit.io import read_column, write_data
+from gbkfit.utils import gridutils, unitutils
 from .data import Data, DataColumns, DataFiles, dump_data
 
 if TYPE_CHECKING:
@@ -173,7 +174,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
     mask, in its unit (by default that of its column).
     """
     with config_path('column'):
-        values = tableutils.read_column(table, columns.column, columns.unit)
+        values = read_column(table, columns.column, columns.unit)
     unit = None if values.unit is astropy.units.dimensionless_unscaled \
         else values.unit
     error = columns.error
@@ -189,7 +190,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
         error = np.full(values.shape, float(error))
     elif error is not None:
         with config_path('error'):
-            error = tableutils.read_column(table, error, None)
+            error = read_column(table, error, None)
             if error.unit is not astropy.units.dimensionless_unscaled:
                 try:
                     error = error.to(values.unit)
@@ -202,7 +203,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
     if columns.mask is not None:
         with config_path('mask'):
             mask = np.nan_to_num(
-                tableutils.read_column(table, columns.mask, None).value)
+                read_column(table, columns.mask, None).value)
     return Data(values.value, mask, error, unit)
 
 
@@ -271,7 +272,7 @@ def file_references(
     Data.from_files): the reference pixels and values given, for each
     axis (None where not given), and the rest, the medium and the
     convention of the spectral axis (velocity: how an ambiguous header is
-    read, see fitsutils.read_data).
+    read, see read_data).
 
     Raises
     ------
@@ -422,7 +423,7 @@ def dump_grid_dataset(
             if key not in ('size', 'convention')})
 
     def write(filename: str, array: np.ndarray) -> None:
-        fitsutils.write_data(
+        write_data(
             filename, array, grid.coords, grid.spectral_axis, overwrite)
     for key, item in dataset.items():
         info[key] = dump_data(

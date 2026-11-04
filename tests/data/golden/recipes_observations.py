@@ -149,7 +149,8 @@ def _write_voronoi_bins(folder: pathlib.Path) -> None:
     Write bins.fits: the Voronoi bins of a 24 x 24 grid of 0.5 arcsec, of
     seeded generators denser near the centre; no bin beyond 5.5 arcsec.
     """
-    from gbkfit.utils import fitsutils, gridutils
+    from gbkfit.io import write_data
+    from gbkfit.utils import gridutils
     rng = np.random.default_rng(3)
     radius = 5.5 * rng.uniform(0, 1, 40) ** 0.75
     angle = rng.uniform(0, 2 * np.pi, 40)
@@ -162,7 +163,7 @@ def _write_voronoi_bins(folder: pathlib.Path) -> None:
     # (the bins numbered from 0 without gaps)
     index = np.where(
         inside, np.searchsorted(np.unique(index[inside]), index), -1)
-    fitsutils.write_data(
+    write_data(
         str(folder / 'bins.fits'), index,
         gridutils.Coords((0.5, 0.5), (11.5, 11.5), (0, 0), 0), overwrite=True)
 

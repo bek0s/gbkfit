@@ -10,9 +10,9 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
+from gbkfit.io import write_data
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
-from gbkfit.utils import fitsutils
 
 
 # An image of 64 x 64 pixels of 0.2 arcsec, at RA 150 and Dec 2 degrees
@@ -50,7 +50,7 @@ def write_truth(path, rval=None):
     coords = group.observations()[0].observable().grid().coords
     if rval is not None:
         coords = coords._replace(rval=tuple(rval))
-    fitsutils.write_data(str(path), truth, coords, None, True)
+    write_data(str(path), truth, coords, None, True)
     return truth
 
 

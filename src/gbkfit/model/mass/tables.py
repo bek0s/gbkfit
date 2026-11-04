@@ -14,9 +14,10 @@ import scipy.interpolate
 from annotated_types import Gt
 
 from gbkfit.config import Column, ConfigError, FilePath, Unit, check_options
+from gbkfit.io import read_column, read_table
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import tableutils, unitutils
+from gbkfit.utils import unitutils
 from .base import MassComponent, MassContext
 
 
@@ -97,7 +98,7 @@ class MassTable(MassComponent):
             distance: Annotated[float, Gt(0), Unit('Mpc')] | None = None
     ) -> Self:
         """
-        Read a mass table from a table file (see tableutils.read_table).
+        Read a mass table from a table file (see read_table).
 
         Parameters
         ----------
@@ -120,9 +121,9 @@ class MassTable(MassComponent):
             The mass component.
         """
         check_options(MassTable.from_file, locals())
-        table = tableutils.read_table(file, format)
-        radii = tableutils.read_column(table, radius.column, radius.unit)
-        velocities = tableutils.read_column(
+        table = read_table(file, format)
+        radii = read_column(table, radius.column, radius.unit)
+        velocities = read_column(
             table, velocity.column, velocity.unit or 'km/s')
         return cls(
             name, radii, velocities.to_value(u.km / u.s).tolist(), distance)

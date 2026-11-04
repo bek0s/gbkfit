@@ -27,7 +27,7 @@ export interface PrepFiles {
 
 export type Prepared = Partial<Record<keyof PrepFiles, string>>;
 
-// What a file of errors holds (see gbkfit.utils.datafiles.ErrorKind):
+// What a file of errors holds (see ErrorKind of gbkfit):
 // standard deviations, variances or inverse variances; prep writes
 // standard deviations
 export type ErrorKind = 'sigma' | 'variance' | 'inverse_variance';

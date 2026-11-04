@@ -894,7 +894,7 @@ def check_overlap(grid: Grid, other: Grid, desc: str) -> None:
 
 class GridData(NamedTuple):
     """
-    Data on a grid with world coordinates (see fitsutils.write_data).
+    Data on a grid with world coordinates (see write_data).
 
     Attributes
     ----------
@@ -916,7 +916,7 @@ class GridData(NamedTuple):
 class SpectraData(NamedTuple):
     """
     Spectra of regions of the sky, with the world coordinates of their
-    spectral axis (see fitsutils.write_spectra).
+    spectral axis (see write_spectra).
 
     Attributes
     ----------

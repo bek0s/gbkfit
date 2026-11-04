@@ -406,7 +406,7 @@ def _from_dict(value: Mapping[str, Any], members: tuple[Any, ...]) -> Any:
     member = others[0]
     if member == FitsFile:
         # (without an HDU, the file alone: its readers take their first
-        # HDU, or the first with data, see datafiles)
+        # HDU, or the first with data, see read_arrays)
         file, hdu = parse_file(dict(value))
         return (file, hdu) if 'hdu' in value else file
     if member == DataFile:

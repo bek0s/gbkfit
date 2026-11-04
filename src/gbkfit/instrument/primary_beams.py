@@ -17,7 +17,8 @@ from annotated_types import Gt
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
     split_fits_file)
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.io import read_data, write_data
+from gbkfit.utils import gridutils
 from . import varying
 
 
@@ -267,7 +268,7 @@ class PrimaryBeamImage(PrimaryBeam):
             The world coordinates of the image (see gridutils.make_grid);
             by default, those of the header. Either rpix or rval can be
             given, and the other comes from the header (see
-            fitsutils.read_data).
+            read_data).
         rota : float, optional
             The rotation of the image on the sky (see gridutils.Coords); by
             default, that of the header.
@@ -278,7 +279,7 @@ class PrimaryBeamImage(PrimaryBeam):
             The primary beam.
         """
         check_options(PrimaryBeamImage.from_file, locals())
-        data, coords = fitsutils.read_data(*split_fits_file(file), rpix, rval)
+        data, coords = read_data(*split_fits_file(file), rpix, rval)
         return cls(
             data, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota)
@@ -289,7 +290,7 @@ class PrimaryBeamImage(PrimaryBeam):
     ) -> dict[str, Any]:
         filename = f'{prefix}primary_beam.fits'
         coords = self._grid.coords
-        fitsutils.write_data(filename, self._data, coords, None, overwrite)
+        write_data(filename, self._data, coords, None, overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename))

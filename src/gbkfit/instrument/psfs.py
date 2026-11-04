@@ -25,8 +25,9 @@ from annotated_types import Gt, Le
 from gbkfit.config import (
     ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
+from gbkfit.io import has_wcs, read_data, to_model_axes, write_data
 import gbkfit.math
-from gbkfit.utils import fitsutils, gridutils
+from gbkfit.utils import gridutils
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -643,10 +644,10 @@ class PSFImage(PSF):
         """
         check_options(PSFImage.from_file, locals())
         filename, hdu = split_fits_file(file)
-        data, coords = fitsutils.read_data(filename, hdu)
+        data, coords = read_data(filename, hdu)
         if step is None:
             header = astropy.io.fits.getheader(filename, hdu)
-            if not (fitsutils.has_wcs(header)
+            if not (has_wcs(header)
                     and astropy.wcs.WCS(header).has_celestial):
                 raise ConfigError(
                     f"{filename}: the image has no celestial axes; give the "
@@ -661,7 +662,7 @@ class PSFImage(PSF):
         filename = f'{prefix}psf.fits'
         rpix = tuple(np.array(self._data.shape[::-1]) / 2 - 0.5)
         coords = gridutils.Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
-        fitsutils.write_data(filename, self._data, coords, None, overwrite)
+        write_data(filename, self._data, coords, None, overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
@@ -990,7 +991,7 @@ def _read_images(
         raise ConfigError(
             f"{file}: PSF images must be a cube (nz, ny, nx); it has "
             f"{data.ndim} axes")
-    data, wcs = fitsutils.to_model_axes(data, wcs)
+    data, wcs = to_model_axes(data, wcs)
     points = _detail.spectral_points(wcs, data.shape[0])
     step = None
     if wcs.has_celestial:

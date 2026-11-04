@@ -94,7 +94,7 @@ class DatasetPixelMoments(Dataset):
             The world coordinates of the grid (see gridutils.Coords); by
             default, those of the headers. Either rpix or rval can be
             given, and the other comes from the headers (see
-            fitsutils.read_data).
+            read_data).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             headers.

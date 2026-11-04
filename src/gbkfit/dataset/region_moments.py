@@ -10,8 +10,8 @@ import astropy.io.fits
 import numpy as np
 
 from gbkfit.config import ConfigError, FilePath, check_options, config_path
+from gbkfit.io import read_table
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import tableutils
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, DataColumns, DataFiles, dump_data
@@ -133,7 +133,7 @@ class DatasetRegionMoments(Dataset):
         ----------
         file : str
             The table file: any that astropy reads (see
-            tableutils.read_table: e.g. FITS, ECSV or CSV).
+            read_table: e.g. FITS, ECSV or CSV).
         regions : Regions
             The regions.
         format : str, optional
@@ -150,7 +150,7 @@ class DatasetRegionMoments(Dataset):
             The dataset.
         """
         check_options(DatasetRegionMoments.from_table, locals())
-        table = tableutils.read_table(file, format)
+        table = read_table(file, format)
         items = {}
         for name, columns in _detail.moment_options(locals()).items():
             with config_path(name):

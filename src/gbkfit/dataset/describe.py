@@ -13,7 +13,10 @@ import astropy.units
 import astropy.wcs
 
 from gbkfit.config import ConfigError
-from gbkfit.utils import fitsutils, gridutils, unitutils
+from gbkfit.io import (
+    centre_missing_crpix, header_shape, model_axis_order, read_beam,
+    read_coords, read_unit, velocity_is_ambiguous)
+from gbkfit.utils import gridutils, unitutils
 from .data import Beam
 
 
@@ -41,7 +44,7 @@ class HDUDescription:
         Its name (EXTNAME; 'PRIMARY' for the first).
     shape : tuple of int
         The number of pixels along each axis, in the orientation of the
-        model (x, y, then the spectral axis; see fitsutils.to_model_axes),
+        model (x, y, then the spectral axis; see to_model_axes),
         or in that of the file if its world coordinates are invalid; with
         its axes of length 1, which reading leaves out.
     axes : tuple of str
@@ -50,10 +53,10 @@ class HDUDescription:
     unit : str or None
         The unit of its values, as the header writes it (BUNIT).
     beam : Beam or None
-        Its beam (see fitsutils.read_beam).
+        Its beam (see read_beam).
     coords : Coords or None
         The world coordinates of its data in the model (see
-        fitsutils.read_coords); None if they cannot be read, or if its
+        read_coords); None if they cannot be read, or if its
         velocities are ambiguous and their convention is not given.
     rms : float or None
         The noise of its values that the header states (keyword RMS or
@@ -62,7 +65,7 @@ class HDUDescription:
     ambiguous_velocity : bool
         Whether the header leaves it open whether the velocities of its
         spectral axis are radio or optical (see
-        fitsutils.velocity_is_ambiguous): a dataset of it gives their
+        velocity_is_ambiguous): a dataset of it gives their
         convention, and so does a description of it (see describe_fits);
         until then, this is not one of its problems.
     problems : tuple of str
@@ -96,7 +99,7 @@ def describe_fits(
         The name of the file.
     velocity : str, optional
         The convention of the velocities of spectral axes that the headers
-        leave ambiguous (see fitsutils.read_data): 'radio' or 'optical'.
+        leave ambiguous (see read_data): 'radio' or 'optical'.
 
     Returns
     -------
@@ -128,23 +131,23 @@ def _describe(
     problems = []
     order = _model_order(header)
     # (world axes beyond those of the array are of length 1, see
-    # fitsutils.model_header)
-    sizes = fitsutils.header_shape(header)[::-1]
+    # model_header)
+    sizes = header_shape(header)[::-1]
     sizes += (1,) * (len(order) - len(sizes))
     shape = tuple(sizes[axis] for axis in order)
     axes = tuple(
         str(header.get(f'CTYPE{axis + 1}', '')).strip() for axis in order)
-    ambiguous = fitsutils.velocity_is_ambiguous(header)
+    ambiguous = velocity_is_ambiguous(header)
     coords = None
     if not ambiguous or velocity is not None:
         try:
-            coords = fitsutils.read_coords(filename, index, velocity)
+            coords = read_coords(filename, index, velocity)
         except ConfigError as e:
             problems.append(str(e))
-    unit = fitsutils.read_unit(filename, index)
+    unit = read_unit(filename, index)
     beam = None
     try:
-        options = fitsutils.read_beam(filename, index)
+        options = read_beam(filename, index)
         beam = None if options is None else Beam(**options)
     except ConfigError as e:
         problems.append(str(e))
@@ -174,17 +177,17 @@ def _describe(
 def _model_order(header: astropy.io.fits.Header) -> tuple[int, ...]:
     """
     Return the axes of the header in the order of the model (see
-    fitsutils.model_axis_order), or in their own if its world coordinates
+    model_axis_order), or in their own if its world coordinates
     are invalid.
     """
-    shape = fitsutils.header_shape(header)
+    shape = header_shape(header)
     try:
         # (the fixes of astropy to the header are for the coords)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
             wcs = astropy.wcs.WCS(
-                fitsutils.centre_missing_crpix(header, shape))
+                centre_missing_crpix(header, shape))
     except Exception:
         # (any error of astropy: the problem is reported with the coords)
         return tuple(range(len(shape)))
-    return fitsutils.model_axis_order(wcs)
+    return model_axis_order(wcs)

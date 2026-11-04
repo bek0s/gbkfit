@@ -266,13 +266,13 @@ def test_unknown_options(tmp_path):
 def test_outputs_have_the_world_coordinates_of_the_model(tmp_path):
     # The model is written with the coordinates of its observable, so it can
     # be read back with them
-    from gbkfit.utils import fitsutils
+    from gbkfit.io import read_data
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     observable = config['observations'][0]['observable']
     observable.update(rval=[150, 2], rota=30)
     observable['spectral'].update(rval=1500)
     run = run_eval('model', config, tmp_path / 'model')
-    _, coords = fitsutils.read_data(run.filename(run.product('model')))
+    _, coords = read_data(run.filename(run.product('model')))
     np.testing.assert_allclose(coords.step, [1, 1, 10], rtol=1e-12)
     np.testing.assert_allclose(coords.rpix, [23.5, 23.5, 24.5], rtol=1e-12)
     np.testing.assert_allclose(coords.rval, [150, 2, 1500], rtol=1e-12)

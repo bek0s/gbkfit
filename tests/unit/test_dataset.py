@@ -442,11 +442,12 @@ def test_data_mask_values_that_are_not_finite():
 
 def test_datasets_from_files_in_python(tmp_path):
     # Reading the files from Python gives what the configuration gives
-    from gbkfit.utils import fitsutils, gridutils
+    from gbkfit.io import write_data
+    from gbkfit.utils import gridutils
     grid = gridutils.make_grid(
         (6, 5, 4), (0.5, 0.5, 10), rval=(150, 2, 1000), spectral_axis=2,
         rest='6562.8 Angstrom')
-    fitsutils.write_data(
+    write_data(
         str(tmp_path / 'cube.fits'), np.ones((4, 5, 6)), grid.coords, 2)
     spectra = DatasetPixelSpectra.from_files(
         str(tmp_path / 'cube.fits'), error=0.5)

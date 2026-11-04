@@ -24,10 +24,11 @@ import numpy.typing as npt
 from astropy.io import fits
 
 from gbkfit.config import ConfigError, DataFile
+from gbkfit.io import ErrorKind, casa_beam_table, read_column, read_table
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
-from gbkfit.utils import datafiles, fitsutils, tableutils, unitutils
+from gbkfit.utils import unitutils
 
 
 __all__ = [
@@ -186,13 +187,13 @@ def prep_pixel_brightness(
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: datafiles.ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare an image (pixel_brightness): crop it to a region (roi_spat:
     x from, x to, y from, y to), clip it, crop it to its valid pixels
     (minify), and pad it with invalid pixels (nanpad). error_kind is what
-    the file of the errors holds (see datafiles.read_arrays); the
+    the file of the errors holds (see read_arrays); the
     prepared errors are standard deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
@@ -227,7 +228,7 @@ def prep_slit_spectra(
         velocity: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: datafiles.ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare the spectra along a slit (slit_spectra: positions along x,
@@ -276,7 +277,7 @@ def prep_pixel_spectra(
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         noise_error: bool = False,
-        error_kind: datafiles.ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare a cube (pixel_spectra), with its spectral axis in velocities
@@ -339,7 +340,7 @@ def prep_pixel_moments(
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: datafiles.ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare moment maps (pixel_moments), as image (see
@@ -425,13 +426,13 @@ def prep_region_moments(
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: datafiles.ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for
     region_moments: a map of the bin of each pixel (file_bins; negative or
     NaN for no bin), and moment maps (file_d, with optional errors file_e,
-    of the kind error_kind, see datafiles.read_arrays, and masks file_m)
+    of the kind error_kind, see read_arrays, and masks file_m)
     whose pixels hold the value of their bin. Write the bins, numbered from
     0 in the order of their numbers in the map (prep_<bins>.fits), and for
     each map a vector of the value of each bin (prep_<map>.fits), whose
@@ -503,7 +504,7 @@ def prep_region_spectra(
         velocity: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: datafiles.ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma'
 ) -> None:
     """
     Prepare the spectra of the bins of a cube for region_spectra: a map of
@@ -608,12 +609,12 @@ def prep_gauss_hermite_moments(
         raise ConfigError(
             "give the columns of V, sigma, h3 and h4, and of their errors "
             "if any, four each")
-    table = tableutils.read_table(file, format_)
-    velocity = tableutils.read_column(table, columns[0], None)
+    table = read_table(file, format_)
+    velocity = read_column(table, columns[0], None)
     unit = velocity.unit
 
     def values(name: str, of_velocity: bool) -> np.ndarray:
-        value = tableutils.read_column(table, name, None)
+        value = read_column(table, name, None)
         if of_velocity and value.unit != astropy.units.dimensionless_unscaled:
             value = value.to(unit)
         return value.value
@@ -680,10 +681,10 @@ def prep_psf_casa_beams(
 ) -> None:
     """
     Write the beams of the channels of a cube of CASA as a table of the
-    options of a Gaussian beam PSF (see fitsutils.casa_beam_table).
+    options of a Gaussian beam PSF (see casa_beam_table).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
-    filename = _write_table(fitsutils.casa_beam_table(file), output_dir, 'psf')
+    filename = _write_table(casa_beam_table(file), output_dir, 'psf')
     _log.info(
         f"the beams are in {filename}; use them as psf: {{type: "
         f"gauss_beam, bmaj: {{file: {filename}, column: bmaj}}, ...}} "
