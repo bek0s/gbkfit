@@ -9,7 +9,7 @@ import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
@@ -72,7 +72,7 @@ class FitterEmcee(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If nwalkers, nsteps or thin is not positive, burnin is not in
         [0, nsteps), thin keeps no step after the burn-in, or width is
         not finite and positive.
@@ -113,11 +113,11 @@ class FitterEmcee(Fitter):
         check_options(FitterEmcee.__init__, locals())
         super().__init__(seed, uncertainty)
         if burnin is not None and not 0 <= burnin < nsteps:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")
         kept = nsteps - (nsteps // 2 if burnin is None else burnin)
         if thin > kept:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'thin' ({thin}) keeps no step of the {kept} after "
                 f"the burn-in")
         self._nwalkers = nwalkers
@@ -141,7 +141,7 @@ class FitterEmcee(Fitter):
         ndim = problem.ndim()
         nwalkers = self._nwalkers or max(32, 4 * ndim)
         if nwalkers < 2 * ndim:
-            raise ConfigError(
+            raise ValueError(
                 f"emcee needs at least {2 * ndim} walkers (twice the free "
                 f"elements); nwalkers is {nwalkers}")
         burnin = self._nsteps // 2 if self._burnin is None else self._burnin

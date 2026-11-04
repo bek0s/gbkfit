@@ -140,7 +140,7 @@ class FitProblem:
         Objective.solves), nothing is free, the number of priors is
         wrong, the log is of a fit of other free elements, the pool is of
         another objective, or the merit is unknown.
-    ConfigError
+    ValueError
         If a prior on several parameters is invalid.
     """
 

@@ -16,7 +16,7 @@ from typing import Annotated, Any
 import threadpoolctl
 from annotated_types import Ge
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.driver import Driver
 from gbkfit.objective import Objective
@@ -60,7 +60,7 @@ class WorkersMPI(Workers):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If drivers gives no placements.
     """
 
@@ -80,7 +80,7 @@ class WorkersMPI(Workers):
     ):
         check_options(WorkersMPI.__init__, locals())
         if drivers is not None and not drivers:
-            raise ConfigError("drivers must give at least one placement")
+            raise ValueError("drivers must give at least one placement")
         self._drivers = None if drivers is None else tuple(drivers)
         self._threads = threads
 
@@ -104,7 +104,7 @@ class WorkersMPI(Workers):
         if self._drivers is None:
             return [own_placement(objective)] * nworkers
         if len(self._drivers) != nworkers:
-            raise ConfigError(
+            raise ValueError(
                 f"drivers must give a placement for each of the {nworkers} "
                 f"workers (the ranks of the job but the first); it gives "
                 f"{len(self._drivers)}")
@@ -142,18 +142,18 @@ _mpi_lock = threading.Lock()
 
 def _mpi_size() -> int:
     """
-    Return the number of ranks of the MPI job, or raise ConfigError unless
+    Return the number of ranks of the MPI job, or raise RuntimeError unless
     the launcher of GBKFIT started the program, and the job has ranks of
     workers.
     """
     if not _mpi_launched:
-        raise ConfigError(
+        raise RuntimeError(
             "workers of MPI need the program to run under the launcher of "
             "GBKFIT: mpiexec -n N python -m gbkfit.parallel <program>")
     from mpi4py import MPI
     size = MPI.COMM_WORLD.Get_size()
     if size < 2:
-        raise ConfigError(
+        raise RuntimeError(
             "the MPI job has no ranks for workers (its first runs the "
             "program): start it with mpiexec -n N, N of at least 2")
     return size

@@ -15,7 +15,6 @@ from typing import Any, TypeAlias, TypeVar
 
 import threadpoolctl
 
-from gbkfit.config import ConfigError
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.objective import Objective
@@ -182,7 +181,7 @@ def own_placement(objective: Objective) -> Drivers:
 def placement_drivers(objective: Objective, placement: Placement) -> Drivers:
     """
     Return the drivers of a copy of an objective on a placement, or raise
-    ConfigError if it names unknown galaxies or observations.
+    ValueError if it names unknown galaxies or observations.
     """
     driver, drivers = (placement, None) if isinstance(placement, Driver) \
         else placement
@@ -192,11 +191,11 @@ def placement_drivers(objective: Objective, placement: Placement) -> Drivers:
 def dump_placements(placements: Sequence[Placement]) -> list[Any]:
     """
     Return the configurations of placements: those of their drivers (see
-    Workers). Raise ConfigError for placements of drivers by label, which
+    Workers). Raise TypeError for placements of drivers by label, which
     configurations do not have.
     """
     if any(not isinstance(p, Driver) for p in placements):
-        raise ConfigError(
+        raise TypeError(
             "workers on placements of drivers by label cannot be dumped: "
             "configurations give one driver of each worker")
     return [driver_parser.dump(p) for p in placements]

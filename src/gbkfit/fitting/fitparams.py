@@ -14,7 +14,6 @@ from typing import Any, ClassVar, Self, TypeAlias
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.params import FreeElement, Prior
 
 
@@ -31,9 +30,9 @@ __all__ = [
 def _check_value(value: float, minimum: float, maximum: float) -> None:
     """Check that a value is finite and in a range."""
     if not math.isfinite(value):
-        raise ConfigError(f"option 'value' must be finite; it is {value}")
+        raise ValueError(f"option 'value' must be finite; it is {value}")
     if not minimum <= value <= maximum:
-        raise ConfigError(
+        raise ValueError(
             f"option 'value' ({value}) must be in the range [{minimum}, "
             f"{maximum}]")
 
@@ -44,7 +43,7 @@ def _value(element: FreeElement) -> float:
     ConfigError if it has none.
     """
     if (value := element.value()) is None:
-        raise ConfigError(
+        raise ValueError(
             "an optimizer needs option 'value' (where it starts)")
     return value
 
@@ -87,7 +86,7 @@ class FitParam(abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the element lacks what the fitters need (e.g. a value).
         """
 
@@ -140,7 +139,7 @@ class FitParamBounded(FitParam):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the bounds (with the support of the prior) are empty, or the
         value is not finite or not in them.
     """
@@ -168,7 +167,7 @@ class FitParamBounded(FitParam):
             minimum = max(minimum, low)
             maximum = min(maximum, high)
         if not minimum < maximum:
-            raise ConfigError(
+            raise ValueError(
                 f"the bounds, with the support of the prior, must not be "
                 f"empty; they are [{minimum}, {maximum}]")
         _check_value(value, minimum, maximum)
@@ -193,7 +192,7 @@ class FitParamBounded(FitParam):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the value is not finite or not within the bounds.
         """
         _check_value(value, self._minimum, self._maximum)
@@ -213,7 +212,7 @@ class FitParamLeastSquares(FitParamBounded):
 
     Raises
     ------
-    ConfigError
+    ValueError
         As FitParamBounded, or if the prior has no residual.
     """
 
@@ -225,7 +224,7 @@ class FitParamLeastSquares(FitParamBounded):
             prior: Prior | None = None
     ):
         if prior is not None and not prior.has_residual():
-            raise ConfigError(
+            raise ValueError(
                 f"least squares cannot take a prior of type "
                 f"'{prior.type()}' (it has no residual); use a Gaussian or "
                 f"a uniform prior, or another optimizer")
@@ -249,7 +248,7 @@ class FitParamPrior(FitParam):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the value is not finite or not in the support of the prior.
     """
 
@@ -312,7 +311,7 @@ class FitParamWalkers(FitParamPrior):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the value is not in the support of the prior, or a width is
         given without a value, or is not positive.
     """
@@ -338,9 +337,9 @@ class FitParamWalkers(FitParamPrior):
     ):
         super().__init__(prior, value)
         if width is not None and value is None:
-            raise ConfigError("option 'width' needs option 'value'")
+            raise ValueError("option 'width' needs option 'value'")
         if width is not None and not (math.isfinite(width) and width > 0):
-            raise ConfigError(
+            raise ValueError(
                 f"option 'width' must be finite and positive; it is {width}")
         self._width = width
 

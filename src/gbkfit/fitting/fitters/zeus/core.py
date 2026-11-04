@@ -12,7 +12,7 @@ import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
@@ -97,7 +97,7 @@ class FitterZeus(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If nwalkers is not even and positive, nsteps or thin is not
         positive, burnin is not in [0, nsteps), thin keeps no step after
         the burn-in, the moves are 'global' without a burn-in, or width is
@@ -141,19 +141,19 @@ class FitterZeus(Fitter):
         check_options(FitterZeus.__init__, locals())
         super().__init__(seed, uncertainty)
         if nwalkers is not None and nwalkers % 2:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'nwalkers' must be even (zeus moves two halves of "
                 f"the walkers in turn); it is {nwalkers}")
         if burnin is not None and not 0 <= burnin < nsteps:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'burnin' must be in [0, nsteps); it is {burnin}")
         burnin = nsteps // 2 if burnin is None else burnin
         if thin > nsteps - burnin:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'thin' ({thin}) keeps no step of the "
                 f"{nsteps - burnin} after the burn-in")
         if moves == 'global' and burnin == 0:
-            raise ConfigError(
+            raise ValueError(
                 "the moves 'global' start after a burn-in: give a positive "
                 "burnin")
         self._nwalkers = nwalkers
@@ -189,7 +189,7 @@ class FitterZeus(Fitter):
         ndim = problem.ndim()
         nwalkers = self._nwalkers or max(32, 4 * ndim)
         if nwalkers < 2 * ndim:
-            raise ConfigError(
+            raise ValueError(
                 f"zeus needs at least {2 * ndim} walkers (twice the free "
                 f"elements); nwalkers is {nwalkers}")
         coords, log_prob = start_walkers(problem, params, nwalkers, rng)

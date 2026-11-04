@@ -88,7 +88,7 @@ class FitterUltraNest(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number is not positive.
     """
 

@@ -102,7 +102,7 @@ class FitterDynestyStatic(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number is not positive.
     """
 
@@ -221,7 +221,7 @@ class FitterDynestyDynamic(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number is not positive.
     """
 

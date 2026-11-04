@@ -10,7 +10,7 @@ from typing import Annotated, Any
 import threadpoolctl
 from annotated_types import Ge
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.control import StopControl, StopFlag
 from gbkfit.driver import Driver
 from gbkfit.objective import Objective
@@ -55,7 +55,7 @@ class WorkersProcesses(Workers):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If neither or both of count and drivers are given, or there are no
         placements.
     """
@@ -75,9 +75,9 @@ class WorkersProcesses(Workers):
     ):
         check_options(WorkersProcesses.__init__, locals())
         if (count is None) == (drivers is None):
-            raise ConfigError("give count or drivers (and not both)")
+            raise ValueError("give count or drivers (and not both)")
         if drivers is not None and not drivers:
-            raise ConfigError("drivers must give at least one placement")
+            raise ValueError("drivers must give at least one placement")
         self._count = count
         self._drivers = None if drivers is None else tuple(drivers)
         self._threads = threads

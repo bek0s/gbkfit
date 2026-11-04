@@ -11,7 +11,7 @@ import numpy as np
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
@@ -50,7 +50,7 @@ class FitParamCMAES(FitParamBounded):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the bounds are empty, the value is not finite or not in them,
         or sigma is not positive or is missing without both bounds.
     """
@@ -79,10 +79,10 @@ class FitParamCMAES(FitParamBounded):
         super().__init__(value, minimum, maximum, prior)
         width = self.maximum() - self.minimum()
         if sigma is None and not math.isfinite(width):
-            raise ConfigError(
+            raise ValueError(
                 "option 'sigma' is required without both 'min' and 'max'")
         if sigma is not None and not (math.isfinite(sigma) and sigma > 0):
-            raise ConfigError(
+            raise ValueError(
                 f"option 'sigma' must be finite and positive; it is {sigma}")
         self._sigma = sigma if sigma is not None else width / 4
 
@@ -143,7 +143,7 @@ class FitterCMAES(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number is not positive (restarts: negative), sigma is not
         finite, or the merit and the uncertainty do not go together (see
         Fitter).

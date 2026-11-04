@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, NamedTuple, Self
 import numpy as np
 
 from gbkfit.config import (
-    ConfigError, TypedParser, TypedSerializable, check_options, config_path)
+    TypedParser, TypedSerializable, check_options, config_path)
 from gbkfit.control import StopControl, Stopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
@@ -158,7 +158,7 @@ class Fitter(TypedSerializable, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the merit is unknown, or it is 'aicp' and the uncertainty
         options ask for a covariance.
     """
@@ -175,7 +175,7 @@ class Fitter(TypedSerializable, abc.ABC):
         check_options(Fitter.__init__, locals())
         if merit == 'aicp' and uncertainty is not None \
                 and uncertainty.covariance():
-            raise ConfigError(
+            raise ValueError(
                 "the AICp is not a likelihood: the solutions of a fit of "
                 "merit 'aicp' have no covariance; give uncertainty "
                 "covariance false")
@@ -251,7 +251,7 @@ class Fitter(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the properties of an element are invalid for the fitter, or
             the elements are fewer than it fits (see FitterInfo.min_free).
         """
@@ -262,7 +262,7 @@ class Fitter(TypedSerializable, abc.ABC):
             with config_path(name):
                 fit_params[name] = cls.of(element, defaults)
         if fit_params and len(fit_params) < self.info.min_free:
-            raise ConfigError(
+            raise ValueError(
                 f"the fitter {self.type()!r} needs at least "
                 f"{self.info.min_free} free elements; {len(fit_params)} "
                 f"are free")
@@ -322,7 +322,7 @@ class Fitter(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the fitter cannot fit the parameters (see check: e.g. too
             few free elements or walkers, or values of free elements
             outside the valid ranges of their parameters).
@@ -379,7 +379,7 @@ class Fitter(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the properties of an element or a joint
             prior are invalid for it (see load_fit_params and
             joint_prior_residuals), it needs residuals that an
@@ -398,7 +398,7 @@ class Fitter(TypedSerializable, abc.ABC):
             if observation.likelihood() is not None
             and not observation.likelihood().gives_residuals()]
         if 'residuals' in self.info.needs and without:
-            raise ConfigError(
+            raise ValueError(
                 f"the likelihood of observation {without[0]} is a function "
                 f"of the log-likelihood, which has no residuals (e.g. for "
                 f"least squares); give the residuals instead (form "
@@ -410,14 +410,14 @@ class Fitter(TypedSerializable, abc.ABC):
 
     def _check_merit(self, params: ParamSpace) -> None:
         """
-        Raise ConfigError unless it minimises the merit that the solves of
+        Raise ValueError unless it minimises the merit that the solves of
         the parameters need (see Solve.merit), if any.
         """
         needs = {
             name: solve.merit() for name, solve in params.solves().items()
             if solve.merit() not in (None, self._merit)}
         if needs:
-            raise ConfigError(
+            raise ValueError(
                 f"the solves of {sorted(needs)} need a fit that minimises "
                 f"the {sorted(set(needs.values()))[0]} (the option merit of "
                 f"optimizers and grids); this fit minimises the "
@@ -429,7 +429,7 @@ class Fitter(TypedSerializable, abc.ABC):
         gives residuals or not: those given, or by default a covariance
         (and Laplace samples; see UncertaintyOptions) if the merit is the
         chi-square and the objective gives residuals (of which a
-        covariance is made), else none. Raise ConfigError if those given
+        covariance is made), else none. Raise ValueError if those given
         ask for a covariance of an objective without residuals (a user
         likelihood of the log-likelihood), before the fit rather than after
         it.
@@ -439,7 +439,7 @@ class Fitter(TypedSerializable, abc.ABC):
                 if self._merit == 'chi2' and gives_residuals \
                 else _NO_UNCERTAINTY
         if self._uncertainty.covariance() and not gives_residuals:
-            raise ConfigError(
+            raise ValueError(
                 "a likelihood that is a function of the log-likelihood has "
                 "no residuals, of which the covariance is made; give "
                 "uncertainty covariance false")
@@ -680,7 +680,7 @@ def _check_valid_ranges(
         ranges: dict[str, ValidRange]
 ) -> None:
     """
-    Raise ConfigError if the fitter may try values of free elements (in
+    Raise ValueError if the fitter may try values of free elements (in
     their bounds, or the support of their priors) outside the valid
     ranges of their parameters (by element name), where the models are
     not defined.
@@ -693,7 +693,7 @@ def _check_valid_ranges(
             ranges[name].contains(fit_param.minimum())
             and ranges[name].contains(fit_param.maximum()))]
     if outside:
-        raise ConfigError(
+        raise ValueError(
             f"the fit may try values of free elements outside the valid "
             f"ranges of their parameters, where the models are not defined: "
             f"{', '.join(outside)}; give them bounds (or priors) within "
@@ -748,7 +748,7 @@ def _dump_params(params: ParamSpace) -> dict[str, Any] | None:
     """Return the configuration of the parameters, if it can be dumped."""
     try:
         return params.dump()
-    except ConfigError:
+    except TypeError:
         return None
 
 

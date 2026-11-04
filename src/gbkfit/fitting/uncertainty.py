@@ -56,7 +56,7 @@ class UncertaintyOptions(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number is negative.
     """
 

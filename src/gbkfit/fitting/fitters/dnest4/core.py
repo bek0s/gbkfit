@@ -12,7 +12,7 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
@@ -104,7 +104,7 @@ class FitterDNest4(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number of particles, steps, saves or new_level_interval is
         not positive, backtracking is not positive, beta is negative, or
         a value of min_rows is negative.
@@ -154,7 +154,7 @@ class FitterDNest4(Fitter):
         super().__init__(seed, uncertainty)
         min_rows = dict(min_rows or {})
         if negative := [k for k, v in min_rows.items() if not v >= 0]:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'min_rows' must be at least 0; it is not for "
                 f"{negative}")
         self._particles = particles

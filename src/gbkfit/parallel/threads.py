@@ -7,7 +7,7 @@ import threading
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.control import StopControl
 from gbkfit.driver import Driver
 from gbkfit.objective import Objective
@@ -49,7 +49,7 @@ class WorkersThreads(Workers):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there are no placements.
     """
 
@@ -63,7 +63,7 @@ class WorkersThreads(Workers):
     def __init__(self, drivers: Sequence[Placement]):
         check_options(WorkersThreads.__init__, locals())
         if not drivers:
-            raise ConfigError("drivers must give at least one placement")
+            raise ValueError("drivers must give at least one placement")
         self._drivers = tuple(drivers)
 
     def dump(self) -> dict[str, Any]:

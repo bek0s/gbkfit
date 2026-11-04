@@ -9,7 +9,6 @@ from typing import Any, NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
@@ -159,7 +158,7 @@ class Objective:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an observation has no data, its comparison cannot be made (see
         Comparison), or a solved element is neither of the flux scale of an
         observation whose comparison can solve it (see
@@ -631,18 +630,18 @@ class Objective:
 
     def require_residuals(self) -> None:
         """
-        Raise ConfigError if the comparison of an observation gives no
+        Raise ValueError if the comparison of an observation gives no
         residuals (e.g. a user likelihood of the log-likelihood; see
         LikelihoodUser), which least squares need.
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an observation gives no residuals.
         """
         for i, comparison_ in enumerate(self._comparisons):
             if not comparison_.gives_residuals():
-                raise ConfigError(
+                raise ValueError(
                     f"the likelihood of observation {i} is a function of "
                     f"the log-likelihood, which has no residuals (e.g. for "
                     f"least squares); give the residuals instead "

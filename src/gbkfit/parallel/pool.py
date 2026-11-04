@@ -59,7 +59,7 @@ class Workers(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If a placement names unknown galaxies or observations (see
             ObservationGroup.placement).
         """
@@ -73,7 +73,7 @@ class Workers(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If a placement names unknown galaxies or observations.
         """
         self.placements(objective)
@@ -85,9 +85,10 @@ class Workers(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
-            If a placement names unknown galaxies or observations, or the
-            job of the workers is not running (see WorkersMPI).
+        ValueError
+            If a placement names unknown galaxies or observations.
+        RuntimeError
+            If the job of the workers is not running (see WorkersMPI).
         """
 
     @abc.abstractmethod
@@ -122,7 +123,7 @@ class WorkerPool:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a placement names unknown galaxies or observations (see
         ObservationGroup.placement).
     """

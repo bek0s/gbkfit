@@ -9,7 +9,7 @@ import numpy as np
 import scipy.optimize
 from annotated_types import Gt
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
@@ -105,7 +105,7 @@ class FitterScipyLeastSquares(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a number is not positive, or 'lm' is given a robust loss.
     """
 
@@ -148,7 +148,7 @@ class FitterScipyLeastSquares(Fitter):
         check_options(FitterScipyLeastSquares.__init__, locals())
         super().__init__(seed, uncertainty)
         if method == 'lm' and loss != 'linear':
-            raise ConfigError("method 'lm' takes only the 'linear' loss")
+            raise ValueError("method 'lm' takes only the 'linear' loss")
         self._method = method
         self._jac = jac
         self._x_scale = x_scale

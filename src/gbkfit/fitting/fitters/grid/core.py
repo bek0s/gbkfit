@@ -10,7 +10,7 @@ from typing import Annotated, Any, Literal, Self
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
@@ -45,7 +45,7 @@ class FitParamGrid(FitParam):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the range is not finite or is empty, or n is not an integer of
         at least 2.
     """
@@ -58,7 +58,7 @@ class FitParamGrid(FitParam):
     ) -> Self:
         n = element.n() if element.n() is not None else defaults.get('n')
         if n is None:
-            raise ConfigError(
+            raise ValueError(
                 "a grid needs option 'n' (the number of values), of the "
                 "element or of the fitter")
         return cls(element.minimum(), element.maximum(), n, element.prior())
@@ -72,11 +72,11 @@ class FitParamGrid(FitParam):
     ):
         if not (math.isfinite(minimum) and math.isfinite(maximum)
                 and minimum < maximum):
-            raise ConfigError(
+            raise ValueError(
                 f"the range of a grid must be finite and not empty; it is "
                 f"[{minimum}, {maximum}]")
         if isinstance(n, bool) or not isinstance(n, int) or n < 2:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'n' must be an integer of at least 2 (a fixed "
                 f"value is not free); it is {n!r}")
         self._minimum = float(minimum)
@@ -134,7 +134,7 @@ class FitterGrid(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If batch or max_points is not positive, n is not an integer of at
         least 2, the merit and the uncertainty do not go together (see
         Fitter), or the grid has more than max_points points (when it
@@ -188,7 +188,7 @@ class FitterGrid(Fitter):
         shape = tuple(len(axis) for axis in axes)
         npoints = math.prod(shape)
         if npoints > self._max_points:
-            raise ConfigError(
+            raise ValueError(
                 f"the grid has {npoints} points, more than max_points "
                 f"({self._max_points}): give fewer values, or a larger "
                 f"max_points")

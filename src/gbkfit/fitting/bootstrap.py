@@ -13,7 +13,7 @@ import numpy as np
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, Serializable, TypedParser, TypedSerializable, check_options,
+    Serializable, TypedParser, TypedSerializable, check_options,
     config_path)
 from gbkfit.dataset import Dataset
 from gbkfit.fitting._subfits import Outcome, run_subfits
@@ -53,7 +53,7 @@ class BootstrapScheme(TypedSerializable, abc.ABC):
 
     def check(self, dataset: Dataset, params: ParamSpace) -> None:
         """
-        Raise ConfigError unless it suits the data of an observation and
+        Raise ValueError unless it suits the data of an observation and
         the parameters (by default, it does).
         """
 
@@ -92,7 +92,7 @@ class BootstrapScheme(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the data cannot be redrawn by it.
         """
 
@@ -114,7 +114,7 @@ class BootstrapBlocks(BootstrapScheme):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the size is not of positive numbers.
     """
 
@@ -131,7 +131,7 @@ class BootstrapBlocks(BootstrapScheme):
         if not size or not all(
                 isinstance(n, numbers.Real) and not isinstance(n, bool)
                 and n > 0 for n in size):
-            raise ConfigError(
+            raise ValueError(
                 f"the size of the blocks is of positive numbers; it is "
                 f"{list(size)}")
         self._size = size
@@ -167,7 +167,7 @@ class BootstrapGaussian(BootstrapScheme):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the noise of a data item is correlated (when it is checked).
     """
 
@@ -182,7 +182,7 @@ class BootstrapGaussian(BootstrapScheme):
         if correlated := [
                 key for key in dataset
                 if dataset.noise_correlation(key) is not None]:
-            raise ConfigError(
+            raise ValueError(
                 f"the noise of the data items {correlated} is correlated; "
                 f"a Gaussian bootstrap draws it independent from value to "
                 f"value: redraw it in blocks (type 'blocks')")
@@ -227,7 +227,7 @@ class BootstrapOptions(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If nsamples is below 2.
     """
 
@@ -270,12 +270,12 @@ class BootstrapOptions(Serializable):
     def schemes(self, nobservations: int) -> list[BootstrapScheme]:
         """
         Return the scheme of each of a number of observations. Raise
-        ConfigError unless there is one scheme, or one per observation.
+        ValueError unless there is one scheme, or one per observation.
         """
         if not isinstance(self._scheme, list):
             return [self._scheme] * nobservations
         if len(self._scheme) != nobservations:
-            raise ConfigError(
+            raise ValueError(
                 f"the scheme is one, or a list of one for each of the "
                 f"{nobservations} observations; it is a list of "
                 f"{len(self._scheme)}")
@@ -283,7 +283,7 @@ class BootstrapOptions(Serializable):
 
     def check(self, group: ObservationGroup, params: ParamSpace) -> None:
         """
-        Raise ConfigError unless the options suit the observations of a
+        Raise ValueError unless the options suit the observations of a
         group and its parameters: their schemes their data (see
         BootstrapScheme.check), and the free properties of the parameters
         the fitter of the refits, if given (see Fitter.load_fit_params).
@@ -380,7 +380,7 @@ def run_bootstrap(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the options do not suit the observations or the parameters
         (see BootstrapOptions.check), or the data of an observation cannot
         be redrawn by its scheme (see BootstrapScheme.resample).

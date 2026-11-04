@@ -12,7 +12,7 @@ import numpy as np
 import scipy.stats
 from annotated_types import Gt
 
-from gbkfit.config import ConfigError, check_options
+from gbkfit.config import check_options
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, fitter_parser
 from gbkfit.control import StopControl
@@ -74,7 +74,7 @@ class FitterMultiStart(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the local fitter is not an optimizer, a number is not
         positive, or the merit and the uncertainty do not go together
         (see Fitter).
@@ -111,7 +111,7 @@ class FitterMultiStart(Fitter):
         check_options(FitterMultiStart.__init__, locals())
         super().__init__(seed, uncertainty, local.merit())
         if local.info.family not in ('least_squares', 'optimizer'):
-            raise ConfigError(
+            raise ValueError(
                 f"the local fitter of multistart must be an optimizer, which "
                 f"starts from an initial value of each free element; "
                 f"'{local.type()}' is not")
@@ -141,7 +141,7 @@ class FitterMultiStart(Fitter):
         lower = np.array([p.minimum() for p in params])
         upper = np.array([p.maximum() for p in params])
         if not np.all(np.isfinite(upper - lower)):
-            raise ConfigError(
+            raise ValueError(
                 "multistart needs min and max for every free element")
         starts = [np.array([p.value() for p in params])]
         if self._nstarts > 1:

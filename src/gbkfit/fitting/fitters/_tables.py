@@ -9,7 +9,6 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.params import ParamSpace, param_tables
 
 
@@ -123,7 +122,7 @@ def table_layout(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If min_rows names no table whose rows can vary, or asks for more
         rows than a table has.
     """
@@ -151,7 +150,7 @@ def table_layout(
         named.add(name)
         least = min_rows.get(name, 0)
         if least > size:
-            raise ConfigError(
+            raise ValueError(
                 f"option 'min_rows' asks for {least} rows of table "
                 f"'{name}', which has {size}")
         # (the rows always used of those varied: the fixed elements have
@@ -167,7 +166,7 @@ def table_layout(
         tables.append(VariedTable(
             name, free, elements, unused, size - len(elements)))
     if unknown := set(min_rows) - named:
-        raise ConfigError(
+        raise ValueError(
             f"option 'min_rows' names tables whose rows cannot vary: "
             f"{sorted(unknown)}; those that can: {sorted(named)}")
     in_tables = {int(i) for t in tables for i in t.elements.ravel()}

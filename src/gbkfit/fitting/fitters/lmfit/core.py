@@ -60,7 +60,7 @@ class FitterLMFitLeastSquares(Fitter):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If max_nfev or a tolerance or the step is not positive.
     """
 

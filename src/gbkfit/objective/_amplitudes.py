@@ -10,7 +10,6 @@ from typing import NamedTuple
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import Comparison, LinearPieces, ObservationGroup
 from gbkfit.params import (
@@ -173,7 +172,7 @@ def amplitude_blocks(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an element is not an amplitude of the light, or one that a model
         is not linear in (with why), its observation has a solved flux
         scale (in the given observations: the model is not linear in
@@ -203,26 +202,26 @@ def amplitude_blocks(
                     (param, None if pdesc.is_scalar() else k))
     if unknown := sorted(set(solves) - {
             element_name(*e) for es in elements.values() for e in es}):
-        raise ConfigError(f"these elements are not parameters: {unknown}")
+        raise ValueError(f"these elements are not parameters: {unknown}")
     for param in elements:
         if param not in takers:
-            raise ConfigError(
+            raise ValueError(
                 f"{param} cannot be solved: only the flux scales of "
                 f"observations and the amplitudes of the light of components "
                 f"seen by observations can be solved (the model is linear "
                 f"in them)")
         if param in reasons:
-            raise ConfigError(
+            raise ValueError(
                 f"{param} cannot be solved: {reasons[param]}, so the model "
                 f"is not linear in it; fit it instead")
         for i in takers[param]:
             if i in scaled:
-                raise ConfigError(
+                raise ValueError(
                     f"{param} cannot be solved with the solved flux scale of "
                     f"observation {i}: the model is not linear in both")
             keys = group.observations()[i].keys()
             if reason := comparisons[i].linear_form(keys):
-                raise ConfigError(
+                raise ValueError(
                     f"{param} cannot be solved from observation {i}: "
                     f"{reason}")
     # (the parameters whose models fall on the same observations, together)

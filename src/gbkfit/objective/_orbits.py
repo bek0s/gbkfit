@@ -10,7 +10,6 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray
 from gbkfit.observation import (
     Comparison, GroupPlan, OrbitRecording, OrbitSeries)
@@ -60,7 +59,7 @@ class OrbitBlock(Block):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the weighted residuals of the comparison of an observation of
         it are not pointwise (see Comparison.pointwise_form).
     """
@@ -80,7 +79,7 @@ class OrbitBlock(Block):
         for i, comparison, observation in zip(
                 indices, self._comparisons, observations):
             if reason := comparison.pointwise_form(observation.keys()):
-                raise ConfigError(
+                raise ValueError(
                     f"the weights of the orbits {recording.weights()!r} "
                     f"cannot be solved from observation {i}: {reason}")
         self._drivers = tuple(
@@ -191,7 +190,7 @@ def orbit_blocks(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the weights of the orbits of a recording are not solved, or not
         by one solve, or an orbit solve cannot be made (see OrbitBlock).
     """
@@ -202,14 +201,14 @@ def orbit_blocks(
         elements = [
             element_name(param, k) for k in range(pdescs[param].size())]
         if not all(element in solves for element in elements):
-            raise ConfigError(
+            raise ValueError(
                 f"the weights of the orbits of the stars of "
                 f"{recording.spheroid().name()!r} ({param!r}) are solved to "
                 f"fit the data: give them a solve, e.g. {param}: {{solve: "
                 f"{{type: gaussian, mean: 1, sigma: 1, min: 0, "
                 f"likelihood: profiled}}}}")
         if len({id(solves[element]) for element in elements}) > 1:
-            raise ConfigError(
+            raise ValueError(
                 f"the weights of the orbits {param!r} are solved by one "
                 f"solve")
         orbits.append(OrbitBlock(

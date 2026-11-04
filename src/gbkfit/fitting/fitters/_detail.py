@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.fitting.fitparams import FitParamWalkers
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import finite_difference_steps, jacobian
@@ -32,7 +31,7 @@ def start_walkers(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If no finite posterior density was drawn for some walker.
     """
     coords = np.stack(
@@ -45,7 +44,7 @@ def start_walkers(
         coords[bad] = np.stack(
             [p.sample_start(rng, len(bad)) for p in params], axis=1)
         log_prob[bad] = problem.log_posterior_batch(coords[bad])
-    raise ConfigError(
+    raise ValueError(
         "could not start the walkers where the posterior density is "
         "positive")
 

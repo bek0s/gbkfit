@@ -9,7 +9,6 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.config import ConfigError
 from gbkfit.observation import (
     Comparison, FluxScale, ModelData, ObservationGroup)
 from gbkfit.params import ParamValues, Solution, Solve, element_name
@@ -131,7 +130,7 @@ def scale_blocks(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the weighted residuals of the comparison of an observation are
         not pointwise (see Comparison.pointwise_form).
     """
@@ -150,7 +149,7 @@ def scale_blocks(
                 indices_of.setdefault(id(solves[name]), []).append(k)
         if indices_of and (
                 reason := comparisons[i].pointwise_form(scale.items)):
-            raise ConfigError(
+            raise ValueError(
                 f"the flux scale of observation {i} ({param}) cannot be "
                 f"solved: {reason}")
         for indices in indices_of.values():
