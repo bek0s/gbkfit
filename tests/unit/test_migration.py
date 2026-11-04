@@ -251,6 +251,52 @@ def test_radii_of_mass_tables_are_migrated_to_a_quantity():
         velocities=[50, 80])
 
 
+def test_a_mass_table_alone_is_migrated_too():
+    # Only the tables of a list of components used to be migrated
+    table = dict(type='table', radii=[1, 2], radius_unit='kpc')
+    changes = migration.migrate(dict(galaxies=[dict(mass=table)]), 2)
+    assert table == dict(type='table', radii=dict(value=[1, 2], unit='kpc'))
+    assert ['galaxies', 0, 'mass'] in [change.path for change in changes]
+
+
+def test_the_spectral_axes_of_migrated_configurations_are_left_alone():
+    # A project whose migration stopped is migrated again from its old
+    # version: the spatial step that stays used to replace the spectral axis
+    observation = dict(type='sky', observable=dict(
+        type='pixel_spectra', size=[4, 4, 5], step=0.5))
+    config = dict(observations=[observation])
+    for _ in range(2):
+        for rule in migration.RULES:
+            if rule.version() == 3:
+                rule.rewrite(config)
+    assert observation['observable'] == dict(
+        type='pixel_spectra', size=[4, 4], step=0.5,
+        spectral=dict(size=5, step=0.5, convention='relativistic'))
+
+
+def test_a_file_that_cannot_be_written_is_left_as_it_was(
+        tmp_path, monkeypatch):
+    # It used to be emptied before it was written
+    filename = tmp_path / 'config.yaml'
+    text = "observations:\n- {type: sky, scale: 2}\n"
+    filename.write_text(text)
+    new_yaml = migration._yaml
+
+    class Failing:
+        def load(self, f):
+            return new_yaml().load(f)
+
+        def dump(self, config, f):
+            f.write("observ")
+            raise RuntimeError("the disk is full")
+
+    monkeypatch.setattr(migration, '_yaml', Failing)
+    with pytest.raises(RuntimeError, match="disk is full"):
+        migration.migrate_file(str(filename), from_version=2)
+    assert filename.read_text() == text
+    assert [path.name for path in tmp_path.iterdir()] == ['config.yaml']
+
+
 def test_files_of_image_traits_are_migrated_to_fits_files():
     image = dict(type='image', file='hst.fits', hdu='SCI', size=[3, 2], step=1)
     migration.migrate(dict(galaxies=[dict(components=[dict(

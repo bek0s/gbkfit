@@ -12,11 +12,13 @@ Configurations of the current version are left as they are.
 """
 
 import abc
+import contextlib
 import json
 import os
-from collections.abc import Iterator, Mapping, MutableMapping
-from pathlib import Path
-from typing import Any, NamedTuple
+import shutil
+import tempfile
+from collections.abc import Generator, Iterator, Mapping, MutableMapping
+from typing import Any, NamedTuple, TextIO
 
 import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
@@ -38,6 +40,11 @@ __all__ = [
 
 # The sections whose items are pieces of projects
 _SECTIONS = ('galaxies', 'observations', 'params', 'fitter')
+
+# The umask of the process, for the files it makes (see _replacing):
+# there is no way to read it but to set it, which is done once here
+_UMASK = os.umask(0)
+os.umask(_UMASK)
 
 
 class _Representer(ruamel.yaml.representer.RoundTripRepresenter):
@@ -360,7 +367,9 @@ class _SpectralAxes(Rule):
     rpix, rval), and rest, medium and convention, of spectral cubes and
     slit spectra, and of their data. Its convention no longer needs a
     rest, and one is required without data: an axis without one gets the
-    convention it had, 'relativistic'.
+    convention it had, 'relativistic'. Options that have spectral are
+    left as they are: a rule runs again on what it rewrote when the
+    migration of a project stopped before its end.
     """
 
     # The observables of spec_* options, and those of a spectral axis that
@@ -412,6 +421,8 @@ class _SpectralAxes(Rule):
         Move the options spec_* of an observable into its option spectral;
         return whether it had any.
         """
+        if 'spectral' in observable:
+            return False
         spectral = {
             key: observable.pop(f'spec_{key}') for key in self._OPTIONS
             if f'spec_{key}' in observable}
@@ -431,6 +442,8 @@ class _SpectralAxes(Rule):
         rest, medium and convention, into its option spectral; return
         whether it had any.
         """
+        if 'spectral' in options:
+            return False
         spectral = {}
         for key in ('size', 'step', 'rpix', 'rval'):
             if key not in options:
@@ -582,18 +595,14 @@ class _QuantityRadii(Rule):
     def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
         changes = []
         for path, galaxy in _items(config, 'galaxies'):
-            mass = galaxy.get('mass')
-            if isinstance(mass, MutableMapping):
-                mass = mass.get('components')
-            items = mass if isinstance(mass, list) else [mass]
-            for i, item in enumerate(items):
-                if isinstance(item, MutableMapping) \
-                        and item.get('type') == 'table' \
+            # The mass of a galaxy is a component, or a list of them
+            for mass_path, item in _items(galaxy, 'mass'):
+                if item.get('type') == 'table' \
                         and 'radius_unit' in item and 'radii' in item:
                     item['radii'] = _flow(dict(
                         value=item['radii'], unit=item.pop('radius_unit')))
                     changes.append(Change(
-                        path + ['mass', i],
+                        path + mass_path,
                         "radii and radius_unit -> radii {value, unit}"))
         for path, item in _items(config, 'observations'):
             if item.get('type') == 'profile' and 'radius_unit' in item \
@@ -1150,7 +1159,7 @@ def _read(path: str) -> Any:
 
 def _write(path: str, config: Any) -> None:
     """Write a configuration file: JSON if it ends with .json, else YAML."""
-    with open(path, 'w') as f:
+    with _replacing(path) as f:
         if path.endswith('.json'):
             json.dump(config, f, indent=2)
             f.write('\n')
@@ -1160,8 +1169,29 @@ def _write(path: str, config: Any) -> None:
 
 def _mark_current(path: str) -> None:
     """Mark a project of the current version of the format."""
-    marker = Path(path, gbkfit.project.MARKER)
-    with marker.open('w') as f:
+    with _replacing(os.path.join(path, gbkfit.project.MARKER)) as f:
         ruamel.yaml.YAML(typ='safe').dump(dict(
             format=gbkfit.project.FORMAT,
             version=gbkfit.project.FORMAT_VERSION), f)
+
+
+@contextlib.contextmanager
+def _replacing(path: str) -> Generator[TextIO]:
+    """
+    Write a file whole or not at all: into a new file next to it, which
+    replaces it once written, so that an error or a crash meanwhile
+    leaves the file as it was (a migration rewrites the files of users).
+    """
+    folder, name = os.path.split(os.path.abspath(path))
+    fd, temp = tempfile.mkstemp(prefix=f'.{name}.', dir=folder)
+    try:
+        with os.fdopen(fd, 'w') as f:
+            yield f
+        if os.path.exists(path):
+            shutil.copymode(path, temp)
+        else:
+            os.chmod(temp, 0o666 & ~_UMASK)
+        os.replace(temp, path)
+    except BaseException:
+        os.unlink(temp)
+        raise
