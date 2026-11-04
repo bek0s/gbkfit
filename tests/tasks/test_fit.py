@@ -189,7 +189,7 @@ def test_a_fit_is_bootstrapped_as_it_ends_or_later(tmp_path):
     assert (result['bootstrap']['nsamples'],
             result['bootstrap']['nfailed']) == (3, 0)
     assert len(read(tmp_path / 'fit', 'bootstrap')) == 3
-    later = dict(version=3, bootstrap=dict(
+    later = dict(version=4, bootstrap=dict(
         nsamples=4, scheme=scheme,
         fitter=dict(type='scipy.least_squares', method='lm')))
     yaml.dump(later, tmp_path / 'later.yaml')

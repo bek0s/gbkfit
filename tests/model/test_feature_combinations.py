@@ -36,8 +36,10 @@ LINES = [dict(name='ha', rest='6562.8 Angstrom'),
 GALAXY = dict(components=[
     component('gas', lines=LINES), component('stars')])
 
-# (the geometry of the galaxy, which its components share)
-PROPERTIES = dict(vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60) | {
+# The geometry of the gas, which that of the stars is tied to
+GEOMETRY = dict(vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60)
+PROPERTIES = {f'gas_{key}': value for key, value in GEOMETRY.items()} | {
+    f'stars_{key}': f'gas_{key}' for key in GEOMETRY} | {
     f'{name}_{key}': value
     for name in ('gas', 'stars')
     for key, value in dict(

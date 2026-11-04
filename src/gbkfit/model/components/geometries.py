@@ -1,23 +1,17 @@
 """
-Geometries that components share: their centre, orientation and systemic
-velocity, possibly warped. A galaxy has one, which its components share
-by default (see Component.geometry); others are named.
+The geometric parameters of the components: their centre, orientation
+and systemic velocity, each its own (components that share them tie
+them in the parameter space).
 """
 
-from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
-from gbkfit.config import (
-    BasicParser, Serializable, check_name, check_options)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from . import _detail
 
 
 __all__ = [
     'GEOMETRY_PARAMS',
     'GEOMETRY_UNITS',
-    'Geometry',
-    'geometry_parser',
     'geometry_pdesc'
 ]
 
@@ -28,129 +22,11 @@ __all__ = [
 GEOMETRY_PARAMS = dict(
     vsys='loose', xpos='loose', ypos='loose', posa='tilted', incl='tilted')
 
-# The units of the geometric parameters of the components (and of those of
-# the same names of the components without geometries, e.g. particles)
+# The units of the geometric parameters of the components
 GEOMETRY_UNITS = dict(
     vsys='km/s', xpos='arcsec', ypos='arcsec', posa='deg', incl='deg')
 # and their typical values (see ParamDesc): at the centre, inclined
 _DEFAULTS = dict(vsys=0, xpos=0, ypos=0, posa=0, incl=45)
-
-
-class Geometry(Serializable):
-    """
-    A geometry that components share: some or all of their geometric
-    parameters (see GEOMETRY_PARAMS), which are then parameters of the
-    geometry instead of each component: named after it (e.g. disk_posa),
-    or plainly (e.g. posa) for that of a galaxy, which has no name.
-
-    The components that use a geometry (see Component.geometry) take its
-    warps and, if it is warped, its rings: their geometric parameters
-    that it does not share are their own, but also node-wise on its rings
-    if it is warped. A component of one centre (e.g. a point) cannot use
-    a loose geometry. Geometries are values: components share the
-    geometry of a name, and must not have different ones of one name.
-
-    Parameters
-    ----------
-    name : str, optional
-        Its name, which prefixes its parameters; none for the geometry of
-        a galaxy.
-    params : Sequence of str, optional
-        The geometric parameters it shares; by default, all those of the
-        components that use it.
-    loose : bool, optional
-        Whether the centre and the systemic velocity are node-wise.
-    tilted : bool, optional
-        Whether the position angle and the inclination are node-wise.
-    rnmax, rnsep, rnlen, rnodes : optional
-        The radii of the rings of a warped geometry, from 0 (one of:
-        rnodes; rnmax and rnsep; rnmax and rnlen); none without warps,
-        when each component has its own rings.
-
-    Raises
-    ------
-    ValueError
-        If the name is not valid, the parameters are not geometric or
-        repeat, or the rings are given without warps or not given with
-        them.
-    """
-
-    def dump(self) -> dict[str, Any]:
-        name = {} if self._name is None else dict(name=self._name)
-        params = {} if self._params is None else dict(
-            params=list(self._params))
-        rnodes = {} if self._rnodes is None else dict(
-            rnodes=list(self._rnodes))
-        return name | params | dict(
-            loose=self._loose, tilted=self._tilted) | rnodes
-
-    def __init__(
-            self,
-            name: str | None = None,
-            params: Sequence[Literal[tuple(GEOMETRY_PARAMS)]] | None = None,
-            loose: bool = False,
-            tilted: bool = False,
-            rnmax: _detail.RnMax | None = None,
-            rnsep: _detail.RnSep | None = None,
-            rnlen: int | None = None,
-            rnodes: _detail.RNodes | None = None
-    ):
-        check_options(Geometry.__init__, locals())
-        check_name(name)
-        if params is not None:
-            params = tuple(params)
-            if not params:
-                raise ValueError("a geometry needs at least one parameter")
-            if len(set(params)) != len(params):
-                raise ValueError(
-                    f"the parameters of a geometry repeat: {list(params)}")
-        given = [rnmax, rnsep, rnlen, rnodes]
-        if loose or tilted:
-            rnodes = _detail.parse_nodes('r', rnmax, rnsep, rnlen, rnodes)
-        elif any(value is not None for value in given):
-            raise ValueError(
-                "the rings of a geometry are those of its warps; without "
-                "warps (loose or tilted), each component has its own")
-        self._name = name
-        self._params = params
-        self._loose = loose
-        self._tilted = tilted
-        self._rnodes = rnodes
-
-    def __eq__(self, other: object) -> bool:
-        return isinstance(other, Geometry) and self._key() == other._key()
-
-    def __hash__(self) -> int:
-        return hash(self._key())
-
-    def _key(self) -> tuple:
-        """Return what makes the geometry: its name and options."""
-        return (
-            self._name, self._params, self._loose, self._tilted,
-            self._rnodes)
-
-    def name(self) -> str | None:
-        """Return its name; none for the geometry of a galaxy."""
-        return self._name
-
-    def params(self) -> tuple[str, ...] | None:
-        """Return the geometric parameters it shares, if given."""
-        return self._params
-
-    def loose(self) -> bool:
-        """Return whether the centre and the systemic velocity are warped."""
-        return self._loose
-
-    def tilted(self) -> bool:
-        """Return whether the position angle and inclination are warped."""
-        return self._tilted
-
-    def rnodes(self) -> tuple[float, ...] | None:
-        """Return the radii of its rings, if it is warped."""
-        return self._rnodes
-
-
-geometry_parser = BasicParser(Geometry)
 
 
 def geometry_pdesc(name: str, nnodes: int | None = None) -> ParamDesc:

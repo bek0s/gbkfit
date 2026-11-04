@@ -7,7 +7,7 @@ shape.
 import abc
 import functools
 import math
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -26,7 +26,7 @@ from ...mass import SpheroidDensity
 from ...mass.profiles import ProfileGaussian, ProfileSersic, SpheroidProfile
 from ...mass.shapes import (
     ShapeFlattened, ShapeSphere, SpheroidShape, spheroid_shape_parser)
-from .._detail import dump_geometry, dump_name, geometry_desc
+from .._detail import dump_name
 from .._needs import Need
 from .._native import (
     NativeComponentPlan, NativePlan, ParamBuffer, emission_setup,
@@ -34,7 +34,7 @@ from .._native import (
 from .._units import DataUnit, mass_per_unit
 from ..base import (
     Component, ComponentState, FieldsLayout, FrameParams, NativeGrid)
-from ..geometries import Geometry, geometry_pdesc
+from ..geometries import geometry_pdesc
 from ..lines import Band
 from ..roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -509,10 +509,6 @@ class Spheroid(Component):
     kinematics : SpheroidKinematics, optional
         How its stars move: in the gravity of its galaxy (JeansKinematics)
         or as traits give (SpheroidTraitsKinematics); none by default.
-    geometry : Geometry, 'galaxy' or 'own', optional
-        The geometry whose centre and axis it shares: that of its galaxy
-        (by default), a named one (not a loose or tilted one), or none
-        ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
@@ -520,9 +516,8 @@ class Spheroid(Component):
     ------
     ValueError
         If rmax is not positive, the emission is not in bands, the profile
-        has its own axis ratios and a shape is given, the geometry is
-        loose or tilted, or the kinematics cannot move in it (see
-        SpheroidKinematics.motion).
+        has its own axis ratios and a shape is given, or the kinematics
+        cannot move in it (see SpheroidKinematics.motion).
     """
 
     @staticmethod
@@ -530,8 +525,7 @@ class Spheroid(Component):
         return 'spheroid'
 
     def dump(self) -> dict[str, Any]:
-        info = dict(type=self.type()) | dump_name(self) \
-            | dump_geometry(self) | dict(
+        info = dict(type=self.type()) | dump_name(self) | dict(
             profile=light_profile_parser.dump(self._profile),
             rmax=self._rmax)
         if self._profile.takes_shape():
@@ -549,16 +543,9 @@ class Spheroid(Component):
             emission: Emission,
             shape: SpheroidShape | None = None,
             kinematics: SpheroidKinematics | None = None,
-            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         check_options(Spheroid.__init__, locals())
-        if isinstance(geometry, Geometry) and (
-                geometry.loose() or geometry.tilted()):
-            raise ValueError(
-                f"a spheroid has one centre and axis, but "
-                f"{geometry_desc(geometry)} is loose or tilted; give it "
-                f"geometry 'own'")
         if not isinstance(emission, BandEmission):
             raise ValueError(
                 "a spheroid emits in bands (emission type: band)")
@@ -571,7 +558,7 @@ class Spheroid(Component):
             raise ValueError(
                 f"the light profile '{profile.type()}' has the axis ratios "
                 f"of its terms: it takes no shape")
-        super().__init__(name, geometry, emission, None)
+        super().__init__(name, emission, None)
         if shape is None and profile.takes_shape():
             shape = ShapeSphere()
         self._profile = profile

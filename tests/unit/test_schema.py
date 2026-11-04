@@ -133,7 +133,7 @@ def test_classes_have_the_schemas_of_their_configurations():
     jsonschema.validate(dict(sigma=0.6), PSFGauss.schema())
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(psf, PSFGauss.schema())
-    # (a galaxy alone, with named geometries)
+    # A galaxy alone, with a warp and ties
     path = GOLDEN_DIR / 'params_features' / 'config.yaml'
     galaxy, = ruamel.yaml.YAML(typ='safe').load(path)['galaxies']
     jsonschema.validate(galaxy, Galaxy.schema())

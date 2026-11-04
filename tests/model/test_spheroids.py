@@ -308,8 +308,9 @@ BULGE = dict(
 STARS = dict(type='light_spheroid', name='stars', component='bulge')
 DISTANCE = dict(type='direct', cosmology='Planck18')
 BULGE_PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=60, bulge_ie=2, bulge_re=1.5, bulge_n=3,
-    bulge_q=0.6, mass_stars_upsilon=4e6, distance=8)
+    bulge_xpos=0, bulge_ypos=0, bulge_posa=30, bulge_incl=60, bulge_ie=2,
+    bulge_re=1.5, bulge_n=3, bulge_q=0.6, mass_stars_upsilon=4e6,
+    distance=8)
 
 
 def bulge_mass(bulge, properties):
@@ -396,7 +397,10 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
             type='traits',
             vptraits=dict(type='mass'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))
-    disk_properties = dict(vsys=0, gas_pt_a=1, gas_pt_s=4, gas_dpt_a=15)
+    # In the plane of the bulge
+    disk_properties = dict(gas_vsys=0, gas_pt_a=1, gas_pt_s=4, gas_dpt_a=15) \
+        | {f'gas_{name}': f'bulge_{name}'
+           for name in ('xpos', 'ypos', 'posa', 'incl')}
 
     def evaluate(mass, properties):
         galaxy = galaxy_parser.load(dict(
@@ -456,7 +460,8 @@ JEANS_SPHEROID = dict(
     type='spheroid', name='stars', rmax=40, emission=STARS_EMISSION,
     profile=dict(type='mge', ngauss=1), kinematics=dict(type='jeans'))
 JEANS_PROPERTIES = dict(
-    xpos=0, ypos=0, posa=30, incl=60, vsys=1000, stars_i0=[1],
+    stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
+    stars_vsys=1000, stars_i0=[1],
     stars_sigma=[S], stars_q=[1], stars_beta_z=0, stars_kappa=0,
     mass_bh_log_m=LOG_M, distance=10)
 
@@ -629,8 +634,8 @@ def test_float32_stars_keep_their_dispersion_at_a_large_vsys(
     # The voxels about the centre take the moments of the velocities of
     # their sub-points: about vsys, else in float32 its square (of a
     # vsys = cz of 15000 km/s) cancels the dispersion (km/s off)
-    properties = JEANS_PROPERTIES | dict(vsys=15000)
-    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    properties = JEANS_PROPERTIES | dict(stars_vsys=15000)
+    spheroid = dict(JEANS_SPHEROID)
     cubes = []
     for dtype in ('float32', 'float64'):
         case = stars_cube(driver, spheroid)
@@ -660,8 +665,8 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
     # dz / int nu dz, with nu sigma^2 = G M [nu / r - sqrt(pi / 2) / s
     # erfc(r / (sqrt(2) s))]), up to the channels (their width^2 / 12)
     # and the voxels
-    properties = JEANS_PROPERTIES | dict(vsys=0)
-    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    properties = JEANS_PROPERTIES | dict(stars_vsys=0)
+    spheroid = dict(JEANS_SPHEROID)
     data, _ = evaluate_cases([stars_cube(driver, spheroid)], properties)
     cube = data[0]['spectra']['d']
     velocity = (np.arange(181) - 90) * 10.0
@@ -701,7 +706,7 @@ def test_the_stars_of_a_cube_have_the_moments_of_their_jeans_equations(
 ])
 def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
                                            change, message):
-    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    spheroid = dict(JEANS_SPHEROID)
     if 'kinematics' in change:
         del spheroid['kinematics']
     case = stars_cube(
@@ -711,7 +716,7 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
     properties = {
         name: value for name, value in JEANS_PROPERTIES.items()
         if 'kinematics' not in change
-        or name not in ('vsys', 'stars_beta_z', 'stars_kappa')}
+        or name not in ('stars_vsys', 'stars_beta_z', 'stars_kappa')}
     with pytest.raises(ValueError, match=message):
         evaluate_cases([case], properties)
 
@@ -733,7 +738,7 @@ def test_a_cube_sees_only_stars_that_move(driver, component, message):
 
 def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
     # (as band light: its projection, without a depth axis)
-    spheroid = JEANS_SPHEROID | dict(geometry='galaxy')
+    spheroid = dict(JEANS_SPHEROID)
     case = image(driver, spheroid, 'float64', flat=True)
     case['galaxy'] |= dict(
         mass=[dict(type='point', name='bh')], distance=DISTANCE)
@@ -764,9 +769,11 @@ TRAITS_SPHEROID = dict(
         vhtraits=dict(type='exponential'), dptraits=[
             dict(type='uniform', direction=direction)
             for direction in ('rad', 'tan', 'ver')]))
-TRAITS_PROPERTIES = GEOMETRY | dict(
-    vsys=20, stars_i0=[1], stars_sigma=[8], stars_q=[1], stars_vpt_vt=100,
-    stars_vht_s=4, stars_dpt_a=30, stars_dpt1_a=50, stars_dpt2_a=70)
+TRAITS_PROPERTIES = {
+    f'stars_{name}': value for name, value in GEOMETRY.items()} | dict(
+    stars_vsys=20, stars_i0=[1], stars_sigma=[8], stars_q=[1],
+    stars_vpt_vt=100, stars_vht_s=4, stars_dpt_a=30, stars_dpt1_a=50,
+    stars_dpt2_a=70)
 
 
 def spheroid_frame(grid_data, xpos, ypos, posa, incl):
@@ -797,7 +804,7 @@ def test_the_stars_move_as_their_traits(driver, evaluate_cases):
     # exp(-|z| / 4) cos(theta) sin(incl), and the dispersion of the
     # velocity ellipsoid on it; but in the voxels near the centre, which
     # hold the moments of their parts (within 3 voxel diagonals)
-    case = stars_cube(driver, TRAITS_SPHEROID | dict(geometry='galaxy'))
+    case = stars_cube(driver, TRAITS_SPHEROID)
     case['galaxy'] = dict(components=[case['galaxy']['components'][0]])
     _, extra = evaluate_cases([case], TRAITS_PROPERTIES)
     vdata = extra.get('vdata', component='stars')
@@ -841,7 +848,7 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
     write_data(
         str(tmp_path / 'bins.fits'), index,
         Coords((2, 2), (15.5, 15.5), (0, 0), 0))
-    spheroid = TRAITS_SPHEROID | dict(geometry='galaxy', kinematics=dict(
+    spheroid = TRAITS_SPHEROID | dict(kinematics=dict(
         type='traits', vptraits=dict(type='uniform', direction='tan'),
         dptraits=dict(type='uniform')))
     case = stars_cube(driver, spheroid)
@@ -852,8 +859,9 @@ def test_the_stars_of_bins_have_the_gauss_hermite_moments_of_their_traits(
         orders=[0, 1, 2, 3, 4], method='gauss_hermite',
         spectral=dict(size=81, step=10, rval=1000, convention='log'),
         psf=dict(type='gauss', sigma=3), dtype='float64')
-    properties = GEOMETRY | dict(
-        vsys=1000, stars_i0=[1], stars_sigma=[8], stars_q=[1],
+    properties = {
+        f'stars_{name}': value for name, value in GEOMETRY.items()} | dict(
+        stars_vsys=1000, stars_i0=[1], stars_sigma=[8], stars_q=[1],
         stars_vpt_vt=0, stars_dpt_a=80)
     data, _ = evaluate_cases([case], properties)
     moments = data[0]
@@ -919,7 +927,7 @@ def hernquist_galaxy():
     a = HERNQUIST_A / HERNQUIST_KPC
     sigma, i0 = hernquist_mge(a)
     spheroid = dict(
-        type='spheroid', name='stars', geometry='galaxy', rmax=30 * a,
+        type='spheroid', name='stars', rmax=30 * a,
         emission=STARS_EMISSION, profile=dict(type='mge', ngauss=len(i0)),
         kinematics=dict(type='jeans'))
     galaxy = dict(
@@ -929,8 +937,8 @@ def hernquist_galaxy():
               dict(type='point', name='bh')],
         distance=DISTANCE)
     properties = dict(
-        xpos=0, ypos=0, posa=0, incl=60, vsys=0,
-        distance=HERNQUIST_DISTANCE, stars_i0=list(i0),
+        stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=60,
+        stars_vsys=0, distance=HERNQUIST_DISTANCE, stars_i0=list(i0),
         stars_sigma=list(sigma), stars_q=[1.0] * len(i0), stars_beta_z=0,
         stars_kappa=0,
         mass_light_log_rho=np.log10(

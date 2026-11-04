@@ -47,7 +47,6 @@ const TITLES: Record<string, string> = {
   clouds: 'Clouds',
   profile: 'Profile',
   shape: 'Shape',
-  geometry: 'Geometry',
 };
 
 // The components of a galaxy (one, or a list of them)
@@ -178,7 +177,7 @@ export function GalaxyOutline({ project, edited }: LayoutProps) {
       <>
         <h2 className="card-head">The galaxy as a whole</h2>
         <div className="card-body">
-          <p className="note">Its distance, redshift, mass and gravity, and the geometry its components share.</p>
+          <p className="note">Its distance, redshift, mass and gravity.</p>
           <GalaxyOptions project={project} edited={edited} defs={defs} />
         </div>
       </>

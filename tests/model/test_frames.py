@@ -16,17 +16,16 @@ from gbkfit.observation import (
 from gbkfit.params import ParamSpace
 
 
-# A disk and a point off its centre (each of its own geometry), which an
-# offset moves together
+# A disk and a point off its centre, which an offset moves together
 GALAXY = dict(components=[
-    dict(type='disk', name='disk', geometry='own', loose=False, tilted=False,
+    dict(type='disk', name='disk', loose=False, tilted=False,
          rnodes=list(range(0, 12)),
          density=dict(ptraits=dict(type='exponential')),
          kinematics=dict(
              type='traits', vptraits=dict(type='arctan', direction='tan'),
              dptraits=dict(type='uniform')),
          emission=dict(type='lines')),
-    dict(type='point', name='core', geometry='own',
+    dict(type='point', name='core',
          emission=dict(type='lines'))])
 
 PARAMS = dict(

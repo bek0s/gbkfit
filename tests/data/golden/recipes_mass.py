@@ -1,8 +1,8 @@
 """
 The recipes of the golden cases of the galaxy stage (mass, gravity,
 equilibria, flows), of profile observations and several galaxies, and of
-the parameters (modes, ties, extra parameters, shared geometries,
-derived values and priors on several parameters) (see make_golden.Case).
+the parameters (modes, ties, extra parameters, derived values and
+priors on several parameters) (see make_golden.Case).
 """
 
 import pathlib
@@ -19,9 +19,8 @@ _STARS = dict(
 
 _NFW = dict(type='spheroid', name='halo', profile=dict(type='nfw'))
 
-# The rings of a disk of its own geometry
-_RINGS = dict(
-    geometry='own', loose=False, tilted=False, rnodes=list(range(0, 13)))
+# The rings of a disk
+_RINGS = dict(loose=False, tilted=False, rnodes=list(range(0, 13)))
 
 
 def _disk(
@@ -307,7 +306,7 @@ def _c6_gas() -> dict[str, Any]:
 
 
 _C6_DUST = dict(
-    type='disk', name='dust', geometry='own', loose=False, tilted=False,
+    type='disk', name='dust', loose=False, tilted=False,
     rnodes=list(range(0, 11)),
     density=dict(
         ptraits=dict(type='exponential'),
@@ -352,10 +351,18 @@ _TWO_GALAXIES = dict(
 # --- C7: the features of the parameters ----------------------------------
 
 def _warped(name: str) -> dict[str, Any]:
-    """A thin disk of the shared warped geometry 'disk'."""
+    """A thin tilted disk, of the rings of the warp of C7."""
     return _disk(
         name, vptraits=dict(type='arctan', direction='tan'),
-        rings=dict(geometry='disk'))
+        rings=dict(
+            loose=False, tilted=True, rnodes=[0, 1.5, 3, 5, 7, 9.5, 12]))
+
+
+# The geometric parameters of the warm disk of C7, tied to those of the
+# cold one: the disks share one warp
+_C7_TIES = {
+    f'warm_{name}': f'cold_{name}'
+    for name in ('xpos', 'ypos', 'vsys', 'posa', 'incl')}
 
 
 # The flux of the nucleus, of the extra parameters (lnf_*) of the section
@@ -364,55 +371,54 @@ _NUCLEUS_FLUX = 'np.exp(lnf_mu + lnf_sigma * lnf_z)'
 
 _PARAMS_FEATURES = dict(
     name='params_features',
-    doc="Two gas disks (cold and warm) of one shared warped geometry "
-        "(galaxy option geometries) and a nucleus, in a cube: the position "
-        "angles of the warp given as offsets (mode), ties, extra "
-        "parameters of the section pdescs (the flux of the nucleus, "
-        "exp(mu + sigma z)), derived values, and priors on several "
-        "parameters (gauss on an expression, smooth over the warp).",
+    doc="Two gas disks (cold and warm) of one warp (the geometric "
+        "parameters of the warm one tied to those of the cold one) and a "
+        "nucleus, in a cube: the position angles of the warp given as "
+        "offsets (mode), ties, extra parameters of the section pdescs "
+        "(the flux of the nucleus, exp(mu + sigma z)), derived values, and "
+        "priors on several parameters (gauss on an expression, smooth "
+        "over the warp).",
     galaxies=[dict(
-        geometries=[dict(
-            name='disk', tilted=True, rnodes=[0, 1.5, 3, 5, 7, 9.5, 12])],
         components=[
             _warped('cold'), _warped('warm'),
-            dict(type='point', name='nucleus', geometry='own',
+            dict(type='point', name='nucleus',
                  emission=dict(type='lines'))])],
     observations=[_cube([24, 24, 30], 'flat')],
     truth=dict(
-        disk_xpos=0.3, disk_ypos=-0.4, disk_vsys=10,
-        disk_posa=[40, 41, 43, 46, 50, 54, 58], disk_incl=55,
+        cold_xpos=0.3, cold_ypos=-0.4, cold_vsys=10,
+        cold_posa=[40, 41, 43, 46, 50, 54, 58], cold_incl=55,
         cold_pt_a=1, cold_pt_s=3, cold_vpt_rt=2, cold_vpt_vt=150,
         cold_dpt_a=15, warm_pt_a=0.5, warm_pt_s=4, warm_vpt_rt=2,
         warm_vpt_vt=120, warm_dpt_a=40, nucleus_xpos=0.3,
         nucleus_ypos=-0.4, nucleus_vsys=10, nucleus_flux=_NUCLEUS_FLUX,
-        nucleus_disp=60, lnf_mu=0.5, lnf_sigma=0.3, lnf_z=0.6),
+        nucleus_disp=60, lnf_mu=0.5, lnf_sigma=0.3, lnf_z=0.6) | _C7_TIES,
     trial=dict(
-        disk_xpos=0.2, disk_ypos=-0.3,
-        disk_vsys=dict(value=12, min=-50, max=50),
+        cold_xpos=0.2, cold_ypos=-0.3,
+        cold_vsys=dict(value=12, min=-50, max=50),
         # (the first ring, and the offsets of the others from it)
-        disk_posa=[dict(value=42, min=0, max=90)] + [
+        cold_posa=[dict(value=42, min=0, max=90)] + [
             dict(value=offset, min=-30, max=30)
             for offset in (1, 2, 4, 8, 12, 16)],
-        disk_incl=dict(value=50, min=10, max=80),
+        cold_incl=dict(value=50, min=10, max=80),
         cold_pt_a=1, cold_pt_s=3, cold_vpt_rt=2,
         cold_vpt_vt=dict(value=140, min=50, max=300), cold_dpt_a=15,
         warm_pt_a=0.5, warm_pt_s=4, warm_vpt_rt='cold_vpt_rt',
         warm_vpt_vt=dict(value=110, min=50, max=300),
-        warm_dpt_a='cold_dpt_a * 2.5', nucleus_xpos='disk_xpos',
-        nucleus_ypos='disk_ypos', nucleus_vsys='disk_vsys',
+        warm_dpt_a='cold_dpt_a * 2.5', nucleus_xpos='cold_xpos',
+        nucleus_ypos='cold_ypos', nucleus_vsys='cold_vsys',
         nucleus_flux=_NUCLEUS_FLUX, nucleus_disp=60, lnf_mu=0.5,
-        lnf_sigma=0.3, lnf_z=dict(value=0.0, min=-5, max=5)),
+        lnf_sigma=0.3, lnf_z=dict(value=0.0, min=-5, max=5)) | _C7_TIES,
     noises=[dict(type='gauss', rms=3e-4)],
     params=dict(
-        modes=dict(disk_posa=dict(type='offsets', origin=0)),
+        modes=dict(cold_posa=dict(type='offsets', origin=0)),
         derived=dict(
-            warp='disk_posa[-1] - disk_posa[0]',
+            warp='cold_posa[-1] - cold_posa[0]',
             v_ratio='rotation_warm(8) / rotation_cold(8)'),
         priors=[
             dict(type='gauss', expr='warm_vpt_vt / cold_vpt_vt',
                  mean=0.8, std=0.05),
-            dict(type='smooth', expr='disk_posa', order=2, std=1,
-                 positions='disk_rnodes')]),
+            dict(type='smooth', expr='cold_posa', order=2, std=1,
+                 positions='cold_rnodes')]),
     sections=dict(pdescs=dict(
         lnf_mu=dict(type='scalar'), lnf_sigma=dict(type='scalar'),
         lnf_z=dict(type='scalar'))))

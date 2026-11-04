@@ -5,7 +5,7 @@ of them (see Particles).
 
 import os.path
 from collections.abc import Mapping
-from typing import Any, Literal
+from typing import Any
 
 import astropy.table
 import numpy as np
@@ -16,12 +16,12 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
 from ._detail import (
-    Fluxes, disk_to_sky, dump_geometry, dump_name, geometry_desc)
+    Fluxes, disk_to_sky, dump_name)
 from ._units import DataUnit
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
-from .geometries import Geometry, geometry_pdesc
+from .geometries import geometry_pdesc
 from .lines import Band, LinePlacement
 from .points import band_light, line_light
 from .roles import (
@@ -370,18 +370,13 @@ class Particles(Component):
         The table of the particles: its columns, by name.
     emission : Emission
         The light it emits.
-    geometry : Geometry, 'galaxy' or 'own', optional
-        The geometry whose centre, position angle, inclination and systemic
-        velocity it shares: that of its galaxy (by default), a named one
-        (not a loose or tilted one), or none ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
     Raises
     ------
     ValueError
-        If the table is invalid, the geometry is loose or tilted, or the
-        lines are not valid.
+        If the table is invalid, or the lines are not valid.
     """
 
     config_constructors = ('from_file',)
@@ -395,7 +390,6 @@ class Particles(Component):
             cls,
             file: FilePath,
             emission: Emission,
-            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ) -> 'Particles':
         """
@@ -406,7 +400,7 @@ class Particles(Component):
         file : str
             The table of the particles: a FITS table, an ECSV file or a
             numpy file (npz) of its columns.
-        emission, geometry, name
+        emission, name
             As those of Particles.
 
         Returns
@@ -420,7 +414,7 @@ class Particles(Component):
             If the file cannot be read, or the particles are not valid.
         """
         check_options(Particles.from_file, locals())
-        particles = cls(read_particles(file), emission, geometry, name)
+        particles = cls(read_particles(file), emission, name)
         particles._file = file
         return particles
 
@@ -433,7 +427,6 @@ class Particles(Component):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | dump_geometry(self)
             | dict(file=self._file,
                    emission=emission_parser.dump(self.emission())))
 
@@ -441,17 +434,10 @@ class Particles(Component):
             self,
             particles: Mapping[str, np.ndarray],
             emission: Emission,
-            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         check_options(Particles.__init__, locals())
-        if isinstance(geometry, Geometry) and (
-                geometry.loose() or geometry.tilted()):
-            raise ValueError(
-                f"particles have one centre and orientation, but "
-                f"{geometry_desc(geometry)} is loose or tilted; give them "
-                f"geometry 'own'")
-        super().__init__(name, geometry, emission, None)
+        super().__init__(name, emission, None)
         # (the file of those made from a file: their configuration; see
         # from_file and dump)
         self._file: str | None = None

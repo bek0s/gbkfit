@@ -57,9 +57,9 @@ __all__ = [
 FORMAT = 'gbkfit-project'
 # The version of the format of configurations, which projects (their
 # marker) and configuration files (their section 'version') carry: 2, the
-# configurations of 2026-10-25 on, and 3, of 2026-10-28 on;
-# gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 3
+# configurations of 2026-10-25 on, 3, of 2026-10-28 on, and 4, of
+# 2026-11-04 on; gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 4
 MARKER = 'gbkfit-project.yaml'
 
 # The folders of the pieces, by the sections and options of the
@@ -105,9 +105,7 @@ TEMPLATES = {
     'galaxies': """\
 # A galaxy: here a thin disk with an exponential surface brightness, an
 # arctan rotation curve and a uniform velocity dispersion, seen in an
-# emission line. Its parameters are named after its component (disk_*),
-# but those of the geometry of the galaxy, which its components share
-# (xpos, ypos, vsys, posa, incl).
+# emission line. Its parameters are named after its component (disk_*).
 components:
 - type: disk
   name: disk
@@ -169,11 +167,11 @@ rms: 0.01
 # Parameters: fixed values, and free ones (value, min, max). Setups list
 # layers of them; a later layer replaces each parameter it gives.
 properties:
-  xpos: 0
-  ypos: 0
-  vsys: 0
-  posa: {value: 30, min: 0, max: 180}
-  incl: {value: 60, min: 5, max: 85}
+  disk_xpos: 0
+  disk_ypos: 0
+  disk_vsys: 0
+  disk_posa: {value: 30, min: 0, max: 180}
+  disk_incl: {value: 60, min: 5, max: 85}
   disk_pt_a: 1
   disk_pt_s: 5
   disk_vpt_rt: 3

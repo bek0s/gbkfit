@@ -4,7 +4,7 @@ the light of a point, which particles share.
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
 import astropy.units
 import numpy as np
@@ -15,12 +15,12 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamScalarDesc, ParamValues
 from ._detail import (
-    Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
+    Fluxes, dump_name, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors
 from .base import (
     Component, ComponentPlan, ComponentState, FieldsLayout, FrameParams,
     NativeGrid)
-from .geometries import Geometry, geometry_pdesc
+from .geometries import geometry_pdesc
 from .lines import Band, Bands, LinePlacement, Lines
 from .roles import (
     STARS, BandEmission, Emission, LineEmission, emission_parser)
@@ -29,15 +29,6 @@ from .roles import (
 __all__ = [
     'Point'
 ]
-
-
-def _check_geometry(geometry: Geometry | Literal['galaxy', 'own']) -> None:
-    """Raise ValueError if the geometry of a point is loose."""
-    if isinstance(geometry, Geometry) and geometry.loose():
-        raise ValueError(
-            f"a point has one centre, but {geometry_desc(geometry)} is "
-            f"loose (a centre for each ring); give the point geometry "
-            f"'own'")
 
 
 def point_pdescs(
@@ -340,17 +331,13 @@ class Point(Component):
         'depth' (arcsec, away from the viewer, from the plane of the sky
         through the centre of its galaxy); by default, it is in that plane
         (e.g. a nucleus).
-    geometry : Geometry, 'galaxy' or 'own', optional
-        The geometry whose centre (and systemic velocity) it shares: that
-        of its galaxy (by default), a named one (not a loose one), or none
-        ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
     Raises
     ------
     ValueError
-        If the geometry is loose, or the lines are not valid.
+        If the lines are not valid.
     """
 
     @staticmethod
@@ -361,7 +348,6 @@ class Point(Component):
         return (
             dict(type=self.type())
             | dump_name(self)
-            | dump_geometry(self)
             | dict(emission=emission_parser.dump(self.emission()),
                    depth=self._depth))
 
@@ -369,12 +355,10 @@ class Point(Component):
             self,
             emission: Emission,
             depth: bool = False,
-            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         check_options(Point.__init__, locals())
-        _check_geometry(geometry)
-        super().__init__(name, geometry, emission, None)
+        super().__init__(name, emission, None)
         self._depth = depth
         self._lines = None
         self._bands = None

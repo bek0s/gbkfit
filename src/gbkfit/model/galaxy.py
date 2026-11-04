@@ -3,18 +3,17 @@ Galaxies: their components and their mass, at one distance.
 """
 
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any
 
 import numpy as np
 
 from gbkfit.config import (
     BasicParser, Serializable, TypedParser, check_name,
-    check_options, load_option)
+    check_options)
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from gbkfit.utils import iterutils
-from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._functions import GalaxyFunctions
 from .components._stage import GalaxyStage
@@ -23,7 +22,6 @@ from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.cones import Cone
 from .components.disks import Disk
-from .components.geometries import Geometry, geometry_parser
 from .components.lines import Band
 from .components.particles import Particles
 from .components.points import Point
@@ -58,21 +56,14 @@ class Galaxy(Serializable):
     traits.VPTraitMass), which takes its disks as concentric and flat
     (see GalaxyStage).
 
-    Its components share its geometry by default: one centre, systemic
-    velocity and plane (see Geometry), whose parameters are its own
-    ('posa'); a component can have its own instead (its option geometry
-    'own') or share a named one. Its parameters are those of its
-    geometries ('posa', '{geometry}_posa'), of its components, each
-    prefixed by its name when there are several ('disk_pt_a'), its
-    distance ('distance'), its mass ('mass_{name}_*') and its gravity
+    Its parameters are those of its components, each prefixed by its name
+    when there are several ('disk_posa', 'disk_pt_a'), its distance
+    ('distance'), its mass ('mass_{name}_*') and its gravity
     ('gravity_*'). A name prefixes them all when there are several
     galaxies (see ObservationGroup), whose order along the line of sight
-    the ObservationGroup gives (see its option depth_order).
-
-    In configurations, its option geometries lists the named geometries
-    that its components name, and its option geometry is its own (e.g.
-    geometry: {tilted: true, rnodes: [...]}, which its components share
-    with their option geometry 'galaxy', the default).
+    the ObservationGroup gives (see its option depth_order). Components
+    that share a centre or an orientation tie their parameters (e.g.
+    stars_posa: disk_posa; see ParamSpace).
 
     Parameters
     ----------
@@ -107,11 +98,6 @@ class Galaxy(Serializable):
         tells how far its light is dimmed.
     name : str, optional
         Its name; required when there are several galaxies.
-    geometry : Geometry, optional
-        Its geometry, without a name: by default flat (not warped), of all
-        the geometric parameters of the components that share it (see
-        Component.geometry). The components that share a warped one hold
-        it themselves (their rings are its rings).
 
     Raises
     ------
@@ -123,47 +109,8 @@ class Galaxy(Serializable):
         or the redshift is not above -1, or missing where it is required.
     """
 
-    config_options = {'geometries': Sequence[Geometry]}
-
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> Self:
-        """
-        Load a galaxy from its configuration, whose components can name
-        its geometries (see config_options), and the lines of the
-        catalogue in use (see lines_from).
-
-        Parameters
-        ----------
-        info : dict
-            The configuration.
-
-        Returns
-        -------
-        Galaxy
-            The galaxy.
-
-        Raises
-        ------
-        ConfigError
-            If the configuration has an error.
-        ValueError, TypeError
-            If an object it makes refuses its options.
-        """
-        info = dict(info)
-        if info.get('geometry') is not None:
-            info['geometry'] = load_option(
-                geometry_parser.load, info, 'geometry')
-        _detail.load_geometries(
-            info, ('components',), info.get('geometry') or Geometry())
-        return super().load(info)
-
     def dump(self) -> dict[str, Any]:
         info = dict(name=self._name) if self._name is not None else {}
-        if self.geometry() != Geometry():
-            info.update(geometry=geometry_parser.dump(self.geometry()))
-        geometries = [g for g in self.geometries() if g.name() is not None]
-        if geometries:
-            info.update(geometries=geometry_parser.dump(geometries))
         if self.components():
             info.update(
                 components=component_parser.dump(list(self.components())))
@@ -184,8 +131,7 @@ class Galaxy(Serializable):
             distance: Distance | None = None,
             redshift: float | None = None,
             name: str | None = None,
-            gravity: Gravity | None = None,
-            geometry: Geometry | None = None
+            gravity: Gravity | None = None
     ):
         check_options(Galaxy.__init__, locals())
         check_name(name)
@@ -196,7 +142,7 @@ class Galaxy(Serializable):
         mass = iterutils.tuplify(mass)
         mass_model = MassModel(mass) if mass else None
         self._component_set = ComponentSet(
-            components, distance, mass_model, gravity, geometry)
+            components, distance, mass_model, gravity)
         if distance is not None:
             distance.check_redshift(redshift)
         if redshift is None:
@@ -231,17 +177,6 @@ class Galaxy(Serializable):
         index among its parameters, by the names of the component.
         """
         return self._component_set.mappings()[index]
-
-    def geometry(self) -> Geometry:
-        """Return its geometry, which its components share by default."""
-        return self._component_set.geometry()
-
-    def geometries(self) -> list[Geometry]:
-        """
-        Return the geometries that its components share, each once (with
-        its own, if they share it).
-        """
-        return self._component_set.geometries()
 
     def light_amplitudes(self) -> dict[str, str | None]:
         """

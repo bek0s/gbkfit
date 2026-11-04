@@ -7,14 +7,13 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 
-from gbkfit.config import ConfigError, Unit, config_path
+from gbkfit.config import Unit
 from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils
 from ._units import BandFactors, LineFactors
 
 if TYPE_CHECKING:
     from .base import Component
-    from .geometries import Geometry
 
 
 # The interpolations of the values of node-wise parameters between nodes
@@ -22,8 +21,8 @@ INTERPOLATIONS = ('linear', 'akima', 'pchip')
 
 # The options of the radii of the nodes of a component (its rings or
 # shells; see parse_nodes), of its subnodes (rstep), and of the
-# interpolation between them, as the components and the geometries take
-# them: one definition of each
+# interpolation between them, as the components take them: one definition
+# of each
 RnMax: TypeAlias = Annotated[float, Unit('arcsec')]
 RnSep: TypeAlias = Annotated[float, Unit('arcsec')]
 RNodes: TypeAlias = Annotated[Sequence[float], Unit('arcsec')]
@@ -106,25 +105,6 @@ def dump_name(component: 'Component') -> dict[str, Any]:
     return dict(name=name) if name is not None else {}
 
 
-def dump_geometry(component: 'Component') -> dict[str, Any]:
-    """
-    Return the geometry option of a component: 'own', the name of its
-    geometry, or none for that of its galaxy (the default).
-    """
-    geometry = component.geometry()
-    if geometry == 'own':
-        return dict(geometry='own')
-    if geometry == 'galaxy' or geometry.name() is None:
-        return {}
-    return dict(geometry=geometry.name())
-
-
-def geometry_desc(geometry: 'Geometry') -> str:
-    """Describe a geometry, for messages."""
-    return "the geometry of its galaxy" if geometry.name() is None \
-        else f"the geometry {geometry.name()!r}"
-
-
 def parse_nodes(
         prefix: str,
         nmax: float | None,
@@ -185,89 +165,3 @@ def parse_nodes(
     if not iterutils.all_unique(nodes):
         raise ValueError(f"{prefix}nodes must be unique")
     return nodes
-
-
-def load_geometries(
-        info: dict[str, Any], keys: tuple[str, ...], geometry: 'Geometry'
-) -> None:
-    """
-    Load the geometries of the configuration of a galaxy (its option
-    geometries), in place: the geometry option of each of its components
-    (those of the options keys, e.g. 'components') becomes the geometry
-    of that name, that of the galaxy (geometry) if it is 'galaxy' or not
-    given, or stays 'own', and the option geometries goes. Raise
-    ConfigError for an unknown geometry, one without a name, repeated
-    names, or a geometry that no component uses.
-    """
-    from .geometries import geometry_parser
-    infos = info.pop('geometries', None)
-    if infos is None:
-        infos = []
-    with config_path('geometries'):
-        geometries = geometry_parser.load(iterutils.listify(infos))
-    names = [geometry.name() for geometry in geometries]
-    if None in names:
-        raise ConfigError(
-            "the geometries of geometries need names (that of the galaxy "
-            "is its option geometry)", ['geometries', names.index(None)])
-    if repeated := sorted({n for n in names if names.count(n) > 1}):
-        raise ConfigError(
-            f"the geometries must have different names; repeated: "
-            f"{repeated}")
-    by_name = dict(zip(names, geometries))
-    used = set()
-    for key in keys:
-        value = info.get(key)
-        if value is None:
-            continue
-        is_list = isinstance(value, (list, tuple))
-        components = [dict(item) for item in value] if is_list \
-            else [dict(value)]
-        for i, component in enumerate(components):
-            name = component.get('geometry', 'galaxy')
-            if name == 'galaxy':
-                component['geometry'] = geometry
-                continue
-            if name == 'own':
-                continue
-            if name not in by_name:
-                path = (key, i) if is_list else (key,)
-                raise ConfigError(
-                    f"unknown geometry {name!r}; the geometries are "
-                    f"{names}", path + ('geometry',))
-            component['geometry'] = by_name[name]
-            used.add(name)
-        info[key] = components if is_list else components[0]
-    if unused := [name for name in names if name not in used]:
-        raise ConfigError(f"no component uses the geometries {unused}")
-
-
-def geometry_params(component: 'Component') -> tuple[str, ...]:
-    """
-    Return the geometric parameters of a component (see GEOMETRY_PARAMS):
-    those that place it in a frame (see Component.frame_params).
-    """
-    from .geometries import GEOMETRY_PARAMS
-    frame = set(component.frame_params()) - {None}
-    return tuple(name for name in GEOMETRY_PARAMS if name in frame)
-
-
-def shared_params(
-        geometry: 'Geometry', components: list['Component']
-) -> tuple[str, ...]:
-    """
-    Return the parameters that a geometry shares: those it was given, or
-    all the geometric parameters of the components that use it. Raise
-    ConfigError if it was given one that none of them has.
-    """
-    from .geometries import GEOMETRY_PARAMS
-    params = set()
-    for component in components:
-        params |= set(geometry_params(component))
-    if geometry.params() is None:
-        return tuple(name for name in GEOMETRY_PARAMS if name in params)
-    if unused := [p for p in geometry.params() if p not in params]:
-        raise ValueError(
-            f"no component of the geometry {geometry.name()!r} has its "
-            f"parameters {unused}")
-    return geometry.params()

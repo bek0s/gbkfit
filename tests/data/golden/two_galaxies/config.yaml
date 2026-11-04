@@ -1,13 +1,12 @@
 # two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
 # (written by make_golden.py; do not edit)
-version: 3
+version: 4
 driver: {type: host}
 galaxies:
 - name: front
   components:
   - type: disk
     name: gas
-    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
@@ -21,7 +20,6 @@ galaxies:
     emission: {type: lines}
   - type: disk
     name: dust
-    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -33,7 +31,6 @@ galaxies:
   components:
   - type: disk
     name: gas
-    geometry: own
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]

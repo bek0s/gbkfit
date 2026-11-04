@@ -34,9 +34,10 @@ def disk(name, density=THIN):
 
 GALAXY = dict(components=[disk('ha'), disk('co')])
 
-# (the geometry of the galaxy, which its components share)
-PROPERTIES = dict(
-    vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60,
+# The geometry of the ha disk, which that of the co disk is tied to
+GEOMETRY = dict(vsys=0, xpos=0.3, ypos=-0.6, posa=50, incl=60)
+PROPERTIES = {f'ha_{key}': value for key, value in GEOMETRY.items()} | {
+    f'co_{key}': f'ha_{key}' for key in GEOMETRY} | dict(
     ha_pt_a=1, ha_pt_s=4, ha_vpt_rt=2, ha_vpt_vt=150, ha_dpt_a=20,
     co_pt_a=2, co_pt_s=2, co_vpt_rt=2, co_vpt_vt=150, co_dpt_a=8)
 
@@ -89,7 +90,8 @@ def test_components_with_opacity_always_absorb(driver):
         rnodes=list(range(0, 14)), density=THICK, opacity=dict(type='dust'))
     galaxy = dict(components=emitters + [dust])
     properties = PROPERTIES | dict(
-        ha_ht_s=1, co_ht_s=0.5, dust_pt_a=0.3, dust_pt_s=4, dust_ht_s=0.5)
+        ha_ht_s=1, co_ht_s=0.5, dust_pt_a=0.3, dust_pt_s=4, dust_ht_s=0.5) | {
+        f'dust_{key}': f'ha_{key}' for key in GEOMETRY if key != 'vsys'}
     ha, co, both = evaluate(driver, galaxy, [
         observation(['ha'], name='muse', line_of_sight=GRID),
         observation(['co'], name='alma', line_of_sight=GRID),

@@ -122,11 +122,11 @@ def _thick_disk(name: str, **roles: Any) -> dict[str, Any]:
     roles, unmoving.
     """
     return dict(
-        type='disk', name=name, geometry='own', loose=False, tilted=False,
+        type='disk', name=name, loose=False, tilted=False,
         rnodes=list(range(0, 9)), density=_THICK) | roles
 
 
-_GAS = _disk(name='gas', geometry='own', density=_THICK)
+_GAS = _disk(name='gas', density=_THICK)
 _DUST = _thick_disk('dust', opacity=dict(type='dust'))
 
 _DUST_TRUTH = dict(
@@ -176,7 +176,7 @@ _WARPED_DISK = dict(
         "Gauss-Hermite maps (h3, h4); the disk fills the maps (fits of "
         "spectra of noise alone are wild).",
     galaxies=[dict(components=[_disk(
-        geometry='own', loose=True, tilted=True, rnodes=[0, 4, 8, 12, 16],
+        loose=True, tilted=True, rnodes=[0, 4, 8, 12, 16],
         kinematics=dict(
             type='traits', vptraits=[
                 dict(type='arctan', direction='tan'),
@@ -252,7 +252,7 @@ _BLOBS_MAPS_SELECTION = dict(
 # --- A5: a disk and an outflow cone, in two lines ----------------------------
 
 _CONE = dict(
-    type='cone', name='cone', geometry='own', rnodes=[0, 2, 4],
+    type='cone', name='cone', rnodes=[0, 2, 4],
     density=dict(
         ptraits=dict(type='uniform'), htraits=dict(type='gauss', zmax=1)),
     kinematics=dict(
@@ -270,7 +270,7 @@ _DISK_CONE_LINES = dict(
         "(a ratio each), in a cube of a spectral axis of velocities of "
         "Halpha, with a solved flux scale for each spectrum.",
     galaxies=[dict(components=[
-        _disk(name='disk', geometry='own', emission=_HALPHA_NII), _CONE])],
+        _disk(name='disk', emission=_HALPHA_NII), _CONE])],
     observations=[_cube(
         [24, 24, 40], [0.6, 0.6, 50], 'grid',
         spectral=dict(rval=450, rest='6562.8 Angstrom')) | dict(
@@ -317,9 +317,9 @@ _POINTS_PARTICLES_BAND = dict(
     doc="An image of a point (a nucleus) and of the particles of a table "
         "(the stars of a disk), which emit in a band.",
     galaxies=[dict(components=[
-        dict(type='point', name='nucleus', geometry='own', emission=_BAND),
-        dict(type='particles', name='stars', geometry='own',
-             file='particles.npz', emission=_BAND)])],
+        dict(type='point', name='nucleus', emission=_BAND),
+        dict(type='particles', name='stars', file='particles.npz',
+             emission=_BAND)])],
     observations=[_image([32, 32], [0.5, 0.5])],
     truth=dict(
         nucleus_xpos=0.27, nucleus_ypos=-0.38, nucleus_flux=2,
@@ -403,7 +403,8 @@ _IMAGE_LIGHT = dict(
         type='image', file='image.fits', size=[40, 40], step=0.4,
         offsets=True)))])],
     observations=[_cube(
-        [24, 24, 40], [0.6, 0.6, 15], rval=[*_SKY, 0])],
+        [24, 24, 40], [0.6, 0.6, 15],
+        spectral=dict(convention='relativistic', rval=0), rval=_SKY)],
     truth=_without(_DISK_TRUTH, 'pt_s') | dict(pt_dx=0, pt_dy=0),
     trial=_without(_DISK_TRIAL, 'pt_s') | dict(
         pt_a=1.1, pt_dx=_free(0.1, -1, 1), pt_dy=0),

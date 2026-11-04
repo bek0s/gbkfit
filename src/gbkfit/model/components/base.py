@@ -5,7 +5,7 @@ the cubes of opacity, the fields of radiative transfer).
 """
 
 import abc
-from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
+from typing import TYPE_CHECKING, Any, NamedTuple, TypedDict
 
 import numpy as np
 
@@ -13,7 +13,6 @@ from gbkfit.config import TypedSerializable, check_name
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
-from .geometries import Geometry
 from .lines import Band
 from .roles import STARS, Emission, LineEmission, Opacity, StarsEmission
 
@@ -129,11 +128,6 @@ class Component(TypedSerializable, abc.ABC):
     name : str, optional
         Its name, which prefixes its parameters in its galaxy (required
         when its galaxy has several components).
-    geometry : Geometry, 'galaxy' or 'own'
-        The geometry that it shares with other components: that of its
-        galaxy ('galaxy'; or the Geometry itself, which a warped one must
-        be, see Galaxy), a named one, or none ('own': its geometric
-        parameters are its own).
     emission : Emission, optional
         The light it emits.
     opacity : Opacity, optional
@@ -142,42 +136,27 @@ class Component(TypedSerializable, abc.ABC):
     Raises
     ------
     ValueError
-        If the name is not valid (see check_name), the geometry
-        is not one of the above, or it has neither emission nor opacity.
+        If the name is not valid (see check_name), or it has neither
+        emission nor opacity.
     """
-
-    # (in configurations, a geometry can be the name of one of the
-    # geometries of the galaxy: see Galaxy)
-    config_options = {'geometry': Geometry | Literal['galaxy', 'own'] | str}
 
     def __init__(
             self,
             name: str | None,
-            geometry: Geometry | Literal['galaxy', 'own'],
             emission: Emission | None,
             opacity: Opacity | None
     ):
         check_name(name)
-        if not isinstance(geometry, Geometry) \
-                and geometry not in ('galaxy', 'own'):
-            raise ValueError(
-                f"geometry must be 'galaxy', 'own' or a geometry; it is "
-                f"{geometry!r}")
         if emission is None and opacity is None:
             raise ValueError(
                 "a component needs emission, opacity or both")
         self._name = name
-        self._geometry = geometry
         self._emission = emission
         self._opacity = opacity
 
     def name(self) -> str | None:
         """Return its name, if any."""
         return self._name
-
-    def geometry(self) -> Geometry | Literal['galaxy', 'own']:
-        """Return the geometry it shares, 'galaxy' or 'own'."""
-        return self._geometry
 
     @abc.abstractmethod
     def frame_params(self) -> FrameParams:

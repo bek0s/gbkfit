@@ -1,9 +1,8 @@
-version: 3
+version: 4
 driver: {type: host}
 galaxies:
 - components:
   - type: disk
-    geometry: own
     name: disk
     loose: false
     tilted: false
@@ -18,7 +17,6 @@ galaxies:
       dptraits: {type: uniform}
     emission: {type: lines}
   - type: cone
-    geometry: own
     name: outflow
     rnodes: [0, 2, 4, 6]
     density:

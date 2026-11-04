@@ -265,7 +265,8 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     assert client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[band]))).json()['parameters']
     info = client.post('/api/v1/parameters', json=dict(
-        project='study', galaxy=dict(components=[dict(disk, tilted=True)])
+        project='study',
+        galaxy=dict(components=[dict(disk, rnodes=[1, 2, 4])])
     )).json()
     assert info['parameters'] == []
     assert info['problems'][0]['path'] == ['components', 0]

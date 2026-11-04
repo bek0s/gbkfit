@@ -79,14 +79,16 @@ _STARS = dict(
     kinematics=dict(type='jeans'))
 
 _STARS_TRUTH = dict(
-    xpos=0.3, ypos=-0.4, posa=40, incl=60, vsys=10, distance=20,
+    stars_xpos=0.3, stars_ypos=-0.4, stars_posa=40, stars_incl=60,
+    stars_vsys=10, distance=20,
     stars_ie=1, stars_re=2, stars_n=2, stars_q=0.6, stars_beta_z=0.2,
     stars_kappa=0.8, mass_lum_upsilon=1e10, mass_halo_log_m=12,
     mass_halo_c=10)
 
 _STARS_TRIAL = _STARS_TRUTH | dict(
-    posa=dict(value=42, min=0, max=90), incl=dict(value=55, min=30, max=85),
-    vsys=dict(value=8, min=-50, max=50),
+    stars_posa=dict(value=42, min=0, max=90),
+    stars_incl=dict(value=55, min=30, max=85),
+    stars_vsys=dict(value=8, min=-50, max=50),
     stars_beta_z=dict(value=0.1, min=-0.5, max=0.5),
     stars_kappa=dict(value=0.7, min=0, max=1.2),
     mass_lum_upsilon=dict(value=1.2e10, min=1e9, max=1e11),
@@ -109,7 +111,8 @@ def _mge_stars(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 _MGE_STARS_TRUTH = dict(
-    xpos=0.3, ypos=-0.4, posa=40, incl=60, vsys=10, distance=16,
+    stars_xpos=0.3, stars_ypos=-0.4, stars_posa=40, stars_incl=60,
+    stars_vsys=10, distance=16,
     stars_i0=[50.0, 10.0], stars_sigma=[1.0, 4.0], stars_q=[0.8, 0.8],
     mass_lum_upsilon=1e8, mass_bh_log_m=8.5)
 
@@ -481,7 +484,7 @@ CASES: list[dict[str, Any]] = [
             lines=['stars'], instrument=dict(psf=_PSF))],
         truth=_MGE_STARS_TRUTH | dict(stars_beta_z=0.0, stars_kappa=0.5),
         trial=_MGE_STARS_TRUTH | dict(
-            posa=dict(value=42, min=0, max=90),
+            stars_posa=dict(value=42, min=0, max=90),
             mass_lum_upsilon=dict(value=1.2e8, min=1e7, max=1e9),
             mass_bh_log_m=dict(value=8.3, min=6, max=10),
             stars_weights=dict(solve=dict(
@@ -524,7 +527,7 @@ CASES: list[dict[str, Any]] = [
             "velocity, an LSF whose sigma does, and a primary beam; "
             "oversampled, median filtered, with pixel weights of the azimuth "
             "in the disk, smoothed.",
-        galaxies=[dict(components=[_thin_disk(name='gas', geometry='own')])],
+        galaxies=[dict(components=[_thin_disk(name='gas')])],
         observations=[_sky(
             dict(
                 type='pixel_spectra', size=[16, 16], step=[0.75, 0.75],

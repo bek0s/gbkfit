@@ -71,10 +71,10 @@ def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
         .problems[0].severity == 'error'
     assert check(str(filename), {str(filename): 'fitter: {}\n'}).problems \
         == [Problem('error', [], "the configuration has no version: 'version: "
-                                 "3' for the format of this gbkfit (gbkfit-cli "
+                                 "4' for the format of this gbkfit (gbkfit-cli "
                                  "migrate rewrites configurations of older "
                                  "ones)")]
-    text = 'version: 3\nfitter: {}\n'
+    text = 'version: 4\nfitter: {}\n'
     assert check(str(filename), {str(filename): text}).problems \
         == [Problem('error', [], "the configuration needs the sections "
                                  "['galaxies', 'observations', 'params']")]

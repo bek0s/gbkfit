@@ -19,8 +19,6 @@ from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
 from ..parts import ConeTraitsKinematics, Density
 from ..roles import STARS, Emission, Opacity
-from .._detail import geometry_desc
-from ..geometries import Geometry
 from . import _cone, _detail
 
 
@@ -69,10 +67,6 @@ class Cone(Component):
     interp : str, optional
         How its node-wise parameters are interpolated between its radii:
         'linear', 'akima' or 'pchip'.
-    geometry : Geometry, 'galaxy' or 'own', optional
-        The geometry whose apex, axis and systemic velocity it shares: that
-        of its galaxy (by default), a named one (not a loose or tilted
-        one), or none ('own'; see Component).
     name : str, optional
         Its name (see Component).
 
@@ -107,17 +101,10 @@ class Cone(Component):
             rnodes: RNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',
-            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         check_options(Cone.__init__, locals())
-        if isinstance(geometry, Geometry) and (
-                geometry.loose() or geometry.tilted()):
-            raise ValueError(
-                f"a cone has one apex and axis, but "
-                f"{geometry_desc(geometry)} is loose or tilted; give it "
-                f"geometry 'own'")
-        super().__init__(name, geometry, emission, opacity)
+        super().__init__(name, emission, opacity)
         self._density = density
         self._kinematics = kinematics
         self._cone = _detail.make_cone(

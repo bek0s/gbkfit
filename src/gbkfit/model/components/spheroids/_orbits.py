@@ -120,7 +120,7 @@ class SkyGrid:
     """
     A grid of cells of the sky and the targets that a point in each cell
     gives its light to: the map of the sky (arcsec, of the frame of the
-    geometry of the galaxy) to the cells, an array of shape (2, 3) (a
+    galaxy) to the cells, an array of shape (2, 3) (a
     point (x, y) is in the cell (floor(cx), floor(cy)) of (cx, cy) = cells
     @ (x, y, 1)), its shape (ny, nx), and shares, a sparse array of shape
     (ny nx, ntargets): the share of each target in the light of a point in

@@ -15,7 +15,7 @@ from gbkfit.grid import Grid
 from gbkfit.params import ParamValues
 from gbkfit.utils import iterutils
 from .. import traits
-from .._detail import dump_geometry, dump_name, geometry_desc
+from .._detail import dump_name
 from .._native import EmissionSetup, NativeComponentPlan, emission_setup
 from .._nodal import (
     MAX_TRAITS, TraitTable, parse_component_rnode_args,
@@ -23,7 +23,6 @@ from .._nodal import (
 from .. import _units
 from .._units import DataUnit
 from ..base import Component
-from ..geometries import Geometry
 from ..lines import Band, Bands, Lines
 from ..roles import (
     Emission, LineEmission, Opacity, emission_parser, opacity_parser)
@@ -79,21 +78,13 @@ def dump_disk_component(
         kinematics: DiskTraitsKinematics | None
 ) -> dict[str, Any]:
     """
-    Return the configuration of a disk component made of the given disk,
-    without what its geometry (if any) gives.
+    Return the configuration of a disk component made of the given disk.
     """
-    geometry = component.geometry()
-    if not isinstance(geometry, Geometry):
-        geometry = None
-    info = dict(type=component.type()) | dump_name(component) \
-        | dump_geometry(component)
-    if geometry is None:
-        info.update(loose=disk.loose(), tilted=disk.tilted())
-    if geometry is None or geometry.rnodes() is None:
-        info.update(rnodes=list(disk.rnodes()))
+    info = dict(type=component.type()) | dump_name(component)
     info.update(
-        rstep=disk.rstep(), interp=disk.interp().type(),
-        density=density.dump())
+        loose=disk.loose(), tilted=disk.tilted(),
+        rnodes=list(disk.rnodes()), rstep=disk.rstep(),
+        interp=disk.interp().type(), density=density.dump())
     if kinematics is not None:
         info.update(kinematics=disk_kinematics_parser.dump(kinematics))
     if component.emission() is not None:
@@ -115,9 +106,8 @@ def make_disk(
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
-        geometry: Geometry | None,
-        loose: bool | None,
-        tilted: bool | None,
+        loose: bool,
+        tilted: bool,
         rnmax: float | None,
         rnsep: float | None,
         rnlen: int | None,
@@ -128,38 +118,20 @@ def make_disk(
 ) -> _disk.NodalDisk:
     """
     Return the disk of a disk component, made of its parts (see Disk for
-    the options): smooth, or made of its clouds. With a geometry, its
-    warps and, if it is warped, its rings are those of the geometry, which
-    the component must not give. A thick disk (with density height
-    traits) takes the default height traits of its velocity and dispersion
-    traits where it has none.
+    the options): smooth, or made of its clouds. A thick disk (with
+    density height traits) takes the default height traits of its velocity
+    and dispersion traits where it has none.
 
     Raises
     ------
     ValueError
-        If the options are not valid, conflict with the geometry, or the
-        parts and roles do not go together (e.g. lines without
-        kinematics, or what only a thick disk can have on a thin one).
+        If the options are not valid, or the parts and roles do not go
+        together (e.g. lines without kinematics, or what only a thick disk
+        can have on a thin one).
     """
-    rings = dict(rnmax=rnmax, rnsep=rnsep, rnlen=rnlen, rnodes=rnodes)
-    if geometry is not None:
-        warps = dict(loose=geometry.loose(), tilted=geometry.tilted())
-        if differ := [k for k, v in dict(loose=loose, tilted=tilted).items()
-                      if v is not None and v != warps[k]]:
-            raise ValueError(
-                f"the warps of a component are those of "
-                f"{geometry_desc(geometry)}, which differ: {differ}; remove "
-                f"them, or give the component geometry 'own'")
-        loose, tilted = warps['loose'], warps['tilted']
-        if geometry.rnodes() is not None:
-            if given := [k for k, v in rings.items() if v is not None]:
-                raise ValueError(
-                    f"the rings of a component are those of "
-                    f"{geometry_desc(geometry)}, which is warped; remove "
-                    f"{given}, or give the component geometry 'own'")
-            rings = dict(rings, rnodes=geometry.rnodes())
     node_args = parse_component_rnode_args(
-        **rings, rstep=rstep, interp=interp)
+        rnmax=rnmax, rnsep=rnsep, rnlen=rnlen, rnodes=rnodes, rstep=rstep,
+        interp=interp)
     traits_ = _disk_traits(
         density, kinematics, emission, opacity, zptraits, sptraits)
     DISK_TRAITS.check(traits_)
@@ -172,7 +144,7 @@ def make_disk(
     if opacity_traits:
         traits_.update(opt=opacity_traits)
     options = dict(
-        loose=bool(loose), tilted=bool(tilted), **node_args,
+        loose=loose, tilted=tilted, **node_args,
         traits_=traits_, prefixes=TRAIT_PREFIXES | dict(opt=opacity_prefixes),
         density_units=dict(
             rpt=_units.density_unit(emission),

@@ -4,7 +4,7 @@ clouds (see Clouds).
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
@@ -19,7 +19,6 @@ from .._detail import Interp, RNodes, RnMax, RnSep, RStep
 from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
-from ..geometries import Geometry
 from ..lines import Band
 from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
@@ -62,18 +61,16 @@ class Disk(Component):
         (e.g. a range of azimuths), for all its roles.
     loose : bool, optional
         Whether its centre and systemic velocity are node-wise (a value
-        for each ring); by default, not, or those of its geometry.
+        for each ring).
     tilted : bool, optional
-        Whether its position angle and inclination are node-wise; by
-        default, not, or those of its geometry.
+        Whether its position angle and inclination are node-wise.
     rnmax, rnsep, rnlen, rnodes : optional
         The radii of its rings (arcsec), from 0: rnodes; or rnmax and rnsep
-        (every rnsep); or rnmax and rnlen (rnlen rings). Those of its
-        geometry if it is warped. They say where its node-wise parameters
-        are given, not where it ends: beyond its last radius, its density
-        goes on as an exponential of the density and its slope there (see
-        traits.RPTrait.tail_scale), and its other node-wise parameters
-        keep their values there.
+        (every rnsep); or rnmax and rnlen (rnlen rings). They say where its
+        node-wise parameters are given, not where it ends: beyond its last
+        radius, its density goes on as an exponential of the density and
+        its slope there (see traits.RPTrait.tail_scale), and its other
+        node-wise parameters keep their values there.
     rstep : float, optional
         The width of the rings it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
@@ -82,20 +79,15 @@ class Disk(Component):
         'linear', 'akima' or 'pchip'.
     clouds : Clouds, optional
         Its clouds, if it is made of clouds; by default, it is smooth.
-    geometry : Geometry, 'galaxy' or 'own', optional
-        The geometry that it shares: that of its galaxy (by default; a
-        warped one itself), a named one, or none ('own'; see
-        Component).
     name : str, optional
         Its name (see Component).
 
     Raises
     ------
     ValueError
-        If the options are not valid (e.g. the rings), conflict with its
-        geometry, or its parts and roles do not go together (e.g. lines
-        without kinematics, or opacity, zptraits or clouds on a thin
-        disk).
+        If the options are not valid (e.g. the rings), or its parts and
+        roles do not go together (e.g. lines without kinematics, or
+        opacity, zptraits or clouds on a thin disk).
     """
 
     @staticmethod
@@ -117,8 +109,8 @@ class Disk(Component):
             opacity: Opacity | None = None,
             zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            loose: bool | None = None,
-            tilted: bool | None = None,
+            loose: bool = False,
+            tilted: bool = False,
             rnmax: RnMax | None = None,
             rnsep: RnSep | None = None,
             rnlen: int | None = None,
@@ -126,11 +118,10 @@ class Disk(Component):
             rstep: RStep | None = None,
             interp: Interp = 'linear',
             clouds: Clouds | None = None,
-            geometry: Geometry | Literal['galaxy', 'own'] = 'galaxy',
             name: str | None = None
     ):
         check_options(Disk.__init__, locals())
-        super().__init__(name, geometry, emission, opacity)
+        super().__init__(name, emission, opacity)
         if clouds is not None and not density.thick():
             raise ValueError(
                 "a disk of clouds needs density height traits (it is "
@@ -140,7 +131,6 @@ class Disk(Component):
         self._clouds = clouds
         self._disk = _detail.make_disk(
             density, kinematics, emission, opacity, zptraits, sptraits,
-            geometry=geometry if isinstance(geometry, Geometry) else None,
             loose=loose, tilted=tilted, rnmax=rnmax, rnsep=rnsep,
             rnlen=rnlen, rnodes=rnodes, rstep=rstep, interp=interp,
             clouds=clouds)

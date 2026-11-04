@@ -52,8 +52,8 @@ class Serializable(abc.ABC):
 
     # The options of its configurations that are not those of its
     # config_constructors, or are in other forms, and their types, which
-    # its load reads (e.g. the named geometries of a galaxy, which its
-    # components name: a configuration cannot hold one object twice)
+    # its load reads (e.g. the drivers of the placements of workers, which
+    # configurations name instead of giving the Drivers)
     config_options: ClassVar[Mapping[str, Any]] = {}
 
     # The parameters of its config_constructors that the caller of its
@@ -75,8 +75,8 @@ class Serializable(abc.ABC):
         config_constructors (see config_constructor), each in the form
         of its annotation, objects of other classes included (e.g. the
         PSF of an Instrument; see parse_options_for_callable). A class
-        overrides it only for options in other forms (e.g. named
-        geometries) or loaded with what its caller gives (e.g. the
+        overrides it only for options in other forms (e.g. the tables of
+        a PSF that varies) or loaded with what its caller gives (e.g. the
         catalogue of lines of an emission), and then calls it. The
         configuration is not changed.
 

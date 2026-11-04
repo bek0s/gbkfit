@@ -28,9 +28,9 @@ OBSERVATION = dict(
 
 
 @pytest.mark.parametrize('version, message', [
-    (None, "has no version: 'version: 3'"),
-    (2, "is of version 2 of the format, not 3"),
-    (4, "is of version 4 of the format, not 3")])
+    (None, "has no version: 'version: 4'"),
+    (3, "is of version 3 of the format, not 4"),
+    (5, "is of version 5 of the format, not 4")])
 def test_configurations_of_other_versions_are_refused(version, message):
     config = dict(galaxies=[], observations=[], params={})
     if version is not None:
@@ -43,7 +43,7 @@ def test_configurations_of_other_versions_are_refused(version, message):
 @pytest.mark.parametrize('config, from_version, message', [
     (dict(), None, "has no version"),
     (dict(version=2), 1, "is of version 2; not 1"),
-    (dict(version=4), None, "versions of the format are 1 to 3")])
+    (dict(version=5), None, "versions of the format are 1 to 4")])
 def test_the_version_of_a_migration_must_be_known(
         config, from_version, message):
     with pytest.raises(ConfigError, match=message):
@@ -67,7 +67,7 @@ def test_a_file_is_migrated_in_place_with_its_comments(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "kmos_calibration -> kmos_flux_scale" in result.stderr
     assert filename.read_text() == (
-        "version: 3\n"
+        "version: 4\n"
         "observations:\n"
         "- type: sky\n"
         "  name: kmos\n"
@@ -119,8 +119,6 @@ def test_a_project_is_migrated_across_its_pieces(tmp_path):
 
 
 def test_a_project_of_the_current_version_is_left_as_it_is(tmp_path):
-    # (the template galaxy is named: a migration from version 1 would
-    # give it its own geometry, and its parameters other names)
     study = project.create(str(tmp_path / 'study'))
     for folder in ('galaxies', 'observations', 'params', 'setups'):
         study.create_piece(folder, 'first')
@@ -137,8 +135,7 @@ def test_the_old_disk_types_are_migrated():
     migration.migrate(dict(galaxies=[dict(components=components)]), 1)
     assert [c['type'] for c in components] == ['disk', 'disk', 'cone']
     assert components[1] == dict(
-        type='disk', name='b', clouds=dict(cflux=1e-3, seed=2),
-        geometry='own')
+        type='disk', name='b', clouds=dict(cflux=1e-3, seed=2))
 
 
 @pytest.mark.parametrize('components, owns', [
@@ -151,7 +148,9 @@ def test_the_old_disk_types_are_migrated():
     ([dict(type='disk', loose=False)], [False]),
     ([dict(type='disk', name='a', geometry='g')], [False])])
 def test_old_components_keep_their_own_geometries(components, owns):
-    migration.migrate(dict(galaxies=[dict(components=components)]), 1)
+    # The rule of version 2 alone: that of version 4 removes geometry
+    migration.v2.OwnGeometries().rewrite(
+        dict(galaxies=[dict(components=components)]))
     assert [c.get('geometry') == 'own' for c in components] == owns
 
 
@@ -390,3 +389,105 @@ def test_gauss_hermite_moments_are_migrated_to_h3_and_h4():
     assert data == dict(type='pixel_moments', moment1='v.fits',
                         h3='h3.fits', h4='h4.fits')
     assert central['data'] == dict(moment3='m3.fits')
+
+
+# Two disks and a point of version 3 that share the geometry of their
+# galaxy, flat (the point its centre and systemic velocity)
+DISK = dict(
+    type='disk', rnodes=[0, 1, 2], density=dict(ptraits=dict(
+        type='exponential')),
+    kinematics=dict(
+        type='traits', vptraits=dict(type='arctan', direction='tan'),
+        dptraits=dict(type='uniform')),
+    emission=dict(type='lines'))
+SHARED = [
+    DISK | dict(name='gas'), DISK | dict(name='ion'),
+    dict(type='point', name='agn', emission=dict(type='lines'))]
+
+
+def test_shared_geometries_are_migrated_to_ties():
+    config = dict(
+        galaxies=[dict(components=SHARED)],
+        params=dict(properties=dict(
+            xpos=0.5, ypos=0, vsys=10, posa=dict(value=30, min=0, max=90),
+            incl=60, agn_flux='xpos * 2')))
+    changes = migration.migrate(config, 3)
+    components = config['galaxies'][0]['components']
+    assert all('geometry' not in c for c in components)
+    properties = config['params']['properties']
+    assert properties == dict(
+        gas_xpos=0.5, ion_xpos='gas_xpos', agn_xpos='gas_xpos',
+        gas_ypos=0, ion_ypos='gas_ypos', agn_ypos='gas_ypos',
+        gas_vsys=10, ion_vsys='gas_vsys', agn_vsys='gas_vsys',
+        gas_posa=dict(value=30, min=0, max=90), ion_posa='gas_posa',
+        gas_incl=60, ion_incl='gas_incl', agn_flux='gas_xpos * 2')
+    assert migration.Change(['params', 'properties'], "xpos -> gas_xpos") \
+        in changes
+    # The migrated configuration has every parameter, of one free value
+    from gbkfit.model import galaxy_parser
+    from gbkfit.params import ParamSpace
+    galaxy = galaxy_parser.load(config['galaxies'][0])
+    properties |= {
+        name: 1 for name in galaxy.pdescs() if name not in properties}
+    space = ParamSpace.from_properties(galaxy.pdescs(), properties)
+    assert space.free_properties() == dict(
+        gas_posa=dict(value=30, min=0, max=90))
+
+
+def test_a_shared_warped_geometry_gives_its_disks_its_warps_and_rings():
+    geometry = dict(name='warp', tilted=True, rnmax=2, rnsep=1)
+    disks = [
+        {k: v for k, v in DISK.items() if k != 'rnodes'}
+        | dict(name=name, geometry='warp') for name in ('gas', 'ion')]
+    config = dict(
+        galaxies=[dict(geometries=[geometry], components=disks)],
+        params=dict(
+            properties={'warp_posa': [30, 31, 32], 'warp_incl[1:]': 60},
+            modes=dict(warp_posa=dict(type='offsets', origin=0)),
+            priors=[dict(type='smooth', expr='warp_posa', order=2, std=1,
+                         positions='warp_rnodes')]))
+    migration.migrate(config, 3)
+    galaxy = config['galaxies'][0]
+    assert 'geometries' not in galaxy
+    for disk in galaxy['components']:
+        assert disk['tilted'] is True and 'geometry' not in disk
+        assert (disk['rnmax'], disk['rnsep']) == (2, 1)
+    params = config['params']
+    assert params['properties'] == {
+        'gas_posa': [30, 31, 32], 'ion_posa': 'gas_posa',
+        'gas_incl[1:]': 60, 'ion_incl': 'gas_incl'} | {
+        f'ion_{name}': f'gas_{name}' for name in ('xpos', 'ypos', 'vsys')}
+    assert params['modes'] == dict(gas_posa=dict(type='offsets', origin=0))
+    assert params['priors'][0]['expr'] == 'gas_posa'
+    assert params['priors'][0]['positions'] == 'gas_rnodes'
+
+
+def test_a_geometry_shares_only_the_parameters_it_was_given():
+    geometry = dict(name='centre', params=['xpos', 'ypos'])
+    config = dict(
+        galaxies=[dict(geometries=[geometry], components=[
+            component | dict(geometry='centre') for component in SHARED])],
+        params=dict(properties=dict(centre_xpos=1, centre_ypos=2)))
+    migration.migrate(config, 3)
+    assert config['params']['properties'] == dict(
+        gas_xpos=1, ion_xpos='gas_xpos', agn_xpos='gas_xpos',
+        gas_ypos=2, ion_ypos='gas_ypos', agn_ypos='gas_ypos')
+
+
+def test_shared_geometries_without_params_are_migrated_by_hand():
+    # A galaxy of a project, whose params are other pieces; the geometry
+    # of a galaxy of one component without a name changes nothing
+    changes = migration.migrate(dict(galaxies=[dict(components=SHARED)]), 3)
+    by_hand = [c.message for c in changes if c.message.startswith('by hand')]
+    assert "by hand: rename the parameter posa to gas_posa, ion_posa: " \
+        "gas_posa" in by_hand
+    alone = dict(galaxies=[dict(components=[DISK])])
+    assert migration.migrate(alone, 3) == [
+        migration.Change(['version'], "3 -> 4")]
+
+
+def test_own_geometries_are_migrated_to_their_components():
+    disk = DISK | dict(name='gas', geometry='own', tilted=True)
+    config = dict(galaxies=[dict(components=[disk])])
+    migration.migrate(config, 3)
+    assert disk == DISK | dict(name='gas', tilted=True)

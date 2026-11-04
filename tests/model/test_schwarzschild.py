@@ -42,7 +42,8 @@ GALAXY = dict(
           dict(type='point', name='bh')],
     distance=dict(type='direct', cosmology='Planck18'))
 PROPERTIES = dict(
-    xpos=0.5, ypos=-0.3, posa=30, incl=60, vsys=0, distance=10,
+    stars_xpos=0.5, stars_ypos=-0.3, stars_posa=30, stars_incl=60,
+    stars_vsys=0, distance=10,
     stars_i0=[3.0, 1.0], stars_sigma=[0.3 * A, 1.5 * A], stars_q=[1.0, 1.0],
     mass_light_log_rho=np.log10(4e10 / (2 * np.pi)), mass_light_rs=1.0,
     mass_light_alpha=1.0, mass_light_beta=4.0, mass_light_gamma=1.0,
@@ -324,7 +325,7 @@ def test_the_light_of_bins_is_that_of_the_spheroid():
     spheroid = galaxy().components()[0]
     values = {name[len('stars_'):] if name.startswith('stars_') else name:
               value for name, value in PROPERTIES.items()}
-    centre = np.array([PROPERTIES['xpos'], PROPERTIES['ypos']])
+    centre = np.array([PROPERTIES['stars_xpos'], PROPERTIES['stars_ypos']])
     x, y = sky_positions(regions.grid())
     index = regions.index()
     inside = index >= 0
@@ -528,11 +529,11 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
 
     group = ObservationGroup([galaxy()], [observation(bins())])
     params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
-        vsys=dict(value=0, min=-50, max=50), stars_weights=SOLVE))
+        stars_vsys=dict(value=0, min=-50, max=50), stars_weights=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
     scheme = KeptModels()
     boot = run_bootstrap(
-        objective, params, dict(vsys=0.0),
+        objective, params, dict(stars_vsys=0.0),
         fitter_parser.load(dict(type='scipy.least_squares', max_nfev=2)),
         BootstrapOptions(2, scheme, seed=1))
     assert len(boot.samples) == 2 and not boot.failures
@@ -581,7 +582,8 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
         kinematics=dict(type='schwarzschild', norbits=1500, turns=30))
     group = ObservationGroup([galaxy(components=[spheroid])], [obs])
     values = dict(
-        xpos=0, ypos=0, posa=0, incl=90, vsys=0, distance=distance,
+        stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=90,
+        stars_vsys=0, distance=distance,
         stars_i0=list(i0), stars_sigma=list(sigma),
         stars_q=[1.0] * len(i0), mass_light_rs=light.a,
         mass_light_alpha=1.0, mass_light_beta=4.0, mass_light_gamma=1.0,
@@ -632,7 +634,8 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
                        component='stars'),
                   dict(type='point', name='bh')])
     truth = dict(
-        xpos=0, ypos=0, posa=0, incl=60, vsys=0, distance=16,
+        stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=60,
+        stars_vsys=0, distance=16,
         stars_i0=[50.0, 10.0], stars_sigma=[1.0, 4.0], stars_q=[0.7, 0.7],
         mass_stars_upsilon=1e8, mass_bh_log_m=8.5)
     los = line_of_sight_parser.load(dict(type='grid', depth=dict(step=0.5)))

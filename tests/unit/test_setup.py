@@ -148,11 +148,11 @@ def test_configs_resolve_relative_paths_against_their_root(tmp_path):
     # folder of their project)
     config = tmp_path / 'configs' / 'fit.yaml'
     config.parent.mkdir()
-    config.write_text("version: 3\ngalaxies: {}\nroot: ../data\n")
+    config.write_text(f"version: {VERSION}\ngalaxies: {{}}\nroot: ../data\n")
     file = setup.read_config(str(config), ('galaxies',))
     assert file.config == dict(galaxies=[{}])
     assert file.root == str(tmp_path / 'data')
-    config.write_text("version: 3\ngalaxies: {}\n")
+    config.write_text(f"version: {VERSION}\ngalaxies: {{}}\n")
     assert setup.read_config(str(config), ('galaxies',)).root == \
         str(config.parent)
     with pytest.raises(ConfigError, match="needs the sections"):

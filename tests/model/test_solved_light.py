@@ -29,8 +29,10 @@ CORE = dict(
 ENVELOPE = dict(
     type='spheroid', name='envelope', rmax=20, emission=dict(type='band'),
     profile=dict(type='sersic'))
+# The centre of both; the envelope, a sphere, has no axis
 TRUTH = dict(
-    xpos=0.2, ypos=-0.3, posa=30, incl=50, core_i0=[4.0, 1.5],
+    core_xpos=0.2, core_ypos=-0.3, core_posa=30, core_incl=50,
+    envelope_xpos=0.2, envelope_ypos=-0.3, core_i0=[4.0, 1.5],
     core_sigma=[0.6, 1.8], core_q=[0.8, 0.6], envelope_ie=0.3,
     envelope_re=4.0, envelope_n=1.5)
 AMPLITUDES = (('core_i0', 0), ('core_i0', 1), ('envelope_ie', None))
@@ -165,7 +167,8 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=[copy.deepcopy(CORE)]))], [obs])
     params = ParamSpace.from_properties(group.pdescs(), dict(
-        xpos=0, ypos=0, posa=0, incl=0, core_sigma=[1, 2], core_q=[1, 1],
+        core_xpos=0, core_ypos=0, core_posa=0, core_incl=0,
+        core_sigma=[1, 2], core_q=[1, 1],
         core_i0=SOLVE, obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.5, min=0))))
     with pytest.raises(ValueError, match="not linear in both"):
