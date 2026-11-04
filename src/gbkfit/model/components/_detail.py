@@ -9,7 +9,6 @@ import numpy as np
 
 from gbkfit.config import Unit
 from gbkfit.params import ParamValues
-from gbkfit.utils import iterutils
 from ._units import BandFactors, LineFactors
 
 if TYPE_CHECKING:
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 INTERPOLATIONS = ('linear', 'akima', 'pchip')
 
 # The options of the radii of the nodes of a component (its rings or
-# shells; see parse_nodes), of its subnodes (rstep), and of the
+# shells; see nodes.node_radii), of its subnodes (rstep), and of the
 # interpolation between them, as the components take them: one definition
 # of each
 RnMax: TypeAlias = Annotated[float, Unit('arcsec')]
@@ -103,65 +102,3 @@ def dump_name(component: 'Component') -> dict[str, Any]:
     """Return the name option of a component: none if it has no name."""
     name = component.name()
     return dict(name=name) if name is not None else {}
-
-
-def parse_nodes(
-        prefix: str,
-        nmax: float | None,
-        nsep: float | None,
-        nlen: int | None,
-        nodes: Any
-) -> tuple[float, ...]:
-    """
-    Return the nodes given by one of: nodes; nmax and nsep (from 0 every
-    nsep, to the first node at or beyond nmax); nmax and nlen (nlen nodes
-    from 0 to nmax). The prefix names the options in messages (e.g. 'r'
-    for rnodes). Raise ValueError unless exactly one of them is given
-    (alone), or the nodes are not at least two, from 0, ascending and
-    unique.
-    """
-    # (exactly one set, alone: an option beside another set would be
-    # ignored silently)
-    given = {name for name, value in (
-        ('nodes', nodes), ('nmax', nmax), ('nsep', nsep), ('nlen', nlen))
-        if value is not None}
-    if given not in ({'nodes'}, {'nmax', 'nsep'}, {'nmax', 'nlen'}):
-        raise ValueError(
-            f"exactly one of the following sets of options must be given, "
-            f"alone: (1) {prefix}nodes; (2) {prefix}nmax, {prefix}nsep; "
-            f"(3) {prefix}nmax, {prefix}nlen; given: "
-            f"{sorted(prefix + name for name in given)}")
-    nodes_arange = given == {'nmax', 'nsep'}
-    nodes_linspace = given == {'nmax', 'nlen'}
-    if (nodes_arange or nodes_linspace) and not 0 < nmax:
-        raise ValueError(
-            f"the following expression must be true: 0 < {prefix}nmax")
-    if nodes_arange and not (0 < nsep <= nmax):
-        raise ValueError(
-            f"the following expression must be true: "
-            f"0 < {prefix}nsep <= {prefix}nmax")
-    if nlen is not None and not 2 <= nlen:
-        raise ValueError(
-            f"the following expression must be true: "
-            f"2 <= {prefix}nlen")
-    if nodes_arange:
-        # From 0 every nsep, to the first node at or beyond nmax; the
-        # count tolerates the rounding of nmax / nsep, which made
-        # np.arange to nmax + nsep add a node (e.g. 2.4 for 2.2 in 0.2s)
-        count = int(np.ceil(nmax / nsep - 1e-9)) + 1
-        nodes = (nsep * np.arange(count)).tolist()
-    elif nodes_linspace:
-        nodes = np.linspace(0, nmax, nlen).tolist()
-    nodes = tuple(nodes)
-    if len(nodes) < 2:
-        raise ValueError(f"at least two {prefix}nodes must be provided")
-    # (from the centre: a component has no hole of nothing at all, which
-    # was a sharp inner edge; one of little density has 0 at its nodes)
-    if nodes[0] != 0:
-        raise ValueError(
-            f"{prefix}nodes must start at 0; they start at {nodes[0]}")
-    if not iterutils.is_ascending(nodes):
-        raise ValueError(f"{prefix}nodes must be ascending")
-    if not iterutils.all_unique(nodes):
-        raise ValueError(f"{prefix}nodes must be unique")
-    return nodes

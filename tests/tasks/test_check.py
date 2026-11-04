@@ -19,17 +19,17 @@ yaml = ruamel.yaml.YAML(typ='safe')
 def test_the_problems_of_a_configuration_have_their_paths(tmp_path):
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     component = config['galaxies'][0]['components'][0]
-    component['rnmx'] = component.pop('rnmax')
+    component['rnode'] = component.pop('rnodes')
     filename = tmp_path / 'config.yaml'
     yaml.dump(config, filename)
     path = ['galaxies', 0, 'components', 0]
     # (an unknown option is an error, and the check goes on past it)
     (unknown, error) = check(str(filename)).problems
     assert (unknown.severity, unknown.path) == ('error', path)
-    assert "'rnmx' (did you mean 'rnmax'?)" in unknown.message
+    assert "'rnode' (did you mean 'rnodes'?)" in unknown.message
     assert (error.severity, error.path) == ('error', path)
     # (a text in place of the file: fixed, and then without problems)
-    component['rnmax'] = component.pop('rnmx')
+    component['rnodes'] = component.pop('rnode')
     text = filename.read_text()
     yaml.dump(config, filename)
     fixed = filename.read_text()

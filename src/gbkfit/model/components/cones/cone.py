@@ -13,10 +13,11 @@ from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
 from .. import traits
 from .._native import make_bands, make_lines
-from .._detail import Interp, RNodes, RnMax, RnSep, RStep
+from .._detail import Interp, RNodes, RStep
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
+from ..nodes import EvenNodes
 from ..parts import ConeTraitsKinematics, Density
 from ..roles import STARS, Emission, Opacity
 from . import _cone, _detail
@@ -56,9 +57,9 @@ class Cone(Component):
         Its sides: 'both', 'positive' (along the positive side of its axis,
         away from the viewer for inclinations below 90 degrees) or
         'negative'.
-    rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its shells (arcsec), from its apex (0): rnodes; or
-        rnmax and rnsep (every rnsep); or rnmax and rnlen (rnlen shells).
+    rnodes : Sequence of float or EvenNodes
+        The radii of its shells (arcsec), from its apex (0): a list, or
+        evenly spaced (see EvenNodes), which its configuration keeps.
         Beyond its last radius, it goes on as a disk does beyond its last
         ring (see Disk).
     rstep : float, optional
@@ -85,7 +86,7 @@ class Cone(Component):
 
     def dump(self) -> dict[str, Any]:
         return _detail.dump_cone_component(
-            self, self._cone, self._density, self._kinematics)
+            self, self._cone, self._rnodes, self._density, self._kinematics)
 
     def __init__(
             self,
@@ -95,10 +96,7 @@ class Cone(Component):
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             sides: Literal[_cone.SIDES] = 'both',
-            rnmax: RnMax | None = None,
-            rnsep: RnSep | None = None,
-            rnlen: int | None = None,
-            rnodes: RNodes | None = None,
+            rnodes: RNodes | EvenNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',
             name: str | None = None
@@ -107,10 +105,11 @@ class Cone(Component):
         super().__init__(name, emission, opacity)
         self._density = density
         self._kinematics = kinematics
+        # As given, for its configuration (see dump)
+        self._rnodes = rnodes
         self._cone = _detail.make_cone(
             _cone.SmoothCone, density, kinematics, emission, opacity,
-            sptraits, sides, rnmax=rnmax, rnsep=rnsep, rnlen=rnlen,
-            rnodes=rnodes, rstep=rstep, interp=interp)
+            sptraits, sides, rnodes=rnodes, rstep=rstep, interp=interp)
         self._lines = make_lines(self._cone.pdescs(), emission)
         self._bands = make_bands(self._cone.pdescs(), emission)
 

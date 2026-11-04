@@ -15,11 +15,12 @@ from gbkfit.params import ParamDesc
 from ...mass import DiskDensity
 from .. import traits
 from .._needs import Need
-from .._detail import Interp, RNodes, RnMax, RnSep, RStep
+from .._detail import Interp, RNodes, RStep
 from .._native import make_bands, make_lines
 from .._units import DataUnit
 from ..base import Component, ComponentPlan, FrameParams
 from ..lines import Band
+from ..nodes import EvenNodes
 from ..roles import STARS, Emission, Opacity
 from . import _detail, _disk, _stage
 from .clouds import Clouds
@@ -64,13 +65,14 @@ class Disk(Component):
         for each ring).
     tilted : bool, optional
         Whether its position angle and inclination are node-wise.
-    rnmax, rnsep, rnlen, rnodes : optional
-        The radii of its rings (arcsec), from 0: rnodes; or rnmax and rnsep
-        (every rnsep); or rnmax and rnlen (rnlen rings). They say where its
-        node-wise parameters are given, not where it ends: beyond its last
-        radius, its density goes on as an exponential of the density and
-        its slope there (see traits.RPTrait.tail_scale), and its other
-        node-wise parameters keep their values there.
+    rnodes : Sequence of float or EvenNodes
+        The radii of its rings (arcsec), from 0: a list, or evenly spaced
+        (in configurations {max, sep} or {max, len}; see EvenNodes), which
+        its configuration keeps. They say where its node-wise parameters
+        are given, not where it ends: beyond its last radius, its density
+        goes on as an exponential of the density and its slope there (see
+        traits.RPTrait.tail_scale), and its other node-wise parameters
+        keep their values there.
     rstep : float, optional
         The width of the rings it is evaluated on, at most half the
         smallest separation of its radii; by default that, or 1 if less.
@@ -96,7 +98,7 @@ class Disk(Component):
 
     def dump(self) -> dict[str, Any]:
         info = _detail.dump_disk_component(
-            self, self._disk, self._density, self._kinematics)
+            self, self._disk, self._rnodes, self._density, self._kinematics)
         if self._clouds is not None:
             info['clouds'] = self._clouds.dump()
         return info
@@ -111,10 +113,7 @@ class Disk(Component):
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
             loose: bool = False,
             tilted: bool = False,
-            rnmax: RnMax | None = None,
-            rnsep: RnSep | None = None,
-            rnlen: int | None = None,
-            rnodes: RNodes | None = None,
+            rnodes: RNodes | EvenNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',
             clouds: Clouds | None = None,
@@ -129,10 +128,12 @@ class Disk(Component):
         self._density = density
         self._kinematics = kinematics
         self._clouds = clouds
+        # As given, for its configuration (see dump)
+        self._rnodes = rnodes
         self._disk = _detail.make_disk(
             density, kinematics, emission, opacity, zptraits, sptraits,
-            loose=loose, tilted=tilted, rnmax=rnmax, rnsep=rnsep,
-            rnlen=rnlen, rnodes=rnodes, rstep=rstep, interp=interp,
+            loose=loose, tilted=tilted, rnodes=rnodes, rstep=rstep,
+            interp=interp,
             clouds=clouds)
         self._lines = make_lines(self._disk.pdescs(), emission)
         self._bands = make_bands(self._disk.pdescs(), emission)

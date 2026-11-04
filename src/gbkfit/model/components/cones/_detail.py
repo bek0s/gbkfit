@@ -21,6 +21,7 @@ from .. import _units
 from .._units import DataUnit
 from ..base import Component
 from ..lines import Band, Bands, Lines
+from ..nodes import EvenNodes, dump_nodes
 from ..parts import (
     ConeTraitsKinematics, Density, cone_kinematics_parser)
 from ..roles import (
@@ -79,12 +80,17 @@ CONE_TRAITS = TraitTable('cone', dict(
 def dump_cone_component(
         component: Component,
         cone: _cone.NodalCone,
+        rnodes: Sequence[float] | EvenNodes | None,
         density: Density,
         kinematics: ConeTraitsKinematics | None
 ) -> dict[str, Any]:
-    """Return the configuration of a cone component made of the given cone."""
+    """
+    Return the configuration of a cone component made of the given cone,
+    with its shells in the form they were given (rnodes).
+    """
     info = dict(type=component.type()) | dump_name(component) | dict(
-        sides=cone.sides(), rnodes=list(cone.rnodes()), rstep=cone.rstep(),
+        sides=cone.sides(), rnodes=dump_nodes(rnodes, cone.rnodes()),
+        rstep=cone.rstep(),
         interp=cone.interp().type(), density=density.dump())
     if kinematics is not None:
         info.update(kinematics=cone_kinematics_parser.dump(kinematics))
@@ -105,10 +111,7 @@ def make_cone(
         opacity: Opacity | None,
         sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
         sides: str,
-        rnmax: float | None,
-        rnsep: float | None,
-        rnlen: int | None,
-        rnodes: Sequence[float] | None,
+        rnodes: Sequence[float] | EvenNodes | None,
         rstep: float | None,
         interp: str
 ) -> _cone.NodalCone:
@@ -148,8 +151,7 @@ def make_cone(
                 kinematics.dhtraits(), len(kinematics.dptraits()),
                 traits.DHTraitOne))
     CONE_TRAITS.check(traits_)
-    node_args = parse_component_rnode_args(
-        rnmax, rnsep, rnlen, rnodes, rstep, interp)
+    node_args = parse_component_rnode_args(rnodes, rstep, interp)
     return cone_class(
         sides=sides, **node_args, traits_=traits_, prefixes=TRAIT_PREFIXES,
         density_units=dict(rpt=_units.density_unit(emission)))

@@ -10,7 +10,7 @@ import re
 import pytest
 from gbkfit.config import ConfigError, config_path, strict_mode
 from gbkfit.grid import Coords, Grid
-from gbkfit.model import galaxy_parser
+from gbkfit.model import EvenNodes, galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
 from modelutils import config_group_plan, located_message
@@ -266,33 +266,52 @@ def test_trait_names_are_all_or_none_and_unique(vptraits, dptraits, message):
 @pytest.mark.parametrize('rnmax, rnsep, nodes', [
     # (0.2 * 11 rounds above 2.2: np.arange to 2.4 added a node)
     (2.2, 0.2, 12), (9.0, 0.3, 31), (2, 0.25, 9),
-    # Not a multiple: to the first node beyond rnmax
+    # Not a multiple: to the first node beyond max
     (10, 3, 5)])
 def test_radial_nodes_from_a_range(rnmax, rnsep, nodes):
     args = parse_component_rnode_args(
-        rnmax, rnsep, None, None, None, 'linear')
+        EvenNodes.every(rnmax, rnsep), None, 'linear')
     assert len(args['rnodes']) == nodes
     assert args['rnodes'][0] == 0
     assert args['rnodes'][-1] == pytest.approx((nodes - 1) * rnsep)
 
 
+def test_radial_nodes_of_a_count():
+    args = parse_component_rnode_args(EvenNodes.count(8, 5), None, 'linear')
+    assert args['rnodes'] == (0, 2, 4, 6, 8)
+
+
 def test_radial_nodes_start_at_the_centre():
     with pytest.raises(ValueError, match="must start at 0"):
-        parse_component_rnode_args(
-            None, None, None, [1, 2, 3], None, 'linear')
+        parse_component_rnode_args([1, 2, 3], None, 'linear')
 
 
+@pytest.mark.parametrize('rnodes, message', [
+    (None, "rnodes must be given"),
+    (dict(max=4), "it has none of them"),
+    # (one form only: the other would be ignored silently)
+    (dict(max=4, sep=1, len=3), "it has those of several"),
+    (dict(max=4, sep=5), "sep must be greater than 0 and at most max"),
+    (dict(max=4, len=1), "len must be at least 2")])
+def test_invalid_radial_nodes(rnodes, message):
+    disk = {k: v for k, v in LINES_THIN.items() if k != 'rnodes'}
+    if rnodes is not None:
+        disk['rnodes'] = rnodes
+    assert message in galaxy_error(dict(components=[disk]))
 
-def test_a_ring_option_beside_another_set_is_refused():
-    # (rnsep beside rnodes was ignored silently: audit 2026-10-31 #30b)
-    with pytest.raises(ValueError, match="alone"):
-        parse_component_rnode_args(
-            None, 0.5, None, [0, 1, 2], None, 'linear')
+
+@pytest.mark.parametrize('rnodes', [
+    [0, 1, 2, 4], dict(max=4, sep=1), dict(max=4, len=3)])
+def test_radial_nodes_keep_their_form(rnodes):
+    info = dict(components=[LINES_THIN | dict(rnodes=rnodes)])
+    dumped = galaxy_parser.dump(galaxy_parser.load(info))
+    assert dumped['components'][0]['rnodes'] == rnodes
+
 
 def test_radial_step_can_be_half_the_node_separation():
     # (half of 0.19999999999999996, the separation as it rounds)
     args = parse_component_rnode_args(
-        None, None, None, [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
+        [0, 0.2, 0.4, 0.6, 0.8, 1.0], 0.1, 'linear')
     assert args['rstep'] == 0.1
 
 

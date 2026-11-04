@@ -101,7 +101,14 @@ function summary(value: unknown): string {
 function rings(component: Options): string {
   const nodes = component.rnodes;
   if (Array.isArray(nodes) && nodes.length > 0) return `${nodes.length} rings to ${nodes[nodes.length - 1]}″`;
-  if (typeof component.rnmax === 'number') return `To ${component.rnmax}″${component.rnsep ? `, every ${component.rnsep}″` : ''}`;
+  // Or evenly spaced: {max, sep} or {max, len}
+  if (nodes && typeof nodes === 'object') {
+    const { max, sep, len } = nodes as Options;
+    if (typeof max === 'number') {
+      if (typeof sep === 'number') return `To ${max}″, every ${sep}″`;
+      if (typeof len === 'number') return `${len} rings to ${max}″`;
+    }
+  }
   return '—';
 }
 

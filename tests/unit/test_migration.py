@@ -364,7 +364,7 @@ def test_parallel_evaluations_are_migrated_to_workers_of_threads():
 def test_rings_from_the_centre_lose_rnmin():
     disk = dict(type='disk', rnmin=0, rnmax=4, rnsep=1)
     migration.migrate(dict(galaxies=[dict(components=[disk])]), 2)
-    assert disk == dict(type='disk', rnmax=4, rnsep=1)
+    assert disk == dict(type='disk', rnodes=dict(max=4, sep=1))
     hole = dict(type='disk', rnmin=1, rnmax=4, rnsep=1)
     changes = migration.migrate(
         dict(galaxies=[dict(components=[hole])]), 2)
@@ -451,7 +451,7 @@ def test_a_shared_warped_geometry_gives_its_disks_its_warps_and_rings():
     assert 'geometries' not in galaxy
     for disk in galaxy['components']:
         assert disk['tilted'] is True and 'geometry' not in disk
-        assert (disk['rnmax'], disk['rnsep']) == (2, 1)
+        assert disk['rnodes'] == dict(max=2, sep=1)
     params = config['params']
     assert params['properties'] == {
         'gas_posa': [30, 31, 32], 'ion_posa': 'gas_posa',
@@ -491,3 +491,32 @@ def test_own_geometries_are_migrated_to_their_components():
     config = dict(galaxies=[dict(components=[disk])])
     migration.migrate(config, 3)
     assert disk == DISK | dict(name='gas', tilted=True)
+
+
+@pytest.mark.parametrize('old, new', [
+    (dict(rnmax=10, rnsep=2), dict(max=10, sep=2)),
+    (dict(rnmax=10, rnlen=6), dict(max=10, len=6))])
+def test_rings_evenly_spaced_are_migrated_to_one_option(old, new):
+    disk = dict(type='disk', name='gas', **old, rstep=0.5)
+    spheroid = dict(type='spheroid', kinematics=dict(type='traits', **old))
+    config = dict(galaxies=[dict(components=[disk, spheroid])])
+    migration.migrate(config, 3)
+    assert disk == dict(type='disk', name='gas', rnodes=new, rstep=0.5)
+    assert list(disk) == ['type', 'name', 'rnodes', 'rstep']
+    assert spheroid['kinematics'] == dict(type='traits', rnodes=new)
+
+
+def test_rings_of_several_forms_are_migrated_by_hand():
+    disk = dict(type='disk', rnmax=10, rnsep=2, rnodes=[0, 1])
+    changes = migration.migrate(dict(galaxies=[dict(components=[disk])]), 3)
+    assert any(c.message.startswith('by hand: give rnodes alone')
+               for c in changes)
+
+
+def test_the_rings_of_a_shared_geometry_are_migrated_to_one_option():
+    geometry = dict(name='warp', tilted=True, rnmax=2, rnsep=1)
+    disk = {k: v for k, v in DISK.items() if k != 'rnodes'} \
+        | dict(name='gas', geometry='warp')
+    config = dict(galaxies=[dict(geometries=[geometry], components=[disk])])
+    migration.migrate(config, 3)
+    assert disk['rnodes'] == dict(max=2, sep=1) and 'rnmax' not in disk

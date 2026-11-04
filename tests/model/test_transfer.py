@@ -30,7 +30,7 @@ def disk(kind='smooth', thick=True):
         density.update(htraits=dict(type='sech2', zmax=8))
     clouds = dict(clouds=dict(cflux=1e-3)) if kind == 'clouds' else {}
     return dict(
-        type='disk', loose=False, tilted=False, rnmax=10, rnsep=1,
+        type='disk', loose=False, tilted=False, rnodes=dict(max=10, sep=1),
         density=density,
         kinematics=dict(
             type='traits',
@@ -142,11 +142,12 @@ THICK = dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
 THIN = dict(ptraits=dict(type='exponential'))
 GAS = dict(
-    type='disk', name='gas', loose=False, tilted=False, rnmax=10,
-    rnsep=1, density=THICK, kinematics=KINEMATICS, emission=LINES)
+    type='disk', name='gas', loose=False, tilted=False,
+    rnodes=dict(max=10, sep=1), density=THICK, kinematics=KINEMATICS,
+    emission=LINES)
 DUST = dict(
-    type='disk', name='dust', loose=False, tilted=False, rnmax=10,
-    rnsep=1, density=THICK, opacity=dict(type='dust'))
+    type='disk', name='dust', loose=False, tilted=False,
+    rnodes=dict(max=10, sep=1), density=THICK, opacity=dict(type='dust'))
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
 OUTFLOW = dict(
     type='cone', name='outflow', rnodes=[0, 1, 3, 6],

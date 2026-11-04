@@ -6,8 +6,7 @@ galaxies:
     name: disk
     loose: false
     tilted: false
-    rnmax: 10
-    rnsep: 1
+    rnodes: {max: 10, sep: 1}
     density:
       ptraits: {type: exponential}
       htraits: {type: sech2, zmax: 3}

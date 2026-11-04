@@ -166,8 +166,6 @@ def test_rotation_curve_from_radial_nodes(tmp_path):
     # its values
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     component = config['galaxies'][0]['components'][0]
-    for option in ('rnmax', 'rnsep'):
-        component.pop(option, None)
     rnodes = list(range(0, 21, 2))
     component['rnodes'] = rnodes
     component['kinematics']['vptraits'] = dict(type='nw_uniform', direction='tan')
@@ -249,17 +247,17 @@ def test_unknown_options(tmp_path):
     # warning with --lenient
     config = yaml.load(REFERENCE_DIR / 'thin_disk_pixel_spectra.yaml')
     component = config['galaxies'][0]['components'][0]
-    component['rnmx'] = component['rnmax']
+    component['rnode'] = component['rnodes']
     yaml.dump(config, tmp_path / 'config.yaml')
 
     options = eval_options('model', 'config.yaml')
     result = run_task(tmp_path, 'eval', options)
     assert result.returncode != 0
     assert "galaxies[0].components[0]" in result.stderr
-    assert "'rnmx' (did you mean 'rnmax'?)" in result.stderr
+    assert "'rnode' (did you mean 'rnodes'?)" in result.stderr
     result = run_task(tmp_path, 'eval', options, '--lenient')
     assert result.returncode == 0
-    assert "'rnmx' (did you mean 'rnmax'?); they are ignored" in \
+    assert "'rnode' (did you mean 'rnodes'?); they are ignored" in \
         result.stderr
 
 

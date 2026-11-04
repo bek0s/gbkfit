@@ -146,8 +146,8 @@ def error_message(error: BaseException) -> str:
     -------
     str
         That of a ConfigError, or that of another error after its type
-        (e.g. "galaxies[0]: ValueError: rnmax must be greater than
-        rnmin").
+        (e.g. "galaxies[0]: ValueError: rnodes must start at 0; they
+        start at 1").
     """
     if isinstance(error, ConfigError):
         return str(error)
@@ -304,7 +304,7 @@ def describe_unknown(unknown: Iterable, known: Iterable[str]) -> str:
     -------
     str
         The unknown names, each with the most similar known name, if any
-        (e.g. "'rnmx' (did you mean 'rnmax'?), 'zzz'").
+        (e.g. "'rnode' (did you mean 'rnodes'?), 'zzz'").
     """
     known = list(known)
     descs = []

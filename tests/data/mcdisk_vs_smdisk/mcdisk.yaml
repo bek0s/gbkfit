@@ -6,8 +6,7 @@ galaxies:
     clouds: {cflux: 0.0001}
     loose: false
     tilted: false
-    rnmax: 20
-    rnsep: 2
+    rnodes: {max: 20, sep: 2}
     density:
       ptraits: {type: exponential}
       htraits: {type: sech2, zmax: 8}

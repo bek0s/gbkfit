@@ -5,8 +5,7 @@ galaxies:
   - type: disk
     loose: false
     tilted: false
-    rnmax: 20
-    rnsep: 2
+    rnodes: {max: 20, sep: 2}
     density:
       ptraits: {type: exponential}
     kinematics:

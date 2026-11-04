@@ -10,12 +10,13 @@ from typing import Any
 
 from ruamel.yaml.comments import CommentedMap
 
-from .rules import Change, Rule, components, items, rename
+from .rules import Change, Rule, components, flow, items, rename
 
 
 __all__ = [
     'RULES',
-    'OwnGeometries'
+    'OwnGeometries',
+    'RingNodes'
 ]
 
 
@@ -322,7 +323,69 @@ def _insert_after(
     mapping.update(pairs)
 
 
-# The rules, in the order of the changes
+class RingNodes(Rule):
+    """
+    The radial nodes of a component (the rings of a disk, the shells of a
+    cone, the nodes of the traits of a spheroid) are one option, rnodes
+    (2026-11-04): a list, as before, or radii evenly spaced, {max, sep}
+    (were rnmax and rnsep) or {max, len} (were rnmax and rnlen).
+    """
+
+    _OLD = ('rnmax', 'rnsep', 'rnlen')
+    _FORMS = {
+        frozenset({'rnmax', 'rnsep'}): dict(rnmax='max', rnsep='sep'),
+        frozenset({'rnmax', 'rnlen'}): dict(rnmax='max', rnlen='len')}
+
+    @staticmethod
+    def version() -> int:
+        return 4
+
+    def rewrite(self, config: MutableMapping[str, Any]) -> list[Change]:
+        changes = []
+        for path, galaxy in items(config, 'galaxies'):
+            changes += self._walk(galaxy, path)
+        return changes
+
+    def _walk(self, value: Any, path: list[str | int]) -> list[Change]:
+        """Rewrite the nodes in a value and its items, in place."""
+        changes = []
+        if isinstance(value, MutableMapping):
+            given = frozenset(k for k in self._OLD if k in value)
+            if given:
+                changes.append(self._rewrite(value, given, path))
+            for key, item in value.items():
+                changes += self._walk(item, path + [key])
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                changes += self._walk(item, path + [i])
+        return changes
+
+    def _rewrite(
+            self,
+            mapping: MutableMapping[str, Any],
+            given: frozenset[str],
+            path: list[str | int]
+    ) -> Change:
+        """Rewrite the nodes of one mapping, in place."""
+        names = self._FORMS.get(given)
+        if names is None or 'rnodes' in mapping:
+            options = sorted(given | ({'rnodes'} & set(mapping)))
+            return Change(path, (
+                f"by hand: give rnodes alone, a list or {{max, sep}} or "
+                f"{{max, len}}; given: {options}"))
+        nodes = flow({new: mapping[old] for old, new in names.items()})
+        rename(mapping, 'rnmax', 'rnodes')
+        mapping['rnodes'] = nodes
+        for old in given - {'rnmax'}:
+            del mapping[old]
+        return Change(path, (
+            f"{', '.join(sorted(given))} -> rnodes: "
+            f"{{{', '.join(names.values())}}}"))
+
+
+# The rules, in the order of the changes: the rings that OwnGeometries
+# gives the components are rewritten by RingNodes
 RULES: tuple[Rule, ...] = (
     OwnGeometries(),
+    RingNodes(),
 )
