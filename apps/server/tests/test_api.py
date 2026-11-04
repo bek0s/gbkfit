@@ -259,6 +259,10 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     assert {'xpos', 'ypos', 'vsys', 'posa', 'incl', 'vpt_vt'} <= set(names)
     vsys = next(p for p in info['parameters'] if p['name'] == 'vsys')
     assert vsys['unit'] == 'km / s' and vsys['size'] == 1
+    # Each with the option that makes it (see Galaxy.param_owners)
+    owners = {p['name']: p['owner'] for p in info['parameters']}
+    assert owners['vsys'] == ['components', 0]
+    assert owners['vpt_vt'] == ['components', 0, 'kinematics', 'vptraits', 0]
     assert info['problems'] == []
     # (a galaxy of a band, seen in an image; one with problems)
     band = dict(disk, emission=dict(type='band'), kinematics=None)

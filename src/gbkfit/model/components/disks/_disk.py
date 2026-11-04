@@ -136,6 +136,13 @@ class NodalDisk(abc.ABC):
         """
         return self._equilibrium
 
+    def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of each parameter of its traits (see
+        NodalTraits.owners), by name.
+        """
+        return self._traits.owners()
+
     def trait_params(self, kind: str) -> TraitParams:
         """Return the parameters of the traits of one kind (TraitParams)."""
         return self._traits.params(kind)

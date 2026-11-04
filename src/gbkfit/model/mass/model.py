@@ -139,6 +139,13 @@ class MassModel(Serializable):
         """
         return self._components[self._index(name)]
 
+    def mappings(self) -> tuple[dict[str, str], ...]:
+        """
+        Return the names of the parameters of each of its components among
+        its parameters, by the names of the component.
+        """
+        return tuple(self._mappings)
+
     def component_params(
             self, name: str, params: ParamValues) -> ParamValues:
         """

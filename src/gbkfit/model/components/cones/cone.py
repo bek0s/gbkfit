@@ -142,6 +142,14 @@ class Cone(Component):
         bands = self._bands.pdescs() if self._bands is not None else {}
         return self._cone.pdescs() | lines | bands
 
+    def param_owners(self) -> dict[str, tuple[str | int, ...]]:
+        owners = super().param_owners()
+        owners.update({
+            name: option
+            for name, option in self._cone.trait_owners().items()
+            if name in owners})
+        return owners
+
     def constants(self) -> dict[str, Any]:
         return dict(
             rnodes=self._cone.rnodes(), subrnodes=self._cone.subrnodes())

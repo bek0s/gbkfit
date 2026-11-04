@@ -1865,7 +1865,7 @@
           "problems"
         ],
         "title": "GalaxyInfo",
-        "description": "A galaxy as the library describes it (see Galaxies.describe): its\nparameters ({name, size, default, unit, range, period}, in its order)\nand its problems ({severity, path, message}; paths in the galaxy)."
+        "description": "A galaxy as the library describes it (see Galaxies.describe): its\nparameters ({name, size, default, unit, range, period, owner}, in its\norder) and its problems ({severity, path, message}; paths in the\ngalaxy)."
       },
       "GalaxyRenderRequest": {
         "properties": {

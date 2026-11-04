@@ -41,7 +41,7 @@ from ..roles import (
 from ._jeans import JeansKinematics
 from ._kinematics import (
     SpheroidKinematics, SpheroidLight, SpheroidMotion,
-    SpheroidTraitsKinematics)
+    SpheroidTraitsKinematics, TraitsMotion)
 from ._schwarzschild import SchwarzschildKinematics
 from ._stage import SpheroidStage
 
@@ -691,6 +691,21 @@ class Spheroid(Component):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._pdescs
+
+    def param_owners(self) -> dict[str, tuple[str | int, ...]]:
+        # Its profile, its shape, and its kinematics: the traits of those of
+        # traits, as those of a disk; the others as a whole
+        owners = super().param_owners()
+        parts = [(('profile',), self._profile.pdescs())]
+        if self._shape is not None:
+            parts.append((('shape',), self._shape.pdescs()))
+        if self._motion is not None:
+            parts.append((('kinematics',), self._motion.pdescs()))
+        for option, pdescs in parts:
+            owners.update(dict.fromkeys(pdescs, option))
+        if isinstance(self._motion, TraitsMotion):
+            owners.update(self._motion.trait_owners())
+        return owners
 
     def bounding_radius(self) -> float:
         return self._rmax

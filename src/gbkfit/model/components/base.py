@@ -14,7 +14,8 @@ from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc, ParamValues
 from .lines import Band
-from .roles import STARS, Emission, LineEmission, Opacity, StarsEmission
+from .roles import (
+    STARS, BandEmission, Emission, LineEmission, Opacity, StarsEmission)
 
 if TYPE_CHECKING:
     from ..extras import Extras
@@ -184,6 +185,31 @@ class Component(TypedSerializable, abc.ABC):
     def pdescs(self) -> dict[str, ParamDesc]:
         """Return its parameters, by name."""
         pass
+
+    def param_owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of its configuration that makes each of its
+        parameters (see pdescs), by name, as a path of option names and
+        list indices: e.g. ('kinematics', 'vptraits', 1) for those of its
+        second velocity polar trait, ('emission', 'lines', 2) for the flux
+        ratio of its third line, and () for those of the component itself
+        (e.g. its centre). For those who show the parameters with the
+        options that make them (e.g. Studio). Here, the ratios of its lines
+        or bands, and () for the others.
+        """
+        owners: dict[str, tuple[str | int, ...]] = dict.fromkeys(
+            self.pdescs(), ())
+        emission = self.emission()
+        light = emission.lines() if isinstance(emission, LineEmission) \
+            else emission.bands() if isinstance(emission, BandEmission) \
+            else None
+        if light is not None:
+            option = 'lines' if isinstance(emission, LineEmission) \
+                else 'bands'
+            for index, name in enumerate(light.names()[1:], 1):
+                if f'{name}_ratio' in owners:
+                    owners[f'{name}_ratio'] = ('emission', option, index)
+        return owners
 
     def constants(self) -> dict[str, Any]:
         """

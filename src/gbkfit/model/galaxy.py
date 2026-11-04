@@ -178,6 +178,30 @@ class Galaxy(Serializable):
         """
         return self._component_set.mappings()[index]
 
+    def param_owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of its configuration that makes each of its
+        parameters, by name, as a path of option names and list indices
+        (see Component.param_owners): e.g. ('components', 0, 'kinematics',
+        'vptraits', 1), ('mass', 1) or ('distance',). For those who show
+        the parameters with the options that make them (e.g. Studio).
+        """
+        owners: dict[str, tuple[str | int, ...]] = dict.fromkeys(
+            self._pdescs, ())
+        for index, component in enumerate(self.components()):
+            names = self.component_params(index)
+            for name, option in component.param_owners().items():
+                owners[names[name]] = ('components', index, *option)
+        if (mass_model := self.mass_model()) is not None:
+            for index, names in enumerate(mass_model.mappings()):
+                owners.update(dict.fromkeys(names.values(), ('mass', index)))
+            owners.update(dict.fromkeys(
+                self._component_set.gravity().pdescs(), ('gravity',)))
+        if self.distance() is not None:
+            owners.update(dict.fromkeys(
+                self.distance().pdescs(), ('distance',)))
+        return owners
+
     def light_amplitudes(self) -> dict[str, str | None]:
         """
         Return the parameters of its components whose elements are

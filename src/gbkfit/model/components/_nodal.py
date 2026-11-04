@@ -34,6 +34,17 @@ from .traits import (
 MAX_TRAITS = 16
 
 
+# The options of the traits of each kind in the configurations of the
+# components that have them (see NodalTraits.owners): disks, cones and
+# spheroids, whose kinematics hold their traits as those of disks do; the
+# coefficients of line opacity, in the order of their lines
+TRAIT_OPTIONS = dict(
+    rpt=('density', 'ptraits'), rht=('density', 'htraits'),
+    vpt=('kinematics', 'vptraits'), vht=('kinematics', 'vhtraits'),
+    dpt=('kinematics', 'dptraits'), dht=('kinematics', 'dhtraits'),
+    zpt=('zptraits',), spt=('sptraits',), opt=('opacity',))
+
+
 @dataclass(frozen=True)
 class TraitTable:
     """
@@ -356,6 +367,18 @@ class NodalTraits:
     def params(self, kind: str) -> TraitParams:
         """Return the parameters of the traits of one kind."""
         return self._params[kind]
+
+    def owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of each parameter of its traits (see
+        Component.param_owners), by name: the option of the traits of its
+        kind (see TRAIT_OPTIONS) and the index of its trait.
+        """
+        return {
+            name: (*TRAIT_OPTIONS[kind], index)
+            for kind, params in self._params.items()
+            for index, names in enumerate(params.pnames)
+            for name in names.values()}
 
     def pdescs(self) -> dict[str, ParamDesc]:
         """

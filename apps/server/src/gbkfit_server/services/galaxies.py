@@ -37,8 +37,10 @@ _OBSERVATIONS = (
 class GalaxyDescription:
     """
     A galaxy as the library describes it: its parameters (their names,
-    sizes, defaults, units, valid ranges and periods, in its order), and
-    its problems (their severities, paths in the galaxy and messages).
+    sizes, defaults, units, valid ranges and periods, and the paths of the
+    options that make them in the galaxy, see Galaxy.param_owners; in its
+    order), and its problems (their severities, paths in the galaxy and
+    messages).
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
@@ -75,11 +77,15 @@ class Galaxies:
                 observations=[observation], params=dict(properties={})))
             if description.group is not None:
                 break
-        parameters = [] if description.group is None else [
-            dict(name=name, size=desc.size(), default=desc.default(),
-                 unit=None if desc.unit() is None else str(desc.unit()),
-                 range=str(desc.valid_range()), period=desc.period())
-            for name, desc in description.group.pdescs().items()]
+        parameters = []
+        if description.group is not None:
+            owners = description.group.galaxies()[0].param_owners()
+            parameters = [
+                dict(name=name, size=desc.size(), default=desc.default(),
+                     unit=None if desc.unit() is None else str(desc.unit()),
+                     range=str(desc.valid_range()), period=desc.period(),
+                     owner=list(owners.get(name, ())))
+                for name, desc in description.group.pdescs().items()]
         problems = [
             dict(severity=p.severity, path=p.path[2:], message=p.message)
             for p in description.problems

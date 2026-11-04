@@ -105,6 +105,13 @@ class NodalCone(abc.ABC):
     def interp(self) -> type[Interpolator]:
         return self._interp
 
+    def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of each parameter of its traits (see
+        NodalTraits.owners), by name.
+        """
+        return self._traits.owners()
+
     def traits(self, kind: str) -> tuple[Trait, ...]:
         return self._traits.traits(kind)
 

@@ -90,8 +90,9 @@ class GalaxyRequest(BaseModel):
 class GalaxyInfo(BaseModel):
     """
     A galaxy as the library describes it (see Galaxies.describe): its
-    parameters ({name, size, default, unit, range, period}, in its order)
-    and its problems ({severity, path, message}; paths in the galaxy).
+    parameters ({name, size, default, unit, range, period, owner}, in its
+    order) and its problems ({severity, path, message}; paths in the
+    galaxy).
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]

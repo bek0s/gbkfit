@@ -167,6 +167,14 @@ class Disk(Component):
         bands = self._bands.pdescs() if self._bands is not None else {}
         return self._disk.pdescs() | lines | bands
 
+    def param_owners(self) -> dict[str, tuple[str | int, ...]]:
+        owners = super().param_owners()
+        owners.update({
+            name: option
+            for name, option in self._disk.trait_owners().items()
+            if name in owners})
+        return owners
+
     def constants(self) -> dict[str, Any]:
         return dict(
             rnodes=self._disk.rnodes(), subrnodes=self._disk.subrnodes())

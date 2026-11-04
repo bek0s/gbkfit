@@ -172,3 +172,38 @@ def test_galaxy_names_prefix_the_extra_outputs():
     extra = extra_outputs(group_, ['north_disk_', 'south_disk_'])
     assert {('bdata', 'hi', 'north', 'disk'),
             ('bdata', 'hi', 'south', 'disk')} <= extra
+
+
+def test_each_parameter_has_the_option_that_makes_it():
+    # (for those who show the parameters with their options, e.g. Studio)
+    gas = dict(
+        type='disk', name='gas', rnodes=[0, 2, 4], density=THICK,
+        kinematics=dict(
+            type='traits',
+            vptraits=[dict(type='arctan', direction='tan', name='rotation'),
+                      dict(type='uniform', direction='rad', name='inflow')],
+            dptraits=dict(type='uniform')),
+        emission=dict(type='lines', lines=['halpha', 'nii6583']))
+    bulge = dict(
+        type='spheroid', name='bulge', rmax=10, emission=dict(type='band'),
+        profile=dict(type='sersic'), shape=dict(type='flattened'))
+    galaxy = galaxy_parser.load(dict(
+        components=[gas, bulge], distance=dict(type='direct'),
+        mass=[dict(type='spheroid', name='halo', profile=dict(type='nfw'))]))
+    owners = galaxy.param_owners()
+    assert set(owners) == set(galaxy.pdescs())
+    assert owners['gas_xpos'] == ('components', 0)
+    assert owners['gas_pt_s'] == ('components', 0, 'density', 'ptraits', 0)
+    assert owners['gas_ht_s'] == ('components', 0, 'density', 'htraits', 0)
+    # Named traits: their parameters are named after them, of their
+    # options
+    assert owners['gas_rotation_vt'] == (
+        'components', 0, 'kinematics', 'vptraits', 0)
+    assert owners['gas_inflow_vr'] == (
+        'components', 0, 'kinematics', 'vptraits', 1)
+    assert owners['gas_nii6583_ratio'] == (
+        'components', 0, 'emission', 'lines', 1)
+    assert owners['bulge_re'] == ('components', 1, 'profile')
+    assert owners['bulge_q'] == ('components', 1, 'shape')
+    assert owners['mass_halo_c'] == ('mass', 0)
+    assert owners['distance'] == ('distance',)

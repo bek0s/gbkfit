@@ -363,6 +363,13 @@ class TraitsMotion(SpheroidMotion):
     def pdescs(self) -> dict[str, ParamDesc]:
         return self._traits.pdescs()
 
+    def trait_owners(self) -> dict[str, tuple[str | int, ...]]:
+        """
+        Return the option of each parameter of its traits (see
+        NodalTraits.owners), by name.
+        """
+        return self._traits.owners()
+
     def takes_light(self) -> bool:
         return False
 
