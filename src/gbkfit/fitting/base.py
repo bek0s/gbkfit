@@ -15,7 +15,7 @@ import numpy as np
 
 from gbkfit.config import (
     ConfigError, TypedParser, TypedSerializable, check_options, config_path)
-from gbkfit.control import FitControl, FitStopped
+from gbkfit.control import StopControl, Stopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import MERITS, FitProblem
@@ -281,14 +281,14 @@ class Fitter(TypedSerializable, abc.ABC):
             objective: Objective,
             params: ParamSpace,
             observers: Sequence[ProgressObserver] = (),
-            control: FitControl | None = None,
+            control: StopControl | None = None,
             log: EvaluationLog | None = None,
             pool: 'WorkerPool | None' = None
     ) -> FitResult:
         """
         Fit the data of an objective.
 
-        A fit asked to stop (see FitControl) ends with what the fitter has:
+        A fit asked to stop (see StopControl) ends with what the fitter has:
         the best point so far (of an MCMC sampler, also its chain so far),
         and success false, without the covariance of its solutions (nor
         those of a fit asked to stop as it computes them). A fit with a
@@ -303,7 +303,7 @@ class Fitter(TypedSerializable, abc.ABC):
         observers : Sequence of ProgressObserver, optional
             Who receives the progress of the fit as it runs (see
             FitProgress).
-        control : FitControl, optional
+        control : StopControl, optional
             The control of the fit, to stop it.
         log : EvaluationLog, optional
             The log of the evaluations: a new one, or that of a fit to
@@ -457,7 +457,7 @@ class Fitter(TypedSerializable, abc.ABC):
         start = time.perf_counter()
         try:
             run = self._run(problem, list(fit_params.values()), rng)
-        except FitStopped:
+        except Stopped:
             run = _stopped_run(problem)
         elapsed = time.perf_counter() - start
         bounds = _Bounds(
@@ -607,7 +607,7 @@ class Fitter(TypedSerializable, abc.ABC):
                 nevals += cov_nevals
             except EvaluationError as e:
                 problems.append(('uncertainty_errors', f"no covariance: {e}"))
-            except FitStopped:
+            except Stopped:
                 problems.append((
                     'uncertainty_errors',
                     "no covariance: the fit was asked to stop"))

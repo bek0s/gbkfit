@@ -31,7 +31,7 @@ from annotated_types import Ge, Gt
 from gbkfit.config import (
     ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.driver import Driver, driver_parser
-from gbkfit.control import FitControl, FitStopped, StopFlag
+from gbkfit.control import StopControl, Stopped, StopFlag
 from gbkfit.objective import Objective
 from gbkfit.observation import GroupPlan, ObservationGroup
 from gbkfit.params import Solve
@@ -155,7 +155,7 @@ class _Worker(abc.ABC):
     @abc.abstractmethod
     def submit_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item
     ) -> concurrent.futures.Future:
         """
@@ -258,11 +258,11 @@ class WorkerPool:
 
     def map_lazily(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             make: Callable[[int], _Item],
             count: int,
             on_result: Callable[[int, _Result], None] | None = None,
-            control: FitControl | None = None
+            control: StopControl | None = None
     ) -> list[_Result]:
         """
         Return function(copy, make(i), control_k) for i < count, in order:
@@ -276,9 +276,9 @@ class WorkerPool:
         worker that raised one).
 
         The function takes the control of its worker (control_k; see
-        FitControl), which stops it (e.g. a sub-fit; see run_subfits) once
+        StopControl), which stops it (e.g. a sub-fit; see run_subfits) once
         the given control is stopped: then no item is made any more, and
-        it raises FitStopped once the workers have finished (the results
+        it raises Stopped once the workers have finished (the results
         that came went to on_result).
         """
         workers = self._start()
@@ -301,7 +301,7 @@ class WorkerPool:
                     if failed.is_set():
                         break
                     if stopped():
-                        raise FitStopped("the work was asked to stop")
+                        raise Stopped("the work was asked to stop")
                     future = workers[k].submit_controlled(function, make(i))
                     while not concurrent.futures.wait(
                             [future], timeout=_POLL_INTERVAL).done:
@@ -430,7 +430,7 @@ class _ThreadWorker(_LocalWorker):
         self.copy = copy
         self._owned = owned
         self._lock = lock
-        self._control = FitControl(self._flag)
+        self._control = StopControl(self._flag)
         self._executor = concurrent.futures.ThreadPoolExecutor(
             1, thread_name_prefix='gbkfit-worker')
 
@@ -444,7 +444,7 @@ class _ThreadWorker(_LocalWorker):
 
     def submit_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item
     ) -> concurrent.futures.Future:
         def run() -> _Result:
@@ -563,7 +563,7 @@ class _ProcessWorker(_LocalWorker):
 
     def submit_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item
     ) -> concurrent.futures.Future:
         return self._executor.submit(_run_controlled_in_process, function, item)
@@ -575,7 +575,7 @@ class _ProcessWorker(_LocalWorker):
 # The copy of the objective of a worker process, and the control of its
 # flag (see _start_process)
 _process_copy: Objective | None = None
-_process_control: FitControl | None = None
+_process_control: StopControl | None = None
 
 
 def _start_process(
@@ -592,7 +592,7 @@ def _start_process(
     """
     global _process_copy, _process_control
     _process_copy = Objective(GroupPlan(group, *placement), solves)
-    _process_control = FitControl(flag)
+    _process_control = StopControl(flag)
     threadpoolctl.threadpool_limits(threads)
 
 
@@ -605,7 +605,7 @@ def _run_in_process(
 
 
 def _run_controlled_in_process(
-        function: Callable[[Objective, _Item, FitControl], _Result],
+        function: Callable[[Objective, _Item, StopControl], _Result],
         item: _Item
 ) -> _Result:
     """Return function(copy, item, control), in a worker process."""
@@ -769,7 +769,7 @@ class _MPIWorker(_Worker):
 
     def submit_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item
     ) -> concurrent.futures.Future:
         return self._executor.submit(
@@ -834,7 +834,7 @@ def _serve_mpi(comm: Any) -> None:
                 if kind == 'run':
                     value = [function(copies[key], item) for item in payload]
                 else:
-                    control = FitControl(_PolledFlag(
+                    control = StopControl(_PolledFlag(
                         lambda: _mpi_stop_sent(comm)))
                     value = function(copies[key], payload, control)
                 reply = (True, value)
@@ -938,11 +938,11 @@ class _ActorCopy:
 
     def run_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item,
             flag: StopFlag | None = None
     ) -> _Result:
-        control = FitControl(self._flag if flag is None else flag)
+        control = StopControl(self._flag if flag is None else flag)
         return function(self._copy, item, control)
 
     def interrupt(self) -> None:
@@ -1048,7 +1048,7 @@ class _RayWorker(_Worker):
 
     def submit_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item
     ) -> concurrent.futures.Future:
         return self._actor.run_controlled.remote(function, item).future()
@@ -1158,7 +1158,7 @@ class _DaskWorker(_Worker):
 
     def submit_controlled(
             self,
-            function: Callable[[Objective, _Item, FitControl], _Result],
+            function: Callable[[Objective, _Item, StopControl], _Result],
             item: _Item
     ) -> concurrent.futures.Future:
         self._event = f'gbkfit-stop-{uuid.uuid4().hex}'

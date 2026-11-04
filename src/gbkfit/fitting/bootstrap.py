@@ -18,7 +18,7 @@ from gbkfit.config import (
 from gbkfit.dataset import Dataset
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import Fitter
-from gbkfit.control import FitControl, FitStopped
+from gbkfit.control import StopControl, Stopped
 from gbkfit.fitting.evaluation_log import SubFitLog
 from gbkfit.fitting.result import Bootstrap
 from gbkfit.objective import Objective
@@ -308,7 +308,7 @@ def run_bootstrap(
         fitter: Fitter,
         options: BootstrapOptions,
         pool: 'WorkerPool | None' = None,
-        control: FitControl | None = None,
+        control: StopControl | None = None,
         log: SubFitLog | None = None
 ) -> Bootstrap:
     """
@@ -343,7 +343,7 @@ def run_bootstrap(
 
     The refits are the sub-fits of the bootstrap (see run_subfits): they
     run at once on workers (see WorkerPool), or one after the other, and
-    the bootstrap can be stopped (it raises FitStopped once the running
+    the bootstrap can be stopped (it raises Stopped once the running
     refits stop) and resumed from its log. The residuals of each refit are
     drawn with a random stream of its own (of the seed of the options, or
     else of the refits' fitter), and its fitter has a seed of its own (of
@@ -366,7 +366,7 @@ def run_bootstrap(
     pool : WorkerPool, optional
         Workers of copies of the objective, which make the refits at once,
         each on its copy (see WorkerPool.map_lazily).
-    control : FitControl, optional
+    control : StopControl, optional
         The control of the bootstrap, to stop it.
     log : SubFitLog, optional
         The log of the refits: a new one, or that of a bootstrap to resume
@@ -384,7 +384,7 @@ def run_bootstrap(
         If the options do not suit the observations or the parameters
         (see BootstrapOptions.check), or the data of an observation cannot
         be redrawn by its scheme (see BootstrapScheme.resample).
-    FitStopped
+    Stopped
         If it was asked to stop (see control).
     """
     options.check(objective.group(), params)
@@ -480,7 +480,7 @@ class _Refit(NamedTuple):
 def _refit(
         objective: Objective,
         refit: _Refit,
-        control: FitControl
+        control: StopControl
 ) -> Outcome:
     """
     Make a refit on an objective of the fit (or a copy of it), until the
@@ -491,7 +491,7 @@ def _refit(
 
     Raises
     ------
-    FitStopped
+    Stopped
         If the control stopped it.
     """
     # (the refits share its whitening of correlated noise; see with_data)
@@ -503,11 +503,11 @@ def _refit(
                 refit_objective, refit.params, control=control)
     except (ParamEvaluationError, RuntimeError) as e:
         if control.stopped():
-            raise FitStopped("the bootstrap was asked to stop") from e
+            raise Stopped("the bootstrap was asked to stop") from e
         return dict(error=str(e))
     # (a fit asked to stop ends with what it has: not a refit)
     if control.stopped():
-        raise FitStopped("the bootstrap was asked to stop")
+        raise Stopped("the bootstrap was asked to stop")
     # A refit whose fitter reports no success (e.g. stopped by its budget
     # of evaluations, or stagnating on round-off) is kept, and flagged. A
     # choice: leaving it out would keep only the refits that were easy to

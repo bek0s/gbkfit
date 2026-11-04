@@ -8,7 +8,7 @@ import threading
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar
 
-from gbkfit.control import FitControl, FitStopped
+from gbkfit.control import StopControl, Stopped
 from gbkfit.fitting.evaluation_log import SubFitLog
 from gbkfit.objective import Objective
 
@@ -30,11 +30,11 @@ Outcome: TypeAlias = dict[str, Any]
 
 def run_subfits(
         objective: Objective,
-        function: Callable[[Objective, _Task, FitControl], Outcome],
+        function: Callable[[Objective, _Task, StopControl], Outcome],
         make: Callable[[int], _Task],
         count: int,
         pool: 'WorkerPool | None' = None,
-        control: FitControl | None = None,
+        control: StopControl | None = None,
         log: SubFitLog | None = None,
         on_outcome: Callable[[int, Outcome, bool], None] | None = None
 ) -> list[Outcome]:
@@ -51,8 +51,8 @@ def run_subfits(
     a time, as it comes.
 
     A sub-fit takes a control that stops it once the given control is
-    stopped (see FitControl): then no sub-fit starts any more, and it
-    raises FitStopped once those running have stopped. Those that
+    stopped (see StopControl): then no sub-fit starts any more, and it
+    raises Stopped once those running have stopped. Those that
     finished are logged: the fit resumes from there.
 
     Parameters
@@ -67,7 +67,7 @@ def run_subfits(
         The number of sub-fits.
     pool : WorkerPool, optional
         Workers of copies of the objective.
-    control : FitControl, optional
+    control : StopControl, optional
         The control of the fit.
     log : SubFitLog, optional
         The log of the outcomes.
@@ -82,7 +82,7 @@ def run_subfits(
 
     Raises
     ------
-    FitStopped
+    Stopped
         If the fit was asked to stop before all the sub-fits finished.
     """
     outcomes = {} if log is None else {
@@ -103,11 +103,11 @@ def run_subfits(
         new = pool.map_lazily(
             function, lambda j: make(todo[j]), len(todo), finished, control)
     else:
-        own = FitControl() if control is None else control
+        own = StopControl() if control is None else control
         new = []
         for j, i in enumerate(todo):
             if own.stopped():
-                raise FitStopped("the fit was asked to stop")
+                raise Stopped("the fit was asked to stop")
             new.append(function(objective, make(i), own))
             finished(j, new[-1])
     outcomes.update(zip(todo, new))

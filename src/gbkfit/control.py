@@ -1,8 +1,8 @@
 """
-Stopping fits as they run: the caller of Fitter.fit holds a FitControl,
-and the fit problem raises FitStopped at the next model evaluation after
-it is asked to stop (as do the workers that run its evaluations; see
-gbkfit.parallel).
+Stopping work as it runs: the caller holds a StopControl, and the work
+checks it as it goes and raises Stopped at its next step after it is
+asked to stop. The workers of gbkfit.parallel stop the same way, with a
+flag that their processes share.
 """
 
 import threading
@@ -10,16 +10,16 @@ from typing import Protocol
 
 
 __all__ = [
-    'FitControl',
-    'FitStopped',
-    'StopFlag'
+    'StopControl',
+    'StopFlag',
+    'Stopped'
 ]
 
 
 class StopFlag(Protocol):
     """
-    A flag of a fit that is asked to stop: e.g. a threading.Event, or a
-    multiprocessing Event, which processes share (see FitControl).
+    A flag of work that is asked to stop: e.g. a threading.Event, or a
+    multiprocessing Event, which processes share (see StopControl).
     """
 
     def set(self) -> None: ...
@@ -29,35 +29,36 @@ class StopFlag(Protocol):
     def is_set(self) -> bool: ...
 
 
-class FitControl:
+class StopControl:
     """
-    The control of a running fit: stop asks it to stop at its next model
-    evaluation, and the fit ends with what it has (see Fitter.fit). It can
-    be called from another thread or a signal handler.
+    The control of running work: stop asks it to stop at its next step,
+    and the work ends with what it has. With its own flag, stop can be
+    called from another thread or a signal handler; a flag of
+    multiprocessing takes a lock that the interrupted thread may hold.
 
     Parameters
     ----------
     flag : StopFlag, optional
         Its flag: by default its own (a threading.Event); a flag that
-        processes share stops fits in them (e.g. the sub-fits of workers,
-        see WorkerPool.map_lazily).
+        processes share stops the work in them (e.g. that of workers, see
+        WorkerPool.map_lazily).
     """
 
     def __init__(self, flag: StopFlag | None = None):
         self._stop = threading.Event() if flag is None else flag
 
     def stop(self) -> None:
-        """Ask the fit to stop."""
+        """Ask the work to stop."""
         self._stop.set()
 
     def stopped(self) -> bool:
-        """Return whether the fit was asked to stop."""
+        """Return whether the work was asked to stop."""
         return self._stop.is_set()
 
 
-class FitStopped(Exception):
+class Stopped(Exception):
     """
-    Raised by the fit problem when its fit was asked to stop (see
-    FitControl). Fitters let it through, or catch it to return what they
-    have (e.g. the chain of an MCMC sampler so far).
+    Raised by work that was asked to stop (see StopControl). The code
+    that runs it lets it through, or catches it to keep what the work
+    has done so far.
     """

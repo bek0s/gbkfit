@@ -12,7 +12,7 @@ from annotated_types import Ge, Gt
 
 from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
-from gbkfit.control import FitStopped
+from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import MERITS, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
@@ -201,7 +201,7 @@ class FitterGrid(Fitter):
             end = min(start + self._batch, npoints)
             try:
                 costs[start:end] = problem.cost_batch(points[start:end])
-            except FitStopped:
+            except Stopped:
                 stopped = True
                 break
         best = problem.best()

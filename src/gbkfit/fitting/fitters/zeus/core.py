@@ -14,7 +14,7 @@ from pydantic import FiniteFloat
 
 from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
-from gbkfit.control import FitStopped
+from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem
@@ -209,7 +209,7 @@ class FitterZeus(Fitter):
                             coords, log_prob0=log_prob, iterations=steps,
                             progress=False):
                         problem.record_chain(x, z)
-                except FitStopped:
+                except Stopped:
                     stopped = True
                 nsteps += sampler.iteration
                 ncall += int(sampler.ncall)
@@ -222,7 +222,7 @@ class FitterZeus(Fitter):
         # (the steps of the burn-in in the chain of the last stage)
         discard = max(0, burnin - (nsteps - sampler.iteration))
         if sampler.iteration - discard < 1:
-            raise FitStopped("zeus was stopped before its first steps")
+            raise Stopped("zeus was stopped before its first steps")
         samples = sampler.get_chain(
             flat=True, discard=discard, thin=self._thin)
         tau = zeus.AutoCorrTime(sampler.get_chain(discard=discard))

@@ -11,7 +11,7 @@ from pydantic import FiniteFloat
 
 from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
-from gbkfit.control import FitStopped
+from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem
@@ -161,13 +161,13 @@ class FitterEmcee(Fitter):
                     self._start(problem, params, nwalkers, rng),
                     iterations=self._nsteps):
                 problem.record_chain(state.coords, state.log_prob)
-        except FitStopped:
+        except Stopped:
             stopped = True
         nsteps = sampler.iteration
         if burnin >= nsteps:
             burnin = nsteps // 2
         if nsteps - burnin < 1:
-            raise FitStopped("emcee was stopped before its first steps")
+            raise Stopped("emcee was stopped before its first steps")
         samples = sampler.get_chain(discard=burnin, thin=self._thin, flat=True)
         tau = sampler.get_autocorr_time(discard=burnin, quiet=True)
         converged = not stopped and (nsteps - burnin) > 50 * np.max(tau)

@@ -11,7 +11,7 @@ import numpy as np
 import pytest
 
 from gbkfit.config import ConfigError
-from gbkfit.fitting import FitControl
+from gbkfit.control import StopControl
 from gbkfit.fitting.fitters._tables import table_layout
 from gbkfit.fitting.fitters.dnest4 import FitterDNest4, _dnest4
 from gbkfit.fitting.fitters.dnest4._output import DNest4Files, posterior
@@ -140,7 +140,7 @@ def test_samplers_run_in_several_threads_at_once(tmp_path):
     assert results == dict(run0=50, run1=100)
 
 
-class StopAfter(FitControl):
+class StopAfter(StopControl):
     """A control that stops a fit after n evaluations."""
 
     def __init__(self, n):

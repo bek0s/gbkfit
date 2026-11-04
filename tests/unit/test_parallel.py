@@ -15,10 +15,11 @@ import threading
 import numpy as np
 import pytest
 
+from gbkfit.control import StopControl, Stopped
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
-    BootstrapBlocks, BootstrapOptions, FitControl, FitProblem, FitStopped,
-    fitter_parser, run_bootstrap)
+    BootstrapBlocks, BootstrapOptions, FitProblem, fitter_parser,
+    run_bootstrap)
 from gbkfit.params import ParamSpace
 from gbkfit.parallel import Workers, WorkersDask, WorkersRay
 
@@ -46,9 +47,9 @@ def check_workers(workers: Workers) -> None:
             FitProblem(objective, params).chi2_batch(xs), rtol=1e-12)
         pooled = run_bootstrap(objective, params, start, fitter, options, pool)
         np.testing.assert_allclose(pooled.samples, alone.samples, rtol=1e-9)
-        control = FitControl()
+        control = StopControl()
         threading.Timer(1.0, control.stop).start()
-        with pytest.raises(FitStopped):
+        with pytest.raises(Stopped):
             pool.map_lazily(
                 run_until_stopped, lambda i: i, 10, control=control)
 

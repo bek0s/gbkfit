@@ -14,7 +14,7 @@ from annotated_types import Ge, Gt
 
 from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
-from gbkfit.control import FitStopped
+from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
 from gbkfit.fitting.fitters._tables import TableLayout, table_layout
 from gbkfit.fitting.problem import FitProblem
@@ -211,12 +211,12 @@ class FitterDNest4(Fitter):
                     sample_file=files.sample(),
                     sample_info_file=files.sample_info(),
                     levels_file=files.levels())
-            except FitStopped:
+            except Stopped:
                 stopped = True
             output = files.read()
         nsaves = len(output.info)
         if not nsaves:
-            raise FitStopped("dnest4 was stopped before its first save")
+            raise Stopped("dnest4 was stopped before its first save")
         post = posterior(output, rng)
         samples, unused, counts = _samples(problem, layout, output)
         best = problem.best()

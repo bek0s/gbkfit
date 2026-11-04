@@ -27,14 +27,15 @@ from gbkfit.config import (
     ConfigError, FilePath, Problem, check_name, collect_problems, config_path,
     paths_relative_to, report_unknown, strict_mode, warn)
 from gbkfit.config.schema import SchemaWriter
+from gbkfit.control import StopControl
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.outputs
 import gbkfit.project
 from gbkfit.driver import Driver, driver_by_name, driver_parser
 from gbkfit.fitting import (
-    BootstrapOptions, EvaluationLog, FitControl, Fitter, FitResult,
-    ProgressObserver, fitter_parser)
+    BootstrapOptions, EvaluationLog, Fitter, FitResult, ProgressObserver,
+    fitter_parser)
 from gbkfit.objective import Evaluation, Objective
 from gbkfit.parallel import WorkerPool, Workers, workers_parser
 from gbkfit.observation import (
@@ -411,7 +412,7 @@ class Setup:
     def fit(
             self,
             observers: Sequence[ProgressObserver] = (),
-            control: FitControl | None = None,
+            control: StopControl | None = None,
             log: EvaluationLog | None = None
     ) -> FitResult:
         """
@@ -423,7 +424,7 @@ class Setup:
         observers : Sequence of ProgressObserver, optional
             Who receives the progress of the fit as it runs (see
             FitProgress).
-        control : FitControl, optional
+        control : StopControl, optional
             The control of the fit, to stop it.
         log : EvaluationLog, optional
             The log of the evaluations: a new one, or that of a fit to

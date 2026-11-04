@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, NamedTuple, TypeVar
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.control import FitControl, FitStopped
+from gbkfit.control import StopControl, Stopped
 from gbkfit.fitting.evaluation_log import EvaluationLog, SubFitLog, fingerprint
 from gbkfit.params.joint_priors import joint_prior_residuals
 from gbkfit.params.priors import Prior
@@ -101,7 +101,7 @@ class FitProblem:
     or refuse them). Both are counted (see nan_nevals), and the first is
     logged.
 
-    Every model evaluation raises FitStopped once the control (if any) is
+    Every model evaluation raises Stopped once the control (if any) is
     stopped: those of a batch before it count, without a pool (with one,
     a batch raises it before and after the workers evaluate it, and none
     of the batch count). The numbers of each evaluation (see Merits; of
@@ -122,7 +122,7 @@ class FitProblem:
         Who receives the progress of the fit.
     interval : float, optional
         The least time between two reports as it evaluates (s).
-    control : FitControl, optional
+    control : StopControl, optional
         The control of the fit, to stop it.
     log : EvaluationLog, optional
         The log of the evaluations (of a fit that resumes, or a new one).
@@ -151,7 +151,7 @@ class FitProblem:
             priors: Sequence[Prior | None] | None = None,
             observers: Sequence[ProgressObserver] = (),
             interval: float = 2.0,
-            control: FitControl | None = None,
+            control: StopControl | None = None,
             log: EvaluationLog | None = None,
             pool: 'WorkerPool | None' = None,
             merit: str = 'chi2'
@@ -307,7 +307,7 @@ class FitProblem:
         """Return the workers of copies of the objective, if any."""
         return self._pool
 
-    def control(self) -> FitControl | None:
+    def control(self) -> StopControl | None:
         """Return the control of the fit, if any."""
         return self._control
 
@@ -355,7 +355,7 @@ class FitProblem:
             If the parameters cannot be evaluated there.
         TypeError
             If a prior has no residual (see Prior.has_residual).
-        FitStopped
+        Stopped
             If the fit was asked to stop.
         """
         return self.residuals_batch(np.atleast_2d(x))[0]
@@ -518,7 +518,7 @@ class FitProblem:
 
         Raises
         ------
-        FitStopped
+        Stopped
             If the fit was asked to stop.
         """
         return float(self.log_posterior_batch(np.atleast_2d(x))[0])
@@ -686,7 +686,7 @@ class FitProblem:
 
         Raises
         ------
-        FitStopped
+        Stopped
             At an evaluation, if the fit was asked to stop.
         """
         if self._pool is not None:
@@ -748,16 +748,16 @@ class FitProblem:
             self._log.close()
 
     def _check_stop(self) -> None:
-        """Raise FitStopped if the fit was asked to stop."""
+        """Raise Stopped if the fit was asked to stop."""
         if self._control is not None and self._control.stopped():
-            raise FitStopped("the fit was asked to stop")
+            raise Stopped("the fit was asked to stop")
 
     def _stoppable(
             self,
             function: Callable[[Objective, ParamValues], _T]
     ) -> Callable[[Objective, ParamValues], _T]:
         """
-        Return the function of an evaluation, which raises FitStopped first
+        Return the function of an evaluation, which raises Stopped first
         if the fit was asked to stop.
         """
         def stoppable(objective: Objective, values: ParamValues) -> _T:
@@ -779,7 +779,7 @@ class FitProblem:
 
         Raises
         ------
-        FitStopped
+        Stopped
             If the fit was asked to stop.
         """
         # (the log replays the first points of a batch at most: its replay

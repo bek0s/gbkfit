@@ -370,7 +370,7 @@ def covariance(
     ParamEvaluationError
         If the parameters cannot be evaluated at a step (e.g. out of
         their valid range).
-    FitStopped
+    Stopped
         If the fit was asked to stop (see FitProblem.map_objective).
     """
     params = problem.params()

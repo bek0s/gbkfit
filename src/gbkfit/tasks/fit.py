@@ -15,6 +15,7 @@ from collections.abc import Generator
 from typing import Any, Literal
 
 from gbkfit.config import ConfigError, config_path
+from gbkfit.control import StopControl, Stopped
 import gbkfit.fitting
 import gbkfit.outputs
 import gbkfit.params
@@ -186,7 +187,7 @@ def bootstrap(output_dir: str, config: str) -> None:
         options = _load_bootstrap(
             bootstrap_cfg, setup.group_plan.group(), setup.params)
         with gbkfit.outputs.reopen(output_dir) as run, _detail.run_log(run):
-            control = gbkfit.fitting.FitControl()
+            control = StopControl()
             with _stop_on_interrupt(control):
                 boot = _bootstrap(setup, best.elements, options, control)
             if boot is None:
@@ -256,7 +257,7 @@ def _bootstrap(
         setup: Setup,
         start: dict[str, float],
         options: gbkfit.fitting.BootstrapOptions,
-        control: gbkfit.fitting.FitControl,
+        control: StopControl,
         log: gbkfit.fitting.SubFitLog | None = None
 ) -> gbkfit.fitting.Bootstrap | None:
     """
@@ -270,7 +271,7 @@ def _bootstrap(
         boot = gbkfit.fitting.run_bootstrap(
             setup.objective, setup.params, start, setup.fitter, options,
             setup.pool, control, log)
-    except gbkfit.fitting.FitStopped:
+    except Stopped:
         _log.warning(
             "bootstrap stopped: the result has no bootstrap"
             + ("; resume continues it" if log is not None else ""))
@@ -334,7 +335,7 @@ def _fit(
         run.filename('logs/progress.jsonl'))
     run.record('logs/progress.jsonl', 'progress', 'jsonl')
     best = _progress.BestValues(write_best)
-    control = gbkfit.fitting.FitControl()
+    control = StopControl()
     with _stop_on_interrupt(control), \
             _progress.console_progress(_log) as console:
         result = setup.fit((console, progress, best), control, log)
@@ -350,7 +351,7 @@ def _fit(
     if options is not None:
         if bootstrap_log is not None:
             run.record(_BOOTSTRAP_LOG, 'bootstrap_log', 'jsonl')
-        control = gbkfit.fitting.FitControl()
+        control = StopControl()
         with _stop_on_interrupt(control):
             boot = _bootstrap(
                 setup, result.best().elements, options, control,
@@ -362,7 +363,7 @@ def _fit(
 
 
 @contextlib.contextmanager
-def _stop_on_interrupt(control: gbkfit.fitting.FitControl) -> Generator[None]:
+def _stop_on_interrupt(control: StopControl) -> Generator[None]:
     """
     While the block runs, make the first Ctrl-C (SIGINT) stop the fit at
     its next evaluation, and a second one quit at once (only in the main

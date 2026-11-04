@@ -15,11 +15,12 @@ import scipy.integrate
 import scipy.stats
 
 from gbkfit.config import ConfigError
+from gbkfit.control import StopControl, Stopped
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
-    EvaluationLog, FitControl, FitParamBounded, FitParamPrior, FitProblem,
-    FitStopped, SubFitLog, read_chain, read_evaluations)
+    EvaluationLog, FitParamBounded, FitParamPrior, FitProblem, SubFitLog,
+    read_chain, read_evaluations)
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Merits, Objective
@@ -524,7 +525,7 @@ def test_points_where_a_prior_cannot_be_evaluated_are_rejected():
         problem.residuals(outside)
 
 
-class StopAfter(FitControl):
+class StopAfter(StopControl):
     """A control that stops a fit after n evaluations."""
 
     def __init__(self, n):
@@ -558,7 +559,7 @@ def test_a_fit_stopped_in_its_uncertainty_ends_without_it():
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
     params = ParamSpace(objective.pdescs(), bounded_properties())
-    control = FitControl()
+    control = StopControl()
 
     def observer(progress):
         if progress.stage == 'uncertainty':
@@ -1119,9 +1120,9 @@ def test_a_stopped_bootstrap_resumes_from_its_log(tmp_path):
     options = BootstrapOptions(4, BootstrapGaussian())
     whole = run_bootstrap(objective, params, start, fitter, options)
     filename = str(tmp_path / 'bootstrap.jsonl')
-    control = FitControl()
+    control = StopControl()
     log = StopAfterOutcomes(filename, control, 2)
-    with pytest.raises(FitStopped):
+    with pytest.raises(Stopped):
         run_bootstrap(objective, params, start, fitter, options, None, control,
                   log)
     log.close()
@@ -1136,17 +1137,17 @@ def run_until_stopped(objective, item, control):
     """A sub-fit that runs until its control stops it."""
     while not control.stopped():
         time.sleep(0.01)
-    raise FitStopped("stopped")
+    raise Stopped("stopped")
 
 
 @pytest.mark.parametrize('kind', ['threads', 'processes'])
 def test_workers_stop_their_sub_fits(kind):
     driver = DriverHost()
-    control = FitControl()
+    control = StopControl()
     threading.Timer(0.5, control.stop).start()
     with two_workers(kind, driver).start(mock_objective(driver)) as pool:
         begin = time.perf_counter()
-        with pytest.raises(FitStopped):
+        with pytest.raises(Stopped):
             pool.map_lazily(
                 run_until_stopped, lambda i: i, 10, control=control)
         # (processes take seconds to start; the sub-fits would never end)
@@ -1400,7 +1401,7 @@ def test_a_stopped_multistart_resumes_from_the_starts_of_its_log(tmp_path):
     fitter = dict(type='multistart', local=dict(type='cmaes'), nstarts=4)
     whole = fitter_parser.load(fitter).fit(objective, params)
     filename = str(tmp_path / 'evaluations.bin')
-    control = FitControl()
+    control = StopControl()
     stopped = fitter_parser.load(fitter).fit(
         objective, params, control=control,
         log=LogStoppingAfterStarts(filename, control, 2))

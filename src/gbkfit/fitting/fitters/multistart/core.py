@@ -15,7 +15,7 @@ from annotated_types import Gt
 from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, fitter_parser
-from gbkfit.control import FitControl
+from gbkfit.control import StopControl
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
 from gbkfit.fitting.problem import FitCounts, FitProblem
@@ -220,7 +220,7 @@ class _Start(NamedTuple):
 def _run_start(
         objective: Objective,
         start: _Start,
-        control: FitControl
+        control: StopControl
 ) -> Outcome:
     """
     Run the local fitter of a start on an objective of the fit (or a copy
@@ -231,7 +231,7 @@ def _run_start(
 
     Raises
     ------
-    FitStopped
+    Stopped
         If the control stopped it.
     """
     problem = FitProblem(
