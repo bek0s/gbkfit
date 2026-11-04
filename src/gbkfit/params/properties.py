@@ -1,9 +1,10 @@
 """
 The properties of the parameters of a configuration (see ParamSpace):
 their parsing into the elements that a ParamSpace takes (see elements),
-and back.
+and back; and the renaming of parameters in a params configuration.
 """
 
+import ast
 import copy
 import numbers
 from collections.abc import Mapping, Sequence
@@ -12,6 +13,7 @@ from typing import Any, TypeAlias
 import numpy as np
 
 from gbkfit.config import ConfigError, config_path, report_unknown
+from ._expressions import check_name
 from ._keys import InvalidKeyError, Key, parse_key
 from .elements import (
     DerivedValue, Element, Elements, FreeElement, Solved, Tied, Transformed)
@@ -25,7 +27,9 @@ __all__ = [
     'is_list',
     'parse_derived',
     'parse_properties',
-    'problems_text'
+    'problems_text',
+    'renamed_expression',
+    'renamed_params'
 ]
 
 
@@ -244,3 +248,137 @@ def parse_derived(
     return parsed
 
 
+# The options of joint priors that are expressions (see joint_priors)
+_PRIOR_EXPRESSIONS = ('expr', 'positions')
+
+
+def renamed_params(
+        params: Mapping[str, Any], names: Mapping[str, str]
+) -> dict[str, Any]:
+    """
+    Return a params configuration (see ParamSpace.load) with parameters
+    or constants renamed: the keys of its properties (e.g. posa,
+    posa[1:]) and of its modes, and the names in its expressions (the
+    ties of its properties, its derived values, and the expressions of
+    its joint priors). For a model whose names change (e.g. a component
+    renamed), so that its params name the same parameters: one rename
+    for Studio, scripts and migrations alike.
+
+    An expression keeps its text but the names, which are names of the
+    expression: not a part of another (e.g. posa is not that of
+    disk_posa), nor an attribute (e.g. np.sin). The function of its
+    transforms is code in a file, which it does not change.
+
+    Parameters
+    ----------
+    params : Mapping
+        The params configuration; not changed.
+    names : Mapping of str to str
+        The new names, by old name.
+
+    Returns
+    -------
+    dict
+        The params configuration, renamed.
+
+    Raises
+    ------
+    ValueError
+        If a new name is not valid, or two keys of the properties or of
+        the modes would be one.
+    """
+    for new in names.values():
+        if (problem := check_name(new)) is not None:
+            raise ValueError(f"cannot rename to {new!r}: {problem}")
+    result = copy.deepcopy(dict(params))
+    for option in ('properties', 'modes'):
+        if isinstance(result.get(option), Mapping):
+            result[option] = _renamed_keys(result[option], names, option)
+    properties = result.get('properties')
+    if isinstance(properties, Mapping):
+        result['properties'] = {
+            key: _renamed_ties(value, names)
+            for key, value in properties.items()}
+    derived = result.get('derived')
+    if isinstance(derived, Mapping):
+        result['derived'] = {
+            key: _renamed_options(value, names, ('expr',))
+            for key, value in derived.items()}
+    priors = result.get('priors')
+    if isinstance(priors, list):
+        result['priors'] = [
+            _renamed_options(prior, names, _PRIOR_EXPRESSIONS)
+            for prior in priors]
+    return result
+
+
+def _renamed_keys(
+        mapping: Mapping[str, Any], names: Mapping[str, str], option: str
+) -> dict[str, Any]:
+    """
+    Return a mapping by the keys of parameters (or of their elements, e.g.
+    posa[1:]) with the names renamed, in its order.
+    """
+    result = {}
+    for key, value in mapping.items():
+        name, bracket, rest = key.partition('[')
+        new = names[name] + bracket + rest if name in names else key
+        if new in result:
+            raise ValueError(f"the {option} would have the key {new!r} twice")
+        result[new] = value
+    return result
+
+
+def _renamed_ties(value: Any, names: Mapping[str, str]) -> Any:
+    """
+    Return a property with the names renamed in its ties: the property
+    itself, or the items of a list, as strings; its other forms (e.g. a
+    free element) have no expressions.
+    """
+    if isinstance(value, str):
+        return renamed_expression(value, names)
+    if is_list(value):
+        return [_renamed_ties(item, names) for item in value]
+    return value
+
+
+def _renamed_options(
+        value: Any, names: Mapping[str, str], options: Sequence[str]
+) -> Any:
+    """
+    Return an expression (a string), or a mapping with the expressions of
+    the given options, with the names renamed.
+    """
+    if isinstance(value, str):
+        return renamed_expression(value, names)
+    if isinstance(value, Mapping):
+        return {
+            key: renamed_expression(item, names)
+            if key in options and isinstance(item, str) else item
+            for key, item in value.items()}
+    return value
+
+
+def renamed_expression(expression: str, names: Mapping[str, str]) -> str:
+    """
+    Return an expression with names renamed, its text otherwise as it is
+    (see renamed_params); a string that does not parse is returned as it
+    is, for its parsing to report.
+    """
+    try:
+        tree = ast.parse(expression, mode='eval')
+    except SyntaxError:
+        return expression
+    # The offsets of ast are of the UTF-8 bytes of each line
+    text = expression.encode()
+    starts = [0]
+    for line in text.splitlines(keepends=True):
+        starts.append(starts[-1] + len(line))
+    spans = sorted(
+        (starts[node.lineno - 1] + node.col_offset,
+         starts[node.end_lineno - 1] + node.end_col_offset, names[node.id])
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name) and node.id in names)
+    for start, end, new in reversed(spans):
+        text = text[:start] + new.encode() + text[end:]
+    return text.decode()

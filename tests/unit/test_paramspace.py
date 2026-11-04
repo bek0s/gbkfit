@@ -15,7 +15,8 @@ from gbkfit.config import ConfigError, strict_mode
 from gbkfit.params import (
     FreeElement, ParamEvaluationError, ParamFunctions, ParamKind,
     ParamModeIncrements, ParamModeOffsets, ParamScalarDesc, ParamSpace,
-    ParamVectorDesc, Tied, Transformed, param_space_parser)
+    ParamVectorDesc, Tied, Transformed, param_space_parser, renamed_expression,
+    renamed_params)
 
 
 def make_pdescs(**sizes):
@@ -673,3 +674,55 @@ def test_options_spread_over_elements_dump_as_given():
     assert params.dump()['properties'] == {
         'v': {'*value': [1, 2, 3], '*min': [0, -1, -2], 'max': 5}}
 
+
+def test_parameters_are_renamed_in_keys_and_expressions():
+    params = dict(
+        properties={
+            'posa': [30, 'posa[0] + 1'], 'incl': 'posa[0] * 2',
+            'vsys[0]': 10, 'disk_posa': 'np.sin(posa[0])'},
+        modes=dict(posa=dict(type='offsets', origin=0)),
+        derived=dict(
+            warp='posa[-1] - posa[0]', ratio=dict(expr='posa[0]', unit='')),
+        priors=[dict(type='smooth', expr='posa', order=2, std=1,
+                     positions='rnodes')])
+    names = dict(posa='gas_posa', vsys='gas_vsys', rnodes='gas_rnodes')
+    renamed = renamed_params(params, names)
+    assert renamed == dict(
+        properties={
+            'gas_posa': [30, 'gas_posa[0] + 1'], 'incl': 'gas_posa[0] * 2',
+            'gas_vsys[0]': 10, 'disk_posa': 'np.sin(gas_posa[0])'},
+        modes=dict(gas_posa=dict(type='offsets', origin=0)),
+        derived=dict(
+            warp='gas_posa[-1] - gas_posa[0]',
+            ratio=dict(expr='gas_posa[0]', unit='')),
+        priors=[dict(type='smooth', expr='gas_posa', order=2, std=1,
+                     positions='gas_rnodes')])
+    # The configuration given is not changed, and the renamed one loads
+    assert params['properties']['incl'] == 'posa[0] * 2'
+    pdescs = dict(
+        gas_posa=ParamVectorDesc(2), incl=ParamScalarDesc(),
+        gas_vsys=ParamVectorDesc(1), disk_posa=ParamScalarDesc())
+    space = ParamSpace.load(
+        dict(properties=renamed['properties']), pdescs=pdescs)
+    assert space.evaluate()['incl'] == 60
+
+
+@pytest.mark.parametrize('expression, renamed', [
+    # Its text but the names: not attributes, nor parts of other names,
+    # over several lines too
+    ('a+b * a', 'x+b * x'),
+    ('np.a(a) + b.a', 'np.a(x) + b.a'),
+    ('(a +\n   ab)', '(x +\n   ab)'),
+    # Not an expression: as it is, for its parsing to report
+    ('a +', 'a +')])
+def test_names_are_renamed_in_the_text_of_an_expression(expression, renamed):
+    assert renamed_expression(expression, dict(a='x')) == renamed
+
+
+@pytest.mark.parametrize('names, message', [
+    (dict(posa='np'), "cannot rename to 'np'"),
+    (dict(posa='1a'), "cannot rename to '1a'"),
+    (dict(posa='incl'), "the properties would have the key 'incl' twice")])
+def test_invalid_renames_are_refused(names, message):
+    with pytest.raises(ValueError, match=re.escape(message)):
+        renamed_params(dict(properties=dict(posa=1, incl=2)), names)
