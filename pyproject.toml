@@ -80,8 +80,15 @@ test = [
     # For the tests of the configuration schema
     'jsonschema']
 docs = ['sphinx', 'numpydoc', 'pydata-sphinx-theme']
+# What builds GBKFIT, as build-system.requires, for an editable install
+# without build isolation, which rebuilds only what changed (see the docs)
+build = [
+    'scikit-build-core>=1.1', 'nanobind>=3.1', 'setuptools-scm>=8', 'cmake',
+    'ninja']
 # All of the above, plus ruff, the code checker that CI also runs
-dev = [{ include-group = 'test' }, { include-group = 'docs' }, 'ruff']
+dev = [
+    { include-group = 'test' }, { include-group = 'docs' },
+    { include-group = 'build' }, 'ruff']
 
 [tool.scikit-build]
 minimum-version = 'build-system.requires'

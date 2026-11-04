@@ -180,12 +180,17 @@ machine. To target other GPUs, also pass, for example,
    Support for CUDA GPUs is not fully functional yet. Do not enable it.
 
 For development, an editable install that recompiles the native code
-automatically when it changes can be set up with:
+automatically when it changes can be set up with (requires pip 25.1 or
+later):
 
 .. code-block:: console
 
-   pip install scikit-build-core nanobind setuptools-scm cmake ninja
+   pip install --group ./gbkfit/pyproject.toml:build
    pip install --no-build-isolation -Ceditable.rebuild=true -e ./gbkfit
+
+Without build isolation, the build tools are those of the environment,
+so a rebuild compiles only what changed; with it, every reinstall
+compiles everything again.
 
 To run the tests (requires pip 25.1 or later), run:
 
