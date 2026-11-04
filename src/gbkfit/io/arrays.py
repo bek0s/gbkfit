@@ -18,7 +18,7 @@ import astropy.wcs
 import gwcs
 import numpy as np
 
-from gbkfit.config import ConfigError, DataFile, is_asdf_file, warn
+from gbkfit.config import DataFile, is_asdf_file, warn
 from gbkfit.utils import unitutils
 from .fits import (
     Orientation, has_wcs, header_beam, header_shape, linear_header,
@@ -151,7 +151,7 @@ def read_arrays(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a file cannot be read, or has world coordinates the model
         cannot take (see model_header); error_kind is not one of
         ERROR_KINDS, the errors are negative, or their unit is not that of
@@ -159,7 +159,7 @@ def read_arrays(
         data; or the beams of a cube are not one for each channel.
     """
     if error_kind not in ERROR_KINDS:
-        raise ConfigError(
+        raise ValueError(
             f"the kind of the errors must be one of {list(ERROR_KINDS)}; "
             f"it is {error_kind!r}")
     values, header, orientation, beam = _read(data, rest, velocity)
@@ -230,7 +230,7 @@ def _beam(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the beams of a cube are not one for each channel.
     """
     beam = header_beam(
@@ -244,7 +244,7 @@ def _beam(
     axis = astropy.wcs.WCS(model).wcs.spec
     nchannels = int(model[f'NAXIS{axis + 1}'])
     if len(beam['bmaj']) != nchannels:
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: the cube has {nchannels} channels, but its table "
             f"BEAMS has beams for {len(beam['bmaj'])}")
     order = slice(None, None, -1) if axis in orientation.flips \
@@ -274,12 +274,12 @@ def _read_asdf(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the path is not given or not in the tree, or the file has more
         than one WCS.
     """
     if path is None:
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: give the path of the array in the tree of the "
             f"file (path, e.g. roman/data)")
     with asdf.open(filename) as file:
@@ -288,7 +288,7 @@ def _read_asdf(
             try:
                 node = node[key]
             except (KeyError, IndexError, TypeError) as e:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: its tree has no {path!r}") from e
         unit = getattr(node, 'unit', None)
         values = np.array(getattr(node, 'value', node))
@@ -297,7 +297,7 @@ def _read_asdf(
     if unit is not None:
         header['BUNIT'] = unitutils.format_unit(unit)
     if len(wcss) > 1:
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: its tree has {len(wcss)} WCSs; files of one are "
             f"read")
     if wcss:
@@ -338,7 +338,7 @@ def _read_companion(
         return _floats(values), header
     shape = data_orientation.file_shape
     if values.shape != shape:
-        raise ConfigError(
+        raise ValueError(
             f"{filename}: without world coordinates (or with data without "
             f"them), its values must be of the shape of the data, {shape}, "
             f"in the axes of their file; they are of {values.shape}")
@@ -352,19 +352,19 @@ def _check_same_pixels(
         data_header: astropy.io.fits.Header
 ) -> None:
     """
-    Raise ConfigError unless the values of a header in the orientation of
+    Raise ValueError unless the values of a header in the orientation of
     the model (of the given shape) are on the pixels of the data of
     another: of their shape, and their world coordinates at the corners.
     """
     data_shape = header_shape(data_header)
     if shape != data_shape:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: its values must be of the shape of the data, "
             f"{data_shape} (in the orientation of the model); they are of "
             f"{shape}")
     wcs, data_wcs = astropy.wcs.WCS(header), astropy.wcs.WCS(data_header)
     if list(wcs.wcs.ctype) != list(data_wcs.wcs.ctype):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: its world coordinates are of the axes "
             f"{list(wcs.wcs.ctype)}, those of the data of "
             f"{list(data_wcs.wcs.ctype)}")
@@ -373,7 +373,7 @@ def _check_same_pixels(
     world = data_wcs.pixel_to_world_values(*corners)
     pixels = np.array(wcs.world_to_pixel_values(*world)).reshape(corners.shape)
     if not np.allclose(pixels, corners, rtol=0, atol=_GRID_TOLERANCE):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: its world coordinates do not put its pixels on "
             f"those of the data")
 
@@ -399,7 +399,7 @@ def _standard_deviations(
                 if unit.is_equivalent(data_unit ** p)]
             hint = f"; it is that of {kinds[0]} (error_kind: {kinds[0]})" \
                 if kinds else ""
-            raise ConfigError(
+            raise ValueError(
                 f"{source}: the unit of the errors "
                 f"({unitutils.format_unit(unit)}) is not that of {kind} of "
                 f"the data ({unitutils.format_unit(expected)}){hint}")
@@ -407,7 +407,7 @@ def _standard_deviations(
     with np.errstate(invalid='ignore'):
         negative = errors < 0
     if np.any(negative):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the errors cannot be negative; "
             f"{np.count_nonzero(negative)} are, down to {np.nanmin(errors):g}")
     if kind == 'variance':
@@ -431,7 +431,7 @@ def _header_unit(
         return None
     try:
         return unitutils.parse_unit(text)
-    except ConfigError as e:
+    except ValueError as e:
         warn(f"{source}: BUNIT is left out: {e}")
         return None
 

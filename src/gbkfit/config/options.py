@@ -10,7 +10,7 @@ from typing import Any
 
 from gbkfit.utils import funcutils, iterutils
 from .errors import ConfigError, config_path, quoted_names, report_unknown
-from .types import option_types, type_problem
+from .types import option_types, type_error
 
 if typing.TYPE_CHECKING:
     from .parsers import Parser
@@ -22,6 +22,7 @@ __all__ = [
     'item_prefixes',
     'load_option',
     'load_option_and_update_info',
+    'name_problem',
     'parse_options'
 ]
 
@@ -31,9 +32,32 @@ __all__ = [
 _NAME = re.compile(r'[A-Za-z0-9_]+')
 
 
+def name_problem(name: Any) -> str | None:
+    """
+    Return what is wrong with the name of an item of a list (e.g. a
+    component), or None if nothing (see check_name).
+
+    Parameters
+    ----------
+    name : Any
+        The name: letters, digits and underscores; or None.
+
+    Returns
+    -------
+    str or None
+        The problem, or None.
+    """
+    if name is None or (isinstance(name, str) and _NAME.fullmatch(name)):
+        return None
+    return (
+        f"invalid name {name!r}: use only letters, digits and "
+        f"underscores")
+
+
 def check_name(name: str | None) -> None:
     """
-    Check the name of an item of a list (e.g. a component).
+    Check the name of an item of a list (e.g. a component), an argument
+    of its constructor.
 
     Parameters
     ----------
@@ -42,14 +66,13 @@ def check_name(name: str | None) -> None:
 
     Raises
     ------
-    ConfigError
-        If the name is invalid.
+    TypeError
+        If the name is not a string (or None).
+    ValueError
+        If the name has other characters.
     """
-    if name is not None and not (
-            isinstance(name, str) and _NAME.fullmatch(name)):
-        raise ConfigError(
-            f"invalid name {name!r}: use only letters, digits and "
-            f"underscores")
+    if (problem := name_problem(name)) is not None:
+        raise (ValueError if isinstance(name, str) else TypeError)(problem)
 
 
 def item_prefixes(
@@ -85,7 +108,7 @@ def item_prefixes(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If only some of the items have a name, or the names are repeated.
     """
     named = [name is not None for name in names]
@@ -94,12 +117,12 @@ def item_prefixes(
             f'{prefix}{i or ""}_' if i or prefix_first else ''
             for i in range(len(names))]
     if not all(named):
-        raise ConfigError(
+        raise ValueError(
             f"either all or none of the {label} must have a name; only "
             f"{sum(named)} of {len(names)} have one")
     repeated = sorted({name for name in names if names.count(name) > 1})
     if repeated:
-        raise ConfigError(
+        raise ValueError(
             f"the names of the {label} must be unique; repeated: {repeated}")
     return [f'{name}_' for name in names]
 
@@ -177,14 +200,20 @@ def check_options(func: Callable, values: Mapping[str, Any]) -> None:
 
     Raises
     ------
-    ConfigError
-        If an argument does not match its annotation.
+    TypeError
+        If an argument is not of the type of its annotation.
+    ValueError
+        If an argument is outside the range or the choices of its
+        annotation.
     """
+    # Not ConfigError: a constructor does not know whether a configuration
+    # calls it, and the parsing checks the options of configurations
+    # itself first (see parse_options_for_callable)
     types = option_types(func)
     for name in funcutils.parameter_names(func).all:
         if name in types and name in values \
-                and (problem := type_problem(values[name], types[name])):
-            raise ConfigError(f"option '{name}' {problem}")
+                and (error := type_error(values[name], types[name])):
+            raise type(error)(f"option '{name}' {error}")
 
 
 def load_option(

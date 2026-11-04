@@ -98,8 +98,11 @@ def load_error(info):
 
 
 def galaxy_error(info):
-    """The error message of loading a bad galaxy."""
-    with pytest.raises(ConfigError) as error:
+    """
+    The error message of loading a bad galaxy: of a mistake that the
+    parsing finds (ConfigError), or a constructor (ValueError, TypeError).
+    """
+    with pytest.raises((ConfigError, ValueError, TypeError)) as error:
         galaxy_parser.load(info)
     return str(error.value)
 

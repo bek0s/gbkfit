@@ -7,7 +7,6 @@ import re
 
 import astropy.units
 
-from gbkfit.config import ConfigError
 
 
 __all__ = [
@@ -54,7 +53,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the text is not a unit, or is one of electricity, which no data
         are in (e.g. 'erg/s/cm2/A': A is the ampere, the angstrom is
         Angstrom).
@@ -73,11 +72,11 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
                 continue
             return unit
     if electric:
-        raise ConfigError(
+        raise ValueError(
             f"{text!r} is a unit of electricity, which no data are in: if A "
             f"is meant as the angstrom, write Angstrom (e.g. "
             f"'erg/s/cm2/Angstrom')")
-    raise ConfigError(
+    raise ValueError(
         f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
         f"'1e-17 erg/s/cm2/arcsec2')")
 
@@ -104,7 +103,7 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the unit is per an angle that is not a solid angle (e.g.
         Jy/arcsec).
     """
@@ -123,7 +122,7 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     if power == -2:
         return astropy.units.sr
     if power != 0:
-        raise ConfigError(
+        raise ValueError(
             f"{format_unit(unit)!r} is per an angle that is not a solid "
             f"angle (e.g. per arcsec, not per arcsec2)")
     return astropy.units.dimensionless_unscaled

@@ -154,7 +154,7 @@ def test_the_primary_beam_of_each_channel_attenuates_it(driver):
 
 
 def test_primary_beam_needs_a_positive_fwhm():
-    with pytest.raises(ConfigError, match="fwhm"):
+    with pytest.raises(ValueError, match="fwhm"):
         PrimaryBeamGauss(fwhm=0)
 
 
@@ -186,7 +186,7 @@ def test_primary_beam_from_an_image(tmp_path):
     response = image.response(beyond)
     assert response[0, 0] > 0 and response[0, 1] == 0
     far = make_grid((2, 2), 1, rpix=(-30, -30))
-    with pytest.raises(ConfigError, match="does not cover"):
+    with pytest.raises(ValueError, match="does not cover"):
         image.response(far)
     # Round trip through the configuration
     dumped = primary_beam_parser.dump(image, prefix=str(tmp_path / 'd_'))

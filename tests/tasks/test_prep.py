@@ -430,7 +430,7 @@ def test_data_and_errors_can_be_hdus_of_one_file():
     np.testing.assert_array_equal(fits.getdata(data_out), 1)
     np.testing.assert_allclose(fits.getdata(error_out), np.sqrt(2))
     assert fits.getheader(error_out)['BUNIT'] == 'Jy/beam'
-    with pytest.raises(ConfigError, match="error_kind: variance"):
+    with pytest.raises(ValueError, match="error_kind: variance"):
         prep.prep_pixel_spectra(*files, *options[0], *options[1:])
 
 

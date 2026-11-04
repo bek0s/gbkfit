@@ -712,12 +712,12 @@ def test_transfer_extras(driver, evaluate_cases):
 
 def test_subchannels_option():
     from gbkfit.observation import LineOfSightTransfer
-    from gbkfit.config import ConfigError
     assert LineOfSightTransfer(subchannels=4).dump()['subchannels'] == 4
-    for subchannels, message in (
-            (0, "at least 1 and at most 64"), (65, "at least 1 and at most 64"),
-            (2.5, "of type int")):
-        with pytest.raises(ConfigError, match=message):
+    for subchannels, error, message in (
+            (0, ValueError, "at least 1 and at most 64"),
+            (65, ValueError, "at least 1 and at most 64"),
+            (2.5, TypeError, "of type int")):
+        with pytest.raises(error, match=message):
             LineOfSightTransfer(subchannels=subchannels)
 
 

@@ -130,17 +130,18 @@ def kms(values):
     return dict(value=values, unit='km/s')
 
 
-@pytest.mark.parametrize('info, message', [
+@pytest.mark.parametrize('info, error, message', [
     (dict(type='hanning', width=dict(points=kms([0]), values=[1])),
-     "option 'width' must be of type float"),
+     ConfigError, "option 'width' must be of type float"),
+    # Of the value at a point, which the constructor checks
     (dict(type='gauss', sigma=dict(points=kms([0, 1]), values=[1, -1])),
-     "sigma: option 'sigma' must be greater than 0"),
+     ValueError, "option 'sigma' must be greater than 0"),
     (dict(type='gauss', sigma=dict(points=[1, 2], values=[1, 1])),
-     "sigma: option 'points' must be of type Quantity"),
+     ConfigError, "sigma: option 'points' must be of type Quantity"),
     (dict(type='gauss', sigma=dict(points=kms([0, 0]), values=[1, 1])),
-     "must be distinct")])
-def test_varying_options_are_checked(info, message):
-    with pytest.raises(ConfigError, match=message):
+     ConfigError, "must be distinct")])
+def test_varying_options_are_checked(info, error, message):
+    with pytest.raises(error, match=message):
         lsf_parser.load(info)
 
 

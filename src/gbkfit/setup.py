@@ -24,8 +24,8 @@ import ruamel.yaml
 from annotated_types import Ge
 
 from gbkfit.config import (
-    ConfigError, FilePath, Problem, check_name, collect_problems, config_path,
-    paths_relative_to, report_unknown, strict_mode, warn)
+    ConfigError, FilePath, Problem, collect_problems, config_path,
+    name_problem, paths_relative_to, report_unknown, strict_mode, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.control import StopControl
 import gbkfit.model
@@ -881,7 +881,8 @@ def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
     drivers = {}
     for name, info in cfg.get('drivers', {}).items():
         with config_path('drivers', name):
-            check_name(name)
+            if (problem := name_problem(name)) is not None:
+                raise ConfigError(problem)
             drivers[name] = driver_parser.load(info)
     return drivers
 

@@ -45,10 +45,10 @@ def test_units_are_read_as_they_are_meant(text, unit):
 
 
 def test_what_is_not_a_unit_is_an_error():
-    with pytest.raises(ConfigError, match="is not a unit"):
+    with pytest.raises(ValueError, match="is not a unit"):
         parse_unit('banana')
     # A is the ampere, not the angstrom
-    with pytest.raises(ConfigError, match="write Angstrom"):
+    with pytest.raises(ValueError, match="write Angstrom"):
         parse_unit('1E-20 erg/s/cm2/A')
 
 
@@ -72,7 +72,7 @@ def test_what_light_is_per(text, spatial):
 
 
 def test_light_per_an_angle_is_not_per_a_solid_angle():
-    with pytest.raises(ConfigError, match="not a solid angle"):
+    with pytest.raises(ValueError, match="not a solid angle"):
         spatial_unit(parse_unit('Jy/arcsec'))
 
 

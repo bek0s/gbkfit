@@ -228,7 +228,7 @@ def test_files_of_errors_and_masks_without_coordinates_follow_the_data(
     np.testing.assert_array_equal(data.mask()[:, 0, 0], [1, 1, 1, 0])
     # (they must be of the shape of the data, in the axes of its file)
     fits.writeto(tmp_path / 'bad.fits', np.ones((3, 3, 4)))
-    with pytest.raises(ConfigError, match="of the shape of the data"):
+    with pytest.raises(ValueError, match="of the shape of the data"):
         Data.from_files(
             str(tmp_path / 'data.fits'), error=str(tmp_path / 'bad.fits'))
 
@@ -284,7 +284,7 @@ def test_observations_have_their_own_dtype(tmp_path):
 
 
 def test_dataset_steps_must_be_positive():
-    with pytest.raises(ConfigError, match="step must be positive"):
+    with pytest.raises(ValueError, match="step must be positive"):
         DatasetPixelBrightness(Data(np.ones((8, 20))), step=(1, -1))
 
 
@@ -320,7 +320,7 @@ def test_datasets_read_ambiguous_velocities_by_their_convention(tmp_path):
     fits.writeto(
         tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
     info = dict(type='pixel_spectra', data=str(tmp_path / 'cube.fits'))
-    with pytest.raises(ConfigError, match="may be radio or optical"):
+    with pytest.raises(ValueError, match="may be radio or optical"):
         dataset_parser.load(info)
     dataset = dataset_parser.load(
         info | dict(spectral=dict(convention='radio')))

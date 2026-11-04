@@ -14,7 +14,7 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Gt
 
-from gbkfit.config import BasicParser, ConfigError, Serializable, check_options
+from gbkfit.config import BasicParser, Serializable, check_options
 
 if typing.TYPE_CHECKING:
     from .coords import Coords, Grid
@@ -57,14 +57,14 @@ FRAMES = (
 
 def check_convention(spectral: 'SpectralAxis') -> None:
     """
-    Raise ConfigError unless the convention of the velocities of a
+    Raise ValueError unless the convention of the velocities of a
     spectral axis is known: given, or that of its rest. None is right for
     all data (e.g. radio for HI, optical for lines of ionised gas, log for
     the stars of pPXF; at 5000 km/s, the rotation of the others differs by
     1.6%).
     """
     if spectral.convention() is None and spectral.rest() is None:
-        raise ConfigError(
+        raise ValueError(
             "the velocities of a spectral axis need their convention: give "
             "its convention ('radio' for HI, 'optical' for lines of ionised "
             "gas, 'log' for the stars of pPXF, or 'relativistic'), or its "
@@ -91,12 +91,12 @@ def make_rest(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the value is not a positive wavelength or frequency.
     """
     if value is None:
         return None
-    error = ConfigError(
+    error = ValueError(
         f"the rest of a spectral axis must be a positive wavelength or "
         f"frequency with units (e.g. '6562.8 Angstrom'); it is {value!r}")
     try:
@@ -124,7 +124,7 @@ def make_convention(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the convention is not one of those of the rest.
     """
     if rest is None:
@@ -136,7 +136,7 @@ def make_convention(
     convention = default if convention is None else convention
     if convention not in allowed:
         of = 'without a rest' if rest is None else f"of the rest {rest}"
-        raise ConfigError(
+        raise ValueError(
             f"the convention of the velocities {of} must be one of "
             f"{[c for c in allowed if c is not None]}; it is {convention!r}")
     return convention
@@ -164,20 +164,20 @@ def make_medium(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the medium is not one of those, or there is a medium without a
         rest wavelength.
     """
     if rest is None or rest.unit != astropy.units.m:
         if medium is not None:
-            raise ConfigError(
+            raise ValueError(
                 f"only the wavelengths of a rest wavelength have a medium; "
                 f"the rest is {rest}")
         return None
     if medium is None:
         return 'vacuum'
     if medium not in ('vacuum', 'air'):
-        raise ConfigError(
+        raise ValueError(
             f"the medium must be 'vacuum' or 'air'; it is {medium!r}")
     return medium
 
@@ -200,11 +200,11 @@ def air_refractive_index(wavelength: float) -> float:
 
     Raises
     ------
-    ConfigError
+    ValueError
         Below 2000 Angstrom, where air wavelengths are not used.
     """
     if not wavelength >= 2e-7:
-        raise ConfigError(
+        raise ValueError(
             f"wavelengths in air are used above 2000 Angstrom only; a line "
             f"is at {wavelength * 1e10:.1f} Angstrom (in vacuum)")
     # The wavenumber (1 / um), squared
@@ -247,7 +247,7 @@ class VelocityConvention:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the convention or the medium is not one of those of the rest.
     """
 
@@ -339,7 +339,7 @@ class VelocityConvention:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the axis has no rest.
         """
         return self._require_rest(self._rest_frequency) \
@@ -352,7 +352,7 @@ class VelocityConvention:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the axis has no rest.
         """
         return self._require_rest(self._rest_wavelength) \
@@ -365,7 +365,7 @@ class VelocityConvention:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the axis has no rest.
         """
         return self.velocity(
@@ -380,7 +380,7 @@ class VelocityConvention:
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the axis has no rest.
         """
         rest = self._require_rest(self._rest)
@@ -402,7 +402,7 @@ class VelocityConvention:
     def _require_rest(self, value: _T) -> _T:
         """Return a value of the rest, or raise if the axis has none."""
         if self._rest is None:
-            raise ConfigError(
+            raise ValueError(
                 "velocities and wavelengths or frequencies are converted "
                 "with the rest of the spectral axis (RESTWAV or RESTFRQ in "
                 "the header of the data, or its option rest), which is not "
@@ -446,7 +446,7 @@ class SpectralAxis(Serializable):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If size is not a positive integer, step is not positive, or the
         rest, the medium, the convention or the frame is not valid.
     """

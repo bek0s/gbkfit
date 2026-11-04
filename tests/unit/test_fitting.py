@@ -925,7 +925,7 @@ def test_optimizers_of_the_aicp_minimise_it():
     assert FitterMultiStart(FitterCMAES(merit='aicp')).merit() == 'aicp'
     with pytest.raises(ConfigError, match="not a likelihood"):
         FitterCMAES(merit='aicp', uncertainty=UncertaintyOptions())
-    with pytest.raises(ConfigError, match="option 'merit'"):
+    with pytest.raises(ValueError, match="option 'merit'"):
         FitterGrid(merit='bic')
 
 

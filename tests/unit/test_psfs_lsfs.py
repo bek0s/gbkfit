@@ -350,7 +350,7 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     (lambda: LSFLorentz(-1), "option 'gamma' must be greater than 0"),
     (lambda: LSFMoffat(1, 0.5), "option 'beta' must be greater than 0.5")])
 def test_invalid_profiles_are_rejected(make, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         make()
 
 

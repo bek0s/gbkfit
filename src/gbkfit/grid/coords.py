@@ -16,7 +16,6 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.config import ConfigError
 from .spectral import SpectralAxis, make_convention, make_medium, make_rest
 
 
@@ -195,13 +194,13 @@ def per_axis(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the option has neither one value nor one for each axis.
     """
     if np.ndim(value) == 0:
         return (value,) * naxes
     if len(value) != naxes:
-        raise ConfigError(
+        raise ValueError(
             f"option '{option}' must have one value for all {naxes} axes, "
             f"or one for each; it is {list(value)}")
     return tuple(value)
@@ -252,7 +251,7 @@ def make_grid(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the sizes are not positive integers, the world coordinates do
         not have a value for each axis, a step is not positive, or the
         spectral axis is not an axis of the grid, if a grid without a
@@ -262,7 +261,7 @@ def make_grid(
     ndim = len(size)
     if not all(isinstance(n, numbers.Integral) and not isinstance(n, bool)
                and n > 0 for n in size):
-        raise ConfigError(
+        raise ValueError(
             f"the sizes of a grid must be positive integers; they are "
             f"{tuple(size)}")
     if step is None:
@@ -277,13 +276,13 @@ def make_grid(
         per_axis(name, value, ndim)
         for name, value in dict(step=step, rpix=rpix, rval=rval).items())
     if not all(value > 0 for value in step):
-        raise ConfigError(f"step must be positive; it is {step}")
+        raise ValueError(f"step must be positive; it is {step}")
     if spectral_axis is not None and spectral_axis not in range(ndim):
-        raise ConfigError(
+        raise ValueError(
             f"the grid has {ndim} axes; its spectral axis cannot be "
             f"{spectral_axis}")
     if rest is not None and spectral_axis is None:
-        raise ConfigError("a grid without a spectral axis has no rest")
+        raise ValueError("a grid without a spectral axis has no rest")
     rest = make_rest(rest)
     return Grid(
         tuple(size),
@@ -307,12 +306,12 @@ def make_cube_grid(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the spectral axis is not given or has no size, or the grid is not
         valid (see make_grid).
     """
     if spectral is None or spectral.size() is None:
-        raise ConfigError(
+        raise ValueError(
             "the spectral axis needs its number of channels: spectral: "
             "{size: ...}")
     coords = make_grid(tuple(size), step, rpix, rval, rota).coords
@@ -490,7 +489,7 @@ def check_overlap(grid: Grid, other: Grid, desc: str) -> None:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If other covers none of the pixels of grid (e.g. because one of
         them has the wrong RA and Dec).
     """
@@ -501,7 +500,7 @@ def check_overlap(grid: Grid, other: Grid, desc: str) -> None:
             & (pixel_y >= -0.5) & (pixel_y <= size_y - 0.5)):
         x, y = _from_sky(
             *np.radians(other.coords.rval[:2]), grid.coords.rval)
-        raise ConfigError(
+        raise ValueError(
             f"{desc} does not cover any of the pixels it is used on: by "
             f"their RA and Dec, its reference pixel is at x = {x:.6g}, "
             f"y = {y:.6g} arcsec from theirs; check the world coordinates "

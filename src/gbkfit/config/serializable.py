@@ -508,11 +508,15 @@ def is_record(type_: Any) -> bool:
 
 def _quantity(info: Mapping[str, Any]) -> astropy.units.Quantity:
     """Return the Quantity of a dict with its value and unit."""
-    # (unitutils imports this module)
+    # Imported here: unitutils imports this module
     from gbkfit.utils import unitutils
     options = parse_options(dict(info), required={'value', 'unit'})
-    with config_path('unit'):
+    # The unit is parsed here, so that what is wrong with it is a mistake
+    # of the configuration
+    try:
         unit = unitutils.parse_unit(options['unit'])
+    except ValueError as e:
+        raise ConfigError(str(e), ['unit']) from e
     try:
         return astropy.units.Quantity(options['value'], unit, dtype=float)
     except (TypeError, ValueError) as e:

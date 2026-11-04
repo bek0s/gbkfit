@@ -194,13 +194,15 @@ def test_gaussian_fit_of_bins(driver):
             bmaps[key], mmaps[key].ravel(), rtol=1e-4, atol=1e-3)
 
 
-@pytest.mark.parametrize('options, message', [
-    (dict(method='gauss'), "'method' must be one of"),
-    (dict(method='gaussian_fit', orders=[1, 3]), "between 0 and 2"),
-    (dict(method='gauss_hermite', orders=[1, 5]), "between 0 and 4")])
-def test_method_options_are_checked(options, message):
+@pytest.mark.parametrize('options, error, message', [
+    (dict(method='gauss'), ValueError, "'method' must be one of"),
+    (dict(method='gaussian_fit', orders=[1, 3]), ConfigError,
+     "between 0 and 2"),
+    (dict(method='gauss_hermite', orders=[1, 5]), ConfigError,
+     "between 0 and 4")])
+def test_method_options_are_checked(options, error, message):
     from gbkfit.observation import PixelMoments
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(error, match=message):
         PixelMoments(
             size=(8, 8), **options,
             spectral=SpectralAxis(convention='relativistic'))

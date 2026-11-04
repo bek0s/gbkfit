@@ -8,7 +8,6 @@ import astropy.wcs
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import (
     CONVENTIONS, Grid, VelocityConvention, check_overlap, make_convention,
     make_grid, make_rest, pixels_on)
@@ -47,7 +46,7 @@ def test_grids_must_overlap():
     grid = make_grid((10, 10), rval=(150.0, 2.0))
     check_overlap(grid, grid, 'the image')
     far = make_grid((10, 10), rval=(150.0, 2.1))
-    with pytest.raises(ConfigError, match="the image does not cover"):
+    with pytest.raises(ValueError, match="the image does not cover"):
         check_overlap(grid, far, 'the image')
 
 
@@ -59,7 +58,7 @@ def test_grids_must_overlap():
     (dict(size=(10, 10, 5), spectral_axis=3), "spectral axis cannot be 3"),
     (dict(size=(10, 10), rest='1 GHz'), "has no rest")])
 def test_make_grid_errors(options, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         make_grid(**options)
 
 
@@ -76,7 +75,7 @@ def test_velocity_conventions_follow_the_rest():
         assert make_convention(convention, None) == convention
     for convention, rest in (
             ('radio', wave), ('log', freq), ('fast', None)):
-        with pytest.raises(ConfigError, match="convention"):
+        with pytest.raises(ValueError, match="convention"):
             make_convention(convention, rest)
 
 

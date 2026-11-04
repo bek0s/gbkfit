@@ -143,20 +143,20 @@ def _describe(
     if not ambiguous or velocity is not None:
         try:
             coords = read_coords(filename, index, velocity)
-        except ConfigError as e:
+        except ValueError as e:
             problems.append(str(e))
     unit = read_unit(filename, index)
     beam = None
     try:
         options = read_beam(filename, index)
         beam = None if options is None else Beam(**options)
-    except ConfigError as e:
+    except (ConfigError, ValueError) as e:
         problems.append(str(e))
     if unit is not None:
         try:
             per_beam = unitutils.spatial_unit(
                 unitutils.parse_unit(unit)) == astropy.units.beam
-        except ConfigError as e:
+        except ValueError as e:
             problems.append(f"{e}: give the unit (option unit of the data)")
         else:
             if per_beam and beam is None:

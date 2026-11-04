@@ -10,7 +10,7 @@ import numpy as np
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
 
-from gbkfit.config import ConfigError, parse_file
+from gbkfit.config import parse_file
 from gbkfit.utils import unitutils
 
 
@@ -41,18 +41,21 @@ def read_table(file: Any, format_: str | None = None) -> Table:
 
     Raises
     ------
-    ConfigError
-        If the file cannot be read, or astropy cannot tell its format.
+    OSError
+        If the file cannot be read (e.g. it is missing).
+    ValueError
+        If astropy cannot tell its format, or cannot read it as a table
+        of that format.
     """
     filename = parse_file(file)[0]
     try:
         return Table.read(filename, format=format_)
     except IORegistryError:
-        raise ConfigError(
+        raise ValueError(
             f"cannot tell the format of the table {filename}: give it "
             f"(format, e.g. ascii.csv)") from None
-    except (OSError, ValueError) as e:
-        raise ConfigError(f"cannot read the table {filename}: {e}") from e
+    except ValueError as e:
+        raise ValueError(f"cannot read the table {filename}: {e}") from e
 
 
 def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
@@ -79,20 +82,20 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the table has no such column, its values are not numbers, the
         unit is not a unit, or the unit of the column cannot be converted
         to it.
     """
     if name not in table.colnames:
-        raise ConfigError(
+        raise ValueError(
             f"the table has no column {name!r}; its columns are "
             f"{table.colnames}")
     column = table[name]
     try:
         values = np.ma.filled(np.ma.asarray(column, dtype=float), np.nan)
     except (TypeError, ValueError):
-        raise ConfigError(f"the column {name!r} is not of numbers") from None
+        raise ValueError(f"the column {name!r} is not of numbers") from None
     if unit is None:
         return values * (column.unit or u.dimensionless_unscaled)
     given = unitutils.parse_unit(unit)
@@ -101,7 +104,7 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
     try:
         return (values * column.unit).to(given)
     except u.UnitConversionError:
-        raise ConfigError(
+        raise ValueError(
             f"the column {name!r} is in "
             f"{unitutils.format_unit(column.unit)!r}, which cannot be "
             f"converted to {unit!r}") from None

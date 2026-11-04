@@ -298,7 +298,7 @@ def test_the_deflections_of_the_masses_of_a_lens_add_up():
     unnamed = Lens((8, 8), (1, 1), [LensSIE(), LensShear()])
     assert 'theta_e' in unnamed.pdescs()
     assert 'mass1_gamma' in unnamed.pdescs()
-    with pytest.raises(ConfigError, match="must have a name"):
+    with pytest.raises(ValueError, match="must have a name"):
         Lens((8, 8), (1, 1), [LensSIE(name='main'), LensShear()])
 
 

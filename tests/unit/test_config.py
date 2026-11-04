@@ -175,7 +175,7 @@ def test_item_prefixes(names, prefix, prefix_first, prefixes):
     (['disk', 'disk'],
      r"the names of the components must be unique; repeated: \['disk'\]")])
 def test_item_prefixes_errors(names, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         item_prefixes(names, 'components', 'cmp', False)
 
 
@@ -184,9 +184,11 @@ def test_valid_names(name):
     check_name(name)
 
 
-@pytest.mark.parametrize('name', ['', 'my disk', 'disk-1', 'disk.x', 3])
-def test_invalid_names(name):
-    with pytest.raises(ConfigError, match="invalid name"):
+@pytest.mark.parametrize('name, error', [
+    ('', ValueError), ('my disk', ValueError), ('disk-1', ValueError),
+    ('disk.x', ValueError), (3, TypeError)])
+def test_invalid_names(name, error):
+    with pytest.raises(error, match="invalid name"):
         check_name(name)
 
 
@@ -279,15 +281,19 @@ class Beam(Serializable):
         return {}
 
 
-@pytest.mark.parametrize('kwargs, message', [
-    (dict(bmaj=-1), "option 'bmaj' must be greater than 0; it is -1"),
-    (dict(bmaj=1, ratio=1.5),
+@pytest.mark.parametrize('kwargs, error, message', [
+    (dict(bmaj=-1), ValueError,
+     "option 'bmaj' must be greater than 0; it is -1"),
+    (dict(bmaj=1, ratio=1.5), ValueError,
      "option 'ratio' must be greater than 0 and at most 1; it is 1.5"),
-    (dict(bmaj=1, shape='box'),
+    (dict(bmaj=1, shape='box'), ValueError,
      "option 'shape' must be one of 'gauss', 'airy'; it is 'box'"),
-    (dict(bmaj='1'), "option 'bmaj' must be of type float; it is '1'")])
-def test_python_calls_are_checked(kwargs, message):
-    with pytest.raises(ConfigError, match=re.escape(message)):
+    (dict(bmaj='1'), TypeError,
+     "option 'bmaj' must be of type float; it is '1'")])
+def test_python_calls_are_checked(kwargs, error, message):
+    # Alike: in Python as errors of the arguments, in configurations as
+    # mistakes of the configuration
+    with pytest.raises(error, match=re.escape(message)):
         Beam(**kwargs)
     with pytest.raises(ConfigError, match=re.escape(message)):
         Beam.load(kwargs)

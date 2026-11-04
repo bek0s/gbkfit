@@ -1110,13 +1110,13 @@ def test_zhao_is_nfw_for_its_shape():
         rtol=1e-10)
 
 
-@pytest.mark.parametrize('options, message', [
-    (dict(parameters='mass'), "'parameters' must be one of"),
-    (dict(overdensity='200x'), "overdensity must be"),
-    (dict(parameters='density_radius', overdensity='200c'),
+@pytest.mark.parametrize('options, error, message', [
+    (dict(parameters='mass'), ValueError, "'parameters' must be one of"),
+    (dict(overdensity='200x'), ConfigError, "overdensity must be"),
+    (dict(parameters='density_radius', overdensity='200c'), ConfigError,
      "take no overdensity")])
-def test_halo_options_are_checked(options, message):
-    with pytest.raises(ConfigError, match=message):
+def test_halo_options_are_checked(options, error, message):
+    with pytest.raises(error, match=message):
         ProfileNFW(**options)
 
 
@@ -1318,9 +1318,9 @@ def test_distances_give_the_length_of_an_arcsec():
     assert own.epoch({}, 0.5) == 0.4
     assert own.dump()['redshift'] == 0.4
     # (a redshift of 0 gave a distance of 0)
-    with pytest.raises(ConfigError, match="'redshift' must be greater than 0"):
+    with pytest.raises(ValueError, match="'redshift' must be greater than 0"):
         DistanceRedshift(redshift=0)
-    with pytest.raises(ConfigError, match="'cosmology' must be one of"):
+    with pytest.raises(ValueError, match="'cosmology' must be one of"):
         DistanceRedshift(cosmology='Planck99')
     # (by the redshift of a galaxy without one, or blueshifted: no length)
     for redshift in ({}, dict(redshift=-0.001)):
@@ -2186,7 +2186,7 @@ def test_rotation_at_each_height_option():
     trait = traits.vht_parser.load(dict(type='mass', zmax=3))
     assert traits.vht_parser.dump(trait) == dict(type='mass', zmax=3.0)
     assert trait.from_galaxy().heights[-1] == 3.0
-    with pytest.raises(ConfigError, match="'zmax' must be finite and greater than 0"):
+    with pytest.raises(ValueError, match="'zmax' must be finite and greater than 0"):
         traits.VHTraitMass(0)
 
 

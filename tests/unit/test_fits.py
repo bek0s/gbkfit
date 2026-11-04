@@ -10,7 +10,6 @@ import astropy.wcs
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, Grid, make_convention, make_grid, make_rest
 from gbkfit.io import (
     centre_missing_crpix, read_array, read_data, read_hdu, write_data)
@@ -206,7 +205,7 @@ def test_hdu_can_be_chosen():
     (dict(CDELT1=1.0, CDELT2=1.0, CDELT3=1.0, PC3_1=0.5), (6, 20, 24),
      "couple axes")])
 def test_coordinates_the_model_cannot_represent(header, shape, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         write(header, shape)
 
 
@@ -225,7 +224,7 @@ def test_the_first_image_is_read_past_tables():
     ]).writeto('data.fits')
     data, _ = read_hdu('data.fits')
     assert data.shape == (20, 24)
-    with pytest.raises(ConfigError, match="HDU 1 is not an image"):
+    with pytest.raises(ValueError, match="HDU 1 is not an image"):
         read_hdu('data.fits', 1)
 
 
@@ -306,7 +305,7 @@ def test_hdu_without_data():
         fits.PrimaryHDU(),
         fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
     ]).writeto('data.fits')
-    with pytest.raises(ConfigError, match="HDU 0 has no data"):
+    with pytest.raises(ValueError, match="HDU 0 has no data"):
         read_data('data.fits')
 
 
@@ -381,7 +380,7 @@ def test_rest_can_be_given():
     fits.writeto('plain.fits', np.zeros((6, 20, 24), np.float32))
     coords = read_data('plain.fits', rest='6562.8 Angstrom')[1]
     assert coords.rest == 6562.8 * u.Angstrom
-    with pytest.raises(ConfigError, match="relativistic velocities"):
+    with pytest.raises(ValueError, match="relativistic velocities"):
         fits.writeto('velo.fits', np.zeros((6, 20, 24), np.float32),
                      fits.Header(_spectral_header('VELO')))
         read_data('velo.fits', rest='6562.8 Angstrom')
@@ -445,7 +444,7 @@ def test_medium_round_trip():
     ('1420.405752 MHz', 'air', "only the wavelengths of a rest wavelength"),
     (None, 'vacuum', "only the wavelengths of a rest wavelength")])
 def test_invalid_medium(rest, medium, message):
-    with pytest.raises(ConfigError, match=message):
+    with pytest.raises(ValueError, match=message):
         make_grid(
             (24, 20, 6), spectral_axis=2, rest=rest, medium=medium)
 
@@ -453,7 +452,7 @@ def test_invalid_medium(rest, medium, message):
 @pytest.mark.parametrize('value', [
     '6562.8', '3 km/s', '-1 Angstrom', 'Halpha', [1, 2] * u.m])
 def test_invalid_rest(value):
-    with pytest.raises(ConfigError, match="positive wavelength or frequency"):
+    with pytest.raises(ValueError, match="positive wavelength or frequency"):
         make_rest(value)
 
 
@@ -461,7 +460,7 @@ def test_nonlinear_velocity_axes_are_rejected():
     # e.g. velocities derived from a linear frequency axis (F2W) are not
     # linear in the pixels
     header = _spectral_header('VOPT-F2W', RESTWAV=6.5628e-7)
-    with pytest.raises(ConfigError, match="not linear in velocity"):
+    with pytest.raises(ValueError, match="not linear in velocity"):
         write(header, shape=(6, 20, 24))
 
 

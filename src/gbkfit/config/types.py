@@ -38,6 +38,7 @@ __all__ = [
     'matches_type',
     'option_types',
     'split_fits_file',
+    'type_error',
     'type_problem',
     'union_members',
     'unit_of',
@@ -321,11 +322,39 @@ def type_problem(value: Any, type_: Any) -> str | None:
     TypeError
         If pydantic cannot validate values of the annotation.
     """
+    error = type_error(value, type_)
+    return None if error is None else str(error)
+
+
+def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
+    """
+    Return the error of the value of an option of a type annotation, of
+    the problem that type_problem describes: a TypeError if the value is
+    not of the type (or is null), a ValueError if it is outside the range
+    or the choices of the annotation, or None if nothing is wrong.
+
+    Parameters
+    ----------
+    value : Any
+        The value.
+    type_ : Any
+        The annotation.
+
+    Returns
+    -------
+    TypeError or ValueError or None
+        The error, whose message is the problem, or None.
+
+    Raises
+    ------
+    TypeError
+        If pydantic cannot validate values of the annotation.
+    """
     if isinstance(value, np.generic):
         value = value.item()
     if value is None:
         return None if type(None) in union_members(type_) \
-            else "cannot be null"
+            else TypeError("cannot be null")
     type_, bounds = _split_bounds(_without_none(type_))
     # A plain array (not a subclass, e.g. a Quantity) is checked as a list
     if not matches_type(value, type_) and not (
@@ -337,26 +366,28 @@ def type_problem(value: Any, type_: Any) -> str | None:
                 typing.get_origin(x) is Literal or _split_bounds(x)[1]
                 for x in members):
             alternatives = ' or '.join(_describe_member(x) for x in members)
-            return f"must be {alternatives}; it is {value!r}"
+            return ValueError(f"must be {alternatives}; it is {value!r}")
         if typing.get_origin(type_) is Literal:
             choices = ', '.join(repr(x) for x in typing.get_args(type_))
-            return f"must be one of {choices}; it is {value!r}"
-        if (item := _item_problem(value, type_)) is not None:
+            return ValueError(f"must be one of {choices}; it is {value!r}")
+        if (item := _item_error(value, type_)) is not None:
             return item
-        return f"must be of type {describe_type(type_)}; it is {value!r}"
+        return TypeError(
+            f"must be of type {describe_type(type_)}; it is {value!r}")
     bounds = [_bound(x) for x in bounds]
     if not all(check(value) for _, check in bounds):
         within = ' and '.join(words for words, _ in bounds)
-        return f"must be {within}; it is {value!r}"
+        return ValueError(f"must be {within}; it is {value!r}")
     return None
 
 
-def _item_problem(value: Any, type_: Any) -> str | None:
+def _item_error(value: Any, type_: Any) -> TypeError | ValueError | None:
     """
-    Return what is wrong with the first wrong item of a sequence of a
-    sequence annotation (e.g. "item [1] must be greater than 0; it is -2",
-    or "item [1][0] ..." in a sequence of sequences), or None if the value
-    is not a sequence of one, or no item is wrong.
+    Return the error of the first wrong item of a sequence of a sequence
+    annotation (e.g. "item [1] must be greater than 0; it is -2", or
+    "item [1][0] ..." in a sequence of sequences), of the type of that of
+    the item, or None if the value is not a sequence of one, or no item
+    is wrong.
     """
     if type(value) is np.ndarray:
         value = value.tolist()
@@ -370,10 +401,11 @@ def _item_problem(value: Any, type_: Any) -> str | None:
         return None
     item_type = args[0] if args else Any
     for i, item in enumerate(value):
-        if (wrong := type_problem(item, item_type)) is not None:
+        if (error := type_error(item, item_type)) is not None:
+            wrong = str(error)
             inner = wrong.removeprefix('item ') if wrong.startswith(
                 'item [') else f' {wrong}'
-            return f"item [{i}]{inner}"
+            return type(error)(f"item [{i}]{inner}")
     return None
 
 

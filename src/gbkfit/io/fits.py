@@ -21,7 +21,7 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 
-from gbkfit.config import ConfigError, warn
+from gbkfit.config import warn
 from gbkfit.grid import Coords, FRAMES, make_convention, make_medium, make_rest
 
 
@@ -244,7 +244,7 @@ def casa_beam_table(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the cube has no spectral axis.
     """
     u = astropy.units
@@ -256,7 +256,7 @@ def casa_beam_table(
         header = astropy.io.fits.getheader(filename, 0)
     wcs = astropy.wcs.WCS(header)
     if wcs.wcs.spec < 0:
-        raise ConfigError(f"{filename}: the cube has no spectral axis")
+        raise ValueError(f"{filename}: the cube has no spectral axis")
     spectral = wcs.sub([wcs.wcs.spec + 1])
     unit = u.Unit(spectral.wcs.cunit[0])
     points = spectral.pixel_to_world_values(np.asarray(beams['CHAN']))
@@ -321,7 +321,7 @@ def read_data(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the HDU has no data, or the header has invalid world
         coordinates or ones the model cannot represent (see model_header
         and coords_from_header).
@@ -362,7 +362,7 @@ def read_array(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the HDU has no array.
     """
     data, header = read_hdu(filename, hdu)
@@ -409,7 +409,7 @@ def read_coords(
 
     Raises
     ------
-    ConfigError
+    ValueError
         As read_data, for the world coordinates of the header.
     """
     header = astropy.io.fits.getheader(filename, hdu)
@@ -437,7 +437,7 @@ def read_hdu(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the file has no such HDU, or it is not an image (e.g. a table),
         or it has no data.
     """
@@ -449,19 +449,19 @@ def read_hdu(
                 h for h in hdulist
                 if h.is_image and h.header.get('NAXIS', 0) > 0), None)
             if found is None:
-                raise ConfigError(f"{filename}: no HDU has an image")
+                raise ValueError(f"{filename}: no HDU has an image")
         else:
             try:
                 found = hdulist[hdu]
             except (IndexError, KeyError) as e:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: it has no HDU {hdu!r}") from e
             if not found.is_image:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: HDU {hdu!r} is not an image (e.g. a "
                     f"table); choose the HDU of the image (e.g. hdu: SCI)")
             if found.data is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: HDU {hdu} has no data; choose the HDU with "
                     f"the data (e.g. hdu: SCI)")
         return np.array(found.data), found.header.copy()
@@ -526,7 +526,7 @@ def model_header(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the world coordinates are invalid, or of fewer axes than the
         array, or the header does not say whether its velocities are radio
         or optical and velocity is not given; or the rest is given for a
@@ -618,7 +618,7 @@ def coords_from_header(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the world coordinates are invalid or ones the model cannot
         represent (see coords_from_wcs), the spectral axis is not at
         spectral_axis, or the medium is not valid.
@@ -629,7 +629,7 @@ def coords_from_header(
     wcs, log = _log_velocity_axis(source, wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis must be the axis "
             f"{spectral_axis + 1}; it is the axis {spec + 1}")
     coords = coords_from_wcs(source, wcs, rpix, rval, rest, medium)
@@ -679,11 +679,11 @@ def _without_flat_axes(
 
 
 def _wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
-    """Return the world coordinates of a header, or raise ConfigError."""
+    """Return the world coordinates of a header, or raise ValueError."""
     try:
         return astropy.wcs.WCS(header)
     except Exception as e:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: invalid world coordinates: {e}") from e
 
 
@@ -701,13 +701,13 @@ def _file_wcs(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the world coordinates are invalid, or of fewer axes than the
         array.
     """
     naxis = _wcs(source, header).naxis
     if naxis < len(shape):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the header has world coordinates for {naxis} axes, "
             f"but the data has {len(shape)}")
     full = (1,) * (naxis - len(shape)) + tuple(shape)
@@ -736,16 +736,16 @@ def _velocity_axis(
         wcs.wcs.set()
         return wcs, 'air' if ctype == _LOG_TYPES['air'] else 'vac'
     if ctype[4:].strip('-').strip():
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis ({ctype}) is not linear in its "
             f"coordinate")
     if kind == 'VELO':
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis has relativistic velocities "
             f"(VELO), which have no rest; convert it to optical (VOPT) or "
             f"radio (VRAD) velocities")
     if kind not in ('WAVE', 'AWAV', 'FREQ', 'VOPT', 'VRAD'):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis ({ctype}) is not a wavelength, "
             f"frequency, or optical or radio velocity")
     # The axis becomes the velocities v = crval + scale x (km/s) of the
@@ -830,7 +830,7 @@ def _log_velocity_axis(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an axis of logarithmic wavelengths has no rest wavelength.
     """
     s = wcs.wcs.spec
@@ -842,7 +842,7 @@ def _log_velocity_axis(
     if rest is None and wcs.wcs.restwav > 0:
         rest = wcs.wcs.restwav * astropy.units.m
     if rest is None or not rest.unit.is_equivalent(astropy.units.m):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis of logarithmic wavelengths "
             f"({wcs.wcs.ctype[s]}) needs a rest wavelength (RESTWAV, or the "
             f"rest)")
@@ -910,7 +910,7 @@ def coords_from_wcs(
 
     Raises
     ------
-    ConfigError
+    ValueError
         For coordinates the model cannot represent: a skewed pixel grid,
         celestial axes coupled to other axes, and spectral axes that are
         not velocities or are not linear in velocity; or if the medium is
@@ -1241,7 +1241,7 @@ def linear_header(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the world coordinates are not of the axes of the array, have
         axes that are not celestial or spectral, or couple the spectral
         axis to others, or are not those of such a grid (e.g. distortions,
@@ -1251,7 +1251,7 @@ def linear_header(
     low = getattr(wcs, 'low_level_wcs', wcs)
     n = len(shape)
     if low.pixel_n_dim != n or low.world_n_dim != n:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the world coordinates have {low.pixel_n_dim} pixel "
             f"and {low.world_n_dim} world axes; the array has {n}")
     sizes = tuple(shape[::-1])
@@ -1274,12 +1274,12 @@ def linear_header(
         unit = astropy.units.Unit(low.world_axis_units[j])
         pixels = np.flatnonzero(correlation[j])
         if not any(unit.is_equivalent(x) for x in _SPECTRAL_UNITS):
-            raise ConfigError(
+            raise ValueError(
                 f"{source}: the world axis "
                 f"{low.world_axis_physical_types[j]!r} is neither celestial "
                 f"nor spectral")
         if len(pixels) != 1:
-            raise ConfigError(
+            raise ValueError(
                 f"{source}: the spectral axis varies along more than one "
                 f"pixel axis")
         k = int(pixels[0])
@@ -1289,7 +1289,7 @@ def linear_header(
     if sky:
         pixels = np.flatnonzero(correlation[sky].any(axis=0))
         if len(sky) != 2 or len(pixels) != 2:
-            raise ConfigError(
+            raise ValueError(
                 f"{source}: the celestial axes must be two, of two pixel "
                 f"axes")
         lon, lat = sorted(sky, key=lambda j: components[j][1])
@@ -1337,7 +1337,7 @@ def linear_header(
         world[axes[k]] * factors[k] for k in range(n)])
     pixels = np.array(pixels).reshape(points.shape)
     if not np.allclose(pixels, points, rtol=0, atol=_LINEAR_TOLERANCE):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the world coordinates are not those of a grid the "
             f"model represents (e.g. they have distortions, or a spectral "
             f"axis linear in none of wavelength, frequency, velocity or log "
@@ -1398,7 +1398,7 @@ def _linear_spectral_axis(
         lines.append((distance, kind, step, middle))
     distance, kind, step, middle = min(lines)
     if not distance <= _LINEAR_TOLERANCE:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis is linear in none of "
             f"{', '.join(kind for kind, _ in kinds)}: resample the data "
             f"first")
@@ -1615,7 +1615,7 @@ def _header_medium(
         return None
     mediums = {v: k for k, v in _HEADER_MEDIUMS.items()}
     if value not in mediums:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: AIRORVAC must be one of {list(mediums)}; it is "
             f"{value!r}")
     return mediums[value]
@@ -1657,19 +1657,19 @@ def with_velocity_convention(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the convention is ambiguous and not given, or it is given and
         the header states it, or it is not 'radio' or 'optical'.
     """
     if velocity is not None and velocity not in _VELOCITY_CONVENTIONS:
-        raise ConfigError(
+        raise ValueError(
             f"the convention of velocities must be one of "
             f"{list(_VELOCITY_CONVENTIONS)}; it is {velocity!r}")
     frame = _aips_frame(header)
     ambiguous = velocity_is_ambiguous(header)
     if velocity is None:
         if ambiguous:
-            raise ConfigError(
+            raise ValueError(
                 f"{source}: the velocities of the spectral axis (VELO-{frame}"
                 f", without VELREF) may be radio or optical: AIPS reads them "
                 f"as optical, but MIRIAD writes radio ones (e.g. LVHIS). Say "
@@ -1680,7 +1680,7 @@ def with_velocity_convention(
                 f"{_AIPS_FRAMES[frame] + 256} for radio)")
         return header
     if not ambiguous:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the convention of velocities is for a spectral axis "
             f"of the AIPS convention without VELREF (e.g. VELO-HEL); this "
             f"header states its own")
@@ -1748,7 +1748,7 @@ def _spectral_rest(
     kind = wcs.wcs.ctype[wcs.wcs.spec][:4]
     if kind == 'VELO':
         if rest is not None:
-            raise ConfigError(
+            raise ValueError(
                 f"{source}: the spectral axis has relativistic velocities "
                 f"(VELO), which have no rest; convert it to optical (VOPT) "
                 f"or radio (VRAD) velocities")
@@ -1782,14 +1782,14 @@ def _axis_scale(source: str, wcs: astropy.wcs.WCS, axis: int) -> float:
         return 1.0
     ctype = wcs.wcs.ctype[axis]
     if ctype[:4] not in VELOCITY_TYPES:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis is of type '{ctype}'; only "
             f"velocity axes ({', '.join(VELOCITY_TYPES)}) are supported: "
             f"convert it to velocities with gbkfit-cli prep and the option "
             f"--velocity-rest (the rest frequency or wavelength of the "
             f"line)")
     if ctype[4:].strip('-').strip():
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the spectral axis ({ctype}) is not linear in "
             f"velocity; only linear velocity axes are supported")
     return astropy.units.Unit(wcs.wcs.cunit[axis]).to(_KM_S)
@@ -1804,7 +1804,7 @@ def _celestial_rotation(source: str, linear: np.ndarray) -> float:
     column_x, column_y = linear[:2, :2].T
     cosine = column_x @ column_y / np.hypot(*column_x) / np.hypot(*column_y)
     if abs(cosine) > 1e-6:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the pixel grid is skewed (its axes are not "
             f"perpendicular on the sky), which the model does not support")
     return float(np.degrees(np.arctan2(column_y[0], column_y[1])))
@@ -1826,7 +1826,7 @@ def _to_icrs(
     try:
         frame = astropy.wcs.utils.wcs_to_celestial_frame(wcs)
     except ValueError as e:
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the celestial frame of the world coordinates is "
             f"not known: {e}") from e
     if isinstance(frame, astropy.coordinates.ICRS):
@@ -1848,7 +1848,7 @@ def _check_uncoupled(
         linear: np.ndarray
 ) -> None:
     """
-    Raise ConfigError if a pixel axis other than the celestial pair is
+    Raise ValueError if a pixel axis other than the celestial pair is
     rotated into another world axis (e.g. velocity varying along x),
     beyond rounding (see _COUPLING_TOLERANCE).
     """
@@ -1860,7 +1860,7 @@ def _check_uncoupled(
     np.fill_diagonal(coupled, 0)
     scale = np.abs(linear).max(axis=1, keepdims=True)
     if np.any(np.abs(coupled) > _COUPLING_TOLERANCE * scale):
-        raise ConfigError(
+        raise ValueError(
             f"{source}: the world coordinates couple axes that the model "
             f"keeps independent (e.g. the velocity varies along a spatial "
             f"axis)")

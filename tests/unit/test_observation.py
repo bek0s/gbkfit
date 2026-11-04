@@ -60,7 +60,7 @@ def test_a_model_that_can_lack_values_needs_their_residual():
 
 
 def test_observable_options_are_checked():
-    with pytest.raises(ConfigError, match="'flux_floor' must be at least 0 and less than 1"):
+    with pytest.raises(ValueError, match="'flux_floor' must be at least 0 and less than 1"):
         PixelMoments(
             size=(8, 8), flux_floor=1,
             spectral=SpectralAxis(convention='relativistic'))
@@ -77,9 +77,9 @@ def test_grid_options_take_one_value_or_one_for_each_axis():
     observable = PixelBrightness(size=8, step=0.5)
     assert observable.size() == (8, 8)
     assert observable.step() == (0.5, 0.5)
-    with pytest.raises(ConfigError, match="option 'size' must have one"):
+    with pytest.raises(ValueError, match="option 'size' must have one"):
         PixelBrightness(size=(8, 8, 10))
-    with pytest.raises(ConfigError, match="option 'size' must have one"):
+    with pytest.raises(ValueError, match="option 'size' must have one"):
         observable_parser.load(dict(type='pixel_brightness', size=[8, 8, 10]))
 
 
@@ -113,7 +113,7 @@ def test_dtypes_without_kernels_are_errors(dtype):
     dataset = Data(np.ones((8, 8)))
     from gbkfit.dataset import DatasetPixelBrightness
     observable = PixelBrightness.from_data(DatasetPixelBrightness(dataset))
-    with pytest.raises(ConfigError, match="'dtype' must be one of 'float32', 'float64'"):
+    with pytest.raises(ValueError, match="'dtype' must be one of 'float32', 'float64'"):
         ObservationSky(observable, LineOfSightFlat(), dtype=dtype)
 
 

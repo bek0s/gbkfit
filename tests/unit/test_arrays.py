@@ -51,7 +51,7 @@ def test_errors_in_the_unit_of_another_kind_are_an_error(tmp_path):
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
     write(tmp_path / 'error.fits', np.full(SHAPE, 4.0),
           dict(BUNIT='Jy2 / beam2'))
-    with pytest.raises(ConfigError, match="error_kind: variance"):
+    with pytest.raises(ValueError, match="error_kind: variance"):
         read_arrays(
             str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'))
 
@@ -105,7 +105,7 @@ def test_a_footprint_follows_the_data(tmp_path):
 def test_errors_on_other_pixels_are_an_error(tmp_path):
     write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
     write(tmp_path / 'error.fits', np.ones(SHAPE), CUBE | dict(CRVAL3=990.0))
-    with pytest.raises(ConfigError, match="pixels"):
+    with pytest.raises(ValueError, match="pixels"):
         read_arrays(
             str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits'))
 
@@ -284,7 +284,7 @@ def test_asdf_files_read_as_their_fits_twins(tmp_path, kind):
 def test_asdf_files_off_a_grid_are_refused(tmp_path):
     # Wavelengths of a curved axis: no linear header stands for them
     _, asdf_file = twin_files(tmp_path, 'curved')
-    with pytest.raises(ConfigError, match="resample"):
+    with pytest.raises(ValueError, match="resample"):
         read_arrays((asdf_file, 'roman/data'))
 
 
