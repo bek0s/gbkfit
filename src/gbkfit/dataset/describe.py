@@ -12,7 +12,6 @@ import astropy.io.fits
 import astropy.units
 import astropy.wcs
 
-from gbkfit.config import ConfigError
 from gbkfit.grid import Coords
 from gbkfit.io import (
     centre_missing_crpix, header_shape, model_axis_order, read_beam,
@@ -150,7 +149,7 @@ def _describe(
     try:
         options = read_beam(filename, index)
         beam = None if options is None else Beam(**options)
-    except (ConfigError, ValueError) as e:
+    except ValueError as e:
         problems.append(str(e))
     if unit is not None:
         try:

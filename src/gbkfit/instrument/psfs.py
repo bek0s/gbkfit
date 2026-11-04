@@ -23,7 +23,7 @@ import scipy.special
 from annotated_types import Gt, Le
 
 from gbkfit.config import (
-    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
+    FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
 from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import has_wcs, read_data, to_model_axes, write_data
@@ -97,7 +97,7 @@ class PSF(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an option that cannot vary is a table, or the options are
             invalid.
         """
@@ -210,12 +210,12 @@ class PSF(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If it has no beam: a point, or a PSF that varies (each point
             of the spectral axis has its own; see at).
         """
         if self.varies():
-            raise ConfigError(
+            raise ValueError(
                 "a PSF that varies has a beam at each point of the spectral "
                 "axis (see PSF.at)")
         return self._beam_area_impl()
@@ -339,7 +339,7 @@ class PSFPoint(PSF):
         return dict(type=self.type())
 
     def _beam_area_impl(self) -> float:
-        raise ConfigError(
+        raise ValueError(
             "a point PSF has no beam: a unit of light per beam needs a PSF "
             "of a width")
 
@@ -639,7 +639,7 @@ class PSFImage(PSF):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If step is not given and the header has no celestial axes.
         """
         check_options(PSFImage.from_file, locals())
@@ -649,7 +649,7 @@ class PSFImage(PSF):
             header = astropy.io.fits.getheader(filename, hdu)
             if not (has_wcs(header)
                     and astropy.wcs.WCS(header).has_celestial):
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: the image has no celestial axes; give the "
                     f"size of its pixels (step)")
             step = coords.step
@@ -676,14 +676,14 @@ class PSFImage(PSF):
         check_options(PSFImage.__init__, locals())
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 2:
-            raise ConfigError(
+            raise ValueError(
                 f"expected a 2D PSF image, but got shape {data.shape}")
         if not np.all(np.isfinite(data)):
-            raise ConfigError(
+            raise ValueError(
                 "non-finite pixels found in the supplied PSF image")
         step = tuple(float(x) for x in step)
         if len(step) != 2 or not all(x > 0 for x in step):
-            raise ConfigError(
+            raise ValueError(
                 f"the size of the pixels of a PSF image (step) must be two "
                 f"positive numbers; it is {step}")
         self._data = data
@@ -827,7 +827,7 @@ class PSFConvolution(PSF):
     def __init__(self, psfs: Sequence[PSF]):
         check_options(PSFConvolution.__init__, locals())
         if not psfs:
-            raise ConfigError("a convolution of PSFs needs at least one PSF")
+            raise ValueError("a convolution of PSFs needs at least one PSF")
         self._psfs = tuple(psfs)
 
     def varies(self) -> bool:
@@ -910,7 +910,7 @@ class PSFGaussBeam(PSF):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the header has no beam.
         """
         check_options(PSFGaussBeam.from_file, locals())
@@ -919,7 +919,7 @@ class PSFGaussBeam(PSF):
         missing = [
             key for key in ('BMAJ', 'BMIN', 'BPA') if key not in header]
         if missing:
-            raise ConfigError(f"{filename}: the header has no {missing}")
+            raise ValueError(f"{filename}: the header has no {missing}")
         return cls(
             float(header['BMAJ']) * 3600, float(header['BMIN']) * 3600,
             float(header['BPA']))
@@ -939,7 +939,7 @@ class PSFGaussBeam(PSF):
     ):
         check_options(PSFGaussBeam.__init__, locals())
         if bmin > bmaj:
-            raise ConfigError(
+            raise ValueError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
         self._bmaj = bmaj
         self._bmin = bmin
@@ -988,7 +988,7 @@ def _read_images(
         data = np.asarray(hdul[hdu].data, dtype=float)
         wcs = astropy.wcs.WCS(hdul[hdu].header)
     if data.ndim != 3:
-        raise ConfigError(
+        raise ValueError(
             f"{file}: PSF images must be a cube (nz, ny, nx); it has "
             f"{data.ndim} axes")
     data, wcs = to_model_axes(data, wcs)
@@ -1058,7 +1058,7 @@ class PSFImages(PSF):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the cube is not 3D, or the points or step are neither given
             nor in its header.
         """
@@ -1067,13 +1067,13 @@ class PSFImages(PSF):
         data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
             if file_points is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: the cube has no spectral axis; give the "
                     f"points of its images (points)")
             points = file_points
         if step is None:
             if file_step is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: the cube has no celestial axes; give the "
                     f"size of its pixels (step)")
             step = file_step
@@ -1102,16 +1102,16 @@ class PSFImages(PSF):
         check_options(PSFImages.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 3 or not np.all(np.isfinite(data)):
-            raise ConfigError(
+            raise ValueError(
                 f"PSF images must be finite, of shape (nz, ny, nx); their "
                 f"shape is {data.shape}")
         points = u.Quantity(points, dtype=float)
         if points.shape != data.shape[:1]:
-            raise ConfigError(
+            raise ValueError(
                 f"PSF images need a point for each of the {len(data)} "
                 f"images; they have {points.size}")
         if np.unique(points).size != points.size:
-            raise ConfigError("the points of the images must be distinct")
+            raise ValueError("the points of the images must be distinct")
         # (each image holds all the light)
         self._data = data / data.sum(axis=(1, 2), keepdims=True)
         self._points = points

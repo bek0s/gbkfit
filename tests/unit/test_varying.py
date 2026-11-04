@@ -133,13 +133,13 @@ def kms(values):
 @pytest.mark.parametrize('info, error, message', [
     (dict(type='hanning', width=dict(points=kms([0]), values=[1])),
      ConfigError, "option 'width' must be of type float"),
-    # Of the value at a point, which the constructor checks
+    # Of the values and the points of tables, which the constructors check
     (dict(type='gauss', sigma=dict(points=kms([0, 1]), values=[1, -1])),
      ValueError, "option 'sigma' must be greater than 0"),
     (dict(type='gauss', sigma=dict(points=[1, 2], values=[1, 1])),
      ConfigError, "sigma: option 'points' must be of type Quantity"),
     (dict(type='gauss', sigma=dict(points=kms([0, 0]), values=[1, 1])),
-     ConfigError, "must be distinct")])
+     ValueError, "must be distinct")])
 def test_varying_options_are_checked(info, error, message):
     with pytest.raises(error, match=message):
         lsf_parser.load(info)
@@ -148,7 +148,7 @@ def test_varying_options_are_checked(info, error, message):
 def test_tables_in_wavelength_need_the_rest():
     psf = psf_parser.load(
         dict(type='gauss', sigma=alpha_table(None, 'inline')))
-    with pytest.raises(ConfigError, match="convention of the velocities"):
+    with pytest.raises(ValueError, match="convention of the velocities"):
         psf.at(0 * KMS)
 
 
@@ -244,7 +244,7 @@ def test_varying_psfs_in_python(tmp_path):
     convention = VelocityConvention(6000 * u.AA)
     assert psf.at([velocity], convention)[0].dump()['alpha'] == (
         pytest.approx(0.7))
-    with pytest.raises(ConfigError, match="of PSFImage cannot vary"):
+    with pytest.raises(ValueError, match="of PSFImage cannot vary"):
         PSFImage.varying(data=np.ones((3, 3)), step=alpha)
 
 

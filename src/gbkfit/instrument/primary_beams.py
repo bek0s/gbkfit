@@ -15,7 +15,7 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
+    FitsFile, TypedParser, TypedSerializable, Unit, check_options,
     split_fits_file)
 from gbkfit.grid import (
     Grid, VelocityConvention, check_overlap, make_grid, pixels_on,
@@ -142,7 +142,7 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the fwhm or the frequency is not positive.
     """
 
@@ -310,7 +310,7 @@ class PrimaryBeamImage(PrimaryBeam):
         check_options(PrimaryBeamImage.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2:
-            raise ConfigError(
+            raise ValueError(
                 f"the primary beam must be an image; it has {data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0)
         self._grid = make_grid(

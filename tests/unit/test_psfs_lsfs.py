@@ -217,13 +217,13 @@ def test_images_without_their_pixel_size_need_it(tmp_path):
         CDELT1=-0.025 / 3600, CDELT2=0.025 / 3600)))
     fits.writeto(tmp_path / 'lsf.fits', np.ones(11))
     for file in ('psf.fits', 'cdelt.fits'):
-        with pytest.raises(ConfigError, match="give the size of its pixels"):
+        with pytest.raises(ValueError, match="give the size of its pixels"):
             PSFImage.from_file(str(tmp_path / file))
     psf = PSFImage.from_file(str(tmp_path / 'psf.fits'), step=(0.025, 0.025))
     np.testing.assert_allclose(psf._step, (0.025, 0.025))
-    with pytest.raises(ConfigError, match="give the width of its channels"):
+    with pytest.raises(ValueError, match="give the width of its channels"):
         LSFImage.from_file(str(tmp_path / 'lsf.fits'))
-    with pytest.raises(ConfigError, match="two positive numbers"):
+    with pytest.raises(ValueError, match="two positive numbers"):
         PSFImage(np.ones((9, 9)), step=(-0.1, 0.1))
 
 
@@ -409,7 +409,7 @@ def test_lsf_sum():
 @pytest.mark.parametrize('weights', [[1], [1, 0], [1, -1]])
 def test_sum_weights_are_checked(weights):
     from gbkfit.instrument import PSFGauss, PSFSum
-    with pytest.raises(ConfigError, match="positive weight"):
+    with pytest.raises(ValueError, match="positive weight"):
         PSFSum([PSFGauss(1.0), PSFGauss(2.0)], weights)
 
 

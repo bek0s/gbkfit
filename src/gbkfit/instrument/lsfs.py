@@ -30,7 +30,7 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
+    FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
 from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import has_wcs, read_data, write_data
@@ -106,7 +106,7 @@ class LSF(TypedSerializable, abc.ABC):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If an option that cannot vary is a table, or the options are
             invalid.
         """
@@ -601,7 +601,7 @@ class LSFImage(LSF):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If step is not given and the header has no spectral axis.
         """
         check_options(LSFImage.from_file, locals())
@@ -611,7 +611,7 @@ class LSFImage(LSF):
             header = astropy.io.fits.getheader(filename, hdu)
             if not (has_wcs(header)
                     and astropy.wcs.WCS(header).wcs.spec >= 0):
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: the image has no spectral axis; give the "
                     f"width of its channels (step)")
             step = coords.step[0]
@@ -638,10 +638,10 @@ class LSFImage(LSF):
         check_options(LSFImage.__init__, locals())
         data = np.squeeze(data)  # Remove singleton dimensions
         if data.ndim != 1:
-            raise ConfigError(
+            raise ValueError(
                 f"expected a 1D LSF image, but got shape {data.shape}")
         if not np.all(np.isfinite(data)):
-            raise ConfigError(
+            raise ValueError(
                 "non-finite pixels found in the supplied LSF image")
         self._data = data
         self._step = step
@@ -760,7 +760,7 @@ class LSFConvolution(LSF):
     def __init__(self, lsfs: Sequence[LSF]):
         check_options(LSFConvolution.__init__, locals())
         if not lsfs:
-            raise ConfigError("a convolution of LSFs needs at least one LSF")
+            raise ValueError("a convolution of LSFs needs at least one LSF")
         self._lsfs = tuple(lsfs)
 
     def stretched(self, factor: float) -> 'LSFConvolution':
@@ -865,7 +865,7 @@ def _read_images(
         data = np.asarray(hdul[hdu].data, dtype=float)
         wcs = astropy.wcs.WCS(hdul[hdu].header)
     if data.ndim != 2:
-        raise ConfigError(
+        raise ValueError(
             f"{file}: LSF profiles must be an image, with one profile per "
             f"row; it has {data.ndim} axes")
     points = None
@@ -935,7 +935,7 @@ class LSFImages(LSF):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the image is not 2D, or the points or step are neither given
             nor in its header.
         """
@@ -944,13 +944,13 @@ class LSFImages(LSF):
         data, file_points, file_step = _read_images(filename, hdu)
         if points is None:
             if file_points is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: the rows have no spectral axis; give the "
                     f"points of the profiles (points)")
             points = file_points
         if step is None:
             if file_step is None:
-                raise ConfigError(
+                raise ValueError(
                     f"{filename}: the columns are not in a velocity unit; "
                     f"give the width of the channels (step, km/s)")
             step = file_step
@@ -979,16 +979,16 @@ class LSFImages(LSF):
         check_options(LSFImages.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2 or not np.all(np.isfinite(data)):
-            raise ConfigError(
+            raise ValueError(
                 f"LSF profiles must be finite, of shape (nz, nk); their "
                 f"shape is {data.shape}")
         points = u.Quantity(points, dtype=float)
         if points.shape != data.shape[:1]:
-            raise ConfigError(
+            raise ValueError(
                 f"LSF profiles need a point for each of the {len(data)} "
                 f"profiles; they have {points.size}")
         if np.unique(points).size != points.size:
-            raise ConfigError("the points of the profiles must be distinct")
+            raise ValueError("the points of the profiles must be distinct")
         # (each profile holds all the light)
         self._data = data / data.sum(axis=1, keepdims=True)
         self._points = points

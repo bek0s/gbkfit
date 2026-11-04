@@ -37,7 +37,7 @@ import astropy.units as u
 import numpy as np
 
 from gbkfit.config import (
-    ConfigError, FilePath, Serializable, check_options, config_path,
+    FilePath, Serializable, check_options, config_path,
     option_types, parse_options_for_callable, unit_of, varying_options)
 from gbkfit.grid import VelocityConvention
 
@@ -81,11 +81,11 @@ def _equivalency(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If there is no convention, or it has no rest.
     """
     if convention is None:
-        raise ConfigError(
+        raise ValueError(
             "velocities and wavelengths or frequencies are converted with "
             "the convention of the velocities of the spectral axis, which "
             "is not given")
@@ -167,7 +167,7 @@ def to_velocities(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the convention is needed but not given, or has no rest.
     """
     return _convert(as_points(points), _KMS, convention)
@@ -195,7 +195,7 @@ def to_frequencies(
 
     Raises
     ------
-    ConfigError
+    ValueError
         If the convention is needed but not given, or has no rest.
     """
     return _convert(as_points(points), u.Hz, convention)
@@ -261,9 +261,10 @@ class SpectralTable(Serializable):
 
     Raises
     ------
-    ConfigError
-        If the points are not wavelengths, frequencies or velocities, are
-        repeated, or there is not a value for each.
+    TypeError
+        If the points are not wavelengths, frequencies or velocities.
+    ValueError
+        If the points are repeated, or there is not a value for each.
     """
 
     config_constructors = ('__init__', 'from_file')
@@ -275,21 +276,18 @@ class SpectralTable(Serializable):
             unit: str | u.UnitBase | None = None
     ):
         check_options(SpectralTable.__init__, locals())
-        try:
-            points = as_points(points)
-        except TypeError as e:
-            raise ConfigError(str(e)) from e
+        points = as_points(points)
         values = np.asarray(values, dtype=float)
         if (points.ndim != 1 or points.size == 0
                 or values.shape != points.shape):
-            raise ConfigError(
+            raise ValueError(
                 f"a table needs a value at each of its points; it has "
                 f"{points.size} points and {values.size} values")
         if not (np.all(np.isfinite(points)) and np.all(np.isfinite(values))):
-            raise ConfigError(
+            raise ValueError(
                 "the points and values of a table must be finite")
         if np.unique(points).size != points.size:
-            raise ConfigError("the points of a table must be distinct")
+            raise ValueError("the points of a table must be distinct")
         self._points = points
         self._values = values
         self._unit = None if unit is None else u.Unit(unit)
@@ -327,7 +325,7 @@ class SpectralTable(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the file has no column of points or values, or its points
             have no unit.
         """
@@ -337,11 +335,11 @@ class SpectralTable(Serializable):
         units = units or {}
         axes = [axis for axis in _AXES if axis in table.colnames]
         if len(axes) != 1:
-            raise ConfigError(
+            raise ValueError(
                 f"{file}: a table needs a column of its points, named "
                 f"one of {list(_AXES)}; its columns are {table.colnames}")
         if column not in table.colnames:
-            raise ConfigError(
+            raise ValueError(
                 f"{file}: there is no column '{column}'; the columns "
                 f"are {table.colnames}")
 
@@ -350,7 +348,7 @@ class SpectralTable(Serializable):
         axis = axes[0]
         points_unit = unit(axis) or (_KMS if axis == 'velocity' else None)
         if points_unit is None:
-            raise ConfigError(
+            raise ValueError(
                 f"{file}: the column '{axis}' has no unit; give it in "
                 f"units")
         return cls(
@@ -431,7 +429,7 @@ class SpectralTable(Serializable):
 
         Raises
         ------
-        ConfigError
+        ValueError
             If the convention is needed but not given or has no convention,
             or the values cannot be
             converted to the unit of the option.
@@ -482,7 +480,7 @@ class SpectralTable(Serializable):
             centres = _convert(points, values.unit, convention)
             ratios = (centres + values.value / 2) / (centres - values.value / 2)
             return (_C * np.abs(np.log(ratios)) * _KMS).to_value(unit)
-        raise ConfigError(
+        raise ValueError(
             f"the values of a table in '{self._unit}' cannot be converted "
             f"to '{unit}'")
 
@@ -507,7 +505,7 @@ def load_tables(cls: type, info: dict[str, Any]) -> dict[str, Any]:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If a table is invalid.
     """
     options = dict(info)
@@ -536,7 +534,7 @@ class _VaryingOptions:
 
     Raises
     ------
-    ConfigError
+    ValueError
         If an option that cannot vary is a table, or the options, or the
         values of the tables, are invalid.
     """
@@ -547,7 +545,7 @@ class _VaryingOptions:
             if isinstance(value, SpectralTable)}
         for name in tables:
             if name not in varying_options(cls.__init__):
-                raise ConfigError(
+                raise ValueError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
         # Check the options with the first value of each table, and the

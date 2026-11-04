@@ -9,7 +9,7 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
-from gbkfit.config import ConfigError, TypedParser
+from gbkfit.config import TypedParser
 from gbkfit.grid import VelocityConvention
 
 if TYPE_CHECKING:
@@ -83,9 +83,9 @@ def sum_weights(
     """
     weights = np.asarray(weights, dtype=float)
     if n < 1:
-        raise ConfigError(f"{desc} needs at least one term")
+        raise ValueError(f"{desc} needs at least one term")
     if weights.shape != (n,) or not np.all(weights > 0):
-        raise ConfigError(
+        raise ValueError(
             f"{desc} needs a positive weight for each of its {n} terms; "
             f"its weights are {weights.tolist()}")
     return weights / weights.sum()
