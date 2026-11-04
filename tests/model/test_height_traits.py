@@ -11,6 +11,7 @@ import logging
 import gbkfit.params
 import numpy as np
 import pytest
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras
 from modelutils import group_plan
 
@@ -45,7 +46,8 @@ def observe(driver, component):
 
 def evaluate(driver, component, properties):
     plan = observe(driver, component)
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
@@ -179,7 +181,7 @@ def test_height_traits_at_each_height(driver, height, values, factor):
     component, properties = with_second(
         'd', dict(type='uniform'), height, dict(dpt1_a=5), values)
     plan = observe(driver, component)
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties | dict(incl=0))
     extra = Extras()
     plan.model_h(params.evaluate(), extra)
@@ -208,7 +210,8 @@ def observe_depth(driver, component, depth):
 
 def evaluate_with(plan, properties, out_extra=None):
     """The spectral cube of a plan of a group of one observation."""
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     return plan.model_h(
         params.evaluate(), out_extra)[0]['spectra']['d'].copy()
 
@@ -305,11 +308,11 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     # valid value. The kernels limit the displacement to zmax all the same
     # (e.g. where an interpolation of the amplitude overshoots it): given
     # past the parameters, a lift of 30 stops at 20, and a warning says so
-    with pytest.raises(ValueError, match="outside its valid range"):
-        gbkfit.params.ParamSpace(
+    with pytest.raises(ConfigError, match="outside its valid range"):
+        gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), properties | dict(zpt_a=[30] * 14))
     at_zmax = evaluate_with(plan, properties | dict(zpt_a=[20] * 14))
-    values = gbkfit.params.ParamSpace(
+    values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), properties | dict(zpt_a=[20] * 14)).evaluate()
     caplog.set_level(logging.WARNING)
     limited = plan.model_h(
@@ -343,7 +346,8 @@ def test_outward_speeds_of_a_thick_disk_leave_both_faces(driver):
         key: value for key, value in PROPERTIES.items()
         if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_vo=40, incl=0)
     plan = observe(driver, disk)
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     extra = Extras()
     plan.model_h(params.evaluate(), extra)
     vdata = extra.get('vdata', component='component0')
@@ -368,7 +372,8 @@ def test_speeds_away_from_the_plane_leave_both_faces(driver):
         key: value for key, value in PROPERTIES.items()
         if key not in ('vpt_rt', 'vpt_vt')} | dict(vpt_va=40, incl=0)
     plan = observe(driver, disk)
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     extra = Extras()
     plan.model_h(params.evaluate(), extra)
     vdata = extra.get('vdata', component='component0')

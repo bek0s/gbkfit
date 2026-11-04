@@ -64,7 +64,7 @@ def evaluate(driver, galaxy_, properties):
             spectral=SpectralAxis(
                 size=51, step=10, convention='relativistic')),
         line_of_sight_parser.load(dict(type='grid')))])
-    params = ParamSpace(group.pdescs(), properties)
+    params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
         params.evaluate())[0]['spectra']['d'].copy()
 

@@ -46,7 +46,8 @@ def evaluate(driver, observable):
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
              line_of_sight=FLAT, observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
@@ -192,7 +193,8 @@ def test_region_moments_objective_residual(driver):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))],
         [ObservationSky(observable, LineOfSightFlat(), instrument=instrument)])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        group.pdescs(), PROPERTIES)
     model = {
         key: value['d'].copy() for key, value in
         group.plan(driver).model_h(params.evaluate())[0].items()}

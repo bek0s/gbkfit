@@ -212,7 +212,7 @@ def test_an_image_sees_the_light_of_stars_on_orbits(driver):
         PixelBrightness.from_data(dataset),
         line_of_sight_parser.load(dict(type='flat')), data=dataset)
     group = ObservationGroup([galaxy()], [observation(bins()), image])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
     objective = Objective(group.plan(driver), params.solves())
     assert np.isfinite(objective.chi2(params.evaluate()))
@@ -248,7 +248,7 @@ def test_the_weights_are_solved_again_when_their_noise_moves(
         name='image', likelihood=LikelihoodGaussian(
             noise=dict(brightness=FittedNoise(scale=True, scale_min=0.5))))
     group = ObservationGroup([galaxy()], [stars, image])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE, bins_noise_scale_moment1=1.0,
         image_noise_scale_brightness=1.0))
     objective = Objective(group.plan(driver), params.solves())
@@ -269,7 +269,7 @@ def test_bins_of_stars_on_orbits_have_a_positive_sigma(driver):
             4: np.zeros(n)}
     data[2][3] = 0
     group = ObservationGroup([galaxy()], [observation(bins(), data=data)])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
     with pytest.raises(ValueError, match="have a positive sigma"):
         Objective(group.plan(driver), params.solves())
@@ -281,7 +281,7 @@ def test_orbits_cut_by_the_most_steps_are_warned_of(
     from gbkfit.model.components.spheroids import OrbitLibraryState
     monkeypatch.setattr(OrbitLibraryState, 'max_steps', lambda self: 10)
     group = ObservationGroup([galaxy()], [observation(bins())])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=SOLVE['solve'])))
     objective = Objective(group.plan(driver), params.solves())
     objective.chi2(params.evaluate())
@@ -290,7 +290,7 @@ def test_orbits_cut_by_the_most_steps_are_warned_of(
 
 def test_the_weights_of_the_orbits_are_solved(driver):
     group = ObservationGroup([galaxy()], [observation(bins())])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=[1.0] * 400))
     with pytest.raises(ValueError, match="give them a solve"):
         Objective(group.plan(driver), params.solves())
@@ -351,7 +351,7 @@ def test_an_objective_models_the_bins_of_stars_on_orbits(driver):
     # V = h3 = 0; and the effective number of the weights is at most the
     # number of the residuals of the bins
     group = ObservationGroup([galaxy()], [observation(bins())])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
     evaluation = objective.evaluate(params.evaluate())
@@ -452,7 +452,7 @@ def test_the_model_of_the_objective_is_the_series_of_the_data(driver):
     data = {m: model[KEYS[m]]['d'] for m in range(1, 5)}
     obs = observation(bins(), data=data)
     group = ObservationGroup([galaxy()], [obs])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=dict(solve=dict(
             type='gaussian', mean=1, sigma=1e-6, min=0,
             likelihood='profiled'))))
@@ -493,7 +493,7 @@ def test_the_model_of_bins_with_data_is_that_of_the_objective(driver):
     # observation without data), whose sigma is up to 7 km/s off here
     obs = observation(bins())
     group = ObservationGroup([galaxy()], [obs])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         stars_weights=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
     evaluation = objective.evaluate(params.evaluate())
@@ -527,7 +527,7 @@ def test_a_bootstrap_redraws_about_the_model_of_the_objective(driver):
                 dataset, residuals, model, params, values, rng)
 
     group = ObservationGroup([galaxy()], [observation(bins())])
-    params = ParamSpace(group.pdescs(), PROPERTIES | dict(
+    params = ParamSpace.from_properties(group.pdescs(), PROPERTIES | dict(
         vsys=dict(value=0, min=-50, max=50), stars_weights=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
     scheme = KeptModels()
@@ -591,7 +591,7 @@ def test_schwarzschild_models_recover_the_exact_mock(driver):
     chi2 = {}
     for bh_mass in (bh, 1.0):
         for factor in (0.8, 1.0, 1.25):
-            params = ParamSpace(group.pdescs(), values | dict(
+            params = ParamSpace.from_properties(group.pdescs(), values | dict(
                 mass_light_log_rho=log_rho + np.log10(factor),
                 mass_bh_log_m=np.log10(bh_mass)))
             if objective is None:
@@ -665,7 +665,7 @@ def test_schwarzschild_models_of_jeans_data_find_their_mass(driver):
     objective = None
     chi2 = {}
     for factor in (0.8, 1.0, 1.25):
-        params = ParamSpace(group.pdescs(), truth | dict(
+        params = ParamSpace.from_properties(group.pdescs(), truth | dict(
             mass_stars_upsilon=1e8 * factor, stars_weights=solve))
         if objective is None:
             objective = Objective(group.plan(driver), params.solves())

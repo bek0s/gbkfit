@@ -57,7 +57,7 @@ def moments(driver, offsets=None, origin=ORIGIN, **values):
             offsets=offsets if name == 'b' else None)
         for name, rval in (('a', ORIGIN), ('b', origin))]
     group = ObservationGroup([galaxy_parser.load(GALAXY)], observations)
-    params = ParamSpace(group.pdescs(), PARAMS | values)
+    params = ParamSpace.from_properties(group.pdescs(), PARAMS | values)
     return group.plan(driver).model_h(params.evaluate())[1]
 
 

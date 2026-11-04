@@ -37,7 +37,7 @@ def check_workers(workers: Workers) -> None:
     objective alone, and stop their sub-fits.
     """
     objective = mock_objective(DriverHost())
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         derived=dict(d='xpos + 2 * ypos'))
     xs = np.random.default_rng(2).uniform(

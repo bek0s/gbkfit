@@ -45,7 +45,8 @@ def evaluate(driver, foreground=None, properties=PROPERTIES, observable=IMAGE,
             foreground=foreground, instrument=observation.instrument(),
             name='obs')
         group = ObservationGroup(group.galaxies(), [observation])
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        group.pdescs(), properties)
     data = group.plan(driver).model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
@@ -348,7 +349,8 @@ def test_the_frame_of_an_observation_moves_its_lens(driver):
     for x, offset in ((1.5, 0.0), (0.0, 1.5)):
         properties = PROPERTIES | dict(xpos=x, obs_dx=offset, obs_dy=0) \
             | lens_params(**lens, x=x)
-        params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+        params = gbkfit.params.ParamSpace.from_properties(
+            plan.group().pdescs(), properties)
         images.append(plan.model_h(params.evaluate())[1]['brightness'][
             'd'].copy())
     np.testing.assert_allclose(images[1], images[0], rtol=1e-5, atol=1e-6)

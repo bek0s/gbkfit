@@ -67,7 +67,7 @@ def model(
             observable, line_of_sight_parser.load(dict(type=line_of_sight)),
             instrument=Instrument(psf=psf), data=data, unit=unit)])
     plan = group.plan(driver)
-    space = ParamSpace(group.pdescs(), params)
+    space = ParamSpace.from_properties(group.pdescs(), params)
     return plan.model_h(space.evaluate())[0]['spectra']['d'].copy()
 
 

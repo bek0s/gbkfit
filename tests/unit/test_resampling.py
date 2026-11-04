@@ -6,7 +6,6 @@ bootstraps (see Dataset.resample_blocks).
 import numpy as np
 import pytest
 
-from gbkfit.config import ConfigError
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
     DatasetRegionMoments, DatasetRegionSpectra, DatasetSlitlessSpectra,

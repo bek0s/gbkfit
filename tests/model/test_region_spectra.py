@@ -52,7 +52,8 @@ def evaluate(driver, observable):
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
              line_of_sight=FLAT, observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
@@ -154,7 +155,7 @@ def test_region_spectra_of_a_point_is_its_flux(driver, step):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=galaxy, line_of_sight=FLAT,
         observable=observable)])
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), dict(xpos=0, ypos=0, flux=2, vsys=0, disp=30))
     spectrum = plan.model_h(params.evaluate())[0]['spectra']['d'][:, 0]
     assert spectrum.sum() * 10 == pytest.approx(2, rel=1e-4)
@@ -179,7 +180,8 @@ def test_region_spectra_objective_residual(driver):
         observable, LineOfSightFlat(), instrument=Instrument(), data=dataset)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        group.pdescs(), PROPERTIES)
     residual = Objective(group.plan(driver)).residual_nddata_h(
         params.evaluate(), False)
     # Without the instrument, the model differs from the data

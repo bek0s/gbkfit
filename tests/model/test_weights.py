@@ -61,7 +61,7 @@ def test_weights_follow_the_plane_of_the_disk(driver):
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=21, step=20, convention='relativistic')),
         dict(component='gas', traits=dict(type='azimuth_power', power=1))))
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES).evaluate()
     extra = Extras()
     weights = plan.model_h(params, extra)[0]['spectra']['w']
@@ -105,7 +105,8 @@ def test_weights_are_normalised_over_the_values_compared(driver, incl):
                 pixel_weights=Weights('gas', WeightAzimuthPower(2)))]
         ).plan(driver)
     blank = plan(np.zeros(size[::-1]), None)
-    params = gbkfit.params.ParamSpace(blank.group().pdescs(), values)
+    params = gbkfit.params.ParamSpace.from_properties(
+        blank.group().pdescs(), values)
     model = blank.model_h(params.evaluate())[0]['spectra']['d']
     mask = np.random.default_rng(1).random(model.shape) < 0.5
     objective = Objective(plan(model - 1, mask))

@@ -103,7 +103,8 @@ def test_feature_combinations(driver, name, lens):
         components=['gas'], oversampling=OVERSAMPLING[name])
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        group.pdescs(), PROPERTIES)
     extra = Extras()
     data = group.plan(driver).model_h(params.evaluate(), extra)[0]
     observable = observation.observable()

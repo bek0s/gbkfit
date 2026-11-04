@@ -30,7 +30,8 @@ def evaluate(driver, observable):
     plan = group_plan([
         dict(driver=dict(type=driver.type()), galaxy=GALAXY,
              line_of_sight=dict(type='flat'), observable=observable)])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
     return next(iter(data.values()))['d'].copy()
 
@@ -87,7 +88,8 @@ def test_slit_spectra_objective_residual(driver):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     objective = Objective(group.plan(driver))
-    params = gbkfit.params.ParamSpace(group.pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        group.pdescs(), PROPERTIES)
     residual = objective.residual_nddata_h(params.evaluate(), False)
     np.testing.assert_allclose(residual[0]['spectra'], -0.5, rtol=1e-5)
     # The chi-squared is the sum of their squares, and the log-likelihood

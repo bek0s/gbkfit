@@ -1427,7 +1427,7 @@ def evaluate(driver, galaxy, line_of_sight, properties):
             spectral=SpectralAxis(
                 size=51, step=10, convention='relativistic')),
         line_of_sight_parser.load(dict(type=line_of_sight)))])
-    params = ParamSpace(group.pdescs(), properties)
+    params = ParamSpace.from_properties(group.pdescs(), properties)
     return group.plan(driver).model_h(
         params.evaluate())[0]['spectra']['d'].copy()
 
@@ -2232,7 +2232,7 @@ def test_observations_of_a_galaxy_share_its_gravity(driver, monkeypatch):
             line_of_sight_parser.load(dict(type='flat')), dtype=dtype,
             name=name)
         for name, dtype in (('single', 'float32'), ('double', 'float64'))])
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         group.pdescs(), DISK_PROPERTIES | MASS_PROPERTIES).evaluate()
     plan = group.plan(driver, dict(single=DriverHost()))
     assert plan.galaxy_drivers() == (driver,)

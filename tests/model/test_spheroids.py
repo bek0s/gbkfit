@@ -15,6 +15,7 @@ import scipy.integrate
 import scipy.optimize
 import scipy.special
 
+from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, SpectralAxis
 from gbkfit.io import write_data
 from gbkfit.model import (
@@ -247,7 +248,7 @@ def test_a_scale_or_an_axis_ratio_of_zero_gives_no_model(
         if profile['type'] == 'sersic' else {}
     spheroid = dict(
         type='spheroid', profile=profile, rmax=8, emission=BAND) | shape
-    with pytest.raises(ValueError, match="invalid parameter properties"):
+    with pytest.raises(ConfigError, match="invalid parameter properties"):
         evaluate_cases([image(driver, spheroid)], GEOMETRY | properties)
     with pytest.raises(ModelEvaluationError, match="above 0"):
         _checked_terms(np.array([[1.0, 2.0, 0.5], [1.0, 0.0, 0.5]]))
@@ -406,7 +407,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
                 spectral=SpectralAxis(
                     size=41, step=10, convention='relativistic')),
             line_of_sight_parser.load(dict(type='flat')))])
-        params = ParamSpace(
+        params = ParamSpace.from_properties(
             group.pdescs(), light | disk_properties | properties)
         return group.plan(driver).model_h(params.evaluate())[0][
             'spectra']['d']

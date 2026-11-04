@@ -17,7 +17,7 @@ from pydantic import FiniteFloat
 from ._errors import ParamEvaluationError
 from .space import ParamFunctions, ParamSpace, ParamValues
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options, config_path)
+    TypedParser, TypedSerializable, check_options)
 
 
 __all__ = [
@@ -515,11 +515,7 @@ def joint_prior_residuals(
     Raises
     ------
     ValueError
-        If a prior is invalid (with the path 'priors[i]').
+        If an expression of a prior is invalid (which the parameter space
+        checks when it is made).
     """
-    residuals = []
-    for i, info in enumerate(params.priors()):
-        with config_path('priors', i):
-            residuals.append(
-                joint_prior_parser.load(info).residuals(params, functions))
-    return residuals
+    return [prior.residuals(params, functions) for prior in params.priors()]

@@ -61,7 +61,8 @@ def evaluate(driver, with_opacity, opacity, times=1):
     if not with_opacity:
         properties = {
             k: v for k, v in properties.items() if not k.startswith('dust_')}
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     values = params.evaluate()
     return [
         copy.deepcopy(plan.model_h(values)[0]['spectra']['d'])

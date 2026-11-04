@@ -57,7 +57,8 @@ def _cube(driver, galaxy, observable, line_of_sight, properties):
         driver=dict(type=driver.type()), galaxy=galaxy,
         observable=observable | dict(dtype='float64'),
         line_of_sight=line_of_sight)])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     return np.asarray(
         plan.model_h(params.evaluate())[0]['spectra']['d'], float)
 
@@ -277,9 +278,10 @@ def test_an_elliptical_blob(driver, posa, incl):
             type='pixel_spectra', size=[n, n], step=[step, step],
             spectral=dict(size=21, step=5, convention='relativistic')),
         line_of_sight=dict(type='flat'))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
-        vsys=0, xpos=0, ypos=0, posa=posa, incl=incl, vpt_vt=0, dpt_a=10,
-        pt_r=r, pt_t=t, pt_a=1, pt_s=s, pt_q=q, pt_p=p))
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), dict(
+            vsys=0, xpos=0, ypos=0, posa=posa, incl=incl, vpt_vt=0, dpt_a=10,
+            pt_r=r, pt_t=t, pt_a=1, pt_s=s, pt_q=q, pt_p=p))
     extra = Extras()
     plan.model_h(params.evaluate(), extra)
     image = extra.get('bdata', component='component0').data.reshape(n, n)

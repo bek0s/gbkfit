@@ -69,7 +69,7 @@ def evaluate_mmaps(driver, observable, **properties):
         emission=dict(type='lines'))]))
     group = ObservationGroup(
         [galaxy], [ObservationSky(observable, LineOfSightFlat())])
-    params = ParamSpace(group.pdescs(), dict(
+    params = ParamSpace.from_properties(group.pdescs(), dict(
         vsys=0, xpos=0, ypos=0, posa=30, incl=60,
         pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=40, dpt_a=20) | properties)
     return group.plan(driver).model_h(params.evaluate())[0]

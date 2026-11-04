@@ -68,7 +68,7 @@ def objective(driver, data, error, scale=None, likelihood=None, **values):
     """
     plan = group_plan(driver, data, error, likelihood)
     scale = dict(solve=SOLVE) if scale is None else scale
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         plan.group().pdescs(), PARAMS | dict(obs_flux_scale=scale) | values)
     return Objective(plan, params.solves()), params
 
@@ -128,7 +128,8 @@ def test_a_flux_scale_of_one_value_scales_the_flux(driver):
         plan = config_group_plan(config(driver, observables, flux_scale))
         scale = dict(first_flux_scale=2) if flux_scale else {}
         data = plan.model_h(
-            ParamSpace(plan.group().pdescs(), PARAMS | scale).evaluate())
+            ParamSpace.from_properties(
+                plan.group().pdescs(), PARAMS | scale).evaluate())
         return (
             data[0]['moment0']['d'].copy(), data[0]['moment1']['d'].copy(),
             data[1]['spectra']['d'].copy())
@@ -156,12 +157,12 @@ def test_a_solved_flux_scale_of_one_value_is_that_of_the_data(driver):
                 likelihood=LikelihoodGaussian(missing_residual=3))]
         ).plan(driver)
     blank = moments(np.zeros(SIZE[1::-1]), np.zeros(SIZE[1::-1]))
-    model = blank.model_h(ParamSpace(
+    model = blank.model_h(ParamSpace.from_properties(
         blank.group().pdescs(), PARAMS | dict(obs_flux_scale=1)
     ).evaluate())[0]
     scaled = moments(
         2 * model['moment0']['d'], np.nan_to_num(model['moment1']['d']))
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         scaled.group().pdescs(),
         PARAMS | dict(obs_flux_scale=dict(solve=SOLVE)))
     obj = Objective(scaled, params.solves())

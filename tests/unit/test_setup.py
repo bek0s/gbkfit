@@ -75,7 +75,7 @@ def test_a_setup_in_python_is_that_of_its_configuration(tmp_path):
         expected = loaded.evaluate().objective.merits
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), observation_parser.load(obs))
-    params = ParamSpace(group.pdescs(), PARAMS['properties'])
+    params = ParamSpace.from_properties(group.pdescs(), PARAMS['properties'])
     # (to rounding: the host kernels sum in no fixed order)
     with gbkfit.Setup(group, params) as built:
         assert tuple(built.evaluate().objective.merits) == pytest.approx(
@@ -89,8 +89,9 @@ def test_a_setup_takes_the_parameters_of_its_group():
     group = ObservationGroup(
         galaxy_parser.load(GALAXY), observation_parser.load(observation()))
     with pytest.raises(ValueError, match="they lack"):
-        gbkfit.Setup(group, ParamSpace(dict(a=ParamScalarDesc()), dict(a=1)))
-    params = ParamSpace(
+        gbkfit.Setup(group, ParamSpace.from_properties(
+            dict(a=ParamScalarDesc()), dict(a=1)))
+    params = ParamSpace.from_properties(
         group.pdescs(), PARAMS['properties'], function_names=['vcirc'])
     with pytest.raises(ValueError, match=r"no functions \['vcirc'\]"):
         gbkfit.Setup(group, params)

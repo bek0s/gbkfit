@@ -46,7 +46,7 @@ def evaluate_cases():
     def evaluate(cases, properties, modes=None):
         plan = group_plan(cases)
         group = plan.group()
-        params = gbkfit.params.ParamSpace(
+        params = gbkfit.params.ParamSpace.from_properties(
             group.pdescs(), properties, constants=group.constants(),
             modes=modes)
         extra = Extras()

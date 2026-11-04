@@ -13,5 +13,7 @@ from .modes import *
 from .pdescs import *
 from .priors import *
 from .solves import *
+from .elements import *
+from .properties import *
 from .space import *
 from .joint_priors import *

@@ -41,7 +41,7 @@ def objective(driver, data, likelihood):
             line_of_sight_parser.load(dict(type='flat')), data=dataset,
             likelihood=likelihood)])
     return (Objective(group.plan(driver)),
-            ParamSpace(group.pdescs(), PARAMS).evaluate())
+            ParamSpace.from_properties(group.pdescs(), PARAMS).evaluate())
 
 
 def noisy_cube(rng, mask):

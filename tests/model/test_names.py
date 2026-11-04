@@ -154,7 +154,7 @@ def extra_outputs(group_, prefixes):
     properties = {
         prefix + name: value
         for prefix in prefixes for name, value in DISK_PROPERTIES.items()}
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         group_.pdescs(), properties, constants=group_.constants())
     extra = Extras()
     group_.plan().model_h(params.evaluate(), extra)

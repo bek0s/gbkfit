@@ -53,7 +53,7 @@ def plan_of(driver, observable):
 
 def evaluate(plan):
     """The model data of the observation and its parameters."""
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), PROPERTIES).evaluate()
     extra = Extras()
     data = plan.model_h(params, extra)[0]

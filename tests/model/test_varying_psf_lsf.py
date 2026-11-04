@@ -41,7 +41,7 @@ def spectra(driver, psf=None, lsf=None, oversampling=(1, 1, 1)):
                 step=list(STEP[:2]), spectral=dict(
                     size=SIZE[2], step=STEP[2],
                     convention='relativistic'))))])
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), PROPERTIES).evaluate()
     return group.plan(driver).model_h(params)[0]['spectra']['d'].copy()
 

@@ -132,7 +132,7 @@ def test_config_roundtrip(config):
 
     def evaluate(config_):
         plan = config_group_plan(config_)
-        params = gbkfit.params.ParamSpace(
+        params = gbkfit.params.ParamSpace.from_properties(
             plan.group().pdescs(), properties,
             constants=plan.group().constants())
         return plan.model_h(params.evaluate())

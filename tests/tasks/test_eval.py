@@ -328,12 +328,7 @@ def test_one_galaxy_seen_by_two_observations(tmp_path):
 
 
 @pytest.mark.parametrize('incl, message', [
-    # TODO: the properties of parameters are parsed by the constructor of
-    # ParamSpace, whose errors are ValueErrors (with a traceback); parsing
-    # them before it (into the elements it takes) makes them ConfigErrors
-    pytest.param(
-        'nonsense +', "error: params",
-        marks=pytest.mark.xfail(strict=True, reason="ParamSpace parses")),
+    ('nonsense +', "error: params"),
     # (a configuration of a sampler: evaluations are at the values)
     (dict(min=20, max=80), r"these have none: \['incl'\]")])
 def test_configuration_errors_are_reported_without_a_traceback(

@@ -60,7 +60,8 @@ def evaluate(driver, galaxy, properties, line_of_sight='flat'):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=line_of_sight, observable=CUBE)])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra']['d'].astype(float)
 
 
@@ -125,7 +126,7 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
     plan = group_plan([dict(
         driver=dict(type='host'), galaxy=particles,
         line_of_sight=dict(type='flat'), observable=CUBE)])
-    values = gbkfit.params.ParamSpace(
+    values = gbkfit.params.ParamSpace.from_properties(
         plan.group().pdescs(), GEOMETRY).evaluate()
     peak = plan.model_h(values)[0]['spectra']['d'].max()
     mock = plan.mock(values, NoiseGauss(rms=0.01 * peak), seed=2)[0][0]
@@ -140,7 +141,8 @@ def test_a_fit_to_mock_data_of_particles_recovers_their_disk(tmp_path):
         incl=dict(value=50, min=20, max=80),
         vpt_vt=dict(value=150, min=50, max=300),
         pt_a=dict(value=0.5, min=0.1, max=5))
-    params = gbkfit.params.ParamSpace(objective.pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        objective.pdescs(), properties)
     best = fitter_parser.load(dict(type='scipy.least_squares')).fit(
         objective, params).best().free
     assert best['posa'] == pytest.approx(40, abs=0.3)
@@ -164,8 +166,9 @@ def test_particles_in_an_image(driver, tmp_path):
         driver=dict(type=driver.type()), galaxy=galaxy,
         line_of_sight=dict(type='flat'), observable=dict(
             type='pixel_brightness', size=[10, 8], step=[0.5, 0.5]))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
-        xpos=0, ypos=0, posa=0, incl=0))
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), dict(
+            xpos=0, ypos=0, posa=0, incl=0))
     image = plan.model_h(params.evaluate())[0]['brightness']['d']
     assert image.sum() * 0.25 == pytest.approx(5)
     assert np.count_nonzero(image) == 2

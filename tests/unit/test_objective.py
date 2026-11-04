@@ -42,7 +42,8 @@ def make_objective(driver, data, likelihood=None, name=None, **values):
         PixelBrightness.from_data(dataset), LineOfSightFlat(), data=dataset,
         likelihood=likelihood, name=name)
     group = ObservationGroup(galaxy_parser.load(GALAXY), observation)
-    params = ParamSpace(group.pdescs(), PROPERTIES | values).evaluate()
+    params = ParamSpace.from_properties(
+        group.pdescs(), PROPERTIES | values).evaluate()
     return Objective(group.plan(driver)), params
 
 
@@ -78,7 +79,7 @@ def test_the_log_likelihoods_of_the_points_sum_to_it(driver):
         objective.log_likelihood(params), rel=1e-5)
     assert len(pointwise) == objective.nresiduals() \
         == np.count_nonzero(data.mask())
-    space = ParamSpace(objective.pdescs(), PROPERTIES | dict(
+    space = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
         pt_a=dict(min=0, max=2)))
     lls = pointwise_log_likelihoods(objective, space, [[1.0], [0.5]])
     assert lls.shape == (2, len(pointwise))
@@ -102,9 +103,9 @@ def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
     error = np.full(model.shape, 0.01 * model.max())
     data = Data(model + rng.normal(0, 1, model.shape) * error, error=error)
     objective, _ = make_objective(driver, data)
-    near = ParamSpace(objective.pdescs(), PROPERTIES | dict(
+    near = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
         pt_a=dict(min=0.98, max=1.02)))
-    far = ParamSpace(objective.pdescs(), PROPERTIES | dict(
+    far = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
         pt_a=dict(min=3, max=4)))
     good = prior_predictive(objective, near, ndraws=40, seed=1)
     bad = prior_predictive(objective, far, ndraws=40, seed=1)
@@ -339,7 +340,7 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
         type='pixel_moments', size=[24, 24], orders=[0, 1, 2],
         spectral=dict(convention='relativistic'))))
     model = image.model_h(
-        ParamSpace(image.group().pdescs(), DISK).evaluate())[0]
+        ParamSpace.from_properties(image.group().pdescs(), DISK).evaluate())[0]
     errors = dict(moment0=0.01, moment1=5.0, moment2=5.0)
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full(
@@ -348,8 +349,8 @@ def test_a_model_without_values_where_the_data_have_some_pays(driver):
     observable = PixelMoments.from_data(
         dataset, spectral=SpectralAxis(convention='relativistic'))
     objective = Objective(group(observable, dataset))
-    truth = ParamSpace(objective.pdescs(), DISK).evaluate()
-    compact = ParamSpace(
+    truth = ParamSpace.from_properties(objective.pdescs(), DISK).evaluate()
+    compact = ParamSpace.from_properties(
         objective.pdescs(), DISK | dict(pt_s=0.1)).evaluate()
     compact_moment1 = \
         objective.group_plan().model_h(compact)[0]['moment1']['d']
@@ -385,14 +386,14 @@ def test_values_the_model_lacks_take_the_noise_of_their_error(driver):
         type='pixel_moments', size=[24, 24], orders=[0, 1],
         spectral=dict(convention='relativistic'))))
     model = image.model_h(
-        ParamSpace(image.group().pdescs(), DISK).evaluate())[0]
+        ParamSpace.from_properties(image.group().pdescs(), DISK).evaluate())[0]
     dataset = DatasetPixelMoments({
         order: Data(model[f'moment{order}']['d'], error=np.full((24, 24), 5.0))
         for order in (0, 1)})
     observable = PixelMoments.from_data(
         dataset, spectral=SpectralAxis(convention='relativistic'))
     objective = Objective(group(observable, dataset))
-    compact = ParamSpace(objective.pdescs(), DISK | dict(
+    compact = ParamSpace.from_properties(objective.pdescs(), DISK | dict(
         pt_s=0.1, obs_noise_scale_moment1=2.0)).evaluate()
     moment1 = objective.group_plan().model_h(compact)[0]['moment1']['d']
     unmasked = dataset['moment1'].mask() != 0
@@ -403,8 +404,9 @@ def test_values_the_model_lacks_take_the_noise_of_their_error(driver):
     assert evaluation.noise_chi2 == pytest.approx(
         np.count_nonzero(has) * np.log((2 / 0.1) ** 2)
         + np.count_nonzero(lacks) * np.log(1 / 0.1 ** 2), rel=1e-6)
-    full = objective.evaluate(ParamSpace(objective.pdescs(), DISK | dict(
-        obs_noise_scale_moment1=2.0)).evaluate())
+    full = objective.evaluate(ParamSpace.from_properties(
+        objective.pdescs(), DISK | dict(
+            obs_noise_scale_moment1=2.0)).evaluate())
     assert evaluation.merits.chi2 + 2 * evaluation.merits.log_likelihood \
         == pytest.approx(
             full.merits.chi2 + 2 * full.merits.log_likelihood, rel=1e-9)

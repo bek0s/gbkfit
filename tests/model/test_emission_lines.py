@@ -52,7 +52,8 @@ def evaluate(driver, galaxy, observable, properties, line_of_sight=FLAT):
     plan = group_plan([dict(
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=line_of_sight, observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     return plan.model_h(params.evaluate())[0]['spectra']['d'].copy()
 
 
@@ -215,7 +216,8 @@ def evaluate_observation(driver, galaxy, observable, properties, **options):
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(galaxy))], [observation])
     plan = group.plan(driver)
-    params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        group.pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 

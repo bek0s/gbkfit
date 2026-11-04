@@ -13,9 +13,9 @@ import pytest
 
 from gbkfit.config import ConfigError, strict_mode
 from gbkfit.params import (
-    ParamEvaluationError, ParamFunctions, ParamKind, ParamModeIncrements,
-    ParamModeOffsets, ParamScalarDesc, ParamSpace, ParamVectorDesc,
-    param_space_parser)
+    FreeElement, ParamEvaluationError, ParamFunctions, ParamKind,
+    ParamModeIncrements, ParamModeOffsets, ParamScalarDesc, ParamSpace,
+    ParamVectorDesc, Tied, Transformed, param_space_parser)
 
 
 def make_pdescs(**sizes):
@@ -149,7 +149,7 @@ def test_dump_keeps_the_transforms(tmp_path):
     assert info == dict(properties={'a': 3, 'b': None}, transforms=transforms)
     assert param_space_parser.load(info, pdescs=pdescs).evaluate()['b'] == 6
     # A function that is not at the top level of a file cannot be dumped
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         pdescs, {'a': 3, 'b': None}, transforms=lambda p: p.update(b=1))
     with pytest.raises(TypeError, match="cannot be dumped"):
         params.dump()
@@ -161,7 +161,7 @@ def test_dump_gives_prior_objects_as_configurations():
     import json
     from gbkfit.params import PriorGauss
     pdescs = make_pdescs(a=S, v=2)
-    params = ParamSpace(pdescs, {
+    params = ParamSpace.from_properties(pdescs, {
         'a': dict(value=1, prior=PriorGauss(1, 2)),
         'v': [dict(value=0, prior=PriorGauss(0, 1)), 2]})
     info = json.loads(json.dumps(params.dump()))
@@ -282,7 +282,7 @@ FIT_PROPERTIES = {
 
 
 def test_fit_classification():
-    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
+    params = ParamSpace.from_properties(FIT_PDESCS, FIT_PROPERTIES)
     assert params.kinds() == {
         'a': ParamKind.FIXED, 'b': ParamKind.TIED, 'c': ParamKind.FREE,
         'v[0]': ParamKind.FREE, 'v[1]': ParamKind.TIED,
@@ -296,7 +296,7 @@ def test_fit_classification():
 
 
 def test_fit_evaluation():
-    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
+    params = ParamSpace.from_properties(FIT_PDESCS, FIT_PROPERTIES)
     values = params.evaluate({'c': 1.5, 'v[0]': 2, 'w[0]': 3, 'w[1]': 4})
     assert values['a'] == 1
     assert values['b'] == 2
@@ -310,7 +310,7 @@ def test_fit_evaluation():
     ({'a': 1, 'c': 1.5, 'v[0]': 2, 'w[0]': 3, 'w[1]': 4}, r"'a'")])
 def test_fit_evaluation_needs_the_free_parameters(free, pattern):
     # Every free parameter must be given, and only those
-    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
+    params = ParamSpace.from_properties(FIT_PDESCS, FIT_PROPERTIES)
     with pytest.raises(ValueError) as error:
         params.evaluate(free)
     assert re.search(pattern, str(error.value))
@@ -319,7 +319,7 @@ def test_fit_evaluation_needs_the_free_parameters(free, pattern):
 def test_evaluation_does_not_keep_state():
     # The values returned are new arrays, and changing them does not
     # change the next evaluation
-    params = ParamSpace(FIT_PDESCS, FIT_PROPERTIES)
+    params = ParamSpace.from_properties(FIT_PDESCS, FIT_PROPERTIES)
     free = {'c': 1.5, 'v[0]': 2, 'w[0]': 3, 'w[1]': 4}
     first = params.evaluate(free)
     first['v'][:] = -1
@@ -329,22 +329,22 @@ def test_evaluation_does_not_keep_state():
 
 def test_constants():
     # Expressions can use constants (e.g. the radial nodes of a disk)
-    space = ParamSpace(
+    space = ParamSpace.from_properties(
         make_pdescs(v=3), {'v': 'rnodes * 2'},
         constants=dict(rnodes=[0, 1, 2]))
     np.testing.assert_array_equal(space.evaluate()['v'], [0, 2, 4])
 
 
 def test_constants_cannot_have_the_names_of_parameters():
-    with pytest.raises(ValueError, match="constants cannot have the names"):
-        ParamSpace(
+    with pytest.raises(ConfigError, match="constants cannot have the names"):
+        ParamSpace.from_properties(
             make_pdescs(a=S), {'a': 1}, constants=dict(a=1))
 
 
 def test_unknown_parameters_are_errors_or_ignored_in_lenient_mode():
     properties = {'a': 1, 'old': 2, 'old[0]': 3}
     with pytest.raises(Exception, match=r"unknown parameters: 'old'"):
-        ParamSpace(make_pdescs(a=S), properties)
+        ParamSpace.from_properties(make_pdescs(a=S), properties)
     with strict_mode(False):
         assert evaluate(make_pdescs(a=S), properties) == {'a': 1}
 
@@ -447,7 +447,7 @@ def test_solved_elements_refused(properties, modes, pattern):
     info = dict(
         properties=dict(s=dict(solve=SOLVE), t=1, v=1) | properties,
         modes=modes)
-    with pytest.raises(ValueError, match=pattern):
+    with pytest.raises((ConfigError, ValueError), match=pattern):
         param_space_parser.load(info, pdescs=pdescs)
 
 
@@ -461,9 +461,10 @@ def test_expressions_cannot_read_solved_elements():
 def test_error_types():
     # Invalid properties are configuration errors; failed evaluations are
     # evaluation errors
-    with pytest.raises(ValueError, match="have no value"):
-        ParamSpace(make_pdescs(a=S), {})
-    space = ParamSpace(make_pdescs(a=S, b=S), {'a': 1, 'b': 'np.inf * a'})
+    with pytest.raises(ConfigError, match="have no value"):
+        ParamSpace.from_properties(make_pdescs(a=S), {})
+    space = ParamSpace.from_properties(
+        make_pdescs(a=S, b=S), {'a': 1, 'b': 'np.inf * a'})
     with pytest.raises(ParamEvaluationError, match="finite"):
         space.evaluate()
 
@@ -473,15 +474,16 @@ def test_valid_ranges():
         s=ParamScalarDesc(min=0),
         v=ParamVectorDesc(3, min=0, max=1))
     # A fixed value outside its range is a configuration error
-    with pytest.raises(ValueError, match=r"'v\[1\]' is 2.0, outside"):
-        ParamSpace(pdescs, {'s': 1, 'v': [0, 2, 1]})
+    with pytest.raises(ConfigError, match=r"'v\[1\]' is 2.0, outside"):
+        ParamSpace.from_properties(pdescs, {'s': 1, 'v': [0, 2, 1]})
     # An evaluated one fails its evaluation
-    space = ParamSpace(pdescs, {'s': {'value': 1}, 'v': 's * 0.5'})
+    space = ParamSpace.from_properties(
+        pdescs, {'s': {'value': 1}, 'v': 's * 0.5'})
     space.evaluate()
     with pytest.raises(ParamEvaluationError, match=r"'s' is -1.0"):
         space.evaluate({'s': -1})
     # The values of a parameter with a mode are checked once decoded
-    space = ParamSpace(
+    space = ParamSpace.from_properties(
         pdescs, {'s': 1, 'v': [0.5, 0.2, 0.7]},
         modes=dict(v=ParamModeOffsets()))
     with pytest.raises(ParamEvaluationError, match=r"'v\[2\]' is 1.2"):
@@ -492,7 +494,7 @@ def test_with_values_starts_the_free_elements_there():
     # (e.g. at the solution of a fit, to start another one): through
     # every form of key, leaving the fixed and tied elements alone
     pdescs = make_pdescs(a=None, b=None, v=4, w=3)
-    params = ParamSpace(pdescs, {
+    params = ParamSpace.from_properties(pdescs, {
         'a': dict(value=1, min=0, max=5),
         'b': 'a * 2',
         'v[0]': dict(value=2),
@@ -506,8 +508,9 @@ def test_with_values_starts_the_free_elements_there():
     np.testing.assert_array_equal(values['v'], [5, 6, 7, 8])
     np.testing.assert_array_equal(values['w'], [4, 7, 5])
     # The other properties stay (the bounds, and those of the elements)
-    assert start.properties()['a'] == dict(value=3, min=0, max=5)
-    assert start.properties()['v[1:]'] == {
+    properties = start.dump()['properties']
+    assert properties['a'] == dict(value=3, min=0, max=5)
+    assert properties['v[1:]'] == {
         '*min': [-1, -2, -3], '*value': [6, 7, 8]}
     assert start.free_properties()['v[3]'] == dict(value=8, min=-3)
 
@@ -516,8 +519,9 @@ def test_with_values_starts_the_free_elements_there():
     ParamModeOffsets(origin=1), ParamModeIncrements(origin=2)])
 def test_with_values_codes_the_values_of_parameters_with_a_mode(mode):
     pdescs = make_pdescs(v=4)
-    params = ParamSpace(pdescs, {'v': {'*value': [1, 2, 3, 4]}},
-                        modes=dict(v=mode))
+    params = ParamSpace.from_properties(
+        pdescs, {'v': {'*value': [1, 2, 3, 4]}},
+        modes=dict(v=mode))
     decoded = [10, 12, 15, 11]
     start = params.with_values(
         {f'v[{i}]': value for i, value in enumerate(decoded)})
@@ -589,7 +593,7 @@ def test_derived_values():
     (dict(v='unknown(b)'), None, "'unknown' cannot be called"),
 ])
 def test_derived_values_refused(derived, properties, message):
-    with pytest.raises(ValueError, match=re.escape(message)):
+    with pytest.raises(ConfigError, match=re.escape(message)):
         derived_params(derived, properties)
 
 
@@ -615,7 +619,7 @@ def test_failed_derived_value():
 def test_parameters_and_derived_values_have_units():
     # A label of their values, which stay plain numbers in it
     from gbkfit.params import ParamScalarDesc, ParamSpace
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         dict(v=ParamScalarDesc(unit='km/s'), q=ParamScalarDesc()),
         dict(v=200.0, q=0.5),
         derived=dict(w='2 * v', z=dict(expr='v / 2', unit='km/s')))
@@ -626,3 +630,46 @@ def test_parameters_and_derived_values_have_units():
         w='2 * v', z=dict(expr='v / 2', unit='km / s'))
     with pytest.raises(ValueError, match="must be an astropy unit"):
         ParamScalarDesc(unit='km per s')
+
+
+def test_elements_in_python():
+    # What a configuration gives as properties, as the elements they are
+    pdescs = make_pdescs(a=S, v=3)
+    params = ParamSpace(pdescs, {
+        'a': FreeElement(value=1, min=0, max=2),
+        'v': [5.0, Tied('a * 2'), Tied('a')]})
+    values = params.evaluate({'a': 1.5})
+    np.testing.assert_array_equal(values['v'], [5, 3, 1.5])
+    assert params.kinds() == {
+        'a': ParamKind.FREE, 'v[0]': ParamKind.FIXED,
+        'v[1]': ParamKind.TIED, 'v[2]': ParamKind.TIED}
+    transformed = ParamSpace(
+        make_pdescs(a=S, t=S), {'a': 1.0, 't': Transformed()},
+        transforms=lambda values: values.update(t=values['a'] + 1))
+    assert transformed.evaluate()['t'] == 2
+
+
+def test_invalid_elements_in_python_are_value_errors():
+    # And the same problems in properties are mistakes of a configuration
+    pdescs = make_pdescs(a=S, b=S)
+    with pytest.raises(ValueError, match="invalid syntax") as error:
+        ParamSpace(pdescs, {'a': Tied('nonsense +'), 'b': 1})
+    assert not isinstance(error.value, ConfigError)
+    with pytest.raises(ValueError, match="have no value"):
+        ParamSpace(pdescs, {'a': 1})
+    with pytest.raises(ConfigError, match="invalid syntax"):
+        ParamSpace.from_properties(pdescs, {'a': 'nonsense +', 'b': 1})
+
+
+def test_options_spread_over_elements_dump_as_given():
+    # (each element its own free element, in Python)
+    pdescs = make_pdescs(v=3)
+    properties = {'v': {'*value': [1, 2, 3], '*min': [0, -1, -2], 'max': 5}}
+    params = ParamSpace.from_properties(pdescs, properties)
+    assert params.elements()['v'] == [
+        FreeElement(value=1, min=0, max=5),
+        FreeElement(value=2, min=-1, max=5),
+        FreeElement(value=3, min=-2, max=5)]
+    assert params.dump()['properties'] == {
+        'v': {'*value': [1, 2, 3], '*min': [0, -1, -2], 'max': 5}}
+

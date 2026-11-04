@@ -19,7 +19,7 @@ VALUES = dict(a=1.0, b=2.0, v=np.array([0.0, 1.0, 4.0, 9.0, 16.0]))
 
 def residuals(info, constants=None):
     """The residuals of one prior at VALUES."""
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         PDESCS, PROPERTIES, constants=constants, priors=[info])
     (function,) = joint_prior_residuals(params)
     return function(VALUES)
@@ -55,7 +55,7 @@ def test_smooth_penalises_jumps_or_bends_however_the_points_are_spaced():
 def smooth2d_residuals(cells, **options):
     """The residuals of a smooth2d prior on a 4 by 3 map of cells."""
     pdescs = dict(m=ParamVectorDesc(12))
-    params = ParamSpace(pdescs, dict(m=0), priors=[
+    params = ParamSpace.from_properties(pdescs, dict(m=0), priors=[
         dict(type='smooth2d', expr='m', size=[4, 3]) | options])
     (function,) = joint_prior_residuals(params)
     return function(dict(m=np.ravel(cells)))
@@ -79,7 +79,7 @@ def test_smooth2d_penalises_jumps_or_bends_of_a_map():
 
 
 def test_smooth2d_needs_a_value_per_cell():
-    params = ParamSpace(PDESCS, PROPERTIES, priors=[dict(
+    params = ParamSpace.from_properties(PDESCS, PROPERTIES, priors=[dict(
         type='smooth2d', expr='v', size=[4, 3], order=1, std=1)])
     (function,) = joint_prior_residuals(params)
     with pytest.raises(ValueError, match="needs 12 values; there are 5"):
@@ -95,12 +95,12 @@ def test_bound_penalises_only_beyond_its_bounds():
 
 def test_the_parameter_space_keeps_its_priors():
     info = dict(type='smooth', expr='v', order=1, std=2)
-    params = ParamSpace(PDESCS, PROPERTIES, priors=[info])
-    assert params.priors() == [info]
-    assert ParamSpace.load(params.dump(), PDESCS).priors() == [info]
-    assert params.with_values({}).priors() == [info]
-    with pytest.raises(ValueError, match="must be dicts"):
-        ParamSpace(PDESCS, PROPERTIES, priors=['smooth'])
+    params = ParamSpace.from_properties(PDESCS, PROPERTIES, priors=[info])
+    assert params.dump()['priors'] == [info]
+    assert ParamSpace.load(params.dump(), PDESCS).dump()['priors'] == [info]
+    assert params.with_values({}).dump()['priors'] == [info]
+    with pytest.raises(ConfigError, match="in the form of a dictionary"):
+        ParamSpace.from_properties(PDESCS, PROPERTIES, priors=['smooth'])
 
 
 @pytest.mark.parametrize('info, message', [

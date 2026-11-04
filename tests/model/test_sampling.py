@@ -139,7 +139,7 @@ def evaluate_curve(component, free):
     obs_group = group(component)
     pdescs = obs_group.pdescs() | dict(
         vmax=ParamScalarDesc(), rt=ParamScalarDesc())
-    space = ParamSpace(pdescs, PROPERTIES | dict(
+    space = ParamSpace.from_properties(pdescs, PROPERTIES | dict(
         vmax=dict(value=100), rt=dict(value=1),
         vpt_vt='vmax * 2 / np.pi * np.arctan(subrnodes / rt)'),
         constants=obs_group.constants())

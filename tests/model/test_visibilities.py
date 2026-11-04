@@ -49,7 +49,8 @@ def evaluate(driver, galaxy, observable, properties):
         driver=dict(type=driver.type()), galaxy=copy.deepcopy(galaxy),
         line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), properties)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), properties)
     data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 
@@ -155,7 +156,8 @@ def observation_of_data(driver, offset):
         data=dataset)
     group = ObservationGroup(galaxy_parser.load(DISK), observation)
     return (group.plan(driver),
-            ParamSpace(group.pdescs(), DISK_PROPERTIES).evaluate())
+            ParamSpace.from_properties(
+                group.pdescs(), DISK_PROPERTIES).evaluate())
 
 
 def test_the_residuals_are_those_of_both_parts(driver):

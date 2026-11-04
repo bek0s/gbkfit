@@ -93,12 +93,12 @@ def test_halo_masses_invert_their_stellar_mass_relations():
 
 
 def test_expressions_call_the_relations():
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         dict(s1=ParamScalarDesc(), c2=ParamScalarDesc(),
              c=ParamScalarDesc()),
         dict(s1=1.0, c2=12.0, c='relations.dz_c(s1, c2)'))
     assert params.evaluate()['c'] == pytest.approx(
         float(relations.dz_c(1.0, 12.0)))
     with pytest.raises(Exception, match="cannot be called|not allowed"):
-        ParamSpace(
+        ParamSpace.from_properties(
             dict(c=ParamScalarDesc()), dict(c='relations._dutton14(1)'))

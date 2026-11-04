@@ -275,7 +275,7 @@ class Setup:
     --------
     >>> group = ObservationGroup(galaxy, observation)
     >>> params = ParamSpace(
-    ...     group.pdescs(), dict(incl=60, vpt_vt=dict(min=50, max=300)),
+    ...     group.pdescs(), dict(incl=60, vpt_vt=FreeElement(min=50, max=300)),
     ...     constants=group.constants())
     >>> with Setup(group, params, fitter=FitterScipyLeastSquares(),
     ...            driver=DriverCuda()) as setup:

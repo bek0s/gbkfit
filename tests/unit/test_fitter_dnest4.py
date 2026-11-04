@@ -32,7 +32,8 @@ PROPERTIES = dict(
 
 def layout(properties, min_rows=None):
     """The layout of the galaxy with the given properties."""
-    params = ParamSpace(galaxy_parser.load(GALAXY).pdescs(), properties)
+    params = ParamSpace.from_properties(
+        galaxy_parser.load(GALAXY).pdescs(), properties)
     names = tuple(params.free_properties())
     medians = [1.0] * len(names)
     return table_layout(params, names, medians, min_rows or {}), names
@@ -171,7 +172,8 @@ def blob_objective():
     truth |= dict(pt_a=1.0, pt1_r=[3, 5, 5], pt1_t=[30, 0, 0],
                   pt1_a=[1, 0, 0])
     model = image.model_h(
-        ParamSpace(image.group().pdescs(), truth).evaluate())[0]
+        ParamSpace.from_properties(
+            image.group().pdescs(), truth).evaluate())[0]
     model = model['brightness']['d']
     sigma = 0.02 * model.max()
     noise = np.random.default_rng(1).normal(0, sigma, shape)
@@ -181,7 +183,7 @@ def blob_objective():
 
 def test_a_stopped_fit_keeps_its_saves():
     objective = blob_objective()
-    params = ParamSpace(objective.pdescs(), PROPERTIES)
+    params = ParamSpace.from_properties(objective.pdescs(), PROPERTIES)
     fitter = FitterDNest4(
         new_level_interval=200, save_interval=50, max_saves=1000)
     result = fitter.fit(objective, params, control=StopAfter(2000))

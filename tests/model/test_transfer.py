@@ -485,7 +485,7 @@ def galaxies_model(
         observation_parser.load([observation]), depth_order)
     plan = group.plan(driver)
     pdescs = group.pdescs()
-    params = gbkfit.params.ParamSpace(pdescs, {
+    params = gbkfit.params.ParamSpace.from_properties(pdescs, {
         key: value for key, value in properties.items() if key in pdescs})
     extra = Extras() if with_extras else None
     data = plan.model_h(params.evaluate(), extra)

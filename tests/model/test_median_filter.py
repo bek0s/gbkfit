@@ -36,7 +36,7 @@ def model(driver, observable, galaxy, item, out_extra=None):
     """The model data of an item of an observation of a galaxy."""
     group = ObservationGroup(
         galaxy, ObservationSky(observable, LineOfSightFlat()))
-    params = ParamSpace(group.pdescs(), {
+    params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
     return group.plan(driver).model_h(params, out_extra)[0][item]['d'].copy()
@@ -99,7 +99,7 @@ def test_a_median_filter_is_not_linear_and_its_noise_is_drawn(driver):
         median_size=3).linear_in_light()
     group = ObservationGroup(disk('band'), ObservationSky(
         PixelBrightness(size=(24, 20), median_size=3), LineOfSightFlat()))
-    params = ParamSpace(group.pdescs(), {
+    params = ParamSpace.from_properties(group.pdescs(), {
         key: value for key, value in PARAMS.items()
         if key in group.pdescs()}).evaluate()
     (mock,), = group.plan(driver).mock(

@@ -33,7 +33,8 @@ def evaluate(driver, observable):
         driver=dict(type=driver.type()), galaxy=GALAXY,
         line_of_sight=dict(type='flat'),
         observable=copy.deepcopy(observable))])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), PROPERTIES)
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), PROPERTIES)
     data = plan.model_h(params.evaluate())[0]
     return {key: value['d'].copy() for key, value in data.items()}
 

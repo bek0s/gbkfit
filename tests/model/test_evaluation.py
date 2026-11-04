@@ -45,10 +45,11 @@ def nodewise_relative_case(driver):
 
 def test_evaluation_does_not_modify_params(driver):
     plan = group_plan([nodewise_relative_case(driver)])
-    params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
-        vsys=0, xpos=0, ypos=0, posa=30, incl=45,
-        pt_a=1, pt_s=4, dpt_a=10,
-        vpt_vt=[100] + [10] * 11),
+    params = gbkfit.params.ParamSpace.from_properties(
+        plan.group().pdescs(), dict(
+            vsys=0, xpos=0, ypos=0, posa=30, incl=45,
+            pt_a=1, pt_s=4, dpt_a=10,
+            vpt_vt=[100] + [10] * 11),
         modes=dict(vpt_vt=gbkfit.params.ParamModeOffsets()))
     values = params.evaluate()
     values_before = copy.deepcopy(values)
@@ -81,7 +82,7 @@ plan = group_plan([dict(
             type='traits',
             vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
         emission=dict(type='lines'))]))])
-params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
+params = gbkfit.params.ParamSpace.from_properties(plan.group().pdescs(), dict(
     vsys=0, xpos=0, ypos=0, posa=30, incl=60, pt_a=1, pt_s=4, ht_s=1,
     vpt_rt=2, vpt_vt=150, dpt_a=20))
 np.save(sys.argv[1], plan.model_h(params.evaluate())[0]['spectra']['d'])
@@ -140,7 +141,8 @@ def test_one_galaxy_observed_on_grids_with_different_steps(driver, kind):
         return ObservationSky(observable_parser.load(info), LineOfSightFlat())
 
     def evaluate(group, i):
-        params = gbkfit.params.ParamSpace(group.pdescs(), properties)
+        params = gbkfit.params.ParamSpace.from_properties(
+            group.pdescs(), properties)
         return group.plan(driver).model_h(
             params.evaluate())[i][key]['d'].copy()
 
@@ -222,8 +224,9 @@ def test_cuda_smooth_disk_of_more_voxels_than_an_int_holds(driver):
                     ptraits=dict(type='exponential'),
                     htraits=dict(type='sech2', zmax=8)),
                 emission=dict(type='band'))]))])
-        params = gbkfit.params.ParamSpace(plan.group().pdescs(), dict(
-            xpos=0, ypos=0, posa=0, incl=30, pt_a=1, pt_s=6, ht_s=1))
+        params = gbkfit.params.ParamSpace.from_properties(
+            plan.group().pdescs(), dict(
+                xpos=0, ypos=0, posa=0, incl=30, pt_a=1, pt_s=6, ht_s=1))
         return plan.model_h(params.evaluate())[0]['brightness']['d']
     many = image(528384, 0.001)
     few = image(1032, 0.512)

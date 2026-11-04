@@ -66,7 +66,7 @@ def evaluate(driver, case, dtype, fft_dtype='float64'):
             instrument=instrument, dtype=dtype, fft_dtype=fft_dtype))])
     # (the disk on a grid is thick: it has a scale height)
     properties = PROPERTIES | (dict(ht_s=0.5) if '3d' in case else {})
-    params = gbkfit.params.ParamSpace(
+    params = gbkfit.params.ParamSpace.from_properties(
         group.pdescs(), properties).evaluate()
     return {key: value['d'].copy()
             for key, value in group.plan(driver).model_h(params)[0].items()}

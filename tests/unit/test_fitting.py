@@ -69,7 +69,7 @@ def mock_objective(
     shape = (32, 32)
     image = group(DatasetPixelBrightness(Data(np.zeros(shape))))
     model = image.model_h(
-        ParamSpace(image.group().pdescs(), TRUE).evaluate())[0]
+        ParamSpace.from_properties(image.group().pdescs(), TRUE).evaluate())[0]
     model = model['brightness']['d']
     sigma = 0.01 * model.max()
     noise = np.random.default_rng(seed).normal(0, sigma, shape)
@@ -112,7 +112,7 @@ def test_fitters_say_what_they_are_give_and_need():
         'dnest4', 'dynesty.dynamic', 'dynesty.static', 'nautilus',
         'ultranest']
     objective = mock_objective(DriverHost())
-    one_free = ParamSpace(
+    one_free = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties() | dict(
             xpos=0, ypos=0, posa=40, incl=55, pt_a=1))
     with pytest.raises(ValueError, match="at least 2 free elements"):
@@ -236,8 +236,8 @@ def test_the_tuning_of_an_element_or_else_of_its_fitter():
     assert FitParamWalkers.of(unstarted, dict(width=0.5)).width() is None
     # (a property of another fitter is known; a typo is not)
     with pytest.raises(
-            ValueError, match=r"'sigmaa' \(did you mean 'sigma'\?\)"):
-        ParamSpace(
+            ConfigError, match=r"'sigmaa' \(did you mean 'sigma'\?\)"):
+        ParamSpace.from_properties(
             dict(a=ParamScalarDesc()), dict(a=dict(value=1, n=5, sigmaa=1)))
 
 
@@ -245,7 +245,8 @@ def test_lmfit_recovers_the_parameters_and_their_errors(driver):
     pytest.importorskip('lmfit')
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     result = FitterLMFitLeastSquares().fit(objective, params)
     best = result.best()
     assert result.success
@@ -274,8 +275,9 @@ def test_least_squares_fit_the_scale_of_the_errors(driver):
         noise=dict(brightness=FittedNoise(scale=True, scale_min=0.1)))
     objective = mock_objective(
         driver, error_scale=0.5, likelihood=likelihood, name='mock')
-    params = ParamSpace(objective.pdescs(), bounded_properties() | dict(
-        mock_noise_scale_brightness=dict(value=1.0, min=0.1, max=10)))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties() | dict(
+            mock_noise_scale_brightness=dict(value=1.0, min=0.1, max=10)))
     best = FitterScipyLeastSquares().fit(objective, params).best()
     n = 32 * 32
     assert best.free['mock_noise_scale_brightness'] == pytest.approx(
@@ -289,7 +291,8 @@ def test_a_point_where_the_model_fails_does_not_end_the_fit(monkeypatch):
     from gbkfit.fitting import fitter_parser
     from gbkfit.params import ModelEvaluationError
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     merits = objective.merits
 
     def failing(values):
@@ -316,7 +319,8 @@ def test_least_squares_step_around_points_where_the_model_fails(
     from gbkfit.fitting import fitter_parser
     from gbkfit.params import ModelEvaluationError
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     residuals_and_merits = objective.residuals_and_merits
 
     def failing(values, out_extra=None):
@@ -368,8 +372,9 @@ def test_a_prior_chosen_by_the_aicp_needs_fits_of_the_aicp():
     from gbkfit.fitting import fitter_parser
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
-    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
-        obs_flux_scale=dict(solve=dict(
+    params = ParamSpace.from_properties(
+        plan.group().pdescs(), bounded_properties() | dict(
+            obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma_aicp=[0.1, 10], min=0,
             likelihood='profiled'))))
     objective = Objective(plan, params.solves())
@@ -388,8 +393,9 @@ def test_the_reduced_chi2_is_of_the_data_alone():
     from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
-    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
-        pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
+    params = ParamSpace.from_properties(
+        plan.group().pdescs(), bounded_properties() | dict(
+            pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1.5, sigma=0.05, min=0))))
     objective = Objective(plan, params.solves())
     best = FitterScipyLeastSquares().fit(objective, params).best()
@@ -406,8 +412,9 @@ def test_a_fit_of_solved_values_has_a_covariance():
     from gbkfit.fitting.fitters.scipy import FitterScipyLeastSquares
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
-    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
-        pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
+    params = ParamSpace.from_properties(
+        plan.group().pdescs(), bounded_properties() | dict(
+            pt_a=TRUE['pt_a'], obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=1e8, min=0))))
     objective = Objective(plan, params.solves())
     result = FitterScipyLeastSquares().fit(objective, params)
@@ -427,7 +434,8 @@ def test_lmfit_says_why_leastsq_stopped():
     pytest.importorskip('lmfit')
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     converged = FitterLMFitLeastSquares().fit(objective, params)
     assert converged.success
     assert 'relative' in converged.message or 'cosine' in converged.message
@@ -443,7 +451,8 @@ def test_cmaes_finds_the_minimum_of_lmfit(driver):
     from gbkfit.fitting.fitters.cmaes import FitterCMAES
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     local = FitterLMFitLeastSquares().fit(objective, params).best()
     best = FitterCMAES().fit(objective, params).best()
     assert best.chi2 == pytest.approx(local.chi2, rel=1e-6)
@@ -461,13 +470,15 @@ def test_optimizers_with_a_gaussian_prior_find_the_maximum_a_posteriori(
     from gbkfit.fitting import fitter_parser
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     alone = FitterLMFitLeastSquares().fit(objective, params).best()
     x, s = alone.free['incl'], alone.covariance.std['incl']
     properties = bounded_properties()
     properties['incl']['prior'] = dict(type='gauss', mean=x + 2 * s, std=s)
     best = fitter_parser.load(fitter).fit(
-        objective, ParamSpace(objective.pdescs(), properties)).best()
+        objective, ParamSpace.from_properties(
+            objective.pdescs(), properties)).best()
     assert best.free['incl'] == pytest.approx(x + s, abs=0.1 * s)
     assert best.covariance.std['incl'] == pytest.approx(
         s / np.sqrt(2), rel=0.05)
@@ -488,10 +499,11 @@ def test_a_prior_on_an_expression_acts_as_the_prior_of_an_element(
     from gbkfit.fitting import fitter_parser
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     alone = FitterLMFitLeastSquares().fit(objective, params).best()
     x, s = alone.free['incl'], alone.covariance.std['incl']
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         priors=[dict(type='gauss', expr=expr, mean=x + 2 * s, std=s)],
         derived=derived)
@@ -505,7 +517,7 @@ def test_points_where_a_prior_cannot_be_evaluated_are_rejected():
     # cost is inf, and the log-prior and what nested samplers integrate
     # are -inf; least squares get the error
     objective = mock_objective(DriverHost())
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         priors=[dict(type='gauss', expr='w', mean=1, std=0.5)],
         derived=dict(w='xpos if xpos > 0 else np.nan'))
@@ -545,7 +557,8 @@ def test_a_stopped_fit_ends_with_its_best_point(fitter):
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     result = fitter_parser.load(fitter).fit(
         objective, params, control=StopAfter(30))
     assert not result.success and 'stopped' in result.message
@@ -558,7 +571,8 @@ def test_a_fit_stopped_in_its_uncertainty_ends_without_it():
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     control = StopControl()
 
     def observer(progress):
@@ -577,7 +591,8 @@ def test_a_fit_resumed_from_its_log_is_the_fit_that_did_not_stop(tmp_path):
     pytest.importorskip('cma')
     from gbkfit.fitting.fitters.cmaes import FitterCMAES
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     whole = FitterCMAES().fit(objective, params).best()
     filename = str(tmp_path / 'evaluations.bin')
     FitterCMAES().fit(
@@ -604,7 +619,8 @@ def test_a_least_squares_fit_logs_its_evaluations_and_resumes_anew(
     # writes the log anew
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     filename = str(tmp_path / 'evaluations.bin')
     fitter.fit(
@@ -630,7 +646,8 @@ def test_workers_evaluate_batches_as_the_objective_does(driver, kind):
     # (copies on one device: the chi-squares differ at rounding, their
     # sums being in the order of the threads of each copy)
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     xs = np.random.default_rng(2).uniform(
         [-1, -1, 30, 45, 0.8, 3], [1, 1, 50, 65, 1.2, 5], (5, 6))
     alone = FitProblem(objective, params)
@@ -649,7 +666,8 @@ def test_workers_take_placements_of_their_copies(driver):
     # (one of other drivers of its observation, by its name, gives the
     # same values)
     objective = mock_objective(driver, name='image')
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     xs = np.random.default_rng(3).uniform(
         [-1, -1, 30, 45, 0.8, 3], [1, 1, 50, 65, 1.2, 5], (4, 6))
     workers = WorkersThreads([(driver, {}), (driver, dict(image=DriverHost()))])
@@ -669,7 +687,8 @@ def test_a_fit_with_workers_is_the_fit_without(driver, fitter, kind):
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     alone = fitter_parser.load(fitter).fit(objective, params)
     with two_workers(kind, driver).start(objective) as pool:
         pooled = fitter_parser.load(fitter).fit(objective, params, pool=pool)
@@ -685,7 +704,8 @@ def test_a_fit_with_workers_logs_its_evaluations_in_order(tmp_path):
     from gbkfit.fitting.fitters.cmaes import FitterCMAES
     driver = DriverHost()
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     filename = str(tmp_path / 'evaluations.bin')
     with WorkersThreads([driver, driver]).start(objective) as pool:
         pooled = FitterCMAES().fit(
@@ -732,7 +752,8 @@ def test_a_finished_chain_discards_all_its_burn_in(sampler):
     pytest.importorskip(sampler)
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     fitter = fitter_parser.load(
         dict(type=sampler, nwalkers=16, nsteps=20, burnin=15))
     result = fitter.fit(objective, params)
@@ -755,8 +776,9 @@ def test_evaluations_that_are_not_numbers_are_outside(tmp_path, caplog):
         str(tmp_path / 'like.py'), 'log_like', 'log_likelihood', ['cut'])
     objective = mock_objective(
         DriverHost(), likelihood=likelihood, name='mock')
-    params = ParamSpace(objective.pdescs(), prior_properties(10) | dict(
-        mock_cut=dict(min=-1, max=1)))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10) | dict(
+            mock_cut=dict(min=-1, max=1)))
     problem = FitProblem(objective, params)
     xs = [[TRUE[name] for name in problem.names()[:-1]] + [cut]
           for cut in (-0.5, 0.5)]
@@ -785,7 +807,8 @@ def test_a_stopped_emcee_keeps_its_chain_so_far(tmp_path):
     pytest.importorskip('emcee')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     fitter = fitter_parser.load(dict(type='emcee', nwalkers=16, nsteps=100))
     result = fitter.fit(
         objective, params, control=StopAfter(16 * 21),
@@ -806,7 +829,8 @@ def test_a_stopped_zeus_keeps_its_chain_so_far(tmp_path):
     pytest.importorskip('zeus')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     fitter = fitter_parser.load(dict(type='zeus', nwalkers=16, nsteps=100))
     result = fitter.fit(
         objective, params, control=StopAfter(16 * 40),
@@ -827,7 +851,8 @@ def test_zeus_is_seeded_and_leaves_the_global_random_numbers_alone():
     import random
     from gbkfit.fitting.fitters.zeus import FitterZeus
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     np.random.seed(7)
     random.seed(7)
     numpy_state = np.random.get_state()[1].copy()
@@ -852,7 +877,7 @@ def test_a_grid_maps_the_chi2_of_two_free_elements():
     objective = mock_objective(DriverHost())
     properties = TRUE | dict(
         posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=11))
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     result = FitterGrid(batch=7).fit(objective, params)
     grid = result.diagnostics['grid']
     chi2 = np.array(grid['cost'])
@@ -871,8 +896,9 @@ def test_a_grid_takes_the_priors_on_several_parameters():
     objective = mock_objective(DriverHost())
     properties = TRUE | dict(
         posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=11))
-    params = ParamSpace(objective.pdescs(), properties, priors=[
-        dict(type='gauss', expr='posa', mean=36, std=0.01)])
+    params = ParamSpace.from_properties(
+        objective.pdescs(), properties, priors=[
+            dict(type='gauss', expr='posa', mean=36, std=0.01)])
     result = FitterGrid().fit(objective, params)
     assert result.best().free['posa'] == 36
 
@@ -880,7 +906,7 @@ def test_a_grid_takes_the_priors_on_several_parameters():
 def test_a_stopped_grid_keeps_the_points_it_evaluated():
     from gbkfit.fitting.fitters.grid import FitterGrid
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), TRUE | dict(
+    params = ParamSpace.from_properties(objective.pdescs(), TRUE | dict(
         posa=dict(min=36, max=44, n=9), incl=dict(min=50, max=60, n=6)))
     result = FitterGrid(batch=10).fit(
         objective, params, control=StopAfter(25))
@@ -905,7 +931,7 @@ def test_optimizers_of_the_aicp_minimise_it():
     from gbkfit.fitting.uncertainty import UncertaintyOptions
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
-    params = ParamSpace(plan.group().pdescs(), TRUE | dict(
+    params = ParamSpace.from_properties(plan.group().pdescs(), TRUE | dict(
         obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.1, min=0)),
         posa=dict(min=36, max=44, n=5)))
@@ -946,7 +972,7 @@ def test_errors_propagate_to_tied_and_fixed_elements():
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(DriverHost())
     properties = bounded_properties() | dict(ypos='xpos - 1.1', pt_s=4.0)
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     best = FitterLMFitLeastSquares().fit(objective, params).best()
     std = best.covariance.element_std
     assert std['ypos'] == pytest.approx(std['xpos'], rel=1e-6)
@@ -968,7 +994,7 @@ def test_unconstrained_elements_have_infinite_errors(tmp_path):
         str(tmp_path / 'like.py'), 'residuals', 'residuals', ['unused'])
     objective = mock_objective(
         DriverHost(), likelihood=likelihood, name='mock')
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties() | dict(
             mock_unused=dict(value=0.5, min=0, max=1)),
         derived=dict(d='mock_unused + xpos'))
@@ -990,7 +1016,7 @@ def test_derived_values_get_errors_and_samples():
     from gbkfit import outputs
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         derived=dict(d='xpos + 2 * ypos', vs='np.array([pt_a, pt_s])'))
     result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
@@ -1027,7 +1053,7 @@ def test_derived_values_get_errors_and_samples():
 def test_derived_values_that_fail_are_reported():
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         derived=dict(bad='np.take(np.array([xpos]), 5)'))
     result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
@@ -1045,7 +1071,7 @@ def test_a_bootstrap_refits_the_model_plus_its_residuals_redrawn():
     from gbkfit.fitting import (
         BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         derived=dict(d='xpos + 2 * ypos'))
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
@@ -1080,7 +1106,7 @@ def test_a_bootstrap_on_workers_is_the_bootstrap_without(kind):
         BootstrapBlocks, BootstrapOptions, fitter_parser, run_bootstrap)
     driver = DriverHost()
     objective = mock_objective(driver)
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         objective.pdescs(), bounded_properties(),
         derived=dict(d='xpos + 2 * ypos'))
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
@@ -1114,7 +1140,8 @@ def test_a_stopped_bootstrap_resumes_from_its_log(tmp_path):
     from gbkfit.fitting import (
         BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     start = fitter.fit(objective, params).best().elements
     options = BootstrapOptions(4, BootstrapGaussian())
@@ -1183,7 +1210,8 @@ def test_a_gaussian_bootstrap_draws_the_noise_anew():
     from gbkfit.fitting import (
         BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     result = fitter.fit(objective, params)
     boot = run_bootstrap(
@@ -1201,7 +1229,8 @@ def test_a_bootstrap_keeps_refits_that_do_not_converge():
     from gbkfit.fitting import (
         BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     result = fitter_parser.load(dict(type='scipy.least_squares')).fit(
         objective, params)
     boot = run_bootstrap(
@@ -1220,8 +1249,9 @@ def test_a_bootstrap_refits_fits_of_solved_values():
         BootstrapGaussian, BootstrapOptions, fitter_parser, run_bootstrap)
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
-    params = ParamSpace(plan.group().pdescs(), bounded_properties() | dict(
-        obs_flux_scale=dict(solve=dict(
+    params = ParamSpace.from_properties(
+        plan.group().pdescs(), bounded_properties() | dict(
+            obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.1, min=0))))
     objective = Objective(plan, params.solves())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
@@ -1240,7 +1270,8 @@ def test_a_bootstrap_refits_fits_of_solved_values():
 def test_bootstrap_options_that_do_not_suit_the_fit_refused(scheme, message):
     from gbkfit.fitting import BootstrapOptions, fitter_parser, run_bootstrap
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     with pytest.raises(ValueError, match=message):
         run_bootstrap(objective, params, TRUE, fitter, BootstrapOptions.load(
@@ -1260,7 +1291,8 @@ def test_least_squares_methods_find_the_minimum_of_lmfit(driver, fitter):
     from gbkfit.fitting import fitter_parser
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     local = FitterLMFitLeastSquares().fit(objective, params).best()
     result = fitter_parser.load(fitter).fit(objective, params)
     assert result.success
@@ -1276,7 +1308,7 @@ def test_multistart_finds_the_four_minima_of_a_thin_disk():
     properties = bounded_properties() | dict(
         posa=dict(value=100, min=0, max=360),
         incl=dict(value=90.5, min=10, max=170))
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     fitter = fitter_parser.load(dict(
         type='multistart', local=dict(type='lmfit.least_squares'),
         nstarts=16))
@@ -1298,12 +1330,14 @@ def test_cmaes_gives_the_minimum_of_its_own_run():
     objective = mock_objective(DriverHost())
     fitter = FitterCMAES(maxfevals=300)
     rng = np.random.default_rng(1)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     problem = FitProblem(objective, params)
     fitter._run(problem, list(fitter.load_fit_params(params).values()), rng)
     posa = list(problem.names()).index('posa')
-    boxed = ParamSpace(objective.pdescs(), bounded_properties() | dict(
-        posa=dict(value=120, min=100, max=150)))
+    boxed = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties() | dict(
+            posa=dict(value=120, min=100, max=150)))
     run = fitter._run(
         problem, list(fitter.load_fit_params(boxed).values()), rng)
     assert 100 <= run.solutions[0][posa] <= 150
@@ -1322,12 +1356,13 @@ def test_least_squares_move_values_from_awkward_starts(fitter):
     from gbkfit.fitting import fitter_parser
     from gbkfit.fitting.fitters.lmfit import FitterLMFitLeastSquares
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     local = FitterLMFitLeastSquares().fit(objective, params).best()
     properties = bounded_properties()
     properties['xpos']['value'] = 1e-3
     properties['pt_s'] |= dict(value=1, min=1)
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     result = fitter_parser.load(fitter).fit(objective, params)
     # (with float64 FFTs, scipy's 'lm' stops 1.4e-5 above the others, where
     # its xtol is met with the default step)
@@ -1344,7 +1379,7 @@ def test_trf_moves_a_value_that_starts_on_its_bound(fitter):
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
     properties = dict(TRUE) | dict(pt_s=dict(value=1, min=1, max=10))
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     best = fitter_parser.load(fitter).fit(objective, params).best()
     assert best.free['pt_s'] == pytest.approx(
         TRUE['pt_s'], abs=5 * best.covariance.std['pt_s'])
@@ -1358,7 +1393,7 @@ def test_a_fit_beyond_the_valid_range_of_a_parameter_fails():
     from gbkfit.params import ParamScalarDesc
     objective = mock_objective(DriverHost())
     pdescs = objective.pdescs() | dict(pt_s=ParamScalarDesc(min=2))
-    params = ParamSpace(pdescs, bounded_properties())
+    params = ParamSpace.from_properties(pdescs, bounded_properties())
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
     with pytest.raises(ValueError, match=r"'pt_s' \[1, 10\] \(valid: "):
         fitter.fit(objective, params)
@@ -1371,7 +1406,8 @@ def test_multistart_on_workers_is_multistart_without(kind):
     from gbkfit.fitting import fitter_parser
     driver = DriverHost()
     objective = mock_objective(driver)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = dict(type='multistart', local=dict(type='cmaes'), nstarts=4)
     alone = fitter_parser.load(fitter).fit(objective, params)
     with two_workers(kind, driver).start(objective) as pool:
@@ -1397,7 +1433,8 @@ def test_a_stopped_multistart_resumes_from_the_starts_of_its_log(tmp_path):
     pytest.importorskip('cma')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = dict(type='multistart', local=dict(type='cmaes'), nstarts=4)
     whole = fitter_parser.load(fitter).fit(objective, params)
     filename = str(tmp_path / 'evaluations.bin')
@@ -1421,7 +1458,7 @@ def test_multistart_skips_starts_the_parameters_reject():
     properties = bounded_properties() | dict(
         xpos=dict(value=0.65, min=-4, max=4),
         pt_s='np.sqrt(xpos - 0.6) * 0 + 4')
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     result = fitter_parser.load(dict(
         type='multistart', local=dict(type='scipy.least_squares'),
         nstarts=8)).fit(objective, params)
@@ -1479,7 +1516,8 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
         return ObservationGroup(
             galaxy_parser.load(GALAXY), observation).plan(DriverHost())
     image = group(DatasetPixelBrightness(Data(np.zeros((48, 48)))))
-    values = ParamSpace(image.group().pdescs(), TRUE).evaluate()
+    values = ParamSpace.from_properties(
+        image.group().pdescs(), TRUE).evaluate()
     peak = image.model_h(values)[0]['brightness']['d'].max()
     noise = NoiseGauss(rms=0.01 * peak, spatial_correlation='instrument')
     fitter = fitter_parser.load(dict(type='scipy.least_squares'))
@@ -1489,7 +1527,8 @@ def test_bootstrap_errors_take_the_noise_the_beam_correlates():
         dataset = DatasetPixelBrightness(Data(
             mock['brightness'].data(), error=mock['brightness'].error()))
         objective = Objective(group(dataset))
-        params = ParamSpace(objective.pdescs(), bounded_properties())
+        params = ParamSpace.from_properties(
+            objective.pdescs(), bounded_properties())
         fits.append((objective, params, fitter.fit(objective, params)))
     scatter = np.std(
         [[result.best().free[name] for name in TRUE] for *_, result in fits],
@@ -1514,7 +1553,7 @@ def test_emcee_posterior_agrees_with_the_covariance():
     properties = prior_properties(10)
     for name in properties:
         properties[name] |= dict(value=TRUE[name], width=1e-3)
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     result = FitterEmcee(nwalkers=24, nsteps=1000, burnin=300).fit(
         objective, params)
     check_posterior(result)
@@ -1528,7 +1567,7 @@ def test_zeus_posterior_agrees_with_the_covariance():
     properties = prior_properties(10)
     for name in properties:
         properties[name] |= dict(value=TRUE[name], width=1e-3)
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     result = FitterZeus(nwalkers=24, nsteps=400, burnin=100).fit(
         objective, params)
     check_posterior(result)
@@ -1539,7 +1578,8 @@ def test_nautilus_posterior_agrees_with_the_covariance():
     pytest.importorskip('nautilus')
     from gbkfit.fitting.fitters.nautilus import FitterNautilus
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     result = FitterNautilus(n_live=300, n_eff=2000).fit(objective, params)
     check_posterior(result)
     assert math.isfinite(result.evidence.log_z)
@@ -1549,7 +1589,8 @@ def test_nautilus_posterior_agrees_with_the_covariance():
 def test_dnest4_posterior_agrees_with_the_covariance():
     from gbkfit.fitting.fitters.dnest4 import FitterDNest4
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     result = FitterDNest4(
         new_level_interval=1000, save_interval=100, max_saves=2000
     ).fit(objective, params)
@@ -1562,7 +1603,8 @@ def test_dynesty_posterior_agrees_with_the_covariance():
     pytest.importorskip('dynesty')
     from gbkfit.fitting.fitters.dynesty import FitterDynestyStatic
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     result = FitterDynestyStatic(nlive=300).fit(objective, params)
     check_posterior(result)
     assert result.evidence.log_z_error > 0
@@ -1574,7 +1616,7 @@ def test_a_nested_evidence_of_profiled_solves_says_it_is_not_one(caplog):
     from gbkfit.fitting.fitters.dynesty import FitterDynestyStatic
     plan = mock_objective(
         DriverHost(), name='obs', flux_scale='one').group_plan()
-    params = ParamSpace(plan.group().pdescs(), TRUE | dict(
+    params = ParamSpace.from_properties(plan.group().pdescs(), TRUE | dict(
         incl=dict(prior=dict(type='uniform', min=50, max=60)),
         obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.5, min=0,
@@ -1596,12 +1638,12 @@ def test_nested_evidence_with_a_prior_on_an_expression_is_corrected():
     properties = prior_properties(10)
     lo, hi = properties['incl']['min'], properties['incl']['max']
     mean, std = TRUE['incl'] + 0.5, 0.5
-    joint = ParamSpace(
+    joint = ParamSpace.from_properties(
         objective.pdescs(), properties,
         priors=[dict(type='gauss', expr='incl', mean=mean, std=std)])
     properties['incl'] = dict(prior=dict(
         type='gauss_trunc', mean=mean, std=std, min=lo, max=hi))
-    alone = ParamSpace(objective.pdescs(), properties)
+    alone = ParamSpace.from_properties(objective.pdescs(), properties)
     z_joint = FitterDynestyStatic(nlive=300).fit(objective, joint).evidence
     z_alone = FitterDynestyStatic(nlive=300).fit(objective, alone).evidence
     error = math.hypot(z_joint.log_z_error, z_alone.log_z_error)
@@ -1618,7 +1660,7 @@ def test_samplers_leave_out_points_the_parameters_reject():
     properties = dict(TRUE) | dict(
         xpos=dict(min=0.5, max=0.9), posa=dict(min=35, max=45),
         pt_s='np.sqrt(xpos - 0.6) * 0 + 4')
-    params = ParamSpace(objective.pdescs(), properties)
+    params = ParamSpace.from_properties(objective.pdescs(), properties)
     result = FitterNautilus(n_live=200, n_eff=500).fit(objective, params)
     assert np.all(result.posterior.samples[:, 0] >= 0.6)
     assert result.posterior.summary()['xpos'][1] == pytest.approx(
@@ -1630,7 +1672,8 @@ def test_ultranest_posterior_agrees_with_the_covariance():
     pytest.importorskip('ultranest')
     from gbkfit.fitting.fitters.ultranest import FitterUltraNest
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), prior_properties(10))
+    params = ParamSpace.from_properties(
+        objective.pdescs(), prior_properties(10))
     result = FitterUltraNest().fit(objective, params)
     check_posterior(result)
     assert result.evidence.log_z_error > 0
@@ -1649,7 +1692,8 @@ def test_multistart_needs_what_its_local_fitter_needs(tmp_path):
     likelihood = LikelihoodUser.from_file(
         str(tmp_path / 'like.py'), 'log_like', 'log_likelihood')
     objective = mock_objective(DriverHost(), likelihood=likelihood)
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     fitter = FitterMultiStart(FitterScipyLeastSquares())
     assert fitter.info.needs == ('residuals',)
     with pytest.raises(ValueError, match="function of the log-likelihood"):
@@ -1680,7 +1724,8 @@ def test_fits_report_their_progress():
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     reports = []
     result = fitter_parser.load(dict(
         type='multistart', local=dict(type='scipy.least_squares'),
@@ -1704,7 +1749,8 @@ def test_observers_that_fail_are_dropped(caplog):
     pytest.importorskip('lmfit')
     from gbkfit.fitting import fitter_parser
     objective = mock_objective(DriverHost())
-    params = ParamSpace(objective.pdescs(), bounded_properties())
+    params = ParamSpace.from_properties(
+        objective.pdescs(), bounded_properties())
     reports = []
 
     def failing(progress):
@@ -1811,7 +1857,7 @@ def test_the_information_criteria_take_solved_values_by_their_likelihood():
     for likelihood in ('integrated', 'profiled'):
         plan = mock_objective(
             DriverHost(), name='obs', flux_scale='one').group_plan()
-        params = ParamSpace(plan.group().pdescs(), TRUE | dict(
+        params = ParamSpace.from_properties(plan.group().pdescs(), TRUE | dict(
             obs_flux_scale=dict(solve=dict(
                 type='gaussian', mean=1, sigma=0.1, min=0,
                 likelihood=likelihood)),

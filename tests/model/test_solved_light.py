@@ -84,7 +84,7 @@ def test_solved_amplitudes_are_the_least_squares_of_their_parts(driver):
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=copy.deepcopy([CORE, ENVELOPE])))],
         [observation(None, d) for d in data])
-    params = ParamSpace(
+    params = ParamSpace.from_properties(
         group.pdescs(), TRUTH | dict(core_i0=SOLVE, envelope_ie=SOLVE))
     objective = Objective(group.plan(driver), params.solves())
     evaluation = objective.evaluate(params.evaluate())
@@ -149,7 +149,7 @@ def test_amplitudes_of_models_not_linear_in_them_are_refused(
     properties |= {name: [1.0] * pdescs[name].size()
                    for name in pdescs if pdescs[name].size() > 1}
     properties['core_i0'] = SOLVE
-    params = ParamSpace(pdescs, properties)
+    params = ParamSpace.from_properties(pdescs, properties)
     with pytest.raises(ValueError, match=message):
         Objective(group.plan(driver), params.solves())
 
@@ -164,7 +164,7 @@ def test_amplitudes_with_a_solved_flux_scale_are_refused(driver):
         flux_scale='one', name='obs')
     group = ObservationGroup(
         [galaxy_parser.load(dict(components=[copy.deepcopy(CORE)]))], [obs])
-    params = ParamSpace(group.pdescs(), dict(
+    params = ParamSpace.from_properties(group.pdescs(), dict(
         xpos=0, ypos=0, posa=0, incl=0, core_sigma=[1, 2], core_q=[1, 1],
         core_i0=SOLVE, obs_flux_scale=dict(solve=dict(
             type='gaussian', mean=1, sigma=0.5, min=0))))
