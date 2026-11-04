@@ -106,6 +106,10 @@ class Scene:
         """
         return self._data_unit
 
+    def lines(self) -> tuple[str, ...] | None:
+        """Return the names of the emission lines drawn (all if None)."""
+        return self._lines
+
     def emitters(self) -> tuple[tuple[int, ...], ...]:
         """
         Return the indices of the components of each galaxy whose light is

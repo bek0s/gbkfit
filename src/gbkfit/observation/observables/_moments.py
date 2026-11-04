@@ -15,11 +15,13 @@ import gbkfit.math
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
+from gbkfit.model import STARS, LineEmission, StarsEmission
 from gbkfit.params import ModelEvaluationError
 from . import _dcube
 from .base import ModelData
 
 if TYPE_CHECKING:
+    from gbkfit.model import Scene
     from .pixel_moments import PixelMoments
     from .region_moments import RegionMoments
 
@@ -242,6 +244,39 @@ def spectra_dcube(
         dtype=dtype,
         fft_dtype=fft_dtype,
         median_size=median_size)
+
+
+def check_one_line(scene: 'Scene') -> None:
+    """
+    Raise ValueError if the moments of the spectra of a scene would mix
+    several lines: its emitters draw more than one (e.g. Ha and [NII] of
+    one component, or of two; or stars and a line of gas). Moments cannot
+    tell the lines of a spectrum apart, whatever the spectral axis covers,
+    so that an observation of moments names the line of its data (its
+    option lines), whose moments its data are.
+    """
+    lines = set()
+    for galaxy, emitters in enumerate(scene.emitters()):
+        for index in emitters:
+            emission = scene.component(galaxy, index).emission()
+            if isinstance(emission, StarsEmission):
+                if scene.lines() is not None and STARS in scene.lines():
+                    lines.add(STARS)
+            elif isinstance(emission, LineEmission):
+                names = emission.lines().names()
+                selected = emission.lines().select(scene.lines())
+                # The one line of a component without lines: whatever line
+                # the spectral axis is of, the same for all such components
+                if names:
+                    lines.update(names[i] for i in selected)
+                else:
+                    lines.add(None)
+    if len(lines) > 1:
+        named = sorted(str(line) for line in lines if line is not None)
+        raise ValueError(
+            f"the moments of a spectrum mix its lines, and the observation "
+            f"sees several: {named}; name the line of its data with its "
+            f"option lines (e.g. lines: [{named[0]!r}])")
 
 
 class MomentsPlan:

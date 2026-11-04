@@ -281,6 +281,7 @@ class RegionMoments(Observable):
             instrument: Instrument,
             flux_scale: str | None
     ) -> None:
+        _moments.check_one_line(scene)
         if scene.orbit_emitters():
             self._check_orbits(scene, flux_scale, foreground, instrument)
 

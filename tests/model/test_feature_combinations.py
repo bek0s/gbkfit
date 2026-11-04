@@ -91,7 +91,8 @@ INSTRUMENT = dict(
 def test_feature_combinations(driver, name, lens):
     info = copy.deepcopy(OBSERVABLES[name])
     instrument = dict(INSTRUMENT)
-    if name in ('pixel_moments', 'pixel_moments_fit', 'region_moments'):
+    moments = name in ('pixel_moments', 'pixel_moments_fit', 'region_moments')
+    if moments:
         # Moments of a narrow spectral axis do not need the Hanning LSF
         instrument['lsf'] = dict(type='gauss', sigma=15)
     foreground = None
@@ -102,7 +103,9 @@ def test_feature_combinations(driver, name, lens):
     observation = ObservationSky(
         observable_parser.load(info), LineOfSightFlat(), foreground=foreground,
         instrument=instrument_parser.load(copy.deepcopy(instrument)),
-        components=['gas'], oversampling=OVERSAMPLING[name])
+        components=['gas'], oversampling=OVERSAMPLING[name],
+        # Moments are of one line (they would mix the lines of a spectrum)
+        lines=['ha'] if moments else None)
     group = ObservationGroup(
         [galaxy_parser.load(copy.deepcopy(GALAXY))], [observation])
     params = gbkfit.params.ParamSpace.from_properties(

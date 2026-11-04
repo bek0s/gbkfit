@@ -381,7 +381,8 @@ class Observable(TypedSerializable, abc.ABC):
         the foreground and the instrument, with the given flux scale of one
         value (its parameter), if any, before any plan: here, that it sees
         the stars on orbits whose weights are solved, if any (see
-        orbit_stars); RegionMoments checks more.
+        orbit_stars); the observables of moments also check that they
+        see one line (see _moments.check_one_line), and RegionMoments more.
 
         Raises
         ------

@@ -258,6 +258,16 @@ class PixelMoments(Observable):
                 f"yet")
         _moments.warn_unmasked_noise(self._flux_floor, instrument)
 
+    def check_scene(
+            self,
+            scene: 'Scene',
+            foreground: 'Foreground',
+            instrument: Instrument,
+            flux_scale: str | None
+    ) -> None:
+        _moments.check_one_line(scene)
+        super().check_scene(scene, foreground, instrument, flux_scale)
+
     def require_matching(self, dataset: Dataset) -> None:
         _moments.check_moment_items(dataset, self._method)
         super().require_matching(dataset)

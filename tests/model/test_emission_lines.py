@@ -258,13 +258,31 @@ def test_moment_maps_of_one_line(driver):
     properties = PROPERTIES | dict(nii6583_ratio=0.4)
     ha = evaluate_observation(
         driver, galaxy, observable, properties, lines=['ha'])
-    both = evaluate_observation(driver, galaxy, observable, properties)
     single = evaluate_observation(
         driver, galaxy_of(COMPONENT), observable, PROPERTIES)
     np.testing.assert_allclose(
         ha['moment1'], single['moment1'], rtol=1e-5, atol=1e-3)
-    good = np.isfinite(both['moment1'])
-    assert np.abs(both['moment1'] - single['moment1'])[good].max() > 100
+    # Both lines: their moments would mix them (off by more than 100 km/s
+    # here), which the observation refuses
+    with pytest.raises(ValueError, match="the moments of a spectrum mix"):
+        evaluate_observation(driver, galaxy, observable, properties)
+
+
+def test_moments_of_one_line_of_several_components(driver):
+    # Two components of the same line are one line; another line is not
+    gas = with_lines(COMPONENT, [LINES[0]])
+    galaxy = dict(components=[gas | dict(name='a'), gas | dict(name='b')])
+    observable = dict(
+        type='pixel_moments', size=[32, 41],
+        spectral=dict(size=301, step=10, rval=500, rest='6562.8 Angstrom'),
+        flux_floor=1e-4)
+    properties = {f'{name}_{key}': value for name in ('a', 'b')
+                  for key, value in PROPERTIES.items()}
+    evaluate_observation(driver, galaxy, observable, properties)
+    galaxy['components'][1] = with_lines(COMPONENT, [LINES[1]]) | dict(
+        name='b')
+    with pytest.raises(ValueError, match=r"sees several: \['ha', 'nii6583'\]"):
+        evaluate_observation(driver, galaxy, observable, properties)
 
 
 @pytest.mark.parametrize('lines, message', [
