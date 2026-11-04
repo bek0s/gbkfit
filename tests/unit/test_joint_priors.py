@@ -6,9 +6,9 @@ parameter space keeps them.
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.params import joint_prior_residuals
 from gbkfit.params import ParamScalarDesc, ParamSpace, ParamVectorDesc
-from gbkfit.utils.parseutils import ConfigError
 
 
 PDESCS = dict(a=ParamScalarDesc(), b=ParamScalarDesc(), v=ParamVectorDesc(5))

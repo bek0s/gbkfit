@@ -10,12 +10,12 @@ from typing import NamedTuple
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.observation import Comparison, LinearPieces, ObservationGroup
 from gbkfit.params import (
     ParamValues, Solution, Solve, check_together, element_name,
     solve_together)
-from gbkfit.utils.parseutils import ConfigError
 from ._block import Block
 
 

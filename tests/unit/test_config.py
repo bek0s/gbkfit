@@ -13,51 +13,55 @@ import numpy as np
 import pytest
 from annotated_types import Gt, Le
 
-from gbkfit.utils import parseutils, typeutils
-from gbkfit.utils.typeutils import FitsFile, Unit
+from gbkfit.config import (
+    ConfigError, FitsFile, Serializable, TypedParser, TypedSerializable, Unit,
+    UnknownNamesError, check_name, check_options, collect_problems,
+    config_path, describe_type, describe_unknown, item_prefixes, matches_type,
+    missing_modules, parse_options, parse_options_for_callable,
+    paths_relative_to, strict_mode, type_problem, warn)
 
 
 def test_config_error_paths():
     # Each level adds its part of the path; only the innermost type of
     # the part with the error describes it
-    with pytest.raises(parseutils.ConfigError) as error:
-        with parseutils.config_path('models'):
-            with parseutils.config_path(0, context='outer'):
-                with parseutils.config_path('traits'):
-                    with parseutils.config_path(1, context='inner'):
+    with pytest.raises(ConfigError) as error:
+        with config_path('models'):
+            with config_path(0, context='outer'):
+                with config_path('traits'):
+                    with config_path(1, context='inner'):
                         raise ValueError("a bad value")
     assert str(error.value) == "models[0].traits[1] [inner]: a bad value"
 
 
 def test_config_error_context_is_for_the_part_itself():
     # An error in an option of a part is not described by the part's type
-    with pytest.raises(parseutils.ConfigError) as error:
-        with parseutils.config_path('component', context='smdisk'):
-            with parseutils.config_path('traits'):
-                raise parseutils.ConfigError("unknown type 'x'")
+    with pytest.raises(ConfigError) as error:
+        with config_path('component', context='smdisk'):
+            with config_path('traits'):
+                raise ConfigError("unknown type 'x'")
     assert str(error.value) == "component.traits: unknown type 'x'"
 
 
 def test_describe_unknown():
-    assert parseutils.describe_unknown(
+    assert describe_unknown(
         ['rnmx', 'zzz'], ['rnmin', 'rnmax']) == (
         "'rnmx' (did you mean 'rnmax'?), 'zzz'")
 
 
 def test_unknown_options_are_errors_or_warnings_in_lenient_mode(caplog):
     def parse():
-        return parseutils.parse_options(
+        return parse_options(
             dict(rnmax=1, rnmx=2), optional={'rnmin', 'rnmax'})
     with pytest.raises(
-            parseutils.UnknownNamesError,
+            UnknownNamesError,
             match=r"'rnmx' \(did you mean 'rnmax'\?\)"):
         parse()
-    with parseutils.strict_mode(False):
+    with strict_mode(False):
         assert parse() == dict(rnmax=1)
     assert "'rnmx' (did you mean 'rnmax'?); they are ignored" in caplog.text
 
 
-class Shape(parseutils.TypedSerializable):
+class Shape(TypedSerializable):
 
     def dump(self):
         return {}
@@ -73,12 +77,12 @@ class Circle(Shape):
         self.radius = radius
 
 
-shape_parser = parseutils.TypedParser(Shape, Circle)
+shape_parser = TypedParser(Shape, Circle)
 
 
 def test_unknown_types_suggest_similar_ones():
     with pytest.raises(
-            parseutils.ConfigError,
+            ConfigError,
             match=r"unknown type 'circel' \(did you mean 'circle'\?\)"):
         shape_parser.load(dict(type='circel'))
 
@@ -98,19 +102,19 @@ class Square(Shape):
 def test_types_of_missing_modules_say_what_to_install():
     # A type whose class needs a missing module is listed, and its options
     # can be read, but asking for it says what to install
-    parser = parseutils.TypedParser(Shape, [Circle, Square])
+    parser = TypedParser(Shape, [Circle, Square])
     assert parser.types() == ['circle', 'square']
-    assert parseutils.missing_modules(Square) == {
+    assert missing_modules(Square) == {
         'missing_package': "pip install missing_package"}
-    assert parseutils.missing_modules(Circle) == {}
+    assert missing_modules(Circle) == {}
     with pytest.raises(
-            parseutils.ConfigError,
+            ConfigError,
             match="'square' needs 'missing_package': pip install"):
         parser.load(dict(type='square', side=1))
 
 
 def test_options_must_match_the_annotations():
-    with pytest.raises(parseutils.ConfigError) as error:
+    with pytest.raises(ConfigError) as error:
         shape_parser.load(dict(type='circle', radius='a'))
     assert str(error.value) == (
         "circle: option 'radius' must be of type float; it is 'a'")
@@ -123,20 +127,20 @@ def ellipse(centre, axes: Sequence[float], angle: float = 0, colour=None):
 def test_options_for_callable():
     # The parameters ignored (centre) are not options
     def parse(**info):
-        return parseutils.parse_options_for_callable(
+        return parse_options_for_callable(
             info, ellipse, ignore_params=['centre'])
     assert parse(axes=[2, 1], angle=3) == dict(axes=[2, 1], angle=3)
-    with pytest.raises(parseutils.ConfigError, match="'axes'"):
+    with pytest.raises(ConfigError, match="'axes'"):
         parse(angle=3)
-    with pytest.raises(parseutils.ConfigError, match="'axes' must be of"):
+    with pytest.raises(ConfigError, match="'axes' must be of"):
         parse(axes=2)
     with pytest.raises(RuntimeError, match="has no parameters 'radius'"):
-        parseutils.parse_options_for_callable(
+        parse_options_for_callable(
             {}, ellipse, ignore_params=['radius'])
 
 
 def test_warnings_have_the_path_of_the_configuration(caplog):
-    with parseutils.strict_mode(False), parseutils.config_path('shapes'):
+    with strict_mode(False), config_path('shapes'):
         shape_parser.load([dict(type='circle', radius=1, colour='red')])
     assert "shapes[0] [circle]: unknown options: 'colour'" in caplog.text
 
@@ -148,7 +152,7 @@ def test_warnings_have_the_path_of_the_configuration(caplog):
     ([], 'cmp', False, [])])
 def test_item_prefixes(names, prefix, prefix_first, prefixes):
     # Names, if all items have one; positions, if none has
-    assert parseutils.item_prefixes(
+    assert item_prefixes(
         names, 'items', prefix, prefix_first) == prefixes
 
 
@@ -157,19 +161,19 @@ def test_item_prefixes(names, prefix, prefix_first, prefixes):
     (['disk', 'disk'],
      r"the names of the components must be unique; repeated: \['disk'\]")])
 def test_item_prefixes_errors(names, message):
-    with pytest.raises(parseutils.ConfigError, match=message):
-        parseutils.item_prefixes(names, 'components', 'cmp', False)
+    with pytest.raises(ConfigError, match=message):
+        item_prefixes(names, 'components', 'cmp', False)
 
 
 @pytest.mark.parametrize('name', ['disk', 'Disk_2', '_x', '2'])
 def test_valid_names(name):
-    parseutils.check_name(name)
+    check_name(name)
 
 
 @pytest.mark.parametrize('name', ['', 'my disk', 'disk-1', 'disk.x', 3])
 def test_invalid_names(name):
-    with pytest.raises(parseutils.ConfigError, match="invalid name"):
-        parseutils.check_name(name)
+    with pytest.raises(ConfigError, match="invalid name"):
+        check_name(name)
 
 
 class Thing:
@@ -202,25 +206,25 @@ class Thing:
     ('quick', Literal['fast', 'slow'], False),
     (Thing(), Thing, True), (None, Thing | None, True), ('x', Thing, False)])
 def test_matches_type(value, type_, matches):
-    assert typeutils.matches_type(value, type_) == matches
+    assert matches_type(value, type_) == matches
 
 
 @pytest.mark.parametrize('type_', [5, typing.Self])
 def test_matches_type_of_unrecognized_types(type_):
     with pytest.raises(TypeError, match="type is not recognized"):
-        typeutils.matches_type(1, type_)
+        matches_type(1, type_)
 
 
 @pytest.mark.parametrize('type_, label', [
     (int, 'int'), (Sequence[int] | None, 'Sequence[int] | None'),
     (Mapping[str, float], 'Mapping[str, float]')])
 def test_describe_type(type_, label):
-    assert typeutils.describe_type(type_) == label
+    assert describe_type(type_) == label
 
 
 def test_describe_type_keeps_modules_whose_names_end_in_types():
     Foo = type('Foo', (), {'__module__': 'mytypes'})
-    assert typeutils.describe_type(list[Foo]) == 'list[mytypes.Foo]'
+    assert describe_type(list[Foo]) == 'list[mytypes.Foo]'
 
 
 @pytest.mark.parametrize('value, type_, message', [
@@ -231,10 +235,10 @@ def test_describe_type_keeps_modules_whose_names_end_in_types():
     ((1, 'x'), tuple[int, ...], "item [1] must be of type int; it is 'x'"),
     (1, type(None), "must be of type None; it is 1")])
 def test_problems_say_which_item_is_wrong(value, type_, message):
-    assert typeutils.problem(value, type_) == message
+    assert type_problem(value, type_) == message
 
 
-class Beam(parseutils.Serializable):
+class Beam(Serializable):
     """A beam given by its axes, or by a file."""
 
     config_constructors = ('__init__', 'from_file')
@@ -245,14 +249,14 @@ class Beam(parseutils.Serializable):
             ratio: Annotated[float, Gt(0), Le(1)] = 1.0,
             shape: Literal['gauss', 'airy'] = 'gauss'
     ):
-        parseutils.check_options(Beam.__init__, locals())
+        check_options(Beam.__init__, locals())
         self.bmaj = bmaj
 
     @classmethod
     def from_file(
             cls, file: FitsFile, scale: u.Quantity | None = None
     ) -> 'Beam':
-        parseutils.check_options(Beam.from_file, locals())
+        check_options(Beam.from_file, locals())
         beam = cls(1.0)
         beam.file, beam.scale = file, scale
         return beam
@@ -269,9 +273,9 @@ class Beam(parseutils.Serializable):
      "option 'shape' must be one of 'gauss', 'airy'; it is 'box'"),
     (dict(bmaj='1'), "option 'bmaj' must be of type float; it is '1'")])
 def test_python_calls_are_checked(kwargs, message):
-    with pytest.raises(parseutils.ConfigError, match=re.escape(message)):
+    with pytest.raises(ConfigError, match=re.escape(message)):
         Beam(**kwargs)
-    with pytest.raises(parseutils.ConfigError, match=re.escape(message)):
+    with pytest.raises(ConfigError, match=re.escape(message)):
         Beam.load(kwargs)
 
 
@@ -281,7 +285,7 @@ def test_numpy_values_are_checked_as_python_values():
 
 def test_configurations_call_the_constructor_of_their_options(tmp_path):
     assert Beam.load(dict(bmaj=2)).bmaj == 2
-    with parseutils.paths_relative_to(str(tmp_path)):
+    with paths_relative_to(str(tmp_path)):
         beam = Beam.load(dict(
             file=dict(file='beam.fits', hdu=1),
             scale=dict(value=2, unit='arcsec')))
@@ -301,11 +305,11 @@ def test_options_of_classes_are_loaded_by_their_annotation():
     assert isinstance(psf, PSFSum)
     assert [x['type'] for x in psf.dump()['psfs']] == ['gauss', 'point']
     assert info == original
-    with pytest.raises(parseutils.ConfigError) as error:
+    with pytest.raises(ConfigError) as error:
         Instrument.load(dict(psf=dict(type='sum', weights=[1], psfs=[
             dict(type='gaus', sigma=1)])))
     assert str(error.value).startswith("psf.psfs[0]: unknown type 'gaus'")
-    with pytest.raises(parseutils.ConfigError) as error:
+    with pytest.raises(ConfigError) as error:
         Instrument.load(dict(psf=dict(type='sum', weights=[1], psfs=[5])))
     assert str(error.value) == "psf.psfs[0]: must be of type PSF; it is 5"
 
@@ -315,7 +319,7 @@ def test_options_of_classes_are_loaded_by_their_annotation():
      "it has those of several: 'bmaj', 'file'"),
     (dict(), "it has none of them")])
 def test_configurations_have_the_options_of_one_constructor(info, message):
-    with pytest.raises(parseutils.ConfigError, match=message):
+    with pytest.raises(ConfigError, match=message):
         Beam.load(info)
 
 
@@ -327,9 +331,9 @@ def test_problems_are_collected_per_thread():
     seen = {}
 
     def collect(name):
-        with parseutils.collect_problems() as problems:
+        with collect_problems() as problems:
             barrier.wait()
-            parseutils.warn(f"warning of {name}")
+            warn(f"warning of {name}")
             barrier.wait()
         seen[name] = [problem.message for problem in problems]
     threads = [threading.Thread(target=collect, args=(n,)) for n in 'ab']

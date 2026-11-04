@@ -5,10 +5,10 @@ import pytest
 from astropy.io import fits
 
 import gbkfit
+from gbkfit.config import ConfigError
 import gbkfit.project
 from gbkfit import setup
 from gbkfit.objective import Objective
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

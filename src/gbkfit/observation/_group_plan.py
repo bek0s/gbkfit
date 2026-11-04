@@ -15,14 +15,14 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Self
 
 import numpy as np
 
+from gbkfit.config import ConfigError, config_path
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.model import DataUnit, Extras, GalaxyFunctions, GalaxyState
 from gbkfit.model.mass.units import G
 from gbkfit.params import (
     ParamFunctions, ParamValues, ParamView, StageCache, with_elements)
-from gbkfit.utils import parseutils, threadutils, timeutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import threadutils, timeutils
 from ._orbits import OrbitRecording, OrbitSeries, orbit_recordings
 from .noise import Noise
 from .observables import HostModelData, ModelData
@@ -140,13 +140,13 @@ class GroupPlan:
         plans = []
         for i, (observation, driver) in enumerate(
                 zip(observations, self._observation_drivers)):
-            with parseutils.config_path('observations', i):
+            with config_path('observations', i):
                 plans.append(observation.plan(driver, group.seen_by(i)))
         self._plans = tuple(plans)
         stages = []
         for g, (galaxy, driver) in enumerate(
                 zip(galaxies, self._galaxy_drivers)):
-            with parseutils.config_path('galaxies', g):
+            with config_path('galaxies', g):
                 stages.append(galaxy.plan_stage(group.sky_origin(), driver))
         self._stages = tuple(stages)
         self._lock = threading.RLock()
@@ -294,7 +294,7 @@ class GroupPlan:
                 self._plans, self._model_caches, news, olds,
                 self._observation_drivers)):
             if not _same_unit(new.data_unit(), old.data_unit()):
-                with parseutils.config_path('observations', i):
+                with config_path('observations', i):
                     plan = new.plan(driver, group.seen_by(i))
                 cache = copied._model_cache(i)
             elif i in copied._recording_of:
@@ -803,7 +803,7 @@ class GroupPlan:
         """
         group = self._group
         observation, plan = group.observations()[index], self._plans[index]
-        with parseutils.config_path('observations', index):
+        with config_path('observations', index):
             exact = plan.has_exact_errors()
             if not exact and nsamples < 2:
                 raise ConfigError(

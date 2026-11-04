@@ -11,8 +11,9 @@ import abc
 
 import numpy as np
 
-from gbkfit.utils import numutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
+from gbkfit.utils import numutils
 
 
 __all__ = [
@@ -31,7 +32,7 @@ def _check_origin_in(origin: int, size: int) -> None:
             f"parameter; it is {origin}")
 
 
-class ParamMode(parseutils.TypedSerializable, abc.ABC):
+class ParamMode(TypedSerializable, abc.ABC):
     """
     How the values of a vector parameter are given: by coded values,
     which the mode decodes.
@@ -190,6 +191,6 @@ class ParamModeIncrements(ParamMode):
         return coded
 
 
-param_mode_parser = parseutils.TypedParser(ParamMode, [
+param_mode_parser = TypedParser(ParamMode, [
     ParamModeIncrements,
     ParamModeOffsets])

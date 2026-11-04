@@ -10,9 +10,10 @@ import dataclasses
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, TypedParser, check_options)
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils import iterutils
 from .base import MassComponent, MassContext
 from .disks import MassDisk
 from .points import MassPoint
@@ -28,7 +29,7 @@ __all__ = [
 ]
 
 
-mass_component_parser = parseutils.TypedParser(MassComponent, [
+mass_component_parser = TypedParser(MassComponent, [
     MassPoint,
     MassDisk,
     MassSpheroid,
@@ -37,7 +38,7 @@ mass_component_parser = parseutils.TypedParser(MassComponent, [
     MassUser])
 
 
-class MassModel(parseutils.Serializable):
+class MassModel(Serializable):
     """
     The mass of a galaxy: its mass components (e.g. stars, gas, dark
     matter), whose densities, potentials and forces add up, and so do
@@ -394,4 +395,4 @@ class MassModel(parseutils.Serializable):
             context, vcirc2s=vcirc2s, enclosed_masses=enclosed_masses)
 
 
-mass_model_parser = parseutils.BasicParser(MassModel)
+mass_model_parser = BasicParser(MassModel)

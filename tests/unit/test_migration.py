@@ -13,8 +13,8 @@ import pytest
 import ruamel.yaml
 
 from gbkfit import migration, project, setup
+from gbkfit.config import ConfigError
 from gbkfit.observation import observable_parser
-from gbkfit.utils.parseutils import ConfigError
 
 
 yaml = ruamel.yaml.YAML(typ='safe')

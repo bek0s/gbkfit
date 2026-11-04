@@ -14,11 +14,12 @@ import numpy.typing as npt
 import scipy.fft
 from annotated_types import Gt
 
+from gbkfit.config import (
+    ConfigError, FitsFile, TypedParser, TypedSerializable, check_options,
+    split_fits_file)
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.math.correlation import periodic_correlation
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FitsFile, split_fits_file
+from gbkfit.utils import fitsutils, gridutils
 
 
 __all__ = [
@@ -34,7 +35,7 @@ __all__ = [
 INSTRUMENT = 'instrument'
 
 
-class Noise(parseutils.TypedSerializable, abc.ABC):
+class Noise(TypedSerializable, abc.ABC):
     """
     The noise of the data of an observation: random values added to the
     data where the instrument records them, on their grid.
@@ -587,5 +588,5 @@ def _correlated(
         scipy.fft.rfftn(white, axes=axes) * np.sqrt(power), shape, axes=axes)
 
 
-noise_parser = parseutils.TypedParser(
+noise_parser = TypedParser(
     Noise, [NoiseGauss, NoiseStudentT, NoisePoisson])

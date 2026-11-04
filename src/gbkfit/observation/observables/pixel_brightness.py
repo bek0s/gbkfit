@@ -7,12 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelBrightness
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import BandEmission, DataUnit, LightUnit
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from .base import ModelData, Observable

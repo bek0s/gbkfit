@@ -9,8 +9,8 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.params import ParamSpace, param_tables
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [

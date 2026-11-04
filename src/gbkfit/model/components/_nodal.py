@@ -15,12 +15,12 @@ from typing import Any
 import astropy.units
 import numpy as np
 
+from gbkfit.config import ConfigError, item_prefixes
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.math import interpolation
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import iterutils
 from ._detail import parse_nodes
 from ._native import ParamBuffer
 from .traits import (
@@ -155,7 +155,7 @@ def _trait_params(
             {name: (pdesc, None) for name, pdesc in params_sm.items()}
             | {name: (pdesc, sampling) for name, pdesc in params_rnw.items()})
     prefixes = list(prefix) if iterutils.is_sequence(prefix) \
-        else parseutils.item_prefixes(
+        else item_prefixes(
             [trait.name() for trait in traits_], 'traits', prefix, True)
     params, mappings = iterutils.merge_with_prefixes(params_list, prefixes)
     inputs = [

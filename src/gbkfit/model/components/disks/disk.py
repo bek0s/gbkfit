@@ -8,10 +8,10 @@ from typing import Any, Literal
 
 import numpy as np
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from ...mass import DiskDensity
 from .. import traits
 from .._needs import Need

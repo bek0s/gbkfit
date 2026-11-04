@@ -6,8 +6,8 @@ their walls and sides, and the dust that dims them.
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import galaxy_parser
-from gbkfit.utils.parseutils import ConfigError
 
 
 UNIFORM = dict(type='uniform')

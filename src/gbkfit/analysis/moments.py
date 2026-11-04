@@ -9,11 +9,11 @@ from collections.abc import Sequence
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.observation.observables import (
     MOMENT_METHODS, MomentsPlan, check_moment_orders)
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [

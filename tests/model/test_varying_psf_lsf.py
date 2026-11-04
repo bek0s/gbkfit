@@ -7,11 +7,11 @@ import numpy as np
 import pytest
 import scipy.signal
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

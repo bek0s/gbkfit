@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal, NamedTuple, Self
 
 import numpy as np
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options, config_path)
 from gbkfit.control import FitControl, FitStopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
@@ -26,8 +28,6 @@ from gbkfit.objective import Objective
 from gbkfit.params import (
     EvaluationError, ParamEvaluationError, ParamSpace, ValidRange,
     joint_prior_residuals)
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 if TYPE_CHECKING:
     from gbkfit.observation import ObservationGroup
@@ -124,7 +124,7 @@ class FitRun:
     raw: object = None
 
 
-class Fitter(parseutils.TypedSerializable, abc.ABC):
+class Fitter(TypedSerializable, abc.ABC):
     """
     A fitter: it finds the free values of a parameter space that fit the
     data of an objective, and works out their uncertainty.
@@ -259,7 +259,7 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
         defaults = self._tuning()
         fit_params = {}
         for name, element in params.free_elements().items():
-            with parseutils.config_path(name):
+            with config_path(name):
                 fit_params[name] = cls.of(element, defaults)
         if fit_params and len(fit_params) < self.info.min_free:
             raise ConfigError(
@@ -388,9 +388,9 @@ class Fitter(parseutils.TypedSerializable, abc.ABC):
             the solves need another merit (see Solve.merit), or its
             uncertainty asks for a covariance without residuals.
         """
-        with parseutils.config_path('params', 'properties'):
+        with config_path('params', 'properties'):
             fit_params = self.load_fit_params(params)
-        with parseutils.config_path('params'):
+        with config_path('params'):
             joint_prior_residuals(params)
         # (of the observations with data: the others are not fitted)
         without = [
@@ -763,4 +763,4 @@ def _versions(libraries: tuple[str, ...]) -> dict[str, str]:
     return versions
 
 
-fitter_parser = parseutils.TypedParser(Fitter)
+fitter_parser = TypedParser(Fitter)

@@ -15,6 +15,7 @@ import scipy.integrate
 import scipy.optimize
 import scipy.special
 
+from gbkfit.config import ConfigError
 from gbkfit.model import (
     MassSpheroid, ProfileSersic, ShapeFlattened, Spheroid, component_parser,
     galaxy_parser)
@@ -22,7 +23,6 @@ from gbkfit.model.mass import G, _numerics
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 BAND = dict(type='band')

@@ -7,10 +7,9 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import DataFile, check_options
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import check_options
 from gbkfit.utils.datafiles import ErrorKind
-from gbkfit.utils.typeutils import DataFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data

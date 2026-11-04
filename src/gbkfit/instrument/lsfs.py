@@ -29,11 +29,11 @@ import scipy.ndimage
 import scipy.special
 from annotated_types import Gt
 
+from gbkfit.config import (
+    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
+    check_options, split_fits_file)
 import gbkfit.math
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import (
-    FitsFile, Unit, Varying, split_fits_file)
+from gbkfit.utils import fitsutils, gridutils
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -55,7 +55,7 @@ __all__ = [
 ]
 
 
-class LSF(parseutils.TypedSerializable, abc.ABC):
+class LSF(TypedSerializable, abc.ABC):
     """
     A line spread function, drawn on arrays of channels.
     """
@@ -65,7 +65,7 @@ class LSF(parseutils.TypedSerializable, abc.ABC):
         """
         Load an LSF from its configuration.
 
-        Options that can vary (see typeutils.Varying) given as tables make
+        Options that can vary (see Varying) given as tables make
         an LSF that varies along the spectral axis (see varying and
         LSFVarying).
 
@@ -1092,7 +1092,7 @@ class LSFVarying(LSF):
             "channel (see at)")
 
 
-lsf_parser = parseutils.TypedParser(LSF, [
+lsf_parser = TypedParser(LSF, [
     LSFPoint,
     LSFGauss,
     LSFGGauss,

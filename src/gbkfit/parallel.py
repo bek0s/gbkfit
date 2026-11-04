@@ -28,13 +28,13 @@ from typing import Annotated, Any, Self, TypeAlias, TypeVar
 import threadpoolctl
 from annotated_types import Ge, Gt
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.driver import Driver, driver_parser
 from gbkfit.control import FitControl, FitStopped, StopFlag
 from gbkfit.objective import Objective
 from gbkfit.observation import GroupPlan, ObservationGroup
 from gbkfit.params import Solve
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -68,7 +68,7 @@ Placement: TypeAlias = Driver | tuple[Driver, Mapping[str, Driver]]
 _Drivers: TypeAlias = tuple[tuple[Driver, ...], tuple[Driver, ...]]
 
 
-class Workers(parseutils.TypedSerializable, abc.ABC):
+class Workers(TypedSerializable, abc.ABC):
     """
     A kind of workers that evaluate an objective at the same time, each on
     a copy of it (see start and WorkerPool).
@@ -1233,7 +1233,7 @@ def _dump_placements(placements: Sequence[Placement]) -> list[Any]:
     return [driver_parser.dump(p) for p in placements]
 
 
-workers_parser = parseutils.TypedParser(Workers)
+workers_parser = TypedParser(Workers)
 workers_parser.register([
     WorkersDask, WorkersMPI, WorkersProcesses, WorkersRay, WorkersThreads])
 

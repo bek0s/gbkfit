@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._component_plans import opacity_cubes
 from ._component_set import IMAGE_SPECTRAL_AXIS, ComponentSetPlan

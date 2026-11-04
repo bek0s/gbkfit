@@ -4,13 +4,13 @@ goes in where its instrument records the data, and the errors of the
 data are those of the noise, or the scatter of the measured data.
 """
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
 
 from gbkfit.model import Extras
 from gbkfit.observation import NoiseGauss, NoisePoisson
-from gbkfit.utils.parseutils import ConfigError
 from modelutils import group_plan
 
 

@@ -14,9 +14,10 @@ import scipy.ndimage
 import scipy.special
 from annotated_types import Gt
 
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import check_options
-from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from gbkfit.config import (
+    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
+    split_fits_file)
+from gbkfit.utils import fitsutils, gridutils
 from . import varying
 
 
@@ -34,7 +35,7 @@ __all__ = [
 _AIRY_HALF_MAXIMUM = 1.616339948310703
 
 
-class PrimaryBeam(parseutils.TypedSerializable, abc.ABC):
+class PrimaryBeam(TypedSerializable, abc.ABC):
     """
     The response of a telescope to the sky, which attenuates its light
     before the PSF: the same at all frequencies, or of each (see varies).
@@ -306,7 +307,7 @@ class PrimaryBeamImage(PrimaryBeam):
         check_options(PrimaryBeamImage.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 2:
-            raise parseutils.ConfigError(
+            raise ConfigError(
                 f"the primary beam must be an image; it has {data.ndim} axes")
         self._data = np.where(np.isfinite(data), data, 0)
         self._grid = gridutils.make_grid(
@@ -319,7 +320,7 @@ class PrimaryBeamImage(PrimaryBeam):
             self._data, [pixel_y, pixel_x], order=1, mode='constant', cval=0)
 
 
-primary_beam_parser = parseutils.TypedParser(PrimaryBeam, [
+primary_beam_parser = TypedParser(PrimaryBeam, [
     PrimaryBeamAiry,
     PrimaryBeamGauss,
     PrimaryBeamImage])

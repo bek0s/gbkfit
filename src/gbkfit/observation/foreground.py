@@ -10,11 +10,11 @@ from typing import Annotated, Any, Self
 
 import numpy as np
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, Unit, check_options, item_prefixes)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import gridutils, iterutils
 
 from .lens_masses import LensMass, lens_mass_parser
 
@@ -28,7 +28,7 @@ __all__ = [
 ]
 
 
-class Lens(parseutils.Serializable):
+class Lens(Serializable):
     """
     A gravitational lens in front of a model: masses between it and the
     telescope (see LensMass), whose deflections add up.
@@ -87,7 +87,7 @@ class Lens(parseutils.Serializable):
         self._source_grid = gridutils.make_grid(
             tuple(source_size), tuple(source_step))
         self._masses = masses
-        self._prefixes = parseutils.item_prefixes(
+        self._prefixes = item_prefixes(
             [mass.name() for mass in masses], 'masses', 'mass', False)
         self._pdescs, self._mappings = iterutils.merge_with_prefixes(
             [mass.pdescs() for mass in masses], self._prefixes)
@@ -264,10 +264,10 @@ class LensPlan:
 
 
 
-lens_parser = parseutils.BasicParser(Lens)
+lens_parser = BasicParser(Lens)
 
 
-class Foreground(parseutils.Serializable):
+class Foreground(Serializable):
     """
     What happens to the light of a model before it reaches the telescope:
     a gravitational lens. Each has its own slot, in the order the light
@@ -344,4 +344,4 @@ class Foreground(parseutils.Serializable):
             for name in self._lens.pdescs()})
 
 
-foreground_parser = parseutils.BasicParser(Foreground)
+foreground_parser = BasicParser(Foreground)

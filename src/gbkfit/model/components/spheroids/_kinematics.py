@@ -11,11 +11,10 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, TypedSerializable, check_options
 from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
 from ..traits import DHTrait, DPTrait, Trait, VHTrait, VPTrait
 from .._native import ParamBuffer
@@ -136,7 +135,7 @@ class SpheroidMotion(abc.ABC):
         pass
 
 
-class SpheroidKinematics(parseutils.TypedSerializable, abc.ABC):
+class SpheroidKinematics(TypedSerializable, abc.ABC):
     """
     How the stars of a spheroid move (see Spheroid): each point of it
     with a Gaussian distribution of velocities, of a mean and a dispersion

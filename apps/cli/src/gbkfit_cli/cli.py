@@ -9,8 +9,8 @@ import re
 from collections.abc import Callable, Sequence
 from typing import Any, Literal
 
+from gbkfit.config import ConfigError
 from gbkfit.tasks import exit_on_user_errors, log_to_console, run
-from gbkfit.utils.parseutils import ConfigError
 
 _log = logging.getLogger(__name__)
 

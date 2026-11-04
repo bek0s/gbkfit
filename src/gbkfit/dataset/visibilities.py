@@ -14,9 +14,9 @@ import numpy.typing as npt
 import scipy.spatial
 from annotated_types import Ge
 
-from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath, Unit
+from gbkfit.config import (
+    ConfigError, FilePath, Serializable, Unit, check_options)
+from gbkfit.utils import gridutils, unitutils
 from .base import Dataset
 from .data import Data
 
@@ -43,7 +43,7 @@ _MS_STOKES_I = 1
 _MS_PARALLEL_HANDS = ((5, 8), (9, 12))
 
 
-class UVCoverage(parseutils.Serializable):
+class UVCoverage(Serializable):
     """
     Where interferometric visibilities are measured: the baselines of
     their rows, the frequencies of their channels, their phase centre, and

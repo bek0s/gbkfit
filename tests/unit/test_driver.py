@@ -33,8 +33,8 @@ def test_unknown_driver_options_are_reported():
     # (they were dropped: e.g. a device, which the host driver does not
     # take)
     from gbkfit.driver import driver_parser
-    from gbkfit.utils import parseutils
-    with pytest.raises(parseutils.ConfigError, match="device"):
+    from gbkfit.config import ConfigError
+    with pytest.raises(ConfigError, match="device"):
         driver_parser.load(dict(type='host', device=1))
 
 
@@ -43,17 +43,17 @@ def test_cuda_drivers_are_of_the_gpus_there_are(driver):
         pytest.skip("a test of the cuda driver")
     import cupy
     from gbkfit.driver import driver_parser
-    from gbkfit.utils import parseutils
+    from gbkfit.config import ConfigError
     assert driver_parser.load(dict(type='cuda', device=0)).dump() \
         == dict(type='cuda', device=0)
     ndevices = cupy.cuda.runtime.getDeviceCount()
-    with pytest.raises(parseutils.ConfigError, match="device"):
+    with pytest.raises(ConfigError, match="device"):
         driver_parser.load(dict(type='cuda', device=ndevices))
 
 
 def test_arrays_too_large_for_the_kernels_are_refused(driver):
     # The kernels index arrays by 32-bit integers: an array of more values
     # is refused before it is allocated
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     with pytest.raises(ConfigError, match="32-bit"):
         driver.mem_alloc_d((2 ** 16, 2 ** 16), np.float32)

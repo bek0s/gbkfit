@@ -8,13 +8,13 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan, flux_weights

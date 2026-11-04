@@ -6,8 +6,8 @@ component at its own lines, of coefficients that are traits of its disk.
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.utils import iterutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from ..roles import Opacity, opacity_parser
 from ..traits import RPTrait, rpt_parser
 

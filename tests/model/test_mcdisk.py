@@ -12,9 +12,9 @@ import numpy as np
 import pytest
 import ruamel.yaml
 
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras
 from gbkfit.params import ModelEvaluationError
-from gbkfit.utils.parseutils import ConfigError
 from modelutils import config_group_plan
 
 

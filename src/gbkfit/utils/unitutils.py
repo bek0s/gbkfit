@@ -7,7 +7,7 @@ import re
 
 import astropy.units
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 
 __all__ = [

@@ -18,11 +18,11 @@ import numpy as np
 import ruamel.yaml
 from astropy.io import fits
 
+from gbkfit.config import ConfigError
 import gbkfit.dataset
 import gbkfit.outputs
 import gbkfit.project
 from gbkfit.utils import unitutils
-from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid, NotFound
 

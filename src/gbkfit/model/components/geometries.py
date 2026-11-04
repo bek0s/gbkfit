@@ -7,9 +7,9 @@ by default (see Component.geometry); others are named.
 from collections.abc import Sequence
 from typing import Any, Literal
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, check_name, check_options)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _detail
 
 
@@ -36,7 +36,7 @@ GEOMETRY_UNITS = dict(
 _DEFAULTS = dict(vsys=0, xpos=0, ypos=0, posa=0, incl=45)
 
 
-class Geometry(parseutils.Serializable):
+class Geometry(Serializable):
     """
     A geometry that components share: some or all of their geometric
     parameters (see GEOMETRY_PARAMS), which are then parameters of the
@@ -96,7 +96,7 @@ class Geometry(parseutils.Serializable):
             rnodes: _detail.RNodes | None = None
     ):
         check_options(Geometry.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         if params is not None:
             params = tuple(params)
             if not params:
@@ -150,7 +150,7 @@ class Geometry(parseutils.Serializable):
         return self._rnodes
 
 
-geometry_parser = parseutils.BasicParser(Geometry)
+geometry_parser = BasicParser(Geometry)
 
 
 def geometry_pdesc(name: str, nnodes: int | None = None) -> ParamDesc:

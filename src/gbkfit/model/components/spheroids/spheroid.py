@@ -13,12 +13,13 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import (
     ModelEvaluationError, ParamDesc, ParamScalarDesc, ParamValues,
     ParamVectorDesc, pdescs_with_units)
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils import gridutils
 from ...mass._numerics import (
     sersic_b, sersic_density_table, sersic_tables)
 from ...mass import SpheroidDensity
@@ -55,7 +56,7 @@ __all__ = [
 ]
 
 
-class LightProfile(parseutils.TypedSerializable, abc.ABC):
+class LightProfile(TypedSerializable, abc.ABC):
     """
     The light profile of a spheroid (see Spheroid): its density as a sum
     of terms, each a function of its own spheroidal radius m, m^2 = R^2 +
@@ -451,11 +452,11 @@ def _checked_terms(terms: np.ndarray) -> np.ndarray:
     return terms
 
 
-light_profile_parser = parseutils.TypedParser(LightProfile, [
+light_profile_parser = TypedParser(LightProfile, [
     LightSersic,
     LightMGE])
 
-spheroid_kinematics_parser = parseutils.TypedParser(SpheroidKinematics, [
+spheroid_kinematics_parser = TypedParser(SpheroidKinematics, [
     JeansKinematics,
     SpheroidTraitsKinematics,
     SchwarzschildKinematics])

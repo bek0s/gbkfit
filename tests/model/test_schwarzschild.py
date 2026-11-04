@@ -12,6 +12,7 @@ import copy
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetRegionMoments
 from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
@@ -24,7 +25,6 @@ from gbkfit.params import ParamSpace
 from gbkfit.region import RegionsBins
 from gbkfit.utils import gridutils
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 from test_spheroids import hernquist_mge
 
 

@@ -23,10 +23,11 @@ import numpy.typing as npt
 import scipy.ndimage
 from annotated_types import Ge
 
+from gbkfit.config import (
+    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_name,
+    check_options, split_fits_file)
 from gbkfit.params import ParamScalarDesc, ParamValues
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from gbkfit.utils import fitsutils, gridutils
 
 
 __all__ = [
@@ -45,7 +46,7 @@ __all__ = [
 _Angle: TypeAlias = Annotated[float, Unit('deg')]
 
 
-class LensMass(parseutils.TypedSerializable, abc.ABC):
+class LensMass(TypedSerializable, abc.ABC):
     """
     A mass of a gravitational lens (see Lens): its deflection of the light
     at each point of the image plane.
@@ -62,7 +63,7 @@ class LensMass(parseutils.TypedSerializable, abc.ABC):
     Raises
     ------
     ConfigError
-        If the name is not valid (see parseutils.check_name).
+        If the name is not valid (see check_name).
     """
 
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
@@ -70,7 +71,7 @@ class LensMass(parseutils.TypedSerializable, abc.ABC):
 
     def __init__(self, name: str | None = None):
         check_options(LensMass.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         self._name = name
 
     def name(self) -> str | None:
@@ -547,7 +548,7 @@ class LensShear(LensMass):
         return gamma1 * x + gamma2 * y, gamma2 * x - gamma1 * y
 
 
-lens_mass_parser = parseutils.TypedParser(LensMass, [
+lens_mass_parser = TypedParser(LensMass, [
     LensDeflectionMap, LensEPL, LensMultipole, LensNFW, LensSIE, LensShear])
 
 

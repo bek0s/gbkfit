@@ -12,13 +12,12 @@ import pytest
 import ruamel.yaml
 
 import gbkfit
-from gbkfit._catalogue import Family, Member
-from gbkfit._schema import SchemaWriter
+from gbkfit.config import Column, FitsFile, TypedParser, TypedSerializable
+from gbkfit.config.catalogue import Family, Member
+from gbkfit.config.schema import SchemaWriter
 from gbkfit.instrument import PSF, PSFGauss
 from gbkfit.model import Galaxy
 from gbkfit.observation import FittedNoise
-from gbkfit.utils import parseutils
-from gbkfit.utils.typeutils import Column, FitsFile
 
 
 def test_members_of_families_have_their_options():
@@ -70,7 +69,7 @@ def test_options_have_the_forms_of_configurations():
         'anyOf'][0] == {'type': 'number', 'exclusiveMinimum': 0}
 
 
-class Shape(parseutils.TypedSerializable):
+class Shape(TypedSerializable):
 
     def dump(self):
         return {}
@@ -87,7 +86,7 @@ class Square(Shape):
 
 
 def test_members_whose_modules_are_missing_say_what_to_install():
-    family = Family('shape', parseutils.TypedParser(Shape, Square), (
+    family = Family('shape', TypedParser(Shape, Square), (
         Member('square', Square, {'missing': 'pip install missing'}),))
     square, = SchemaWriter()._family(family)['oneOf']
     assert (square['available'], square['requires']) == (

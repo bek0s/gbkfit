@@ -16,6 +16,7 @@ import pytest
 import scipy.integrate
 import scipy.special
 
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.model.distance import (
     KPC_PER_ARCSEC_MPC, DistanceDirect, DistanceRedshift)
@@ -31,7 +32,6 @@ from gbkfit.model.mass import (
 from gbkfit.model.mass import _disk_gravity
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)

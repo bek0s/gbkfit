@@ -21,9 +21,9 @@ import scipy.special
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.params._errors import ModelEvaluationError
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [
@@ -64,7 +64,7 @@ class Solution(NamedTuple):
     m_eff: float
 
 
-class Solve(parseutils.TypedSerializable, abc.ABC):
+class Solve(TypedSerializable, abc.ABC):
     """
     How the values of elements of parameters that the model is linear in
     (e.g. a scale of the flux of the model) are solved at each evaluation
@@ -738,4 +738,4 @@ def _priors(
     return mean, sigma, lower
 
 
-solve_parser = parseutils.TypedParser(Solve, [SolveGaussian])
+solve_parser = TypedParser(Solve, [SolveGaussian])

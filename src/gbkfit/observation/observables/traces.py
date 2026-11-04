@@ -17,9 +17,9 @@ import numpy.polynomial.polynomial as npp
 import numpy.typing as npt
 import scipy.interpolate
 
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath, Unit
+from gbkfit.config import (
+    ConfigError, FilePath, TypedParser, TypedSerializable, Unit, check_options)
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -37,7 +37,7 @@ _NEWTON_ITERATIONS = 50
 _NEWTON_TOLERANCE = 1e-12
 
 
-class Trace(parseutils.TypedSerializable, abc.ABC):
+class Trace(TypedSerializable, abc.ABC):
     """
     The trace of a disperser: the offsets (dx, dy; pixels of the detector)
     of the light of each wavelength from the place of its undispersed
@@ -475,7 +475,7 @@ def _cubic_spline(
     return scipy.interpolate.NdBSpline(tuple(knots), coefficients, 3)
 
 
-trace_parser = parseutils.TypedParser(Trace, [
+trace_parser = TypedParser(Trace, [
     TracePolynomial,
     TraceGrismConf,
     TraceTable])

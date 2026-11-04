@@ -15,10 +15,11 @@ import numpy as np
 import numpy.typing as npt
 import scipy.optimize
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, TypedParser, check_name,
+    check_options)
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassComponent, MassContext, SpheroidDensity
 from .halos import (
     ProfileBurkert, ProfileCoreNFW, ProfileDekelZhao, ProfileEinasto,
@@ -38,7 +39,7 @@ __all__ = [
 ]
 
 
-spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
+spheroid_profile_parser = TypedParser(SpheroidProfile, [
     ProfileSersic,
     ProfileNodewise,
     ProfileNFW,
@@ -50,7 +51,7 @@ spheroid_profile_parser = parseutils.TypedParser(SpheroidProfile, [
     ProfileCoreNFW,
     ProfileNFWTruncated])
 
-class DarkFraction(parseutils.Serializable):
+class DarkFraction(Serializable):
     """
     A spheroid given by its dark matter fraction (see MassSpheroid): the
     fraction fdm = v^2 / (v^2 + v_b^2) of its squared circular velocity v^2
@@ -76,7 +77,7 @@ class DarkFraction(parseutils.Serializable):
 
     def __init__(self, solve: str, bounds: Sequence[float]):
         check_options(DarkFraction.__init__, locals())
-        parseutils.check_name(solve)
+        check_name(solve)
         if not (isinstance(bounds, Sequence) and len(bounds) == 2 and all(
                 isinstance(b, (int, float)) and not isinstance(b, bool)
                 and math.isfinite(b) for b in bounds)
@@ -96,7 +97,7 @@ class DarkFraction(parseutils.Serializable):
         return self._bounds
 
 
-dark_fraction_parser = parseutils.BasicParser(DarkFraction)
+dark_fraction_parser = BasicParser(DarkFraction)
 
 
 class MassSpheroid(MassComponent):
@@ -177,7 +178,7 @@ class MassSpheroid(MassComponent):
         super().__init__(name)
         shape = ShapeSphere() if shape is None else shape
         for baryon in baryons:
-            parseutils.check_name(baryon)
+            check_name(baryon)
         if repeated := sorted({b for b in baryons if baryons.count(b) > 1}):
             raise ConfigError(f"the baryons repeat: {repeated}")
         own = profile.pdescs() | shape.pdescs()
@@ -464,7 +465,7 @@ class MassLightSpheroid(MassComponent):
     def __init__(self, name: str, component: str):
         check_options(MassLightSpheroid.__init__, locals())
         super().__init__(name)
-        parseutils.check_name(component)
+        check_name(component)
         self._component = component
 
     def component(self) -> str:

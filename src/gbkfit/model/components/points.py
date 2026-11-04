@@ -10,10 +10,10 @@ import astropy.units
 import numpy as np
 import scipy.special
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from ._detail import (
     Fluxes, dump_geometry, dump_name, geometry_desc, systemic_velocity)
 from ._units import DataUnit, band_factors, line_factors

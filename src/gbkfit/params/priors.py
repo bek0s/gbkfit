@@ -17,9 +17,8 @@ import scipy.stats
 from annotated_types import Ge, Gt, Le
 from pydantic import FiniteFloat
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, Unit, check_options)
 
 
 __all__ = [
@@ -45,7 +44,7 @@ def _check_range(min: float, max: float) -> None:
             f"and {max}")
 
 
-class Prior(parseutils.TypedSerializable, abc.ABC):
+class Prior(TypedSerializable, abc.ABC):
     """
     The prior of a free element: a probability distribution of its value.
     Priors are immutable, and take arrays of values.
@@ -824,7 +823,7 @@ class PriorTruncated(Prior):
         return np.clip(x, self._minimum, self._maximum)
 
 
-prior_parser = parseutils.TypedParser(Prior)
+prior_parser = TypedParser(Prior)
 prior_parser.register(PriorUniform)
 prior_parser.register(PriorLogUniform)
 prior_parser.register(PriorSine)

@@ -9,7 +9,7 @@ import astropy.stats
 import numpy as np
 import scipy.ndimage
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 
 __all__ = [

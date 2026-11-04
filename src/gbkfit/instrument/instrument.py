@@ -4,7 +4,7 @@ The instrument: the primary beam, the PSF and the LSF together.
 
 from typing import Any
 
-from gbkfit.utils import parseutils
+from gbkfit.config import BasicParser, Serializable, check_options
 from .lsfs import LSF, lsf_parser
 from .primary_beams import PrimaryBeam, primary_beam_parser
 from .psfs import PSF, psf_parser
@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 
-class Instrument(parseutils.Serializable):
+class Instrument(Serializable):
     """
     What happens to the light of a model in the telescope and the
     instrument, in the order the light meets them: the primary beam, and
@@ -75,7 +75,7 @@ class Instrument(parseutils.Serializable):
             psf: PSF | None = None,
             lsf: LSF | None = None
     ):
-        parseutils.check_options(Instrument.__init__, locals())
+        check_options(Instrument.__init__, locals())
         self._primary_beam = primary_beam
         self._psf = psf
         self._lsf = lsf
@@ -90,4 +90,4 @@ class Instrument(parseutils.Serializable):
         return self._lsf
 
 
-instrument_parser = parseutils.BasicParser(Instrument)
+instrument_parser = BasicParser(Instrument)

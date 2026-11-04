@@ -8,10 +8,10 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, item_prefixes
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamDesc, ParamValues, pdescs_with_units
-from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils, iterutils
 from ..distance import Distance
 from ..extras import Extras
 from ..gravity import Capability, Gravity, GravityNewton
@@ -159,7 +159,7 @@ def _component_prefixes(components: Sequence[Component]) -> list[str]:
     Return the prefix of the parameters and the constants of each
     component of a galaxy: its name and '_', or none for one
     component without a name. Raise ConfigError if several components do
-    not all have names (see parseutils.item_prefixes).
+    not all have names (see item_prefixes).
     """
     names = [cmp.name() for cmp in components]
     if len(names) > 1 and None in names:
@@ -167,7 +167,7 @@ def _component_prefixes(components: Sequence[Component]) -> list[str]:
         raise ConfigError(
             f"the components of a galaxy need names when there are "
             f"several; the components {unnamed} have none")
-    return parseutils.item_prefixes(names, 'components', 'cmp', False)
+    return item_prefixes(names, 'components', 'cmp', False)
 
 
 def _shared_geometries(

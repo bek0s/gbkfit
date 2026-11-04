@@ -6,12 +6,12 @@ by the trace of the disperser.
 
 import copy
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
 from gbkfit.observation.observables.slitless_spectra import pixel_footprint
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 from modelutils import group_plan, observation_group
 
 

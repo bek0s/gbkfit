@@ -7,8 +7,8 @@ gbkfit.migration), and log the changes.
 import logging
 import os
 
+from gbkfit.config import ConfigError
 import gbkfit.migration
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [

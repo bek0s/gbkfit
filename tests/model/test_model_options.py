@@ -8,10 +8,11 @@ import logging
 import re
 
 import pytest
+from gbkfit.config import ConfigError, config_path, strict_mode
 from gbkfit.model import galaxy_parser
 from gbkfit.model.components._nodal import parse_component_rnode_args
 from gbkfit.observation import Depth
-from gbkfit.utils import gridutils, parseutils
+from gbkfit.utils import gridutils
 from modelutils import config_group_plan
 
 
@@ -91,14 +92,14 @@ def with_dust(kind):
 
 def load_error(info):
     """The error message of loading a bad configuration."""
-    with pytest.raises(parseutils.ConfigError) as error:
+    with pytest.raises(ConfigError) as error:
         config_group_plan(info)
     return str(error.value)
 
 
 def galaxy_error(info):
     """The error message of loading a bad galaxy."""
-    with pytest.raises(parseutils.ConfigError) as error:
+    with pytest.raises(ConfigError) as error:
         galaxy_parser.load(info)
     return str(error.value)
 
@@ -226,7 +227,7 @@ def test_unknown_trait_options_are_errors(name):
 @pytest.mark.parametrize('name', COMPONENTS)
 def test_unknown_options_are_warnings_in_lenient_mode(name, caplog):
     info = dict(components=COMPONENTS[name] | dict(foo=1))
-    with parseutils.strict_mode(False), caplog.at_level(logging.WARNING):
+    with strict_mode(False), caplog.at_level(logging.WARNING):
         galaxy_parser.load(info)
     assert "'foo'" in caplog.text
 
@@ -269,7 +270,7 @@ def test_radial_nodes_from_a_range(rnmax, rnsep, nodes):
 
 
 def test_radial_nodes_start_at_the_centre():
-    with pytest.raises(parseutils.ConfigError, match="must start at 0"):
+    with pytest.raises(ConfigError, match="must start at 0"):
         parse_component_rnode_args(
             None, None, None, [1, 2, 3], None, 'linear')
 
@@ -277,7 +278,7 @@ def test_radial_nodes_start_at_the_centre():
 
 def test_a_ring_option_beside_another_set_is_refused():
     # (rnsep beside rnodes was ignored silently: audit 2026-10-31 #30b)
-    with pytest.raises(parseutils.ConfigError, match="alone"):
+    with pytest.raises(ConfigError, match="alone"):
         parse_component_rnode_args(
             None, 0.5, None, [0, 1, 2], None, 'linear')
 
@@ -290,7 +291,7 @@ def test_radial_step_can_be_half_the_node_separation():
 
 def test_discouraged_traits_are_warnings_with_the_path(caplog):
     component = BAND_THIN | dict(density=dict(ptraits=UNIFORM))
-    with parseutils.config_path('galaxies'):
+    with config_path('galaxies'):
         galaxy_parser.load([dict(components=component)])
     assert "galaxies[0].components [disk]: the use of" in caplog.text
 

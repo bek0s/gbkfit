@@ -54,7 +54,7 @@ def test_narrow_lines_keep_their_flux(driver, evaluate_cases, dispersion):
 
 def test_the_catalogue_has_lines_and_those_of_the_user():
     from gbkfit.model import LineCatalogue
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     catalogue = LineCatalogue(
         {'mgii2796': '2796.35 Angstrom', 'halpha': '6562.80 Angstrom'})
     # Rest wavelengths in vacuum, or rest frequencies
@@ -107,7 +107,7 @@ def test_configurations_name_lines_of_the_catalogue():
 
 def test_configurations_name_known_lines():
     from modelutils import config_group_plan
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     with pytest.raises(ConfigError) as error:
         config_group_plan(lines_config(['halpha', 'oi6300']))
     assert "there is no line 'oi6300' in the catalogue" in str(error.value)

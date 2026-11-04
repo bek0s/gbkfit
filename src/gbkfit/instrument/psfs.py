@@ -22,11 +22,11 @@ import scipy.signal
 import scipy.special
 from annotated_types import Gt, Le
 
+from gbkfit.config import (
+    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, Varying,
+    check_options, split_fits_file)
 import gbkfit.math
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import (
-    FitsFile, Unit, Varying, split_fits_file)
+from gbkfit.utils import fitsutils, gridutils
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
 
@@ -47,7 +47,7 @@ __all__ = [
 ]
 
 
-class PSF(parseutils.TypedSerializable, abc.ABC):
+class PSF(TypedSerializable, abc.ABC):
     """
     A point spread function, drawn on arrays of pixels.
     """
@@ -57,7 +57,7 @@ class PSF(parseutils.TypedSerializable, abc.ABC):
         """
         Load a PSF from its configuration.
 
-        Options that can vary (see typeutils.Varying) given as tables make a
+        Options that can vary (see Varying) given as tables make a
         PSF that varies along the spectral axis (see varying and
         PSFVarying).
 
@@ -1214,7 +1214,7 @@ class PSFVarying(PSF):
             "channel (see at)")
 
 
-psf_parser = parseutils.TypedParser(PSF, [
+psf_parser = TypedParser(PSF, [
     PSFPoint,
     PSFGauss,
     PSFGGauss,

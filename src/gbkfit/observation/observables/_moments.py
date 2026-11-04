@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 import numpy as np
 from annotated_types import Ge, Lt
 
+from gbkfit.config import ConfigError, warn
 import gbkfit.math
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.params import ModelEvaluationError
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils
 from . import _dcube
 from .base import ModelData
 
@@ -203,7 +203,7 @@ def warn_unmasked_noise(flux_floor: float, instrument: Instrument) -> None:
     """
     if flux_floor == 0 and (
             instrument.psf() is not None or instrument.lsf() is not None):
-        parseutils.warn(
+        warn(
             "flux_floor is 0, but the instrument has a PSF or an LSF: the "
             "FFT-based convolution leaves noise in the faint parts of the "
             "model, whose moments can give artefacts; a flux_floor "

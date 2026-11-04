@@ -6,14 +6,13 @@ the checks of their options.
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError, config_path
 from gbkfit.dataset import Data, DatasetPixelMoments
 from gbkfit.instrument import Instrument, LSFGauss
 from gbkfit.observation import (
     LikelihoodGaussian, LineOfSightFlat, ObservationSky, PixelBrightness,
     PixelMoments, UpperLimit, observable_parser, observation_parser)
-from gbkfit.utils import parseutils
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 def test_observable_from_data():
@@ -97,7 +96,7 @@ def test_observations_need_their_type():
 def test_instrument_warnings_have_the_path_of_the_configuration(caplog):
     # The instrument is checked when the observation is made, so its
     # warnings have the path of the observation
-    with parseutils.config_path('observations'):
+    with config_path('observations'):
         observation_parser.load([dict(
             type='sky',
             line_of_sight=dict(type='flat'),

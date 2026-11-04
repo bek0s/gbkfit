@@ -9,8 +9,8 @@ from typing import Annotated, Literal
 import numpy as np
 from annotated_types import Ge
 
+from gbkfit.config import check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils.parseutils import check_options
 from .base import DPTrait, params_nw_distortion, splits_nw_distortion
 from .options import (
     Blobs, DPT_DIRECTIONS, DPT_DIRECTION_DEFAULT, DispersionDirection,

@@ -8,11 +8,10 @@ from typing import Any
 import astropy.units
 import numpy as np
 
+from gbkfit.config import ConfigError, Serializable, check_options
 from gbkfit.driver import Driver
 from gbkfit.math.interpolation import Interpolator
 from gbkfit.params import ModelEvaluationError, ParamValues
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
 from ..base import FieldsLayout
 from . import _disk
@@ -30,7 +29,7 @@ __all__ = [
 _MAX_CLOUDS = np.iinfo(np.int32).max
 
 
-class Clouds(parseutils.Serializable):
+class Clouds(Serializable):
     """
     The clouds of a disk made of clouds (see Disk): drawn at random from
     its density, each of the flux cflux, with the random numbers of the

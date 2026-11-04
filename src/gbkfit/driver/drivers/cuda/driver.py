@@ -10,9 +10,9 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Ge
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.driver.base import (
     DeviceArray, Driver, DriverFFT, DriverNUFFT, Shape, check_array_size)
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [

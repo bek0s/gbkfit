@@ -388,7 +388,7 @@ def test_a_uniform_coefficient_is_not_discouraged(caplog):
         GAS | dict(emission=dict(type='band')), dict(type='uniform')),
      'transfer', "needs emission lines")])
 def test_line_opacity_errors(driver, component, line_of_sight, message):
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     from modelutils import group_plan
     case = dict(
         driver=dict(type=driver.type()),
@@ -637,7 +637,7 @@ def test_a_group_far_apart_is_its_galaxies_in_order(driver, separation):
     ('transfer', [DepthGroup('a', ('a', 'b'))], "the name of a galaxy")])
 def test_several_galaxies_errors(
         driver, line_of_sight, depth_order, message):
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     galaxies = [
         dict(name='a', components=[GAS, DUST]),
         dict(name='b', components=[DUST])]
@@ -712,7 +712,7 @@ def test_transfer_extras(driver, evaluate_cases):
 
 def test_subchannels_option():
     from gbkfit.observation import LineOfSightTransfer
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     assert LineOfSightTransfer(subchannels=4).dump()['subchannels'] == 4
     for subchannels, message in (
             (0, "at least 1 and at most 64"), (65, "at least 1 and at most 64"),

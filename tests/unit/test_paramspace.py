@@ -11,11 +11,11 @@ import re
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError, strict_mode
 from gbkfit.params import (
     ParamEvaluationError, ParamFunctions, ParamKind, ParamModeIncrements,
     ParamModeOffsets, ParamScalarDesc, ParamSpace, ParamVectorDesc,
     param_space_parser)
-from gbkfit.utils.parseutils import ConfigError
 
 
 def make_pdescs(**sizes):
@@ -342,11 +342,10 @@ def test_constants_cannot_have_the_names_of_parameters():
 
 
 def test_unknown_parameters_are_errors_or_ignored_in_lenient_mode():
-    from gbkfit.utils import parseutils
     properties = {'a': 1, 'old': 2, 'old[0]': 3}
     with pytest.raises(Exception, match=r"unknown parameters: 'old'"):
         ParamSpace(make_pdescs(a=S), properties)
-    with parseutils.strict_mode(False):
+    with strict_mode(False):
         assert evaluate(make_pdescs(a=S), properties) == {'a': 1}
 
 

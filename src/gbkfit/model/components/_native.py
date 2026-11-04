@@ -16,10 +16,10 @@ from typing import Any
 import astropy.units
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 from ._detail import Fluxes, systemic_velocity
 from ._units import DataUnit, OpacityScales, band_factors, line_factors
 from .base import ComponentPlan, ComponentState, FieldsLayout, NativeGrid

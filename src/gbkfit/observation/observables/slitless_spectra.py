@@ -15,13 +15,13 @@ import scipy.sparse
 from annotated_types import Ge
 from pydantic import FiniteFloat
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, Unit, check_options)
 from gbkfit.dataset import Data, Dataset, DatasetSlitlessSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
-from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import gridutils, iterutils
 from . import _dcube, _detail, _moments
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._region_sums import RegionSumsPlan
@@ -231,7 +231,7 @@ def _unique_rows(rows: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return ordered[new], inverse
 
 
-class Exposure(parseutils.Serializable):
+class Exposure(Serializable):
     """
     An exposure combined into the image of slitless spectra (see
     SlitlessSpectra): of the sky at an offset from the instrument (e.g.
@@ -292,7 +292,7 @@ class Exposure(parseutils.Serializable):
         return self._weight
 
 
-exposure_parser = parseutils.BasicParser(Exposure)
+exposure_parser = BasicParser(Exposure)
 
 
 class SlitlessSpectra(Observable):

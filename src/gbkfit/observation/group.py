@@ -11,12 +11,13 @@ from typing import Any, NamedTuple, Self
 
 from astropy.coordinates import SkyCoord
 
+from gbkfit.config import (
+    ConfigError, check_name, config_path, item_prefixes, warn)
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import DepthUnit, Galaxy
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import iterutils
 from ._group_plan import GroupPlan
 from ._scene import SeenGalaxies
 from .observation import Observation
@@ -168,9 +169,9 @@ class ObservationGroup:
             raise ConfigError(
                 "the galaxies need names when there are several")
         observation_names = [obs.name() for obs in self._observations]
-        self._prefixes = parseutils.item_prefixes(
+        self._prefixes = item_prefixes(
             galaxy_names, 'galaxies', 'galaxy', False)
-        parseutils.item_prefixes(
+        item_prefixes(
             observation_names, 'observations', 'observation', False)
         repeated = sorted(
             set(galaxy_names) & set(observation_names) - {None})
@@ -228,7 +229,7 @@ class ObservationGroup:
             else self._observations[first].sky_origin()
         seen = []
         for i, observation in enumerate(self._observations):
-            with parseutils.config_path('observations', i):
+            with config_path('observations', i):
                 seen.append(self._seen(i, observation))
         # The indices of the galaxies that each observation sees
         self._seen_galaxies = tuple(tuple(indices) for indices in seen)
@@ -242,7 +243,7 @@ class ObservationGroup:
         # (every rule about what each sees, here, without devices: the
         # plans fail only for resources)
         for i, observation in enumerate(self._observations):
-            with parseutils.config_path('observations', i):
+            with config_path('observations', i):
                 observation.check(self.seen_by(i))
 
     def _seen(self, i: int, observation: Observation) -> list[int]:
@@ -620,7 +621,7 @@ def _alignments(
     sky is in the frame of each (arcsec, x to the west and y to the
     north), of the RA and Dec of their origins (see
     Observation.sky_origin); (0, 0) for those that are not on the sky.
-    Warn (see parseutils.warn) of origins more than
+    Warn (see warn) of origins more than
     _ALIGNMENT_SEPARATION_WARNING apart (e.g. one of data without
     coordinates, at RA and Dec 0), and of frames that turn by more than
     _ALIGNMENT_ROTATION_WARNING: the frames are aligned by a shift; that
@@ -644,7 +645,7 @@ def _alignments(
              float(north.to_value('arcsec'))))
         separation = origin.separation(first).to_value('deg')
         if separation > _ALIGNMENT_SEPARATION_WARNING:
-            parseutils.warn(
+            warn(
                 f"the origins of the frames of observations {f} and {i} (the "
                 f"RA and Dec of their reference pixels) are {separation:g} "
                 f"deg apart: check their coordinates")
@@ -655,7 +656,7 @@ def _alignments(
                 - first.position_angle(origin)
             rotation = bearings.to_value('deg') % 360 - 180
             if abs(rotation) > _ALIGNMENT_ROTATION_WARNING:
-                parseutils.warn(
+                warn(
                     f"the frames of observations {f} and {i} turn by "
                     f"{rotation:.2g} deg against each other, which their "
                     f"alignment leaves out: their reference pixels are "
@@ -693,7 +694,7 @@ def _warn_frames(
         seen: Sequence[Sequence[int]]
 ) -> None:
     """
-    Warn (see parseutils.warn) if the observations that see a galaxy
+    Warn (see warn) if the observations that see a galaxy
     without offsets of velocity have velocities in different frames of
     rest (see Observation.velocity_frame): their systemic velocities
     differ (by up to some 30 km/s).
@@ -705,7 +706,7 @@ def _warn_frames(
             if g in indices and obs.velocity_frame() is not None
             and obs.offset_params()[2] is None}
         if len(set(frames.values())) > 1:
-            parseutils.warn(
+            warn(
                 f"the observations of galaxy {galaxy.name() or g} have "
                 f"velocities in different frames of rest (by observation: "
                 f"{frames}), whose systemic velocities differ by up to some "
@@ -730,7 +731,7 @@ def _depth_order(
     items = []
     for item in order:
         if isinstance(item, DepthGroup):
-            parseutils.check_name(item.name)
+            check_name(item.name)
             if len(item.galaxies) < 2:
                 raise ConfigError(
                     f"the group {item.name!r} of depth_order needs at least "

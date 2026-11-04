@@ -8,9 +8,9 @@ from typing import Any
 import astropy.units
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
 from gbkfit.utils import gridutils, iterutils
-from gbkfit.utils.parseutils import ConfigError
 from .. import traits
 from .._detail import dump_geometry, dump_name
 from .._native import NativeComponentPlan, emission_setup

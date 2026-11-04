@@ -6,11 +6,11 @@ on the sky and along the spectral axis, and its configuration.
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.instrument import LSFConvolution, LSFHanning, PSFGauss
 from gbkfit.observation.noise import (
     NoiseGauss, NoisePoisson, NoiseStudentT, noise_parser)
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 # A cube of 128 by 128 pixels of 5 arcsec and 64 channels of 10 km/s

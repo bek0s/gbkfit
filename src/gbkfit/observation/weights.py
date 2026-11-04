@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 import numpy as np
 from annotated_types import Ge, Gt, Le
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, TypedParser, TypedSerializable,
+    Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import gridutils, iterutils
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -38,7 +39,7 @@ _AXES = dict(major=0.0, minor=np.pi / 2)
 _Axis: TypeAlias = Literal[tuple(_AXES)]
 
 
-class WeightTrait(parseutils.TypedSerializable, abc.ABC):
+class WeightTrait(TypedSerializable, abc.ABC):
     """
     A weight function of the azimuth of a point in the plane of a disk,
     measured from its major axis (as that of the polar traits).
@@ -125,12 +126,12 @@ class WeightAzimuthRange(WeightTrait):
             angle <= np.radians(self._half_width), self._weight, 1.0)
 
 
-weight_trait_parser = parseutils.TypedParser(WeightTrait, [
+weight_trait_parser = TypedParser(WeightTrait, [
     WeightAzimuthPower,
     WeightAzimuthRange])
 
 
-class Weights(parseutils.Serializable):
+class Weights(Serializable):
     """
     Spatial weights of the data of an observation: the product of weight
     functions of the azimuth of each pixel in the plane of a disk of a
@@ -208,7 +209,7 @@ class Weights(parseutils.Serializable):
         return weight
 
 
-weights_parser = parseutils.BasicParser(Weights)
+weights_parser = BasicParser(Weights)
 
 
 class WeightsPlan:

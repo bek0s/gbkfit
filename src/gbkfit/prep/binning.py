@@ -14,8 +14,8 @@ import astropy.wcs.utils
 import numpy as np
 import scipy.spatial
 
+from gbkfit.config import ConfigError
 from gbkfit.utils import unitutils
-from gbkfit.utils.parseutils import ConfigError
 from .arrays import FitsArrays
 
 

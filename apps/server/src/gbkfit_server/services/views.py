@@ -20,8 +20,8 @@ import numpy as np
 
 import gbkfit.analysis
 from gbkfit import prep
+from gbkfit.config import ConfigError
 from gbkfit.utils import fitsutils
-from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid
 from .workspace import Workspace

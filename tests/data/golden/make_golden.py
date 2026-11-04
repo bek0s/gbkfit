@@ -237,7 +237,8 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     from gbkfit.observation import likelihood_parser, noise_parser
     from gbkfit.observation import observation_parser
     from gbkfit.project import FORMAT_VERSION
-    from gbkfit.utils import numutils, parseutils
+    from gbkfit.config import paths_relative_to
+    from gbkfit.utils import numutils
     folder.mkdir(parents=True, exist_ok=True)
     if case.prepare is not None:
         case.prepare(folder)
@@ -251,7 +252,7 @@ def make_data(case: Case, folder: pathlib.Path) -> None:
     likelihoods = case.likelihoods or [None] * len(case.observations)
     # (their files, e.g. error maps or the modules of user likelihoods,
     # are in the folder of the case)
-    with parseutils.paths_relative_to(str(folder)):
+    with paths_relative_to(str(folder)):
         noises = [noise_parser.load(noise) for noise in case.noises]
         likelihoods = [
             None if info is None else likelihood_parser.load(info)

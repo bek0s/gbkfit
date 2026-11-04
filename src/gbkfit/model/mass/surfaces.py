@@ -20,11 +20,11 @@ import scipy.interpolate
 import scipy.special
 from annotated_types import Gt
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, Unit, check_name,
+    check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from . import _disk_forces, _disk_gravity, _numerics
 from .base import ComponentDensity, MassContext
 from .units import G
@@ -164,7 +164,7 @@ def _component_knots(knots: np.ndarray, rd: float) -> np.ndarray:
     return np.union1d(np.union1d(0, knots), grid)
 
 
-class DiskSurface(parseutils.TypedSerializable, abc.ABC):
+class DiskSurface(TypedSerializable, abc.ABC):
     """
     The surface density of a mass disk: its mass seen face-on, and the
     gravity of the disk of it and a vertical structure.
@@ -697,7 +697,7 @@ class SurfaceComponent(DiskSurface):
             self, component: str, rstep: Annotated[float, Gt(0)] | None = None
     ):
         check_options(SurfaceComponent.__init__, locals())
-        parseutils.check_name(component)
+        check_name(component)
         self._component = component
         self._rstep = rstep
 
@@ -811,7 +811,7 @@ class SurfaceComponent(DiskSurface):
         return upsilon
 
 
-disk_surface_parser = parseutils.TypedParser(DiskSurface, [
+disk_surface_parser = TypedParser(DiskSurface, [
     SurfaceExponential,
     SurfaceNodewise,
     SurfaceGaussianRing,

@@ -12,11 +12,9 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
+from gbkfit.config import ConfigError, TypedSerializable, Unit, check_options
 from gbkfit.params import ModelEvaluationError, ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from . import _numerics
 from .base import MassContext
 from .units import G
@@ -29,7 +27,7 @@ __all__ = [
 ]
 
 
-class SpheroidProfile(parseutils.TypedSerializable, abc.ABC):
+class SpheroidProfile(TypedSerializable, abc.ABC):
     """
     The profile of a spheroid: its density and its enclosed mass, as
     functions of the spherical radius r (kpc), and its potential

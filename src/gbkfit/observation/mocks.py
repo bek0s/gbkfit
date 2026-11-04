@@ -8,8 +8,8 @@ from typing import Annotated, Any
 
 from annotated_types import Ge
 
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.config import ConfigError, Serializable, check_options
+from gbkfit.utils import iterutils
 from .likelihood import Likelihood, likelihood_parser
 from .noise import Noise, noise_parser
 
@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-class MockOptions(parseutils.Serializable):
+class MockOptions(Serializable):
     """
     The options of mock data of the observations of a group (see
     GroupPlan.mock).

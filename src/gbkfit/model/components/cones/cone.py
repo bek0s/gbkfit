@@ -7,10 +7,10 @@ from typing import Any, Literal
 
 import numpy as np
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .. import traits
 from .._native import make_bands, make_lines
 from .._detail import Interp, RNodes, RnMax, RnSep, RStep

@@ -10,6 +10,9 @@ from typing import Any, Literal, Self, TypeAlias
 import astropy.units
 import numpy as np
 
+from gbkfit.config import (
+    ConfigError, check_name, check_options, config_path,
+    load_option_and_update_info, make_typed_desc, warn)
 from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
@@ -19,8 +22,7 @@ from gbkfit.model import (
 from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
-from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils import gridutils, unitutils
 from ._scene import SeenGalaxies, check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, likelihood_parser
@@ -236,8 +238,8 @@ class ObservationSky(Observation):
             If the configuration has an error.
         """
         info = dict(info)
-        parseutils.load_option_and_update_info(dataset_parser, info, 'data')
-        parseutils.load_option_and_update_info(
+        load_option_and_update_info(dataset_parser, info, 'data')
+        load_option_and_update_info(
             observable_parser, info, 'observable', dataset=info.get('data'))
         return super().load(info)
 
@@ -318,7 +320,7 @@ class ObservationSky(Observation):
     ):
         check_options(ObservationSky.__init__, locals())
         if isinstance(band, str):
-            with parseutils.config_path('band'):
+            with config_path('band'):
                 band = catalogue_in_use().band(band)
         if components is not None:
             components = tuple(components)
@@ -326,7 +328,7 @@ class ObservationSky(Observation):
         if lines is not None:
             lines = tuple(lines)
             for line in lines:
-                parseutils.check_name(line)
+                check_name(line)
         _check_flux_scale(flux_scale, observable, name)
         offsets = _check_offsets(offsets, name)
         if band is not None and observable.emission is not BandEmission:
@@ -672,7 +674,7 @@ def _light_unit(
         raise ConfigError(
             "the data of an observation give the unit of its model; remove "
             "its unit")
-    with parseutils.config_path('unit'):
+    with config_path('unit'):
         unit = unitutils.parse_unit(unit)
     if unitutils.spatial_unit(unit) != astropy.units.beam:
         return LightUnit(unit)
@@ -735,7 +737,7 @@ def _check_flux_scale(
         return
     kinds = observable.flux_scales()
     if flux_scale not in kinds:
-        desc = parseutils.make_typed_desc(observable.__class__, 'observable')
+        desc = make_typed_desc(observable.__class__, 'observable')
         raise ConfigError(
             f"{desc} has the flux scales {list(kinds)}; not {flux_scale!r}")
     if name is None:
@@ -828,7 +830,7 @@ def _has_correlated_noise(data: Dataset) -> bool:
 
 def _check_beams(data: Dataset, instrument: Instrument) -> None:
     """
-    Warn (see parseutils.warn) if an item of the data has one beam, and
+    Warn (see warn) if an item of the data has one beam, and
     the PSF of the instrument is another beam: the light of data per beam
     is per their beam, but the PSF smooths the model otherwise.
     """
@@ -845,7 +847,7 @@ def _check_beams(data: Dataset, instrument: Instrument) -> None:
             atol=0) and (np.isclose(beam.bmaj, beam.bmin, rtol=1e-3) or abs(
                 (beam.bpa - psf.bpa() + 90) % 180 - 90) < 0.1)
         if not same:
-            parseutils.warn(
+            warn(
                 f"the data ({key}) have the beam {beam.bmaj:g} x "
                 f"{beam.bmin:g} arcsec at {beam.bpa:g} deg, but the PSF of "
                 f"the instrument is the beam {psf.bmaj():g} x {psf.bmin():g} "

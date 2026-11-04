@@ -6,6 +6,7 @@ the model (that of pixel_spectra on its grid), and analytic sources.
 import copy
 import logging
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
@@ -14,7 +15,6 @@ from modelutils import group_plan
 
 from gbkfit.dataset import UVCoverage
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 C = 299792458.0

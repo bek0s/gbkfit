@@ -14,9 +14,8 @@ import astropy.wcs
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import ConfigError, DataFile
 from gbkfit.utils import datafiles, fitsutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import DataFile
 from .masks import bounding_box
 
 

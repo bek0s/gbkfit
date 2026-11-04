@@ -8,9 +8,8 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
+from gbkfit.config import ConfigError, warn
 from gbkfit.params import ParamValues
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
 from ._detail import disk_to_sky
 from .disks._disk import TRAIT_KINDS
 from .traits import RPTraitImage, map_cell_centres
@@ -114,7 +113,7 @@ class ImageMaps:
 
     def warn_inclination(self, params: ParamValues) -> None:
         """
-        Warn (see parseutils.warn) if the inclination of the disk (by the
+        Warn (see warn) if the inclination of the disk (by the
         values of its parameters) is above _EDGE_ON_WARNING: near edge-on,
         the image says little of the face-on light, which the deprojection
         stretches by 1 / cos(incl) along the minor axis.
@@ -124,7 +123,7 @@ class ImageMaps:
         cosines = np.abs(np.cos(np.radians(incls)))
         if np.min(cosines) < np.cos(np.radians(_EDGE_ON_WARNING)):
             incl, cosine = incls[np.argmin(cosines)], np.min(cosines)
-            parseutils.warn(
+            warn(
                 f"the disk of {self._label!r} is at the inclination "
                 f"{incl:.3g} degrees: its image traits stretch their "
                 f"images by 1 / |cos(incl)| = {1 / cosine:.3g} along its "

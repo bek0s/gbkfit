@@ -16,10 +16,10 @@ import scipy.integrate
 import scipy.special
 from annotated_types import Gt
 
+from gbkfit.config import (
+    TypedParser, TypedSerializable, check_name, check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import check_options
 from .base import DiskDensity, MassContext
 
 
@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 
-class DiskVertical(parseutils.TypedSerializable, abc.ABC):
+class DiskVertical(TypedSerializable, abc.ABC):
     """
     The vertical structure of a mass disk: how its mass is spread in
     height at each radius.
@@ -374,7 +374,7 @@ class VerticalComponent(DiskVertical):
             self, component: str, rstep: Annotated[float, Gt(0)] | None = None
     ):
         check_options(VerticalComponent.__init__, locals())
-        parseutils.check_name(component)
+        check_name(component)
         self._component = component
         self._rstep = rstep
 
@@ -522,7 +522,7 @@ def _between(
     return left, right, (radii - knots[left]) / (knots[right] - knots[left])
 
 
-disk_vertical_parser = parseutils.TypedParser(DiskVertical, [
+disk_vertical_parser = TypedParser(DiskVertical, [
     VerticalThin,
     VerticalExponential,
     VerticalSech2,

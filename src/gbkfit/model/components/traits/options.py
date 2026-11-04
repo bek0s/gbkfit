@@ -12,9 +12,9 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.params.pdescs import (
     ParamColumn, ParamDesc, ParamScalarDesc, ParamTable, ParamVectorDesc)
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [

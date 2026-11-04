@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING, Annotated, Any, NamedTuple
 import numpy as np
 from annotated_types import Ge
 
+from gbkfit.config import (
+    ConfigError, Serializable, TypedParser, TypedSerializable, check_options,
+    config_path)
 from gbkfit.dataset import Dataset
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import Fitter
@@ -21,8 +24,7 @@ from gbkfit.fitting.result import Bootstrap
 from gbkfit.objective import Objective
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamEvaluationError, ParamSpace, ParamValues
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils import iterutils
 
 if TYPE_CHECKING:
     from gbkfit.parallel import WorkerPool
@@ -41,7 +43,7 @@ __all__ = [
 _log = logging.getLogger(__name__)
 
 
-class BootstrapScheme(parseutils.TypedSerializable, abc.ABC):
+class BootstrapScheme(TypedSerializable, abc.ABC):
     """
     How a bootstrap redraws the residuals of the data of an observation
     (see run_bootstrap), keeping the correlations of the noise (e.g. within
@@ -201,11 +203,11 @@ class BootstrapGaussian(BootstrapScheme):
             for key, residual in residuals.items()}
 
 
-bootstrap_scheme_parser = parseutils.TypedParser(
+bootstrap_scheme_parser = TypedParser(
     BootstrapScheme, [BootstrapBlocks, BootstrapGaussian])
 
 
-class BootstrapOptions(parseutils.Serializable):
+class BootstrapOptions(Serializable):
     """
     The options of a bootstrap (see run_bootstrap).
 
@@ -292,10 +294,10 @@ class BootstrapOptions(parseutils.Serializable):
                 zip(schemes, observations)):
             dataset = observation.data()
             index = [i] if isinstance(self._scheme, list) else []
-            with parseutils.config_path('scheme', *index):
+            with config_path('scheme', *index):
                 scheme.check(dataset, params)
         if self._fitter is not None:
-            with parseutils.config_path('fitter'):
+            with config_path('fitter'):
                 self._fitter.load_fit_params(params)
 
 

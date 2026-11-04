@@ -16,8 +16,8 @@ from pydantic import FiniteFloat
 
 from ._errors import ParamEvaluationError
 from .space import ParamFunctions, ParamSpace, ParamValues
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options, config_path)
 
 
 __all__ = [
@@ -45,7 +45,7 @@ def _check_std(std: float | Sequence[float]) -> None:
             f"std must be finite and positive; it is {std}")
 
 
-class JointPrior(parseutils.TypedSerializable, abc.ABC):
+class JointPrior(TypedSerializable, abc.ABC):
     """
     A prior on several parameters at once: on values computed from all
     the parameter values (after ties, modes and fixed values) and the
@@ -494,7 +494,7 @@ class JointPriorMVN(JointPrior):
         return float(value[0])
 
 
-joint_prior_parser = parseutils.TypedParser(JointPrior)
+joint_prior_parser = TypedParser(JointPrior)
 joint_prior_parser.register(JointPriorGauss)
 joint_prior_parser.register(JointPriorSmooth)
 joint_prior_parser.register(JointPriorSmooth2D)
@@ -519,7 +519,7 @@ def joint_prior_residuals(
     """
     residuals = []
     for i, info in enumerate(params.priors()):
-        with parseutils.config_path('priors', i):
+        with config_path('priors', i):
             residuals.append(
                 joint_prior_parser.load(info).residuals(params, functions))
     return residuals

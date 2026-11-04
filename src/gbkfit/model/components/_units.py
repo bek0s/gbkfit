@@ -17,8 +17,8 @@ import astropy.constants as const
 import astropy.units as u
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.utils import gridutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
 from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:

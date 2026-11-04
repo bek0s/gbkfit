@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
 
 import numpy as np
 
+from gbkfit.config import ConfigError, TypedSerializable, check_name
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils
 from .geometries import Geometry
 from .lines import Band
 from .roles import STARS, Emission, LineEmission, Opacity, StarsEmission
@@ -118,7 +118,7 @@ class FrameParams(NamedTuple):
     incl: str | None
 
 
-class Component(parseutils.TypedSerializable, abc.ABC):
+class Component(TypedSerializable, abc.ABC):
     """
     A component of a galaxy: a shape (the subclass) with roles, the light
     it emits (emission) and what it removes from the light behind it
@@ -142,7 +142,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
     Raises
     ------
     ConfigError
-        If the name is not valid (see parseutils.check_name), the geometry
+        If the name is not valid (see check_name), the geometry
         is not one of the above, or it has neither emission nor opacity.
     """
 
@@ -157,7 +157,7 @@ class Component(parseutils.TypedSerializable, abc.ABC):
             emission: Emission | None,
             opacity: Opacity | None
     ):
-        parseutils.check_name(name)
+        check_name(name)
         if not isinstance(geometry, Geometry) \
                 and geometry not in ('galaxy', 'own'):
             raise ConfigError(

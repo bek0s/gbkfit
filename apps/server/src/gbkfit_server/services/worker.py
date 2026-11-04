@@ -43,7 +43,7 @@ def main() -> None:
     from gbkfit import load
     from gbkfit.tasks import log_handler
     from gbkfit.params import ParamEvaluationError
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
 
     logger = logging.getLogger('gbkfit')
     logger.setLevel(logging.INFO)

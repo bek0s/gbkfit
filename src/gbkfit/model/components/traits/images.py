@@ -11,11 +11,11 @@ import numpy as np
 import scipy.ndimage
 import scipy.special
 
+from gbkfit.config import (
+    ConfigError, FitsFile, Unit, check_options, split_fits_file, warn)
 from gbkfit.instrument import PSF, psf_parser
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from gbkfit.utils import fitsutils, gridutils
 from .base import ImageInput, RPTrait
 
 
@@ -335,7 +335,7 @@ class RPTraitImage(RPTrait):
             coords.rota)
         pixel = min(abs(s) for s in coords.step[:2])
         if self._step > pixel * (1 + 1e-9):
-            parseutils.warn(
+            warn(
                 f"the cells of the image trait ({self._step:g} arcsec) are "
                 f"larger than the pixels of its image ({pixel:g} arcsec): "
                 f"they take the image at their centres, and miss its "
@@ -457,7 +457,7 @@ class RPTraitImage(RPTrait):
             label: str
     ) -> None:
         """
-        Warn (see parseutils.warn) if its image covers none of the given
+        Warn (see warn) if its image covers none of the given
         positions on the sky (arcsec, in the frame of origin; see
         face_on): e.g. its map about the origin, whose light would then be
         none, because the world coordinates of the image or of the
@@ -480,7 +480,7 @@ class RPTraitImage(RPTrait):
             return
         centre_x, centre_y = gridutils.frame_to_pixels(
             np.zeros(1), np.zeros(1), origin, self._grid)
-        parseutils.warn(
+        warn(
             f"the image of the image trait of {label} "
             f"covers none of its map about the origin of the frame of the "
             f"model (RA {origin[0]:.6f}, Dec {origin[1]:.6f}), which is at "
@@ -491,7 +491,7 @@ class RPTraitImage(RPTrait):
 
     def check_psf(self, psf: PSF | None) -> None:
         """
-        Warn (see parseutils.warn) if the PSF of its image (if given)
+        Warn (see warn) if the PSF of its image (if given)
         widens the blur of its light in the model of an observation by
         more than _IMAGE_BLUR_WIDENING_WARNING: the model blurs the image
         again by the PSF of the instrument (psf), and the widths of the two
@@ -505,7 +505,7 @@ class RPTraitImage(RPTrait):
         own, other = (_rms_radius(p, step) for p in (self._psf, psf))
         widening = np.hypot(1, own / other) - 1
         if widening > _IMAGE_BLUR_WIDENING_WARNING:
-            parseutils.warn(
+            warn(
                 f"the image of the image trait is blurred by its PSF "
                 f"({own:.3g} arcsec rms) by {own / other:.0%} of the PSF of "
                 f"the instrument ({other:.3g} arcsec rms): the model blurs "

@@ -10,13 +10,13 @@ import threading
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.fitting import FitControl
 from gbkfit.fitting.fitters._tables import table_layout
 from gbkfit.fitting.fitters.dnest4 import FitterDNest4, _dnest4
 from gbkfit.fitting.fitters.dnest4._output import DNest4Files, posterior
 from gbkfit.model import galaxy_parser
 from gbkfit.params import ParamSpace
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

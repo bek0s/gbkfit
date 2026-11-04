@@ -11,10 +11,11 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Gt
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, Unit, check_options,
+    make_typed_desc)
 from gbkfit.math import overlap
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -89,7 +90,7 @@ def _overlaps_inside_grid(
     """
     inside = np.sum(areas)
     if inside < area * (1 - _AREA_TOLERANCE):
-        desc = parseutils.make_typed_desc(aperture.__class__, 'aperture')
+        desc = make_typed_desc(aperture.__class__, 'aperture')
         raise RuntimeError(
             f"{desc} is not inside the grid of the model "
             f"({inside / area:.1%} of it is); enlarge the grid")
@@ -97,7 +98,7 @@ def _overlaps_inside_grid(
     return indices[keep], areas[keep]
 
 
-class Aperture(parseutils.TypedSerializable, abc.ABC):
+class Aperture(TypedSerializable, abc.ABC):
     """
     A region of the sky whose data are the sum of the pixels of a grid,
     each weighted by the fraction of its area inside the region (exactly).
@@ -320,7 +321,7 @@ class ApertureField(Aperture):
         return np.arange(npix), np.ones(npix)
 
 
-aperture_parser = parseutils.TypedParser(Aperture, [
+aperture_parser = TypedParser(Aperture, [
     ApertureCircle,
     ApertureEllipse,
     ApertureField,

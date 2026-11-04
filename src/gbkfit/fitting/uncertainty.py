@@ -10,13 +10,12 @@ from typing import Annotated, Any, Literal
 import numpy as np
 from annotated_types import Ge
 
+from gbkfit.config import Serializable, check_options
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Covariance, Posterior
 from gbkfit.objective import Objective
 from gbkfit.params import (
     ModelEvaluationError, ParamEvaluationError, ParamKind)
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import check_options
 
 
 __all__ = [
@@ -29,7 +28,7 @@ __all__ = [
 ]
 
 
-class UncertaintyOptions(parseutils.Serializable):
+class UncertaintyOptions(Serializable):
     """
     How fitters work out the uncertainty of their solutions.
 

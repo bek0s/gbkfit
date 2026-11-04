@@ -6,6 +6,7 @@ moments of the sums of a spectral cube in regions (bins or apertures).
 import copy
 
 import astropy.units as u
+from gbkfit.config import ConfigError
 import gbkfit.dataset
 import gbkfit.params
 import numpy as np
@@ -18,7 +19,6 @@ from gbkfit.dataset import DatasetRegionMoments
 from gbkfit.region import RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

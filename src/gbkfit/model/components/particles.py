@@ -11,11 +11,10 @@ import astropy.table
 import numpy as np
 import scipy.special
 
+from gbkfit.config import ConfigError, FilePath, check_options
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath
 from ._detail import (
     Fluxes, disk_to_sky, dump_geometry, dump_name, geometry_desc)
 from ._units import DataUnit

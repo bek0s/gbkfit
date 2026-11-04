@@ -123,7 +123,7 @@ the density), heights, velocity, dispersion, warps (vertical
 distortion) and selections.
 """
 
-from gbkfit.utils import parseutils
+from gbkfit.config import TypedParser
 from .options import *
 from .base import *
 from .density import *
@@ -136,7 +136,7 @@ from .selections import *
 
 
 # Density polar traits parser
-rpt_parser = parseutils.TypedParser(RPTrait, [
+rpt_parser = TypedParser(RPTrait, [
     RPTraitUniform,
     RPTraitExponential,
     RPTraitGauss,
@@ -156,7 +156,7 @@ rpt_parser = parseutils.TypedParser(RPTrait, [
     RPTraitImage])
 
 # Density height traits parser
-rht_parser = parseutils.TypedParser(RHTrait, [
+rht_parser = TypedParser(RHTrait, [
     RHTraitUniform,
     RHTraitExponential,
     RHTraitGauss,
@@ -167,7 +167,7 @@ rht_parser = parseutils.TypedParser(RHTrait, [
 
 
 # Velocity polar traits parser
-vpt_parser = parseutils.TypedParser(VPTrait, [
+vpt_parser = TypedParser(VPTrait, [
     VPTraitUniform,
     VPTraitArctan,
     VPTraitBoissier,
@@ -189,7 +189,7 @@ vpt_parser = parseutils.TypedParser(VPTrait, [
     VPTraitMass])
 
 # Velocity height traits parser
-vht_parser = parseutils.TypedParser(VHTrait, [
+vht_parser = TypedParser(VHTrait, [
     VHTraitOne,
     VHTraitLinear,
     VHTraitExponential,
@@ -197,7 +197,7 @@ vht_parser = parseutils.TypedParser(VHTrait, [
     VHTraitMass])
 
 # Dispersion polar traits parser
-dpt_parser = parseutils.TypedParser(DPTrait, [
+dpt_parser = TypedParser(DPTrait, [
     DPTraitUniform,
     DPTraitExponential,
     DPTraitGauss,
@@ -214,19 +214,19 @@ dpt_parser = parseutils.TypedParser(DPTrait, [
     DPTraitNWDistortion])
 
 # Dispersion height traits parser
-dht_parser = parseutils.TypedParser(DHTrait, [
+dht_parser = TypedParser(DHTrait, [
     DHTraitOne,
     DHTraitLinear,
     DHTraitExponential,
     DHTraitGauss])
 
 # Vertical polar distortion traits parser
-zpt_parser = parseutils.TypedParser(ZPTrait, [
+zpt_parser = TypedParser(ZPTrait, [
     ZPTraitNWUniform,
     ZPTraitNWHarmonic])
 
 # Selection polar traits parser
-spt_parser = parseutils.TypedParser(SPTrait, [
+spt_parser = TypedParser(SPTrait, [
     SPTraitAzimuthalRange,
     SPTraitRadialRange,
     SPTraitNWAzimuthalRange])

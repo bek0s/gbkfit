@@ -11,8 +11,7 @@ import sys
 from collections.abc import Generator, Mapping
 from typing import Any
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError, strict_mode
 
 
 __all__ = [
@@ -44,7 +43,7 @@ def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:
     """
     Run a task by name with its arguments by name: strict about unknown
     options of configurations, sections and parameters, unless lenient
-    (see parseutils.strict_mode).
+    (see strict_mode).
 
     Parameters
     ----------
@@ -66,7 +65,7 @@ def run(task: str, options: Mapping[str, Any], lenient: bool = False) -> None:
         bound = inspect.signature(function).bind(**options)
     except TypeError as e:
         raise ConfigError(f"invalid options of task {task}: {e}") from None
-    with parseutils.strict_mode(not lenient):
+    with strict_mode(not lenient):
         function(*bound.args, **bound.kwargs)
 
 

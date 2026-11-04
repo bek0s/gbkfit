@@ -6,12 +6,12 @@ from typing import Any, TypeAlias
 import astropy.units as u
 import numpy as np
 
+from gbkfit.config import ConfigError
 import gbkfit.math
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
 from gbkfit.model import Extras
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 # The unit of the velocities of the spectral axis

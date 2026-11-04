@@ -10,10 +10,9 @@ from typing import Any, NamedTuple
 import astropy.units
 import numpy as np
 
+from gbkfit.config import ConfigError, DataFile, parse_options, warn
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
-from gbkfit.utils import datafiles, fitsutils, gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import DataFile
+from gbkfit.utils import datafiles, fitsutils, gridutils, unitutils
 
 
 __all__ = [
@@ -462,7 +461,7 @@ def _make_beam(beam: Beam | Mapping[str, Any] | None) -> Beam | None:
     if beam is None:
         return None
     if not isinstance(beam, Beam):
-        beam = Beam(**parseutils.parse_options(
+        beam = Beam(**parse_options(
             beam, required={'bmaj', 'bmin'}, optional={'bpa', 'spectral'}))
     if not (np.all(np.asarray(beam.bmaj) > 0)
             and np.all(np.asarray(beam.bmin) > 0)):
@@ -525,7 +524,7 @@ def dump_data(
         info['beam'] = dict(
             bmaj=float(beam.bmaj), bmin=float(beam.bmin), bpa=float(beam.bpa))
     elif beam is not None:
-        parseutils.warn(
+        warn(
             "the beams of the channels of a data item are not dumped; give "
             "its beam in its configuration (beam: {bmaj, bmin, bpa})")
     kwargs = dict(dump_path=dump_path, overwrite=overwrite)

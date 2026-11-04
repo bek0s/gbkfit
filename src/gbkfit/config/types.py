@@ -5,8 +5,7 @@ The options of the constructors of GBKFIT are described by the type
 annotations of their parameters: their types, their ranges and choices
 (e.g. ``Annotated[float, Gt(0)]``, ``Literal['a', 'b']``) and their
 units (``Unit``). They are checked against them in Python calls (see
-`gbkfit.utils.parseutils.check_options`) and in configurations (see
-`gbkfit.utils.parseutils.parse_options_for_callable`).
+check_options) and in configurations (see parse_options_for_callable).
 """
 
 import collections.abc
@@ -38,8 +37,8 @@ __all__ = [
     'is_varying',
     'matches_type',
     'option_types',
-    'problem',
     'split_fits_file',
+    'type_problem',
     'union_members',
     'unit_of',
     'varying_options'
@@ -78,14 +77,14 @@ class Varying:
 class _ConfigForm:
     """
     The marker of a type whose values configurations give in a form of
-    their own (see parseutils.parse_options_for_callable).
+    their own (see parse_options_for_callable).
     """
 
     name: str
 
 
 # The path of a file; in a configuration, relative to the directory of
-# the configuration (see parseutils.resolve_path)
+# the configuration (see resolve_path)
 FilePath: TypeAlias = Annotated[str, _ConfigForm('path')]
 
 # A FITS file: its filename, or its filename and the HDU to read (by
@@ -133,7 +132,7 @@ def split_fits_file(file: FitsFile) -> tuple[str, int | str]:
 
 
 # The bounds of the ranges of options, and finiteness (e.g. of
-# pydantic.FiniteFloat; see problem)
+# pydantic.FiniteFloat; see type_problem)
 _BOUNDS = (
     annotated_types.Gt, annotated_types.Ge, annotated_types.Lt,
     annotated_types.Le, pydantic.AllowInfNan(False))
@@ -294,7 +293,7 @@ def _split_bounds(type_: Any) -> tuple[Any, list[Any]]:
     return (Annotated[inner, *others] if others else inner), bounds
 
 
-def problem(value: Any, type_: Any) -> str | None:
+def type_problem(value: Any, type_: Any) -> str | None:
     """
     Return what is wrong with the value of an option of a type
     annotation, or None if nothing.
@@ -371,7 +370,7 @@ def _item_problem(value: Any, type_: Any) -> str | None:
         return None
     item_type = args[0] if args else Any
     for i, item in enumerate(value):
-        if (wrong := problem(item, item_type)) is not None:
+        if (wrong := type_problem(item, item_type)) is not None:
             inner = wrong.removeprefix('item ') if wrong.startswith(
                 'item [') else f' {wrong}'
             return f"item [{i}]{inner}"

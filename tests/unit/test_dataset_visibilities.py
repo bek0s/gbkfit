@@ -6,9 +6,9 @@ reading of measurement sets.
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import (
     Data, DatasetVisibilities, UVCoverage, dataset_parser)
-from gbkfit.utils.parseutils import ConfigError
 
 
 HI = '1420.405752 MHz'

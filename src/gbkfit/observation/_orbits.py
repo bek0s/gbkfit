@@ -14,12 +14,12 @@ from typing import TYPE_CHECKING, NamedTuple
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import Driver
 from gbkfit.model import GalaxyState
 from gbkfit.model.components.spheroids import (
     OrbitIntegrator, OrbitLibraryState, SkyGrid, Spheroid)
 from gbkfit.params import ModelEvaluationError, ParamValues
-from gbkfit.utils.parseutils import ConfigError
 from .observables import ModelData
 from .observables._moments import moment_item
 

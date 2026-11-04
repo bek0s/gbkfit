@@ -23,6 +23,10 @@ import astropy.units
 import ruamel.yaml
 from annotated_types import Ge
 
+from gbkfit.config import (
+    ConfigError, FilePath, Problem, check_name, collect_problems, config_path,
+    paths_relative_to, report_unknown, strict_mode, warn)
+from gbkfit.config.schema import SchemaWriter
 import gbkfit.model
 import gbkfit.observation
 import gbkfit.outputs
@@ -38,9 +42,7 @@ from gbkfit.observation import (
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
     load_pdescs_dict, param_space_parser)
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import FilePath
+from gbkfit.utils import iterutils
 
 
 __all__ = [
@@ -50,7 +52,8 @@ __all__ = [
     'SetupEvaluation',
     'describe',
     'load',
-    'read_config'
+    'read_config',
+    'schema'
 ]
 
 
@@ -105,7 +108,7 @@ class _ParamsSection(NamedTuple):
 
 class _Section(NamedTuple):
     """
-    A section of configurations (see gbkfit.schema): the type of its
+    A section of configurations (see schema): the type of its
     value, as that of an option; what it is; whether it is required;
     whether it can be a list of values of the type (or one); and the
     options that each of them has besides its own.
@@ -158,6 +161,37 @@ _SECTIONS = dict(
 _REQUIRED = tuple(k for k, v in _SECTIONS.items() if v.required)
 _OPTIONAL = tuple(
     k for k, v in _SECTIONS.items() if not v.required and k != 'version')
+
+
+def schema() -> dict[str, Any]:
+    """
+    Return the JSON Schema (2020-12) of the configurations of GBKFIT.
+
+    It is written from the signatures of the constructors that
+    configurations call: the options of each, with their types, ranges,
+    choices, units (the keyword 'unit'), defaults and descriptions. The
+    members of families that need modules that are not installed are in
+    it too, with the keywords 'available' (false) and 'requires' (what to
+    install): it is the same on every machine. Classes have the schemas
+    of their own configurations (see Serializable.schema).
+
+    Returns
+    -------
+    dict
+        The schema.
+    """
+    writer = SchemaWriter()
+    properties = {}
+    for name, section in _SECTIONS.items():
+        value = writer.option(section.type)
+        if section.item_options:
+            value = writer.with_options(value, section.item_options)
+        if section.listed:
+            value = {'anyOf': [value, {'type': 'array', 'items': value}]}
+        properties[name] = value | {'description': section.desc}
+    return writer.document('GBKFIT configuration', {
+        'type': 'object', 'properties': properties,
+        'required': list(_REQUIRED), 'additionalProperties': False})
 
 
 class ConfigFile(NamedTuple):
@@ -469,7 +503,7 @@ def read_config(
         If the file cannot be read, its project is invalid, it is not of
         the current version of the format (see _check_version), a required
         section is missing, or a section is unknown (see
-        parseutils.report_unknown) or of the wrong type.
+        report_unknown) or of the wrong type.
     """
     filename = os.path.abspath(filename)
     texts = texts or {}
@@ -516,7 +550,7 @@ class Description:
     ----------
     problems : tuple of Problem
         Its warnings and its unknown names, then its error, if any, each
-        with its path in the configuration (see parseutils.Problem).
+        with its path in the configuration (see Problem).
     config : dict or None
         The configuration, as plain JSON values (see read_config), if it
         could be read.
@@ -536,7 +570,7 @@ class Description:
         if it could be read: that of the sections that tasks load (e.g.
         'mock').
     """
-    problems: tuple[parseutils.Problem, ...]
+    problems: tuple[Problem, ...]
     config: dict[str, Any] | None
     group: ObservationGroup | None
     params: ParamSpace | None
@@ -554,7 +588,7 @@ def describe(
     observations, its parameters and its fitter as descriptions, with
     every rule of them checked (see ObservationGroup), but no drivers and
     no plans; and collect its problems, past its unknown names (see
-    parseutils.collect_problems). Its drivers are checked by type only.
+    collect_problems). Its drivers are checked by type only.
 
     Parameters
     ----------
@@ -573,12 +607,12 @@ def describe(
     """
     file = group = params = fitter = None
     # (lenient, to list every unknown name)
-    with parseutils.strict_mode(False), \
-            parseutils.collect_problems() as problems:
+    with strict_mode(False), \
+            collect_problems() as problems:
         file = read_config(config, texts=texts) if isinstance(config, str) \
             else _config_file(config)
         cfg = file.config
-        with parseutils.paths_relative_to(file.root):
+        with paths_relative_to(file.root):
             _check_driver_types(cfg)
             group = _load_observation_group(cfg)
             params = _load_params(
@@ -589,8 +623,8 @@ def describe(
                 # (the rules of the start of a fit, as load checks them)
                 fitter.check(params, group)
                 if not group.has_data():
-                    with parseutils.config_path('fitter'):
-                        parseutils.warn(
+                    with config_path('fitter'):
+                        warn(
                             "a fit needs data for every observation, and "
                             "some have none: the configuration can only be "
                             "evaluated")
@@ -655,7 +689,7 @@ def load(
     elif not isinstance(config, ConfigFile):
         config = _config_file(config)
     cfg = config.config
-    with parseutils.paths_relative_to(config.root):
+    with paths_relative_to(config.root):
         _log.info("setting up galaxies and observations...")
         if drivers is None:
             drivers = _load_drivers(cfg)
@@ -746,7 +780,7 @@ def _prepare_config(
 ) -> dict[str, Any]:
     """
     Check the sections of a configuration, and return it as plain JSON
-    values: unknown sections are reported (see parseutils.report_unknown)
+    values: unknown sections are reported (see report_unknown)
     and left out, null sections are empty, and the sections 'galaxies' and
     'observations' are lists.
 
@@ -759,7 +793,7 @@ def _prepare_config(
     config = {} if config is None else dict(config)
     known = required + optional
     if unknown := [s for s in config if s not in known]:
-        parseutils.report_unknown(
+        report_unknown(
             "unknown configuration sections", unknown, known)
     config = {s: config[s] for s in config if s in known}
     if missing := [s for s in required if s not in config]:
@@ -819,7 +853,7 @@ def _check_driver_types(cfg: dict[str, Any]) -> None:
         else dict(cfg.get('drivers', {}))
     for name, info in infos.items():
         path = ('driver',) if name is None else ('drivers', name)
-        with parseutils.config_path(*path):
+        with config_path(*path):
             type_ = info.get('type') if isinstance(info, Mapping) else None
             if type_ not in driver_parser.types():
                 raise ConfigError(
@@ -841,12 +875,12 @@ def _load_drivers(cfg: dict[str, Any]) -> dict[str | None, Driver]:
     """
     _check_driver_types(cfg)
     if 'driver' in cfg:
-        with parseutils.config_path('driver'):
+        with config_path('driver'):
             return {None: driver_parser.load(cfg['driver'])}
     drivers = {}
     for name, info in cfg.get('drivers', {}).items():
-        with parseutils.config_path('drivers', name):
-            parseutils.check_name(name)
+        with config_path('drivers', name):
+            check_name(name)
             drivers[name] = driver_parser.load(info)
     return drivers
 
@@ -863,13 +897,13 @@ def _load_observation_group(cfg: dict[str, Any]) -> ObservationGroup:
     """
     catalogue = gbkfit.model.LineCatalogue(cfg.get('lines'), cfg.get('bands'))
     with gbkfit.model.lines_from(catalogue):
-        with parseutils.config_path('galaxies'):
+        with config_path('galaxies'):
             galaxies = gbkfit.model.galaxy_parser.load(
                 _without_driver(cfg['galaxies']))
-        with parseutils.config_path('observations'):
+        with config_path('observations'):
             observations = gbkfit.observation.observation_parser.load(
                 _without_driver(cfg['observations']))
-    with parseutils.config_path('depth_order'):
+    with config_path('depth_order'):
         depth_order = _load_depth_order(cfg.get('depth_order'))
     return gbkfit.observation.ObservationGroup(
         galaxies, observations, depth_order)
@@ -915,7 +949,7 @@ def _load_placement(
     """
     def driver_of(section: str, index: int, owner: str) -> _T:
         info = cfg[section][index]
-        with parseutils.config_path(section, index, 'driver'):
+        with config_path(section, index, 'driver'):
             driver = driver_by_name(info.get('driver'), drivers, owner)
         return host if driver is None else driver
 
@@ -955,9 +989,9 @@ def _load_params(
     galaxies that its derived values can use.
     """
     if 'pdescs' in cfg:
-        with parseutils.config_path('pdescs'):
+        with config_path('pdescs'):
             pdescs = _merge_pdescs(pdescs, load_pdescs_dict(cfg['pdescs']))
-    with parseutils.config_path('params'):
+    with config_path('params'):
         return param_space_parser.load(
             cfg['params'], pdescs=pdescs, constants=constants,
             function_names=function_names)
@@ -971,7 +1005,7 @@ def _load_fitter(cfg: dict[str, Any]) -> Fitter | None:
     if 'fitter' not in cfg:
         return None
     _log.info("setting up fitter...")
-    with parseutils.config_path('fitter'):
+    with config_path('fitter'):
         return fitter_parser.load(cfg['fitter'])
 
 
@@ -1001,10 +1035,10 @@ def _load_workers(
             driver = driver_by_name(item, drivers, 'workers')
             return driver if stand_in is None else stand_in
         return driver_parser.load(item) if stand_in is None else stand_in
-    with parseutils.config_path('workers'):
+    with config_path('workers'):
         info = dict(cfg['workers'])
         if iterutils.is_sequence(info.get('drivers')):
-            with parseutils.config_path('drivers'):
+            with config_path('drivers'):
                 info['drivers'] = [
                     load_driver(item) for item in info['drivers']]
         return workers_parser.load(info)

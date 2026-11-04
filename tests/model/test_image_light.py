@@ -9,10 +9,10 @@ import logging
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.utils import fitsutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 # An image of 64 x 64 pixels of 0.2 arcsec, at RA 150 and Dec 2 degrees

@@ -4,10 +4,10 @@ Tests for the extinction laws of dust.
 
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import (
     ExtinctionCCM, ExtinctionCalzetti, ExtinctionTable,
     extinction_law_parser)
-from gbkfit.utils.parseutils import ConfigError
 
 
 @pytest.mark.parametrize('wavelength, ratio', [

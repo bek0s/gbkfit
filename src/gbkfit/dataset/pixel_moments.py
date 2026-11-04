@@ -7,8 +7,8 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import check_options
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import check_options
 from . import _detail, _outliers, _resampling
 from .base import Dataset, NoiseCorrelation
 from .data import Data, DataFiles

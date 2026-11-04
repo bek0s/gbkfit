@@ -13,11 +13,10 @@ import numpy.typing as npt
 import scipy.interpolate
 from annotated_types import Gt
 
+from gbkfit.config import Column, ConfigError, FilePath, Unit, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from gbkfit.utils import tableutils, unitutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Column, FilePath, Unit
 from .base import MassComponent, MassContext
 
 

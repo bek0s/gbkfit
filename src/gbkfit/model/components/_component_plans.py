@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._units import DataUnit
 from .base import ComponentState, DepthAxis, NativeGrid, OpacityCubes

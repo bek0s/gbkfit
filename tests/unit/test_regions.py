@@ -1,12 +1,12 @@
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.region import (
     ApertureCircle, ApertureEllipse, ApertureField, AperturePolygon,
     ApertureRectangle, RegionsApertures, RegionsBins, regions_parser)
 from gbkfit.math import overlap
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 def _pixels(size):

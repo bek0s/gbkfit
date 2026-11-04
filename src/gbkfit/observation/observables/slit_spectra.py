@@ -8,13 +8,12 @@ from typing import TYPE_CHECKING, Annotated, Any, TypeAlias
 import numpy as np
 from annotated_types import Gt
 
+from gbkfit.config import ConfigError, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetSlitSpectra
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval, Size, Step
 from .base import FluxScale, ModelData, Observable

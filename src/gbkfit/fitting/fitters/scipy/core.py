@@ -9,6 +9,7 @@ import numpy as np
 import scipy.optimize
 from annotated_types import Gt
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
@@ -17,7 +18,6 @@ from gbkfit.fitting.fitparams import (
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import (
     UncertaintyOptions, finite_difference_steps)
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [

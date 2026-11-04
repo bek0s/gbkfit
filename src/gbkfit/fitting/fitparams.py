@@ -14,8 +14,8 @@ from typing import Any, ClassVar, Self, TypeAlias
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.params import FreeElement, Prior
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [

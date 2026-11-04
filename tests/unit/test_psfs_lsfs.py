@@ -7,9 +7,9 @@ import pytest
 import scipy.integrate
 import scipy.special
 
+from gbkfit.config import ConfigError
 import gbkfit.math
 from gbkfit.instrument import *
-from gbkfit.utils.parseutils import ConfigError
 
 
 @pytest.mark.parametrize(
@@ -496,8 +496,7 @@ def test_psf_beam_options_are_checked(info, message):
 @pytest.mark.parametrize('parser', [psf_parser, lsf_parser])
 def test_unknown_options_of_points_are_reported(parser):
     # (they used to be ignored silently)
-    from gbkfit.utils import parseutils
-    with pytest.raises(parseutils.ConfigError, match="'sigma'"):
+    with pytest.raises(ConfigError, match="'sigma'"):
         parser.load(dict(type='point', sigma=2))
 
 

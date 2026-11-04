@@ -11,9 +11,8 @@ from typing import TYPE_CHECKING, Any, Protocol
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import TypedSerializable, check_name, check_options
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import check_options
 from .units import G
 
 if TYPE_CHECKING:
@@ -199,7 +198,7 @@ class MassContext:
         return self.densities[component]
 
 
-class MassComponent(parseutils.TypedSerializable, abc.ABC):
+class MassComponent(TypedSerializable, abc.ABC):
     """
     A component of a mass model (e.g. the stars, the gas or the dark
     matter halo of a galaxy), axisymmetric about the z axis: R is the
@@ -218,7 +217,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
     Raises
     ------
     ConfigError
-        If the name is not valid (see parseutils.check_name).
+        If the name is not valid (see check_name).
     """
 
     def dump(self) -> dict[str, Any]:
@@ -226,7 +225,7 @@ class MassComponent(parseutils.TypedSerializable, abc.ABC):
 
     def __init__(self, name: str):
         check_options(MassComponent.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         self._name = name
 
     def name(self) -> str:

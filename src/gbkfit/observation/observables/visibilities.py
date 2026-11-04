@@ -11,14 +11,13 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
+from gbkfit.config import ConfigError, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
 from gbkfit.utils import gridutils, unitutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms

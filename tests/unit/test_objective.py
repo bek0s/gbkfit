@@ -10,6 +10,7 @@ import pytest
 import scipy.optimize
 import scipy.special
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelBrightness, DatasetPixelMoments
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import galaxy_parser
@@ -21,7 +22,6 @@ from gbkfit.observation import (
 from gbkfit.params import (
     ParamSpace, SolveGaussian, solve_together, solve_together_rows)
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

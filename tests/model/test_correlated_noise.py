@@ -6,6 +6,7 @@ correlated on the sky and along the channels at once.
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelSpectra
 from gbkfit.instrument import LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
@@ -15,7 +16,6 @@ from gbkfit.observation import (
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 SIZE = (12, 12, 31)

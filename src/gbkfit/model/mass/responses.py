@@ -14,10 +14,10 @@ import numpy as np
 import scipy.integrate
 import scipy.interpolate
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassContext
 from .halos import ProfileHalo
 from .profiles import SpheroidProfile
@@ -75,7 +75,7 @@ _SIDM_ITERATIONS = 50
 _SIDM_TOLERANCE = 1e-10
 
 
-class HaloResponse(parseutils.TypedSerializable, abc.ABC):
+class HaloResponse(TypedSerializable, abc.ABC):
     """
     How a spherical halo responds to the gravity of its baryons: its
     squared circular velocity after, of those of the halo before and of
@@ -610,7 +610,7 @@ def _contracted(
     return out
 
 
-halo_response_parser = parseutils.TypedParser(HaloResponse, [
+halo_response_parser = TypedParser(HaloResponse, [
     ResponseBlumenthal86,
     ResponseGnedin04,
     ResponseCautun20,

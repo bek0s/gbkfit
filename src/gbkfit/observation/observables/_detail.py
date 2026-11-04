@@ -10,15 +10,15 @@ import astropy.units
 import numpy as np
 from annotated_types import Ge
 
+from gbkfit.config import (
+    ConfigError, Unit, make_typed_desc, parse_options_for_callable, warn)
 from gbkfit.dataset import Dataset
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
-from gbkfit.utils import gridutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import gridutils, unitutils
 from ..weights import plan_weights
 from ._dcube import DCube, cube_extra
 from .base import HostModelData, ModelData, Observable, ObservablePlan
@@ -58,10 +58,10 @@ def load_observable(
     it must not repeat.
     """
     if dataset is None:
-        return cls(**parseutils.parse_options_for_callable(
+        return cls(**parse_options_for_callable(
             info, cls.__init__))
     require_no_options_from_data(cls, info, dataset)
-    return cls.from_data(dataset, **parseutils.parse_options_for_callable(
+    return cls.from_data(dataset, **parse_options_for_callable(
         info, cls.from_data, ignore_params=['dataset']))
 
 
@@ -115,7 +115,7 @@ def require_no_options_from_data(
         key for key in cls.options_from_data(dataset)
         if info.get(key) is not None]
     if given:
-        desc = parseutils.make_typed_desc(cls, 'observable')
+        desc = make_typed_desc(cls, 'observable')
         raise ConfigError(
             f"the data of {desc} give its options {given}; remove them (the "
             f"world coordinates of data can be set in the data options)")
@@ -157,7 +157,7 @@ def warn_unsmoothed_weights(
     """
     if smooth_weights and instrument.psf() is None \
             and instrument.lsf() is None:
-        parseutils.warn(
+        warn(
             "smooth_weights is true, but the instrument has no PSF or LSF "
             "to smooth the weights with")
 

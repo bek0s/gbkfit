@@ -11,9 +11,9 @@ import numpy as np
 import pytest
 import scipy.ndimage
 
+from gbkfit.config import ConfigError
 from gbkfit.tasks import prep
 from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 # A spectral cube with a degenerate Stokes axis, as radio cubes often have:

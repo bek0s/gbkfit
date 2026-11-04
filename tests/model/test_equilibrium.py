@@ -10,9 +10,9 @@ import numpy as np
 import pytest
 import scipy.integrate
 
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)

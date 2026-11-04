@@ -11,9 +11,9 @@ import numpy as np
 import numpy.typing as npt
 import scipy.integrate
 
+from gbkfit.config import TypedParser, TypedSerializable
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
 from .base import MassContext, forces_in_plane
 from .profiles import SpheroidProfile
 from .units import G
@@ -87,7 +87,7 @@ def _flattened_enclosed_mass(
     return float(inside) + cut
 
 
-class SpheroidShape(parseutils.TypedSerializable, abc.ABC):
+class SpheroidShape(TypedSerializable, abc.ABC):
     """
     The shape of a spheroid: how it lays out the density of its profile,
     and its gravity from it.
@@ -371,6 +371,6 @@ class ShapeFlattened(SpheroidShape):
         return force_R.reshape(R.shape), force_z.reshape(R.shape)
 
 
-spheroid_shape_parser = parseutils.TypedParser(SpheroidShape, [
+spheroid_shape_parser = TypedParser(SpheroidShape, [
     ShapeSphere,
     ShapeFlattened])

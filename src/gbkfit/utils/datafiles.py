@@ -18,9 +18,8 @@ import astropy.wcs
 import gwcs
 import numpy as np
 
-from gbkfit.utils import fitsutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import DataFile, is_asdf_file
+from gbkfit.config import ConfigError, DataFile, is_asdf_file, warn
+from gbkfit.utils import fitsutils, unitutils
 
 
 __all__ = [
@@ -422,7 +421,7 @@ def _header_unit(
     """
     Return the unit of the values of a header (BUNIT), if it has one that
     is a unit (see unitutils.parse_unit); one that is not is left out,
-    with a warning (see parseutils.warn).
+    with a warning (see warn).
     """
     text = str(header.get('BUNIT', '')).strip()
     if not text:
@@ -430,7 +429,7 @@ def _header_unit(
     try:
         return unitutils.parse_unit(text)
     except ConfigError as e:
-        parseutils.warn(f"{source}: BUNIT is left out: {e}")
+        warn(f"{source}: BUNIT is left out: {e}")
         return None
 
 

@@ -7,12 +7,12 @@ sight (make_scene; see gbkfit.model.Scene).
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
+from gbkfit.config import ConfigError, check_name
 from gbkfit.model import (
     STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
     Galaxy, LineEmission, Scene, StarsEmission,
     named_components)
-from gbkfit.utils import parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import unitutils
 
 if TYPE_CHECKING:
     from .line_of_sight import LineOfSight
@@ -228,4 +228,4 @@ def check_component_names(names: Sequence[str]) -> None:
                 f"a component is named 'component' or 'galaxy.component'; "
                 f"{name!r} is not")
         for part in parts:
-            parseutils.check_name(part)
+            check_name(part)

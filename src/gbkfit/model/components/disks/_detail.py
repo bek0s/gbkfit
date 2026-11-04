@@ -9,10 +9,10 @@ from typing import Any
 import astropy.units
 import numpy as np
 
+from gbkfit.config import ConfigError, item_prefixes, warn
 from gbkfit.driver import Driver
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils, iterutils
 from .. import traits
 from .._detail import dump_geometry, dump_name, geometry_desc
 from .._native import EmissionSetup, NativeComponentPlan, emission_setup
@@ -252,7 +252,7 @@ def line_opacity_traits(
         lines = [(f'{name}_', coefficients[name]) for name in names]
     result = ([], [], [])
     for index, (suffix, line_traits) in enumerate(lines):
-        prefixes = parseutils.item_prefixes(
+        prefixes = item_prefixes(
             [trait.name() for trait in line_traits], 'traits', 'op', True)
         for trait, prefix in zip(line_traits, prefixes):
             if not isinstance(trait, traits.RPTrait):
@@ -420,15 +420,15 @@ class DiskComponentPlan(NativeComponentPlan):
 
 
 def check_traits_common(traits_: Sequence[traits.Trait]) -> None:
-    """Warn about the traits that are discouraged (see parseutils.warn)."""
+    """Warn about the traits that are discouraged (see warn)."""
     for trait in traits_:
         trait_desc = traits.trait_desc(trait.__class__)
         if isinstance(trait, traits.RPTraitUniform):
-            parseutils.warn(
+            warn(
                 f"the use of {trait_desc} is discouraged; "
                 f"its main purpose is to facilitate software testing")
         if isinstance(trait, traits.RHTraitUniform):
-            parseutils.warn(
+            warn(
                 f"the use of {trait_desc} is discouraged; "
                 f"it may result in density overestimation due to aliasing")
 

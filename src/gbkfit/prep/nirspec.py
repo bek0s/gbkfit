@@ -13,7 +13,7 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 if TYPE_CHECKING:
     from gbkfit.dataset import DatasetSlitlessSpectra

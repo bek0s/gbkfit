@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any, TypeAlias, TypeVar, Union
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import ConfigError, TypedParser, TypedSerializable
 import gbkfit.math
-from gbkfit.utils import parseutils
 
 if TYPE_CHECKING:
     import cupy
@@ -68,7 +68,7 @@ def check_array_size(shape: Shape) -> None:
     """
     size = int(np.prod(shape, dtype=np.int64))
     if size > MAX_ARRAY_SIZE:
-        raise parseutils.ConfigError(
+        raise ConfigError(
             f"an array of the model of shape {tuple(np.atleast_1d(shape))} "
             f"has {size:.4g} values, more than the {MAX_ARRAY_SIZE:.4g} that "
             f"the native kernels index (by 32-bit integers): lower the "
@@ -560,7 +560,7 @@ def _check_nufft_options(sign: int, eps: float, ntransforms: int) -> None:
             f"ntransforms must be a positive integer; it is {ntransforms!r}")
 
 
-class Driver(parseutils.TypedSerializable, abc.ABC):
+class Driver(TypedSerializable, abc.ABC):
     """
     A device on which models are evaluated: its memory, its native module
     (the C++ or CUDA kernels, in float32 and float64) and its FFT. All its
@@ -749,7 +749,7 @@ class Driver(parseutils.TypedSerializable, abc.ABC):
         """
 
 
-driver_parser = parseutils.TypedParser(Driver)
+driver_parser = TypedParser(Driver)
 
 
 def driver_by_name(
@@ -787,15 +787,15 @@ def driver_by_name(
     names = [n for n in drivers if n is not None]
     if name is None:
         if len(drivers) > 1:
-            raise parseutils.ConfigError(
+            raise ConfigError(
                 f"the {owner} must name its driver; the drivers are {names}")
         return next(iter(drivers.values()), None)
     if not isinstance(name, str):
-        raise parseutils.ConfigError(
+        raise ConfigError(
             f"the driver of the {owner} is the name of a driver that the "
             f"configuration declares at its top level (section 'driver' for "
             f"one driver, 'drivers' for several by name); it is {name!r}")
     if name not in names:
-        raise parseutils.ConfigError(
+        raise ConfigError(
             f"unknown driver {name!r}; the named drivers are {names}")
     return drivers[name]

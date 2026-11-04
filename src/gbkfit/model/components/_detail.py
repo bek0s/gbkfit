@@ -7,10 +7,9 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 
+from gbkfit.config import ConfigError, Unit, config_path
 from gbkfit.params import ParamValues
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import iterutils
 from ._units import BandFactors, LineFactors
 
 if TYPE_CHECKING:
@@ -204,7 +203,7 @@ def load_geometries(
     infos = info.pop('geometries', None)
     if infos is None:
         infos = []
-    with parseutils.config_path('geometries'):
+    with config_path('geometries'):
         geometries = geometry_parser.load(iterutils.listify(infos))
     names = [geometry.name() for geometry in geometries]
     if None in names:

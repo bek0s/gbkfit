@@ -8,7 +8,7 @@ be asked before (see galaxy_gives).
 from collections.abc import Collection, Iterable, Sequence
 from typing import NamedTuple
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 from ..gravity import Capability, Gravity
 from ..mass import MassModel
 

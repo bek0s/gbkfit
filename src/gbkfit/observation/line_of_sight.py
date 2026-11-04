@@ -14,14 +14,15 @@ from typing import Annotated, Any, Literal, TypeAlias
 import numpy as np
 from annotated_types import Ge, Gt, Le
 
+from gbkfit.config import (
+    ConfigError, Serializable, TypedParser, TypedSerializable, Unit,
+    check_options, warn)
 from gbkfit.driver import Driver
 from gbkfit.model import (
     MAX_SUBCHANNELS, AdditiveScenePlan, DepthUnit, Emission, Galaxy,
     Scene, ScenePlan, TransferScenePlan)
 from gbkfit.model.components.base import Component, DepthAxis
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -38,7 +39,7 @@ __all__ = [
 _Length: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 
 
-class Depth(parseutils.Serializable):
+class Depth(Serializable):
     """
     The depth axis of a grid, along the line of sight: centred on the
     plane of the sky.
@@ -58,7 +59,7 @@ class Depth(parseutils.Serializable):
         that of each galaxy; or 'legacy': the longer of those x and y axes,
         as the 3d models of earlier versions took it. A shorter axis than
         that of 'galaxy' (of 'legacy' or a length) loses the density
-        beyond its ends: a warning says so (see parseutils.warn).
+        beyond its ends: a warning says so (see warn).
     step : float, optional
         The size of its voxels (arcsec); by default that of the pixels
         along the longer of the x and y axes of that grid.
@@ -106,7 +107,7 @@ class Depth(parseutils.Serializable):
             extent = galaxy if self._extent == 'galaxy' else self._extent
             size = max(1, int(np.ceil(extent / step - 1e-9)))
         if size * step < galaxy * (1 - 1e-9):
-            parseutils.warn(
+            warn(
                 f"the depth axis ({size * step:g} arcsec) is shorter than "
                 f"the galaxies need ({galaxy:g} arcsec, the diagonal of the "
                 f"grid or twice their bounding radius): their density "
@@ -114,7 +115,7 @@ class Depth(parseutils.Serializable):
         return DepthAxis(size, step, -(size / 2 - 0.5) * step)
 
 
-class LineOfSight(parseutils.TypedSerializable, abc.ABC):
+class LineOfSight(TypedSerializable, abc.ABC):
     """
     How an observation treats the line of sight: on which grid it
     evaluates the galaxies it sees, and what components it can see.
@@ -404,7 +405,7 @@ class LineOfSightTransfer(LineOfSight):
             smoothing)
 
 
-line_of_sight_parser = parseutils.TypedParser(LineOfSight, [
+line_of_sight_parser = TypedParser(LineOfSight, [
     LineOfSightFlat,
     LineOfSightGrid,
     LineOfSightTransfer])

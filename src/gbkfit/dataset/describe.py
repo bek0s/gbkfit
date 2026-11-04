@@ -12,8 +12,8 @@ import astropy.io.fits
 import astropy.units
 import astropy.wcs
 
+from gbkfit.config import ConfigError
 from gbkfit.utils import fitsutils, gridutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
 from .data import Beam
 
 

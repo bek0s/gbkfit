@@ -20,8 +20,8 @@ import astropy.units
 import numpy as np
 from annotated_types import Ge
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options, load_option)
 
 
 __all__ = [
@@ -123,7 +123,7 @@ class ValidRange(NamedTuple):
             f"{')' if high else ']'}")
 
 
-class ParamDesc(parseutils.TypedSerializable, abc.ABC):
+class ParamDesc(TypedSerializable, abc.ABC):
     """
     The description of a parameter: a scalar, or a vector of elements.
 
@@ -400,7 +400,7 @@ class ParamVectorDesc(ParamDesc):
         return pdesc
 
 
-pdesc_parser = parseutils.TypedParser(ParamDesc, [
+pdesc_parser = TypedParser(ParamDesc, [
     ParamScalarDesc,
     ParamVectorDesc])
 
@@ -475,7 +475,7 @@ def load_pdescs_dict(info: Mapping[str, Any]) -> dict[str, ParamDesc]:
         If a configuration is invalid.
     """
     return {
-        name: parseutils.load_option(
+        name: load_option(
             pdesc_parser.load, info, name, required=True)
         for name in info}
 

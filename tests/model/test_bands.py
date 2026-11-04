@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 from modelutils import config_group_plan, group_plan
 
+from gbkfit.config import ConfigError
 from gbkfit.model import LineCatalogue
-from gbkfit.utils.parseutils import ConfigError
 
 
 DISK = dict(

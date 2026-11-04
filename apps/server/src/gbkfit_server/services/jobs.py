@@ -305,7 +305,7 @@ class Jobs:
     def _fits_file(self, value: Any) -> str | tuple[str, int | str] | None:
         """
         Return a file option of prep (a path relative to the workspace, or
-        {file, hdu}) with its absolute path (see typeutils.FitsFile).
+        {file, hdu}) with its absolute path (see FitsFile).
 
         Raises
         ------

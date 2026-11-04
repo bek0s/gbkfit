@@ -9,9 +9,8 @@ from typing import Annotated, Literal
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
+from gbkfit.config import Unit, check_options
 from gbkfit.params.pdescs import ParamDesc
-from gbkfit.utils.parseutils import check_options
-from gbkfit.utils.typeutils import Unit
 from .base import ZPTrait
 from .options import Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
 

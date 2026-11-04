@@ -20,9 +20,9 @@ from collections.abc import Callable
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils.parseutils import ConfigError
 from .base import MassContext
 from .units import G
 

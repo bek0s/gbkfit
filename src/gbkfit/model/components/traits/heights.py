@@ -12,9 +12,8 @@ import scipy.special
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
+from gbkfit.config import Unit, check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils.parseutils import check_options
-from gbkfit.utils.typeutils import Unit
 from .base import DHTrait, RHTrait, RotationFactorsInput, VHTrait
 from .options import Nodewise, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
 

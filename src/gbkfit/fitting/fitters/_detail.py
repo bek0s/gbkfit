@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.fitting.fitparams import FitParamWalkers
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import finite_difference_steps, jacobian
 from gbkfit.params import ModelEvaluationError
 from gbkfit.utils import threadutils
-from gbkfit.utils.parseutils import ConfigError
 
 if TYPE_CHECKING:
     from gbkfit.fitting.problem import FitProblem

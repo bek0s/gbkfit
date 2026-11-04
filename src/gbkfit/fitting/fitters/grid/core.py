@@ -10,13 +10,13 @@ from typing import Annotated, Any, Literal, Self
 import numpy as np
 from annotated_types import Ge, Gt
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
 from gbkfit.fitting.problem import MERITS, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.params import FreeElement, Prior
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [

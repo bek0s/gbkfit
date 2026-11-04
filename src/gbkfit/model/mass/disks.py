@@ -9,8 +9,8 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.params import ParamDesc, ParamValues
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import DiskDensity, MassComponent, MassContext, forces_in_plane
 from .surfaces import DiskSurface, disk_surface_parser
 from .vertical import DiskVertical, disk_vertical_parser

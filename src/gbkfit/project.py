@@ -36,8 +36,7 @@ from typing import Any, NamedTuple
 
 import ruamel.yaml
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError, config_path
 
 
 __all__ = [
@@ -683,7 +682,7 @@ def resolve(
         if section != 'params':
             config[section] = loaded
             continue
-        with parseutils.config_path('params'):
+        with config_path('params'):
             config['params'], owners = merge_params(loaded)
         sources['parameters'] = {
             name: sources['params'][i] for name, i in owners.items()}
@@ -694,7 +693,7 @@ def resolve(
     if isinstance(mock := config.get('mock'), Mapping) and 'noise' in mock:
         mock = config['mock'] = dict(mock)
         noise = mock['noise']
-        with parseutils.config_path('mock'):
+        with config_path('mock'):
             if isinstance(noise, list):
                 mock['noise'] = [
                     _piece(project, item, 'noise', i)
@@ -732,13 +731,13 @@ def _parts(
         found[key] = source if not isinstance(value, str) \
             else os.path.relpath(project.piece_file(key, value), base)
 
-    with parseutils.config_path('observations', index):
+    with config_path('observations', index):
         if 'data' in observation:
             part(observation, 'data')
         if isinstance(observation.get('instrument'), Mapping):
             instrument = observation['instrument'] = dict(
                 observation['instrument'])
-            with parseutils.config_path('instrument'):
+            with config_path('instrument'):
                 for key in ('psf', 'lsf'):
                     if key in instrument:
                         part(instrument, key)
@@ -757,7 +756,7 @@ def _piece(
     """
     if not isinstance(item, str):
         return item
-    with parseutils.config_path(section, *index):
+    with config_path(section, *index):
         if project is None:
             raise ConfigError(
                 f"'{item}' names a piece of a project, but the "
@@ -800,11 +799,11 @@ def merge_params(
     merged: dict[str, Any] = {}
     owners: dict[str, int] = {}
     for i, layer in enumerate(layers):
-        with parseutils.config_path(i):
+        with config_path(i):
             if not isinstance(layer, Mapping):
                 raise ConfigError("a layer of parameters must be a dictionary")
             for key, value in layer.items():
-                with parseutils.config_path(key):
+                with config_path(key):
                     merged[key] = _merge_option(key, merged.get(key), value)
             names = {_parameter(key) for key in layer.get('properties', {})}
             owners |= dict.fromkeys(names, i)

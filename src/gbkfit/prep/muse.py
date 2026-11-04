@@ -8,7 +8,7 @@ import astropy.table
 import astropy.units
 import numpy as np
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 
 __all__ = [

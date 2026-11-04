@@ -12,6 +12,7 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Ge, Gt
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
@@ -19,7 +20,6 @@ from gbkfit.fitting.fitters._tables import TableLayout, table_layout
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.result import Evidence
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 from . import _dnest4
 from ._output import DNest4Files, DNest4Output, posterior

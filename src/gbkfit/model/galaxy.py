@@ -7,10 +7,12 @@ from typing import Any, Self
 
 import numpy as np
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, TypedParser, check_name,
+    check_options, load_option)
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc
-from gbkfit.utils import gridutils, iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils import gridutils, iterutils
 from .components import _detail
 from .components._component_set import ComponentSet, ComponentSetPlan
 from .components._functions import GalaxyFunctions
@@ -38,7 +40,7 @@ __all__ = [
 ]
 
 
-component_parser = parseutils.TypedParser(Component, [
+component_parser = TypedParser(Component, [
     Disk,
     Cone,
     Spheroid,
@@ -46,7 +48,7 @@ component_parser = parseutils.TypedParser(Component, [
     Particles])
 
 
-class Galaxy(parseutils.Serializable):
+class Galaxy(Serializable):
     """
     A galaxy: its components, and its mass at a distance. Its components
     are what observations see: each emits light (its emission), removes
@@ -146,7 +148,7 @@ class Galaxy(parseutils.Serializable):
         """
         info = dict(info)
         if info.get('geometry') is not None:
-            info['geometry'] = parseutils.load_option(
+            info['geometry'] = load_option(
                 geometry_parser.load, info, 'geometry')
         _detail.load_geometries(
             info, ('components',), info.get('geometry') or Geometry())
@@ -183,7 +185,7 @@ class Galaxy(parseutils.Serializable):
             geometry: Geometry | None = None
     ):
         check_options(Galaxy.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         if redshift is not None and not redshift > -1:
             raise ConfigError(
                 f"the redshift must be above -1; it is {redshift}")
@@ -459,7 +461,7 @@ class Galaxy(parseutils.Serializable):
             depth)
 
 
-galaxy_parser = parseutils.BasicParser(Galaxy)
+galaxy_parser = BasicParser(Galaxy)
 
 
 def _or_host(driver: Driver | None) -> Driver:

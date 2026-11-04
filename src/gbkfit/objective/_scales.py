@@ -9,10 +9,10 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.observation import (
     Comparison, FluxScale, ModelData, ObservationGroup)
 from gbkfit.params import ParamValues, Solution, Solve, element_name
-from gbkfit.utils.parseutils import ConfigError
 from ._block import Block
 
 

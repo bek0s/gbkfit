@@ -19,6 +19,9 @@ from typing import Any, TypeAlias
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, config_path, load_option,
+    parse_options, parse_options_for_callable, report_unknown, resolve_path)
 from gbkfit.params._errors import ParamEvaluationError
 from gbkfit.params._expressions import (
     Expression, InvalidExpressionError, check_name)
@@ -30,8 +33,7 @@ from gbkfit.params.pdescs import (
 from gbkfit.params.priors import (
     Prior, PriorTruncated, PriorUniform, prior_parser)
 from gbkfit.params.solves import Solve, solve_parser
-from gbkfit.utils import funcutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import funcutils
 
 
 __all__ = [
@@ -127,7 +129,7 @@ class FreeElement:
 
     @classmethod
     def load(cls, info: Mapping[str, Any]) -> 'FreeElement':
-        return cls(**parseutils.parse_options_for_callable(
+        return cls(**parse_options_for_callable(
             dict(info), cls.__init__))
 
     def __init__(
@@ -288,9 +290,9 @@ def _spread(properties: Mapping[str, Any], size: int) -> list[dict[str, Any]]:
 
 def _load_transforms(info: dict[str, Any]) -> Transforms:
     """Load a transforms function from its file: info is {file, func}."""
-    opts = parseutils.parse_options(info, {'file', 'func'})
+    opts = parse_options(info, {'file', 'func'})
     return funcutils.load_function_from_file(
-        parseutils.resolve_path(opts['file']), opts['func'])
+        resolve_path(opts['file']), opts['func'])
 
 
 def _dump_transforms(transforms: Transforms) -> dict[str, str]:
@@ -310,7 +312,7 @@ def _dump_transforms(transforms: Transforms) -> dict[str, str]:
     return dict(file=code.co_filename, func=name)
 
 
-class ParamSpace(parseutils.Serializable):
+class ParamSpace(Serializable):
     """
     The parameters of a model evaluation or a fit: what sets each element
     of each parameter, and their evaluation.
@@ -337,7 +339,7 @@ class ParamSpace(parseutils.Serializable):
     subscript of integer constants to select elements of a vector (e.g.
     'v[0]', 'v[-1]', 'v[1:4]', 'v[::2]', 'v[[0, 2, 5]]'). Properties of
     unknown parameters are reported like unknown options (see
-    parseutils.report_unknown).
+    report_unknown).
 
     Expressions can use numbers, the values of parameters and their
     elements, constants, arithmetic, comparisons, conditional expressions
@@ -447,9 +449,9 @@ class ParamSpace(parseutils.Serializable):
                 "the parameters, by key")
         derived = info.pop('derived', None)
         if 'transforms' in info:
-            info['transforms'] = parseutils.load_option(
+            info['transforms'] = load_option(
                 _load_transforms, info, 'transforms')
-        opts = parseutils.parse_options_for_callable(
+        opts = parse_options_for_callable(
             info, cls.__init__,
             ignore_params=[
                 'pdescs', 'properties', 'constants', 'derived',
@@ -1084,7 +1086,7 @@ class ParamSpace(parseutils.Serializable):
         if unknown_keys:
             # (unless in lenient mode, an error among the others)
             try:
-                parseutils.report_unknown(
+                report_unknown(
                     "unknown parameters", unknown_keys, self._pdescs)
             except ConfigError as e:
                 errors.append(e.message)
@@ -1169,7 +1171,7 @@ class ParamSpace(parseutils.Serializable):
         elif isinstance(value, Mapping):
             kind = ParamKind.FREE
             try:
-                with parseutils.config_path(key):
+                with config_path(key):
                     free = FreeElement.load(value)
             except ConfigError as e:
                 raise ValueError(e.message) from None
@@ -1512,7 +1514,7 @@ class ParamSpace(parseutils.Serializable):
                 f"{', '.join(bad)}")
 
 
-param_space_parser = parseutils.BasicParser(ParamSpace)
+param_space_parser = BasicParser(ParamSpace)
 
 
 def _derived_values(
@@ -1530,7 +1532,7 @@ def _derived_values(
     """
     expressions, units = {}, {}
     for name, value in derived.items():
-        with parseutils.config_path('derived', name):
+        with config_path('derived', name):
             if isinstance(value, Mapping):
                 if set(value) - {'expr', 'unit'} or 'expr' not in value:
                     raise ConfigError(

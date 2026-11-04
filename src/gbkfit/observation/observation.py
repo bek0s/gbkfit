@@ -11,12 +11,13 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_name)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import Driver
 from gbkfit.model import DataUnit
 from gbkfit.params import ParamDesc, pdescs_with_units
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, LikelihoodGaussian
 from .observables import FluxScale, ObservablePlan
@@ -28,7 +29,7 @@ __all__ = [
 ]
 
 
-class Observation(parseutils.TypedSerializable, abc.ABC):
+class Observation(TypedSerializable, abc.ABC):
     """
     Data of galaxies, and how the model of the galaxies gives them: what
     the plan of an observation group evaluates (see ObservationGroup.plan),
@@ -86,7 +87,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
             model_can_lack_values: bool = False
     ):
         keys = tuple(keys)
-        parseutils.check_name(name)
+        check_name(name)
         if galaxies is not None:
             galaxies = tuple(galaxies)
             if not galaxies:
@@ -94,7 +95,7 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
             if len(set(galaxies)) != len(galaxies):
                 raise ConfigError(f"the galaxies repeat: {list(galaxies)}")
             for galaxy in galaxies:
-                parseutils.check_name(galaxy)
+                check_name(galaxy)
         if data is None and likelihood is not None:
             raise ConfigError("a likelihood needs data")
         if data is not None:
@@ -415,4 +416,4 @@ class Observation(parseutils.TypedSerializable, abc.ABC):
         return {}
 
 
-observation_parser = parseutils.TypedParser(Observation)
+observation_parser = TypedParser(Observation)

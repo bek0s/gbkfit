@@ -9,8 +9,8 @@ import copy
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import galaxy_parser
-from gbkfit.utils.parseutils import ConfigError
 
 
 # A disk of a uniform rotation (tangential), thin or thick

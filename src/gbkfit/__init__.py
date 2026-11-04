@@ -3,10 +3,9 @@ from typing import TYPE_CHECKING, Any
 from gbkfit._version import __version__
 
 if TYPE_CHECKING:
-    from gbkfit._catalogue import catalogue
-    from gbkfit._schema import schema
-    from gbkfit.setup import Description, Setup, describe, load
-    from gbkfit.utils.parseutils import ConfigError, Problem
+    from gbkfit.config import ConfigError, Problem
+    from gbkfit.config.catalogue import catalogue
+    from gbkfit.setup import Description, Setup, describe, load, schema
 
 
 __all__ = [
@@ -26,18 +25,15 @@ def __getattr__(name: str) -> Any:
     # The front door (see gbkfit.setup), imported on first use: it imports
     # the whole library, which a plain import of gbkfit (e.g. by its
     # command line) does not need
-    if name in ('Description', 'Setup', 'describe', 'load'):
+    if name in ('Description', 'Setup', 'describe', 'load', 'schema'):
         import gbkfit.setup
         return getattr(gbkfit.setup, name)
     if name in ('ConfigError', 'Problem'):
-        import gbkfit.utils.parseutils
-        return getattr(gbkfit.utils.parseutils, name)
+        import gbkfit.config
+        return getattr(gbkfit.config, name)
     if name == 'catalogue':
-        import gbkfit._catalogue
-        return gbkfit._catalogue.catalogue
-    if name == 'schema':
-        import gbkfit._schema
-        return gbkfit._schema.schema
+        import gbkfit.config.catalogue
+        return gbkfit.config.catalogue.catalogue
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

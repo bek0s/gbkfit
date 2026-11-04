@@ -8,13 +8,13 @@ import numpy as np
 import pytest
 from astropy.coordinates import SkyCoord
 
+from gbkfit.config import ConfigError
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
     LineOfSightFlat, ObservationGroup, ObservationSky, PixelMoments,
     SlitSpectra, observable_parser, observation_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 # A disk and a point off its centre (each of its own geometry), which an

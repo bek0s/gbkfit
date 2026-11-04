@@ -12,6 +12,7 @@ import numpy as np
 import scipy.stats
 from annotated_types import Gt
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting._subfits import Outcome, run_subfits
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, fitter_parser
 from gbkfit.control import FitControl
@@ -21,7 +22,6 @@ from gbkfit.fitting.problem import FitCounts, FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.objective import Objective
 from gbkfit.params import ParamSpace, Prior
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [

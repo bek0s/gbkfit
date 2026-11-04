@@ -20,10 +20,10 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Gt
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from ._field_grid import FieldGradient
 from ._qumond import phantom_gradient
 from ._scalar_field import solve_field
@@ -134,7 +134,7 @@ class GravityField(abc.ABC):
         """
 
 
-class Gravity(parseutils.TypedSerializable, abc.ABC):
+class Gravity(TypedSerializable, abc.ABC):
     """
     How the mass of a galaxy pulls: its parameters, and the field of the
     mass in each evaluation (see GravityField). Every field gives the
@@ -798,5 +798,5 @@ def _forces_of_components(mass_model: MassModel) -> str | None:
     return None
 
 
-gravity_parser = parseutils.TypedParser(
+gravity_parser = TypedParser(
     Gravity, [GravityNewton, GravityMOND, GravityHuSawicki, GravityPalatini])

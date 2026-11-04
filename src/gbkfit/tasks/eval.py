@@ -10,14 +10,14 @@ import os
 from typing import Any, Literal
 
 
+from gbkfit.config import ConfigError, config_path, paths_relative_to
 import gbkfit.outputs
 import gbkfit.setup
 from gbkfit.observation import (
     GroupPlan, Likelihood, MockOptions, Noise, observation_parser)
 from gbkfit.params import ParamValues
 from gbkfit.setup import ConfigFile
-from gbkfit.utils import numutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import numutils
 from . import _detail
 
 
@@ -139,8 +139,8 @@ def _eval(
             "the mode 'objective' needs data for every observation")
     mock = None
     if mode == 'mock':
-        with parseutils.paths_relative_to(root), \
-                parseutils.config_path('mock'):
+        with paths_relative_to(root), \
+                config_path('mock'):
             mock = MockOptions.load(cfg['mock'])
             noises, likelihoods = mock.per_observation(
                 group_plan.group().nobservations())
@@ -149,7 +149,7 @@ def _eval(
     if missing := [
             name for name, info in params.free_properties().items()
             if 'value' not in info]:
-        with parseutils.config_path('params'):
+        with config_path('params'):
             raise ConfigError(
                 f"an evaluation is at the 'value' of each free parameter; "
                 f"these have none: {missing}")
@@ -222,7 +222,7 @@ def _write_mocks(
     write their files and configurations (see eval_).
     """
     group = group_plan.group()
-    with parseutils.config_path('mock'):
+    with config_path('mock'):
         datasets = group_plan.mock(
             values, noises, mock.nmocks(), mock.nsamples(), mock.seed())
     sections = {k: v for k, v in cfg.items() if k != 'mock'}
@@ -234,7 +234,7 @@ def _write_mocks(
             folder = f'mocks/{k}/observations/{name}'
             directory = os.path.join(run.path, *folder.split('/'))
             os.makedirs(directory, exist_ok=True)
-            with parseutils.config_path('mock'):
+            with config_path('mock'):
                 mocked = observation.with_data(
                     datasets[i][k], likelihoods[i])
             # (the paths of the files of the data are relative to the

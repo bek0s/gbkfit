@@ -23,7 +23,7 @@ import gbkfit.model
 import gbkfit.observation
 import gbkfit.params
 import gbkfit.instrument
-from gbkfit._catalogue import family_of
+from gbkfit.config.catalogue import family_of
 from gbkfit.model.components import traits
 from gbkfit.utils import funcutils
 from modelutils import config_group_plan

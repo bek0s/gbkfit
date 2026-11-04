@@ -9,9 +9,9 @@ import copy
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras, GravityHuSawicki, GravityNewton, galaxy_parser
 from gbkfit.model.mass import MassContext, MassModel
-from gbkfit.utils.parseutils import ConfigError
 
 
 # The gravitational constant (kpc (km/s)^2 / Msun)

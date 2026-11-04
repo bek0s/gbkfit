@@ -18,13 +18,14 @@ import numpy as np
 from annotated_types import Ge, Gt, Lt
 from pydantic import FiniteFloat
 
+from gbkfit.config import (
+    ConfigError, FilePath, TypedParser, TypedSerializable, check_name,
+    check_options)
 from gbkfit.dataset import Dataset, NoiseCorrelation
 from gbkfit.math.correlation import (
     correlation_matrix, periodic_correlation, whitening_matrix)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import funcutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath
+from gbkfit.utils import funcutils
 
 if TYPE_CHECKING:
     from gbkfit.driver import Driver
@@ -90,7 +91,7 @@ class UpperLimit(NamedTuple):
     error: Annotated[FiniteFloat, Gt(0)]
 
 
-class Likelihood(parseutils.TypedSerializable, abc.ABC):
+class Likelihood(TypedSerializable, abc.ABC):
     """
     How the model of an observation is compared with its data: the noise
     model of the data. It can have parameters of its own, whose names
@@ -783,7 +784,7 @@ class LikelihoodUser(Likelihood):
     ):
         check_options(LikelihoodUser.__init__, locals())
         for param in params:
-            parseutils.check_name(param)
+            check_name(param)
         names = list(params)
         if repeated := sorted({p for p in names if names.count(p) > 1}):
             raise ConfigError(f"the parameters repeat: {repeated}")
@@ -855,5 +856,5 @@ class LikelihoodUser(Likelihood):
         return float(result)
 
 
-likelihood_parser = parseutils.TypedParser(
+likelihood_parser = TypedParser(
     Likelihood, [LikelihoodGaussian, LikelihoodUser])

@@ -11,8 +11,8 @@ from typing import Any, NamedTuple, Self
 
 import numpy as np
 
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError, TypedParser, TypedSerializable
+from gbkfit.utils import iterutils
 from .data import Data
 
 
@@ -36,7 +36,7 @@ class NoiseCorrelation(NamedTuple):
     spectral: np.ndarray | None
 
 
-class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
+class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
     """
     Named data items (see Data) of one shape, and where they were
     measured, which each kind of dataset describes (e.g. the grid of their
@@ -316,7 +316,7 @@ class Dataset(parseutils.TypedSerializable, Mapping[str, Data], abc.ABC):
             f"the spectra of {self.type()} data cannot be masked whole")
 
 
-class DatasetTypedParser(parseutils.TypedParser):
+class DatasetTypedParser(TypedParser):
     """
     The parser of the datasets: the files of several datasets dumped
     together need a prefix each.

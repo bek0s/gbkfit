@@ -3,8 +3,8 @@ import numpy as np
 import pytest
 from astropy.table import Table
 
+from gbkfit.config import ConfigError
 from gbkfit.utils import tableutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 @pytest.fixture

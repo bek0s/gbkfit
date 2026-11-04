@@ -10,9 +10,8 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
-from gbkfit.utils import (
-    fitsutils, gridutils, parseutils, tableutils, unitutils)
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError, config_path, parse_options, warn
+from gbkfit.utils import fitsutils, gridutils, tableutils, unitutils
 from .data import Data, DataColumns, DataFiles, dump_data
 
 if TYPE_CHECKING:
@@ -46,8 +45,8 @@ def cleaned(
     to each.
     """
     if outliers is not None:
-        with parseutils.config_path('outliers'):
-            options = parseutils.parse_options(
+        with config_path('outliers'):
+            options = parse_options(
                 dict(outliers), required={'size', 'nsigma'})
             dataset = _logged(
                 dataset,
@@ -173,7 +172,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
     Return a data item of the columns of a table: its values, errors and
     mask, in its unit (by default that of its column).
     """
-    with parseutils.config_path('column'):
+    with config_path('column'):
         values = tableutils.read_column(table, columns.column, columns.unit)
     unit = None if values.unit is astropy.units.dimensionless_unscaled \
         else values.unit
@@ -189,7 +188,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
                 f"{error}")
         error = np.full(values.shape, float(error))
     elif error is not None:
-        with parseutils.config_path('error'):
+        with config_path('error'):
             error = tableutils.read_column(table, error, None)
             if error.unit is not astropy.units.dimensionless_unscaled:
                 try:
@@ -201,7 +200,7 @@ def table_item(table: Table, columns: DataColumns) -> Data:
             error = error.value
     mask = None
     if columns.mask is not None:
-        with parseutils.config_path('mask'):
+        with config_path('mask'):
             mask = np.nan_to_num(
                 tableutils.read_column(table, columns.mask, None).value)
     return Data(values.value, mask, error, unit)
@@ -316,21 +315,21 @@ def cube_coords(
     A convention or a frame given for files that state another (e.g.
     optical for VRAD, radio velocities) relabels their velocities,
     without converting them: for a header that states the wrong one; a
-    warning says so (see parseutils.warn), as a convention copied by
+    warning says so (see warn), as a convention copied by
     mistake puts the lines off (by 3.4% at 5000 km/s), and a frame the
     velocities (by up to some 30 km/s).
     """
     spectral = spectral or gridutils.SpectralAxis()
     given, stated = spectral.convention(), coords.convention
     if given is not None and stated is not None and given != stated:
-        parseutils.warn(
+        warn(
             f"the spectral axis of the data states velocities of the "
             f"convention {stated!r}; they are taken as given, of the "
             f"convention {given!r}, without converting them")
     frame = spectral.frame()
     if frame is not None and coords.frame is not None \
             and frame != coords.frame:
-        parseutils.warn(
+        warn(
             f"the spectral axis of the data states velocities in the frame "
             f"{coords.frame!r}; they are taken as given, in the frame "
             f"{frame!r}, without converting them")

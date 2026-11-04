@@ -12,9 +12,9 @@ import numpy as np
 from annotated_types import Gt
 from astropy.table import Table
 
-from gbkfit.utils import parseutils, tableutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Column, FilePath, Unit
+from gbkfit.config import (
+    Column, ConfigError, FilePath, Unit, check_options, config_path)
+from gbkfit.utils import tableutils
 from . import _detail, _resampling
 from .base import Dataset
 from .data import Data, DataColumns
@@ -136,7 +136,7 @@ class DatasetProfile(Dataset):
         """
         check_options(DatasetProfile.from_file, locals())
         table = tableutils.read_table(file, format)
-        with parseutils.config_path('radius'):
+        with config_path('radius'):
             radii = tableutils.read_column(table, radius.column, radius.unit)
             if radii.unit is u.dimensionless_unscaled:
                 raise ConfigError(
@@ -144,7 +144,7 @@ class DatasetProfile(Dataset):
                     "column does not have")
         data = {}
         for key, item in items.items():
-            with parseutils.config_path(key):
+            with config_path(key):
                 data[key] = _detail.table_item(table, item)
         return cls(data, radii, distance)
 

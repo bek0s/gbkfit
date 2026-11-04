@@ -14,6 +14,7 @@ import time
 from collections.abc import Generator
 from typing import Any, Literal
 
+from gbkfit.config import ConfigError, config_path
 import gbkfit.fitting
 import gbkfit.outputs
 import gbkfit.params
@@ -22,8 +23,7 @@ import gbkfit.setup
 from gbkfit.observation import ObservationGroup
 from gbkfit.params import ParamSpace
 from gbkfit.setup import ConfigFile, Setup
-from gbkfit.utils import numutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import numutils
 from . import _detail, _progress
 
 
@@ -246,7 +246,7 @@ def _load_bootstrap(
     """
     if 'bootstrap' not in cfg:
         return None
-    with parseutils.config_path('bootstrap'):
+    with config_path('bootstrap'):
         options = gbkfit.fitting.BootstrapOptions.load(cfg['bootstrap'])
         options.check(group, params)
     return options

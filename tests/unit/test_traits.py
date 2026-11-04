@@ -8,8 +8,8 @@ import numpy as np
 import pytest
 import scipy.integrate
 
+from gbkfit.config import ConfigError
 from gbkfit.model.components import traits
-from gbkfit.utils.parseutils import ConfigError
 
 
 def kernel_consts_cases():

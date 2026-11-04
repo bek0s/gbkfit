@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 import scipy.optimize
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.model import galaxy_parser
 from gbkfit.objective import Objective
@@ -20,7 +21,6 @@ from gbkfit.observation import (
     line_of_sight_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 # A core of two Gaussians (an MGE) and a Sersic envelope, in a band

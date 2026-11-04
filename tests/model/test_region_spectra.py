@@ -5,6 +5,7 @@ cube in regions (apertures or bins), which must match those of an scube.
 
 import copy
 
+from gbkfit.config import ConfigError
 import gbkfit.dataset
 import gbkfit.region
 import gbkfit.params
@@ -18,7 +19,6 @@ from gbkfit.dataset import DatasetRegionSpectra
 from gbkfit.region import RegionsApertures, RegionsBins
 from gbkfit.utils import fitsutils, gridutils
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

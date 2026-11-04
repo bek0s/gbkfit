@@ -5,9 +5,9 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import *
 from gbkfit.utils.gridutils import Coords, SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 def test_data():

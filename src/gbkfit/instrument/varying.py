@@ -36,9 +36,10 @@ import astropy.table
 import astropy.units as u
 import numpy as np
 
-from gbkfit.utils import gridutils, parseutils, typeutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath
+from gbkfit.config import (
+    ConfigError, FilePath, Serializable, check_options, config_path,
+    option_types, parse_options_for_callable, unit_of, varying_options)
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -241,7 +242,7 @@ def blend(
     return result
 
 
-class SpectralTable(parseutils.Serializable):
+class SpectralTable(Serializable):
     """
     The values of an option at points of the spectral axis.
 
@@ -510,9 +511,9 @@ def load_tables(cls: type, info: dict[str, Any]) -> dict[str, Any]:
         If a table is invalid.
     """
     options = dict(info)
-    for name in typeutils.varying_options(cls.__init__):
+    for name in varying_options(cls.__init__):
         if isinstance(info.get(name), Mapping):
-            with parseutils.config_path(name):
+            with config_path(name):
                 options[name] = SpectralTable.load(info[name])
     return options
 
@@ -523,8 +524,8 @@ class _VaryingOptions:
     tables of values along the spectral axis (see PSF.varying).
 
     The options of the class that can vary are those whose annotations
-    are marked so (see typeutils.Varying); their units are those of the
-    annotations (see typeutils.Unit; none for none).
+    are marked so (see Varying); their units are those of the
+    annotations (see Unit; none for none).
 
     Parameters
     ----------
@@ -545,23 +546,23 @@ class _VaryingOptions:
             name: value for name, value in options.items()
             if isinstance(value, SpectralTable)}
         for name in tables:
-            if name not in typeutils.varying_options(cls.__init__):
+            if name not in varying_options(cls.__init__):
                 raise ConfigError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
         # Check the options with the first value of each table, and the
         # values of each table with the first values of the others
         first = {name: table.values()[0] for name, table in tables.items()}
-        checked = parseutils.parse_options_for_callable(
+        checked = parse_options_for_callable(
             options | first, cls.__init__)
         for name, table in tables.items():
-            with parseutils.config_path(name):
+            with config_path(name):
                 for value in table.values():
                     cls(**checked | {name: value})
-        types = typeutils.option_types(cls.__init__)
+        types = option_types(cls.__init__)
         self._cls = cls
         self._units = {
-            name: typeutils.unit_of(types[name]) or '' for name in tables}
+            name: unit_of(types[name]) or '' for name in tables}
         self._constants = {
             name: value for name, value in checked.items()
             if name not in tables}

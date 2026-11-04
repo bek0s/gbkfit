@@ -6,6 +6,7 @@ of the model before the PSF.
 import copy
 
 import astropy.units as u
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
@@ -15,7 +16,6 @@ from modelutils import group_plan
 from gbkfit.instrument import (
     Instrument, PrimaryBeamAiry, PrimaryBeamGauss, instrument_parser)
 from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

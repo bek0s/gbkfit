@@ -10,7 +10,7 @@ import pytest
 import ruamel.yaml
 
 from gbkfit import project
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 
 yaml = ruamel.yaml.YAML(typ='safe')

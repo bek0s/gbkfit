@@ -8,8 +8,8 @@ import astropy.wcs
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 def celestial_wcs(crval, crpix, rota):

@@ -8,8 +8,10 @@ import abc
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from gbkfit.utils import iterutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, TypedParser, TypedSerializable,
+    check_name, check_options)
+from gbkfit.utils import iterutils
 from . import traits
 from ._nodal import MAX_TRAITS
 
@@ -110,7 +112,7 @@ def _check_dispersion_directions(
 
 
 def _dump_traits(
-        parser: parseutils.TypedParser,
+        parser: TypedParser,
         value: tuple[traits.Trait | None, ...] | None
 ) -> list[dict[str, Any] | None] | None:
     """Return the configuration of traits (None items as None)."""
@@ -119,7 +121,7 @@ def _dump_traits(
     return [parser.dump(trait) for trait in value]
 
 
-class Density(parseutils.Serializable):
+class Density(Serializable):
     """
     The density of a component: its polar traits, the density per unit
     area of its surface (the plane of a disk, seen face-on), and for a
@@ -272,7 +274,7 @@ class KinematicTraits:
         return self._dhtraits
 
 
-class Equilibrium(parseutils.TypedSerializable, abc.ABC):
+class Equilibrium(TypedSerializable, abc.ABC):
     """
     The vertical equilibrium of a thick disk (see DiskTraitsKinematics):
     the disk is held up against the gravity of its galaxy by its velocity
@@ -378,7 +380,7 @@ class SelfGravitatingEquilibrium(Equilibrium):
     ):
         check_options(SelfGravitatingEquilibrium.__init__, locals())
         super().__init__(direction)
-        parseutils.check_name(mass)
+        check_name(mass)
         self._mass = mass
 
     def mass(self) -> str:
@@ -413,13 +415,13 @@ class JeansEquilibrium(Equilibrium):
         return 'jeans'
 
 
-equilibrium_parser = parseutils.TypedParser(Equilibrium, [
+equilibrium_parser = TypedParser(Equilibrium, [
     CentralEquilibrium,
     SelfGravitatingEquilibrium,
     JeansEquilibrium])
 
 
-class DiskTraitsKinematics(parseutils.TypedSerializable):
+class DiskTraitsKinematics(TypedSerializable):
     """
     How a disk moves, as its traits give (see KinematicTraits), and with
     a vertical equilibrium, the dispersion that holds a thick disk up
@@ -484,7 +486,7 @@ class DiskTraitsKinematics(parseutils.TypedSerializable):
         return self._equilibrium
 
 
-class ConeTraitsKinematics(parseutils.TypedSerializable):
+class ConeTraitsKinematics(TypedSerializable):
     """
     How a cone moves, as its traits give (see KinematicTraits). A cone
     that emits lines into a spectral cube needs kinematics.
@@ -536,10 +538,10 @@ class ConeTraitsKinematics(parseutils.TypedSerializable):
         return self._traits.dhtraits()
 
 
-density_parser = parseutils.BasicParser(Density)
+density_parser = BasicParser(Density)
 
-disk_kinematics_parser = parseutils.TypedParser(
+disk_kinematics_parser = TypedParser(
     DiskTraitsKinematics, [DiskTraitsKinematics])
 
-cone_kinematics_parser = parseutils.TypedParser(
+cone_kinematics_parser = TypedParser(
     ConeTraitsKinematics, [ConeTraitsKinematics])

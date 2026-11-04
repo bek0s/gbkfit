@@ -11,14 +11,13 @@ import numpy as np
 from annotated_types import Gt, Le
 from astropy.table import Table
 
+from gbkfit.config import ConfigError, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
 from gbkfit.utils import gridutils, unitutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan

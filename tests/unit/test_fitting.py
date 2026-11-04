@@ -14,6 +14,7 @@ import pytest
 import scipy.integrate
 import scipy.stats
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Data, DatasetPixelBrightness
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.fitting import (
@@ -31,7 +32,6 @@ from gbkfit.params import (
     PriorGauss, PriorGaussTrunc,
     PriorHalfCauchy, PriorHalfGauss, PriorLogUniform, PriorScipy, PriorSine,
     PriorTruncated, PriorUniform)
-from gbkfit.utils.parseutils import ConfigError
 
 
 # A disk of rings out to beyond the image

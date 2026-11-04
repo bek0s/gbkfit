@@ -8,8 +8,8 @@ from typing import Literal
 
 import numpy as np
 
+from gbkfit.config import check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils.parseutils import check_options
 from .base import SPTrait
 from .options import SAMPLINGS, SAMPLING_DEFAULT, Sampling
 

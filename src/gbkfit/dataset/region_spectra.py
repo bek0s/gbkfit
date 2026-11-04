@@ -8,11 +8,10 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, DataFile, check_options
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from gbkfit.utils.datafiles import ErrorKind
-from gbkfit.utils.typeutils import DataFile
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, dump_data

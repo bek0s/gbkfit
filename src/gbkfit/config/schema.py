@@ -28,14 +28,16 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
-from gbkfit._catalogue import Family, family_of
-from gbkfit.utils import parseutils, typeutils
+from .catalogue import Family, family_of
+from .serializable import Serializable, is_record
+from .types import (
+    DataFile, FilePath, FitsFile, describe_type, is_varying, option_types,
+    unit_of)
 
 
 __all__ = [
     'SchemaWriter',
-    'class_schema',
-    'schema'
+    'class_schema'
 ]
 
 
@@ -62,43 +64,7 @@ _PLAIN = {
     Any: {}}
 
 
-def schema() -> dict[str, Any]:
-    """
-    Return the JSON Schema (2020-12) of the configurations of GBKFIT.
-
-    It is written from the signatures of the constructors that
-    configurations call: the options of each, with their types, ranges,
-    choices, units (the keyword 'unit'), defaults and descriptions. The
-    members of families that need modules that are not installed are in
-    it too, with the keywords 'available' (false) and 'requires' (what to
-    install): it is the same on every machine. Classes have the schemas
-    of their own configurations (see Serializable.schema).
-
-    Returns
-    -------
-    dict
-        The schema.
-    """
-    # (setup imports the whole library)
-    from gbkfit.setup import _SECTIONS
-    writer = SchemaWriter()
-    properties = {}
-    for name, section in _SECTIONS.items():
-        value = writer.option(section.type)
-        if section.item_options:
-            value = writer.with_options(value, section.item_options)
-        if section.listed:
-            value = {'anyOf': [value, {'type': 'array', 'items': value}]}
-        properties[name] = value | {'description': section.desc}
-    required = [k for k, v in _SECTIONS.items() if v.required]
-    return {
-        '$schema': _DIALECT,
-        'title': 'GBKFIT configuration',
-        **_object(properties, required),
-        '$defs': writer.defs()}
-
-
-def class_schema(cls: type[parseutils.Serializable]) -> dict[str, Any]:
+def class_schema(cls: type[Serializable]) -> dict[str, Any]:
     """
     Return the JSON Schema (2020-12) of the configurations of a class (see
     Serializable.schema).
@@ -109,11 +75,7 @@ def class_schema(cls: type[parseutils.Serializable]) -> dict[str, Any]:
         If the class has no configurations.
     """
     writer = SchemaWriter()
-    return {
-        '$schema': _DIALECT,
-        'title': cls.__qualname__,
-        **writer.option(cls),
-        '$defs': writer.defs()}
+    return writer.document(cls.__qualname__, writer.option(cls))
 
 
 class SchemaWriter:
@@ -130,10 +92,31 @@ class SchemaWriter:
         """Return the definitions written so far, by name."""
         return dict(self._defs)
 
+    def document(self, title: str, root: dict[str, Any]) -> dict[str, Any]:
+        """
+        Return a whole schema: a schema written by this writer, with its
+        dialect, its title and the definitions it refers to.
+
+        Parameters
+        ----------
+        title : str
+            The title.
+        root : dict
+            The schema (e.g. of an option, see option).
+
+        Returns
+        -------
+        dict
+            The whole schema.
+        """
+        return {
+            '$schema': _DIALECT, 'title': title, **root,
+            '$defs': self.defs()}
+
     def option(self, type_: Any) -> dict[str, Any]:
         """
         Return the schema of the values of an option of a type annotation,
-        as configurations give them (see parseutils.from_config).
+        as configurations give them (see from_config).
 
         Raises
         ------
@@ -143,15 +126,15 @@ class SchemaWriter:
         """
         if type_ in _PLAIN:
             return dict(_PLAIN[type_])
-        if type_ == typeutils.FilePath:
+        if type_ == FilePath:
             return {'type': 'string', 'format': 'path'}
-        if type_ == typeutils.FitsFile:
+        if type_ == FitsFile:
             return {'anyOf': [
                 {'type': 'string', 'format': 'path'},
                 _object(
                     {'file': {'type': 'string', 'format': 'path'},
                      'hdu': {'type': ['integer', 'string']}}, ['file'])]}
-        if type_ == typeutils.DataFile:
+        if type_ == DataFile:
             return {'anyOf': [
                 {'type': 'string', 'format': 'path'},
                 _object(
@@ -187,22 +170,22 @@ class SchemaWriter:
             return _object({
                 'value': {'type': ['number', 'array']},
                 'unit': {'type': 'string'}}, ['value', 'unit'])
-        if isinstance(type_, type) and parseutils.is_record(type_):
+        if isinstance(type_, type) and is_record(type_):
             return self._record(type_)
         if isinstance(type_, type) and (family := family_of(type_)):
             return self._ref(family.name, lambda: self._family(family))
         if isinstance(type_, type) \
-                and issubclass(type_, parseutils.Serializable) \
+                and issubclass(type_, Serializable) \
                 and not inspect.isabstract(type_):
             return self._ref(
                 type_.__qualname__, lambda: self.constructors(type_))
         raise TypeError(
-            f"options of the type {typeutils.describe_type(type_)} have no "
+            f"options of the type {describe_type(type_)} have no "
             f"form in configurations")
 
     def constructors(
             self,
-            cls: type[parseutils.Serializable]
+            cls: type[Serializable]
     ) -> dict[str, Any]:
         """
         Return the schema of the configurations of a class: the options
@@ -280,7 +263,7 @@ class SchemaWriter:
 
     def _constructor(
             self,
-            cls: type[parseutils.Serializable],
+            cls: type[Serializable],
             name: str
     ) -> dict[str, Any]:
         """Return the schema of the options of a config constructor."""
@@ -298,7 +281,7 @@ class SchemaWriter:
         Return the schema of an object of the options of the parameters of
         a callable (a constructor, or a record), with their descriptions.
         """
-        hints = typeutils.option_types(func)
+        hints = option_types(func)
         params = inspect.signature(func).parameters
         properties, required = {}, []
         others: Any = False
@@ -315,12 +298,12 @@ class SchemaWriter:
             if param.kind is param.VAR_KEYWORD:
                 others = schema
                 continue
-            if typeutils.is_varying(hints.get(name)):
+            if is_varying(hints.get(name)):
                 # (an option that varies along the spectral axis is given
-                # as a table of its values too, see typeutils.Varying)
+                # as a table of its values too, see Varying)
                 from gbkfit.instrument import SpectralTable
                 schema = {'anyOf': [schema, self.option(SpectralTable)]}
-            if (unit := typeutils.unit_of(hints.get(name))) is not None:
+            if (unit := unit_of(hints.get(name))) is not None:
                 schema['unit'] = unit
             if name in docs:
                 schema['description'] = docs[name]

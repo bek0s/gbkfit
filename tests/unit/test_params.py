@@ -10,11 +10,11 @@ import numpy as np
 import pytest
 
 import gbkfit
+from gbkfit.config import ConfigError
 from gbkfit.params._expressions import Expression, InvalidExpressionError
 from gbkfit.params._keys import InvalidKeyError, parse_key
 from gbkfit.params.pdescs import (
     ParamScalarDesc, ParamVectorDesc, default_values, pdesc_parser)
-from gbkfit.utils.parseutils import ConfigError
 
 
 def describe(pdesc):

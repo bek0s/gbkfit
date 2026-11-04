@@ -17,9 +17,9 @@ import scipy.integrate
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
+from gbkfit.config import check_options
 from gbkfit.driver import Driver
 from gbkfit.params import ParamDesc, ParamValues, ParamVectorDesc
-from gbkfit.utils.parseutils import check_options
 from .._native import ParamBuffer
 from .._needs import Need
 from ...gravity import Capability

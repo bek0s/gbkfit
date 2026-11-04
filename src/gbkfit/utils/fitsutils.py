@@ -21,10 +21,9 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 
-from gbkfit.utils import parseutils
+from gbkfit.config import ConfigError, warn
 from gbkfit.utils.gridutils import (
     FRAMES, Coords, make_convention, make_medium, make_rest)
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [
@@ -372,9 +371,9 @@ def read_array(
         # The warnings of the fixes of astropy to the header are left out,
         # as they are not of the orientation. That changes the warning
         # filters of the whole process for a moment, which can only show
-        # or hide a warning of another thread (see typeutils._adapter for
-        # the fix once Python 3.14 is the least supported); astropy cannot
-        # fix a header without warning.
+        # or hide a warning of another thread (see the type adapters of
+        # options for the fix once Python 3.14 is the least supported);
+        # astropy cannot fix a header without warning.
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
             header, orientation = _oriented(filename, header, data.shape)
@@ -971,11 +970,11 @@ def _frame(source: str, wcs: astropy.wcs.WCS) -> str | None:
     """
     Return the frame of rest of the velocities of a WCS (SPECSYS, see
     gridutils.FRAMES), if it gives one of FITS; a warning says when it
-    gives another (see parseutils.warn), which is left out.
+    gives another (see warn), which is left out.
     """
     frame = wcs.wcs.specsys.strip().upper()
     if frame and frame not in FRAMES:
-        parseutils.warn(
+        warn(
             f"{source}: SPECSYS is {frame!r}, not a frame of FITS "
             f"({', '.join(FRAMES)}); it is left out")
     return frame if frame in FRAMES else None

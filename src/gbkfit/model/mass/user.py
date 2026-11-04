@@ -8,11 +8,10 @@ from typing import Any
 import numpy as np
 import numpy.typing as npt
 
+from gbkfit.config import ConfigError, FilePath, check_name, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import funcutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath
+from gbkfit.utils import funcutils
 from .base import MassComponent, MassContext
 
 
@@ -146,7 +145,7 @@ class MassUser(MassComponent):
         check_options(MassUser.__init__, locals())
         super().__init__(name)
         for param in params:
-            parseutils.check_name(param)
+            check_name(param)
         names = list(params)
         if repeated := sorted({p for p in names if names.count(p) > 1}):
             raise ConfigError(f"the parameters repeat: {repeated}")

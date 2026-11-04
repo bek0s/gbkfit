@@ -9,8 +9,8 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError, TypedParser
+from gbkfit.utils import gridutils
 
 if TYPE_CHECKING:
     from .lsfs import LSF
@@ -116,7 +116,7 @@ def terms_velocity_range(
 
 
 def dump_terms(
-        parser: parseutils.TypedParser,
+        parser: TypedParser,
         terms: Sequence[_Term],
         prefix: str,
         dump_path: bool,

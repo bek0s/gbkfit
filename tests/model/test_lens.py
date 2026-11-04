@@ -6,6 +6,7 @@ position less the deflection there.
 
 import copy
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
@@ -15,7 +16,6 @@ from gbkfit.observation import (
     Foreground, Lens, LensDeflectionMap, LensEPL, LensMultipole, LensNFW,
     LensSIE, LensShear, foreground_parser)
 from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 DISK = dict(

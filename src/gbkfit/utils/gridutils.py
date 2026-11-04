@@ -18,8 +18,7 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Gt
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import BasicParser, ConfigError, Serializable, check_options
 
 
 __all__ = [
@@ -934,7 +933,7 @@ class SpectraData(NamedTuple):
     unit: str | None = None
 
 
-class SpectralAxis(parseutils.Serializable):
+class SpectralAxis(Serializable):
     """
     The spectral axis of an observable or of data: its channels, of
     velocities (km/s) of a convention, and what light is at each velocity
@@ -1005,7 +1004,7 @@ class SpectralAxis(parseutils.Serializable):
             medium: Literal['vacuum', 'air'] | None = None,
             frame: Literal[FRAMES] | None = None
     ):
-        parseutils.check_options(SpectralAxis.__init__, locals())
+        check_options(SpectralAxis.__init__, locals())
         self._rest = make_rest(rest)
         make_medium(medium, self._rest)
         make_convention(convention, self._rest)
@@ -1058,4 +1057,4 @@ class SpectralAxis(parseutils.Serializable):
         return SpectralAxis(**self.dump() | other.dump())
 
 
-spectral_axis_parser = parseutils.BasicParser(SpectralAxis)
+spectral_axis_parser = BasicParser(SpectralAxis)

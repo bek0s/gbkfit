@@ -8,13 +8,13 @@ import numpy as np
 import pytest
 from astropy.io import fits
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import (
     Data, DatasetPixelBrightness, DatasetPixelMoments, DatasetPixelSpectra,
     DatasetRegionMoments, DatasetRegionSpectra)
 from gbkfit.region import (
     ApertureCircle, AperturePolygon, ApertureRectangle, RegionsApertures,
     RegionsBins)
-from gbkfit.utils.parseutils import ConfigError
 
 
 def test_a_spike_in_a_velocity_map_is_masked_not_its_gradient():

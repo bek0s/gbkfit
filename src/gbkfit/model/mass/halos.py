@@ -11,9 +11,9 @@ import numpy as np
 import numpy.typing as npt
 import scipy.special
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import MassContext
 from .halo_params import (
     PARAMETERISATIONS, Overdensity, halo_scale_radius, halo_scales,

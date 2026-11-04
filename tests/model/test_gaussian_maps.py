@@ -5,6 +5,7 @@ mmaps and bmaps), as the maps of data often are.
 
 import copy
 
+from gbkfit.config import ConfigError
 import gbkfit.params
 import numpy as np
 import pytest
@@ -12,7 +13,6 @@ from modelutils import group_plan
 
 from gbkfit.observation.observables._moments import MomentsPlan
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 GALAXY = dict(components=[dict(

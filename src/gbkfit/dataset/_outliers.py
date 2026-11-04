@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import scipy.spatial
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 if TYPE_CHECKING:
     from .base import Dataset

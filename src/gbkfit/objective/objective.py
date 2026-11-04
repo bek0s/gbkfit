@@ -9,6 +9,7 @@ from typing import Any, NamedTuple, Self
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Dataset
 from gbkfit.driver import DeviceArray
 from gbkfit.model import Extras
@@ -16,7 +17,6 @@ from gbkfit.observation import GroupPlan, ModelData, ObservationGroup
 from gbkfit.params import (
     ParamDesc, ParamValues, Solution, Solve, with_elements)
 from gbkfit.utils import threadutils
-from gbkfit.utils.parseutils import ConfigError
 from ._amplitudes import amplitude_blocks
 from ._block import Block
 from ._orbits import orbit_blocks

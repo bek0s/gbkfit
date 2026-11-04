@@ -6,11 +6,11 @@ and traits), and their errors.
 
 import numpy as np
 import pytest
+from gbkfit.config import ConfigError
 from gbkfit.model import BandEmission, LineEmission, galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
 from gbkfit.observation import Depth, LineOfSightGrid
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 EXPONENTIAL = dict(type='exponential')

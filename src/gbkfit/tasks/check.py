@@ -12,11 +12,11 @@ import os
 from collections.abc import Mapping
 from typing import Any, NamedTuple
 
+from gbkfit.config import (
+    Problem, collect_problems, config_path, paths_relative_to, strict_mode)
 import gbkfit.fitting
 import gbkfit.observation
 import gbkfit.setup
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import Problem
 
 
 __all__ = [
@@ -58,8 +58,8 @@ def check(config: str, texts: Mapping[str, str] | None = None) -> Checked:
     description = gbkfit.setup.describe(config, texts)
     problems = list(description.problems)
     if description.params is not None:
-        with parseutils.strict_mode(False), \
-                parseutils.collect_problems() as task_problems:
+        with strict_mode(False), \
+                collect_problems() as task_problems:
             _check_task_sections(description)
         problems += task_problems
     return Checked(problems, description.sources)
@@ -74,12 +74,12 @@ def _check_task_sections(description: gbkfit.setup.Description) -> None:
     config, group = description.config, description.group
     # (their paths relative to the root of the configuration, as eval
     # takes them, not to the current directory)
-    with parseutils.paths_relative_to(description.root or os.curdir):
+    with paths_relative_to(description.root or os.curdir):
         if 'mock' in config:
-            with parseutils.config_path('mock'):
+            with config_path('mock'):
                 gbkfit.observation.MockOptions.load(
                     config['mock']).per_observation(group.nobservations())
         if 'bootstrap' in config and group.has_data():
-            with parseutils.config_path('bootstrap'):
+            with config_path('bootstrap'):
                 gbkfit.fitting.BootstrapOptions.load(
                     config['bootstrap']).check(group, description.params)

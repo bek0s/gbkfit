@@ -15,9 +15,8 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Ge, Gt
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, Unit, check_options)
 
 
 __all__ = [
@@ -27,7 +26,7 @@ __all__ = [
 ]
 
 
-class Aperture(parseutils.TypedSerializable, abc.ABC):
+class Aperture(TypedSerializable, abc.ABC):
     """
     An aperture in front of a disperser: open rectangles along the axes
     of the image (see the module).
@@ -157,4 +156,4 @@ class ApertureShutters(Aperture):
             y + offsets - length / 2, y + offsets + length / 2])
 
 
-aperture_parser = parseutils.TypedParser(Aperture, [ApertureShutters])
+aperture_parser = TypedParser(Aperture, [ApertureShutters])

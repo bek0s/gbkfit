@@ -1,7 +1,7 @@
 """
 Tests that the constructors that configurations call declare their
 options: each parameter is annotated, and checked first, by the
-constructor named by its class (see parseutils.check_options).
+constructor named by its class (see check_options).
 """
 
 import ast
@@ -10,6 +10,7 @@ import textwrap
 
 import pytest
 
+from gbkfit.config import option_types
 import gbkfit.fitting
 import gbkfit.instrument
 import gbkfit.model
@@ -18,7 +19,7 @@ import gbkfit.model.components.parts
 import gbkfit.model.mass
 import gbkfit.observation
 from gbkfit import catalogue
-from gbkfit.utils import funcutils, typeutils
+from gbkfit.utils import funcutils
 
 
 # The classes whose options are declared, besides the members of the
@@ -60,7 +61,7 @@ def constructors():
 @pytest.mark.parametrize('func', list(constructors()))
 def test_constructors_declare_their_options(func):
     params = funcutils.parameter_names(func).all
-    assert set(params) <= set(typeutils.option_types(func))
+    assert set(params) <= set(option_types(func))
     body = ast.parse(textwrap.dedent(inspect.getsource(func))).body[0].body
     if isinstance(body[0], ast.Expr) and isinstance(
             body[0].value, ast.Constant):

@@ -7,6 +7,7 @@ import astropy.units as u
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.dataset import Beam, Data, DatasetPixelSpectra
 from gbkfit.instrument import Instrument, PSFGaussBeam
 from gbkfit.model import galaxy_parser
@@ -14,7 +15,6 @@ from gbkfit.observation import (
     ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
 from gbkfit.params import ParamSpace
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 HI = 1420.405751768 * u.MHz

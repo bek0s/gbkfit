@@ -12,13 +12,13 @@ import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import FitStopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
 from gbkfit.fitting.fitters._detail import start_walkers
 from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
-from gbkfit.utils.parseutils import ConfigError, check_options
 
 
 __all__ = [

@@ -16,7 +16,8 @@ from gbkfit import (
     params, region)
 from gbkfit.model.components import spheroids, traits
 from gbkfit.observation.observables import apertures, traces
-from gbkfit.utils import parseutils
+from .parsers import TypedParser
+from .serializable import TypedSerializable, missing_modules
 
 
 __all__ = [
@@ -28,7 +29,7 @@ __all__ = [
 
 
 # The families, by name
-_PARSERS: dict[str, parseutils.TypedParser] = dict(
+_PARSERS: dict[str, TypedParser] = dict(
     aperture=region.aperture_parser,
     bootstrap_scheme=fitting.bootstrap_scheme_parser,
     component=model.component_parser,
@@ -98,7 +99,7 @@ class Member:
     """
 
     type: str
-    cls: type[parseutils.TypedSerializable]
+    cls: type[TypedSerializable]
     missing: Mapping[str, str]
 
     def available(self) -> bool:
@@ -123,10 +124,10 @@ class Family:
     """
 
     name: str
-    parser: parseutils.TypedParser
+    parser: TypedParser
     members: tuple[Member, ...]
 
-    def base(self) -> type[parseutils.TypedSerializable]:
+    def base(self) -> type[TypedSerializable]:
         """Return its base class."""
         return self.parser.cls()
 
@@ -164,9 +165,9 @@ def family_of(base: type) -> Family | None:
     return None
 
 
-def _family(name: str, parser: parseutils.TypedParser) -> Family:
+def _family(name: str, parser: TypedParser) -> Family:
     """Return a family of the catalogue, of its name and parser."""
     members = tuple(
-        Member(type_, cls, parseutils.missing_modules(cls))
+        Member(type_, cls, missing_modules(cls))
         for type_, cls in sorted(parser.registered_classes().items()))
     return Family(name, parser, members)

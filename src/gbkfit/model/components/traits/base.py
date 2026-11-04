@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 import numpy as np
 
+from gbkfit.config import (
+    ConfigError, TypedSerializable, check_name, check_options, make_typed_desc)
 from gbkfit.params.pdescs import ParamDesc, ParamVectorDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .options import (
     Blobs, Direction, DispersionDirection, Nodewise, SAMPLING_DEFAULT, Sampling,
     TraitOption, VPT_DIRECTIONS, VPT_DIRECTION_PLANE, Zmax, splits_around)
@@ -93,7 +93,7 @@ class ImageInput(GalaxyInput):
     """
 
 
-class Trait(parseutils.TypedSerializable, abc.ABC):
+class Trait(TypedSerializable, abc.ABC):
     """
     A trait of a component made of nodes: a profile of one of its
     properties (see the package docstring). A trait declares its type
@@ -135,7 +135,7 @@ class Trait(parseutils.TypedSerializable, abc.ABC):
 
     def __init__(self, *options: TraitOption, name: str | None = None):
         check_options(Trait.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         self._options = options
         self._name = name
 
@@ -505,7 +505,7 @@ def trait_desc(cls: type[Trait]) -> str:
         ZPTrait: 'vertical distortion polar trait',
         SPTrait: 'selection polar trait'}
     label = next(v for k, v in descs.items() if issubclass(cls, k))
-    return parseutils.make_typed_desc(cls, label)
+    return make_typed_desc(cls, label)
 
 
 def params_nw_distortion(

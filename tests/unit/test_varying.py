@@ -7,9 +7,9 @@ import astropy.units as u
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError, paths_relative_to
 from gbkfit.instrument import lsf_parser, psf_parser
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 C = 299792.458
@@ -258,11 +258,10 @@ def test_spectral_tables_from_files(tmp_path):
 
 def test_table_files_are_relative_to_the_configuration(tmp_path):
     # A relative table file is in the folder of the configuration (see
-    # parseutils.paths_relative_to), not in the current one
-    from gbkfit.utils import parseutils
+    # paths_relative_to), not in the current one
     folder = tmp_path / 'config'
     folder.mkdir()
     info = alpha_table(folder, 'ecsv') | dict(file='psf.ecsv')
-    with parseutils.paths_relative_to(str(folder)):
+    with paths_relative_to(str(folder)):
         psf = psf_parser.load(dict(type='moffat', alpha=info, beta=2.5))
     assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)

@@ -20,10 +20,10 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .mass.units import G
 
 
@@ -104,7 +104,7 @@ def _baryon_fraction(cosmology: str) -> float | None:
     return None if cosmo.Ob0 is None else float(cosmo.Ob0 / cosmo.Om0)
 
 
-class Distance(parseutils.TypedSerializable, abc.ABC):
+class Distance(TypedSerializable, abc.ABC):
     """
     The distance of a galaxy: its parameters, the length of an arcsec at
     the galaxy, and the epoch and the cosmology of the quantities of the
@@ -321,6 +321,6 @@ class DistanceRedshift(Distance):
                 f"has {redshift}")
 
 
-distance_parser = parseutils.TypedParser(Distance, [
+distance_parser = TypedParser(Distance, [
     DistanceDirect,
     DistanceRedshift])

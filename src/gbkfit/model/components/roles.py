@@ -9,8 +9,9 @@ from typing import Any
 
 import astropy.units
 
-from gbkfit.utils import iterutils, parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_options, config_path)
+from gbkfit.utils import iterutils, unitutils
 from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
@@ -47,12 +48,12 @@ def _named(
     """
     named = []
     for i, item in enumerate(iterutils.listify(items)):
-        with parseutils.config_path(option, i):
+        with config_path(option, i):
             named.append(lookup(item) if isinstance(item, str) else item)
     return named
 
 
-class Emission(parseutils.TypedSerializable, abc.ABC):
+class Emission(TypedSerializable, abc.ABC):
     """
     The light that a component emits: its density, with a spectral shape.
     Spectral cubes see the components that emit lines, and images those
@@ -290,7 +291,7 @@ def _dump_unit(unit: astropy.units.UnitBase | None) -> dict[str, str]:
     return {} if unit is None else dict(unit=unitutils.format_unit(unit))
 
 
-class Opacity(parseutils.TypedSerializable, abc.ABC):
+class Opacity(TypedSerializable, abc.ABC):
     """
     What a component removes from the light behind it: its density, with
     a spectral shape. It needs a line of sight with a depth axis.
@@ -345,11 +346,11 @@ class DustOpacity(Opacity):
         return self._law
 
 
-emission_parser = parseutils.TypedParser(Emission, [
+emission_parser = TypedParser(Emission, [
     LineEmission,
     BandEmission,
     StarsEmission])
 
 # (the disks register their line opacity, LineOpacity)
-opacity_parser = parseutils.TypedParser(Opacity, [
+opacity_parser = TypedParser(Opacity, [
     DustOpacity])

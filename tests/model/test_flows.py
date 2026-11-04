@@ -8,10 +8,10 @@ the density of a spiral density wave (the density trait spiral).
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.model import component_parser, galaxy_parser
 from gbkfit.model.components.disks._profiles import NodalDiskDensity
 from gbkfit.model.components.traits import RPTraitSpiral, VPTraitSpiral
-from gbkfit.utils.parseutils import ConfigError
 
 
 RNODES = list(range(0, 13))

@@ -11,9 +11,9 @@ from typing import Annotated, Any, Literal
 import numpy as np
 from annotated_types import Ge
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, check_name, check_options)
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
 from .options import (
     Direction, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, SAMPLING_TAIL,
@@ -85,7 +85,7 @@ def _splits_bar(r: np.ndarray, params: dict[str, np.ndarray]) -> np.ndarray:
     return np.concatenate((p - a, p + a, p + 180 - a, p + 180 + a), axis=1)
 
 
-class PressureSupport(parseutils.TypedSerializable, abc.ABC):
+class PressureSupport(TypedSerializable, abc.ABC):
     """
     How the rotation of a disk in the gravity of its galaxy is corrected
     for its pressure (see VPTraitMass): with the density of the disk, or
@@ -119,7 +119,7 @@ class PressureSupport(parseutils.TypedSerializable, abc.ABC):
                     f"the mass of a pressure support names mass components, "
                     f"at least one and each once; it is {list(mass)}")
             for name in mass:
-                parseutils.check_name(name)
+                check_name(name)
         self._mass = mass
 
     def mass(self) -> tuple[str, ...] | None:
@@ -162,7 +162,7 @@ class PressureSupportSelfGravitating(PressureSupport):
         return 'self_gravitating'
 
 
-pressure_support_parser = parseutils.TypedParser(
+pressure_support_parser = TypedParser(
     PressureSupport, [PressureSupportJeans, PressureSupportSelfGravitating])
 
 

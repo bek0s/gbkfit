@@ -9,10 +9,9 @@ from typing import Any
 import astropy.io.fits
 import numpy as np
 
+from gbkfit.config import ConfigError, FilePath, check_options, config_path
 from gbkfit.region import Regions, regions_parser
-from gbkfit.utils import parseutils, tableutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FilePath
+from gbkfit.utils import tableutils
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data, DataColumns, DataFiles, dump_data
@@ -154,7 +153,7 @@ class DatasetRegionMoments(Dataset):
         table = tableutils.read_table(file, format)
         items = {}
         for name, columns in _detail.moment_options(locals()).items():
-            with parseutils.config_path(name):
+            with config_path(name):
                 items[name] = _detail.table_item(table, columns)
         if not items:
             raise ConfigError("a dataset needs at least one moment")

@@ -10,13 +10,13 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray
 from gbkfit.observation import (
     Comparison, GroupPlan, OrbitRecording, OrbitSeries)
 from gbkfit.params import (
     ParamValues, ParamView, Solution, Solve, StageCache, element_name,
     solve_together_rows)
-from gbkfit.utils.parseutils import ConfigError
 from ._block import Block
 
 

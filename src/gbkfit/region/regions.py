@@ -13,9 +13,10 @@ import numpy.typing as npt
 import scipy.sparse
 from astropy.io import fits
 
-from gbkfit.utils import fitsutils, gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import FitsFile, Unit, split_fits_file
+from gbkfit.config import (
+    ConfigError, FitsFile, TypedParser, TypedSerializable, Unit, check_options,
+    split_fits_file)
+from gbkfit.utils import fitsutils, gridutils
 from .apertures import Aperture, aperture_parser
 
 
@@ -39,7 +40,7 @@ def _per_axis(value: _PerAxis) -> list[float] | None:
         else None if value is None else list(value)
 
 
-class Regions(parseutils.TypedSerializable, abc.ABC):
+class Regions(TypedSerializable, abc.ABC):
     """
     The regions of the sky in which data were measured, each the weighted
     sum of the pixels of a spatial grid (see weights()): e.g. bins of
@@ -309,6 +310,6 @@ class RegionsApertures(Regions):
             shape=(len(self._apertures), npix))
 
 
-regions_parser = parseutils.TypedParser(Regions, [
+regions_parser = TypedParser(Regions, [
     RegionsApertures,
     RegionsBins])

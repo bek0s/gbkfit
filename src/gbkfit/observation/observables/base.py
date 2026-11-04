@@ -11,14 +11,15 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Self, TypeAlias
 import astropy.units
 import numpy as np
 
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, make_typed_desc)
 from gbkfit.dataset import Data, Dataset
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import (
     DataUnit, Emission, Extras, GalaxyState, LightUnit)
 from gbkfit.params import ParamValues
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.utils import gridutils
 
 if TYPE_CHECKING:
     from gbkfit.model import Scene
@@ -61,7 +62,7 @@ class FluxScale(NamedTuple):
     size: int
 
 
-class Observable(parseutils.TypedSerializable, abc.ABC):
+class Observable(TypedSerializable, abc.ABC):
     """
     What a dataset measures, made from a model seen through an
     instrument: the form of the data (their items, see keys) and their
@@ -347,7 +348,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         its pixel weights, if any (see ObservationSky), before any plan.
 
         It warns about the options of the observable that the instrument
-        makes useless (see parseutils.warn). Here, every observation suits;
+        makes useless (see warn). Here, every observation suits;
         observables override this.
 
         Parameters
@@ -415,7 +416,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         """
         self._require_dataset_class(dataset)
         if set(dataset.keys()) != set(self.keys()):
-            desc = parseutils.make_typed_desc(self.__class__, 'observable')
+            desc = make_typed_desc(self.__class__, 'observable')
             raise ConfigError(
                 f"{desc} has the data items {sorted(self.keys())}, but the "
                 f"data have {sorted(dataset.keys())}")
@@ -425,8 +426,8 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
     def _require_dataset_class(cls, dataset: Dataset) -> None:
         """Raise ConfigError unless the dataset is of the dataset class."""
         if not isinstance(dataset, cls.dataset_class):
-            desc = parseutils.make_typed_desc(cls, 'observable')
-            dataset_desc = parseutils.make_typed_desc(
+            desc = make_typed_desc(cls, 'observable')
+            dataset_desc = make_typed_desc(
                 dataset.__class__, 'dataset')
             raise ConfigError(f"{desc} cannot be compared with {dataset_desc}")
 
@@ -436,7 +437,7 @@ class Observable(parseutils.TypedSerializable, abc.ABC):
         observable. Observables of other data override this.
         """
         if dataset.grid() != self._grid:
-            desc = parseutils.make_typed_desc(self.__class__, 'observable')
+            desc = make_typed_desc(self.__class__, 'observable')
             raise ConfigError(
                 f"the data are on the grid {dataset.grid()}, but {desc} "
                 f"is on the grid {self._grid}")
@@ -676,4 +677,4 @@ class ObservablePlan(abc.ABC):
         pass
 
 
-observable_parser = parseutils.TypedParser(Observable)
+observable_parser = TypedParser(Observable)

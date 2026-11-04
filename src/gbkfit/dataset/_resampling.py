@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 
 import numpy as np
 
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError
 
 
 def block_size(

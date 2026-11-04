@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
+from gbkfit.config import ConfigError
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.params import ModelEvaluationError, ParamValues
 from gbkfit.utils import gridutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
 from ..extras import Extras
 from ._component_plans import ComponentPlans
 from ._units import DataUnit

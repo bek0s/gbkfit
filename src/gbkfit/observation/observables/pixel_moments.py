@@ -8,12 +8,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetPixelMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, LightUnit, LineEmission
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail, _moments
 from ._detail import MedianSize, Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method

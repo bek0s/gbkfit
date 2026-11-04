@@ -7,10 +7,10 @@ import numpy as np
 import pytest
 from modelutils import config_group_plan
 
+from gbkfit.config import ConfigError
 from gbkfit.model import Extras
 from gbkfit.observation import WeightAzimuthPower, WeightAzimuthRange
 from gbkfit.utils.gridutils import SpectralAxis
-from gbkfit.utils.parseutils import ConfigError
 
 
 def test_weight_functions():

@@ -212,7 +212,7 @@ def test_functions_of_a_galaxy_of_mass_alone():
     from gbkfit.observation import (
         LineOfSightFlat, ObservationGroup, ObservationSky)
     from gbkfit.observation import PixelBrightness
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     info = dict(mass=copy.deepcopy(MASS), distance=dict(type='direct'))
     galaxy = galaxy_parser.load(copy.deepcopy(info))
     assert galaxy.components() == ()

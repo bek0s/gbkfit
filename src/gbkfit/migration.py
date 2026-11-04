@@ -21,9 +21,9 @@ from typing import Any, NamedTuple
 import ruamel.yaml
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 
+from gbkfit.config import ConfigError
 import gbkfit.project
 from gbkfit.project import FORMAT_VERSION
-from gbkfit.utils.parseutils import ConfigError
 
 
 __all__ = [

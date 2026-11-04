@@ -11,6 +11,7 @@ import numpy as np
 import scipy.signal
 import scipy.sparse
 
+from gbkfit.config import ConfigError, check_options
 from gbkfit.dataset import Data, Dataset, DatasetRegionMoments
 from gbkfit.driver import Driver
 from gbkfit.instrument import Instrument
@@ -19,7 +20,6 @@ from gbkfit.model.components.spheroids import OrbitIntegrator, SkyGrid
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions, regions_parser
 from gbkfit.utils import gridutils
-from gbkfit.utils.parseutils import ConfigError, check_options
 from . import _dcube, _detail, _moments, _orbit_outputs
 from ._detail import Rota, Rpix, Rval, Size, Step
 from ._moments import FluxFloor, Method

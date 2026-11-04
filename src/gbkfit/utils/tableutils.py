@@ -10,8 +10,8 @@ import numpy as np
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
 
-from gbkfit.utils import parseutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
+from gbkfit.config import ConfigError, parse_file
+from gbkfit.utils import unitutils
 
 
 __all__ = [
@@ -29,7 +29,7 @@ def read_table(file: Any, format_: str | None = None) -> Table:
     Parameters
     ----------
     file : Any
-        The file, as a file option (see parseutils.parse_file).
+        The file, as a file option (see parse_file).
     format_ : str, optional
         The format of the file (e.g. 'ascii.csv'); by default, the one
         astropy tells from the file.
@@ -44,7 +44,7 @@ def read_table(file: Any, format_: str | None = None) -> Table:
     ConfigError
         If the file cannot be read, or astropy cannot tell its format.
     """
-    filename = parseutils.parse_file(file)[0]
+    filename = parse_file(file)[0]
     try:
         return Table.read(filename, format=format_)
     except IORegistryError:

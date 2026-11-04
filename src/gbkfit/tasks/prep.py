@@ -23,12 +23,11 @@ import numpy as np
 import numpy.typing as npt
 from astropy.io import fits
 
+from gbkfit.config import ConfigError, DataFile
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
 from gbkfit.utils import datafiles, fitsutils, tableutils, unitutils
-from gbkfit.utils.parseutils import ConfigError
-from gbkfit.utils.typeutils import DataFile
 
 
 __all__ = [

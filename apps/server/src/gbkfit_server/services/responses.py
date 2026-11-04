@@ -13,10 +13,9 @@ from typing import Any
 
 import numpy as np
 
+from gbkfit.config import ConfigError, TypedParser, paths_relative_to
 from gbkfit.instrument.lsfs import lsf_parser
 from gbkfit.instrument.psfs import psf_parser
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError
 
 from .errors import Invalid
 from .workspace import Workspace
@@ -181,7 +180,7 @@ class Responses:
 
     def _load(
             self,
-            parser: parseutils.TypedParser,
+            parser: TypedParser,
             project: str,
             options: Mapping[str, Any],
             what: str
@@ -200,7 +199,7 @@ class Responses:
         for file in _files(options):
             self._workspace.path(os.path.join(project, file))
         try:
-            with parseutils.paths_relative_to(folder):
+            with paths_relative_to(folder):
                 response = parser.load(dict(options))
         except (ConfigError, OSError, ValueError, TypeError) as e:
             raise Invalid(str(e)) from e

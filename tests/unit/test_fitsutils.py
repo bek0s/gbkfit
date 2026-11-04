@@ -10,8 +10,8 @@ import astropy.wcs
 import numpy as np
 import pytest
 
+from gbkfit.config import ConfigError
 from gbkfit.utils import fitsutils, gridutils
-from gbkfit.utils.parseutils import ConfigError
 
 
 def position_angle(header, pixel_from, pixel_to):

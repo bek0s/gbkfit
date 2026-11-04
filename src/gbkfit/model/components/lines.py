@@ -12,9 +12,10 @@ from collections.abc import Generator, Mapping, Sequence
 import astropy.units
 import numpy as np
 
+from gbkfit.config import (
+    BasicParser, ConfigError, Serializable, check_name, check_options)
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import gridutils, parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
+from gbkfit.utils import gridutils
 
 
 __all__ = [
@@ -70,7 +71,7 @@ _CATALOGUE_BANDS = {
     'irac2': '4.493 um'}
 
 
-class Line(parseutils.Serializable):
+class Line(Serializable):
     """
     An emission line of a spectral component.
 
@@ -93,7 +94,7 @@ class Line(parseutils.Serializable):
 
     def __init__(self, name: str, rest: str | astropy.units.Quantity):
         check_options(Line.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         self._name = name
         self._rest = gridutils.make_rest(rest)
 
@@ -106,10 +107,10 @@ class Line(parseutils.Serializable):
         return self._rest
 
 
-line_parser = parseutils.BasicParser(Line)
+line_parser = BasicParser(Line)
 
 
-class Band(parseutils.Serializable):
+class Band(Serializable):
     """
     A band of images: a filter, of an effective wavelength.
 
@@ -132,7 +133,7 @@ class Band(parseutils.Serializable):
 
     def __init__(self, name: str, wavelength: str | astropy.units.Quantity):
         check_options(Band.__init__, locals())
-        parseutils.check_name(name)
+        check_name(name)
         error = ConfigError(
             f"the wavelength of a band must be a positive length with units "
             f"(e.g. '6166 Angstrom'); it is {wavelength!r}")
@@ -155,7 +156,7 @@ class Band(parseutils.Serializable):
         return self._wavelength
 
 
-band_parser = parseutils.BasicParser(Band)
+band_parser = BasicParser(Band)
 
 
 class LineCatalogue:

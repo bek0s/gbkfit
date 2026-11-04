@@ -11,9 +11,8 @@ from typing import Annotated, Any
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.utils import parseutils
-from gbkfit.utils.parseutils import ConfigError, check_options
-from gbkfit.utils.typeutils import Unit
+from gbkfit.config import (
+    ConfigError, TypedParser, TypedSerializable, Unit, check_options)
 
 
 __all__ = [
@@ -25,7 +24,7 @@ __all__ = [
 ]
 
 
-class ExtinctionLaw(parseutils.TypedSerializable, abc.ABC):
+class ExtinctionLaw(TypedSerializable, abc.ABC):
     """
     An extinction law: A(lambda) / A(V), the optical depth of dust at a
     wavelength relative to that at V. Two laws are equal if they are of
@@ -229,7 +228,7 @@ class ExtinctionTable(ExtinctionLaw):
         return np.interp(wavelength, self._wavelengths, self._ratios)
 
 
-extinction_law_parser = parseutils.TypedParser(ExtinctionLaw, [
+extinction_law_parser = TypedParser(ExtinctionLaw, [
     ExtinctionCCM,
     ExtinctionCalzetti,
     ExtinctionTable])

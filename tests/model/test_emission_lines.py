@@ -8,8 +8,8 @@ import copy
 
 import astropy.constants
 import astropy.units as u
+from gbkfit.config import ConfigError
 import gbkfit.params
-from gbkfit.utils.parseutils import ConfigError
 import numpy as np
 import pytest
 from modelutils import group_plan, split_case

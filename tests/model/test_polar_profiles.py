@@ -134,6 +134,6 @@ def test_map_lies_where_blobs_lie(driver, evaluate_cases):
     (dict(size=[3, 2], step=0), "step must be")])
 def test_map_options_are_checked(options, message):
     from gbkfit.model.components import traits
-    from gbkfit.utils.parseutils import ConfigError
+    from gbkfit.config import ConfigError
     with pytest.raises(ConfigError, match=message):
         traits.RPTraitMap(**options)
