@@ -1,8 +1,11 @@
 // The state of the Studio that its parts share: the open project and the
 // recent ones, the screen on the stage, the blocks opened last, the tree
-// folded or not, and the folder where a new block is being named.
+// folded or not, and the folder where a new block is being named. Leaving
+// a screen whose edits are not saved asks first, in a dialog.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useProjects } from './api/queries';
+import { Button } from './components/ui/basics';
+import { Dialog } from './components/ui/overlays';
 import { address, parseAddress, sameScreen, type Screen } from './shell/navigation';
 import { latestFirst, useRemembered } from './shell/remember';
 
@@ -48,18 +51,37 @@ export function StudioProvider({ children }: { children: ReactNode }) {
   const [screen, setScreen] = useState<Screen>(() => parseAddress(window.location.hash));
   const [adding, setAdding] = useState<string | null>(null);
 
-  // (back and forward ask first too, as the edits of the screen are not
-  // saved: kept, the address goes back to the screen)
+  // (the screen has edits not saved: what leaves it is asked first, and
+  // done once the user leaves)
+  const unsaved = useRef(false);
+  const setUnsaved = useCallback((value: boolean) => {
+    unsaved.current = value;
+  }, []);
+  const [asking, setAsking] = useState<{ then: () => void } | null>(null);
+  const leaving = useCallback((then: () => void) => {
+    if (!unsaved.current) then();
+    else setAsking({ then });
+  }, []);
+
+  // (back and forward ask first too: until the user leaves, the address
+  // goes back to the screen)
   const shown = useRef(screen);
   shown.current = screen;
   useEffect(() => {
     const onPop = () => {
-      if (!leave()) {
-        window.history.pushState(null, '', address(shown.current));
+      const next = parseAddress(window.location.hash);
+      if (!unsaved.current) {
+        setScreen(next);
         return;
       }
-      unsaved.current = false;
-      setScreen(parseAddress(window.location.hash));
+      window.history.pushState(null, '', address(shown.current));
+      setAsking({
+        then: () => {
+          unsaved.current = false;
+          setScreen(next);
+          window.history.pushState(null, '', address(next));
+        },
+      });
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -73,37 +95,35 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     if (recent.some((path) => !found.includes(path))) setRecent(recent.filter((path) => found.includes(path)));
   }, [projects.data, project, recent, setProject, setRecent]);
 
-  // (the screen has edits not saved: leaving it is asked first)
-  const unsaved = useRef(false);
-  const setUnsaved = useCallback((value: boolean) => {
-    unsaved.current = value;
-  }, []);
-  const leave = () => !unsaved.current || window.confirm('The edits of this screen are not saved. Leave it anyway?');
-
-  const show = useCallback((next: Screen) => {
-    if (!leave()) return false;
-    unsaved.current = false;
-    setScreen(next);
-    window.history.pushState(null, '', address(next));
-    return true;
-  }, []);
+  // (a screen shown, and then what follows it, once the user leaves the
+  // last one)
+  const show = useCallback(
+    (next: Screen, then?: () => void) =>
+      leaving(() => {
+        unsaved.current = false;
+        setScreen(next);
+        window.history.pushState(null, '', address(next));
+        then?.();
+      }),
+    [leaving],
+  );
 
   const go = useCallback(
-    (next: Screen) => {
-      if (!show(next)) return;
-      if (project !== null && next.kind === 'block') {
-        setVisited((all) => ({ ...all, [project]: latestFirst(all[project] ?? [], next, RECENT, sameScreen) }));
-      }
-    },
+    (next: Screen) =>
+      show(next, () => {
+        if (project !== null && next.kind === 'block') {
+          setVisited((all) => ({ ...all, [project]: latestFirst(all[project] ?? [], next, RECENT, sameScreen) }));
+        }
+      }),
     [show, project, setVisited],
   );
 
   const openProject = useCallback(
-    (path: string | null) => {
-      if (!show({ kind: 'home' })) return;
-      setProject(path);
-      if (path !== null) setRecent((paths) => latestFirst(paths, path, RECENT));
-    },
+    (path: string | null) =>
+      show({ kind: 'home' }, () => {
+        setProject(path);
+        if (path !== null) setRecent((paths) => latestFirst(paths, path, RECENT));
+      }),
     [setProject, setRecent, show],
   );
 
@@ -162,5 +182,28 @@ export function StudioProvider({ children }: { children: ReactNode }) {
     }),
     [project, openProject, recent, screen, go, visited, folded, setFolded, adding, startAdding, movedProject, movedBlock, setUnsaved],
   );
-  return <StudioContext.Provider value={studio}>{children}</StudioContext.Provider>;
+  return (
+    <StudioContext.Provider value={studio}>
+      {children}
+      {asking && (
+        <Dialog title="Leave without saving?" onClose={() => setAsking(null)}>
+          <div className="dialog-form">
+            <p>This screen has edits that are not saved. If you leave it, they are lost.</p>
+            <div className="dialog-actions">
+              <Button onClick={() => setAsking(null)}>Stay</Button>
+              <Button
+                kind="danger"
+                onClick={() => {
+                  setAsking(null);
+                  asking.then();
+                }}
+              >
+                Leave
+              </Button>
+            </div>
+          </div>
+        </Dialog>
+      )}
+    </StudioContext.Provider>
+  );
 }
