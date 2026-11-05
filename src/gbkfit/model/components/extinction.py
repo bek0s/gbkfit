@@ -94,6 +94,10 @@ class ExtinctionCCM(ExtinctionLaw):
     def type() -> str:
         return 'ccm'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Milky Way (Cardelli et al.)'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), rv=self._rv)
 
@@ -136,9 +140,8 @@ class ExtinctionCCM(ExtinctionLaw):
 
 class ExtinctionCalzetti(ExtinctionLaw):
     """
-    The attenuation law of starburst galaxies of Calzetti et al. (2000,
-    ApJ 533, 682), k(lambda) / R_V, of the given R_V, from 0.12 to 2.2
-    um.
+    The attenuation law of starburst galaxies (Calzetti et al. 2000, ApJ
+    533, 682), k(lambda) / R_V, of the given R_V, from 0.12 to 2.2 um.
 
     Parameters
     ----------
@@ -154,6 +157,10 @@ class ExtinctionCalzetti(ExtinctionLaw):
     @staticmethod
     def type() -> str:
         return 'calzetti'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Starburst (Calzetti et al.)'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), rv=self._rv)
@@ -196,6 +203,10 @@ class ExtinctionTable(ExtinctionLaw):
     @staticmethod
     def type() -> str:
         return 'table'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Custom table'
 
     def dump(self) -> dict[str, Any]:
         return dict(

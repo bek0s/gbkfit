@@ -95,6 +95,10 @@ class SlitSpectra(Observable):
     def type() -> str:
         return 'slit_spectra'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Slit spectra (long slit)'
+
     @classmethod
     def load(
             cls, info: dict[str, Any],

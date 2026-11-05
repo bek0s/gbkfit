@@ -33,10 +33,11 @@ _RADIUS_ROUNDING = 1e-12
 
 class MassTable(MassComponent):
     """
-    A mass component given by a table of its circular velocity V in its
-    plane at radii (e.g. the curves of the gas, the disk and the bulge of
-    SPARC, Vgas, Vdisk and Vbul, of Lelli et al. 2016), times its
-    parameter upsilon, the ratio of its mass to that of the table (e.g.
+    A mass component given by a table of its circular velocity at radii,
+    scaled by a ratio of masses. Its table is of the circular velocity V
+    in its plane at radii (e.g. the curves of the gas, the disk and the
+    bulge of SPARC, Vgas, Vdisk and Vbul, of Lelli et al. 2016), and its
+    parameter upsilon is the ratio of its mass to that of the table (e.g.
     the mass-to-light ratio of a curve of a stellar disk of upsilon 1):
     v^2 = upsilon V |V|, negative where V is (where it pushes outwards,
     e.g. the gas inside a ring).
@@ -86,6 +87,10 @@ class MassTable(MassComponent):
     @staticmethod
     def type() -> str:
         return 'table'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Circular velocity table'
 
     @classmethod
     def from_file(
@@ -188,6 +193,7 @@ class MassTable(MassComponent):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
+            title='Mass ratio',
             desc="the ratio of its mass to that of its table (e.g. a "
                  "mass-to-light ratio)", min=0, unit='', default=1))
 

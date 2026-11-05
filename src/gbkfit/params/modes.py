@@ -92,7 +92,7 @@ class ParamMode(TypedSerializable, abc.ABC):
 
 class ParamModeOffsets(ParamMode):
     """
-    Values given as offsets from the value of one element: the element at
+    Values given as offsets from the value of one element. The element at
     the origin is given as its value, and each other one as its offset
     from it (e.g. the position angles of the rings of a warp as offsets
     from that of the innermost ring).
@@ -112,6 +112,10 @@ class ParamModeOffsets(ParamMode):
     @staticmethod
     def type() -> str:
         return 'offsets'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Offsets'
 
     def dump(self) -> dict[str, str | int]:
         return dict(type=self.type(), origin=self._origin)
@@ -142,7 +146,7 @@ class ParamModeOffsets(ParamMode):
 
 class ParamModeIncrements(ParamMode):
     """
-    Values given as increments outward from one element: the element at
+    Values given as increments outward from one element. The element at
     the origin is given as its value, and each other one as its increment
     over its neighbour towards the origin (e.g. the change of the position
     angle from each ring of a warp to the next).
@@ -162,6 +166,10 @@ class ParamModeIncrements(ParamMode):
     @staticmethod
     def type() -> str:
         return 'increments'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Increments'
 
     def dump(self) -> dict[str, str | int]:
         return dict(type=self.type(), origin=self._origin)

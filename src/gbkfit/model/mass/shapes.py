@@ -189,14 +189,18 @@ class SpheroidShape(TypedSerializable, abc.ABC):
 
 class ShapeSphere(SpheroidShape):
     """
-    A sphere: the density of the profile at the spherical radius r, its
-    circular velocity G M(<r) / r and its forces exactly, and its
-    potential as the profile gives it.
+    A sphere: the density of the profile at the spherical radius r. Its
+    circular velocity G M(<r) / r and its forces are exact, and its
+    potential is as the profile gives it.
     """
 
     @staticmethod
     def type() -> str:
         return 'sphere'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Sphere'
 
     def spherical(self) -> bool:
         return True
@@ -264,9 +268,9 @@ class ShapeSphere(SpheroidShape):
 class ShapeFlattened(SpheroidShape):
     """
     A flattened (oblate, q < 1) or elongated (prolate, q > 1) spheroid of
-    the axis ratio q (its height over its width), a parameter: the
-    density rho_sph(m) / q at m^2 = R^2 + z^2 / q^2, the sphere of the
-    profile squashed along z with the mass of each shell kept. The
+    the axis ratio q, its height over its width (a parameter). It is the
+    sphere of the profile squashed along z with the mass of each shell
+    kept: the density rho_sph(m) / q at m^2 = R^2 + z^2 / q^2. The
     parameters of the profile keep their meaning: e.g. the mass, the mass
     M_D within m < r_D of a halo (the parameters of the sphere before it
     is squashed), and seen face-on, the projected profile of the sphere
@@ -286,12 +290,17 @@ class ShapeFlattened(SpheroidShape):
     def type() -> str:
         return 'flattened'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Flattened'
+
     def spherical(self) -> bool:
         return False
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(q=ParamScalarDesc(
-            desc="the axis ratio (height over width)", min=0,
+            title='Axis ratio', desc="the axis ratio (height over width)",
+            min=0,
             min_exclusive=True, unit='', default=0.8))
 
     def vcirc2(

@@ -332,6 +332,10 @@ class PSFPoint(PSF):
     def type() -> str:
         return 'point'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'None (a point)'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -378,6 +382,10 @@ class PSFGauss(PSF):
     @staticmethod
     def type() -> str:
         return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -453,6 +461,10 @@ class PSFGGauss(PSF):
     @staticmethod
     def type() -> str:
         return 'ggauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -535,6 +547,10 @@ class PSFMoffat(PSF):
     def type() -> str:
         return 'moffat'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Moffat'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -614,6 +630,10 @@ class PSFImage(PSF):
     @staticmethod
     def type() -> str:
         return 'image'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Image (measured)'
 
     @classmethod
     def from_file(
@@ -741,6 +761,10 @@ class PSFSum(PSF):
     def type() -> str:
         return 'sum'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Sum'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -814,6 +838,10 @@ class PSFConvolution(PSF):
     @staticmethod
     def type() -> str:
         return 'convolution'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Convolution'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -891,6 +919,10 @@ class PSFGaussBeam(PSF):
     @staticmethod
     def type() -> str:
         return 'gauss_beam'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian, by FWHM (radio beam)'
 
     @classmethod
     def from_file(cls, file: FitsFile) -> 'PSFGaussBeam':
@@ -1028,6 +1060,10 @@ class PSFImages(PSF):
     @staticmethod
     def type() -> str:
         return 'images'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Image per wavelength (measured)'
 
     @classmethod
     def from_file(
@@ -1172,6 +1208,9 @@ class PSFVarying(PSF):
 
     def type(self) -> str:
         return self._options.cls().type()
+
+    def type_title(self) -> str:
+        return self._options.cls().type_title()
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

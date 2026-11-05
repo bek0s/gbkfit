@@ -28,8 +28,9 @@ _BLOCK_AXES = ('the regions', 'the channels')
 
 class DatasetRegionSpectra(Dataset):
     """
-    Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
-    bins), with the world coordinates of their spectral axis.
+    Spectra in regions of the sky (e.g. fibres, apertures, bins), with
+    the world coordinates of their spectral axis. The regions are those of
+    Regions.
 
     Its configuration has the regions, and the options of from_files: the
     files of its one data item (data, mask, error) and the world
@@ -63,6 +64,10 @@ class DatasetRegionSpectra(Dataset):
     @staticmethod
     def type() -> str:
         return 'region_spectra'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Region spectra (bins, fibres)'
 
     @classmethod
     def from_files(

@@ -225,20 +225,20 @@ SPHEROID_TRAITS = TraitTable('spheroid', dict(
 
 class SpheroidTraitsKinematics(SpheroidKinematics):
     """
-    The kinematics of the stars of a spheroid given by traits (see
-    traits), as those of a thick disk whose spin axis is the axis of the
-    spheroid: at the distance R from the axis, the azimuth theta and the
-    height z along it, the mean velocity is vsys plus the sum of the
-    velocity polar traits of (R, theta), speeds around the axis, each
-    times its height trait of |z|; the dispersion is that of the velocity
-    ellipsoid of the dispersion traits (each polar trait times its height
-    trait) on the line of sight: the sum of those along each direction of
-    the cylinder and of the isotropic ones (see traits). The height traits
-    are of the factor one (the same at every height) unless given. The
-    traits are on radial nodes of R, by default 0 and the rmax of the
-    spheroid; given ones go from 0 to rmax at least, where its light is.
-    Its stars take neither the mass of their galaxy nor its gravity: e.g.
-    the kinematics of a spheroid without a model of its mass.
+    The kinematics of the stars of a spheroid given by traits, as those of
+    a thick disk whose spin axis is the axis of the spheroid. At the
+    distance R from the axis, the azimuth theta and the height z along it,
+    the mean velocity is vsys plus the sum of the velocity polar traits of
+    (R, theta), speeds around the axis, each times its height trait of
+    |z|; the dispersion is that of the velocity ellipsoid of the
+    dispersion traits (each polar trait times its height trait) on the
+    line of sight: the sum of those along each direction of the cylinder
+    and of the isotropic ones (see traits). The height traits are of the
+    factor one (the same at every height) unless given. The traits are on
+    radial nodes of R, by default 0 and the rmax of the spheroid; given
+    ones go from 0 to rmax at least, where its light is. Its stars take
+    neither the mass of their galaxy nor its gravity: e.g. the kinematics
+    of a spheroid without a model of its mass.
 
     Parameters
     ----------
@@ -277,6 +277,10 @@ class SpheroidTraitsKinematics(SpheroidKinematics):
     @staticmethod
     def type() -> str:
         return 'traits'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Traits'
 
     def dump(self) -> dict[str, Any]:
         info = super().dump() | self._traits.dump()

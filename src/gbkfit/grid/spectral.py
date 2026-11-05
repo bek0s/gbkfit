@@ -6,7 +6,7 @@ and the frame of rest.
 """
 
 import typing
-from typing import Annotated, Any, Literal, TypeVar
+from typing import Annotated, Any, Literal, TypeAlias, TypeVar
 
 import astropy.constants
 import astropy.units
@@ -14,7 +14,8 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Gt
 
-from gbkfit.config import BasicParser, Serializable, check_options
+from gbkfit.config import (
+    BasicParser, Choices, Serializable, check_options)
 
 if typing.TYPE_CHECKING:
     from .coords import Coords, Grid
@@ -53,6 +54,20 @@ CONVENTIONS = ('optical', 'log', 'radio', 'relativistic')
 FRAMES = (
     'TOPOCENT', 'GEOCENTR', 'BARYCENT', 'HELIOCEN', 'LSRK', 'LSRD',
     'GALACTOC', 'LOCALGRP', 'CMBDIPOL', 'SOURCE')
+
+# The options of a spectral axis: the convention of its velocities, the
+# medium of its wavelengths and its frame of rest (see SpectralAxis)
+_Convention: TypeAlias = Annotated[Literal[CONVENTIONS], Choices(
+    optical='Optical', log='Logarithmic (as pPXF)', radio='Radio',
+    relativistic='Relativistic')]
+_Medium: TypeAlias = Annotated[
+    Literal['vacuum', 'air'], Choices(vacuum='Vacuum', air='Air')]
+_Frame: TypeAlias = Annotated[Literal[FRAMES], Choices(
+    TOPOCENT='Topocentric (observer)', GEOCENTR='Geocentric',
+    BARYCENT='Barycentric', HELIOCEN='Heliocentric',
+    LSRK='Kinematic LSR (LSRK)', LSRD='Dynamical LSR (LSRD)',
+    GALACTOC='Galactocentric', LOCALGRP='Local Group',
+    CMBDIPOL='CMB dipole', SOURCE='Rest frame of the source')]
 
 
 def check_convention(spectral: 'SpectralAxis') -> None:
@@ -475,11 +490,10 @@ class SpectralAxis(Serializable):
             step: Annotated[float, Gt(0)] | None = None,
             rpix: float | None = None,
             rval: float | None = None,
-            convention: Literal[
-                'optical', 'log', 'radio', 'relativistic'] | None = None,
+            convention: _Convention | None = None,
             rest: str | astropy.units.Quantity | None = None,
-            medium: Literal['vacuum', 'air'] | None = None,
-            frame: Literal[FRAMES] | None = None
+            medium: _Medium | None = None,
+            frame: _Frame | None = None
     ):
         check_options(SpectralAxis.__init__, locals())
         self._rest = make_rest(rest)

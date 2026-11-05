@@ -2,7 +2,7 @@
 // screen reads it: the types of a family (e.g. the velocity traits), what
 // each is, the options a new item of a type starts with, and the options
 // of an item that the screen leaves to a form of the schema.
-import { membersOf, resolve, typeOf, type Defs, type Schema } from '../../components/SchemaForm';
+import { choicesOf, membersOf, resolve, typeOf, type Defs, type Schema } from '../../components/SchemaForm';
 import { ITEM_STARTS, NUMBER_STARTS } from './catalogue';
 import { freshName, isObject, type Options } from './options';
 
@@ -18,26 +18,39 @@ export function memberOf(defs: Defs | undefined, family: string, type: unknown):
   return membersOf(defs[family], defs).find((m) => typeOf(m) === type);
 }
 
-// The types of a family, with what each is (the first sentence of its
-// description); of those given alone, if given (e.g. those a cone takes)
-export function typesOf(defs: Defs | undefined, family: string, only?: string[] | null, labels: Record<string, string> = {}): TypeChoice[] {
+// The types of a family, with the title of each and what it is (the
+// first sentence of its description); of those given alone, if given
+// (e.g. those a cone takes)
+export function typesOf(defs: Defs | undefined, family: string, only?: string[] | null): TypeChoice[] {
   if (!defs?.[family]) return [];
   // (each type once: a family can have two members of one type, e.g. of
   // options or of a file)
-  const types = new Map<string, string | undefined>();
+  const types = new Map<string, TypeChoice>();
   for (const m of membersOf(defs[family], defs)) {
     const type = typeOf(m)!;
-    if (only && !only.includes(type)) continue;
-    if (!types.has(type)) types.set(type, typeof m.description === 'string' ? firstSentence(m.description) : undefined);
+    if ((only && !only.includes(type)) || types.has(type)) continue;
+    types.set(type, {
+      value: type,
+      label: typeof m.title === 'string' ? m.title : type.replaceAll('_', ' '),
+      description: typeof m.description === 'string' ? firstSentence(m.description) : undefined,
+    });
   }
-  return [...types].map(([type, description]) => ({ value: type, label: labels[type] ?? type.replaceAll('_', ' '), description }));
+  return [...types.values()];
 }
 
 // The first sentence of a text (not cut at e.g. or i.e.)
 export function firstSentence(text: string): string {
-  const match = /^.*?\.(?=\s+[A-Z(]|$)/s.exec(text);
-  return (match ? match[0] : text).trim();
+  const ends = /\.(?=\s+[A-Z(]|\s*$)/g;
+  for (let end = ends.exec(text); end !== null; end = ends.exec(text)) {
+    const sentence = text.slice(0, end.index + 1);
+    if (!ABBREVIATION.test(sentence)) return sentence.trim();
+  }
+  return text.trim();
 }
+
+// The abbreviations whose periods do not end a sentence (e.g. 'Epinat et
+// al. (2008)', 'e.g. Voronoi bins')
+const ABBREVIATION = /\b(?:e\.g|i\.e|et al|cf|vs)\.$/i;
 
 // The properties of a schema of an object, and those it requires
 export function propertiesOf(node: Schema | undefined, defs: Defs): { properties: Record<string, Schema>; required: string[] } {
@@ -64,7 +77,8 @@ function filled(defs: Defs, node: Schema, given: Options, names: string[]): Opti
     const branches = ((property.anyOf as Schema[] | undefined) ?? [property]).map((b) => resolve(b, defs)).filter((b) => b.type !== 'null');
     const first = branches[0];
     if (!first) continue;
-    if (Array.isArray(first.enum)) result[key] = first.enum[0];
+    const choices = choicesOf(first);
+    if (choices) result[key] = choices[0].value;
     else if (first.type === 'number' || first.type === 'integer') {
       const start = NUMBER_STARTS[key] ?? property.default ?? first.default ?? first.minimum ?? first.exclusiveMinimum;
       if (typeof start === 'number') result[key] = start;

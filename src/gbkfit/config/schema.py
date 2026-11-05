@@ -5,9 +5,12 @@ Serializable.config_constructors): their parameters are the options,
 with the types, ranges and choices of their annotations, their units
 (Unit; the keyword 'unit'), their defaults, and the descriptions of their
 docstrings. Each member of a family is described by the first paragraph
-of the docstring of its class, and each form of the configurations of a
+of the docstring of its class, and named by the title of its type (see
+TypedSerializable.type_title), and each form of the configurations of a
 class of several (see Serializable.config_constructors) by that of its
-named constructor (not __init__, which the class describes).
+named constructor (not __init__, which the class describes). The choices
+of an option with titles (see Choices) are each a constant with its
+title.
 
 The options of a family (e.g. a PSF) are one of its members, chosen by
 their type (see catalogue); a member that needs modules that are not
@@ -31,8 +34,8 @@ import numpy.typing as npt
 from .catalogue import Family, family_of
 from .serializable import Serializable, is_record
 from .types import (
-    DataFile, FilePath, FitsFile, describe_type, is_varying, option_types,
-    unit_of)
+    Choices, DataFile, FilePath, FitsFile, describe_type, is_varying,
+    option_types, unit_of)
 
 
 __all__ = [
@@ -225,6 +228,8 @@ class SchemaWriter:
             if (bound := _BOUNDS.get(type(marker))) is not None:
                 keyword, attribute = bound
                 schema[keyword] = getattr(marker, attribute)
+            if isinstance(marker, Choices):
+                schema = _titled_choices(schema, marker)
         return schema
 
     def _sequence(self, origin: Any, args: tuple) -> dict[str, Any]:
@@ -256,7 +261,7 @@ class SchemaWriter:
                 schema['available'] = False
                 schema['requires'] = '; '.join(
                     dict.fromkeys(member.missing.values()))
-            members.append(schema | {'title': member.cls.__qualname__})
+            members.append(schema | {'title': member.cls.type_title()})
             if summary := _summary(member.cls):
                 members[-1]['description'] = summary
         return {'oneOf': members}
@@ -330,6 +335,27 @@ class SchemaWriter:
             self._defs[name] = {}
             self._defs[name] = write()
         return {'$ref': f'#/$defs/{name}'}
+
+
+def _titled_choices(
+        schema: dict[str, Any], choices: Choices
+) -> dict[str, Any]:
+    """
+    Return the schema of the choices of an option (an enum) as one of
+    constants, each with its title.
+
+    Raises
+    ------
+    TypeError
+        If the schema is not of choices, or a choice has no title.
+    """
+    if 'enum' not in schema:
+        raise TypeError("titles of choices are those of a Literal")
+    if untitled := [x for x in schema['enum'] if choices.of(x) is None]:
+        raise TypeError(f"the choices {untitled} have no titles")
+    rest = {key: value for key, value in schema.items() if key != 'enum'}
+    return rest | {'oneOf': [
+        {'const': x, 'title': choices.of(x)} for x in schema['enum']]}
 
 
 def _with_properties(

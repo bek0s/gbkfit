@@ -12,7 +12,7 @@ import abc
 import math
 import typing
 from collections.abc import Callable, Sequence
-from typing import Annotated, Literal, NamedTuple
+from typing import Annotated, Literal, NamedTuple, TypeAlias
 
 import numpy as np
 import scipy.linalg
@@ -22,7 +22,7 @@ from annotated_types import Gt
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options)
+    Choices, TypedParser, TypedSerializable, check_options)
 from gbkfit.params._errors import ModelEvaluationError
 
 
@@ -41,6 +41,9 @@ __all__ = [
 # What the log-likelihood takes of solved values (see Solve): their
 # integral under their prior, or their best values (the profile)
 LIKELIHOODS = ('integrated', 'profiled')
+_Likelihood: TypeAlias = Annotated[Literal[LIKELIHOODS], Choices(
+    integrated='Integrated over the prior',
+    profiled='Profiled (best values)')]
 
 # The most Newton steps of solve_together_rows, and the relative change
 # of its dual below which it is rounding (of sums of many terms)
@@ -156,7 +159,7 @@ class Solve(TypedSerializable, abc.ABC):
 class SolveGaussian(Solve):
     """
     Solved values whose prior is a Gaussian of a mean (mu) and a standard
-    deviation (s), cut below a minimum (c), if any: each value x times the
+    deviation (s), cut below a minimum (c), if any. Each value x times the
     model, of the sums A and B of its values, adds to the chi-square
     A x^2 - 2 B x (and a term without x) and the chi-square of its prior,
     (x - mu)^2 / s^2. With A' = A + 1/s^2 and B' = B + mu/s^2:
@@ -219,6 +222,10 @@ class SolveGaussian(Solve):
     def type() -> str:
         return 'gaussian'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
     def dump(self) -> dict[str, str | float | list[float]]:
         info: dict[str, str | float | list[float]] = dict(
             type=self.type(), mean=self._mean)
@@ -237,7 +244,7 @@ class SolveGaussian(Solve):
             mean: FiniteFloat,
             sigma: Annotated[FiniteFloat, Gt(0)] | None = None,
             min: FiniteFloat | None = None,
-            likelihood: Literal[LIKELIHOODS] = LIKELIHOODS[0],
+            likelihood: _Likelihood = LIKELIHOODS[0],
             sigma_aicp: Sequence[float] | None = None
     ):
         check_options(SolveGaussian.__init__, locals())

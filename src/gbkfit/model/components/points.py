@@ -42,9 +42,18 @@ def point_pdescs(
     for spectral ones its systemic velocity and dispersion.
     """
     others = dict(
-        depth=ParamScalarDesc(unit='arcsec', default=0),
-        flux=ParamScalarDesc(unit=flux_unit, default=1),
-        disp=ParamScalarDesc(min=0, unit='km/s', default=20))
+        depth=ParamScalarDesc(
+            title='Depth',
+            desc="the distance behind the plane of the sky through the "
+                 "centre of the galaxy", unit='arcsec', default=0),
+        flux=ParamScalarDesc(
+            title='Flux',
+            desc="the flux of the point (of its first line or band)",
+            unit=flux_unit, default=1),
+        disp=ParamScalarDesc(
+            title='Velocity dispersion',
+            desc="the velocity dispersion of its lines", min=0,
+            unit='km/s', default=20))
     names = ('xpos', 'ypos') + (('depth',) if depth else ()) + ('flux',) \
         + (('vsys', 'disp') if spectral else ())
     return {
@@ -315,12 +324,12 @@ class PointPlan(ComponentPlan):
 
 class Point(Component):
     """
-    An unresolved component (e.g. a nucleus): its flux at a point (see
-    PointPlan). Its parameters: xpos, ypos, depth (if it has one) and
-    flux, and with emission lines vsys and disp (the dispersion of its
-    lines) and the flux ratios of its lines (see Lines). Seen along a line
-    of sight with a depth axis, the opacity of its galaxy in front of it
-    dims it.
+    An unresolved component (e.g. a nucleus): its flux at a point. It is
+    drawn on the pixels around the point (see PointPlan). Its parameters:
+    xpos, ypos, depth (if it has one) and flux, and with emission lines
+    vsys and disp (the dispersion of its lines) and the flux ratios of its
+    lines (see Lines). Seen along a line of sight with a depth axis, the
+    opacity of its galaxy in front of it dims it.
 
     Parameters
     ----------
@@ -343,6 +352,10 @@ class Point(Component):
     @staticmethod
     def type() -> str:
         return 'point'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Point'
 
     def dump(self) -> dict[str, Any]:
         return (

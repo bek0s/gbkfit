@@ -154,6 +154,9 @@ class ParamDesc(TypedSerializable, abc.ABC):
         The period of its values, if they repeat (e.g. 360 for an azimuth
         in degrees): a value and that value plus the period give the same
         models.
+    title : str, optional
+        Its name, for people: a few words in sentence case (e.g. "Core
+        radius"), where its name is a symbol (e.g. rc).
 
     Raises
     ------
@@ -167,6 +170,8 @@ class ParamDesc(TypedSerializable, abc.ABC):
         info: dict[str, Any] = dict(type=self.type())
         if not self.is_scalar():
             info.update(size=self._size)
+        if self._title is not None:
+            info.update(title=self._title)
         if self._desc is not None:
             info.update(desc=self._desc)
         if self._unit is not None:
@@ -196,7 +201,8 @@ class ParamDesc(TypedSerializable, abc.ABC):
             max_exclusive: bool = False,
             unit: str | ParamUnit | None = None,
             default: float | None = None,
-            period: float | None = None
+            period: float | None = None,
+            title: str | None = None
     ):
         for name, bound, exclusive in (
                 ('min', min, min_exclusive), ('max', max, max_exclusive)):
@@ -220,6 +226,7 @@ class ParamDesc(TypedSerializable, abc.ABC):
             raise ValueError(
                 f"the period of a parameter ({period}) must be positive")
         self._size = int(size)
+        self._title = title
         self._desc = desc
         self._unit = make_param_unit(unit)
         self._valid = valid
@@ -234,6 +241,10 @@ class ParamDesc(TypedSerializable, abc.ABC):
     def size(self) -> int:
         """Return the number of its values (1 for a scalar)."""
         return self._size
+
+    def title(self) -> str | None:
+        """Return its name for people, if given."""
+        return self._title
 
     def desc(self) -> str | None:
         """Return what it is, if given."""
@@ -300,6 +311,8 @@ class ParamScalarDesc(ParamDesc):
         Its typical value (see ParamDesc).
     period : float, optional
         The period of its values, if they repeat (see ParamDesc).
+    title : str, optional
+        Its name for people (see ParamDesc).
 
     Raises
     ------
@@ -311,6 +324,10 @@ class ParamScalarDesc(ParamDesc):
     def type() -> str:
         return 'scalar'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Scalar'
+
     def __init__(
             self,
             desc: str | None = None,
@@ -320,12 +337,13 @@ class ParamScalarDesc(ParamDesc):
             max_exclusive: bool = False,
             unit: str | ParamUnit | None = None,
             default: float | None = None,
-            period: float | None = None
+            period: float | None = None,
+            title: str | None = None
     ):
         check_options(ParamScalarDesc.__init__, locals())
         super().__init__(
             1, desc, min, max, min_exclusive, max_exclusive, unit, default,
-            period)
+            period, title)
 
     def is_scalar(self) -> bool:
         return True
@@ -354,6 +372,8 @@ class ParamVectorDesc(ParamDesc):
     period : float, optional
         The period of the values of its elements, if they repeat (see
         ParamDesc).
+    title : str, optional
+        Its name for people (see ParamDesc).
 
     Raises
     ------
@@ -365,6 +385,10 @@ class ParamVectorDesc(ParamDesc):
     def type() -> str:
         return 'vector'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Vector'
+
     def __init__(
             self,
             size: Annotated[int, Ge(1)],
@@ -375,12 +399,13 @@ class ParamVectorDesc(ParamDesc):
             max_exclusive: bool = False,
             unit: str | ParamUnit | None = None,
             default: float | None = None,
-            period: float | None = None
+            period: float | None = None,
+            title: str | None = None
     ):
         check_options(ParamVectorDesc.__init__, locals())
         super().__init__(
             size, desc, min, max, min_exclusive, max_exclusive, unit,
-            default, period)
+            default, period, title)
         self._column: ParamColumn | None = None
 
     def is_scalar(self) -> bool:

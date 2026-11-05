@@ -184,30 +184,38 @@ class LightProfile(TypedSerializable, abc.ABC):
 
 class LightSersic(LightProfile):
     """
-    The spherical deprojection of a Sersic profile: seen face-on, the
-    surface brightness ie exp(-b ((R / re)^(1/n) - 1)) of a sphere, of
-    its brightness ie at the effective radius re (arcsec; within which
-    half of its light is) and the index n, with b(n) exact; laid out in a
-    shape (see Spheroid). Its density, infinite at the centre for n > 1,
-    is computed numerically (see mass._numerics.sersic_density_table),
-    for n in [0.3, 12]: f(u) = exp(T(ln u) - b u^(1/n)), the table T of
-    ln f + b u^(1/n) is smooth. Its projection is exact.
+    A Sersic profile, deprojected and laid out in a shape: seen face-on,
+    its surface brightness is a Sersic profile. It is the spherical
+    deprojection of the surface brightness ie exp(-b ((R / re)^(1/n) - 1))
+    of a sphere, of its brightness ie at the effective radius re (arcsec;
+    within which half of its light is) and the index n, with b(n) exact,
+    laid out in a shape (see Spheroid). Its density, infinite at the
+    centre for n > 1, is computed numerically (see
+    mass._numerics.sersic_density_table), for n in [0.3, 12]: f(u) =
+    exp(T(ln u) - b u^(1/n)), the table T of ln f + b u^(1/n) is smooth.
+    Its projection is exact.
     """
 
     @staticmethod
     def type() -> str:
         return 'sersic'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Sersic'
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             ie=ParamScalarDesc(
+                title='Effective surface brightness',
                 desc="the surface brightness at the effective radius, "
                      "face-on", default=1),
             re=ParamScalarDesc(
-                desc="the effective radius", min=0, min_exclusive=True,
-                unit='arcsec', default=1),
+                title='Effective radius', desc="the effective radius",
+                min=0, min_exclusive=True, unit='arcsec', default=1),
             n=ParamScalarDesc(
-                desc="the Sersic index", min=0.3, max=12, unit='', default=4))
+                title='Sersic index', desc="the Sersic index", min=0.3,
+                max=12, unit='', default=4))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('ie',)
@@ -294,7 +302,7 @@ def _sersic_table(n: float) -> tuple[np.ndarray, np.ndarray]:
 class LightMGE(LightProfile):
     """
     A multi-Gaussian expansion (MGE): a sum of ngauss flattened Gaussians,
-    each of its own axis ratio: Gaussian k is, seen face-on, of the peak
+    each of its own axis ratio. Gaussian k is, seen face-on, of the peak
     surface brightness i0[k] and the dispersion sigma[k] (arcsec), with
     the intrinsic axis ratio q[k] (its height over its width, flattened
     for q < 1): the density i0 / (sqrt(2 pi) sigma q) exp(-m^2 / (2
@@ -318,6 +326,10 @@ class LightMGE(LightProfile):
     def type() -> str:
         return 'mge'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Multi-Gaussian expansion'
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(ngauss=self._ngauss)
 
@@ -337,15 +349,17 @@ class LightMGE(LightProfile):
         n = self._ngauss
         return dict(
             i0=ParamVectorDesc(
-                n, desc="the peak surface brightness of each Gaussian, "
-                        "face-on", default=1),
+                n, title='Peak surface brightness',
+                desc="the peak surface brightness of each Gaussian, "
+                     "face-on", default=1),
             sigma=ParamVectorDesc(
-                n, desc="the dispersion of each Gaussian", min=0,
-                min_exclusive=True, unit='arcsec', default=1),
+                n, title='Width', desc="the dispersion of each Gaussian",
+                min=0, min_exclusive=True, unit='arcsec', default=1),
             q=ParamVectorDesc(
-                n, desc="the intrinsic axis ratio of each Gaussian "
-                        "(height over width)", min=0, min_exclusive=True,
-                unit='', default=0.8))
+                n, title='Axis ratio',
+                desc="the intrinsic axis ratio of each Gaussian (height "
+                     "over width)", min=0, min_exclusive=True, unit='',
+                default=0.8))
 
     def amplitudes(self) -> tuple[str, ...]:
         return ('i0',)
@@ -472,13 +486,15 @@ GEOMETRY_PDESCS = {
 
 class Spheroid(Component):
     """
-    A spheroid of stars: the density of its light profile, laid out in
-    its shape (unless the profile has its own axis ratios, see LightMGE),
-    and its kinematics, if any (see SpheroidKinematics; with a systemic
-    velocity vsys). Its axis is the spin axis of a disk of its posa and
-    incl; a sphere without kinematics has none (no posa or incl). It emits
-    in bands, seen by images, or as stars (see StarsEmission), seen by
-    images and by the spectral cubes that ask for them, with kinematics.
+    A spheroid of stars (e.g. a bulge, or an elliptical galaxy): a light
+    profile laid out in a shape, with kinematics if any. It is the density
+    of its light profile, laid out in its shape (unless the profile has
+    its own axis ratios, see LightMGE), and its kinematics, if any (see
+    SpheroidKinematics; with a systemic velocity vsys). Its axis is the
+    spin axis of a disk of its posa and incl; a sphere without kinematics
+    has none (no posa or incl). It emits in bands, seen by images, or as
+    stars (see StarsEmission), seen by images and by the spectral cubes
+    that ask for them, with kinematics.
 
     On a grid without a depth axis (e.g. the line of sight flat), it is
     its projection on the sky, exactly, to any radius; its kinematics need
@@ -523,6 +539,10 @@ class Spheroid(Component):
     @staticmethod
     def type() -> str:
         return 'spheroid'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Spheroid'
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | dump_name(self) | dict(

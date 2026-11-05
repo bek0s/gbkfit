@@ -9,12 +9,14 @@ import importlib.metadata
 import logging
 import time
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, ClassVar, Literal, NamedTuple, Self
+from typing import (
+    TYPE_CHECKING, Annotated, Any, ClassVar, Literal, NamedTuple, Self,
+    TypeAlias)
 
 import numpy as np
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options, config_path)
+    Choices, TypedParser, TypedSerializable, check_options, config_path)
 from gbkfit.control import StopControl, Stopped
 from gbkfit.fitting.evaluation_log import EvaluationLog
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
@@ -43,6 +45,11 @@ __all__ = [
     'FitterInfo',
     'fitter_parser'
 ]
+
+
+# The option of what an optimizer minimises (see MERITS)
+MeritChoice: TypeAlias = Annotated[
+    Literal[MERITS], Choices(chi2='Chi-square', aicp='AICp')]
 
 
 class FitterInfo(NamedTuple):
@@ -170,7 +177,7 @@ class Fitter(TypedSerializable, abc.ABC):
             self,
             seed: int,
             uncertainty: UncertaintyOptions | None,
-            merit: Literal[MERITS] = 'chi2'
+            merit: MeritChoice = 'chi2'
     ):
         check_options(Fitter.__init__, locals())
         if merit == 'aicp' and uncertainty is not None \

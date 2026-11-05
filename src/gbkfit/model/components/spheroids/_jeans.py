@@ -49,11 +49,11 @@ _SUBSTEPS = 4
 
 class JeansKinematics(SpheroidKinematics):
     """
-    The kinematics of the stars of a spheroid in a steady state in the
-    gravity of its galaxy, of a velocity ellipsoid aligned with the
-    cylinder (JAM_cyl, Cappellari 2008): at each (R, z), from the forces
-    F_R and F_z of all the mass of the galaxy and the density nu of the
-    light of the spheroid (its whole profile),
+    The stars of a spheroid in a steady state in the gravity of its
+    galaxy, by the Jeans equations (JAM_cyl, Cappellari 2008). Their
+    velocity ellipsoid is aligned with the cylinder: at each (R, z), from
+    the forces F_R and F_z of all the mass of the galaxy and the density
+    nu of the light of the spheroid (its whole profile),
 
         nu sigma_z^2 = int_z^inf nu (-F_z) dz'
         nu <v_phi^2> = b [R d(nu sigma_z^2)/dR + nu sigma_z^2] + R nu (-F_R)
@@ -80,12 +80,18 @@ class JeansKinematics(SpheroidKinematics):
     def type() -> str:
         return 'jeans'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Jeans equations'
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             beta_z=ParamScalarDesc(
+                title='Anisotropy',
                 desc="the anisotropy, 1 - sigma_z^2 / sigma_R^2",
                 max=1, unit='', default=0),
             kappa=ParamScalarDesc(
+                title='Rotation factor',
                 desc="the rotation, the share of <v_phi^2> - sigma_R^2 "
                      "whose square root is the mean rotation",
                 unit='', default=1))

@@ -3,11 +3,11 @@ The cone component: shells around an apex, with traits.
 """
 
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import numpy as np
 
-from gbkfit.config import check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ParamDesc
@@ -30,7 +30,8 @@ __all__ = [
 
 class Cone(Component):
     """
-    A cone, evaluated at every voxel of a grid with a depth axis.
+    A hollow cone, on one side of its apex or both (e.g. a biconical
+    outflow). It is evaluated at every voxel of a grid with a depth axis.
     Its walls are around the mid-surface at the angle wall (a parameter)
     from its axis, on one side of its apex or both; its traits are
     functions of the distance from the apex and the azimuth around the
@@ -83,6 +84,10 @@ class Cone(Component):
     def type() -> str:
         return 'cone'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Cone'
+
     def dump(self) -> dict[str, Any]:
         return _detail.dump_cone_component(
             self, self._cone, self._rnodes, self._density, self._kinematics)
@@ -94,7 +99,9 @@ class Cone(Component):
             emission: Emission | None = None,
             opacity: Opacity | None = None,
             sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None = None,
-            sides: Literal[_cone.SIDES] = 'both',
+            sides: Annotated[Literal[_cone.SIDES], Choices(
+                both='Both sides', positive='Positive side',
+                negative='Negative side')] = 'both',
             rnodes: Nodes | RNodes | None = None,
             rstep: RStep | None = None,
             interp: Interp = 'linear',

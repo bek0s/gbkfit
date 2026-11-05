@@ -6,12 +6,12 @@
 // place (a double click), and its menu duplicates, shows alone or removes
 // it.
 import { useState } from 'react';
-import type { Defs } from '../../components/SchemaForm';
 import { DropMenu } from '../../components/ui/overlays';
-import { COMPONENT_ORDER, COMPONENT_STARTS, GALAXY_PARTS, partsOf, typeLabel, type Part } from './catalogue';
+import { choicesOf, titleOf, type Defs, type Schema } from '../../components/SchemaForm';
+import { COMPONENT_ORDER, COMPONENT_STARTS, GALAXY_PARTS, partsOf, type Part } from './catalogue';
 import type { Problem } from './draft';
 import { asList, componentName, getAt, isObject, lineList, lineName, ringRadii, startsWith, type Options, type Path } from './options';
-import { typesOf } from './schema';
+import { memberOf, typesOf } from './schema';
 
 export interface Selected {
   component: number | null;
@@ -65,7 +65,7 @@ export function Outline(props: OutlineProps) {
         </header>
         {present.length === 0 && <p className="gx-outline-note">Its distance, mass and gravity, when it needs them.</p>}
         {present.map((p) => (
-          <PartRow key={p.key} part={p} glance={glanceOf(p, options)} on={isOn(null, p.key)} problem={flagged(p.option)} onClick={() => onSelect({ component: null, part: p.key })} />
+          <PartRow key={p.key} part={p} glance={glanceOf(p, options, defs)} on={isOn(null, p.key)} problem={flagged(p.option)} onClick={() => onSelect({ component: null, part: p.key })} />
         ))}
       </section>
       <section className="gx-section">
@@ -116,6 +116,7 @@ function ComponentGroup({
   isOn,
   flagged,
   options,
+  defs,
   isolated,
   onSelect,
   onAddPart,
@@ -154,7 +155,7 @@ function ComponentGroup({
             {name}
           </span>
         )}
-        <span className="gx-type">{typeLabel(component.type)}</span>
+        <span className="gx-type">{titleOf(defs, 'component', String(component.type))}</span>
         <DropMenu
           label={`The actions of ${name}`}
           width={220}
@@ -182,7 +183,7 @@ function ComponentGroup({
         <PartRow
           key={p.key}
           part={p}
-          glance={glanceOf(p, component)}
+          glance={glanceOf(p, component, defs)}
           on={isOn(index, p.key)}
           problem={p.key === 'geometry' ? false : flagged([...base, ...p.option])}
           onClick={() => onSelect({ component: index, part: p.key })}
@@ -239,9 +240,10 @@ function RenameField({ value, onDone }: { value: string; onDone: (name: string |
   );
 }
 
-// A part at a glance: the types of its items (or of its option), and the
-// like (e.g. the rings of a disk, the lines of its light)
-export function glanceOf(part: Part, owner: Options): string {
+// A part at a glance: the titles of the types of its items (or of its
+// option), with their directions, and the like (e.g. the rings of a disk,
+// the lines of its light)
+export function glanceOf(part: Part, owner: Options, defs: Defs | undefined): string {
   const value = getAt(owner, part.option);
   if (part.key === 'geometry') {
     if (owner.type === 'spheroid') return `to ${owner.rmax}″`;
@@ -256,8 +258,15 @@ export function glanceOf(part: Part, owner: Options): string {
   }
   if (part.key === 'mass') return asList(value).map((m) => String(m.name ?? m.type)).join(', ');
   const items = asList(value);
+  const family = part.family ?? part.typed ?? '';
   return items
-    .map((item) => [item.type, typeof item.direction === 'string' ? item.direction : null].filter(Boolean).join(' '))
-    .join(', ')
-    .replaceAll('_', ' ');
+    .map((item) => {
+      const type = String(item.type ?? '');
+      const title = titleOf(defs, family, type);
+      if (typeof item.direction !== 'string') return title;
+      const directions = choicesOf((memberOf(defs, family, type)?.properties as Record<string, Schema> | undefined)?.direction);
+      const direction = directions?.find((d) => d.value === item.direction)?.title ?? item.direction;
+      return `${title} · ${direction.toLowerCase()}`;
+    })
+    .join(', ');
 }

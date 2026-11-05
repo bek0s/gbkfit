@@ -14,6 +14,9 @@ import { isObject, startsWith, type Options, type Path } from './options';
 
 export interface Param {
   name: string;
+  // Its name and what it is, for people (e.g. 'Rotation speed')
+  title?: string | null;
+  desc?: string | null;
   // Its number of elements: 1 (a scalar), or more (e.g. one per ring)
   size: number;
   default: number | null;

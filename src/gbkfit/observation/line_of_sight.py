@@ -15,7 +15,7 @@ import numpy as np
 from annotated_types import Ge, Gt, Le
 
 from gbkfit.config import (
-    Serializable, TypedParser, TypedSerializable, Unit,
+    Choices, Serializable, TypedParser, TypedSerializable, Unit,
     check_options, warn)
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid
@@ -37,6 +37,11 @@ __all__ = [
 
 # A length on the sky
 _Length: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
+
+# The extents of a depth axis that are not lengths (see Depth)
+_Extent: TypeAlias = Annotated[
+    Literal['galaxy', 'legacy'], Choices(
+        galaxy='Whole galaxies', legacy='Longer image axis (legacy)')]
 
 
 class Depth(Serializable):
@@ -71,7 +76,7 @@ class Depth(Serializable):
 
     def __init__(
             self,
-            extent: Literal['galaxy', 'legacy'] | _Length = 'galaxy',
+            extent: _Extent | _Length = 'galaxy',
             step: _Length | None = None
     ):
         check_options(Depth.__init__, locals())
@@ -229,6 +234,10 @@ class LineOfSightFlat(LineOfSight):
     def type() -> str:
         return 'flat'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Flat (plane of the sky)'
+
     def depth_axis(
             self, grid: Grid, bounding_radius: float
     ) -> None:
@@ -266,6 +275,10 @@ class LineOfSightGrid(LineOfSight):
     def type() -> str:
         return 'grid'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Depth grid'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), depth=self._depth.dump())
 
@@ -291,7 +304,8 @@ class LineOfSightGrid(LineOfSight):
 class LineOfSightTransfer(LineOfSight):
     """
     A depth axis and radiative transfer along each line of sight: the
-    galaxies are evaluated on the voxels of a grid, as by
+    light that reaches the viewer, dimmed by the opacity in front of it.
+    The galaxies are evaluated on the voxels of a grid, as by
     LineOfSightGrid, but their emitters write the fields of their light
     (its density, velocity and dispersion in each voxel, or in the layer
     of a thin disk or a point; see ComponentPlan.evaluate_fields), and a
@@ -330,6 +344,10 @@ class LineOfSightTransfer(LineOfSight):
     @staticmethod
     def type() -> str:
         return 'transfer'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Radiative transfer'
 
     def dump(self) -> dict[str, Any]:
         return dict(

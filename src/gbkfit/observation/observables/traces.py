@@ -61,11 +61,13 @@ class Trace(TypedSerializable, abc.ABC):
 
 class TracePolynomial(Trace):
     """
-    A trace of polynomials of the wavelength, the same at every place:
+    A trace of polynomials of the wavelength, the same at every place.
+
+    Its offsets along x are
 
         dx(w) = sum_n dx[n] ((w - wave) / 1 um)^n
 
-    (pixels) and likewise dy.
+    (pixels), and likewise those along y (dy).
 
     Parameters
     ----------
@@ -85,6 +87,10 @@ class TracePolynomial(Trace):
     @staticmethod
     def type() -> str:
         return 'polynomial'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Polynomial'
 
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return dict(type=self.type(), wave=str(self._wave),
@@ -120,9 +126,13 @@ class TracePolynomial(Trace):
 
 class TraceGrismConf(Trace):
     """
-    A trace of the GRISMCONF form of JWST (Pirzkal & Ryan 2016; of the
-    configurations of NIRCam and NIRISS, and of the JWST pipeline): the
-    wavelength (um) and the offsets as polynomials of a parameter t,
+    A trace of the GRISMCONF form of JWST, which varies across the
+    detector: the wavelength and the offsets as polynomials of a parameter
+    t.
+
+    The form is that of Pirzkal & Ryan 2016 (of the configurations of
+    NIRCam and NIRISS, and of the JWST pipeline): with the wavelength in
+    um,
 
         w(t) = sum_k L_k t^k,  dx(t) = sum_k X_k t^k,  dy(t) = sum_k Y_k t^k
 
@@ -156,6 +166,10 @@ class TraceGrismConf(Trace):
     @staticmethod
     def type() -> str:
         return 'grismconf'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'GRISMCONF (JWST)'
 
     @classmethod
     def from_file(
@@ -329,10 +343,10 @@ def _field_polynomials(
 
 class TraceTable(Trace):
     """
-    A trace tabulated at the nodes of a grid of wavelengths and places
-    (e.g. sampled from the model of an instrument: see
-    prep.nirspec_msa_spectra), interpolated between them by cubic splines
-    along each axis. Places beyond the grid take the offsets of its
+    A trace tabulated at the nodes of a grid of wavelengths and places,
+    interpolated between them by cubic splines along each axis. The table
+    can be sampled from the model of an instrument (e.g. by
+    prep.nirspec_msa_spectra). Places beyond the grid take the offsets of its
     nearest edge; wavelengths beyond it are refused.
 
     Its configuration is a FITS file of it (see from_file and write).
@@ -360,6 +374,10 @@ class TraceTable(Trace):
     @staticmethod
     def type() -> str:
         return 'table'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Table'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

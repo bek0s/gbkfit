@@ -48,10 +48,11 @@ _SHARE_FLOOR = 1e-6
 
 class RegionMoments(Observable):
     """
-    Moments of the spectra in regions of the sky (see Regions; e.g.
-    Voronoi bins, fibres): the moments of the sum of the cube of the
-    model, seen through the instrument, in each region, as the moments of
-    binned data are those of their summed spectra.
+    Moments of the spectra in regions of the sky (e.g. fibres or Voronoi
+    bins): the moments of the summed spectrum of each region. The spectra
+    are the sum of the cube of the model, seen through the instrument, in
+    each region (see Regions), as the moments of binned data are those of
+    their summed spectra.
 
     The spatial axes of the cube are those of the regions if they are on
     a grid (bins), or given (apertures); its spectral axis is as that of
@@ -106,6 +107,10 @@ class RegionMoments(Observable):
     @staticmethod
     def type() -> str:
         return 'region_moments'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Region moments (bins, fibres)'
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:

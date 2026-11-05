@@ -5,17 +5,17 @@ The CMA-ES fitter (pycma).
 import math
 import typing
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Self
 
 import numpy as np
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
 from gbkfit.config import check_options
-from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, MeritChoice
 from gbkfit.fitting.fitparams import (
     FitParam, FitParamBounded, FitParamClass)
-from gbkfit.fitting.problem import MERITS, FitProblem
+from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.params import FreeElement, Prior
 
@@ -93,10 +93,10 @@ class FitParamCMAES(FitParamBounded):
 
 class FitterCMAES(Fitter):
     """
-    The covariance matrix adaptation evolution strategy (Hansen 2016),
-    with pycma: a global, derivative-free optimizer of the chi-square (or
-    of the AICp; see merit), with optional restarts of growing
-    populations (IPOP or BIPOP).
+    The covariance matrix adaptation evolution strategy: a global,
+    derivative-free optimizer, with optional restarts. It runs with pycma
+    (Hansen 2016), minimises the chi-square (or the AICp; see merit), and
+    restarts with growing populations (IPOP or BIPOP).
 
     The free elements take a value, optional min and max, and sigma (see
     FitParamCMAES; the option sigma of the fitter is the default). CMA-ES
@@ -158,6 +158,10 @@ class FitterCMAES(Fitter):
         return 'cmaes'
 
     @staticmethod
+    def type_title() -> str:
+        return 'CMA-ES'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamCMAES
 
@@ -182,7 +186,7 @@ class FitterCMAES(Fitter):
             tolx: Annotated[float, Gt(0)] = 1e-6,
             sigma: Annotated[FiniteFloat, Gt(0)] | None = None,
             verbose: bool = False,
-            merit: Literal[MERITS] = 'chi2',
+            merit: MeritChoice = 'chi2',
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):

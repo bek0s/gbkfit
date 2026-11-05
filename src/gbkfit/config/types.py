@@ -16,7 +16,7 @@ import re
 import types
 import typing
 import warnings
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Literal, NamedTuple, TypeAlias
 
 import annotated_types
@@ -26,6 +26,7 @@ import pydantic.warnings
 
 
 __all__ = [
+    'Choices',
     'Column',
     'DataFile',
     'FilePath',
@@ -62,6 +63,36 @@ class Unit:
     """
 
     unit: str
+
+
+@dataclasses.dataclass(frozen=True, init=False)
+class Choices:
+    """
+    The titles of the choices of an option, as a marker of its annotation,
+    e.g. ``Annotated[Literal['tan', 'rad'], Choices(tan='Tangential',
+    rad='Radial')]``: a name for people of each choice (in schemas), in
+    sentence case. Choices that are not names (e.g. numbers) are given as
+    a mapping, ``Choices({1: 'First order'})``.
+
+    Parameters
+    ----------
+    titles : Mapping, optional
+        The title of each choice, by choice.
+    **named : str
+        The title of each choice, by choice (choices that are names).
+    """
+
+    titles: tuple[tuple[Any, str], ...]
+
+    def __init__(
+            self, titles: Mapping[Any, str] | None = None, **named: str
+    ):
+        object.__setattr__(
+            self, 'titles', tuple({**(titles or {}), **named}.items()))
+
+    def of(self, choice: Any) -> str | None:
+        """Return the title of a choice, if it has one."""
+        return dict(self.titles).get(choice)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -363,12 +394,12 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
         # A union of choices or ranges is checked by each of its members
         members = union_members(type_)
         if len(members) > 1 and any(
-                typing.get_origin(x) is Literal or _split_bounds(x)[1]
+                _literal(x) is not None or _split_bounds(x)[1]
                 for x in members):
             alternatives = ' or '.join(_describe_member(x) for x in members)
             return ValueError(f"must be {alternatives}; it is {value!r}")
-        if typing.get_origin(type_) is Literal:
-            choices = ', '.join(repr(x) for x in typing.get_args(type_))
+        if (literal := _literal(type_)) is not None:
+            choices = ', '.join(repr(x) for x in typing.get_args(literal))
             return ValueError(f"must be one of {choices}; it is {value!r}")
         if (item := _item_error(value, type_)) is not None:
             return item
@@ -409,14 +440,24 @@ def _item_error(value: Any, type_: Any) -> TypeError | ValueError | None:
     return None
 
 
+def _literal(type_: Any) -> Any:
+    """
+    Return the Literal of an annotation of choices (a Literal, or one with
+    markers, e.g. Choices), or None if it is not one.
+    """
+    if typing.get_origin(type_) is Annotated:
+        type_ = typing.get_args(type_)[0]
+    return type_ if typing.get_origin(type_) is Literal else None
+
+
 def _describe_member(type_: Any) -> str:
     """
     Return the wording of a member of a union annotation, for messages:
     its choices (of a Literal), or its type and range (e.g. "of type float
     greater than 0").
     """
-    if typing.get_origin(type_) is Literal:
-        return ', '.join(repr(x) for x in typing.get_args(type_))
+    if (literal := _literal(type_)) is not None:
+        return ', '.join(repr(x) for x in typing.get_args(literal))
     inner, bounds = _split_bounds(type_)
     within = ' and '.join(_bound(x)[0] for x in bounds)
     return f"of type {describe_type(inner)}" + (f" {within}" if within else "")

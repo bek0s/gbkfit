@@ -5,7 +5,7 @@ given shape f, and its mass shape m(x) = int_0^x f(t) t^2 dt.
 """
 
 import abc
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
@@ -16,7 +16,7 @@ from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
 from .halo_params import (
-    PARAMETERISATIONS, Overdensity, halo_scale_radius, halo_scales,
+    Overdensity, ParameterisationChoice, halo_scale_radius, halo_scales,
     parameterisation_pdescs)
 from .profiles import SpheroidProfile
 from .units import G
@@ -70,7 +70,7 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
 
     def __init__(
             self,
-            parameters: Literal[PARAMETERISATIONS] = 'mass_concentration',
+            parameters: ParameterisationChoice = 'mass_concentration',
             overdensity: str | None = None
     ):
         check_options(ProfileHalo.__init__, locals())
@@ -192,9 +192,10 @@ class ProfileHalo(SpheroidProfile, abc.ABC):
 
 class ProfileNFW(ProfileHalo):
     """
-    The halo of Navarro, Frenk & White (1997): f(x) = 1 / (x (1 + x)^2),
-    m(x) = ln(1 + x) - x / (1 + x), and the potential -4 pi G rho_s r_s^2
-    ln(1 + x) / x.
+    The halo of Navarro, Frenk & White (1997): a density that falls as
+    r^-1 inside its scale radius and as r^-3 outside. Its shape is f(x) =
+    1 / (x (1 + x)^2), m(x) = ln(1 + x) - x / (1 + x), and its potential
+    -4 pi G rho_s r_s^2 ln(1 + x) / x.
 
     Parameters
     ----------
@@ -205,6 +206,10 @@ class ProfileNFW(ProfileHalo):
     @staticmethod
     def type() -> str:
         return 'nfw'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'NFW halo'
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -224,9 +229,11 @@ class ProfileNFW(ProfileHalo):
 
 class ProfileBurkert(ProfileHalo):
     """
-    The halo of Burkert (1995): f(x) = 1 / ((1 + x) (1 + x^2)), m(x) =
-    (ln((1 + x)^2 (1 + x^2)) - 2 arctan(x)) / 4. Its scale radius r_s is
-    the core radius r_0, and its concentration r_D / r_0.
+    The cored halo of Burkert (1995): a density that is flat inside its
+    core radius and falls as r^-3 outside. Its shape is f(x) = 1 / ((1 +
+    x) (1 + x^2)), m(x) = (ln((1 + x)^2 (1 + x^2)) - 2 arctan(x)) / 4. Its
+    scale radius r_s is the core radius r_0, and its concentration r_D /
+    r_0.
 
     Parameters
     ----------
@@ -237,6 +244,10 @@ class ProfileBurkert(ProfileHalo):
     @staticmethod
     def type() -> str:
         return 'burkert'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Burkert halo'
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -254,10 +265,11 @@ class ProfileBurkert(ProfileHalo):
 
 class ProfilePseudoIsothermal(ProfileHalo):
     """
-    The pseudo-isothermal sphere: f(x) = 1 / (1 + x^2), m(x) = x -
-    arctan(x). Its scale radius r_s is the core radius r_c, and its
-    concentration r_D / r_c. Its mass grows without bound, so its
-    potential is infinite.
+    The pseudo-isothermal sphere: a density that is flat inside its core
+    radius and falls as r^-2 outside (of a flat rotation curve). Its shape
+    is f(x) = 1 / (1 + x^2), m(x) = x - arctan(x). Its scale radius r_s is
+    the core radius r_c, and its concentration r_D / r_c. Its mass grows
+    without bound, so its potential is infinite.
 
     Parameters
     ----------
@@ -268,6 +280,10 @@ class ProfilePseudoIsothermal(ProfileHalo):
     @staticmethod
     def type() -> str:
         return 'pseudo_isothermal'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Pseudo-isothermal halo'
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -294,9 +310,10 @@ class ProfilePseudoIsothermal(ProfileHalo):
 
 class ProfileEinasto(ProfileHalo):
     """
-    The halo of Einasto (1965): f(x) = exp(-(2 / a) (x^a - 1)), with a its
-    shape (parameter alpha), and m(x) = e^(2/a) / a (a / 2)^(3/a)
-    gamma(3 / a, (2 / a) x^a) (gamma: the lower incomplete gamma
+    The halo of Einasto (1965): a density whose logarithmic slope steepens
+    with radius, as r^alpha. Its shape is f(x) = exp(-(2 / a) (x^a - 1)),
+    with a its shape (parameter alpha), and m(x) = e^(2/a) / a (a /
+    2)^(3/a) gamma(3 / a, (2 / a) x^a) (gamma: the lower incomplete gamma
     function). Its scale radius r_s is r_-2, where the logarithmic slope
     of its density is -2; its concentration is r_D / r_-2. Its potential
     has a closed form, with the upper incomplete gamma function.
@@ -311,9 +328,14 @@ class ProfileEinasto(ProfileHalo):
     def type() -> str:
         return 'einasto'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Einasto halo'
+
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(alpha=ParamScalarDesc(
-            desc="the shape of the profile", min=0, unit='', default=0.17))
+            title='Shape parameter', desc="the shape of the profile", min=0,
+            unit='', default=0.17))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -341,14 +363,15 @@ class ProfileEinasto(ProfileHalo):
 
 class ProfileZhao(ProfileHalo):
     """
-    The halo of Zhao (1996): f(x) = x^-g (1 + x^a)^(-(b - g) / a), of the
-    shape parameters alpha (a, the sharpness of the transition), beta
-    (b, the outer slope) and gamma (g, the inner slope, below 3), and
-    m(x) = x^(3 - g) / (3 - g) 2F1((3 - g) / a, (b - g) / a; (3 - g) / a +
-    1; -x^a). The generalised NFW halo is the case a = 1, b = 3, and NFW
-    a = 1, b = 3, g = 1. Its scale radius r_s is that of this formula
-    (not r_-2), and its concentration r_D / r_s. Its potential is finite
-    for b > 2.
+    The halo of Zhao (1996): a density of a free inner slope, outer slope
+    and sharpness of the transition between them. Its shape is f(x) =
+    x^-g (1 + x^a)^(-(b - g) / a), of the shape parameters alpha (a, the
+    sharpness of the transition), beta (b, the outer slope) and gamma (g,
+    the inner slope, below 3), and m(x) = x^(3 - g) / (3 - g) 2F1((3 - g)
+    / a, (b - g) / a; (3 - g) / a + 1; -x^a). The generalised NFW halo is
+    the case a = 1, b = 3, and NFW a = 1, b = 3, g = 1. Its scale radius
+    r_s is that of this formula (not r_-2), and its concentration r_D /
+    r_s. Its potential is finite for b > 2.
 
     Parameters
     ----------
@@ -360,14 +383,22 @@ class ProfileZhao(ProfileHalo):
     def type() -> str:
         return 'zhao'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Zhao halo'
+
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             alpha=ParamScalarDesc(
+                title='Transition sharpness',
                 desc="the sharpness of the transition", min=0,
                 unit='', default=1),
-            beta=ParamScalarDesc(desc="the outer slope", unit='', default=3),
+            beta=ParamScalarDesc(
+                title='Outer slope', desc="the outer slope", unit='',
+                default=3),
             gamma=ParamScalarDesc(
-                desc="the inner slope", max=3, unit='', default=1))
+                title='Inner slope', desc="the inner slope", max=3,
+                unit='', default=1))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -384,15 +415,16 @@ class ProfileZhao(ProfileHalo):
 
 class ProfileDekelZhao(ProfileHalo):
     """
-    The halo of Dekel et al. (2017) and Freundlich et al. (2020), of the
-    mean density rho_s / (x^a (1 + x^(1/2))^(2 (3 - a))) within r: f(x) =
-    (1 - a / 3) / (x^a (1 + x^(1/2))^(7 - 2 a)), of the inner slope a (its
-    shape parameter, below 3) and the outer slope -3.5, and m(x) =
-    chi^(2 (3 - a)) / 3, with chi = x^(1/2) / (1 + x^(1/2)). Its scale
-    radius r_s is r_c of the papers (its slope is -2 at ((2 - a) / 1.5)^2
-    r_s), and its concentration r_D / r_s. Its potential has a closed form
-    for a < 2: -(2 / 3) ((1 - chi^(4 - 2 a)) / (4 - 2 a) - (1 - chi^(5 -
-    2 a)) / (5 - 2 a)) in units of 4 pi G rho_s r_s^2.
+    The halo of Dekel et al. 2017 and Freundlich et al. 2020: a cusp or a
+    core of a free inner slope, falling as r^-3.5 outside. Its mean
+    density within r is rho_s / (x^a (1 + x^(1/2))^(2 (3 - a))): f(x) = (1
+    - a / 3) / (x^a (1 + x^(1/2))^(7 - 2 a)), of the inner slope a (its
+    shape parameter, below 3) and the outer slope -3.5, and m(x) = chi^(2
+    (3 - a)) / 3, with chi = x^(1/2) / (1 + x^(1/2)). Its scale radius r_s
+    is r_c of the papers (its slope is -2 at ((2 - a) / 1.5)^2 r_s), and
+    its concentration r_D / r_s. Its potential has a closed form for a <
+    2: -(2 / 3) ((1 - chi^(4 - 2 a)) / (4 - 2 a) - (1 - chi^(5 - 2 a)) /
+    (5 - 2 a)) in units of 4 pi G rho_s r_s^2.
 
     Parameters
     ----------
@@ -404,9 +436,14 @@ class ProfileDekelZhao(ProfileHalo):
     def type() -> str:
         return 'dekel_zhao'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Dekel-Zhao halo'
+
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(a=ParamScalarDesc(
-            desc="the inner slope", max=3, unit='', default=1))
+            title='Inner slope', desc="the inner slope", max=3, unit='',
+            default=1))
 
     def _density_shape(
             self, x: np.ndarray, shape: dict[str, float]) -> np.ndarray:
@@ -431,8 +468,9 @@ class ProfileDekelZhao(ProfileHalo):
 
 class ProfileCoreNFW(ProfileHalo):
     """
-    The cored NFW halo of Read, Agertz & Collins (2016, coreNFW): the mass
-    of the NFW halo of its parameters times t^n, t = tanh(r / r_c), of the
+    The cored NFW halo of Read, Agertz & Collins (2016, coreNFW): an NFW
+    halo whose central cusp is flattened into a core. Its mass is that of
+    the NFW halo of its parameters times t^n, t = tanh(r / r_c), of the
     core radius r_c (kpc; parameter rc) and the strength of the core n (0:
     the NFW halo, 1: a full core). With x_c = r_c / r_s: m(x) = m_NFW(x)
     t^n, and f(x) = f_NFW(x) t^n + n t^(n - 1) (1 - t^2) m_NFW(x) / (x^2
@@ -449,6 +487,10 @@ class ProfileCoreNFW(ProfileHalo):
     def type() -> str:
         return 'core_nfw'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Cored NFW halo'
+
     def scales(
             self, params: ParamValues, context: MassContext
     ) -> tuple[float, float]:
@@ -460,10 +502,11 @@ class ProfileCoreNFW(ProfileHalo):
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             rc=ParamScalarDesc(
-                desc="the core radius r_c", min=0, unit='kpc', default=1),
+                title='Core radius', desc="the core radius r_c", min=0,
+                unit='kpc', default=1),
             n=ParamScalarDesc(
-                desc="the strength of the core", min=0, max=1,
-                unit='', default=1))
+                title='Core strength', desc="the strength of the core",
+                min=0, max=1, unit='', default=1))
 
     def _shape_values(
             self, params: ParamValues, r_s: float) -> dict[str, float]:
@@ -492,13 +535,14 @@ class ProfileCoreNFW(ProfileHalo):
 
 class ProfileNFWTruncated(ProfileHalo):
     """
-    The NFW halo of its parameters truncated exponentially, as galpy's
-    ExpTruncNFWPotential: f(x) = f_NFW(x) exp(-x / x_t), of the truncation
-    radius r_t (kpc; parameter rt), x_t = r_t / r_s. With a = 1 / x_t,
-    its mass is m(x) = (1 + a) e^a (E1(a) - E1(a (1 + x))) - 1 + e^(-a x)
-    / (1 + x) (E1: the exponential integral), finite as x grows; for r_t
-    above r_s / 700. Its scale radius and concentration are those of the
-    NFW halo, whose mass within r_D is M_D (more than that of the
+    An NFW halo cut off exponentially beyond a truncation radius, so that
+    its mass is finite. It is the NFW halo of its parameters truncated as
+    galpy's ExpTruncNFWPotential: f(x) = f_NFW(x) exp(-x / x_t), of the
+    truncation radius r_t (kpc; parameter rt), x_t = r_t / r_s. With a = 1
+    / x_t, its mass is m(x) = (1 + a) e^a (E1(a) - E1(a (1 + x))) - 1 +
+    e^(-a x) / (1 + x) (E1: the exponential integral), finite as x grows;
+    for r_t above r_s / 700. Its scale radius and concentration are those
+    of the NFW halo, whose mass within r_D is M_D (more than that of the
     truncated halo).
 
     Parameters
@@ -511,6 +555,10 @@ class ProfileNFWTruncated(ProfileHalo):
     def type() -> str:
         return 'nfw_truncated'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Truncated NFW halo'
+
     def scales(
             self, params: ParamValues, context: MassContext
     ) -> tuple[float, float]:
@@ -521,7 +569,8 @@ class ProfileNFWTruncated(ProfileHalo):
 
     def _shape_pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(rt=ParamScalarDesc(
-            desc="the truncation radius r_t", min=0, unit='kpc', default=200))
+            title='Truncation radius', desc="the truncation radius r_t",
+            min=0, unit='kpc', default=200))
 
     def _shape_values(
             self, params: ParamValues, r_s: float) -> dict[str, float]:

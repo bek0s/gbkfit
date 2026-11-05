@@ -102,7 +102,8 @@ dark_fraction_parser = BasicParser(DarkFraction)
 
 class MassSpheroid(MassComponent):
     """
-    A spheroid of a profile and a shape: its density, circular velocity,
+    A spheroid of a profile (e.g. a dark matter halo, or a Sersic bulge)
+    and a shape (a sphere, or flattened). Its density, circular velocity,
     forces and potential are those of the profile laid out in the shape
     (see shapes), and its parameters those of both.
 
@@ -151,6 +152,10 @@ class MassSpheroid(MassComponent):
     @staticmethod
     def type() -> str:
         return 'spheroid'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Spheroid'
 
     def dump(self) -> dict[str, Any]:
         info = super().dump() | dict(
@@ -248,9 +253,11 @@ class MassSpheroid(MassComponent):
             del pdescs[self._dark_fraction.solve()]
             pdescs |= dict(
                 fdm=ParamScalarDesc(
+                    title='Dark matter fraction',
                     desc="the dark matter fraction (of v^2) at r_fdm",
                     min=0, max=1, unit='', default=0.5),
                 r_fdm=ParamScalarDesc(
+                    title='Dark matter fraction radius',
                     desc="the radius of the dark matter fraction",
                     min=0, unit='kpc', default=10))
         return pdescs
@@ -430,12 +437,12 @@ class MassSpheroid(MassComponent):
 
 class MassLightSpheroid(MassComponent):
     """
-    The mass of a spheroid of the galaxy (see components.Spheroid) that
-    follows its light, to any radius (rmax only bounds how far its light
-    is drawn): upsilon times the light of each term of its profile, its
-    density, circular velocity, forces and potential those of the term
-    (see SpheroidDensity; exactly, or as the shapes give them, see
-    shapes).
+    The mass that follows the light of a spheroid of the galaxy, times a
+    mass-to-light ratio. It follows it to any radius (see
+    components.Spheroid; rmax only bounds how far its light is drawn):
+    upsilon times the light of each term of its profile, its density,
+    circular velocity, forces and potential those of the term (see
+    SpheroidDensity; exactly, or as the shapes give them, see shapes).
 
     upsilon is the mass per unit of its light, as of the mass disks that
     follow disks (see surfaces.SurfaceComponent): without a unit of its
@@ -459,6 +466,10 @@ class MassLightSpheroid(MassComponent):
     def type() -> str:
         return 'light_spheroid'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'From a spheroid'
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(component=self._component)
 
@@ -481,8 +492,9 @@ class MassLightSpheroid(MassComponent):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
-            desc="the mass per unit of the light of the spheroid (see "
-                 "MassLightSpheroid)", min=0, default=1))
+            title='Mass-to-light ratio',
+            desc="the mass per unit of the light of the spheroid", min=0,
+            default=1))
 
     def mass_ratios(self) -> dict[str, str]:
         return dict(upsilon=self._component)

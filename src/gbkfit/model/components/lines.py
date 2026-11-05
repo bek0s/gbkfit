@@ -336,6 +336,7 @@ class Lines:
         self._lines = lines
         self._ratios = {} if lines is None else {
             f'{line.name()}_ratio': ParamScalarDesc(
+                title=f'Flux ratio of {line.name()}',
                 desc=f"the flux of line {line.name()} relative to line "
                      f"{lines[0].name()}", unit='', default=1)
             for line in lines[1:]}
@@ -576,6 +577,7 @@ class Bands:
         self._bands = bands
         self._ratios = {} if bands is None else {
             f'{band.name()}_ratio': ParamScalarDesc(
+                title=f'Flux ratio in {band.name()}',
                 desc=f"the flux in band {band.name()} relative to that in "
                      f"band {bands[0].name()}", unit='', default=1)
             for band in bands[1:]}

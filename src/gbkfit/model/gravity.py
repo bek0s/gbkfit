@@ -12,7 +12,7 @@ need it check when the galaxy is made.
 import abc
 import enum
 from collections.abc import Callable, Collection, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.constants
 import astropy.units
@@ -21,7 +21,7 @@ import numpy.typing as npt
 from annotated_types import Gt
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options)
+    Choices, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from ._field_grid import FieldGradient
@@ -42,6 +42,8 @@ __all__ = [
     'GravityMOND',
     'GravityNewton',
     'GravityPalatini',
+    'MONDForm',
+    'MONDInterpolation',
     'gravity_parser'
 ]
 
@@ -59,8 +61,16 @@ _MOND_NU: dict[str, Callable[[np.ndarray], np.ndarray]] = dict(
 # The names of the interpolation functions of MOND
 MOND_INTERPOLATIONS = tuple(_MOND_NU)
 
-# The forms of MOND (see GravityMOND)
+# The option of the interpolation function of MOND
+MONDInterpolation: TypeAlias = Annotated[
+    Literal[MOND_INTERPOLATIONS], Choices(
+        simple='Simple', standard='Standard',
+        rar='Radial acceleration relation')]
+
+# The forms of MOND (see GravityMOND), and their option
 MOND_FORMS = ('qumond', 'algebraic')
+MONDForm: TypeAlias = Annotated[Literal[MOND_FORMS], Choices(
+    qumond='QUMOND', algebraic='Algebraic')]
 
 # The square of the speed of light ((km/s)^2)
 _C2 = astropy.constants.c.to_value('km/s') ** 2
@@ -212,6 +222,10 @@ class GravityNewton(Gravity):
     def type() -> str:
         return 'newton'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Newtonian'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
 
@@ -261,8 +275,9 @@ class _NewtonField(GravityField):
 
 class GravityMOND(Gravity):
     """
-    MOND (Milgrom 1983): about spherical mass, the gravity nu(|g_N| / a0)
-    g_N of the Newtonian gravity g_N of all the mass (see GravityNewton)
+    MOND (Milgrom 1983): gravity stronger than Newtonian where it is weaker
+    than the acceleration a0. About spherical mass, it is nu(|g_N| / a0)
+    g_N, of the Newtonian gravity g_N of all the mass (see GravityNewton)
     and the acceleration a0. Its parameter: 'gravity_a0', a0 in units of
     1e-10 m/s^2 (a0 = 0 is Newtonian gravity). Its interpolation function
     nu, of y = |g_N| / a0:
@@ -320,6 +335,10 @@ class GravityMOND(Gravity):
     def type() -> str:
         return 'mond'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'MOND'
+
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), interpolation=self._interpolation,
@@ -327,8 +346,8 @@ class GravityMOND(Gravity):
 
     def __init__(
             self,
-            interpolation: Literal[MOND_INTERPOLATIONS],
-            form: Literal[MOND_FORMS] = 'qumond'
+            interpolation: MONDInterpolation,
+            form: MONDForm = 'qumond'
     ):
         check_options(GravityMOND.__init__, locals())
         self._interpolation = interpolation
@@ -344,8 +363,8 @@ class GravityMOND(Gravity):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(gravity_a0=ParamScalarDesc(
-            desc="the acceleration a0 of MOND", min=0,
-            unit='1e-10 m / s2', default=1.2))
+            title='Acceleration scale', desc="the acceleration a0 of MOND",
+            min=0, unit='1e-10 m / s2', default=1.2))
 
     def field(
             self,
@@ -451,9 +470,13 @@ class _MONDField(GravityField):
 
 class GravityHuSawicki(Gravity):
     """
-    The f(R) gravity of Hu & Sawicki (2007), with its chameleon screening:
-    the Newtonian field of all the mass, plus the fifth force (c^2 / 2)
-    grad(f_R) of the scalar field f_R, of the quasi-static equation
+    The f(R) gravity of Hu & Sawicki (2007): Newtonian gravity plus a
+    fifth force, screened where the density is high (chameleon
+    screening).
+
+    Its field is the Newtonian field of all the mass, plus the fifth force
+    (c^2 / 2) grad(f_R) of the scalar field f_R, of the quasi-static
+    equation
 
         laplacian(f_R) = (R(f_R) - Rbar) / 3 - 8 pi G rho / (3 c^2)
 
@@ -510,6 +533,10 @@ class GravityHuSawicki(Gravity):
     def type() -> str:
         return 'hu_sawicki'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Hu-Sawicki f(R)'
+
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), n=self._n, screened=list(self._screened),
@@ -540,10 +567,12 @@ class GravityHuSawicki(Gravity):
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         pdescs = dict(gravity_log_fr0=ParamScalarDesc(
+            title='Log background field',
             desc="log10 of |f_R0|, the scalar field of the background "
                  "today", unit='dex', default=-6))
         if self._environment:
             pdescs['gravity_log_phi_ext'] = ParamScalarDesc(
+                title='Log environment potential',
                 desc="log10 of -Phi_ext / c^2, the depth of the Newtonian "
                      "potential of the environment", unit='dex', default=-6)
         return pdescs
@@ -665,11 +694,12 @@ class _GradientField(GravityField):
 class GravityPalatini(Gravity):
     """
     Palatini f(R) gravity in its weak-field limit, of any f(R) = R + alpha
-    R^2 + O(R^3) (Toniato et al. 2020; Hernandez-Arboleda et al. 2023, eq.
-    16): the Poisson equation of the potential of the motion is
-    laplacian(Phi) = 4 pi G (rho + 2 alpha laplacian(rho)), so Phi = Phi_N
-    + 8 pi G alpha rho, of the density rho of all the mass. Its correction
-    is local: where there is mass (in vacuum, it is Newtonian gravity).
+    R^2 + O(R^3): Newtonian gravity, corrected where there is mass. The
+    Poisson equation of the potential of the motion is laplacian(Phi) = 4
+    pi G (rho + 2 alpha laplacian(rho)) (Toniato et al. 2020;
+    Hernandez-Arboleda et al. 2023, eq. 16), so Phi = Phi_N + 8 pi G alpha
+    rho, of the density rho of all the mass. Its correction is local:
+    where there is mass (in vacuum, it is Newtonian gravity).
     Its squared circular velocity is v^2 = v_N^2 + 8 pi G alpha R
     drho/dR, at z = 0 (their eq. 32), and its forces are the Newtonian
     ones minus 8 pi G alpha grad(rho). Its parameter: 'gravity_alpha',
@@ -695,12 +725,17 @@ class GravityPalatini(Gravity):
     def type() -> str:
         return 'palatini'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Palatini f(R)'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(gravity_alpha=ParamScalarDesc(
-            desc="alpha of f(R) = R + alpha R^2", unit='kpc2', default=0))
+            title='Coefficient of R^2', desc="alpha of f(R) = R + alpha R^2",
+            unit='kpc2', default=0))
 
     def field(
             self,

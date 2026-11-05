@@ -8,10 +8,11 @@ direction: tan, order: 1, sampling: subrings).
 import abc
 import dataclasses
 from collections.abc import Sequence
-from typing import Any
+from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 
+from gbkfit.config import Choices
 from gbkfit.params.pdescs import (
     ParamColumn, ParamDesc, ParamScalarDesc, ParamTable, ParamVectorDesc)
 
@@ -24,14 +25,19 @@ __all__ = [
     'SAMPLING_TAIL',
     'VPT_DIRECTIONS',
     'Blobs',
+    'DPTDirectionChoice',
     'Direction',
     'DispersionDirection',
     'Harmonic',
     'Nodewise',
     'Sampling',
+    'SamplingChoice',
     'Spiral',
+    'SpiralWavenumber',
+    'SpiralWinding',
     'TraitOption',
     'VPTDirection',
+    'VPTDirectionChoice',
     'Zmax'
 ]
 
@@ -58,6 +64,10 @@ DPT_DIRECTION_VER = 3
 # or at the subnodes themselves (see _disk.NodalDisk)
 SAMPLINGS = ('rings', 'subrings')
 SAMPLING_DEFAULT = 'rings'
+
+# The option of a sampling (see SAMPLINGS)
+SamplingChoice: TypeAlias = Annotated[Literal[SAMPLINGS], Choices(
+    rings='At the rings', subrings='At the subrings')]
 # Where the values that the galaxy of a disk gives beyond its last ring
 # too are given (e.g. the rotation of its mass, see VPTraitMass; not an
 # option of the traits): at the subnodes, and beyond the last, at the
@@ -69,22 +79,35 @@ SAMPLING_TAIL = 'subrings_tail'
 class VPTDirection:
     """
     A direction of the speeds of the velocity polar traits: its uid in the
-    native kernels, and the name of the speed parameter of the traits
-    along it.
+    native kernels, its title, and the name and the title of the speed
+    parameter of the traits along it.
     """
     uid: int
+    title: str
     speed: str
+    speed_title: str
 
 
 # The directions of the speeds of the velocity polar traits, by name (see
 # the module docstring of the traits)
 VPT_DIRECTIONS = dict(
-    tan=VPTDirection(VPT_DIRECTION_TAN, 'vt'),
-    rad=VPTDirection(VPT_DIRECTION_RAD, 'vr'),
-    ver=VPTDirection(VPT_DIRECTION_VER, 'vv'),
-    los=VPTDirection(VPT_DIRECTION_LOS, 'vl'),
-    out=VPTDirection(VPT_DIRECTION_OUT, 'vo'),
-    away=VPTDirection(VPT_DIRECTION_AWAY, 'va'))
+    tan=VPTDirection(VPT_DIRECTION_TAN, 'Tangential', 'vt', 'Rotation speed'),
+    rad=VPTDirection(VPT_DIRECTION_RAD, 'Radial', 'vr', 'Radial speed'),
+    ver=VPTDirection(VPT_DIRECTION_VER, 'Vertical', 'vv', 'Vertical speed'),
+    los=VPTDirection(
+        VPT_DIRECTION_LOS, 'Along the line of sight', 'vl',
+        'Line-of-sight speed'),
+    out=VPTDirection(
+        VPT_DIRECTION_OUT, 'Outward, from the centre', 'vo',
+        'Outward speed'),
+    away=VPTDirection(
+        VPT_DIRECTION_AWAY, 'Away from the plane', 'va',
+        'Speed away from the plane'))
+
+# The option of the direction of a velocity polar trait
+VPTDirectionChoice: TypeAlias = Annotated[
+    Literal[tuple(VPT_DIRECTIONS)],
+    Choices({name: d.title for name, d in VPT_DIRECTIONS.items()})]
 
 # The directions of the dispersions of the velocity dispersion polar
 # traits, by name: their uids in the native kernels (see the module
@@ -95,6 +118,20 @@ DPT_DIRECTIONS = dict(
     tan=DPT_DIRECTION_TAN,
     ver=DPT_DIRECTION_VER)
 DPT_DIRECTION_DEFAULT = 'iso'
+
+# The option of the direction of a velocity dispersion polar trait
+DPTDirectionChoice: TypeAlias = Annotated[
+    Literal[tuple(DPT_DIRECTIONS)], Choices(
+        iso='Isotropic', rad='Radial', tan='Tangential', ver='Vertical')]
+
+# The options of the winding and of the wavenumber of a spiral density
+# wave (see Spiral)
+SpiralWinding: TypeAlias = Annotated[
+    Literal['trailing', 'leading'],
+    Choices(trailing='Trailing arms', leading='Leading arms')]
+SpiralWavenumber: TypeAlias = Annotated[
+    Literal['dispersion', 'given'],
+    Choices(dispersion='From the dispersion relation', given='Given (k)')]
 
 # The azimuthal means split the circles around narrow structure at
 # distances along them of at least this fraction of its size, and up to
@@ -276,6 +313,18 @@ class Blobs(TraitOption):
         range, e.g. dict(min=0); None for none), of the amplitudes a of the
         given unit (None for a density, whose component knows it).
         """
+        titles = dict(
+            r='Centre radius', t='Centre azimuth', a='Amplitude',
+            s='Scale length', b='Shape', q='Axis ratio', p='Orientation')
+        descs = dict(
+            r='the radius of the centre of each blob',
+            t='the azimuth of the centre of each blob',
+            a='the amplitude of each blob',
+            s='the scale of each blob along its major axis',
+            b='the shape of the profile of each blob',
+            q='the axis ratio of each blob (minor over major)',
+            p='the angle of the major axis of each blob from the '
+              'tangential direction')
         units = dict(
             r='arcsec', t='deg', a=unit, s='arcsec', b='', q='', p='deg')
         # (amplitudes 0: those of the empty row, see Blobs)
@@ -289,7 +338,8 @@ class Blobs(TraitOption):
             else ('r', 't', 'a', 's', 'q', 'p')
         return {
             name: ParamVectorDesc(
-                self.nblobs, unit=units[name], default=defaults[name],
+                self.nblobs, title=titles[name], desc=descs[name],
+                unit=units[name], default=defaults[name],
                 **valid.get(name, {})
             ).with_column(ParamColumn(self.table, name))
             for name in names}
@@ -337,13 +387,28 @@ class Harmonic(TraitOption):
         of the given unit (None for a density, whose component knows it),
         and p (but for order 0), the azimuth of a maximum.
         """
-        params = dict(a=ParamVectorDesc(nnodes, unit=unit, default=0))
+        params = dict(a=ParamVectorDesc(
+            nnodes, title='Amplitude', desc='the amplitude of the harmonic',
+            unit=unit, default=0))
         if self.order > 0:
             # (the pattern repeats every 360 / m degrees: of a bisymmetric
             # flow (m = 2), p and p + 180 are the same)
             params.update(p=ParamVectorDesc(
-                nnodes, unit='deg', default=0, period=360 / self.order))
+                nnodes, title='Phase', desc='the azimuth of a maximum',
+                unit='deg', default=0, period=360 / self.order))
         return params
+
+
+# The titles and the descriptions of the tables of the spiral density
+# waves, by name (see WaveInput, and the method wave of the spiral traits)
+_SPIRAL_TABLES = dict(
+    a=('Density amplitude',
+       'the amplitude of the density of the wave, e Sigma_0'),
+    ar=('Radial amplitude',
+        'the amplitude of the radial velocity of the wave'),
+    at=('Tangential amplitude',
+        'the amplitude of the tangential velocity of the wave'),
+    f=('Radial phase', 'the phase f of the arms, the integral of k'))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -438,12 +503,22 @@ class Spiral(TraitOption):
         dispersion = self.wavenumber == 'dispersion'
         # (m arms: the pattern repeats every 360 / m degrees)
         params = dict(p=ParamScalarDesc(
+            title='Arm azimuth', desc='the azimuth of the arms where f = 0',
             unit='deg', default=0, period=360 / self.order))
         if dispersion:
-            params['c'] = ParamScalarDesc(min=0, unit='km/s', default=10)
-        params['e'] = ParamScalarDesc(unit='', default=0.1)
+            params['c'] = ParamScalarDesc(
+                title='Sound speed', desc='the sound speed of the gas',
+                min=0, unit='km/s', default=10)
+        params['e'] = ParamScalarDesc(
+            title='Relative amplitude',
+            desc='the amplitude of the density of the wave, relative to '
+                 'that of the disk', unit='', default=0.1)
         if dispersion or pattern_speed:
-            params['o'] = ParamScalarDesc(unit='km / (s arcsec)', default=0)
+            params['o'] = ParamScalarDesc(
+                title='Pattern speed',
+                desc='the angular speed of the arms, positive in the '
+                     'direction of a positive rotation',
+                unit='km / (s arcsec)', default=0)
         return params
 
     def params_rnw(
@@ -454,9 +529,16 @@ class Spiral(TraitOption):
         first (the kernels read them there), and k
         with a given wavenumber.
         """
-        params = {name: ParamVectorDesc(nnodes, default=0) for name in tables}
+        params = {
+            name: ParamVectorDesc(
+                nnodes, title=_SPIRAL_TABLES[name][0],
+                desc=_SPIRAL_TABLES[name][1], default=0)
+            for name in tables}
         if self.wavenumber == 'given':
-            params['k'] = ParamVectorDesc(nnodes, unit='1 / arcsec', default=1)
+            params['k'] = ParamVectorDesc(
+                nnodes, title='Radial wavenumber',
+                desc='the radial wavenumber of the arms, whose sign winds '
+                     'them', unit='1 / arcsec', default=1)
         return params
 
     def wavenumber_at(

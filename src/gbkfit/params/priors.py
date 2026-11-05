@@ -193,6 +193,10 @@ class PriorUniform(Prior):
     def type() -> str:
         return 'uniform'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Uniform'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
 
@@ -252,6 +256,10 @@ class PriorLogUniform(Prior):
     def type() -> str:
         return 'log_uniform'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Log-uniform'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
 
@@ -294,9 +302,10 @@ class PriorLogUniform(Prior):
 
 class PriorSine(Prior):
     """
-    A sine prior on an angle in degrees: p(x) proportional to sin x, the
-    distribution of the inclination of a disk oriented at random (seen
-    edge-on more often than face-on).
+    A sine prior on an angle in degrees: the distribution of the
+    inclination of a disk oriented at random. Its density p(x) is
+    proportional to sin x (a disk is seen edge-on more often than
+    face-on).
 
     Its chi-square is -2 ln sin x, 0 at 90 degrees also when the range
     ends before (as a truncated Gaussian's is 0 at its mean), so that the
@@ -316,6 +325,10 @@ class PriorSine(Prior):
     @staticmethod
     def type() -> str:
         return 'sine'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Sine'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), min=self._minimum, max=self._maximum)
@@ -392,6 +405,10 @@ class PriorGauss(Prior):
     def type() -> str:
         return 'gauss'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), mean=self._mean, std=self._std)
 
@@ -458,6 +475,10 @@ class PriorGaussTrunc(Prior):
     def type() -> str:
         return 'gauss_trunc'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Truncated Gaussian'
+
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), mean=self._mean, std=self._std,
@@ -518,9 +539,9 @@ class PriorGaussTrunc(Prior):
 class PriorHalfGauss(Prior):
     """
     A half-Gaussian prior on a value of at least 0: a Gaussian of mean 0
-    and standard deviation s, folded onto x >= 0 (e.g. for a jitter that
-    is likely below 2 s, as 95% of the prior is). Its chi-square is (x /
-    s)^2, and its residual x / s.
+    and standard deviation s, folded onto x >= 0. It suits e.g. a jitter
+    that is likely below 2 s, as 95% of the prior is. Its chi-square is
+    (x / s)^2, and its residual x / s.
 
     Parameters
     ----------
@@ -536,6 +557,10 @@ class PriorHalfGauss(Prior):
     @staticmethod
     def type() -> str:
         return 'half_gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Half-Gaussian'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), std=self._std)
@@ -577,11 +602,11 @@ class PriorHalfGauss(Prior):
 
 class PriorHalfCauchy(Prior):
     """
-    A half-Cauchy prior on a value of at least 0: p(x) proportional to 1 /
-    (1 + (x / s)^2), x >= 0, of scale s. About flat below s, with a heavy
-    tail, it lets the data prefer values well above s: a weakly
-    informative prior for scale parameters, e.g. a jitter (Gelman 2006,
-    Bayesian Analysis 1, 515).
+    A half-Cauchy prior on a value of at least 0: a weakly informative
+    prior for scale parameters. Its density p(x) is proportional to
+    1 / (1 + (x / s)^2), x >= 0, of scale s. About flat below s, with a
+    heavy tail, it lets the data prefer values well above s: e.g. for a
+    jitter (Gelman 2006, Bayesian Analysis 1, 515).
 
     Its chi-square is 2 log(1 + (x / s)^2), and its residual sign(x)
     sqrt(2 log(1 + (x / s)^2)), which has the slope sqrt(2) / s at 0.
@@ -600,6 +625,10 @@ class PriorHalfCauchy(Prior):
     @staticmethod
     def type() -> str:
         return 'half_cauchy'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Half-Cauchy'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), scale=self._scale)
@@ -665,11 +694,11 @@ def _max_log_pdf(frozen: Any) -> float:
 
 class PriorScipy(Prior):
     """
-    A prior of any continuous distribution of scipy.stats (e.g. a
-    log-normal prior on a mass: the distribution 'lognorm', of the
-    parameters s and scale): of its name and the values of its
-    parameters (its shapes, loc and scale, by name, as scipy.stats takes
-    them).
+    A prior of any continuous distribution of scipy.stats, given by its
+    name and the values of its parameters. The parameters are its shapes,
+    loc and scale, by name, as scipy.stats takes them (e.g. a log-normal
+    prior on a mass: the distribution 'lognorm', of the parameters s and
+    scale).
 
     Its chi-square is 0 at its most probable value, which it finds
     numerically (or at its median, where its density is unbounded). It
@@ -692,6 +721,10 @@ class PriorScipy(Prior):
     @staticmethod
     def type() -> str:
         return 'scipy'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'SciPy distribution'
 
     def dump(self) -> dict[str, Any]:
         return dict(
@@ -770,6 +803,10 @@ class PriorTruncated(Prior):
     @staticmethod
     def type() -> str:
         return 'truncated'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Truncated prior'
 
     def dump(self) -> dict[str, Any]:
         return dict(

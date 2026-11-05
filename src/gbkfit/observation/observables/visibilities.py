@@ -11,7 +11,7 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import Unit, check_options
+from gbkfit.config import Choices, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
 from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
@@ -42,7 +42,10 @@ _log = logging.getLogger(__name__)
 # The lengths on the sky of x and y, or one for both, and the transforms
 # of the models (see uv_transforms)
 _Lengths: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
-_Transform: TypeAlias = Literal[tuple(uv_transforms)]
+_Transform: TypeAlias = Annotated[
+    Literal[tuple(uv_transforms)], Choices(
+        exact='Exact', sin='SIN projection',
+        flat='SIN projection, no w-term')]
 
 
 # The speed of light (km/s and m/s), and arcsec per radian
@@ -70,9 +73,10 @@ _EDGE_TOLERANCE = 1e-3
 
 class Visibilities(Observable):
     """
-    Interferometric visibilities (see DatasetVisibilities): the Fourier
-    transform of the cube of the model on the sky, seen through the
-    instrument, at the baselines of each channel (see uv_transforms).
+    Interferometric visibilities: the Fourier transform of the model
+    cube, seen through the instrument, at the baselines of each channel.
+    The cube is that of the model on the sky; its data are those of
+    DatasetVisibilities, and its transforms those of uv_transforms.
 
     The spatial pixels of the cube are the points of the sum of the
     transform, at their centres (not integrated over their area, which
@@ -149,6 +153,10 @@ class Visibilities(Observable):
     @staticmethod
     def type() -> str:
         return 'visibilities'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Visibilities (interferometer)'
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:

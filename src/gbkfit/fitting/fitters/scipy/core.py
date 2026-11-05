@@ -3,13 +3,13 @@ The scipy least-squares fitter.
 """
 
 import typing
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 import scipy.optimize
 from annotated_types import Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
@@ -23,6 +23,20 @@ from gbkfit.fitting.uncertainty import (
 __all__ = [
     'FitterScipyLeastSquares'
 ]
+
+
+# The options of the method, of the finite differences, of the scale of
+# the values (besides numbers), and of the loss
+_Method: TypeAlias = Annotated[Literal['trf', 'dogbox', 'lm'], Choices(
+    trf='Trust region reflective', dogbox='Dogbox',
+    lm='Levenberg-Marquardt')]
+_Jac: TypeAlias = Annotated[Literal['2-point', '3-point'], Choices({
+    '2-point': 'Forward differences', '3-point': 'Central differences'})]
+_XScale: TypeAlias = Annotated[Literal['jac'], Choices(jac='By the Jacobian')]
+_Loss: TypeAlias = Annotated[
+    Literal['linear', 'soft_l1', 'huber', 'cauchy', 'arctan'], Choices(
+        linear='Linear (least squares)', soft_l1='Soft L1', huber='Huber',
+        cauchy='Cauchy', arctan='Arctangent')]
 
 
 class _BoundsTransform:
@@ -63,10 +77,12 @@ class _BoundsTransform:
 
 class FitterScipyLeastSquares(Fitter):
     """
-    Least squares with scipy.optimize.least_squares: trust region
-    reflective ('trf', with bounds), dogbox, or Levenberg-Marquardt
-    ('lm': MINPACK, whose bounds are applied by a map of the values, as
-    lmfit does). The Jacobian is by finite differences.
+    Least squares with scipy: trust region reflective, dogbox or
+    Levenberg-Marquardt. The methods are those of
+    scipy.optimize.least_squares: trust region reflective ('trf', with
+    bounds), dogbox, or Levenberg-Marquardt ('lm': MINPACK, whose bounds
+    are applied by a map of the values, as lmfit does). The Jacobian is
+    by finite differences.
 
     The free elements take a value (where to start), and optional min,
     max and a Gaussian or uniform prior (see FitParamLeastSquares).
@@ -116,6 +132,10 @@ class FitterScipyLeastSquares(Fitter):
         return 'scipy.least_squares'
 
     @staticmethod
+    def type_title() -> str:
+        return 'SciPy least squares'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamLeastSquares
 
@@ -131,11 +151,10 @@ class FitterScipyLeastSquares(Fitter):
 
     def __init__(
             self,
-            method: Literal['trf', 'dogbox', 'lm'] = 'trf',
-            jac: Literal['2-point', '3-point'] = '2-point',
-            x_scale: Annotated[float, Gt(0)] | Literal['jac'] | None = None,
-            loss: Literal[
-                'linear', 'soft_l1', 'huber', 'cauchy', 'arctan'] = 'linear',
+            method: _Method = 'trf',
+            jac: _Jac = '2-point',
+            x_scale: Annotated[float, Gt(0)] | _XScale | None = None,
+            loss: _Loss = 'linear',
             f_scale: Annotated[float, Gt(0)] = 1.0,
             max_nfev: Annotated[int, Gt(0)] | None = None,
             ftol: Annotated[float, Gt(0)] = 1e-8,

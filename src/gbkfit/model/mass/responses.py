@@ -127,19 +127,23 @@ class HaloResponse(TypedSerializable, abc.ABC):
 
 class ResponseBlumenthal86(HaloResponse):
     """
-    The adiabatic contraction of Blumenthal et al. (1986): the dark matter
-    within r' ends within r, with r' M(r') = r (M(r') + M_b(r)) (Burkert
-    et al. 2010, Eq. 19), of the masses within spheres of the halo before
-    (M = v^2 r / G) and of the baryons: v^2(r) = G M(r') / r = v^2(r') r'
-    / r. (Burkert
-    et al. 2010, Eq. 18, which DysmalPy's documentation quotes, writes
-    v^2(r') for this term, smaller by r / r': it does not keep the mass
-    that Eq. 19 moves within r.)
+    The adiabatic contraction of Blumenthal et al. 1986: the halo
+    contracts in the pull of its baryons, each shell keeping r M(<r). The
+    dark matter within r' ends within r, with r' M(r') = r (M(r') +
+    M_b(r)) (Burkert et al. 2010, Eq. 19), of the masses within spheres of
+    the halo before (M = v^2 r / G) and of the baryons: v^2(r) = G M(r') /
+    r = v^2(r') r' / r. (Burkert et al. 2010, Eq. 18, which DysmalPy's
+    documentation quotes, writes v^2(r') for this term, smaller by r /
+    r': it does not keep the mass that Eq. 19 moves within r.)
     """
 
     @staticmethod
     def type() -> str:
         return 'blumenthal86'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Adiabatic contraction (Blumenthal 1986)'
 
     def vcirc2(
             self,
@@ -155,15 +159,21 @@ class ResponseBlumenthal86(HaloResponse):
 
 class ResponseGnedin04(HaloResponse):
     """
-    The adiabatic contraction of Gnedin et al. (2004): that of Blumenthal
-    et al. (see ResponseBlumenthal86) with the orbit-averaged radii r_bar
-    = 0.85 r_D (r / r_D)^0.8 in the masses, of the radius r_D of the halo
-    (of a parameterisation of a mass or a velocity).
+    The adiabatic contraction of Gnedin et al. 2004: that of Blumenthal et
+    al. 1986 on orbit-averaged radii, which contracts the halo less. It is
+    that of Blumenthal et al. (see ResponseBlumenthal86) with the
+    orbit-averaged radii r_bar = 0.85 r_D (r / r_D)^0.8 in the masses, of
+    the radius r_D of the halo (of a parameterisation of a mass or a
+    velocity).
     """
 
     @staticmethod
     def type() -> str:
         return 'gnedin04'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Adiabatic contraction (Gnedin 2004)'
 
     def check_profile(self, profile: SpheroidProfile) -> None:
         if not (isinstance(profile, ProfileHalo)
@@ -189,17 +199,23 @@ class ResponseGnedin04(HaloResponse):
 
 class ResponseCautun20(HaloResponse):
     """
-    The contraction of Cautun et al. (2020, Eq. 11), as they fit their
-    simulations: the mass of the halo within r times 0.45 + 0.38 (eta +
-    1.16)^0.53, eta = M_b (1 - f_b) / (f_b M) of the masses within the
-    sphere of r of the halo before (of dark matter only, M = v^2 r / G)
-    and of the baryons, f_b the cosmic baryon fraction of the cosmology of
-    the galaxy (about 1 at eta = 1: baryons that follow the dark matter).
+    The contraction of Cautun et al. 2020, fitted to simulations: the
+    mass of the halo within each radius grows with that of the baryons.
+    It is the mass of the halo within r times 0.45 + 0.38 (eta +
+    1.16)^0.53 (their Eq. 11), eta = M_b (1 - f_b) / (f_b M) of the masses
+    within the sphere of r of the halo before (of dark matter only, M =
+    v^2 r / G) and of the baryons, f_b the cosmic baryon fraction of the
+    cosmology of the galaxy (about 1 at eta = 1: baryons that follow the
+    dark matter).
     """
 
     @staticmethod
     def type() -> str:
         return 'cautun20'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Empirical contraction (Cautun 2020)'
 
     def vcirc2(
             self,
@@ -283,6 +299,10 @@ class ResponseSIDM(HaloResponse):
     def type() -> str:
         return 'sidm'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Self-interacting dark matter core'
+
     def dump(self) -> dict[str, Any]:
         info = super().dump()
         if self._contraction is not None:
@@ -307,10 +327,12 @@ class ResponseSIDM(HaloResponse):
             else self._contraction.pdescs()
         return pdescs | dict(
             sigma_m=ParamScalarDesc(
+                title='Cross-section per unit mass',
                 desc="the cross-section of SIDM per unit mass",
                 min=0, unit='cm2 / g', default=1),
             t_age=ParamScalarDesc(
-                desc="the age of the halo", min=0, unit='Gyr', default=10))
+                title='Halo age', desc="the age of the halo", min=0,
+                unit='Gyr', default=10))
 
     def check_profile(self, profile: SpheroidProfile) -> None:
         if self._contraction is not None:

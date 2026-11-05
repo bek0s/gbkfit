@@ -92,17 +92,22 @@ class Regions(TypedSerializable, abc.ABC):
 
 class RegionsBins(Regions):
     """
-    Bins of the pixels of a spatial grid (e.g. Voronoi bins), given by the
-    bin of each pixel (index): 0 to n - 1, or negative for the pixels in no
-    bin. Each bin is the sum of its pixels; of spectra, optionally of
-    those valid in each channel (valid: 1 or 0, of shape (channels, ny,
-    nx), e.g. those of a cube of which some spaxels are masked in some
-    channels; see prep_region_spectra), which the model sums too.
+    Bins of the pixels of a spatial grid (as Voronoi bins), given by the
+    bin of each pixel. The bin of each pixel (index) is 0 to n - 1, or
+    negative for the pixels in no bin. Each bin is the sum of its pixels;
+    of spectra, optionally of those valid in each channel (valid: 1 or 0,
+    of shape (channels, ny, nx), e.g. those of a cube of which some
+    spaxels are masked in some channels; see prep_region_spectra), which
+    the model sums too.
     """
 
     @staticmethod
     def type() -> str:
         return 'bins'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Bins of pixels'
 
     config_constructors = ('from_file',)
 
@@ -257,11 +262,18 @@ class RegionsBins(Regions):
 
 
 class RegionsApertures(Regions):
-    """Apertures on the sky (see Aperture), one region each."""
+    """
+    Apertures on the sky (e.g. the circles of fibres), one region each.
+    Their shapes are those of Aperture.
+    """
 
     @staticmethod
     def type() -> str:
         return 'apertures'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Apertures on the sky'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

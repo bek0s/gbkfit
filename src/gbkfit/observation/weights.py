@@ -14,7 +14,7 @@ import numpy as np
 from annotated_types import Ge, Gt, Le
 
 from gbkfit.config import (
-    BasicParser, Serializable, TypedParser, TypedSerializable,
+    BasicParser, Choices, Serializable, TypedParser, TypedSerializable,
     Unit, check_options)
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid, sky_positions
@@ -37,7 +37,8 @@ __all__ = [
 
 # The axes of a disk, and the azimuth of each (radians, in its plane)
 _AXES = dict(major=0.0, minor=np.pi / 2)
-_Axis: TypeAlias = Literal[tuple(_AXES)]
+_Axis: TypeAlias = Annotated[
+    Literal[tuple(_AXES)], Choices(major='Major axis', minor='Minor axis')]
 
 
 class WeightTrait(TypedSerializable, abc.ABC):
@@ -69,6 +70,10 @@ class WeightAzimuthPower(WeightTrait):
     @staticmethod
     def type() -> str:
         return 'azimuth_power'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Azimuth power'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), power=self._power, axis=self._axis)
@@ -103,6 +108,10 @@ class WeightAzimuthRange(WeightTrait):
     @staticmethod
     def type() -> str:
         return 'azimuth_range'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Azimuth range'
 
     def dump(self) -> dict[str, Any]:
         return dict(

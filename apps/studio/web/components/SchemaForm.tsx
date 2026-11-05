@@ -91,16 +91,39 @@ export function resolve(node: Schema, defs: Defs): Schema {
 }
 
 // The members of a family: the objects of its choice (oneOf, nested),
-// each of a type (its const), in the order of the schema
+// each of a type (its const) and with the title of its type, in the order
+// of the schema
 export function membersOf(node: Schema, defs: Defs): Schema[] {
   const resolved = resolve(node, defs);
   const choices = resolved.oneOf as Schema[] | undefined;
   if (!choices) return typeOf(resolved) === undefined ? [] : [resolved];
   // (the forms of a member, e.g. a beam by its axes or by a file, have its
-  // description; their own, of their constructors, is kept as form)
+  // title and description; their own, of their constructors, is kept as
+  // form)
   return choices.flatMap((choice) =>
-    membersOf(choice, defs).map((member) => (resolved.description === undefined ? member : { ...member, description: resolved.description, form: member.description })),
+    membersOf(choice, defs).map((member) => ({
+      ...member,
+      ...(resolved.title === undefined ? {} : { title: resolved.title }),
+      ...(resolved.description === undefined ? {} : { description: resolved.description, form: member.description }),
+    })),
   );
+}
+
+// The title of a type of a family (that of its members), or the type
+export function titleOf(defs: Defs | undefined, family: string, type: string): string {
+  const member = defs?.[family] ? membersOf(defs[family], defs).find((m) => typeOf(m) === type) : undefined;
+  return typeof member?.title === 'string' ? member.title : type;
+}
+
+// The choices of a node of the schema, each with its title: those of a
+// choice of constants (oneOf of {const, title}), or of an enum (titled by
+// their values); null if it is not a choice
+export function choicesOf(node: Schema | undefined): { value: unknown; title: string }[] | null {
+  if (!node) return null;
+  if (Array.isArray(node.enum)) return (node.enum as unknown[]).map((value) => ({ value, title: String(value) }));
+  const options = node.oneOf as Schema[] | undefined;
+  if (!Array.isArray(options) || options.length === 0 || !options.every((o) => 'const' in o)) return null;
+  return options.map((o) => ({ value: o.const, title: typeof o.title === 'string' ? o.title : String(o.const) }));
 }
 
 // The type of a member of a family (the const of its option type)
@@ -231,7 +254,10 @@ function MemberField({
           items={[
             ...(nullable ? [{ value: '', label: 'None' }] : type === undefined ? [{ value: '', label: 'Choose…' }] : []),
             ...(type !== undefined && !types.includes(type) ? [{ value: type, label: type }] : []),
-            ...types.map((t) => ({ value: t, label: typeTitle(t), description: members.find((m) => typeOf(m) === t)?.description as string | undefined })),
+            ...types.map((t) => {
+              const of = members.find((m) => typeOf(m) === t);
+              return { value: t, label: typeof of?.title === 'string' ? of.title : t, description: of?.description as string | undefined };
+            }),
             ...named.map((name) => ({ value: `block:${name}`, label: name, description: `A block of the project (its ${family})` })),
           ]}
           value={type ?? ''}
@@ -255,35 +281,15 @@ function MemberField({
   );
 }
 
-// The titles of the types of the families of instruments (others: their
-// names); what each is comes from the library (its description: the
-// first paragraph of the docstring of its class)
-const TYPE_TITLES: Record<string, string> = {
-  point: 'None (a point)',
-  gauss: 'Gaussian',
-  gauss_beam: 'Gaussian, by FWHM (radio beam)',
-  ggauss: 'Generalised Gaussian',
-  moffat: 'Moffat',
-  lorentz: 'Lorentzian',
-  hanning: 'Hanning',
-  image: 'Image (measured)',
-  images: 'Image per wavelength (measured)',
-  sum: 'Sum',
-  convolution: 'Convolution',
-};
-
-// The order of the types in their menus: the common ones first (others
-// after them)
+// The order of the types of the instruments in their menus: the common
+// ones first (others after them; their titles and what each is come from
+// the library)
 const TYPE_ORDER = ['point', 'gauss', 'gauss_beam', 'moffat', 'ggauss', 'lorentz', 'hanning', 'image', 'images', 'sum', 'convolution'];
 
 // A form of a member, by its options (e.g. bmaj, bmin, bpa; file)
 function formLabel(form: Schema): string {
   const keys = Object.keys(propertiesOf(form)).filter((key) => key !== 'type');
   return keys.length ? keys.join(', ') : 'nothing';
-}
-
-export function typeTitle(type: string): string {
-  return TYPE_TITLES[type] ?? type;
 }
 
 export function propertiesOf(node: Schema): Record<string, Schema> {
@@ -391,7 +397,7 @@ function AnyField({
   if (typeof value === 'string' || value === undefined) {
     const family = kinds.map((i) => familyOf(branches[i])).find((f) => f && BLOCK_FOLDERS[f]);
     if (typeof value === 'string' && family) return <BlockField family={family} value={value} onChange={onChange} />;
-    const choice = find((b) => Array.isArray(b.enum) && (value === undefined || (b.enum as unknown[]).includes(value)));
+    const choice = find((b) => choicesOf(b) !== null && (value === undefined || choicesOf(b)!.some((c) => c.value === value)));
     if (choice !== undefined) return <PlainField node={{ ...resolved[choice], default: node.default }} value={value} onChange={onChange} />;
     const text = find((b) => b.type === 'string' && b.format !== 'path');
     if (typeof value === 'string' && text !== undefined) return <PlainField node={resolved[text]} value={value} onChange={onChange} />;
@@ -450,13 +456,15 @@ function PlainField({
       />
     );
   }
-  if (Array.isArray(node.enum)) {
+  const choices = choicesOf(node);
+  if (choices) {
+    const titled = (v: unknown) => choices.find((c) => c.value === v)?.title ?? String(v);
     return (
       <Choice
-        items={[{ value: '', label: node.default === undefined ? '—' : `default (${String(node.default)})` }, ...(node.enum as string[]).map((e) => ({ value: e, label: e }))]}
-        value={typeof value === 'string' ? value : ''}
+        items={[{ value: '', label: node.default === undefined ? '—' : `default (${titled(node.default)})` }, ...choices.map((c) => ({ value: String(c.value), label: c.title }))]}
+        value={value === undefined ? '' : String(value)}
         label="a choice"
-        onChange={(next) => onChange(next === '' ? undefined : next)}
+        onChange={(next) => onChange(next === '' ? undefined : choices.find((c) => String(c.value) === next)?.value)}
       />
     );
   }

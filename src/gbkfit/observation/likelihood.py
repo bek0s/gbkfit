@@ -19,7 +19,7 @@ from annotated_types import Ge, Gt, Lt
 from pydantic import FiniteFloat
 
 from gbkfit.config import (
-    FilePath, TypedParser, TypedSerializable, check_name,
+    Choices, FilePath, TypedParser, TypedSerializable, check_name,
     check_options)
 from gbkfit.dataset import Dataset, NoiseCorrelation
 from gbkfit.math.correlation import (
@@ -333,6 +333,10 @@ class LikelihoodGaussian(Likelihood):
     def type() -> str:
         return 'gaussian'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
     def dump(self) -> dict[str, Any]:
         limits = {} if self._upper_limits is None else dict(upper_limits={
             key: _record_config(limit)
@@ -375,11 +379,13 @@ class LikelihoodGaussian(Likelihood):
             scale, jitter = self.noise_params(key)
             if scale is not None:
                 pdescs[scale] = ParamScalarDesc(
+                    title=f'Noise scale ({key})',
                     desc=f"the scale of the errors of {key}",
                     min=noise.scale_min,
                     default=max(1.0, noise.scale_min))
             if jitter is not None:
                 pdescs[jitter] = ParamScalarDesc(
+                    title=f'Noise jitter ({key})',
                     desc=f"the jitter of {key}, which adds to its errors in "
                          "quadrature",
                     min=0, default=0)
@@ -668,13 +674,15 @@ def _record_config(record: NamedTuple) -> dict[str, Any]:
 
 
 # What the function of a LikelihoodUser returns
-_Form: TypeAlias = Literal['residuals', 'log_likelihood']
+_Form: TypeAlias = Annotated[
+    Literal['residuals', 'log_likelihood'],
+    Choices(residuals='Residuals', log_likelihood='Log-likelihood')]
 
 
 class LikelihoodUser(Likelihood):
     """
     A likelihood given by a Python function (as BayesianBBarolo's
-    log_like), which the objective calls on the host at each evaluation,
+    log_like). The objective calls it on the host at each evaluation,
     for each data item of the observation: func(item, data, model, error,
     mask, params), with item the name of the item (e.g. 'moment1'), data
     and model arrays of its shape (the model NaN where it lacks a value),
@@ -722,6 +730,10 @@ class LikelihoodUser(Likelihood):
     @staticmethod
     def type() -> str:
         return 'user'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Python function'
 
     def dump(self) -> dict[str, Any]:
         if self._source is None:
@@ -804,7 +816,9 @@ class LikelihoodUser(Likelihood):
         return self._form == 'residuals'
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return {f'{self._prefix}{name}': ParamScalarDesc()
+        return {f'{self._prefix}{name}': ParamScalarDesc(
+                    title='User parameter',
+                    desc="a parameter of the function of the likelihood")
                 for name in self._params}
 
     def takes_lacking_values(self) -> bool:

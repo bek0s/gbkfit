@@ -50,6 +50,10 @@ class DriverCuda(Driver):
     def type() -> str:
         return 'cuda'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'CUDA GPU'
+
     def __init__(self, device: Annotated[int, Ge(0)] = 0):
         check_options(DriverCuda.__init__, locals())
         try:

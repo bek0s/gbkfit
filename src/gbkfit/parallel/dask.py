@@ -24,12 +24,13 @@ __all__ = [
 
 class WorkersDask(Workers):
     """
-    Workers in actors of a Dask cluster: a number of them, each on a worker
-    of the cluster (of its own, while there are enough), with its copy of
-    the objective, which goes to it pickled (see Objective). Like
-    processes (see WorkersProcesses), they evaluate at the same time the
-    parts of the models that run in Python, and run stoppable functions
-    at once (e.g. sub-fits), on the machines of the cluster.
+    Workers in actors of a Dask cluster, each with its copy of the
+    objective. There are a number of them, each on a worker of the
+    cluster (of its own, while there are enough); the objective goes to
+    each pickled (see Objective). Like processes (see WorkersProcesses),
+    they evaluate at the same time the parts of the models that run in
+    Python, and run stoppable functions at once (e.g. sub-fits), on the
+    machines of the cluster.
 
     The cluster is that of the client of this process (see
     distributed.get_client), or else that of the address of its scheduler.
@@ -52,6 +53,10 @@ class WorkersDask(Workers):
     @staticmethod
     def type() -> str:
         return 'dask'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Dask cluster'
 
     def __init__(
             self,

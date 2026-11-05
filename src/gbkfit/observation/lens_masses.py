@@ -151,6 +151,10 @@ class LensDeflectionMap(LensMass):
     def type() -> str:
         return 'deflection_map'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Deflection maps'
+
     @classmethod
     def from_files(
             cls,
@@ -255,8 +259,8 @@ class LensDeflectionMap(LensMass):
         if not self._scaled:
             return {}
         return dict(scale=ParamScalarDesc(
-            "the scale of the deflection (e.g. D_LS / D_S)", min=0,
-            unit='', default=0.5))
+            "the scale of the deflection (e.g. D_LS / D_S)",
+            title='Deflection scale', min=0, unit='', default=0.5))
 
     def deflection(
             self, grid: Grid, params: ParamValues
@@ -274,11 +278,13 @@ class LensDeflectionMap(LensMass):
 class LensSIE(LensMass):
     """
     A singular isothermal ellipsoid (SIE): the standard model of a galaxy
-    lens, of convergence
+    lens.
+
+    Its convergence is
 
         kappa = theta_e / (2 xi),
 
-    whose deflection is analytic (Kormann et al. 1994): with
+    and its deflection is analytic (Kormann et al. 1994): with
     f = sqrt(1 - q^2) and psi = sqrt(q^2 u^2 + v^2),
 
         alpha_u = theta_e sqrt(q) / f * arctan(f u / psi)
@@ -301,12 +307,17 @@ class LensSIE(LensMass):
     def type() -> str:
         return 'sie'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Singular isothermal ellipsoid (SIE)'
+
     def centred(self) -> bool:
         return True
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(theta_e=ParamScalarDesc(
-            "the Einstein radius", min=0, unit='arcsec', default=1)
+            "the Einstein radius", title='Einstein radius', min=0,
+            unit='arcsec', default=1)
         ) | _ellipse_pdescs()
 
     def deflection(
@@ -321,11 +332,13 @@ class LensSIE(LensMass):
 class LensEPL(LensMass):
     """
     An elliptical power law (EPL): a galaxy lens whose density falls as
-    r^-slope (an SIE for slope 2), of convergence
+    r^-slope (an SIE for slope 2).
+
+    Its convergence is
 
         kappa = (2 - t) / 2 * (theta_e / xi)^t,   t = slope - 1,
 
-    whose deflection is analytic (Tessore & Metcalf 2015): with
+    and its deflection is analytic (Tessore & Metcalf 2015): with
     b = theta_e sqrt(q), R e^(i phi) = q u + i v and f = (1 - q) / (1 + q),
 
         alpha_u + i alpha_v = 2 b / (1 + q) * (b / R)^(t - 1) * e^(i phi)
@@ -348,16 +361,22 @@ class LensEPL(LensMass):
     def type() -> str:
         return 'epl'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Elliptical power law (EPL)'
+
     def centred(self) -> bool:
         return True
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             theta_e=ParamScalarDesc(
-                "the Einstein radius", min=0, unit='arcsec', default=1),
+                "the Einstein radius", title='Einstein radius', min=0,
+                unit='arcsec', default=1),
             slope=ParamScalarDesc(
                 "the slope of the density (2 = isothermal)",
-                min=1, max=3, unit='', default=2)) | _ellipse_pdescs()
+                title='Density slope', min=1, max=3, unit='', default=2)
+        ) | _ellipse_pdescs()
 
     def deflection(
             self, grid: Grid, params: ParamValues
@@ -371,7 +390,9 @@ class LensEPL(LensMass):
 class LensNFW(LensMass):
     """
     A Navarro-Frenk-White (NFW) halo: the lens of a dark matter halo (e.g.
-    of a group or a cluster), of convergence (Bartelmann 1996)
+    of a group or a cluster).
+
+    Its convergence is (Bartelmann 1996)
 
         kappa = 2 kappa_s (1 - F(x)) / (x^2 - 1),   x = xi / r_s,
 
@@ -397,16 +418,21 @@ class LensNFW(LensMass):
     def type() -> str:
         return 'nfw'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'NFW halo'
+
     def centred(self) -> bool:
         return True
 
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             kappa_s=ParamScalarDesc(
-                "the convergence scale (rho_s r_s / Sigma_cr)", min=0,
-                unit='', default=0.1),
+                "the convergence scale (rho_s r_s / Sigma_cr)",
+                title='Convergence scale', min=0, unit='', default=0.1),
             r_s=ParamScalarDesc(
-                "the scale radius", min=0, unit='arcsec', default=10)
+                "the scale radius", title='Scale radius', min=0,
+                unit='arcsec', default=10)
         ) | _ellipse_pdescs()
 
     def deflection(
@@ -425,8 +451,10 @@ class LensNFW(LensMass):
 class LensMultipole(LensMass):
     """
     A multipole of a lens: the deviation of a galaxy lens from an
-    ellipse (e.g. order 4 for disky or boxy isodensity contours, 3 and 1
-    for lopsided ones), of convergence (e.g. Van de Vyvere et al. 2022)
+    ellipse (e.g. order 4 for disky or boxy isodensity contours).
+
+    Orders 3 and 1 make the contours lopsided. Its convergence is (e.g.
+    Van de Vyvere et al. 2022)
 
         kappa = theta_e a / (2 r) * cos(m (phi - phi_m))
 
@@ -461,6 +489,10 @@ class LensMultipole(LensMass):
     def type() -> str:
         return 'multipole'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Multipole'
+
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         return super().dump() | dict(order=self._order)
 
@@ -479,11 +511,13 @@ class LensMultipole(LensMass):
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             theta_e=ParamScalarDesc(
-                "the Einstein radius of its lens", min=0,
-                unit='arcsec', default=1),
-            a=ParamScalarDesc("the strength", unit='', default=0),
+                "the Einstein radius of its lens", title='Einstein radius',
+                min=0, unit='arcsec', default=1),
+            a=ParamScalarDesc(
+                "the strength", title='Strength', unit='', default=0),
             pa=ParamScalarDesc(
-                "the position angle", unit='deg', default=0, period=360),
+                "the position angle", title='Position angle', unit='deg',
+                default=0, period=360),
         ) | _centre_pdescs()
 
     def deflection(
@@ -532,12 +566,18 @@ class LensShear(LensMass):
     def type() -> str:
         return 'shear'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'External shear'
+
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(
             gamma=ParamScalarDesc(
-                "the strength", min=0, unit='', default=0),
+                "the strength", title='Shear strength', min=0, unit='',
+                default=0),
             pa=ParamScalarDesc(
-                "the position angle", unit='deg', default=0, period=180))
+                "the position angle", title='Position angle', unit='deg',
+                default=0, period=180))
 
     def deflection(
             self, grid: Grid, params: ParamValues
@@ -557,8 +597,12 @@ lens_mass_parser = TypedParser(LensMass, [
 def _centre_pdescs() -> dict[str, ParamScalarDesc]:
     """Return the parameters of the centre of a mass."""
     return dict(
-        x=ParamScalarDesc("the centre along x", unit='arcsec', default=0),
-        y=ParamScalarDesc("the centre along y", unit='arcsec', default=0))
+        x=ParamScalarDesc(
+            "the centre along x", title='Centre (x)', unit='arcsec',
+            default=0),
+        y=ParamScalarDesc(
+            "the centre along y", title='Centre (y)', unit='arcsec',
+            default=0))
 
 
 def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
@@ -566,9 +610,11 @@ def _ellipse_pdescs() -> dict[str, ParamScalarDesc]:
     return dict(
         # (q > 0 keeps the deflection finite)
         q=ParamScalarDesc(
-            "the axis ratio", min=1e-3, max=1, unit='', default=0.8),
+            "the axis ratio", title='Axis ratio', min=1e-3, max=1, unit='',
+            default=0.8),
         pa=ParamScalarDesc(
-            "the position angle", unit='deg', default=0, period=180),
+            "the position angle", title='Position angle', unit='deg',
+            default=0, period=180),
     ) | _centre_pdescs()
 
 

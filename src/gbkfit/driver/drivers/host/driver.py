@@ -33,6 +33,10 @@ class DriverHost(Driver):
     def type() -> str:
         return 'host'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Host CPU'
+
     def mem_alloc_s(
             self,
             shape: Shape,

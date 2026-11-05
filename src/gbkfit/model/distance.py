@@ -12,7 +12,7 @@ galaxies, peculiar velocities make it wrong.
 
 import abc
 import functools
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.constants
 import astropy.cosmology
@@ -21,7 +21,7 @@ import numpy as np
 from annotated_types import Gt
 
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options)
+    Choices, TypedParser, TypedSerializable, check_options)
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .mass.units import G
@@ -44,6 +44,16 @@ COSMOLOGY_DEFAULT = 'Planck18'
 
 # The cosmologies: the realizations of astropy
 _COSMOLOGIES = tuple(astropy.cosmology.realizations.available)
+
+# The titles of the cosmologies (of those astropy may add, their names)
+_COSMOLOGY_TITLES = dict(
+    WMAP1='WMAP 1-year', WMAP3='WMAP 3-year', WMAP5='WMAP 5-year',
+    WMAP7='WMAP 7-year', WMAP9='WMAP 9-year', Planck13='Planck 2013',
+    Planck15='Planck 2015', Planck18='Planck 2018')
+
+# The option of a cosmology
+_Cosmology: TypeAlias = Annotated[Literal[_COSMOLOGIES], Choices({
+    name: _COSMOLOGY_TITLES.get(name, name) for name in _COSMOLOGIES})]
 
 # The speed of light (km/s)
 _C = astropy.constants.c.to_value('km/s')
@@ -125,7 +135,7 @@ class Distance(TypedSerializable, abc.ABC):
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), cosmology=self._cosmology_name)
 
-    def __init__(self, cosmology: Literal[_COSMOLOGIES] = COSMOLOGY_DEFAULT):
+    def __init__(self, cosmology: _Cosmology = COSMOLOGY_DEFAULT):
         check_options(Distance.__init__, locals())
         self._cosmology = _cosmology(cosmology)
         self._cosmology_name = cosmology
@@ -226,9 +236,9 @@ class Distance(TypedSerializable, abc.ABC):
 
 class DistanceDirect(Distance):
     """
-    A distance given directly: its parameter is the angular diameter
-    distance (Mpc), and the epoch is the redshift of the galaxy (see
-    Galaxy; 0 without one).
+    A distance given directly, as a parameter: the angular diameter
+    distance of the galaxy (Mpc). The epoch is the redshift of the galaxy
+    (see Galaxy; 0 without one).
 
     Parameters
     ----------
@@ -245,8 +255,13 @@ class DistanceDirect(Distance):
     def type() -> str:
         return 'direct'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Given directly'
+
     def pdescs(self) -> dict[str, ParamScalarDesc]:
         return dict(distance=ParamScalarDesc(
+            title='Angular diameter distance',
             desc="the angular diameter distance of the galaxy",
             min=0, unit='Mpc', default=10))
 
@@ -259,13 +274,13 @@ class DistanceDirect(Distance):
 
 class DistanceRedshift(Distance):
     """
-    A distance given by a redshift: the angular diameter distance in the
-    cosmology at the redshift of the galaxy (see Galaxy), which is also
-    the epoch; or at the given redshift, for the distance only (e.g. one
-    corrected for the motion of the galaxy, whose lines show its
-    heliocentric redshift). It has no parameters: the galaxy has one
-    redshift, and the velocity offset is the systemic velocity of its
-    components (vsys).
+    A distance given by a redshift: the angular diameter distance at the
+    redshift of the galaxy, or at its own, in the cosmology. That redshift
+    is also the epoch: that of the galaxy (see Galaxy), or the given one,
+    which serves the distance and the epoch only (e.g. one corrected for
+    the motion of the galaxy, whose lines show its heliocentric redshift).
+    It has no parameters: the galaxy has one redshift, and the velocity
+    offset is the systemic velocity of its components (vsys).
 
     Parameters
     ----------
@@ -285,6 +300,10 @@ class DistanceRedshift(Distance):
     def type() -> str:
         return 'redshift'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'From a redshift'
+
     def dump(self) -> dict[str, Any]:
         info = super().dump()
         if self._redshift is not None:
@@ -294,7 +313,7 @@ class DistanceRedshift(Distance):
     def __init__(
             self,
             redshift: Annotated[float, Gt(0)] | None = None,
-            cosmology: Literal[_COSMOLOGIES] = COSMOLOGY_DEFAULT
+            cosmology: _Cosmology = COSMOLOGY_DEFAULT
     ):
         check_options(DistanceRedshift.__init__, locals())
         super().__init__(cosmology)

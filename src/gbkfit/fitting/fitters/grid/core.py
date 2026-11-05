@@ -5,16 +5,16 @@ The brute-force grid.
 import math
 import typing
 from collections.abc import Mapping
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Self
 
 import numpy as np
 from annotated_types import Ge, Gt
 
 from gbkfit.config import check_options
-from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
+from gbkfit.fitting.base import FitRun, Fitter, FitterInfo, MeritChoice
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass
-from gbkfit.fitting.problem import MERITS, FitProblem
+from gbkfit.fitting.problem import FitProblem
 from gbkfit.fitting.uncertainty import UncertaintyOptions
 from gbkfit.params import FreeElement, Prior
 
@@ -100,14 +100,14 @@ class FitParamGrid(FitParam):
 
 class FitterGrid(Fitter):
     """
-    A brute-force grid (e.g. 3D Barolo's SPACEPAR): the chi-square (or
-    the AICp; see merit) at every combination of the values of the free
-    elements (see FitParamGrid), with the chi-square of the priors, if
-    any (the cost of the optimizers; see FitProblem.cost), evaluated in
-    batches. Its best solution is the point of the lowest. With two free
-    elements and the others fixed, it maps how they trade off (e.g. the
-    inclination and the rotation of a ring: free one element of each
-    node-wise parameter).
+    A brute-force grid: the chi-square (or the AICp) at every combination
+    of the values of the free elements. Like 3D Barolo's SPACEPAR, it
+    evaluates the merit (see merit) at each point of the grid (see
+    FitParamGrid), with the chi-square of the priors, if any (the cost of
+    the optimizers; see FitProblem.cost), in batches. Its best solution
+    is the point of the lowest. With two free elements and the others
+    fixed, it maps how they trade off (e.g. the inclination and the
+    rotation of a ring: free one element of each node-wise parameter).
 
     Its diagnostics 'grid' hold the names of the free elements, the
     values of each on the grid ('axes') and the cost of every point
@@ -148,6 +148,10 @@ class FitterGrid(Fitter):
         return 'grid'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Grid search'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamGrid
 
@@ -164,7 +168,7 @@ class FitterGrid(Fitter):
             batch: Annotated[int, Gt(0)] = 1000,
             max_points: Annotated[int, Gt(0)] = 1_000_000,
             n: Annotated[int, Ge(2)] | None = None,
-            merit: Literal[MERITS] = 'chi2',
+            merit: MeritChoice = 'chi2',
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None
     ):

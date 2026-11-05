@@ -101,6 +101,10 @@ class FitterUltraNest(Fitter):
         return 'ultranest'
 
     @staticmethod
+    def type_title() -> str:
+        return 'UltraNest'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamPrior
 

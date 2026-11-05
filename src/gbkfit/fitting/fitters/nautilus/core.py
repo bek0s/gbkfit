@@ -80,6 +80,10 @@ class FitterNautilus(Fitter):
         return 'nautilus'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Nautilus'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamPrior
 

@@ -65,9 +65,10 @@ def check_profile_radii(
 
 class DatasetProfile(Dataset):
     """
-    Values of functions of a galaxy at radii (see ObservationProfile; e.g.
-    its rotation curve): a table of radii, and of the values of each
-    function, its data items, named after the function (e.g. vcirc).
+    Values of functions of a galaxy at radii (e.g. its rotation curve): a
+    table of radii, and of the values of each function. The values of
+    each function are a data item, named after the function (e.g. vcirc;
+    see ObservationProfile).
 
     The radii are angles (e.g. arcsec), or lengths (e.g. kpc): measured at
     a distance, if given (their angles are the lengths over it), or
@@ -99,6 +100,10 @@ class DatasetProfile(Dataset):
     @staticmethod
     def type() -> str:
         return 'profile'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Radial profiles'
 
     @classmethod
     def from_file(

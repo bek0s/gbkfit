@@ -6,7 +6,7 @@ for pressure (PressureSupport).
 
 import abc
 from collections.abc import Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any
 
 import numpy as np
 from annotated_types import Ge
@@ -16,8 +16,9 @@ from gbkfit.config import (
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import RotationInput, VPTrait, VPTraitPlanar, WaveInput
 from .options import (
-    Direction, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, SAMPLING_TAIL,
-    Sampling, Spiral, VPT_DIRECTIONS)
+    SAMPLING_DEFAULT, SAMPLING_TAIL, Direction,
+    Harmonic, Sampling, SamplingChoice, Spiral, SpiralWavenumber,
+    SpiralWinding, VPTDirectionChoice)
 
 
 __all__ = [
@@ -133,7 +134,7 @@ class PressureSupport(TypedSerializable, abc.ABC):
 class PressureSupportJeans(PressureSupport):
     """
     The pressure support of an isotropic gas at the midplane of its disk:
-    the radial Jeans equation (see VPTraitMass).
+    the radial Jeans equation. See VPTraitMass.
 
     Parameters
     ----------
@@ -145,11 +146,15 @@ class PressureSupportJeans(PressureSupport):
     def type() -> str:
         return 'jeans'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Jeans equation'
+
 
 class PressureSupportSelfGravitating(PressureSupport):
     """
-    The pressure support of a disk whose thickness its own gravity sets
-    (see VPTraitMass).
+    The pressure support of a disk whose thickness its own gravity sets.
+    See VPTraitMass.
 
     Parameters
     ----------
@@ -160,6 +165,10 @@ class PressureSupportSelfGravitating(PressureSupport):
     @staticmethod
     def type() -> str:
         return 'self_gravitating'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Self-gravitating disk'
 
 
 pressure_support_parser = TypedParser(
@@ -190,19 +199,26 @@ class VPTraitUniform(VPTrait):
         return 'uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_UNIFORM
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitUniform.__init__, locals())
         super().__init__(Direction(direction), name=name)
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return {self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+        return {self.speed(): ParamScalarDesc(
+            title=self.speed_title(),
+            desc='the speed, the same at every radius', unit='km/s',
+            default=200)}
 
 
 class VPTraitArctan(VPTrait):
@@ -229,12 +245,16 @@ class VPTraitArctan(VPTrait):
         return 'arctan'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Arctan'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_ARCTAN
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitArctan.__init__, locals())
@@ -242,8 +262,12 @@ class VPTraitArctan(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+            'rt': ParamScalarDesc(
+                title='Turnover radius', desc='the radius of the turnover',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the asymptotic speed',
+                unit='km/s', default=200)}
 
 
 class VPTraitBoissier(VPTrait):
@@ -270,12 +294,16 @@ class VPTraitBoissier(VPTrait):
         return 'boissier'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Exponential (Boissier)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_BOISSIER
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitBoissier.__init__, locals())
@@ -283,13 +311,17 @@ class VPTraitBoissier(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+            'rt': ParamScalarDesc(
+                title='Scale radius', desc='the scale radius of the rise',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the asymptotic speed',
+                unit='km/s', default=200)}
 
 
 class VPTraitEpinat(VPTrait):
     """
-    The profile of the rotation curves of Epinat et al. (2008): v (r /
+    The profile of the rotation curves of Epinat et al. 2008: v (r /
     rt)^g / (1 + (r / rt)^a). Its parameters: rt, the turnover radius, v,
     the speed scale, a, the outer slope, and g, the inner slope.
 
@@ -312,12 +344,16 @@ class VPTraitEpinat(VPTrait):
         return 'epinat'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Epinat et al. (2008)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_EPINAT
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitEpinat.__init__, locals())
@@ -325,10 +361,20 @@ class VPTraitEpinat(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200),
-            'a': ParamScalarDesc(unit='', default=1),
-            'g': ParamScalarDesc(unit='', default=1)}
+            'rt': ParamScalarDesc(
+                title='Turnover radius', desc='the radius of the turnover',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the speed scale', unit='km/s',
+                default=200),
+            'a': ParamScalarDesc(
+                title='Outer slope',
+                desc='the outer slope: the speed goes as r^(g - a) far out',
+                unit='', default=1),
+            'g': ParamScalarDesc(
+                title='Inner slope',
+                desc='the inner slope: the speed goes as r^g near the centre',
+                unit='', default=1)}
 
 
 class VPTraitLRamp(VPTrait):
@@ -355,12 +401,16 @@ class VPTraitLRamp(VPTrait):
         return 'lramp'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Linear ramp'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_LRAMP
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitLRamp.__init__, locals())
@@ -368,8 +418,13 @@ class VPTraitLRamp(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+            'rt': ParamScalarDesc(
+                title='Turnover radius',
+                desc='the radius where the linear rise ends', min=0,
+                unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the speed at rt and beyond',
+                unit='km/s', default=200)}
 
 
 class VPTraitTanh(VPTrait):
@@ -396,12 +451,16 @@ class VPTraitTanh(VPTrait):
         return 'tanh'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Tanh'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_TANH
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitTanh.__init__, locals())
@@ -409,8 +468,12 @@ class VPTraitTanh(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+            'rt': ParamScalarDesc(
+                title='Turnover radius', desc='the radius of the turnover',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the asymptotic speed',
+                unit='km/s', default=200)}
 
 
 class VPTraitPolyex(VPTrait):
@@ -438,12 +501,16 @@ class VPTraitPolyex(VPTrait):
         return 'polyex'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Polyex'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_POLYEX
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitPolyex.__init__, locals())
@@ -451,14 +518,22 @@ class VPTraitPolyex(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200),
-            'a': ParamScalarDesc(unit='', default=0)}
+            'rt': ParamScalarDesc(
+                title='Scale radius',
+                desc='the scale radius of the inner rise', min=0,
+                unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the speed scale', unit='km/s',
+                default=200),
+            'a': ParamScalarDesc(
+                title='Outer slope',
+                desc='the slope of the outer part, in speed scales per rt',
+                unit='', default=0)}
 
 
 class VPTraitRix(VPTrait):
     """
-    The profile of the rotation curves of Rix et al. (1997): v (1 + r /
+    The profile of the rotation curves of Rix et al. 1997: v (1 + r /
     rt)^b (1 + (r / rt)^-g)^(-1 / g). Its parameters: rt, the turnover
     radius, v, the speed scale, g, the sharpness of the turnover, and b,
     the power law of the profile at large radii.
@@ -482,12 +557,16 @@ class VPTraitRix(VPTrait):
         return 'rix'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Rix et al. (1997)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_RIX
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitRix.__init__, locals())
@@ -495,10 +574,20 @@ class VPTraitRix(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200),
-            'b': ParamScalarDesc(unit='', default=0),
-            'g': ParamScalarDesc(min=0, unit='', default=2)}
+            'rt': ParamScalarDesc(
+                title='Turnover radius', desc='the radius of the turnover',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the speed scale', unit='km/s',
+                default=200),
+            'b': ParamScalarDesc(
+                title='Outer slope',
+                desc='the power law of the speed at large radii', unit='',
+                default=0),
+            'g': ParamScalarDesc(
+                title='Turnover sharpness',
+                desc='the sharpness of the turnover', min=0, unit='',
+                default=2)}
 
 
 class VPTraitCourteau(VPTrait):
@@ -526,12 +615,16 @@ class VPTraitCourteau(VPTrait):
         return 'courteau'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Courteau (1997)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_COURTEAU
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitCourteau.__init__, locals())
@@ -539,10 +632,20 @@ class VPTraitCourteau(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200),
-            'b': ParamScalarDesc(unit='', default=0),
-            'g': ParamScalarDesc(min=0, unit='', default=2)}
+            'rt': ParamScalarDesc(
+                title='Turnover radius', desc='the radius of the turnover',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the speed scale', unit='km/s',
+                default=200),
+            'b': ParamScalarDesc(
+                title='Outer shape',
+                desc='the fall (b > 0) or the rise (b < 0) of the speed to '
+                     'its scale beyond the turnover', unit='', default=0),
+            'g': ParamScalarDesc(
+                title='Turnover sharpness',
+                desc='the sharpness of the turnover', min=0, unit='',
+                default=2)}
 
 
 class VPTraitBrandt(VPTrait):
@@ -570,12 +673,16 @@ class VPTraitBrandt(VPTrait):
         return 'brandt'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Brandt (1960)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_BRANDT
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitBrandt.__init__, locals())
@@ -583,16 +690,23 @@ class VPTraitBrandt(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200),
-            'n': ParamScalarDesc(min=0, unit='', default=1)}
+            'rt': ParamScalarDesc(
+                title='Peak radius', desc='the radius of the maximum speed',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the maximum speed, at rt',
+                unit='km/s', default=200),
+            'n': ParamScalarDesc(
+                title='Turnover sharpness',
+                desc='the sharpness of the turnover', min=0, unit='',
+                default=1)}
 
 
 class VPTraitIso(VPTrait):
     """
-    The profile of the rotation curve of a pseudo-isothermal sphere of
-    core radius rt and asymptotic speed v: v sqrt(1 - (rt / r) atan(r /
-    rt)). Its parameters: rt and v.
+    The rotation curve of a pseudo-isothermal sphere of core radius rt
+    and asymptotic speed v: v sqrt(1 - (rt / r) atan(r / rt)). Its
+    parameters: rt and v.
 
     Parameters
     ----------
@@ -613,12 +727,16 @@ class VPTraitIso(VPTrait):
         return 'iso'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Pseudo-isothermal sphere'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_ISO
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitIso.__init__, locals())
@@ -626,15 +744,19 @@ class VPTraitIso(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+            'rt': ParamScalarDesc(
+                title='Core radius', desc='the core radius of the sphere',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the asymptotic speed',
+                unit='km/s', default=200)}
 
 
 class VPTraitNFW(VPTrait):
     """
-    The profile of the rotation curve of an NFW halo of scale radius rt,
-    of maximum v (at 2.163 rt): v sqrt(f(r / rt) / f_max), with f(u) =
-    (ln(1 + u) - u / (1 + u)) / u. Its parameters: rt and v.
+    The rotation curve of an NFW halo of scale radius rt, of maximum v
+    (at 2.163 rt). It is v sqrt(f(r / rt) / f_max), with f(u) = (ln(1 +
+    u) - u / (1 + u)) / u. Its parameters: rt and v.
 
     Parameters
     ----------
@@ -655,12 +777,16 @@ class VPTraitNFW(VPTrait):
         return 'nfw'
 
     @staticmethod
+    def type_title() -> str:
+        return 'NFW halo'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_NFW
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitNFW.__init__, locals())
@@ -668,8 +794,13 @@ class VPTraitNFW(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            'rt': ParamScalarDesc(min=0, unit='arcsec', default=1),
-            self.speed(): ParamScalarDesc(unit='km/s', default=200)}
+            'rt': ParamScalarDesc(
+                title='Scale radius', desc='the scale radius of the halo',
+                min=0, unit='arcsec', default=1),
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(),
+                desc='the maximum speed, at 2.163 rt', unit='km/s',
+                default=200)}
 
 
 class VPTraitNWUniform(VPTrait):
@@ -699,13 +830,17 @@ class VPTraitNWUniform(VPTrait):
         return 'nw_uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_NW_UNIFORM
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            direction: VPTDirectionChoice,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(VPTraitNWUniform.__init__, locals())
@@ -713,7 +848,8 @@ class VPTraitNWUniform(VPTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return {self.speed(): ParamVectorDesc(
-            nnodes, unit='km/s', default=200)}
+            nnodes, title=self.speed_title(), desc='the speed at each ring',
+            unit='km/s', default=200)}
 
 
 class VPTraitNWHarmonic(VPTrait):
@@ -748,14 +884,18 @@ class VPTraitNWHarmonic(VPTrait):
         return 'nw_harmonic'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Harmonic (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_NW_HARMONIC
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             order: Annotated[int, Ge(0)],
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(VPTraitNWHarmonic.__init__, locals())
@@ -773,11 +913,11 @@ class VPTraitNWHarmonic(VPTrait):
 
 class VPTraitWedge(VPTrait):
     """
-    A uniform speed within two opposite wedges of a disk (e.g. a radial
-    flow, as DysmalPy's UniformWedgeFlow): v at the azimuths within s / 2
-    of p or of p + 180 degrees, |cos(theta - p)| >= cos(s / 2), and 0 at
-    the others. Its parameters: v, p (degrees) and s (degrees, the full
-    width of each wedge).
+    A uniform speed within two opposite wedges of a disk, and 0 outside
+    them (e.g. a radial flow). As DysmalPy's UniformWedgeFlow, it is v at
+    the azimuths within s / 2 of p or of p + 180 degrees, |cos(theta - p)|
+    >= cos(s / 2), and 0 at the others. Its parameters: v, p (degrees)
+    and s (degrees, the full width of each wedge).
 
     Its wedges have sharp edges, which p and s place: the model, which
     samples the wedges at points, does not change while an edge moves
@@ -804,12 +944,16 @@ class VPTraitWedge(VPTrait):
         return 'wedge'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Wedge flow'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_WEDGE
 
     def __init__(
             self,
-            direction: Literal[tuple(VPT_DIRECTIONS)],
+            direction: VPTDirectionChoice,
             name: str | None = None
     ):
         check_options(VPTraitWedge.__init__, locals())
@@ -817,9 +961,16 @@ class VPTraitWedge(VPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {
-            self.speed(): ParamScalarDesc(unit='km/s', default=50),
-            'p': ParamScalarDesc(unit='deg', default=0, period=180),
-            's': ParamScalarDesc(min=0, max=360, unit='deg', default=30)}
+            self.speed(): ParamScalarDesc(
+                title=self.speed_title(), desc='the speed within the wedges',
+                unit='km/s', default=50),
+            'p': ParamScalarDesc(
+                title='Wedge azimuth',
+                desc='the azimuth of the middle of a wedge', unit='deg',
+                default=0, period=180),
+            's': ParamScalarDesc(
+                title='Wedge width', desc='the full width of each wedge',
+                min=0, max=360, unit='deg', default=30)}
 
     def axisymmetric(self) -> bool:
         return False
@@ -838,14 +989,15 @@ class VPTraitWedge(VPTrait):
 
 class VPTraitBar(VPTraitPlanar):
     """
-    A uniform flow along a bar, in the plane of a disk (as DysmalPy's
-    UniformBarFlow): the speed v along the axis of the bar, away from its
-    centre on both sides (inwards if v < 0), within the strip of the full
-    width s along the axis, and 0 outside. The axis is at the azimuth p
-    (and p + 180 degrees); at the distance x along it (positive towards
-    p) and y across it, the velocity is v sign(x) along the axis where
-    |y| < s / 2, with v_y = v sign(x) sin(p). The strip reaches the edge
-    of the disk. Its parameters: v, p (degrees) and s (arcsec).
+    A uniform flow along a bar, in the plane of a disk, away from its
+    centre on both sides (inwards if v < 0). As DysmalPy's
+    UniformBarFlow, it is the speed v along the axis of the bar within the
+    strip of the full width s along the axis, and 0 outside. The axis is
+    at the azimuth p (and p + 180 degrees); at the distance x along it
+    (positive towards p) and y across it, the velocity is v sign(x) along
+    the axis where |y| < s / 2, with v_y = v sign(x) sin(p). The strip
+    reaches the edge of the disk. Its parameters: v, p (degrees) and s
+    (arcsec).
 
     Its strip has sharp edges, which s places: the model, which samples
     the strip at points, does not change while an edge moves between two
@@ -864,14 +1016,26 @@ class VPTraitBar(VPTraitPlanar):
         return 'bar'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Bar flow'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_BAR
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            v=ParamScalarDesc(unit='km/s', default=50),
-            p=ParamScalarDesc(unit='deg', default=0, period=180),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            v=ParamScalarDesc(
+                title='Flow speed',
+                desc='the speed along the axis, away from the centre',
+                unit='km/s', default=50),
+            p=ParamScalarDesc(
+                title='Bar azimuth', desc='the azimuth of the axis of the bar',
+                unit='deg', default=0, period=180),
+            s=ParamScalarDesc(
+                title='Bar width',
+                desc='the full width of the strip of the flow', min=0,
+                unit='arcsec', default=1))
 
     def azimuthal_edges(
             self,
@@ -884,13 +1048,14 @@ class VPTraitBar(VPTraitPlanar):
 
 class VPTraitNWBar(VPTraitPlanar):
     """
-    A flow along a bar whose speed is given at distances along it (as
-    DysmalPy's VariableXBarFlow): as VPTraitBar, with the speed v(|x|) at
-    the distance |x| from the centre along the axis, of a value at each
-    node (at the distances of the radii of the nodes); 0 within the first
-    or beyond the last (e.g. a bar of a length: speeds of 0 beyond it).
-    Its parameters: p (degrees) and s (arcsec); v, node-wise. Fit s with
-    a fitter that takes no slopes (see VPTraitBar).
+    A flow along a bar whose speed is given at distances along it from
+    its centre. As DysmalPy's VariableXBarFlow, it is as VPTraitBar, with
+    the speed v(|x|) at the distance |x| from the centre along the axis,
+    of a value at each node (at the distances of the radii of the
+    nodes); 0 within the first or beyond the last (e.g. a bar of a
+    length: speeds of 0 beyond it). Its parameters: p (degrees) and s
+    (arcsec); v, node-wise. Fit s with a fitter that takes no slopes (see
+    VPTraitBar).
 
     Parameters
     ----------
@@ -912,12 +1077,16 @@ class VPTraitNWBar(VPTraitPlanar):
         return 'nw_bar'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Bar flow (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_NW_BAR
 
     def __init__(
             self,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(VPTraitNWBar.__init__, locals())
@@ -925,11 +1094,19 @@ class VPTraitNWBar(VPTraitPlanar):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            p=ParamScalarDesc(unit='deg', default=0, period=180),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            p=ParamScalarDesc(
+                title='Bar azimuth', desc='the azimuth of the axis of the bar',
+                unit='deg', default=0, period=180),
+            s=ParamScalarDesc(
+                title='Bar width',
+                desc='the full width of the strip of the flow', min=0,
+                unit='arcsec', default=1))
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(v=ParamVectorDesc(nnodes, unit='km/s', default=50))
+        return dict(v=ParamVectorDesc(
+            nnodes, title='Flow speed',
+            desc='the speed along the axis, away from the centre, at '
+                 'the distance of each ring', unit='km/s', default=50))
 
     def azimuthal_edges(
             self,
@@ -942,10 +1119,10 @@ class VPTraitNWBar(VPTraitPlanar):
 
 class VPTraitSpiral(VPTraitPlanar):
     """
-    The velocities of a spiral density wave in the gas of a disk, as
-    DysmalPy's SpiralDensityWave (see Spiral): the radial
-    part v_R = -e m (Omega - o) / k cos(phi) and the tangential part v_t =
-    e kappa^2 / (2 k Omega) sin(phi), 0 where there is no wave, where k is
+    The velocities of a spiral density wave in the gas of a disk. As
+    DysmalPy's SpiralDensityWave (see Spiral), they are the radial part
+    v_R = -e m (Omega - o) / k cos(phi) and the tangential part v_t = e
+    kappa^2 / (2 k Omega) sin(phi), 0 where there is no wave, where k is
     0 or where the disk does not rotate. Towards the edges of the radii of
     a wave of the dispersion relation, k tends to 0 and the velocity grows
     without bound (v_R = -e c / eta, eta = k c / (m |Omega - o|)): the
@@ -976,14 +1153,18 @@ class VPTraitSpiral(VPTraitPlanar):
         return 'spiral'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Spiral density wave'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_SPIRAL
 
     def __init__(
             self,
             order: Annotated[int, Ge(1)],
-            winding: Literal['trailing', 'leading'] | None = None,
-            wavenumber: Literal['dispersion', 'given'] = 'dispersion',
+            winding: SpiralWinding | None = None,
+            wavenumber: SpiralWavenumber = 'dispersion',
             name: str | None = None
     ):
         check_options(VPTraitSpiral.__init__, locals())
@@ -1037,19 +1218,19 @@ class VPTraitSpiral(VPTraitPlanar):
 
 class VPTraitMass(VPTrait):
     """
-    The rotation curve of the mass of its galaxy (see gbkfit.model.mass):
-    the circular velocity at the rings it is evaluated on, and beyond its
-    last ring, at the radii of its tail (see SAMPLING_TAIL; linear between
-    them, and beyond the last, its value there), which its
-    galaxy computes from the parameters of its distance and its mass at
-    each evaluation, and with pressure support, the
-    rotation of the gas of its disk in that gravity; 0 where its square is
-    negative (the mass pulls outwards, e.g. inside a ring, or the pressure
-    exceeds the gravity: no rotation, as DysmalPy takes it), NaN where it
-    is infinite (there is no circular orbit, e.g. at a jump of the surface
-    density of a thin disk). A tangential speed (it has no option
-    direction). It has no parameters of its own, and its galaxy must have
-    mass.
+    The rotation curve of the mass of its galaxy, which the galaxy
+    computes at each evaluation, with or without pressure support. It is
+    the circular velocity (see gbkfit.model.mass) at the rings it is
+    evaluated on, and beyond its last ring, at the radii of its tail (see
+    SAMPLING_TAIL; linear between them, and beyond the last, its value
+    there), from the parameters of the distance and the mass of its
+    galaxy, and with pressure support, the rotation of the gas of its
+    disk in that gravity; 0 where its square is negative (the mass pulls
+    outwards, e.g. inside a ring, or the pressure exceeds the gravity: no
+    rotation, as DysmalPy takes it), NaN where it is infinite (there is
+    no circular orbit, e.g. at a jump of the surface density of a thin
+    disk). A tangential speed (it has no option direction). It has no
+    parameters of its own, and its galaxy must have mass.
 
     With the pressure support 'jeans', the rotation of an isotropic gas at the
     midplane of its disk (the radial Jeans equation): v^2 = v_c^2 + (R /
@@ -1098,6 +1279,10 @@ class VPTraitMass(VPTrait):
         return 'mass'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Rotation from the mass'
+
+    @staticmethod
     def uid() -> int:
         return VPT_UID_TABLE
 
@@ -1123,7 +1308,10 @@ class VPTraitMass(VPTrait):
         return SAMPLING_TAIL
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(vt=ParamVectorDesc(nnodes, unit='km/s', default=200))
+        return dict(vt=ParamVectorDesc(
+            nnodes, title='Rotation speed',
+            desc='the rotation in the gravity of the galaxy', unit='km/s',
+            default=200))
 
     def from_galaxy(self) -> RotationInput:
         return RotationInput(('vt',), self._pressure_support)

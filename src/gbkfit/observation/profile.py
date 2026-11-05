@@ -40,10 +40,11 @@ _ROTATIONS = ('vcirc', 'vnewton', 'rotation')
 
 class ObservationProfile(Observation):
     """
-    An observation of profiles of a galaxy (see Observation): the values
-    of functions of the galaxy at radii (see GalaxyFunctions), e.g. its
-    rotation curve, the circular velocity of its mass, compared with a
-    table of them (see DatasetProfile).
+    An observation of profiles of a galaxy (e.g. its rotation curve): the
+    values of functions of the galaxy at radii, compared with a table of
+    them. The functions are those of GalaxyFunctions (e.g. vcirc, the
+    circular velocity of its mass), and the table is a DatasetProfile
+    (see Observation).
 
     Its data items are named after the functions they measure, in their
     units: of its mass, vcirc, vnewton and vcirc_{component} (km/s),
@@ -110,6 +111,10 @@ class ObservationProfile(Observation):
     @staticmethod
     def type() -> str:
         return 'profile'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Radial profiles'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -250,6 +255,7 @@ class ObservationProfile(Observation):
         """
         param = self._inclination_param()
         inclination = {} if param is None else {param: ParamScalarDesc(
+            title='Inclination',
             desc=f"the inclination of the galaxy, of observation "
                  f"{self._name}, whose rotation velocities were deprojected "
                  f"at {self._inclination:g} degrees", unit='deg',

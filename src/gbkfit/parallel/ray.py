@@ -23,13 +23,13 @@ __all__ = [
 
 class WorkersRay(Workers):
     """
-    Workers in actors of a Ray cluster: a number of them, each on CPUs and
-    GPUs of the cluster, with its copy of the objective, which goes to it
-    pickled (see Objective). Ray gives an actor its GPUs: the CUDA drivers
-    of its copy of device 0 are on the first. Like processes (see
-    WorkersProcesses), they evaluate at the same time the parts of the
-    models that run in Python, and run stoppable functions at once (e.g.
-    sub-fits), on the machines of the cluster.
+    Workers in actors of a Ray cluster, each on CPUs and GPUs of the
+    cluster with its copy of the objective. There are a number of them;
+    the objective goes to each pickled (see Objective). Ray gives an actor
+    its GPUs: the CUDA drivers of its copy of device 0 are on the first.
+    Like processes (see WorkersProcesses), they evaluate at the same time
+    the parts of the models that run in Python, and run stoppable
+    functions at once (e.g. sub-fits), on the machines of the cluster.
 
     The cluster is that of Ray in this process, if it has one (see
     ray.init), or else that of the address.
@@ -56,6 +56,10 @@ class WorkersRay(Workers):
     @staticmethod
     def type() -> str:
         return 'ray'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Ray cluster'
 
     def __init__(
             self,

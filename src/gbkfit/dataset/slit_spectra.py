@@ -60,6 +60,10 @@ class DatasetSlitSpectra(Dataset):
     def type() -> str:
         return 'slit_spectra'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Slit spectra (long slit)'
+
     @classmethod
     def from_files(
             cls,

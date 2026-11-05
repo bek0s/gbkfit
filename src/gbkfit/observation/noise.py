@@ -5,7 +5,7 @@ where the instrument records them (see GroupPlan.mock).
 
 import abc
 import os
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.io.fits
 import astropy.units as u
@@ -15,7 +15,7 @@ import scipy.fft
 from annotated_types import Gt
 
 from gbkfit.config import (
-    FitsFile, TypedParser, TypedSerializable, check_options,
+    Choices, FitsFile, TypedParser, TypedSerializable, check_options,
     split_fits_file)
 from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
@@ -32,8 +32,11 @@ __all__ = [
 ]
 
 
-# The spatial correlation of the noise that the PSF of the instrument gives
+# The spatial correlation of the noise that the PSF of the instrument
+# gives, and its option
 INSTRUMENT = 'instrument'
+_Instrument: TypeAlias = Annotated[
+    Literal[INSTRUMENT], Choices({INSTRUMENT: 'PSF of the instrument'})]
 
 
 class Noise(TypedSerializable, abc.ABC):
@@ -140,8 +143,8 @@ class Noise(TypedSerializable, abc.ABC):
 class NoiseGauss(Noise):
     """
     Gaussian noise of mean 0, of the dispersion rms at every value or of
-    an error map; independent from value to value, unless correlated on
-    the sky or along the spectral axis.
+    an error map. It is independent from value to value, unless
+    correlated on the sky or along the spectral axis.
 
     The correlation of the noise of two values at the separation (dx, dy)
     on the sky and dz along the spectral axis is C_xy(dx, dy) C_z(dz):
@@ -187,6 +190,10 @@ class NoiseGauss(Noise):
     def type() -> str:
         return 'gauss'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -207,7 +214,7 @@ class NoiseGauss(Noise):
     def from_file(
             cls,
             error: FitsFile,
-            spatial_correlation: PSF | Literal[INSTRUMENT] | None = None,
+            spatial_correlation: PSF | _Instrument | None = None,
             spectral_correlation: LSF | None = None
     ) -> 'NoiseGauss':
         """
@@ -238,7 +245,7 @@ class NoiseGauss(Noise):
             self,
             rms: Annotated[float, Gt(0)] | None = None,
             error: npt.ArrayLike | None = None,
-            spatial_correlation: PSF | Literal[INSTRUMENT] | None = None,
+            spatial_correlation: PSF | _Instrument | None = None,
             spectral_correlation: LSF | None = None
     ):
         check_options(NoiseGauss.__init__, locals())
@@ -349,12 +356,12 @@ class NoiseGauss(Noise):
 
 class NoiseStudentT(Noise):
     """
-    Student-t noise of mean 0 and of dof degrees of freedom (above 2), of
-    the dispersion rms at every value or of an error map (as NoiseGauss),
-    independent from value to value: heavier tails than Gaussian noise
-    (outliers), e.g. to test how fits take them; Gaussian as dof grows.
-    Its values are t draws times sigma sqrt((dof - 2) / dof), whose
-    dispersion is sigma.
+    Student-t noise: heavier tails than Gaussian noise (outliers), e.g.
+    to test how fits take them. It is of mean 0 and of dof degrees of
+    freedom (above 2), of the dispersion rms at every value or of an
+    error map (as NoiseGauss), independent from value to value; Gaussian
+    as dof grows. Its values are t draws times sigma sqrt((dof - 2) /
+    dof), whose dispersion is sigma.
 
     Configurations give the error map by its FITS file (see from_file).
 
@@ -379,6 +386,10 @@ class NoiseStudentT(Noise):
     @staticmethod
     def type() -> str:
         return 'student_t'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Student-t'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -444,11 +455,11 @@ class NoiseStudentT(Noise):
 
 class NoisePoisson(Noise):
     """
-    Poisson noise of data of counts: the data become counts / gain, the
-    counts Poisson draws of the signal (the data without noise) times the
-    gain, of the dispersion sqrt(signal gain) / gain (a signal below 0,
-    e.g. of the ringing of a convolution, counts as 0). Independent from
-    value to value.
+    Poisson noise of data of counts, independent from value to value.
+    The data become counts / gain, the counts Poisson draws of the signal
+    (the data without noise) times the gain, of the dispersion
+    sqrt(signal gain) / gain (a signal below 0, e.g. of the ringing of a
+    convolution, counts as 0).
 
     Parameters
     ----------
@@ -461,6 +472,10 @@ class NoisePoisson(Noise):
     @staticmethod
     def type() -> str:
         return 'poisson'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Poisson'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

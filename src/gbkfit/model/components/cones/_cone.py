@@ -44,6 +44,7 @@ GEOMETRY_PDESCS = {
     name: geometry_pdesc(name) for name in GEOMETRY_UNITS
 } | dict(
     wall=ParamScalarDesc(
+        title='Wall angle',
         desc="the angle of the mid-surface of the walls from the axis",
         min=0, max=90, unit='deg', default=30))
 

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 
-from gbkfit.config import Unit
+from gbkfit.config import Choices, Unit
 from gbkfit.params import ParamValues
 from ._units import BandFactors, LineFactors
 
@@ -26,7 +26,8 @@ RnMax: TypeAlias = Annotated[float, Unit('arcsec')]
 RnSep: TypeAlias = Annotated[float, Unit('arcsec')]
 RNodes: TypeAlias = Annotated[Sequence[float], Unit('arcsec')]
 RStep: TypeAlias = Annotated[float, Unit('arcsec')]
-Interp: TypeAlias = Literal[INTERPOLATIONS]
+Interp: TypeAlias = Annotated[Literal[INTERPOLATIONS], Choices(
+    linear='Linear', akima='Akima spline', pchip='Monotone cubic (PCHIP)')]
 
 
 def disk_to_sky(

@@ -88,6 +88,10 @@ class Circle(Shape):
     def type():
         return 'circle'
 
+    @staticmethod
+    def type_title():
+        return 'Circle'
+
     def __init__(self, radius: float):
         self.radius = radius
 
@@ -109,6 +113,10 @@ class Square(Shape):
     @staticmethod
     def type():
         return 'square'
+
+    @staticmethod
+    def type_title():
+        return 'Square'
 
     def __init__(self, side: float):
         self.side = side

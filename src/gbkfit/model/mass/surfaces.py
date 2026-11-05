@@ -277,10 +277,11 @@ def _force_law(
 
 class SurfaceExponential(DiskSurface):
     """
-    An exponential disk of total mass 10^log_m (Msun) and scale length rd
-    (kpc): the surface density M / (2 pi rd^2) exp(-R / rd), with S(k) =
-    M / (2 pi) (1 + k^2 rd^2)^(-3/2). Its circular velocity is v^2 = G M
-    / rd F(R / rd), with F of the integral above:
+    An exponential disk: the surface density M / (2 pi rd^2) exp(-R /
+    rd), of the total mass M = 10^log_m (Msun) and the scale length rd
+    (kpc). Its Hankel transform is S(k) = M / (2 pi) (1 + k^2
+    rd^2)^(-3/2), and its circular velocity v^2 = G M / rd F(R / rd), with
+    F of the integral above:
 
     - thin, the closed form of Freeman (1970);
     - of a vertical law, of the scale height hz, computed numerically
@@ -300,12 +301,18 @@ class SurfaceExponential(DiskSurface):
     def type() -> str:
         return 'exponential'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)', default=10),
+                title='Log mass', desc="log10 of the mass",
+                unit='dex(solMass)', default=10),
             rd=ParamScalarDesc(
-                desc="the scale length", min=0, unit='kpc', default=3))
+                title='Scale length', desc="the scale length", min=0,
+                unit='kpc', default=3))
 
     def surface_density(
             self,
@@ -431,27 +438,35 @@ class SurfaceExponential(DiskSurface):
 
 class SurfaceGaussianRing(DiskSurface):
     """
-    A Gaussian ring of total mass 10^log_m (Msun), of the peak radius
-    r_peak (kpc) and the full width at half maximum fwhm (kpc): the
-    surface density S_0 exp(-(R - r_peak)^2 / (2 s^2)), s = fwhm / (2
-    (2 ln 2)^(1/2)), with M = 2 pi S_0 (s^2 exp(-r_peak^2 / (2 s^2)) +
-    r_peak s (pi / 2)^(1/2) (1 + erf(r_peak / (s 2^(1/2))))). Thin only
-    (as DysmalPy's GaussianRing): its circular velocity is the pull of its
-    rings, by quadrature (see _ring_vcirc2), to about 1e-10 of its largest
-    value; negative inside it, which it pulls outwards.
+    A ring whose surface density is a Gaussian of the radius (thin only).
+    Of the total mass 10^log_m (Msun), the peak radius r_peak (kpc) and
+    the full width at half maximum fwhm (kpc), it is the surface density
+    S_0 exp(-(R - r_peak)^2 / (2 s^2)), s = fwhm / (2 (2 ln 2)^(1/2)),
+    with M = 2 pi S_0 (s^2 exp(-r_peak^2 / (2 s^2)) + r_peak s (pi /
+    2)^(1/2) (1 + erf(r_peak / (s 2^(1/2))))). Thin only (as DysmalPy's
+    GaussianRing): its circular velocity is the pull of its rings, by
+    quadrature (see _ring_vcirc2), to about 1e-10 of its largest value;
+    negative inside it, which it pulls outwards.
     """
 
     @staticmethod
     def type() -> str:
         return 'gaussian_ring'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian ring'
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)', default=9),
+                title='Log mass', desc="log10 of the mass",
+                unit='dex(solMass)', default=9),
             r_peak=ParamScalarDesc(
-                desc="the radius of the peak", min=0, unit='kpc', default=5),
+                title='Peak radius', desc="the radius of the peak", min=0,
+                unit='kpc', default=5),
             fwhm=ParamScalarDesc(
+                title='Full width at half maximum',
                 desc="the full width at half maximum", min=0,
                 unit='kpc', default=2))
 
@@ -526,15 +541,15 @@ class SurfaceGaussianRing(DiskSurface):
 
 class SurfaceNodewise(DiskSurface):
     """
-    A surface density given at radial nodes (kpc): 10^log_sigma
-    (Msun/kpc^2) at each node but the last, where it is 0, linear in
-    between, and 0 outside the nodes (a first node above 0 leaves a hole,
-    with a jump at its edge). Its circular velocity is the pull of its
-    rings (see _disk_gravity), exact for its linear profile to about
-    1e-10 (thin) or 1e-7 (thick; as thick as a component, polynomials of
-    degree 2 between the nodes and the subnodes of the component, where
-    both are linear); a thin disk pulls infinitely at a jump of its
-    surface density.
+    A surface density given at radial nodes, linear between them (e.g.
+    measured from photometry, or free). It is 10^log_sigma (Msun/kpc^2)
+    at each node (kpc) but the last, where it is 0, linear in between, and
+    0 outside the nodes (a first node above 0 leaves a hole, with a jump
+    at its edge). Its circular velocity is the pull of its rings (see
+    _disk_gravity), exact for its linear profile to about 1e-10 (thin) or
+    1e-7 (thick; as thick as a component, polynomials of degree 2 between
+    the nodes and the subnodes of the component, where both are linear);
+    a thin disk pulls infinitely at a jump of its surface density.
 
     Parameters
     ----------
@@ -556,6 +571,10 @@ class SurfaceNodewise(DiskSurface):
     @staticmethod
     def type() -> str:
         return 'nodewise'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Nodewise'
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(nodes=self._nodes.tolist())
@@ -580,7 +599,7 @@ class SurfaceNodewise(DiskSurface):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_sigma=ParamVectorDesc(
-            len(self._nodes) - 1,
+            len(self._nodes) - 1, title='Log surface density',
             desc="log10 of the surface density at each node but the last",
             unit='dex(solMass / kpc2)', default=7))
 
@@ -647,21 +666,21 @@ class SurfaceNodewise(DiskSurface):
 
 class SurfaceComponent(DiskSurface):
     """
-    The surface density of a disk component of the galaxy (light, the
-    optical depth of dust, ...), never the data: upsilon times the
-    azimuthal mean of the density of the component, as it evaluates it
-    (its density polar traits, where its selection traits keep it), at
-    its subnodes and linear between them (exactly its node-wise traits),
-    or at those of rings of width rstep. A component with warps (tilted
-    or loose rings, vertical distortions) is taken flat: its rings
-    coplanar and concentric, as the rotation of the velocity traits
-    'mass' takes them. Its circular velocity is the pull of its rings
-    (see _disk_gravity); a thin disk pulls infinitely at a jump of its
-    surface density (e.g. at the edge of the component, unless the
-    density is 0 there). The azimuthal means of axisymmetric traits are
-    exact (one azimuth); those of the others take at least 128 azimuths,
-    more until they converge: structure narrower than their spacing (e.g.
-    tiny blobs) can be missed.
+    The surface density of a disk component of the galaxy (e.g. of its
+    light, or the optical depth of its dust), times a mass per unit of it.
+    It is never the data: upsilon times the azimuthal mean of the density
+    of the component, as it evaluates it (its density polar traits, where
+    its selection traits keep it), at its subnodes and linear between
+    them (exactly its node-wise traits), or at those of rings of width
+    rstep. A component with warps (tilted or loose rings, vertical
+    distortions) is taken flat: its rings coplanar and concentric, as the
+    rotation of the velocity traits 'mass' takes them. Its circular
+    velocity is the pull of its rings (see _disk_gravity); a thin disk
+    pulls infinitely at a jump of its surface density (e.g. at the edge of
+    the component, unless the density is 0 there). The azimuthal means of
+    axisymmetric traits are exact (one azimuth); those of the others take
+    at least 128 azimuths, more until they converge: structure narrower
+    than their spacing (e.g. tiny blobs) can be missed.
 
     upsilon is the mass per unit of the density of the component: without
     a unit of its emission, in Msun/kpc^2 per unit; with one, of HI (its
@@ -688,6 +707,10 @@ class SurfaceComponent(DiskSurface):
     @staticmethod
     def type() -> str:
         return 'component'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'From a component'
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(
@@ -718,8 +741,9 @@ class SurfaceComponent(DiskSurface):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(upsilon=ParamScalarDesc(
-            desc="the mass per unit of the density of the component (see "
-                 "SurfaceComponent)", min=0, default=1))
+            title='Mass per unit density',
+            desc="the mass per unit of the density of the component",
+            min=0, default=1))
 
     def mass_ratios(self) -> dict[str, str]:
         return dict(upsilon=self._component)

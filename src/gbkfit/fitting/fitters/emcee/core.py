@@ -3,13 +3,13 @@ The emcee MCMC sampler.
 """
 
 import typing
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
@@ -25,6 +25,11 @@ __all__ = [
     'FitParamEmcee',
     'FitterEmcee'
 ]
+
+
+# The option of the moves of the walkers
+_Moves: TypeAlias = Annotated[Literal['de', 'stretch'], Choices(
+    de='Differential evolution', stretch='Stretch')]
 
 
 class FitParamEmcee(FitParamWalkers):
@@ -87,6 +92,10 @@ class FitterEmcee(Fitter):
         return 'emcee'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Emcee'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamEmcee
 
@@ -105,7 +114,7 @@ class FitterEmcee(Fitter):
             nsteps: Annotated[int, Gt(0)] = 5000,
             burnin: int | None = None,
             thin: Annotated[int, Gt(0)] = 1,
-            moves: Literal['de', 'stretch'] = 'de',
+            moves: _Moves = 'de',
             width: Annotated[FiniteFloat, Gt(0)] | None = None,
             seed: int = 0,
             uncertainty: UncertaintyOptions | None = None

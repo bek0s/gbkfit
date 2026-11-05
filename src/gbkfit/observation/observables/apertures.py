@@ -87,10 +87,10 @@ class Aperture(TypedSerializable, abc.ABC):
 class ApertureShutters(Aperture):
     """
     A column of shutters along y (along the slit, across the dispersion),
-    each open over a rectangle of a size, one pitch from the next (e.g.
-    the slitlets of the micro-shutter array of JWST NIRSpec: shutters
-    open over 0.20 x 0.46 arcsec, of a pitch of 0.27 x 0.53 arcsec); the
-    bars between them block the light. One shutter is a slit.
+    each open over a rectangle of a size, one pitch from the next. The
+    bars between them block the light. The slitlets of the micro-shutter
+    array of JWST NIRSpec are such: shutters open over 0.20 x 0.46
+    arcsec, of a pitch of 0.27 x 0.53 arcsec. One shutter is a slit.
 
     Parameters
     ----------
@@ -115,6 +115,10 @@ class ApertureShutters(Aperture):
     @staticmethod
     def type() -> str:
         return 'shutters'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Column of shutters'
 
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
         info = dict(size=list(self._size), count=self._count,

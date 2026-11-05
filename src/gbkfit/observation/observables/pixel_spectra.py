@@ -79,6 +79,10 @@ class PixelSpectra(Observable):
     def type() -> str:
         return 'pixel_spectra'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Pixel spectra (cube)'
+
     @classmethod
     def load(
             cls, info: dict[str, Any],

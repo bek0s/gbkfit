@@ -28,11 +28,11 @@ _BLOCK_AXES = ('the regions',)
 
 class DatasetRegionMoments(Dataset):
     """
-    Moments of the spectra in regions of the sky (see Regions; e.g.
-    Voronoi bins, fibres): central moments of some of the orders 0 to 7, as
-    the data items moment0 to moment7, and the coefficients h3 and h4 of a
-    Gauss-Hermite series, as the items h3 and h4 (see
-    _detail.moment_items).
+    Moments of the spectra in regions of the sky (e.g. fibres or Voronoi
+    bins). Of the regions (see Regions), they are central moments of some
+    of the orders 0 to 7, as the data items moment0 to moment7, and the
+    coefficients h3 and h4 of a Gauss-Hermite series, as the items h3 and
+    h4 (see _detail.moment_items).
 
     Its configuration has the options of from_files (the regions, and the
     files of the data items), or those of from_table (the regions, a table
@@ -62,6 +62,10 @@ class DatasetRegionMoments(Dataset):
     @staticmethod
     def type() -> str:
         return 'region_moments'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Region moments (bins, fibres)'
 
     @classmethod
     def from_files(

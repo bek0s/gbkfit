@@ -5,13 +5,13 @@ line of sight, through a foreground and an instrument.
 
 import logging
 from collections.abc import Mapping, Sequence
-from typing import Any, Literal, Self, TypeAlias
+from typing import Annotated, Any, Literal, Self, TypeAlias
 
 import astropy.units
 import numpy as np
 
 from gbkfit.config import (
-    check_name, check_options, config_path,
+    Choices, check_name, check_options, config_path,
     load_option_and_update_info, make_typed_desc, warn)
 from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
@@ -45,15 +45,19 @@ _log = logging.getLogger(__name__)
 
 
 # The floating types of models: those the native modules have kernels for
-_DType: TypeAlias = Literal[tuple(dt.name for dt in Driver.dtypes())]
+_DType: TypeAlias = Annotated[
+    Literal[tuple(dt.name for dt in Driver.dtypes())], Choices(
+        float32='Single precision (float32)',
+        float64='Double precision (float64)')]
 
 
 class ObservationSky(Observation):
     """
-    An observation on the sky (see Observation): galaxies seen as an
-    observable, along a line of sight, through a foreground (e.g. a
-    gravitational lens) and an instrument, and optionally its data, which
-    the model of the galaxies is compared with under a likelihood.
+    An observation on the sky: galaxies seen as an observable through an
+    instrument, optionally compared with its data. They are seen along a
+    line of sight, through a foreground (e.g. a gravitational lens) and
+    the instrument, and the model of the galaxies is compared with the
+    data under a likelihood (see Observation).
 
     In its configuration (type 'sky'), the data have the form of the
     observable (no type), and give it the options of options_from_data
@@ -212,6 +216,10 @@ class ObservationSky(Observation):
     @staticmethod
     def type() -> str:
         return 'sky'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Sky (through an instrument)'
 
     @classmethod
     def load(cls, info: dict[str, Any]) -> 'ObservationSky':
@@ -421,19 +429,23 @@ class ObservationSky(Observation):
         if (scale := self.flux_scale()) is not None:
             name, kind = scale
             desc = f"the flux scale of observation {self._name}"
-            flux_scale[name] = \
-                ParamScalarDesc(desc=desc, min=0, unit='', default=1) \
+            flux_scale[name] = ParamScalarDesc(
+                title='Flux scale', desc=desc, min=0, unit='', default=1) \
                 if kind.axis is None else ParamVectorDesc(
-                    kind.size, desc=desc, min=0, unit='', default=1)
+                    kind.size, title='Flux scale', desc=desc, min=0,
+                    unit='', default=1)
         descs = (
-            ("the offset of its frame to the west", 'arcsec'),
-            ("the offset of its frame to the north", 'arcsec'),
-            ("the offset of its velocities", 'km/s'))
+            ('Offset to the west', "the offset of its frame to the west",
+             'arcsec'),
+            ('Offset to the north', "the offset of its frame to the north",
+             'arcsec'),
+            ('Velocity offset', "the offset of its velocities", 'km/s'))
         offsets = {
             param: ParamScalarDesc(
-                desc=f"{desc}, of observation {self._name}", unit=unit,
-                default=0)
-            for param, (desc, unit) in zip(self.offset_params(), descs)
+                title=title, desc=f"{desc}, of observation {self._name}",
+                unit=unit, default=0)
+            for param, (title, desc, unit) in zip(
+                self.offset_params(), descs)
             if param is not None}
         return flux_scale | offsets | self._foreground.pdescs() \
             | super().pdescs()

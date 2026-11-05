@@ -4,7 +4,7 @@ of a component (see RPTrait), but the maps (see images).
 """
 
 from collections.abc import Callable, Sequence
-from typing import Annotated, Literal
+from typing import Annotated
 
 import numpy as np
 import scipy.ndimage
@@ -16,7 +16,8 @@ from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import (
     RPTrait, WaveInput, params_nw_distortion, splits_nw_distortion)
 from .options import (
-    Blobs, Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Spiral)
+    SAMPLING_DEFAULT, Blobs, Harmonic, Sampling, SamplingChoice,
+    Spiral, SpiralWavenumber, SpiralWinding)
 
 
 __all__ = [
@@ -332,10 +333,10 @@ def _ptrait_integrate_nw_distortion(
 
 class RPTraitUniform(RPTrait):
     """
-    A uniform surface density: a, within the last node of its component
-    (and beyond, its tail of the scale of that radius: it is flat there,
-    see RPTrait.tail_scale). Its parameter: a, the density. Mainly for
-    tests: its use is discouraged (a warning says so).
+    A uniform surface density, mainly for tests: its use is discouraged (a
+    warning says so). It is a within the last node of its component, and
+    beyond, its tail of the scale of that radius (it is flat there, see
+    RPTrait.tail_scale). Its parameter: a, the density.
 
     Parameters
     ----------
@@ -348,6 +349,10 @@ class RPTraitUniform(RPTrait):
         return 'uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_UNIFORM
 
@@ -355,7 +360,8 @@ class RPTraitUniform(RPTrait):
         return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc(default=1))
+        return dict(a=ParamScalarDesc(
+            title='Density', desc="the surface density", default=1))
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -384,6 +390,10 @@ class RPTraitExponential(RPTrait):
         return 'exponential'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_EXP
 
@@ -392,8 +402,13 @@ class RPTraitExponential(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(default=1),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central density',
+                desc="the surface density at the centre", default=1),
+            s=ParamScalarDesc(
+                title='Scale length',
+                desc="the radius where the density falls by a factor e",
+                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -430,6 +445,10 @@ class RPTraitGauss(RPTrait):
         return 'gauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_GAUSS
 
@@ -438,8 +457,13 @@ class RPTraitGauss(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(default=1),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central density',
+                desc="the surface density at the centre", default=1),
+            s=ParamScalarDesc(
+                title='Width (sigma)',
+                desc="the standard deviation of the Gaussian",
+                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -479,6 +503,10 @@ class RPTraitGGauss(RPTrait):
         return 'ggauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_GGAUSS
 
@@ -487,9 +515,17 @@ class RPTraitGGauss(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(default=1),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1),
-            b=ParamScalarDesc(min=0, unit='', default=1))
+            a=ParamScalarDesc(
+                title='Central density',
+                desc="the surface density at the centre", default=1),
+            s=ParamScalarDesc(
+                title='Scale length',
+                desc="the radius where the density falls by a factor e",
+                min=0, unit='arcsec', default=1),
+            b=ParamScalarDesc(
+                title='Shape',
+                desc="the shape: 1 is the exponential, 2 a Gaussian",
+                min=0, unit='', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -528,6 +564,10 @@ class RPTraitLorentz(RPTrait):
         return 'lorentz'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Lorentzian'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_LORENTZ
 
@@ -536,8 +576,13 @@ class RPTraitLorentz(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(default=1),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central density',
+                desc="the surface density at the centre", default=1),
+            s=ParamScalarDesc(
+                title='Half width at half maximum',
+                desc="the radius where the density falls to half",
+                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -576,6 +621,10 @@ class RPTraitMoffat(RPTrait):
         return 'moffat'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Moffat'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_MOFFAT
 
@@ -584,9 +633,17 @@ class RPTraitMoffat(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(default=1),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1),
-            b=ParamScalarDesc(min=0, unit='', default=2))
+            a=ParamScalarDesc(
+                title='Central density',
+                desc="the surface density at the centre", default=1),
+            s=ParamScalarDesc(
+                title='Core radius',
+                desc="the radius of the flat core",
+                min=0, unit='arcsec', default=1),
+            b=ParamScalarDesc(
+                title='Power index',
+                desc="the power of the fall, as r^(-2b) far out",
+                min=0, unit='', default=2))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -624,6 +681,10 @@ class RPTraitSech2(RPTrait):
         return 'sech2'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Sech-squared'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_SECH2
 
@@ -632,8 +693,13 @@ class RPTraitSech2(RPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(default=1),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central density',
+                desc="the surface density at the centre", default=1),
+            s=ParamScalarDesc(
+                title='Scale length',
+                desc="the scale length of the sech^2",
+                min=0, unit='arcsec', default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -657,12 +723,12 @@ class RPTraitSech2(RPTrait):
 
 class RPTraitMixtureExponential(RPTrait):
     """
-    A surface density made of nblobs elliptical blobs (see the module
-    docstring), each an exponential of the elliptical distance rho from
-    its centre: a exp(-rho / s). Its parameters, vectors of a value for
-    each blob: r and t, the radius and the azimuth of its centre, a, its
-    amplitude, s, its scale along its major axis, q, its axis ratio (minor
-    over major), and p, the angle of its major axis.
+    A surface density made of elliptical blobs, each an exponential of the
+    elliptical distance rho from its centre: a exp(-rho / s). It has nblobs
+    blobs (see the package docstring). Its parameters, vectors of a value
+    for each blob: r and t, the radius and the azimuth of its centre, a,
+    its amplitude, s, its scale along its major axis, q, its axis ratio
+    (minor over major), and p, the angle of its major axis.
 
     Parameters
     ----------
@@ -680,6 +746,10 @@ class RPTraitMixtureExponential(RPTrait):
     @staticmethod
     def type() -> str:
         return 'mixture_exponential'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Exponential blobs'
 
     @staticmethod
     def uid() -> int:
@@ -709,12 +779,12 @@ class RPTraitMixtureExponential(RPTrait):
 
 class RPTraitMixtureGauss(RPTrait):
     """
-    A surface density made of nblobs elliptical blobs (see the module
-    docstring), each a Gaussian of the elliptical distance rho from its
-    centre: a exp(-rho^2 / (2 s^2)). Its parameters, vectors of a value
-    for each blob: r and t, the radius and the azimuth of its centre, a,
-    its amplitude, s, its scale along its major axis, q, its axis ratio
-    (minor over major), and p, the angle of its major axis.
+    A surface density made of elliptical blobs, each a Gaussian of the
+    elliptical distance rho from its centre: a exp(-rho^2 / (2 s^2)). It
+    has nblobs blobs (see the package docstring). Its parameters, vectors
+    of a value for each blob: r and t, the radius and the azimuth of its
+    centre, a, its amplitude, s, its scale along its major axis, q, its
+    axis ratio (minor over major), and p, the angle of its major axis.
 
     Parameters
     ----------
@@ -732,6 +802,10 @@ class RPTraitMixtureGauss(RPTrait):
     @staticmethod
     def type() -> str:
         return 'mixture_gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian blobs'
 
     @staticmethod
     def uid() -> int:
@@ -761,10 +835,10 @@ class RPTraitMixtureGauss(RPTrait):
 
 class RPTraitMixtureGGauss(RPTrait):
     """
-    A surface density made of nblobs elliptical blobs (see the module
-    docstring), each a generalised Gaussian of the elliptical distance rho
-    from its centre: a exp(-(rho / s)^b). Its parameters, vectors of a
-    value for each blob: r and t, the radius and the azimuth of its
+    A surface density made of elliptical blobs, each a generalised Gaussian
+    of the elliptical distance rho from its centre: a exp(-(rho / s)^b). It
+    has nblobs blobs (see the package docstring). Its parameters, vectors
+    of a value for each blob: r and t, the radius and the azimuth of its
     centre, a, its amplitude, s, its scale along its major axis, b, its
     shape, q, its axis ratio (minor over major), and p, the angle of its
     major axis.
@@ -785,6 +859,10 @@ class RPTraitMixtureGGauss(RPTrait):
     @staticmethod
     def type() -> str:
         return 'mixture_ggauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian blobs'
 
     @staticmethod
     def uid() -> int:
@@ -814,13 +892,13 @@ class RPTraitMixtureGGauss(RPTrait):
 
 class RPTraitMixtureMoffat(RPTrait):
     """
-    A surface density made of nblobs elliptical blobs (see the module
-    docstring), each a Moffat of the elliptical distance rho from its
-    centre: a (1 + (rho / s)^2)^-b. Its parameters, vectors of a value for
-    each blob: r and t, the radius and the azimuth of its centre, a, its
-    amplitude, s, its scale along its major axis, b, its shape, q, its
-    axis ratio (minor over major), and p, the angle of its major axis. The
-    Monte Carlo disks need b > 1 (a finite flux).
+    A surface density made of elliptical blobs, each a Moffat of the
+    elliptical distance rho from its centre: a (1 + (rho / s)^2)^-b. It has
+    nblobs blobs (see the package docstring). Its parameters, vectors of a
+    value for each blob: r and t, the radius and the azimuth of its centre,
+    a, its amplitude, s, its scale along its major axis, b, its shape, q,
+    its axis ratio (minor over major), and p, the angle of its major axis.
+    The Monte Carlo disks need b > 1 (a finite flux).
 
     Parameters
     ----------
@@ -838,6 +916,10 @@ class RPTraitMixtureMoffat(RPTrait):
     @staticmethod
     def type() -> str:
         return 'mixture_moffat'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Moffat blobs'
 
     @staticmethod
     def uid() -> int:
@@ -892,12 +974,16 @@ class RPTraitNWUniform(RPTrait):
         return 'nw_uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_NW_UNIFORM
 
     def __init__(
             self,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RPTraitNWUniform.__init__, locals())
@@ -907,7 +993,9 @@ class RPTraitNWUniform(RPTrait):
         return True
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
-        return dict(a=ParamVectorDesc(nnodes, default=1))
+        return dict(a=ParamVectorDesc(
+            nnodes, title='Density',
+            desc="the surface density at each ring", default=1))
 
     def has_analytical_integral(self) -> bool:
         return False
@@ -953,13 +1041,17 @@ class RPTraitNWHarmonic(RPTrait):
         return 'nw_harmonic'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Harmonic (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_NW_HARMONIC
 
     def __init__(
             self,
             order: Annotated[int, Ge(0)],
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RPTraitNWHarmonic.__init__, locals())
@@ -990,7 +1082,7 @@ class RPTraitNWHarmonic(RPTrait):
 class RPTraitNWDistortion(RPTrait):
     """
     A surface density around one azimuth at each ring: a(r)
-    exp(-(dtheta r)^2 / (2 s(r)^2)), with dtheta the azimuth from p(r)
+    exp(-(dtheta r)^2 / (2 s(r)^2)). Here dtheta is the azimuth from p(r)
     (radians, within half a turn). Its parameters, node-wise: a, the peak,
     p, its azimuth, and s, its width along the ring. A p that changes with
     r winds it into a spiral arm.
@@ -1015,12 +1107,16 @@ class RPTraitNWDistortion(RPTrait):
         return 'nw_distortion'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Distortion (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_NW_DISTORTION
 
     def __init__(
             self,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RPTraitNWDistortion.__init__, locals())
@@ -1056,18 +1152,18 @@ class RPTraitNWDistortion(RPTrait):
 
 class RPTraitSpiral(RPTrait):
     """
-    The density of a spiral density wave in a disk, as DysmalPy's
-    SpiralDensityWave with light (see Spiral): e Sigma_0(R)
-    cos(phi), Sigma_0 the density of the disk without its waves (the
-    azimuthal mean of the sum of its other density polar traits), 0 where
-    there is no wave. It is negative between the arms (with e <= 1, the
-    density of the disk stays positive), and its azimuthal mean is 0, so
-    that the gravity of its galaxy does not take it (see NodalDiskDensity).
-    Its velocities are the velocity trait 'spiral' (see VPTraitSpiral).
-    The Monte Carlo disks draw its clouds as those of a harmonic in each
-    ring (see RPTraitNWHarmonic), of the phase f of the ring. With a given
-    wavenumber, it does not take the rotation of its disk (e.g. the arms
-    of an image).
+    The density of a spiral density wave in a disk: e Sigma_0(R) cos(phi),
+    Sigma_0 the density of the disk without its waves. It is as DysmalPy's
+    SpiralDensityWave with light (see Spiral): Sigma_0 is the azimuthal
+    mean of the sum of the other density polar traits of the disk, and the
+    density is 0 where there is no wave. It is negative between the arms
+    (with e <= 1, the density of the disk stays positive), and its
+    azimuthal mean is 0, so that the gravity of its galaxy does not take it
+    (see NodalDiskDensity). Its velocities are the velocity trait 'spiral'
+    (see VPTraitSpiral). The Monte Carlo disks draw its clouds as those of
+    a harmonic in each ring (see RPTraitNWHarmonic), of the phase f of the
+    ring. With a given wavenumber, it does not take the rotation of its
+    disk (e.g. the arms of an image).
 
     Parameters
     ----------
@@ -1093,14 +1189,18 @@ class RPTraitSpiral(RPTrait):
         return 'spiral'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Spiral density wave'
+
+    @staticmethod
     def uid() -> int:
         return RPT_UID_SPIRAL
 
     def __init__(
             self,
             order: Annotated[int, Ge(1)],
-            winding: Literal['trailing', 'leading'] | None = None,
-            wavenumber: Literal['dispersion', 'given'] = 'dispersion',
+            winding: SpiralWinding | None = None,
+            wavenumber: SpiralWavenumber = 'dispersion',
             name: str | None = None
     ):
         check_options(RPTraitSpiral.__init__, locals())

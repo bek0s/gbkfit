@@ -36,10 +36,11 @@ __all__ = [
 
 class RegionSpectra(Observable):
     """
-    Spectra in regions of the sky (see Regions; e.g. fibres, apertures,
-    bins, or the whole field for an integrated spectrum): the sum of the
-    cube of the model, seen through the instrument, in each region, in
-    each channel.
+    Spectra in regions of the sky (e.g. fibres, apertures, bins, or the
+    whole field): the summed spectrum of each region. The spectra are the
+    sum of the cube of the model, seen through the instrument, in each
+    region (see Regions), in each channel; that of the whole field is an
+    integrated spectrum.
 
     The spatial axes of the cube are those of the regions if they are on
     a grid (bins), or given (apertures). Its configuration has the options
@@ -77,6 +78,10 @@ class RegionSpectra(Observable):
     @staticmethod
     def type() -> str:
         return 'region_spectra'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Region spectra (bins, fibres)'
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:

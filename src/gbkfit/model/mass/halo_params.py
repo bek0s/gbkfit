@@ -17,9 +17,11 @@ exactly.
 
 import re
 from collections.abc import Callable
+from typing import Annotated, Literal, TypeAlias
 
 import numpy as np
 
+from gbkfit.config import Choices
 from gbkfit.params import ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
 from .base import MassContext
@@ -29,6 +31,7 @@ from .units import G
 __all__ = [
     'PARAMETERISATIONS',
     'Overdensity',
+    'ParameterisationChoice',
     'halo_scale_radius',
     'halo_scales',
     'parameterisation_pdescs'
@@ -37,6 +40,13 @@ __all__ = [
 
 PARAMETERISATIONS = (
     'mass_concentration', 'velocity_concentration', 'density_radius')
+
+# The option of the parameterisation of a halo
+ParameterisationChoice: TypeAlias = Annotated[
+    Literal[PARAMETERISATIONS], Choices(
+        mass_concentration='Mass and concentration',
+        velocity_concentration='Velocity and concentration',
+        density_radius='Scale density and radius')]
 
 
 class Overdensity:
@@ -87,23 +97,28 @@ def parameterisation_pdescs(
         parameterisation: str) -> dict[str, ParamScalarDesc]:
     """Return the parameters of a parameterisation, by name."""
     c = ParamScalarDesc(
-        desc="the concentration, r_D / r_s", min=0, unit='', default=10)
+        title='Concentration', desc="the concentration, r_D / r_s", min=0,
+        unit='', default=10)
     return dict(
         mass_concentration=dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass M_D", unit='dex(solMass)', default=12),
+                title='Log mass', desc="log10 of the mass M_D",
+                unit='dex(solMass)', default=12),
             c=c),
         velocity_concentration=dict(
             v=ParamScalarDesc(
+                title='Circular velocity',
                 desc="the circular velocity V_D at r_D", min=0,
                 unit='km/s', default=150),
             c=c),
         density_radius=dict(
             log_rho=ParamScalarDesc(
+                title='Log scale density',
                 desc="log10 of the scale density rho_s",
                 unit='dex(solMass / kpc3)', default=7),
             rs=ParamScalarDesc(
-                desc="the scale radius r_s", min=0, unit='kpc', default=20)),
+                title='Scale radius', desc="the scale radius r_s", min=0,
+                unit='kpc', default=20)),
     )[parameterisation]
 
 

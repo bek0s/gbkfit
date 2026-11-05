@@ -301,6 +301,10 @@ class LSFPoint(LSF):
     def type() -> str:
         return 'point'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'None (a point)'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -336,6 +340,10 @@ class LSFGauss(LSF):
     @staticmethod
     def type() -> str:
         return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -393,6 +401,10 @@ class LSFGGauss(LSF):
     @staticmethod
     def type() -> str:
         return 'ggauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -454,6 +466,10 @@ class LSFLorentz(LSF):
     def type() -> str:
         return 'lorentz'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Lorentzian'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -509,6 +525,10 @@ class LSFMoffat(LSF):
     @staticmethod
     def type() -> str:
         return 'moffat'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Moffat'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -576,6 +596,10 @@ class LSFImage(LSF):
     @staticmethod
     def type() -> str:
         return 'image'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Image (measured)'
 
     @classmethod
     def from_file(
@@ -684,6 +708,10 @@ class LSFSum(LSF):
     def type() -> str:
         return 'sum'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Sum'
+
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
@@ -736,7 +764,7 @@ class LSFSum(LSF):
 class LSFConvolution(LSF):
     """
     The convolution of LSFs: e.g. the LSF of an instrument and the
-    Hanning smoothing of the channels of the data (see hanning).
+    Hanning smoothing of the channels of the data (hanning).
 
     Parameters
     ----------
@@ -747,6 +775,10 @@ class LSFConvolution(LSF):
     @staticmethod
     def type() -> str:
         return 'convolution'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Convolution'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -818,6 +850,10 @@ class LSFHanning(LSF):
     @staticmethod
     def type() -> str:
         return 'hanning'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Hanning smoothing'
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -905,6 +941,10 @@ class LSFImages(LSF):
     @staticmethod
     def type() -> str:
         return 'images'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Image per wavelength (measured)'
 
     @classmethod
     def from_file(
@@ -1049,6 +1089,9 @@ class LSFVarying(LSF):
 
     def type(self) -> str:
         return self._options.cls().type()
+
+    def type_title(self) -> str:
+        return self._options.cls().type_title()
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

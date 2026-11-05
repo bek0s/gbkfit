@@ -333,8 +333,8 @@ class ParticlesPlan(ComponentPlan):
 class Particles(Component):
     """
     Particles given in a table (e.g. the gas of a simulation), each the
-    light of a point at its position, moving at its velocity: for mock
-    data of them (see GroupPlan.mock), which other models then fit.
+    light of a point at its position, moving at its velocity. They are for
+    mock data of them (see GroupPlan.mock), which other models then fit.
     Each is in the pixel that holds it (so that a pixel has the light of
     the particles in it), as surface brightness (as a point component, see
     PointPlan), with its lines (emission lines) each a Gaussian of its
@@ -384,6 +384,10 @@ class Particles(Component):
     @staticmethod
     def type() -> str:
         return 'particles'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Particles'
 
     @classmethod
     def from_file(

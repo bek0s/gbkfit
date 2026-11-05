@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated, Literal, TypeAlias
 import numpy as np
 from annotated_types import Ge, Lt
 
-from gbkfit.config import warn
+from gbkfit.config import Choices, warn
 from gbkfit.grid import SpectralAxis, check_convention
 import gbkfit.math
 from gbkfit.dataset import Data, Dataset
@@ -46,7 +46,9 @@ SPEC_RANGE = 1000
 # dispersion), or a Gauss-Hermite series fitted to them (its flux, centre,
 # dispersion, h3 and h4)
 MOMENT_METHODS = ('moments', 'gaussian_fit', 'gauss_hermite')
-Method: TypeAlias = Literal[MOMENT_METHODS]
+Method: TypeAlias = Annotated[Literal[MOMENT_METHODS], Choices(
+    moments='Moments', gaussian_fit='Gaussian fit',
+    gauss_hermite='Gauss-Hermite fit')]
 
 # The flux floor of the moments: a fraction of the flux of the brightest
 # spectrum (see PixelMoments)

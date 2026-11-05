@@ -7,7 +7,7 @@ free element (see Prior).
 import abc
 import numbers
 from collections.abc import Callable, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 import scipy.linalg
@@ -17,7 +17,7 @@ from pydantic import FiniteFloat
 from ._errors import ParamEvaluationError
 from .space import ParamFunctions, ParamSpace, ParamValues
 from gbkfit.config import (
-    TypedParser, TypedSerializable, check_options)
+    Choices, TypedParser, TypedSerializable, check_options)
 
 
 __all__ = [
@@ -35,6 +35,10 @@ __all__ = [
 # The residuals of a prior on several parameters, of the values of all
 # the parameters
 Residuals = Callable[[ParamValues], np.ndarray]
+
+# The option of the order of the differences of a prior on smoothness
+_Order: TypeAlias = Annotated[Literal[1, 2], Choices(
+    {1: 'First differences', 2: 'Second differences'})]
 
 
 def _check_std(std: float | Sequence[float]) -> None:
@@ -83,9 +87,9 @@ class JointPrior(TypedSerializable, abc.ABC):
 
 class JointPriorGauss(JointPrior):
     """
-    A Gaussian prior on an expression: the residuals (g - mean) / std,
-    one per element of its value (e.g. a prior on the rotation at 2.2
-    disk scale lengths, from the Tully-Fisher relation).
+    A Gaussian prior on an expression (e.g. on the rotation at 2.2 disk
+    scale lengths, from the Tully-Fisher relation). Its residuals are
+    (g - mean) / std, one per element of its value.
 
     Parameters
     ----------
@@ -104,6 +108,10 @@ class JointPriorGauss(JointPrior):
     @staticmethod
     def type() -> str:
         return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
 
     def dump(self) -> dict[str, Any]:
         return dict(
@@ -135,8 +143,8 @@ class JointPriorGauss(JointPrior):
 
 class JointPriorSmooth(JointPrior):
     """
-    A prior on the smoothness of a vector (e.g. a parameter of each ring
-    of a disk): on its first differences (order 1, a random walk:
+    A prior on the smoothness of a vector, e.g. a parameter of each ring
+    of a disk. It is on its first differences (order 1, a random walk:
     penalises jumps) or its second differences (order 2: penalises bends,
     not steady trends), with standard deviation std from element to
     element.
@@ -170,6 +178,10 @@ class JointPriorSmooth(JointPrior):
     def type() -> str:
         return 'smooth'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Smoothness'
+
     def dump(self) -> dict[str, Any]:
         info = dict(
             type=self.type(), expr=self._expr, order=self._order,
@@ -181,7 +193,7 @@ class JointPriorSmooth(JointPrior):
     def __init__(
             self,
             expr: str,
-            order: Literal[1, 2],
+            order: _Order,
             std: Annotated[FiniteFloat, Gt(0)],
             positions: str | None = None
     ):
@@ -256,17 +268,18 @@ class JointPriorSmooth(JointPrior):
 
 class JointPriorSmooth2D(JointPrior):
     """
-    A prior on the smoothness of a map (e.g. the cells of a map trait):
-    a vector of nx ny values, row by row (an image c of shape (ny, nx), x
-    along its columns), on its differences from cell to cell, with
-    standard deviation std. Order 1 (first differences: penalises jumps)
-    gives (c[j, i+1] - c[j, i]) / std along x and (c[j+1, i] - c[j, i]) /
-    std along y. Order 2 (second differences: penalises bends, not steady
-    gradients) gives (c[j, i+1] - 2 c[j, i] + c[j, i-1]) / std along x,
-    the same along y, and sqrt(2) (c[j+1, i+1] - c[j+1, i] - c[j, i+1] +
-    c[j, i]) / std across: the terms of the thin-plate energy f_xx^2 +
-    2 f_xy^2 + f_yy^2, which is the same in every direction (without the
-    term across, a saddle c = x y would cost nothing).
+    A prior on the smoothness of a map, e.g. the cells of a map trait.
+    The map is a vector of nx ny values, row by row (an image c of shape
+    (ny, nx), x along its columns), and the prior is on its differences
+    from cell to cell, with standard deviation std. Order 1 (first
+    differences: penalises jumps) gives (c[j, i+1] - c[j, i]) / std along
+    x and (c[j+1, i] - c[j, i]) / std along y. Order 2 (second
+    differences: penalises bends, not steady gradients) gives
+    (c[j, i+1] - 2 c[j, i] + c[j, i-1]) / std along x, the same along y,
+    and sqrt(2) (c[j+1, i+1] - c[j+1, i] - c[j, i+1] + c[j, i]) / std
+    across: the terms of the thin-plate energy f_xx^2 + 2 f_xy^2 + f_yy^2,
+    which is the same in every direction (without the term across, a
+    saddle c = x y would cost nothing).
 
     Parameters
     ----------
@@ -290,6 +303,10 @@ class JointPriorSmooth2D(JointPrior):
     def type() -> str:
         return 'smooth2d'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Smoothness of a map'
+
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), expr=self._expr, size=list(self._size),
@@ -299,7 +316,7 @@ class JointPriorSmooth2D(JointPrior):
             self,
             expr: str,
             size: Sequence[int],
-            order: Literal[1, 2],
+            order: _Order,
             std: Annotated[FiniteFloat, Gt(0)]
     ):
         check_options(JointPriorSmooth2D.__init__, locals())
@@ -341,12 +358,12 @@ class JointPriorSmooth2D(JointPrior):
 
 class JointPriorBound(JointPrior):
     """
-    A soft bound on an expression: no penalty inside the bounds, and
-    outside, the residual (lower - g) / std or (g - upper) / std, for
-    each element of its value (e.g. a mass that grows with radius: the
-    differences of r v^2 above 0). The residuals are 0 inside, so their
-    derivatives jump at the bounds; a hard bound (std near 0) would stall
-    least squares.
+    A soft bound on an expression: no penalty inside the bounds, and one
+    that grows beyond them. Outside, the residual is (lower - g) / std or
+    (g - upper) / std, for each element of its value (e.g. a mass that
+    grows with radius: the differences of r v^2 above 0). The residuals
+    are 0 inside, so their derivatives jump at the bounds; a hard bound
+    (std near 0) would stall least squares.
 
     Parameters
     ----------
@@ -367,6 +384,10 @@ class JointPriorBound(JointPrior):
     @staticmethod
     def type() -> str:
         return 'bound'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Soft bound'
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type(), expr=self._expr, std=self._std)
@@ -414,11 +435,12 @@ class JointPriorBound(JointPrior):
 
 class JointPriorMVN(JointPrior):
     """
-    A multivariate Gaussian prior on several expressions together, with a
-    covariance (e.g. the inclination and position angle of a previous fit,
-    and their correlation): the residuals L^-1 (g - mean), with L the
-    Cholesky factor of the covariance (L L^T = cov), so that the sum of
-    their squares is (g - mean)^T cov^-1 (g - mean).
+    A multivariate Gaussian prior on several expressions together, with
+    their covariance. It suits e.g. the inclination and position angle of
+    a previous fit, and their correlation. Its residuals are
+    L^-1 (g - mean), with L the Cholesky factor of the covariance
+    (L L^T = cov), so that the sum of their squares is
+    (g - mean)^T cov^-1 (g - mean).
 
     Parameters
     ----------
@@ -439,6 +461,10 @@ class JointPriorMVN(JointPrior):
     @staticmethod
     def type() -> str:
         return 'mvn'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Multivariate Gaussian'
 
     def dump(self) -> dict[str, Any]:
         return dict(

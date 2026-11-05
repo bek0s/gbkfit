@@ -41,8 +41,15 @@ export function ParamField(props: ParamFieldProps) {
   const unit = unitText(param.unit);
   const head = (
     <div className="gx-param-head">
-      <span className="gx-param-name" title={`${param.name}${param.range ? ` · valid ${param.range}` : ''}`}>
-        {label}
+      <span className="gx-param-name" title={[param.desc, `${param.name}${param.range ? ` · valid ${param.range}` : ''}`].filter(Boolean).join('\n')}>
+        {param.title ? (
+          <>
+            <span className="gx-param-title">{param.title}</span>
+            <code>{label}</code>
+          </>
+        ) : (
+          <code className="gx-param-symbol">{label}</code>
+        )}
         {param.size > 1 && <small>{props.rings?.length === param.size ? 'per ring' : `${param.size} values`}</small>}
       </span>
       {(setting.kind === 'fixed' || setting.kind === 'free') && (

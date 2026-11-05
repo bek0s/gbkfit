@@ -60,6 +60,10 @@ class WorkersThreads(Workers):
     def type() -> str:
         return 'threads'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Threads'
+
     def __init__(self, drivers: Sequence[Placement]):
         check_options(WorkersThreads.__init__, locals())
         if not drivers:

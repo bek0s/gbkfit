@@ -15,7 +15,7 @@ import gbkfit
 from gbkfit.config import Column, FitsFile, TypedParser, TypedSerializable
 from gbkfit.config.catalogue import Family, Member
 from gbkfit.config.schema import SchemaWriter
-from gbkfit.instrument import PSF, PSFGauss
+from gbkfit.instrument import PSF, PSFGauss, PSFGaussBeam
 from gbkfit.model import Galaxy
 from gbkfit.observation import FittedNoise
 
@@ -24,8 +24,10 @@ def test_members_of_families_have_their_options():
     writer = SchemaWriter()
     assert writer.option(PSF | None) == {
         'anyOf': [{'$ref': '#/$defs/psf'}, {'type': 'null'}]}
+    # (a member is named by the title of its type)
     gauss = next(
-        x for x in writer.defs()['psf']['oneOf'] if x['title'] == 'PSFGauss')
+        x for x in writer.defs()['psf']['oneOf']
+        if x['title'] == PSFGauss.type_title())
     assert gauss['required'] == ['type', 'sigma']
     assert gauss['additionalProperties'] is False
     assert gauss['properties']['type'] == {'const': 'gauss'}
@@ -48,7 +50,7 @@ def test_members_of_families_have_their_options():
     # e.g. a beam by its axes, or by a file, from_file)
     beam = next(
         x for x in writer.defs()['psf']['oneOf']
-        if x['title'] == 'PSFGaussBeam')
+        if x['title'] == PSFGaussBeam.type_title())
     axes, file = beam['oneOf']
     assert 'description' not in axes
     assert file['description'].startswith('Read a beam from the header')
@@ -80,6 +82,10 @@ class Square(Shape):
     @staticmethod
     def type():
         return 'square'
+
+    @staticmethod
+    def type_title():
+        return 'Square'
 
     def __init__(self, side: float):
         self.side = side

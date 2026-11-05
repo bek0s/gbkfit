@@ -6,7 +6,7 @@ measured (see UVCoverage).
 import numbers
 import os.path
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import astropy.units
 import numpy as np
@@ -15,7 +15,7 @@ import scipy.spatial
 from annotated_types import Ge
 
 from gbkfit.config import (
-    FilePath, Serializable, Unit, check_options)
+    Choices, FilePath, Serializable, Unit, check_options)
 from gbkfit.grid import make_rest
 from gbkfit.utils import unitutils
 from .base import Dataset
@@ -37,6 +37,12 @@ _FRAMES = ('LSRK', 'BARY')
 _MS_FRAMES = {
     0: 'REST', 1: 'LSRK', 2: 'LSRD', 3: 'BARY', 4: 'GEO', 5: 'TOPO',
     6: 'GALACTO', 7: 'LGROUP', 8: 'CMB'}
+
+# Where the errors of the visibilities of a measurement set come from
+# (see DatasetVisibilities.from_ms)
+_ErrorSource: TypeAlias = Annotated[
+    Literal['weights', 'scatter'],
+    Choices(weights='From the weights', scatter='From the scatter')]
 
 # The codes of the Stokes I and of the pairs of parallel hands (I = (a +
 # b) / 2) of the measurement sets (CORR_TYPE)
@@ -231,8 +237,9 @@ class UVCoverage(Serializable):
 class DatasetVisibilities(Dataset):
     """
     Interferometric visibilities of Stokes I: their real and imaginary
-    parts (the items re and im, of shape (nchannels, nrows), with the error
-    of each part), and where they are measured (see UVCoverage).
+    parts, and where they are measured. The parts are the items re and
+    im, of shape (nchannels, nrows), with the error of each part, and
+    where they are measured is their coverage (see UVCoverage).
 
     Its configuration is a file of the arrays of the dataset (option file;
     see from_file and dump), or a measurement set and the options of
@@ -261,6 +268,10 @@ class DatasetVisibilities(Dataset):
     @staticmethod
     def type() -> str:
         return 'visibilities'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Visibilities (interferometer)'
 
     @classmethod
     def from_file(cls, file: FilePath) -> 'DatasetVisibilities':
@@ -309,7 +320,7 @@ class DatasetVisibilities(Dataset):
             spw: Annotated[int, Ge(0)] = 0,
             column: str = 'DATA',
             rest: str | astropy.units.Quantity | None = None,
-            error: Literal['weights', 'scatter'] = 'weights'
+            error: _ErrorSource = 'weights'
     ) -> 'DatasetVisibilities':
         """
         Read the dataset from a measurement set (python-casacore): the

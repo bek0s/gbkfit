@@ -40,14 +40,15 @@ _PROGRESS_INTERVAL = 10.0
 
 class FitterDNest4(Fitter):
     """
-    Diffusive nested sampling with DNest4 (Brewer et al. 2011; Brewer &
-    Foreman-Mackey 2018), which also varies the number of rows of the
-    tables of parameters (see ParamTable): e.g. how many blobs a mixture
-    trait has. Other fitters fit every row; DNest4 uses from min_rows of
-    them (0 by default) to all, with a uniform prior on their number,
-    adding and removing rows (new ones drawn from the priors), and gives
-    the posterior of their number. The rows it does not use get the empty
-    row of their table (e.g. a blob of amplitude 0).
+    Diffusive nested sampling with DNest4, which also fits the number of
+    rows of tables of parameters (e.g. how many blobs a mixture trait
+    has). DNest4 (Brewer et al. 2011; Brewer & Foreman-Mackey 2018)
+    varies the number of rows of the tables (see ParamTable): other
+    fitters fit every row; it uses from min_rows of them (0 by default)
+    to all, with a uniform prior on their number, adding and removing
+    rows (new ones drawn from the priors), and gives the posterior of
+    their number. The rows it does not use get the empty row of their
+    table (e.g. a blob of amplitude 0).
 
     Only the rows of a table that share all their settings are
     interchangeable, and only they can be dropped: a row with settings of
@@ -116,6 +117,10 @@ class FitterDNest4(Fitter):
     @staticmethod
     def type() -> str:
         return 'dnest4'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'DNest4'
 
     @staticmethod
     def fit_param_class() -> FitParamClass:

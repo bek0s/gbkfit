@@ -35,9 +35,9 @@ __all__ = [
 
 class WorkersMPI(Workers):
     """
-    Workers in the processes (ranks) of an MPI job: one on each rank but
-    the first, which runs the program, started by the launcher of GBKFIT
-    (see main), e.g. with 4 workers:
+    Workers in the processes (ranks) of an MPI job, one on each rank but
+    the first. The first rank runs the program, started by the launcher
+    of GBKFIT (see main), e.g. with 4 workers:
 
         mpiexec -n 5 python -m gbkfit.parallel script.py [arguments]
         mpiexec -n 5 python -m gbkfit.parallel -m module [arguments]
@@ -72,6 +72,10 @@ class WorkersMPI(Workers):
     @staticmethod
     def type() -> str:
         return 'mpi'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'MPI job'
 
     def __init__(
             self,

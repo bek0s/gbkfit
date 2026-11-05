@@ -19,7 +19,7 @@ import { CutPlot } from '../components/CutPlot';
 import { contourPath, widthAt, type Width } from '../components/contour';
 import { LinkIcon, UnlinkIcon } from '../components/icons';
 import { MapView } from '../components/MapView';
-import { SchemaForm, typeTitle, type Defs, type Options } from '../components/SchemaForm';
+import { SchemaForm, titleOf, type Defs, type Options } from '../components/SchemaForm';
 import { SpectrumPlot } from '../components/SpectrumPlot';
 import { Button, NavItem } from '../components/ui/basics';
 import { Segments } from '../components/ui/inputs';
@@ -130,7 +130,7 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
         <div>
           <div className="eyebrow">
             {kindOf(folder)}
-            {options && typeof options.type === 'string' ? ` · ${typeTitle(options.type)}` : ''}
+            {options && typeof options.type === 'string' ? ` · ${titleOf(defs, family, options.type)}` : ''}
           </div>
           {head.title}
         </div>

@@ -54,6 +54,10 @@ class DatasetPixelBrightness(Dataset):
     def type() -> str:
         return 'pixel_brightness'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Pixel brightness (image)'
+
     @classmethod
     def from_files(
             cls,

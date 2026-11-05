@@ -124,7 +124,8 @@ class VerticalLaw(DiskVertical, abc.ABC):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(hz=ParamScalarDesc(
-            desc="the scale height", min=0, unit='kpc', default=0.3))
+            title='Scale height', desc="the scale height", min=0,
+            unit='kpc', default=0.3))
 
     def thin(self, context: MassContext) -> bool:
         return False
@@ -179,13 +180,18 @@ class VerticalLaw(DiskVertical, abc.ABC):
 
 class VerticalThin(VerticalLaw):
     """
-    No thickness: all the mass in the plane (a thin disk), T(k) = 1. It
-    has no pdf of the height, and no scale height.
+    No thickness: all the mass in the plane (a razor-thin disk). Its
+    transform is T(k) = 1. It has no pdf of the height, and no scale
+    height.
     """
 
     @staticmethod
     def type() -> str:
         return 'thin'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Razor-thin'
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return {}
@@ -230,13 +236,17 @@ class VerticalThin(VerticalLaw):
 
 class VerticalExponential(VerticalLaw):
     """
-    The exponential law: p(z) = exp(-|z| / h) / (2 h), T(k) = 1 / (1 + k
-    h).
+    The exponential law, p(z) = exp(-|z| / h) / (2 h), of the scale height
+    h. Its transform is T(k) = 1 / (1 + k h).
     """
 
     @staticmethod
     def type() -> str:
         return 'exponential'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
 
     @staticmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
@@ -254,13 +264,18 @@ class VerticalExponential(VerticalLaw):
 
 class VerticalSech2(VerticalLaw):
     """
-    The sech2 law: p(z) = sech^2(z / h) / (2 h), T(k) = (a/2) (psi(a/4 +
-    1/2) - psi(a/4)) - 1 with a = k h (psi: the digamma function).
+    The sech2 law, p(z) = sech^2(z / h) / (2 h), of the scale height h
+    (that of an isothermal sheet). Its transform is T(k) = (a/2) (psi(a/4
+    + 1/2) - psi(a/4)) - 1 with a = k h (psi: the digamma function).
     """
 
     @staticmethod
     def type() -> str:
         return 'sech2'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Sech-squared'
 
     @staticmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
@@ -283,14 +298,19 @@ class VerticalSech2(VerticalLaw):
 
 class VerticalSech(VerticalLaw):
     """
-    The sech law: p(z) = sech(z / h) / (pi h), with the share within |z|
-    < H of (2 / pi) arctan(sinh(H / h)), and T(k) = (psi(a/4 + 3/4) -
-    psi(a/4 + 1/4)) / pi with a = k h (psi: the digamma function).
+    The sech law, p(z) = sech(z / h) / (pi h), of the scale height h. Its
+    share within |z| < H is (2 / pi) arctan(sinh(H / h)), and its
+    transform T(k) = (psi(a/4 + 3/4) - psi(a/4 + 1/4)) / pi with a = k h
+    (psi: the digamma function).
     """
 
     @staticmethod
     def type() -> str:
         return 'sech'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Sech'
 
     @staticmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
@@ -311,12 +331,17 @@ class VerticalSech(VerticalLaw):
 
 class VerticalGauss(VerticalLaw):
     """
-    The Gaussian law, of dispersion h: T(k) = erfcx(k h / sqrt(2)).
+    The Gaussian law, p(z) = exp(-z^2 / (2 h^2)) / (sqrt(2 pi) h), of the
+    dispersion h. Its transform is T(k) = erfcx(k h / sqrt(2)).
     """
 
     @staticmethod
     def type() -> str:
         return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
 
     @staticmethod
     def pdf(z: npt.ArrayLike, h: float) -> np.ndarray:
@@ -334,18 +359,18 @@ class VerticalGauss(VerticalLaw):
 
 class VerticalComponent(DiskVertical):
     """
-    The vertical structure of a component of the galaxy (its density
-    height traits; thin without them): at each radius, the shape of its
-    density, sum_i S_i(R) p_i(z | R) / sum_i S_i(R) (S_i and p_i: the
-    surface density and the pdf of the height of each of its terms, e.g.
-    of each density polar trait), taken at its subnodes (or at those of
-    rings of width rstep) and linear between them. Where the component
-    has no density, the shape is that of the nearest subnodes with
-    density: interpolated linearly between them on either side, and held
-    beyond the first and the last. This is an assumption (e.g. a disk
-    may flare on beyond the last ring of the component), and it only
-    matters where the shape changes with radius (a flaring component, or
-    several terms).
+    The vertical structure of a component of the galaxy, which may change
+    with radius. It is that of its density height traits (thin without
+    them): at each radius, the shape of its density, sum_i S_i(R) p_i(z |
+    R) / sum_i S_i(R) (S_i and p_i: the surface density and the pdf of the
+    height of each of its terms, e.g. of each density polar trait), taken
+    at its subnodes (or at those of rings of width rstep) and linear
+    between them. Where the component has no density, the shape is that
+    of the nearest subnodes with density: interpolated linearly between
+    them on either side, and held beyond the first and the last. This is
+    an assumption (e.g. a disk may flare on beyond the last ring of the
+    component), and it only matters where the shape changes with radius
+    (a flaring component, or several terms).
 
     Parameters
     ----------
@@ -365,6 +390,10 @@ class VerticalComponent(DiskVertical):
     @staticmethod
     def type() -> str:
         return 'component'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'From a component'
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(

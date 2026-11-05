@@ -95,15 +95,15 @@ def _map_azimuthal_edges(
 
 class RPTraitMap(RPTrait):
     """
-    A free map: a surface density of nx by ny square cells of side step
-    (arcsec) in the plane of the disk, centred on its centre, x along the
-    azimuth 0 and y along the azimuth 90 degrees (see the module
-    docstring). The cell (i, j) covers [(i - nx / 2) step, (i + 1 - nx /
-    2) step) along x and likewise along y, and has the density a[j nx +
-    i], of any sign, all over it; 0 outside the grid. Its parameter: a,
-    the nx ny densities, row by row (as a numpy image of shape (ny, nx),
-    x along its columns). A warped disk has the map in the plane of each
-    of its rings, as it has its blobs.
+    A free map: a surface density of nx by ny square cells in the plane of
+    the disk, each of its own density. The cells are of side step (arcsec),
+    centred on the centre of the disk, x along the azimuth 0 and y along
+    the azimuth 90 degrees (see the package docstring). The cell (i, j)
+    covers [(i - nx / 2) step, (i + 1 - nx / 2) step) along x and likewise
+    along y, and has the density a[j nx + i], of any sign, all over it; 0
+    outside the grid. Its parameter: a, the nx ny densities, row by row (as
+    a numpy image of shape (ny, nx), x along its columns). A warped disk
+    has the map in the plane of each of its rings, as it has its blobs.
 
     Parameters
     ----------
@@ -123,6 +123,10 @@ class RPTraitMap(RPTrait):
     @staticmethod
     def type() -> str:
         return 'map'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Free map'
 
     @staticmethod
     def uid() -> int:
@@ -158,8 +162,8 @@ class RPTraitMap(RPTrait):
     def params_sm(self) -> dict[str, ParamDesc]:
         nx, ny = self._size
         return dict(a=ParamVectorDesc(
-            nx * ny, desc="the density of each cell, row by row",
-            default=1))
+            nx * ny, title='Cell densities',
+            desc="the density of each cell, row by row", default=1))
 
     def has_analytical_integral(self) -> bool:
         return True
@@ -191,16 +195,16 @@ _IMAGE_BLUR_WIDENING_WARNING = 0.05
 class RPTraitImage(RPTrait):
     """
     The light of an observed image (e.g. of HST or JWST), as the face-on
-    light of a map in the plane of the disk: nx by ny square cells of side
-    step (arcsec), those of the map trait (see RPTraitMap), whose densities
-    its galaxy makes from the image at each evaluation, by the geometry of
-    the disk (its centre, position angle and inclination; at the radius of
-    each cell in a warped disk): a I(x, y) cos(incl), I the image at the
-    position (x, y) on the sky of the centre of the cell, and a, a
-    parameter, the light of the model per unit of the image. Seen with the
-    same geometry, a thin disk of it is a times the image, whatever its
-    inclination: its light says nothing of the geometry, which the
-    kinematics give (as KinMS_fitter's skySampler; a photometric
+    light of a map in the plane of the disk. The map has nx by ny square
+    cells of side step (arcsec), those of the map trait (see RPTraitMap),
+    whose densities its galaxy makes from the image at each evaluation, by
+    the geometry of the disk (its centre, position angle and inclination;
+    at the radius of each cell in a warped disk): a I(x, y) cos(incl), I
+    the image at the position (x, y) on the sky of the centre of the cell,
+    and a, a parameter, the light of the model per unit of the image. Seen
+    with the same geometry, a thin disk of it is a times the image,
+    whatever its inclination: its light says nothing of the geometry, which
+    the kinematics give (as KinMS_fitter's skySampler; a photometric
     inclination goes in as a prior on the inclination of the disk). The
     light of a thick disk of it is the image smeared along the minor axis
     by about h sin(incl), h its height.
@@ -256,6 +260,10 @@ class RPTraitImage(RPTrait):
     @staticmethod
     def type() -> str:
         return 'image'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Observed image'
 
     @staticmethod
     def uid() -> int:
@@ -370,16 +378,20 @@ class RPTraitImage(RPTrait):
         nx, ny = self._size
         params = dict(
             m=ParamVectorDesc(
-                nx * ny, desc="the face-on light of each cell, row by row "
-                              "(made by the galaxy)", default=1),
+                nx * ny, title='Cell densities',
+                desc="the face-on light of each cell, row by row (made by "
+                     "the galaxy)", default=1),
             a=ParamScalarDesc(
+                title='Light per image unit',
                 desc="the light per unit of the image", default=1))
         if self._offsets:
             params |= dict(
                 dx=ParamScalarDesc(
+                    title='Offset (west)',
                     desc="the offset of the image to the west",
                     unit='arcsec', default=0),
                 dy=ParamScalarDesc(
+                    title='Offset (north)',
                     desc="the offset of the image to the north",
                     unit='arcsec', default=0))
         return params

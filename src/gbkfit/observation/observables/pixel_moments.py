@@ -33,10 +33,10 @@ __all__ = [
 
 class PixelMoments(Observable):
     """
-    Moments of the spectra on a grid of pixels: the moment maps of some
-    orders (0 to 7) of a spectral cube of the model, seen through the
-    instrument, as the data items moment0 to moment7, but h3 and h4 of
-    the method gauss_hermite (see _moments.moment_item).
+    Moments of the spectra on a grid of pixels: moment maps of a spectral
+    cube of the model, seen through the instrument. The maps are of some
+    orders (0 to 7), as the data items moment0 to moment7, but h3 and h4
+    of the method gauss_hermite (see _moments.moment_item).
 
     The moments are measured from a spectral cube with the spatial axes
     of the maps, and a spectral axis (spectral; see _moments.spectral_axis
@@ -107,6 +107,10 @@ class PixelMoments(Observable):
     @staticmethod
     def type() -> str:
         return 'pixel_moments'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Pixel moments (maps)'
 
     @classmethod
     def options_from_data(cls, dataset: Dataset) -> tuple[str, ...]:

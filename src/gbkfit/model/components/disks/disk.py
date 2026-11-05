@@ -235,6 +235,10 @@ class ThinDisk(Disk):
     def type() -> str:
         return 'thin_disk'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Thin disk'
+
     @classmethod
     def load(cls, info: dict[str, Any]) -> Self:
         # The options of a thick disk are reported as such, not as unknown
@@ -342,6 +346,10 @@ class ThickDisk(Disk):
     @staticmethod
     def type() -> str:
         return 'thick_disk'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Thick disk'
 
     def __init__(
             self,

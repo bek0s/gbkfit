@@ -7,11 +7,11 @@
 // type).
 import { useState } from 'react';
 import { useComponentTraits, useLines } from '../../api/queries';
-import { SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
+import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { Close } from '../../components/ui/basics';
 import { Check, Choice, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
-import { HEAD_OPTIONS, HEIGHT_START, isDisk, isThick, ITEM_STARTS, MASS_HEAD_OPTIONS, THICK_OPTIONS, TYPE_LABELS, type Part } from './catalogue';
+import { HEAD_OPTIONS, HEIGHT_START, isDisk, isThick, ITEM_STARTS, MASS_HEAD_OPTIONS, THICK_OPTIONS, type Part } from './catalogue';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { ParamField } from './ParamField';
 import { asList, asOneOrList, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
@@ -216,13 +216,12 @@ function TypedPart({ ctx, part, path, value, rings }: { ctx: Context; part: Part
   const family = part.typed!;
   const item = isObject(value) ? value : {};
   const set = (next: unknown) => draft.edit((s) => ({ ...s, options: setAt(s.options, path, next) }));
-  const labels = TYPE_LABELS[family] ?? {};
   const without = new Set([...HEAD_OPTIONS, ...(item.type === 'lines' ? ['lines'] : [])]);
   return (
     <>
       <div className="gx-row">
         <span className="gx-row-label">Type</span>
-        <Choice items={typesOf(defs, family, null, labels)} value={String(item.type ?? '')} onChange={(type) => set(retyped(defs, family, item, type))} label={`The type of the ${part.title.toLowerCase()}`} />
+        <Choice items={typesOf(defs, family)} value={String(item.type ?? '')} onChange={(type) => set(retyped(defs, family, item, type))} label={`The type of the ${part.title.toLowerCase()}`} />
       </div>
       {family === 'emission' && item.type === 'lines' && <LinesField emission={item} onChange={set} />}
       <Params ctx={ctx} owned={ownedBy(params, path)} rings={rings} />
@@ -396,8 +395,8 @@ function ItemCard({
   const member = memberOf(defs, family, item.type);
   const properties = (member?.properties ?? {}) as Record<string, Schema>;
   const set = (next: unknown, how?: EditHow) => draft.edit((s) => ({ ...s, options: setAt(s.options, path, next) }), how);
-  const directionEnum = (properties.direction?.enum as string[] | undefined) ?? null;
-  const directionChoices = directionEnum ? directionEnum.filter((d) => directions === null || directions.includes(d)) : null;
+  // (the directions the component takes, titled by the schema)
+  const directionChoices = choicesOf(properties.direction)?.filter((d) => directions === null || directions.includes(String(d.value))) ?? null;
   // (a mass component is named, and others name it: in its head; the name
   // of a trait is among its options)
   const named = family === 'mass_component' && 'name' in properties;
@@ -413,8 +412,9 @@ function ItemCard({
         />
         {directionChoices && (
           <Choice
-            items={directionChoices.map((d) => ({ value: d, label: DIRECTION_LABELS[d] ?? d }))}
-            value={String(item.direction ?? '')}
+            items={directionChoices.map((d) => ({ value: String(d.value), label: d.title }))}
+            // (one not given is the default, e.g. isotropic)
+            value={String(item.direction ?? properties.direction?.default ?? '')}
             onChange={(direction) => set({ ...item, direction })}
             label="Its direction"
           />
@@ -440,16 +440,6 @@ function omitKey(options: Options, key: string): Options {
   const { [key]: _, ...rest } = options;
   return rest;
 }
-
-const DIRECTION_LABELS: Record<string, string> = {
-  tan: 'tangential',
-  rad: 'radial',
-  ver: 'vertical',
-  los: 'along the line of sight',
-  out: 'outward',
-  away: 'away from the plane',
-  iso: 'isotropic',
-};
 
 // The height trait paired with an item (of a thick disk or a cone): its
 // type (or none, if it can be), its parameters and options

@@ -29,8 +29,8 @@ _AXES = ('x', 'y')
 class DatasetSlitlessSpectra(Dataset):
     """
     Slitless spectra: an image of a grism (or prism) exposure, where the
-    light of each wavelength lands away from its place on the sky by the
-    trace of the disperser (see SlitlessSpectra).
+    light of each wavelength lands away from its place on the sky. The
+    trace of the disperser moves it (see SlitlessSpectra).
 
     Its grid is that of the detector, with the world coordinates of the
     undispersed light: a pixel is at the position on the sky whose light
@@ -60,6 +60,10 @@ class DatasetSlitlessSpectra(Dataset):
     @staticmethod
     def type() -> str:
         return 'slitless_spectra'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Slitless spectra (grism)'
 
     @classmethod
     def from_files(

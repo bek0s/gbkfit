@@ -5,14 +5,15 @@ a disk along z (see ZPTrait).
 
 
 
-from typing import Annotated, Literal
+from typing import Annotated
 from annotated_types import Ge, Gt
 from pydantic import FiniteFloat
 
 from gbkfit.config import Unit, check_options
 from gbkfit.params.pdescs import ParamDesc
 from .base import ZPTrait
-from .options import Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
+from .options import (
+    SAMPLING_DEFAULT, Harmonic, Sampling, SamplingChoice, Zmax)
 
 
 __all__ = [
@@ -53,13 +54,17 @@ class ZPTraitNWUniform(ZPTrait):
         return 'nw_uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return ZPT_UID_NW_UNIFORM
 
     def __init__(
             self,
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(ZPTraitNWUniform.__init__, locals())
@@ -75,9 +80,9 @@ class ZPTraitNWUniform(ZPTrait):
 class ZPTraitNWHarmonic(ZPTrait):
     """
     A harmonic displacement of the plane: a(r) cos(m (theta - p(r))), of
-    the order m; order 1 is a warp, whose line of nodes is 90 degrees from
-    p. Its parameters, node-wise: a, the amplitude, and p (but for order
-    0), the azimuth of a maximum.
+    the order m (order 1: a warp). The line of nodes of a warp is 90
+    degrees from p. Its parameters, node-wise: a, the amplitude, and p
+    (but for order 0), the azimuth of a maximum.
 
     Parameters
     ----------
@@ -104,6 +109,10 @@ class ZPTraitNWHarmonic(ZPTrait):
         return 'nw_harmonic'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Harmonic (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return ZPT_UID_NW_HARMONIC
 
@@ -111,7 +120,7 @@ class ZPTraitNWHarmonic(ZPTrait):
             self,
             order: Annotated[int, Ge(0)],
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(ZPTraitNWHarmonic.__init__, locals())

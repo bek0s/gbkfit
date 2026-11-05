@@ -27,6 +27,16 @@ GEOMETRY_UNITS = dict(
     vsys='km/s', xpos='arcsec', ypos='arcsec', posa='deg', incl='deg')
 # and their typical values (see ParamDesc): at the centre, inclined
 _DEFAULTS = dict(vsys=0, xpos=0, ypos=0, posa=0, incl=45)
+# and their titles and descriptions (see ParamDesc)
+_TITLES = dict(
+    vsys='Systemic velocity', xpos='Centre (x)', ypos='Centre (y)',
+    posa='Position angle', incl='Inclination')
+_DESCS = dict(
+    vsys="the line-of-sight velocity of the centre",
+    xpos="the x coordinate of the centre on the sky (of a cone, its apex)",
+    ypos="the y coordinate of the centre on the sky (of a cone, its apex)",
+    posa="the position angle of the major axis, from north through east",
+    incl="the angle of the spin axis from the line of sight (0: face-on)")
 
 
 def geometry_pdesc(name: str, nnodes: int | None = None) -> ParamDesc:
@@ -35,8 +45,10 @@ def geometry_pdesc(name: str, nnodes: int | None = None) -> ParamDesc:
     a scalar, or node-wise (one value for each of nnodes rings) if nnodes
     is given. The position angle repeats every 360 degrees.
     """
+    title, desc = _TITLES[name], _DESCS[name]
     options: dict[str, Any] = dict(
         unit=GEOMETRY_UNITS[name], default=_DEFAULTS[name],
         period=360 if name == 'posa' else None)
-    return ParamScalarDesc(**options) if nnodes is None \
-        else ParamVectorDesc(nnodes, **options)
+    if nnodes is None:
+        return ParamScalarDesc(title=title, desc=desc, **options)
+    return ParamVectorDesc(nnodes, title=title, desc=desc, **options)

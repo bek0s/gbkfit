@@ -58,6 +58,10 @@ class DatasetPixelSpectra(Dataset):
     def type() -> str:
         return 'pixel_spectra'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Pixel spectra (cube)'
+
     @classmethod
     def from_files(
             cls,

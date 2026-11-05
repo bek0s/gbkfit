@@ -29,11 +29,12 @@ __all__ = [
 
 class WorkersProcesses(Workers):
     """
-    Workers in processes of this machine: a number of them on the drivers
-    of the objective, or one on each of the given placements (e.g. one per
-    GPU). Each process imports GBKFIT (spawned, see multiprocessing) and
-    makes its copy of the objective, which goes to it pickled (see
-    Objective): its data, once.
+    Workers in processes of this machine, each with its copy of the
+    objective. There are a number of them on the drivers of the
+    objective, or one on each of the given placements (e.g. one per GPU).
+    Each process imports GBKFIT (spawned, see multiprocessing) and makes
+    its copy of the objective, which goes to it pickled (see Objective):
+    its data, once.
 
     Unlike threads (see WorkersThreads), processes evaluate at the same
     time the parts of the models that run in Python, and models on the
@@ -66,6 +67,10 @@ class WorkersProcesses(Workers):
     @staticmethod
     def type() -> str:
         return 'processes'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Processes'
 
     def __init__(
             self,

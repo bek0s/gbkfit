@@ -8,10 +8,10 @@ component has: its heights and its equilibrium.
 
 import abc
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 from gbkfit.config import (
-    BasicParser, Serializable, TypedParser, TypedSerializable,
+    BasicParser, Choices, Serializable, TypedParser, TypedSerializable,
     check_name, check_options)
 from gbkfit.utils import iterutils
 from . import traits
@@ -213,6 +213,9 @@ class Density(Serializable):
 # Equilibrium)
 EQUILIBRIUM_DIRECTIONS = ('iso', 'ver')
 EQUILIBRIUM_DIRECTION_DEFAULT = 'iso'
+EquilibriumDirection: TypeAlias = Annotated[
+    Literal[EQUILIBRIUM_DIRECTIONS],
+    Choices(iso='Isotropic', ver='Vertical (sigma_z)')]
 
 
 class KinematicTraits:
@@ -345,8 +348,7 @@ class Equilibrium(TypedSerializable, abc.ABC):
 
     def __init__(
             self,
-            direction: Literal[
-                EQUILIBRIUM_DIRECTIONS] = EQUILIBRIUM_DIRECTION_DEFAULT
+            direction: EquilibriumDirection = EQUILIBRIUM_DIRECTION_DEFAULT
     ):
         check_options(Equilibrium.__init__, locals())
         self._direction = direction
@@ -359,32 +361,37 @@ class Equilibrium(TypedSerializable, abc.ABC):
 class CentralEquilibrium(Equilibrium):
     """
     The vertical equilibrium in the pull of a spherical mass: sigma_eq =
-    h V_c / R, with h the rms height of the disk at R (that of its
-    density, from its density height traits) and V_c the circular
-    velocity of the mass of its galaxy, or without mass, the rotation of
-    the disk (the azimuthal mean of its tangential velocity traits at the
-    midplane); exact for a disk thin against its radius (h << R) in a
-    spherical gravity, whatever the shape of its height profile (the
-    vertical virial theorem: sigma^2 = Omega^2 <z^2>, Omega = V_c / R). At
-    the centre, where V_c / R is 0 / 0, it takes Omega at the next
-    subnode; NaN where V_c^2 is negative. It is the thick disk of
-    GalPaK3D, there with h a fixed share of the radius of the disk. See
-    Equilibrium.
+    h V_c / R, of the rms height h and the circular velocity V_c. At the
+    radius R, h is the rms height of the disk (that of its density, from
+    its density height traits), and V_c the circular velocity of the mass
+    of its galaxy, or without mass, the rotation of the disk (the
+    azimuthal mean of its tangential velocity traits at the midplane). It
+    is exact for a disk thin against its radius (h << R) in a spherical
+    gravity, whatever the shape of its height profile (the vertical virial
+    theorem: sigma^2 = Omega^2 <z^2>, Omega = V_c / R). At the centre,
+    where V_c / R is 0 / 0, it takes Omega at the next subnode; NaN where
+    V_c^2 is negative. It is the thick disk of GalPaK3D, there with h a
+    fixed share of the radius of the disk. See Equilibrium.
     """
 
     @staticmethod
     def type() -> str:
         return 'central'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Spherical mass'
+
 
 class SelfGravitatingEquilibrium(Equilibrium):
     """
     The vertical equilibrium in the pull of the disk itself: sigma_eq^2 =
-    2 sqrt(3) G Sigma h, with Sigma the surface density of a mass
-    component of its galaxy (e.g. a mass disk that follows the disk) and
-    h its rms height; exact for an isothermal slab of its own gravity, of
-    the height profile sech^2(z / z0), z0 = sigma^2 / (pi G Sigma) (<z^2>
-    = pi^2 z0^2 / 12); NaN where Sigma is negative. See Equilibrium.
+    2 sqrt(3) G Sigma h, of its surface density Sigma and rms height h.
+    Sigma is the surface density of a mass component of its galaxy (e.g. a
+    mass disk that follows the disk); it is exact for an isothermal slab
+    of its own gravity, of the height profile sech^2(z / z0), z0 = sigma^2
+    / (pi G Sigma) (<z^2> = pi^2 z0^2 / 12); NaN where Sigma is negative.
+    See Equilibrium.
 
     Parameters
     ----------
@@ -404,14 +411,17 @@ class SelfGravitatingEquilibrium(Equilibrium):
     def type() -> str:
         return 'self_gravitating'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Self-gravitating disk'
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(mass=self._mass)
 
     def __init__(
             self,
             mass: str,
-            direction: Literal[
-                EQUILIBRIUM_DIRECTIONS] = EQUILIBRIUM_DIRECTION_DEFAULT
+            direction: EquilibriumDirection = EQUILIBRIUM_DIRECTION_DEFAULT
     ):
         check_options(SelfGravitatingEquilibrium.__init__, locals())
         super().__init__(direction)
@@ -428,15 +438,15 @@ class SelfGravitatingEquilibrium(Equilibrium):
 
 class JeansEquilibrium(Equilibrium):
     """
-    The vertical equilibrium in the pull of all the mass of its galaxy
-    (the vertical Jeans equation): sigma_eq^2 = int_0^inf z rho(z) (-F_z(R,
-    z)) dz / int_0^inf rho(z) dz, the dispersion of the column weighted by
-    its density (the vertical virial theorem, Binney & Tremaine 2008, eq.
-    4.222; rho of its density traits and density height traits), with F_z
-    the vertical force of every mass component (see
-    mass.MassComponent.vertical_force: user components give it by their
-    function of the forces); exact for any mass and profile of the height,
-    as the dispersion a face-on column shows. As 'central' and
+    The vertical equilibrium in the pull of all the mass of its galaxy, by
+    the vertical Jeans equation. Its dispersion is sigma_eq^2 = int_0^inf
+    z rho(z) (-F_z(R, z)) dz / int_0^inf rho(z) dz, the dispersion of the
+    column weighted by its density (the vertical virial theorem, Binney &
+    Tremaine 2008, eq. 4.222; rho of its density traits and density
+    height traits), with F_z the vertical force of every mass component
+    (see mass.MassComponent.vertical_force: user components give it by
+    their function of the forces); it is exact for any mass and profile of
+    the height, as the dispersion a face-on column shows. As 'central' and
     'self_gravitating' in their limits (a harmonic potential, the sheet
     alone): the dispersion of the midplane (int rho (-F_z) dz / rho(0)) is
     that of a profile isothermal in its own potential only, 1 / sqrt(2) of
@@ -449,6 +459,10 @@ class JeansEquilibrium(Equilibrium):
     def type() -> str:
         return 'jeans'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Jeans equation'
+
 
 equilibrium_parser = TypedParser(Equilibrium, [
     CentralEquilibrium,
@@ -458,9 +472,9 @@ equilibrium_parser = TypedParser(Equilibrium, [
 
 class ThinDiskTraitsKinematics(TypedSerializable):
     """
-    How a thin disk moves, as its traits give (see KinematicTraits): its
-    velocity and dispersion polar traits, in its plane. A disk that emits
-    lines into a spectral cube needs kinematics.
+    How a thin disk moves, as its traits give: its velocity and dispersion
+    polar traits, in its plane. See KinematicTraits for the traits. A disk
+    that emits lines into a spectral cube needs kinematics.
 
     Parameters
     ----------
@@ -476,6 +490,10 @@ class ThinDiskTraitsKinematics(TypedSerializable):
     @staticmethod
     def type() -> str:
         return 'traits'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Traits'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | self._traits.dump()
@@ -499,10 +517,11 @@ class ThinDiskTraitsKinematics(TypedSerializable):
 
 class ThickDiskTraitsKinematics(TypedSerializable):
     """
-    How a thick disk moves, as its traits give (see KinematicTraits),
-    and with a vertical equilibrium, the dispersion that holds it up
-    against the gravity of its galaxy (see Equilibrium). A disk that emits
-    lines into a spectral cube needs kinematics.
+    How a thick disk moves, as its traits give, and with a vertical
+    equilibrium, the dispersion that holds it up against the gravity of
+    its galaxy. See KinematicTraits for the traits, and Equilibrium for
+    the equilibrium. A disk that emits lines into a spectral cube needs
+    kinematics.
 
     Parameters
     ----------
@@ -520,6 +539,10 @@ class ThickDiskTraitsKinematics(TypedSerializable):
     @staticmethod
     def type() -> str:
         return 'traits'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Traits'
 
     def dump(self) -> dict[str, Any]:
         info = dict(type=self.type()) | self._traits.dump()
@@ -564,8 +587,9 @@ class ThickDiskTraitsKinematics(TypedSerializable):
 
 class ConeTraitsKinematics(TypedSerializable):
     """
-    How a cone moves, as its traits give (see KinematicTraits). A cone
-    that emits lines into a spectral cube needs kinematics.
+    How a cone moves, as its traits give. See KinematicTraits for the
+    traits. A cone that emits lines into a spectral cube needs
+    kinematics.
 
     Parameters
     ----------
@@ -581,6 +605,10 @@ class ConeTraitsKinematics(TypedSerializable):
     @staticmethod
     def type() -> str:
         return 'traits'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Traits'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | self._traits.dump()

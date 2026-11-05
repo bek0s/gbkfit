@@ -3,12 +3,12 @@ The lmfit least-squares fitter.
 """
 
 import typing
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import (
     LeastSquaresFunctions, inside_bounds, relative_step)
@@ -27,10 +27,16 @@ __all__ = [
 ]
 
 
+# The option of the method
+_Method: TypeAlias = Annotated[Literal['leastsq', 'least_squares'], Choices(
+    leastsq='Levenberg-Marquardt', least_squares='Trust region reflective')]
+
+
 class FitterLMFitLeastSquares(Fitter):
     """
-    Least squares with lmfit: Levenberg-Marquardt (MINPACK, method
-    'leastsq'; lmfit maps bounded values to unbounded ones) or scipy's
+    Least squares with lmfit: Levenberg-Marquardt or trust region
+    reflective. The methods are MINPACK's Levenberg-Marquardt (method
+    'leastsq'; lmfit maps bounded values to unbounded ones) and scipy's
     trust region reflective (method 'least_squares'). GBKFIT computes the
     Jacobian by forward differences (see LeastSquaresFunctions).
 
@@ -73,6 +79,10 @@ class FitterLMFitLeastSquares(Fitter):
         return 'lmfit.least_squares'
 
     @staticmethod
+    def type_title() -> str:
+        return 'LMFIT least squares'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamLeastSquares
 
@@ -87,7 +97,7 @@ class FitterLMFitLeastSquares(Fitter):
 
     def __init__(
             self,
-            method: Literal['leastsq', 'least_squares'] = 'leastsq',
+            method: _Method = 'leastsq',
             max_nfev: Annotated[int, Gt(0)] | None = None,
             ftol: Annotated[float, Gt(0)] | None = None,
             xtol: Annotated[float, Gt(0)] | None = None,

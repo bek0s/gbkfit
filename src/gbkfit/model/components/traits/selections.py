@@ -4,14 +4,13 @@ The selection polar traits (spt): the parts of a component that it keeps
 """
 
 from collections.abc import Sequence
-from typing import Literal
 
 import numpy as np
 
 from gbkfit.config import check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import SPTrait
-from .options import SAMPLINGS, SAMPLING_DEFAULT, Sampling
+from .options import SAMPLING_DEFAULT, Sampling, SamplingChoice
 
 
 __all__ = [
@@ -25,6 +24,10 @@ __all__ = [
 SPT_UID_AZRANGE = 1
 SPT_UID_RRANGE = 2
 SPT_UID_NW_AZRANGE = 101
+
+# What the parameters of the wedges (azrange and nw_azrange) are
+_AZIMUTH = "the azimuth of the centre of the wedge"
+_WIDTH = "the full width of the wedge in azimuth"
 
 
 class SPTraitAzimuthalRange(SPTrait):
@@ -44,6 +47,10 @@ class SPTraitAzimuthalRange(SPTrait):
         return 'azrange'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Azimuth range'
+
+    @staticmethod
     def uid() -> int:
         return SPT_UID_AZRANGE
 
@@ -52,8 +59,12 @@ class SPTraitAzimuthalRange(SPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            p=ParamScalarDesc(unit='deg', default=0, period=360),
-            s=ParamScalarDesc(min=0, max=360, unit='deg', default=90))
+            p=ParamScalarDesc(
+                title='Central azimuth', desc=_AZIMUTH, unit='deg',
+                default=0, period=360),
+            s=ParamScalarDesc(
+                title='Angular width', desc=_WIDTH, min=0, max=360,
+                unit='deg', default=90))
 
     def azimuthal_edges(
             self,
@@ -82,6 +93,10 @@ class SPTraitRadialRange(SPTrait):
         return 'rrange'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Radius range'
+
+    @staticmethod
     def uid() -> int:
         return SPT_UID_RRANGE
 
@@ -90,8 +105,14 @@ class SPTraitRadialRange(SPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            rmin=ParamScalarDesc(min=0, unit='arcsec', default=0),
-            rmax=ParamScalarDesc(min=0, unit='arcsec', default=10))
+            rmin=ParamScalarDesc(
+                title='Inner radius',
+                desc="the radius where the range starts (inclusive)", min=0,
+                unit='arcsec', default=0),
+            rmax=ParamScalarDesc(
+                title='Outer radius',
+                desc="the radius where the range ends (exclusive)", min=0,
+                unit='arcsec', default=10))
 
 
 class SPTraitNWAzimuthalRange(SPTrait):
@@ -120,12 +141,16 @@ class SPTraitNWAzimuthalRange(SPTrait):
         return 'nw_azrange'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Azimuth range (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return SPT_UID_NW_AZRANGE
 
     def __init__(
             self,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(SPTraitNWAzimuthalRange.__init__, locals())
@@ -136,9 +161,12 @@ class SPTraitNWAzimuthalRange(SPTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(
-            p=ParamVectorDesc(nnodes, unit='deg', default=0, period=360),
+            p=ParamVectorDesc(
+                nnodes, title='Central azimuth', desc=_AZIMUTH, unit='deg',
+                default=0, period=360),
             s=ParamVectorDesc(
-                nnodes, min=0, max=360, unit='deg', default=90))
+                nnodes, title='Angular width', desc=_WIDTH, min=0, max=360,
+                unit='deg', default=90))
 
     def azimuthal_edges(
             self,

@@ -299,9 +299,10 @@ exposure_parser = BasicParser(Exposure)
 class SlitlessSpectra(Observable):
     """
     Slitless spectra: the image of a grism (or prism) exposure, where the
+    light of each wavelength lands away from its place on the sky. The
     light of each wavelength of an emission line lands on the detector
-    away from its place on the sky by the trace of the disperser (e.g.
-    JWST NIRCam or NIRISS wide-field slitless spectroscopy).
+    moved by the trace of the disperser (e.g. in the wide-field slitless
+    spectroscopy of JWST NIRCam or NIRISS).
 
     The model is a spectral cube of the sky around the image, seen
     through the instrument (its PSF, which can vary with wavelength), of
@@ -397,6 +398,10 @@ class SlitlessSpectra(Observable):
     @staticmethod
     def type() -> str:
         return 'slitless_spectra'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Slitless spectra (grism)'
 
     @classmethod
     def load(

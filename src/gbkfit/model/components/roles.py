@@ -96,8 +96,8 @@ class Emission(TypedSerializable, abc.ABC):
 class LineEmission(Emission):
     """
     Emission lines: each a Gaussian at the velocity and of the dispersion
-    of the kinematics of its component (see Lines). Seen by spectral
-    cubes.
+    of the kinematics of its component. Seen by spectral cubes (see
+    Lines).
 
     Parameters
     ----------
@@ -130,6 +130,10 @@ class LineEmission(Emission):
     @staticmethod
     def type() -> str:
         return 'lines'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Emission lines'
 
     def dump(self) -> dict[str, Any]:
         lines = self._lines.lines()
@@ -210,6 +214,10 @@ class BandEmission(Emission):
     def type() -> str:
         return 'band'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Light in bands'
+
     def dump(self) -> dict[str, Any]:
         bands = self._bands.bands()
         return dict(type=self.type()) | (
@@ -251,13 +259,13 @@ class BandEmission(Emission):
 
 class StarsEmission(BandEmission):
     """
-    The light of stars: light in bands, seen by images as BandEmission,
-    and its distribution of velocities, seen by the spectral cubes that
-    ask for it, those whose lines name it ('stars'): one line on an axis
-    of velocities (without a rest), at the velocity and of the dispersion
-    of the kinematics of its component, of the flux of its light in the
-    band of the cube, if known (as an image takes it). Spectral cubes of
-    gas do not see it.
+    The light of stars: light in bands, seen by images, and its
+    distribution of velocities, seen by the spectral cubes that ask for
+    it. Images see it as BandEmission, and the spectral cubes whose lines
+    name it ('stars') as one line on an axis of velocities (without a
+    rest), at the velocity and of the dispersion of the kinematics of its
+    component, of the flux of its light in the band of the cube, if known
+    (as an image takes it). Spectral cubes of gas do not see it.
 
     Parameters
     ----------
@@ -277,6 +285,10 @@ class StarsEmission(BandEmission):
     @staticmethod
     def type() -> str:
         return 'stars'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Stars (light and velocities)'
 
 
 def _parse_unit(
@@ -312,11 +324,12 @@ class Opacity(TypedSerializable, abc.ABC):
 
 class DustOpacity(Opacity):
     """
-    Dust: the density is the optical depth of each voxel at V, which dims
-    the light of the voxels behind it and that of its own voxels (as a
-    uniform mixture of light and dust). At the wavelength of a line or a
-    band, the optical depth is that at V times the ratio of the extinction
-    law there (at the rest wavelength of the line).
+    Dust, which dims the light behind it and within it (grey, or by an
+    extinction law). The density is the optical depth of each voxel at V,
+    which dims the light of the voxels behind it and that of its own
+    voxels (as a uniform mixture of light and dust). At the wavelength of
+    a line or a band, the optical depth is that at V times the ratio of
+    the extinction law there (at the rest wavelength of the line).
 
     Parameters
     ----------
@@ -328,6 +341,10 @@ class DustOpacity(Opacity):
     @staticmethod
     def type() -> str:
         return 'dust'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Dust'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type()) | (

@@ -172,11 +172,6 @@ export function nameBase(type: string): string {
   return isDisk(type) ? 'disk' : type;
 }
 
-// A type of component in words (e.g. 'thick disk')
-export function typeLabel(type: unknown): string {
-  return String(type ?? '').replaceAll('_', ' ');
-}
-
 // What each type of component starts with: the least that shows (light,
 // and of a disk or cone of lines, its motions)
 const DISK_START: Options = {
@@ -212,12 +207,6 @@ export const ITEM_STARTS: Record<string, Record<string, Options>> = {
     spheroid: { profile: { type: 'nfw' } },
     disk: { surface: { type: 'exponential' }, vertical: { type: 'thin' } },
   },
-};
-
-// The labels of types where their names say too little
-export const TYPE_LABELS: Record<string, Record<string, string>> = {
-  opacity: { dust: 'dust', line: 'self-absorption (of its lines)' },
-  emission: { lines: 'emission lines', band: 'light in bands', stars: 'stars (their spectra)' },
 };
 
 // The options of items the screen sets in their heads, not among their

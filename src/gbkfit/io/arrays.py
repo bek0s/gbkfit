@@ -18,7 +18,7 @@ import astropy.wcs
 import gwcs
 import numpy as np
 
-from gbkfit.config import DataFile, is_asdf_file, warn
+from gbkfit.config import Choices, DataFile, is_asdf_file, warn
 from gbkfit.utils import unitutils
 from .fits import (
     Orientation, has_wcs, header_beam, header_shape, linear_header,
@@ -35,9 +35,11 @@ __all__ = [
 
 # What an error file holds: standard deviations, variances or inverse
 # variances, and the power of the unit of the data that each is in
-ErrorKind: typing.TypeAlias = typing.Literal[
-    'sigma', 'variance', 'inverse_variance']
-ERROR_KINDS = typing.get_args(ErrorKind)
+ERROR_KINDS = ('sigma', 'variance', 'inverse_variance')
+ErrorKind: typing.TypeAlias = typing.Annotated[
+    typing.Literal[ERROR_KINDS], Choices(
+        sigma='Standard deviations', variance='Variances',
+        inverse_variance='Inverse variances')]
 _ERROR_POWERS = dict(sigma=1, variance=2, inverse_variance=-2)
 
 # How far (in pixels) the world coordinates of an error or mask file may

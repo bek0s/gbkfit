@@ -20,11 +20,11 @@ __all__ = [
 class LineOpacity(Opacity):
     """
     The opacity of a component at its own lines (self-absorption, e.g. of
-    HI): at each of its lines, its light there times a coefficient, 1/S
-    (S the source function), so that the light j of a voxel has the
-    optical depth j/S, with the shape of its line. Seen only along a
-    line of sight of radiative transfer (LineOfSightTransfer), by the
-    observations that see the component,
+    HI), of a coefficient 1/S of each line (S the source function). At
+    each of its lines, it is its light there times the coefficient, so
+    that the light j of a voxel has the optical depth j/S, with the shape
+    of its line. Seen only along a line of sight of radiative transfer
+    (LineOfSightTransfer), by the observations that see the component,
     which must be a thick disk that emits lines.
 
     With a unit of its emission (see LineEmission), S is the brightness
@@ -68,6 +68,10 @@ class LineOpacity(Opacity):
     @staticmethod
     def type() -> str:
         return 'line'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Self-absorption of its lines'
 
     def dump(self) -> dict[str, Any]:
         coefficients = self._coefficients

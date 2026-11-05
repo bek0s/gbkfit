@@ -375,6 +375,10 @@ class VPTrait(PTrait, abc.ABC):
         """Return the name of its speed parameter, by its direction."""
         return VPT_DIRECTIONS[self.direction()].speed
 
+    def speed_title(self) -> str:
+        """Return the title of its speed parameter, by its direction."""
+        return VPT_DIRECTIONS[self.direction()].speed_title
+
     def axisymmetric(self) -> bool:
         """
         Check whether its speed is the same at every azimuth (at each
@@ -466,8 +470,9 @@ class ZPTrait(PTrait, abc.ABC):
     def _amplitude_desc(self, nnodes: int) -> ParamVectorDesc:
         """Return the description of its node-wise amplitude, a."""
         return ParamVectorDesc(
-            nnodes, desc="the amplitude of the displacement",
-            min=-self.zmax(), max=self.zmax(), unit='arcsec', default=0)
+            nnodes, title='Amplitude',
+            desc="the amplitude of the displacement", min=-self.zmax(),
+            max=self.zmax(), unit='arcsec', default=0)
 
 
 class SPTrait(PTrait, abc.ABC):
@@ -516,10 +521,16 @@ def params_nw_distortion(
     density, whose component knows it), azimuth p and width s.
     """
     return dict(
-        a=ParamVectorDesc(nnodes, unit=unit, default=0),
-        p=ParamVectorDesc(nnodes, unit='deg', default=0, period=360),
+        a=ParamVectorDesc(
+            nnodes, title='Amplitude', desc='the value at the peak',
+            unit=unit, default=0),
+        p=ParamVectorDesc(
+            nnodes, title='Azimuth', desc='the azimuth of the peak',
+            unit='deg', default=0, period=360),
         s=ParamVectorDesc(
-            nnodes, min=0, unit='arcsec', default=1))
+            nnodes, title='Width',
+            desc='the width along the ring (a standard deviation)', min=0,
+            unit='arcsec', default=1))
 
 
 def splits_nw_distortion(

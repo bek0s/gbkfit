@@ -29,10 +29,11 @@ _CORRELATIONS = ('spatial',)
 
 class DatasetPixelMoments(Dataset):
     """
-    Moments of the spectra on a grid of pixels: maps of central moments of
-    some of the orders 0 to 7, as the data items moment0 to moment7, and of
-    the coefficients h3 and h4 of a Gauss-Hermite series, as the items h3
-    and h4 (see _detail.moment_items).
+    Moments of the spectra on a grid of pixels: moment maps. They are
+    maps of central moments of some of the orders 0 to 7, as the data
+    items moment0 to moment7, and of the coefficients h3 and h4 of a
+    Gauss-Hermite series, as the items h3 and h4 (see
+    _detail.moment_items).
 
     Its configuration has those data items (the files of each: data,
     mask, error; see from_files) and the world coordinates.
@@ -60,6 +61,10 @@ class DatasetPixelMoments(Dataset):
     @staticmethod
     def type() -> str:
         return 'pixel_moments'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Pixel moments (maps)'
 
     @classmethod
     def from_files(

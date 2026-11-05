@@ -4,7 +4,7 @@ direction of a disk (see DPTrait).
 """
 
 from collections.abc import Sequence
-from typing import Annotated, Literal
+from typing import Annotated
 
 import numpy as np
 from annotated_types import Ge
@@ -13,8 +13,9 @@ from gbkfit.config import check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import DPTrait, params_nw_distortion, splits_nw_distortion
 from .options import (
-    Blobs, DPT_DIRECTIONS, DPT_DIRECTION_DEFAULT, DispersionDirection,
-    Harmonic, SAMPLINGS, SAMPLING_DEFAULT, Sampling)
+    DPT_DIRECTION_DEFAULT, SAMPLING_DEFAULT,
+    Blobs, DPTDirectionChoice, DispersionDirection, Harmonic, Sampling,
+    SamplingChoice)
 
 
 __all__ = [
@@ -76,12 +77,16 @@ class DPTraitUniform(DPTrait):
         return 'uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_UNIFORM
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitUniform.__init__, locals())
@@ -91,7 +96,9 @@ class DPTraitUniform(DPTrait):
         return True
 
     def params_sm(self) -> dict[str, ParamDesc]:
-        return dict(a=ParamScalarDesc(min=0, unit='km/s', default=20))
+        return dict(a=ParamScalarDesc(
+            title='Velocity dispersion', desc="the velocity dispersion",
+            min=0, unit='km/s', default=20))
 
 
 class DPTraitExponential(DPTrait):
@@ -118,12 +125,16 @@ class DPTraitExponential(DPTrait):
         return 'exponential'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_EXP
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitExponential.__init__, locals())
@@ -134,8 +145,14 @@ class DPTraitExponential(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(min=0, unit='km/s', default=20),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central dispersion',
+                desc="the velocity dispersion at the centre",
+                min=0, unit='km/s', default=20),
+            s=ParamScalarDesc(
+                title='Scale length',
+                desc="the radius where the dispersion falls by a factor e",
+                min=0, unit='arcsec', default=1))
 
 
 class DPTraitGauss(DPTrait):
@@ -163,12 +180,16 @@ class DPTraitGauss(DPTrait):
         return 'gauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_GAUSS
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitGauss.__init__, locals())
@@ -179,8 +200,14 @@ class DPTraitGauss(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(min=0, unit='km/s', default=20),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central dispersion',
+                desc="the velocity dispersion at the centre",
+                min=0, unit='km/s', default=20),
+            s=ParamScalarDesc(
+                title='Width (sigma)',
+                desc="the standard deviation of the Gaussian",
+                min=0, unit='arcsec', default=1))
 
 
 class DPTraitGGauss(DPTrait):
@@ -209,12 +236,16 @@ class DPTraitGGauss(DPTrait):
         return 'ggauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_GGAUSS
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitGGauss.__init__, locals())
@@ -225,9 +256,18 @@ class DPTraitGGauss(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(min=0, unit='km/s', default=20),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1),
-            b=ParamScalarDesc(min=0, unit='', default=1))
+            a=ParamScalarDesc(
+                title='Central dispersion',
+                desc="the velocity dispersion at the centre",
+                min=0, unit='km/s', default=20),
+            s=ParamScalarDesc(
+                title='Scale length',
+                desc="the radius where the dispersion falls by a factor e",
+                min=0, unit='arcsec', default=1),
+            b=ParamScalarDesc(
+                title='Shape',
+                desc="the shape: 1 is the exponential, 2 a Gaussian",
+                min=0, unit='', default=1))
 
 
 class DPTraitLorentz(DPTrait):
@@ -255,12 +295,16 @@ class DPTraitLorentz(DPTrait):
         return 'lorentz'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Lorentzian'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_LORENTZ
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitLorentz.__init__, locals())
@@ -271,8 +315,14 @@ class DPTraitLorentz(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(min=0, unit='km/s', default=20),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central dispersion',
+                desc="the velocity dispersion at the centre",
+                min=0, unit='km/s', default=20),
+            s=ParamScalarDesc(
+                title='Half width at half maximum',
+                desc="the radius where the dispersion falls to half",
+                min=0, unit='arcsec', default=1))
 
 
 class DPTraitMoffat(DPTrait):
@@ -300,12 +350,16 @@ class DPTraitMoffat(DPTrait):
         return 'moffat'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Moffat'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_MOFFAT
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitMoffat.__init__, locals())
@@ -316,9 +370,18 @@ class DPTraitMoffat(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(min=0, unit='km/s', default=20),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1),
-            b=ParamScalarDesc(min=0, unit='', default=2))
+            a=ParamScalarDesc(
+                title='Central dispersion',
+                desc="the velocity dispersion at the centre",
+                min=0, unit='km/s', default=20),
+            s=ParamScalarDesc(
+                title='Core radius',
+                desc="the radius of the flat core",
+                min=0, unit='arcsec', default=1),
+            b=ParamScalarDesc(
+                title='Power index',
+                desc="the power of the fall, as r^(-2b) far out",
+                min=0, unit='', default=2))
 
 
 class DPTraitSech2(DPTrait):
@@ -345,12 +408,16 @@ class DPTraitSech2(DPTrait):
         return 'sech2'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Sech-squared'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_SECH2
 
     def __init__(
             self,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitSech2.__init__, locals())
@@ -361,18 +428,24 @@ class DPTraitSech2(DPTrait):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return dict(
-            a=ParamScalarDesc(min=0, unit='km/s', default=20),
-            s=ParamScalarDesc(min=0, unit='arcsec', default=1))
+            a=ParamScalarDesc(
+                title='Central dispersion',
+                desc="the velocity dispersion at the centre",
+                min=0, unit='km/s', default=20),
+            s=ParamScalarDesc(
+                title='Scale length',
+                desc="the scale length of the sech^2",
+                min=0, unit='arcsec', default=1))
 
 
 class DPTraitMixtureExponential(DPTrait):
     """
-    A velocity dispersion made of nblobs elliptical blobs (see the module
-    docstring), each an exponential of the elliptical distance rho from
-    its centre: a exp(-rho / s). Its parameters, vectors of a value for
-    each blob: r and t, the radius and the azimuth of its centre, a, its
-    amplitude, s, its scale along its major axis, q, its axis ratio (minor
-    over major), and p, the angle of its major axis.
+    A velocity dispersion made of elliptical blobs, each an exponential of
+    the elliptical distance rho from its centre: a exp(-rho / s). It has
+    nblobs blobs (see the package docstring). Its parameters, vectors of a
+    value for each blob: r and t, the radius and the azimuth of its centre,
+    a, its amplitude, s, its scale along its major axis, q, its axis ratio
+    (minor over major), and p, the angle of its major axis.
 
     Parameters
     ----------
@@ -395,13 +468,17 @@ class DPTraitMixtureExponential(DPTrait):
         return 'mixture_exponential'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Exponential blobs'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_MIXTURE_EXP
 
     def __init__(
             self,
             nblobs: Annotated[int, Ge(1)],
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitMixtureExponential.__init__, locals())
@@ -417,12 +494,12 @@ class DPTraitMixtureExponential(DPTrait):
 
 class DPTraitMixtureGauss(DPTrait):
     """
-    A velocity dispersion made of nblobs elliptical blobs (see the module
-    docstring), each a Gaussian of the elliptical distance rho from its
-    centre: a exp(-rho^2 / (2 s^2)). Its parameters, vectors of a value
-    for each blob: r and t, the radius and the azimuth of its centre, a,
-    its amplitude, s, its scale along its major axis, q, its axis ratio
-    (minor over major), and p, the angle of its major axis.
+    A velocity dispersion made of elliptical blobs, each a Gaussian of the
+    elliptical distance rho from its centre: a exp(-rho^2 / (2 s^2)). It
+    has nblobs blobs (see the package docstring). Its parameters, vectors
+    of a value for each blob: r and t, the radius and the azimuth of its
+    centre, a, its amplitude, s, its scale along its major axis, q, its
+    axis ratio (minor over major), and p, the angle of its major axis.
 
     Parameters
     ----------
@@ -445,13 +522,17 @@ class DPTraitMixtureGauss(DPTrait):
         return 'mixture_gauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Gaussian blobs'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_MIXTURE_GAUSS
 
     def __init__(
             self,
             nblobs: Annotated[int, Ge(1)],
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitMixtureGauss.__init__, locals())
@@ -467,13 +548,13 @@ class DPTraitMixtureGauss(DPTrait):
 
 class DPTraitMixtureGGauss(DPTrait):
     """
-    A velocity dispersion made of nblobs elliptical blobs (see the module
-    docstring), each a generalised Gaussian of the elliptical distance rho
-    from its centre: a exp(-(rho / s)^b). Its parameters, vectors of a
-    value for each blob: r and t, the radius and the azimuth of its
-    centre, a, its amplitude, s, its scale along its major axis, b, its
-    shape, q, its axis ratio (minor over major), and p, the angle of its
-    major axis.
+    A velocity dispersion made of elliptical blobs, each a generalised
+    Gaussian of the elliptical distance rho from its centre:
+    a exp(-(rho / s)^b). It has nblobs blobs (see the package docstring).
+    Its parameters, vectors of a value for each blob: r and t, the radius
+    and the azimuth of its centre, a, its amplitude, s, its scale along its
+    major axis, b, its shape, q, its axis ratio (minor over major), and p,
+    the angle of its major axis.
 
     Parameters
     ----------
@@ -496,13 +577,17 @@ class DPTraitMixtureGGauss(DPTrait):
         return 'mixture_ggauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian blobs'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_MIXTURE_GGAUSS
 
     def __init__(
             self,
             nblobs: Annotated[int, Ge(1)],
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitMixtureGGauss.__init__, locals())
@@ -518,12 +603,12 @@ class DPTraitMixtureGGauss(DPTrait):
 
 class DPTraitMixtureMoffat(DPTrait):
     """
-    A velocity dispersion made of nblobs elliptical blobs (see the module
-    docstring), each a Moffat of the elliptical distance rho from its
-    centre: a (1 + (rho / s)^2)^-b. Its parameters, vectors of a value for
-    each blob: r and t, the radius and the azimuth of its centre, a, its
-    amplitude, s, its scale along its major axis, b, its shape, q, its
-    axis ratio (minor over major), and p, the angle of its major axis.
+    A velocity dispersion made of elliptical blobs, each a Moffat of the
+    elliptical distance rho from its centre: a (1 + (rho / s)^2)^-b. It has
+    nblobs blobs (see the package docstring). Its parameters, vectors of a
+    value for each blob: r and t, the radius and the azimuth of its centre,
+    a, its amplitude, s, its scale along its major axis, b, its shape, q,
+    its axis ratio (minor over major), and p, the angle of its major axis.
 
     Parameters
     ----------
@@ -546,13 +631,17 @@ class DPTraitMixtureMoffat(DPTrait):
         return 'mixture_moffat'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Moffat blobs'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_MIXTURE_MOFFAT
 
     def __init__(
             self,
             nblobs: Annotated[int, Ge(1)],
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitMixtureMoffat.__init__, locals())
@@ -594,13 +683,17 @@ class DPTraitNWUniform(DPTrait):
         return 'nw_uniform'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Uniform (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_NW_UNIFORM
 
     def __init__(
             self,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitNWUniform.__init__, locals())
@@ -612,7 +705,9 @@ class DPTraitNWUniform(DPTrait):
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
         return dict(a=ParamVectorDesc(
-            nnodes, min=0, unit='km/s', default=20))
+            nnodes, title='Velocity dispersion',
+            desc="the velocity dispersion at each ring",
+            min=0, unit='km/s', default=20))
 
 
 class DPTraitNWHarmonic(DPTrait):
@@ -648,14 +743,18 @@ class DPTraitNWHarmonic(DPTrait):
         return 'nw_harmonic'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Harmonic (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_NW_HARMONIC
 
     def __init__(
             self,
             order: Annotated[int, Ge(0)],
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitNWHarmonic.__init__, locals())
@@ -674,7 +773,7 @@ class DPTraitNWHarmonic(DPTrait):
 class DPTraitNWDistortion(DPTrait):
     """
     A velocity dispersion around one azimuth at each ring: a(r)
-    exp(-(dtheta r)^2 / (2 s(r)^2)), with dtheta the azimuth from p(r)
+    exp(-(dtheta r)^2 / (2 s(r)^2)). Here dtheta is the azimuth from p(r)
     (radians, within half a turn). Its parameters, node-wise: a, the peak,
     p, its azimuth, and s, its width along the ring. A p that changes with
     r winds it into a spiral arm.
@@ -702,13 +801,17 @@ class DPTraitNWDistortion(DPTrait):
         return 'nw_distortion'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Distortion (per ring)'
+
+    @staticmethod
     def uid() -> int:
         return DPT_UID_NW_DISTORTION
 
     def __init__(
             self,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
-            direction: Literal[tuple(DPT_DIRECTIONS)] = DPT_DIRECTION_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
+            direction: DPTDirectionChoice = DPT_DIRECTION_DEFAULT,
             name: str | None = None
     ):
         check_options(DPTraitNWDistortion.__init__, locals())

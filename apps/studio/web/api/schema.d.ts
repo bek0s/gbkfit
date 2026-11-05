@@ -861,9 +861,9 @@ export interface components {
         /**
          * GalaxyInfo
          * @description A galaxy as the library describes it (see Galaxies.describe): its
-         *     parameters ({name, size, default, unit, range, period, owner}, in its
-         *     order) and its problems ({severity, path, message}; paths in the
-         *     galaxy).
+         *     parameters ({name, title, desc, size, default, unit, range, period,
+         *     owner}, in its order) and its problems ({severity, path, message};
+         *     paths in the galaxy).
          */
         GalaxyInfo: {
             /** Parameters */

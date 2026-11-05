@@ -199,6 +199,7 @@ class ObservationGroup:
                 f"components")
         self._pdescs |= {
             separation: ParamScalarDesc(
+                title='Separation along the line of sight',
                 desc="the position of the galaxy along the line of sight "
                      "from the first of its group (away from the viewer)",
                 unit='arcsec', default=0)

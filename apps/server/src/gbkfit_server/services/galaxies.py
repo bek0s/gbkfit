@@ -40,10 +40,10 @@ _OBSERVATIONS = (
 class GalaxyDescription:
     """
     A galaxy as the library describes it: its parameters (their names,
-    sizes, defaults, units, valid ranges and periods, and the paths of the
-    options that make them in the galaxy, see Galaxy.param_owners; in its
-    order), and its problems (their severities, paths in the galaxy and
-    messages).
+    titles and descriptions for people, sizes, defaults, units, valid
+    ranges and periods, and the paths of the options that make them in the
+    galaxy, see Galaxy.param_owners; in its order), and its problems
+    (their severities, paths in the galaxy and messages).
     """
     parameters: list[dict[str, Any]]
     problems: list[dict[str, Any]]
@@ -84,7 +84,8 @@ class Galaxies:
         if description.group is not None:
             owners = description.group.galaxies()[0].param_owners()
             parameters = [
-                dict(name=name, size=desc.size(), default=desc.default(),
+                dict(name=name, title=desc.title(), desc=desc.desc(),
+                     size=desc.size(), default=desc.default(),
                      unit=None if desc.unit() is None else str(desc.unit()),
                      range=str(desc.valid_range()), period=desc.period(),
                      owner=list(owners.get(name, ())))

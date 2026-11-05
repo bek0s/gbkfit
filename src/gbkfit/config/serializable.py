@@ -224,7 +224,8 @@ def config_constructor(
 class TypedSerializable(Serializable, abc.ABC):
     """
     A serializable object of one of several classes, chosen by the type
-    in its configuration (see TypedParser).
+    in its configuration (see TypedParser), and named for people by the
+    title of its type.
     """
 
     @staticmethod
@@ -236,7 +237,21 @@ class TypedSerializable(Serializable, abc.ABC):
         Returns
         -------
         str
-            The type (e.g. 'disk').
+            The type (e.g. 'thick_disk').
+        """
+
+    @staticmethod
+    @abc.abstractmethod
+    def type_title() -> str:
+        """
+        Return the name of the type for people: a few words in sentence
+        case, unique in its family (e.g. 'Thick disk', 'Generalised
+        Gaussian'). Unlike the type, it is never parsed, and can change.
+
+        Returns
+        -------
+        str
+            The title.
         """
 
 

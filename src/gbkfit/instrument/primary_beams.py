@@ -201,6 +201,10 @@ class PrimaryBeamGauss(PrimaryBeamRadial):
     def type() -> str:
         return 'gauss'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
     def _response_impl(self, radius: np.ndarray) -> np.ndarray:
         return np.exp(-4 * np.log(2) * radius ** 2)
 
@@ -212,6 +216,10 @@ class PrimaryBeamAiry(PrimaryBeamRadial):
     def type() -> str:
         return 'airy'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Airy pattern'
+
     def _response_impl(self, radius: np.ndarray) -> np.ndarray:
         u = 2 * _AIRY_HALF_MAXIMUM * radius
         u_safe = np.where(u > 0, u, 1)
@@ -221,10 +229,10 @@ class PrimaryBeamAiry(PrimaryBeamRadial):
 class PrimaryBeamImage(PrimaryBeam):
     """
     A response given as an image with its world coordinates (e.g. the
-    primary beam that an imaging package writes with the data), placed by
-    its RA and Dec, sampled at the pixels (bilinearly), and 0 beyond the
-    image: the same at all frequencies (not supported yet: a cube of an
-    image for each channel, e.g. a CASA .pb cube).
+    primary beam that an imaging package writes with the data). It is
+    placed by its RA and Dec, sampled at the pixels (bilinearly), and 0
+    beyond the image: the same at all frequencies (not supported yet: a
+    cube of an image for each channel, e.g. a CASA .pb cube).
 
     Configurations give its file (see from_file).
 
@@ -246,6 +254,10 @@ class PrimaryBeamImage(PrimaryBeam):
     @staticmethod
     def type() -> str:
         return 'image'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Image'
 
     @classmethod
     def from_file(

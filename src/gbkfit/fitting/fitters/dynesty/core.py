@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias
 import numpy as np
 from annotated_types import Gt
 
-from gbkfit.config import check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.fitting.fitters._detail import corrected_evidence
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamPrior
@@ -28,6 +28,18 @@ __all__ = [
 
 # A sampler of dynesty
 _Sampler: TypeAlias = 'dynesty.NestedSampler | dynesty.DynamicNestedSampler'
+
+# The options of the samplers: the bounds of the live points, and how new
+# points are drawn in them
+_Bound: TypeAlias = Annotated[
+    Literal['multi', 'single', 'balls', 'cubes', 'none'], Choices(
+        multi='Multiple ellipsoids', single='Single ellipsoid',
+        balls='Balls around live points', cubes='Cubes around live points',
+        none='None (unit cube)')]
+_Sample: TypeAlias = Annotated[
+    Literal['auto', 'unif', 'rwalk', 'slice', 'rslice'], Choices(
+        auto='Automatic (by dimension)', unif='Uniform', rwalk='Random walk',
+        slice='Slice', rslice='Random slice')]
 
 
 def _evidence(sampler: _Sampler) -> Evidence:
@@ -116,6 +128,10 @@ class FitterDynestyStatic(Fitter):
         return 'dynesty.static'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Dynesty (static)'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamPrior
 
@@ -131,10 +147,8 @@ class FitterDynestyStatic(Fitter):
     def __init__(
             self,
             nlive: Annotated[int, Gt(0)] = 500,
-            bound: Literal[
-                'multi', 'single', 'balls', 'cubes', 'none'] = 'multi',
-            sample: Literal[
-                'auto', 'unif', 'rwalk', 'slice', 'rslice'] = 'auto',
+            bound: _Bound = 'multi',
+            sample: _Sample = 'auto',
             dlogz: Annotated[float, Gt(0)] | None = None,
             maxcall: Annotated[int, Gt(0)] | None = None,
             verbose: bool = False,
@@ -185,11 +199,12 @@ class FitterDynestyStatic(Fitter):
 
 class FitterDynestyDynamic(Fitter):
     """
-    Dynamic nested sampling with dynesty (Speagle 2020): after a first
-    run, batches of live points are added where the posterior is, until
-    its effective sample size is reached. It gives the posterior
-    (weighted samples) and the evidence with its error; its best solution
-    is the sample with the highest likelihood.
+    Dynamic nested sampling with dynesty (Speagle 2020): live points are
+    added where the posterior is. After a first run, batches of live
+    points are added there, until the effective sample size of the
+    posterior is reached. It gives the posterior (weighted samples) and
+    the evidence with its error; its best solution is the sample with the
+    highest likelihood.
 
     The free elements take a prior (or min and max for a uniform prior;
     see FitParamPrior). The likelihood is evaluated one point at a time
@@ -235,6 +250,10 @@ class FitterDynestyDynamic(Fitter):
         return 'dynesty.dynamic'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Dynesty (dynamic)'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamPrior
 
@@ -251,10 +270,8 @@ class FitterDynestyDynamic(Fitter):
     def __init__(
             self,
             nlive: Annotated[int, Gt(0)] = 500,
-            bound: Literal[
-                'multi', 'single', 'balls', 'cubes', 'none'] = 'multi',
-            sample: Literal[
-                'auto', 'unif', 'rwalk', 'slice', 'rslice'] = 'auto',
+            bound: _Bound = 'multi',
+            sample: _Sample = 'auto',
             dlogz_init: Annotated[float, Gt(0)] | None = None,
             n_effective: Annotated[int, Gt(0)] | None = None,
             maxcall: Annotated[int, Gt(0)] | None = None,

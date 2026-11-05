@@ -22,20 +22,21 @@ __all__ = [
 
 class MassUser(MassComponent):
     """
-    A mass component given by Python functions: func(R, params), with R
-    the radii (kpc, an array) and params the values of its parameters (a
-    dict, by name), which returns the squared circular velocity
-    ((km/s)^2, signed, an array of the shape of R); and optionally
-    forces(R, z, params), with R and z the points (kpc, two arrays of one
-    shape), which returns its forces per unit mass there ((km/s)^2/kpc,
-    -dPhi/dR and -dPhi/dz, two arrays of their shape), anywhere (e.g. for
-    the jeans equilibrium; in its plane, -vcirc2 / R and 0); and
-    optionally mass(r, params), with r the radii of spheres about its
-    centre (kpc, an array), which returns its mass within them (Msun, an
-    array of the shape of r; e.g. for the enclosed masses of the
-    functions of the galaxy). Without forces, it gives them in its plane
-    only; without mass, no enclosed mass. It gives nothing else: its
-    density and its potential raise NotImplementedError.
+    A mass component given by Python functions of the user: of its
+    circular velocity, and optionally of its forces and its enclosed
+    mass. They are func(R, params), with R the radii (kpc, an array) and
+    params the values of its parameters (a dict, by name), which returns
+    the squared circular velocity ((km/s)^2, signed, an array of the shape
+    of R); and optionally forces(R, z, params), with R and z the points
+    (kpc, two arrays of one shape), which returns its forces per unit mass
+    there ((km/s)^2/kpc, -dPhi/dR and -dPhi/dz, two arrays of their
+    shape), anywhere (e.g. for the jeans equilibrium; in its plane,
+    -vcirc2 / R and 0); and optionally mass(r, params), with r the radii
+    of spheres about its centre (kpc, an array), which returns its mass
+    within them (Msun, an array of the shape of r; e.g. for the enclosed
+    masses of the functions of the galaxy). Without forces, it gives them
+    in its plane only; without mass, no enclosed mass. It gives nothing
+    else: its density and its potential raise NotImplementedError.
 
     Configurations give the functions by a Python file and their names
     (see from_file); one made from functions in Python has no
@@ -65,6 +66,10 @@ class MassUser(MassComponent):
     @staticmethod
     def type() -> str:
         return 'user'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'User functions'
 
     def gives_forces(self) -> bool:
         return self._forces is not None
@@ -158,7 +163,11 @@ class MassUser(MassComponent):
         self._source: tuple[str, str, str | None, str | None] | None = None
 
     def pdescs(self) -> dict[str, ParamDesc]:
-        return {name: ParamScalarDesc() for name in self._params}
+        return {
+            name: ParamScalarDesc(
+                title='User parameter',
+                desc="a parameter of the functions of the user")
+            for name in self._params}
 
     def vcirc2(
             self,

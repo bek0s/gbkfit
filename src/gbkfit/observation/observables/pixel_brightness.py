@@ -77,6 +77,10 @@ class PixelBrightness(Observable):
     def type() -> str:
         return 'pixel_brightness'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Pixel brightness (image)'
+
     @classmethod
     def load(
             cls, info: dict[str, Any],

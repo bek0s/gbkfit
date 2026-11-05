@@ -59,15 +59,16 @@ def _panel_nodes(edges: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
 
 class MassDisk(MassComponent):
     """
-    An axisymmetric disk, of a surface density (see surfaces: e.g. an
-    exponential, or that of a component of the galaxy) and a vertical
-    structure (see vertical: a law, e.g. sech2, or that of a component),
-    each chosen on its own. A disk follows at most one component (by its
-    surface density, its vertical structure, or both); following it by
-    both, it is the density of the component itself (each of its terms of
-    the pdf of its height). Its forces are given anywhere: in its plane,
-    the radial force of its circular velocity; off it, the pull of its
-    rings (see DiskSurface.force).
+    An axisymmetric disk of a surface density and a vertical structure,
+    each chosen on its own. Its surface density is e.g. an exponential, or
+    that of a component of the galaxy (see surfaces), and its vertical
+    structure a law, e.g. sech2, or that of a component (see vertical).
+    A disk follows at most one component (by its surface density, its
+    vertical structure, or both); following it by both, it is the density
+    of the component itself (each of its terms of the pdf of its height).
+    Its forces are given anywhere: in its plane, the radial force of its
+    circular velocity; off it, the pull of its rings (see
+    DiskSurface.force).
 
     Parameters
     ----------
@@ -88,6 +89,10 @@ class MassDisk(MassComponent):
     @staticmethod
     def type() -> str:
         return 'disk'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Disk'
 
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(

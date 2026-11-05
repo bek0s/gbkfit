@@ -117,26 +117,33 @@ class SpheroidProfile(TypedSerializable, abc.ABC):
 
 class ProfileSersic(SpheroidProfile):
     """
-    The spherical deprojection of a Sersic profile of total mass 10^log_m
-    (Msun), effective radius re (kpc; within which half of the projected
-    mass is) and index n: the surface density S_e exp(-b ((R / re)^(1/n)
-    - 1)), with b(n) exact. The density, enclosed mass and potential are
-    computed numerically (see _numerics.sersic_tables), for n in [0.3,
-    12].
+    The spherical deprojection of a Sersic profile (e.g. of a bulge). Its
+    total mass is 10^log_m (Msun), its effective radius re (kpc; within
+    which half of the projected mass is) and its index n: the surface
+    density S_e exp(-b ((R / re)^(1/n) - 1)), with b(n) exact. The
+    density, enclosed mass and potential are computed numerically (see
+    _numerics.sersic_tables), for n in [0.3, 12].
     """
 
     @staticmethod
     def type() -> str:
         return 'sersic'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Sersic'
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)', default=10),
+                title='Log mass', desc="log10 of the mass",
+                unit='dex(solMass)', default=10),
             re=ParamScalarDesc(
-                desc="the effective radius", min=0, unit='kpc', default=3),
+                title='Effective radius', desc="the effective radius",
+                min=0, unit='kpc', default=3),
             n=ParamScalarDesc(
-                desc="the Sersic index", min=0.3, max=12, unit='', default=4))
+                title='Sersic index', desc="the Sersic index", min=0.3,
+                max=12, unit='', default=4))
 
     def density(
             self,
@@ -208,12 +215,18 @@ class ProfileGaussian(SpheroidProfile):
     def type() -> str:
         return 'gaussian'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(
             log_m=ParamScalarDesc(
-                desc="log10 of the mass", unit='dex(solMass)', default=9),
+                title='Log mass', desc="log10 of the mass",
+                unit='dex(solMass)', default=9),
             sigma=ParamScalarDesc(
-                desc="the dispersion", min=0, unit='kpc', default=1))
+                title='Dispersion', desc="the dispersion", min=0,
+                unit='kpc', default=1))
 
     def density(
             self,
@@ -267,12 +280,12 @@ class ProfileGaussian(SpheroidProfile):
 class ProfileNodewise(SpheroidProfile):
     """
     The spherical deprojection of a projected density given at radial
-    nodes (kpc), as the surface density of a nodewise disk (see
-    surfaces.SurfaceNodewise): 10^log_sigma (Msun/kpc^2) at each node but
-    the last, where it is 0, linear in between, and 0 beyond; e.g. the
-    surface density of a bulge, measured (times a mass-to-light ratio) or
-    free. Of any shape, it keeps that projection face-on (see
-    shapes.ShapeFlattened).
+    nodes, linear between them. It is as the surface density of a
+    nodewise disk (see surfaces.SurfaceNodewise): 10^log_sigma
+    (Msun/kpc^2) at each node (kpc) but the last, where it is 0, linear in
+    between, and 0 beyond; e.g. the surface density of a bulge, measured
+    (times a mass-to-light ratio) or free. Of any shape, it keeps that
+    projection face-on (see shapes.ShapeFlattened).
 
     Its density, enclosed mass and potential are exact for that profile:
     with the slope k of the projected density S on each segment [a, b] of
@@ -303,6 +316,10 @@ class ProfileNodewise(SpheroidProfile):
     def type() -> str:
         return 'nodewise'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Nodewise'
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(nodes=self._nodes.tolist())
 
@@ -322,7 +339,7 @@ class ProfileNodewise(SpheroidProfile):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(log_sigma=ParamVectorDesc(
-            len(self._nodes) - 1,
+            len(self._nodes) - 1, title='Log projected density',
             desc="log10 of the projected density at each node but the "
                  "last", unit='dex(solMass / kpc2)', default=7))
 

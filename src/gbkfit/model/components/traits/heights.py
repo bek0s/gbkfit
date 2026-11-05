@@ -4,7 +4,7 @@ velocity dispersion (dht).
 """
 
 import abc
-from typing import Annotated, Literal
+from typing import Annotated
 
 import numpy as np
 import scipy.ndimage
@@ -15,7 +15,8 @@ from pydantic import FiniteFloat
 from gbkfit.config import Unit, check_options
 from gbkfit.params.pdescs import ParamDesc, ParamScalarDesc, ParamVectorDesc
 from .base import DHTrait, RHTrait, RotationFactorsInput, VHTrait
-from .options import Nodewise, SAMPLINGS, SAMPLING_DEFAULT, Sampling, Zmax
+from .options import (
+    SAMPLING_DEFAULT, Nodewise, Sampling, SamplingChoice, Zmax)
 
 
 __all__ = [
@@ -66,6 +67,19 @@ DHT_UID_GAUSS = 4
 # VHTraitMass): this many, from 0 to its zmax
 VHT_MASS_NHEIGHTS = 33
 
+# What the parameters of the density height traits are: s, the height
+# that scales each profile (e.g. its scale height, or the half thickness
+# of 'uniform'), and b, the power of 'ggauss' and 'moffat'
+_SCALE_HEIGHT = "the height that sets the thickness of the profile"
+_SHAPE = "the power of the profile, which sets its shape"
+
+# The titles and descriptions of the parameters of the velocity and the
+# dispersion height traits of one parameter, by name (see
+# VHTraitP1.param_name and DHTraitP1.param_name)
+_P1_PARAMS = dict(
+    z0=('Onset height', "the height above which the factor grows"),
+    s=('Scale height', "the height over which the factor falls"))
+
 
 class RHTraitP1(RHTrait, abc.ABC):
     """
@@ -76,7 +90,7 @@ class RHTraitP1(RHTrait, abc.ABC):
             self,
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
             nodewise: bool = False,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RHTraitP1.__init__, locals())
@@ -85,12 +99,15 @@ class RHTraitP1(RHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.nodewise() else dict(
-            s=ParamScalarDesc(min=0, unit='arcsec', default=0.2))
+            s=ParamScalarDesc(
+                title='Scale height', desc=_SCALE_HEIGHT, min=0,
+                unit='arcsec', default=0.2))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.nodewise() else dict(
             s=ParamVectorDesc(
-                nrnodes, min=0, unit='arcsec', default=0.2))
+                nrnodes, title='Scale height', desc=_SCALE_HEIGHT, min=0,
+                unit='arcsec', default=0.2))
 
 
 class RHTraitP2(RHTrait, abc.ABC):
@@ -102,7 +119,7 @@ class RHTraitP2(RHTrait, abc.ABC):
             self,
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
             nodewise: bool = False,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(RHTraitP2.__init__, locals())
@@ -111,15 +128,20 @@ class RHTraitP2(RHTrait, abc.ABC):
 
     def params_sm(self) -> dict[str, ParamDesc]:
         return {} if self.nodewise() else dict(
-            s=ParamScalarDesc(min=0, unit='arcsec', default=0.2),
-            b=ParamScalarDesc(min=0, unit='', default=1))
+            s=ParamScalarDesc(
+                title='Scale height', desc=_SCALE_HEIGHT, min=0,
+                unit='arcsec', default=0.2),
+            b=ParamScalarDesc(
+                title='Shape', desc=_SHAPE, min=0, unit='', default=1))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.nodewise() else dict(
             s=ParamVectorDesc(
-                nrnodes, min=0, unit='arcsec', default=0.2),
+                nrnodes, title='Scale height', desc=_SCALE_HEIGHT, min=0,
+                unit='arcsec', default=0.2),
             b=ParamVectorDesc(
-                nrnodes, min=0, unit='', default=1))
+                nrnodes, title='Shape', desc=_SHAPE, min=0, unit='',
+                default=1))
 
 
 class RHTraitUniform(RHTraitP1):
@@ -152,6 +174,10 @@ class RHTraitUniform(RHTraitP1):
     @staticmethod
     def type() -> str:
         return 'uniform'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Uniform'
 
     @staticmethod
     def uid() -> int:
@@ -190,6 +216,10 @@ class RHTraitExponential(RHTraitP1):
     @staticmethod
     def type() -> str:
         return 'exponential'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
 
     @staticmethod
     def uid() -> int:
@@ -231,6 +261,10 @@ class RHTraitGauss(RHTraitP1):
         return 'gauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
+    @staticmethod
     def uid() -> int:
         return RHT_UID_GAUSS
 
@@ -268,6 +302,10 @@ class RHTraitGGauss(RHTraitP2):
     @staticmethod
     def type() -> str:
         return 'ggauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Generalised Gaussian'
 
     @staticmethod
     def uid() -> int:
@@ -310,6 +348,10 @@ class RHTraitLorentz(RHTraitP1):
         return 'lorentz'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Lorentzian'
+
+    @staticmethod
     def uid() -> int:
         return RHT_UID_LORENTZ
 
@@ -347,6 +389,10 @@ class RHTraitMoffat(RHTraitP2):
     @staticmethod
     def type() -> str:
         return 'moffat'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Moffat'
 
     @staticmethod
     def uid() -> int:
@@ -390,6 +436,10 @@ class RHTraitSech2(RHTraitP1):
         return 'sech2'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Sech-squared'
+
+    @staticmethod
     def uid() -> int:
         return RHT_UID_SECH2
 
@@ -413,6 +463,10 @@ class VHTraitOne(VHTrait):
         return 'one'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Constant'
+
+    @staticmethod
     def uid() -> int:
         return VHT_UID_ONE
 
@@ -423,20 +477,20 @@ class VHTraitOne(VHTrait):
 
 class VHTraitMass(VHTrait):
     """
-    The rotation in the gravity of the galaxy at each height: the factor
-    v(R, z) / v(R, 0) of its velocity polar trait 'mass' (see
-    VPTraitMass), with which it pairs, of the rotation of a circular orbit
-    at the height z in the radial force of the mass of the galaxy there,
-    v(R, z)^2 = -R F_R(R, z) (see gravity.Gravity), plus the pressure
-    support of the trait 'mass' at z, if any: 'jeans', with the density of
-    its disk at z (its density traits times its density height traits) or
-    that of the mass components of the mass of the pressure support
-    (their sum), and its dispersion at z (with its dispersion height
-    traits); 'self_gravitating', in the isothermal sheet of the surface
-    density S of the mass components of its mass (required: the disk has
-    no mass) and the dispersion
-    sigma at the midplane, of the density ~ sech^2(z / z0), z0 = sigma^2 /
-    (pi G S). v(R, z) is 0 where its square is negative, and NaN where it
+    The rotation in the gravity of the galaxy at each height, for the
+    velocity polar trait 'mass', with which it pairs. It is the factor
+    v(R, z) / v(R, 0) of that trait (see VPTraitMass), of the rotation of
+    a circular orbit at the height z in the radial force of the mass of
+    the galaxy there, v(R, z)^2 = -R F_R(R, z) (see gravity.Gravity), plus
+    the pressure support of the trait 'mass' at z, if any: 'jeans', with
+    the density of its disk at z (its density traits times its density
+    height traits) or that of the mass components of the mass of the
+    pressure support (their sum), and its dispersion at z (with its
+    dispersion height traits); 'self_gravitating', in the isothermal
+    sheet of the surface density S of the mass components of its mass
+    (required: the disk has no mass) and the dispersion sigma at the
+    midplane, of the density ~ sech^2(z / z0), z0 = sigma^2 / (pi G S).
+    v(R, z) is 0 where its square is negative, and NaN where it
     is infinite, as at the midplane; the factor is 1 where v(R, 0) is 0
     (no rotation at any height). Its galaxy computes it at each
     evaluation, at the subnodes of the disk and at VHT_MASS_NHEIGHTS
@@ -462,6 +516,10 @@ class VHTraitMass(VHTrait):
     @staticmethod
     def type() -> str:
         return 'mass'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'From the gravity'
 
     @staticmethod
     def uid() -> int:
@@ -490,9 +548,14 @@ class VHTraitMass(VHTrait):
         return (self.zmax(), VHT_MASS_NHEIGHTS)
 
     def params_rnw(self, nnodes: int) -> dict[str, ParamDesc]:
+        table = self.from_galaxy()
         return {
-            name: ParamVectorDesc(nnodes, unit='', default=1)
-            for name in self.from_galaxy().params}
+            name: ParamVectorDesc(
+                nnodes, title=f'Rotation factor at {z:.3g} arcsec',
+                desc=f"the factor of the rotation at the height {z:.3g} "
+                     f"arcsec, which the galaxy computes",
+                unit='', default=1)
+            for name, z in zip(table.params, table.heights)}
 
     def from_galaxy(self) -> RotationFactorsInput:
         heights = np.linspace(0, self.zmax(), VHT_MASS_NHEIGHTS)
@@ -510,7 +573,7 @@ class VHTraitP1(VHTrait, abc.ABC):
     def __init__(
             self,
             nodewise: bool = False,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(VHTraitP1.__init__, locals())
@@ -523,20 +586,24 @@ class VHTraitP1(VHTrait, abc.ABC):
         pass
 
     def params_sm(self) -> dict[str, ParamDesc]:
+        title, desc = _P1_PARAMS[self.param_name()]
         return {} if self.nodewise() else {
-            self.param_name(): ParamScalarDesc(unit='arcsec', default=1)}
+            self.param_name(): ParamScalarDesc(
+                title=title, desc=desc, unit='arcsec', default=1)}
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        title, desc = _P1_PARAMS[self.param_name()]
         return {} if not self.nodewise() else {
             self.param_name(): ParamVectorDesc(
-                nrnodes, unit='arcsec', default=1)}
+                nrnodes, title=title, desc=desc, unit='arcsec', default=1)}
 
 
 class VHTraitLinear(VHTraitP1):
     """
-    The factor max(0, |z| - z0), which grows linearly above the height z0:
-    with a polar trait of the change per unit height (e.g. a lag), and
-    another of the velocity in the plane. Its parameter: z0.
+    A change of the velocity that grows linearly above a height (e.g. a
+    lag): the factor max(0, |z| - z0). It goes with a polar trait of the
+    change per unit height, and another of the velocity in the plane. Its
+    parameter: z0.
 
     Parameters
     ----------
@@ -558,6 +625,10 @@ class VHTraitLinear(VHTraitP1):
     @staticmethod
     def type() -> str:
         return 'linear'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Linear'
 
     @staticmethod
     def uid() -> int:
@@ -595,6 +666,10 @@ class VHTraitExponential(VHTraitP1):
         return 'exponential'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
+
+    @staticmethod
     def uid() -> int:
         return VHT_UID_EXP
 
@@ -630,6 +705,10 @@ class VHTraitGauss(VHTraitP1):
         return 'gauss'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
+
+    @staticmethod
     def uid() -> int:
         return VHT_UID_GAUSS
 
@@ -654,6 +733,10 @@ class DHTraitOne(DHTrait):
         return 'one'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Constant'
+
+    @staticmethod
     def uid() -> int:
         return DHT_UID_ONE
 
@@ -671,7 +754,7 @@ class DHTraitP1(DHTrait, abc.ABC):
     def __init__(
             self,
             nodewise: bool = False,
-            sampling: Literal[SAMPLINGS] = SAMPLING_DEFAULT,
+            sampling: SamplingChoice = SAMPLING_DEFAULT,
             name: str | None = None
     ):
         check_options(DHTraitP1.__init__, locals())
@@ -684,20 +767,24 @@ class DHTraitP1(DHTrait, abc.ABC):
         pass
 
     def params_sm(self) -> dict[str, ParamDesc]:
+        title, desc = _P1_PARAMS[self.param_name()]
         return {} if self.nodewise() else {
-            self.param_name(): ParamScalarDesc(unit='arcsec', default=1)}
+            self.param_name(): ParamScalarDesc(
+                title=title, desc=desc, unit='arcsec', default=1)}
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
+        title, desc = _P1_PARAMS[self.param_name()]
         return {} if not self.nodewise() else {
             self.param_name(): ParamVectorDesc(
-                nrnodes, unit='arcsec', default=1)}
+                nrnodes, title=title, desc=desc, unit='arcsec', default=1)}
 
 
 class DHTraitLinear(DHTraitP1):
     """
-    The factor max(0, |z| - z0), which grows linearly above the height z0:
-    with a polar trait of the change per unit height (e.g. a lag), and
-    another of the dispersion in the plane. Its parameter: z0.
+    A change of the dispersion that grows linearly above a height: the
+    factor max(0, |z| - z0). It goes with a polar trait of the change per
+    unit height, and another of the dispersion in the plane. Its
+    parameter: z0.
 
     Parameters
     ----------
@@ -719,6 +806,10 @@ class DHTraitLinear(DHTraitP1):
     @staticmethod
     def type() -> str:
         return 'linear'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Linear'
 
     @staticmethod
     def uid() -> int:
@@ -756,6 +847,10 @@ class DHTraitExponential(DHTraitP1):
         return 'exponential'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Exponential'
+
+    @staticmethod
     def uid() -> int:
         return DHT_UID_EXP
 
@@ -789,6 +884,10 @@ class DHTraitGauss(DHTraitP1):
     @staticmethod
     def type() -> str:
         return 'gauss'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian'
 
     @staticmethod
     def uid() -> int:

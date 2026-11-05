@@ -132,6 +132,10 @@ class ApertureEllipse(Aperture):
     def type() -> str:
         return 'ellipse'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Ellipse'
+
     def dump(self) -> dict[str, Any]:
         return dict(
             type=self.type(), x=self._x, y=self._y, a=self._a, b=self._b,
@@ -161,6 +165,10 @@ class ApertureCircle(Aperture):
     @staticmethod
     def type() -> str:
         return 'circle'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Circle'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), x=self._x, y=self._y, radius=self._radius)
@@ -216,6 +224,10 @@ class AperturePolygon(Aperture):
     def type() -> str:
         return 'polygon'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Polygon'
+
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), vertices=self._vertices.tolist())
 
@@ -250,6 +262,10 @@ class ApertureRectangle(Aperture):
     @staticmethod
     def type() -> str:
         return 'rectangle'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Rectangle'
 
     def dump(self) -> dict[str, Any]:
         return dict(
@@ -306,6 +322,10 @@ class ApertureField(Aperture):
     @staticmethod
     def type() -> str:
         return 'field'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Whole field'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())

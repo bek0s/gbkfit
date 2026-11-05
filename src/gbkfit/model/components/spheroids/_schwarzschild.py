@@ -76,7 +76,7 @@ _STEPS_PER_TURN = 10 ** 5
 class SchwarzschildKinematics(SpheroidKinematics):
     """
     The stars of a spheroid in a steady state in the gravity of its galaxy,
-    as a superposition of orbits (Schwarzschild 1979): a library of
+    as a superposition of orbits (Schwarzschild 1979). It is a library of
     norbits orbits, started where its light is (each with a share of it,
     see orbit_library), each integrated for turns periods of the circular
     orbit of its energy, and recorded with its twin reversed in time
@@ -117,6 +117,10 @@ class SchwarzschildKinematics(SpheroidKinematics):
     def type() -> str:
         return 'schwarzschild'
 
+    @staticmethod
+    def type_title() -> str:
+        return 'Schwarzschild orbits'
+
     def dump(self) -> dict[str, Any]:
         return super().dump() | dict(
             norbits=self._norbits, turns=self._turns, seed=self._seed)
@@ -146,7 +150,7 @@ class SchwarzschildKinematics(SpheroidKinematics):
 
     def pdescs(self) -> dict[str, ParamDesc]:
         return dict(weights=ParamVectorDesc(
-            2 * self._norbits,
+            2 * self._norbits, title='Orbit weights',
             desc="the factor of the share of the light of each orbit "
                  "(orbit k at 2k, its twin at 2k + 1), solved",
             min=0, unit='', default=1))

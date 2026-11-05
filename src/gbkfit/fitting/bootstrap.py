@@ -99,12 +99,13 @@ class BootstrapScheme(TypedSerializable, abc.ABC):
 
 class BootstrapBlocks(BootstrapScheme):
     """
-    Residuals redrawn in blocks (see Dataset.resample_blocks): each block
-    takes those of a block drawn at random, with replacement, from those
-    with residuals in all of their values. Each kind of data says what
-    its blocks are (see Dataset.check_blocks; e.g. pixels and channels of
-    a cube). Blocks of at least a beam (and of the width of the line
-    spread in channels) keep the correlations of the noise.
+    Residuals redrawn in blocks: each block takes those of a block drawn
+    at random. The blocks are drawn with replacement, from those with
+    residuals in all of their values (see Dataset.resample_blocks). Each
+    kind of data says what its blocks are (see Dataset.check_blocks; e.g.
+    pixels and channels of a cube). Blocks of at least a beam (and of the
+    width of the line spread in channels) keep the correlations of the
+    noise.
 
     Parameters
     ----------
@@ -121,6 +122,10 @@ class BootstrapBlocks(BootstrapScheme):
     @staticmethod
     def type() -> str:
         return 'blocks'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Resampled blocks'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type(), size=list(self._size))
@@ -157,13 +162,13 @@ class BootstrapBlocks(BootstrapScheme):
 
 class BootstrapGaussian(BootstrapScheme):
     """
-    Residuals drawn anew from a Gaussian: each value of the data is the
-    model plus Gaussian noise of its noise (its error, or its fitted noise;
-    see run_bootstrap), independent from value to value: a parametric
-    bootstrap, e.g. of the kinematics of Voronoi bins, whose few values
-    have errors of their own, too unlike to swap residuals. Noise
-    correlated between the values is not drawn so: blocks keep it (see
-    BootstrapBlocks).
+    Residuals drawn anew from a Gaussian of the noise of each value: a
+    parametric bootstrap. Each value of the data is the model plus
+    Gaussian noise of its noise (its error, or its fitted noise; see
+    run_bootstrap), independent from value to value. It suits e.g. the
+    kinematics of Voronoi bins, whose few values have errors of their
+    own, too unlike to swap residuals. Noise correlated between the
+    values is not drawn so: blocks keep it (see BootstrapBlocks).
 
     Raises
     ------
@@ -174,6 +179,10 @@ class BootstrapGaussian(BootstrapScheme):
     @staticmethod
     def type() -> str:
         return 'gaussian'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Gaussian noise'
 
     def dump(self) -> dict[str, Any]:
         return dict(type=self.type())

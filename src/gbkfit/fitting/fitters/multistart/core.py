@@ -32,9 +32,10 @@ __all__ = [
 class FitterMultiStart(Fitter):
     """
     An optimizer (e.g. least squares, CMA-ES) run from many starting
-    points: the given values, and points spread over the bounds (a
-    scrambled Sobol sequence). The distinct minima it finds are the
-    solutions, best first, each with its own uncertainty.
+    points, for problems with several minima. The starts are the given
+    values, and points spread over the bounds (a scrambled Sobol
+    sequence). The distinct minima it finds are the solutions, best
+    first, each with its own uncertainty.
 
     Two minima are the same if they differ by less than 'tolerance'
     times the width of the bounds in every free element.
@@ -85,6 +86,10 @@ class FitterMultiStart(Fitter):
     @staticmethod
     def type() -> str:
         return 'multistart'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Multi-start'
 
     def fit_param_class(self) -> FitParamClass:
         # (the options of the local fitter)

@@ -6,13 +6,13 @@ import contextlib
 import random
 import typing
 from collections.abc import Generator
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, TypeAlias
 
 import numpy as np
 from annotated_types import Gt
 from pydantic import FiniteFloat
 
-from gbkfit.config import check_options
+from gbkfit.config import Choices, check_options
 from gbkfit.fitting.base import FitRun, Fitter, FitterInfo
 from gbkfit.control import Stopped
 from gbkfit.fitting.fitparams import FitParam, FitParamClass, FitParamWalkers
@@ -25,6 +25,11 @@ __all__ = [
     'FitParamZeus',
     'FitterZeus'
 ]
+
+
+# The option of the moves of the walkers ('global' is a keyword)
+_Moves: TypeAlias = Annotated[Literal['differential', 'global'], Choices({
+    'differential': 'Differential', 'global': 'Global (several modes)'})]
 
 
 class FitParamZeus(FitParamWalkers):
@@ -113,6 +118,10 @@ class FitterZeus(Fitter):
         return 'zeus'
 
     @staticmethod
+    def type_title() -> str:
+        return 'Zeus'
+
+    @staticmethod
     def fit_param_class() -> FitParamClass:
         return FitParamZeus
 
@@ -132,7 +141,7 @@ class FitterZeus(Fitter):
             nsteps: Annotated[int, Gt(0)] = 2000,
             burnin: int | None = None,
             thin: Annotated[int, Gt(0)] = 1,
-            moves: Literal['differential', 'global'] = 'differential',
+            moves: _Moves = 'differential',
             light_mode: bool = False,
             width: Annotated[FiniteFloat, Gt(0)] | None = None,
             seed: int = 0,
