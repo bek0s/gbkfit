@@ -12,7 +12,7 @@ import { Button } from '../../components/ui/basics';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
-import { COMPONENT_STARTS, GALAXY_PARTS, nameBase, partsOf, type Part } from './catalogue';
+import { COMPONENT_STARTS, GALAXY_PARTS, nameBase, partsOf, withThickness, type Part } from './catalogue';
 import { useGalaxyDraft } from './draft';
 import { Inspector, inPlace, removedFrom } from './Inspector';
 import { componentName, componentsOf, freshName, getAt, ringRadii, setAt } from './options';
@@ -150,6 +150,12 @@ export function GalaxyScreen({ name }: { name: string }) {
     setSelected({ component: index + 1, part: shown?.part ?? 'geometry' });
   };
 
+  // (a disk made thin or thick: its density shown, where it changes)
+  const changeThickness = (index: number, thick: boolean) => {
+    draft.edit((s) => ({ ...s, options: setAt(s.options, ['components', index], withThickness(componentsOf(s.options)[index], thick)) }));
+    setSelected({ component: index, part: 'density' });
+  };
+
   const removeComponent = (index: number) => {
     const removed = componentName(components[index], index);
     draft.edit((s) => ({ ...s, options: setAt(s.options, ['components', index], undefined) }), { moved: removedFrom(['components'], index) });
@@ -224,6 +230,7 @@ export function GalaxyScreen({ name }: { name: string }) {
           onAddComponent={addComponent}
           onRenameComponent={renameComponent}
           onDuplicateComponent={duplicateComponent}
+          onThickness={changeThickness}
           onRemoveComponent={removeComponent}
           onIsolate={setIsolated}
         />

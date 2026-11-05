@@ -260,12 +260,14 @@ h2 { margin: 0; font: var(--text-heading); }
 .ui-choice-dropdown .mantine-Select-option[data-combobox-selected] { color: var(--accent-text); background: transparent; }
 .ui-choice-dropdown .mantine-Select-option:hover { background: var(--panel2); }
 /* (a choice of a few, in the tokens of the page in either scheme: a track
-   framed as the inputs are, of their height, and the one chosen raised in
-   it; Mantine's own track is the colour of a card in the dark scheme) */
+   framed as the inputs are, of their height, and the one chosen marked as
+   what is chosen elsewhere, the selection and the accent; Mantine's own
+   track is the colour of a card in the dark scheme) */
 .ui-segments { height: 30px; padding: 2px; background: var(--panel2); border: 1px solid var(--line2); }
-.ui-segments .mantine-SegmentedControl-indicator { background: var(--raise); border: 1px solid var(--line2); box-shadow: none; }
+.ui-segments .mantine-SegmentedControl-indicator { background: var(--sel); border: 1px solid transparent; box-shadow: none; }
 .ui-segments .mantine-SegmentedControl-label { padding: 0 10px; height: 24px; display: flex; align-items: center; justify-content: center; font: var(--text-label); color: var(--muted); }
-.ui-segments .mantine-SegmentedControl-label[data-active] { color: var(--fg); }
+.ui-segments .mantine-SegmentedControl-label[data-active] { color: var(--accent-text); }
+.ui-segments .mantine-SegmentedControl-label[data-disabled] { opacity: .4; cursor: not-allowed; }
 .ui-choice-option { display: grid; gap: 1px; }
 /* (a long description, e.g. of a fitter, in three lines; all of it on hover) */
 .ui-choice-option small { font: var(--text-caption); color: var(--faint); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -320,6 +322,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .callout-list { border: 1px solid var(--line2); border-radius: 7px; padding: 8px 10px; background: var(--panel2); font: var(--text-body); }
 .callout-list ul { margin: 6px 0 0; padding-left: 18px; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.gx-losing { margin: 0; padding-left: 18px; display: grid; gap: 2px; font: var(--text-label); color: var(--fg2); }
 .dialog-list { display: grid; gap: 2px; max-height: 50vh; overflow: auto; }
 
 @media (max-width: 900px) {

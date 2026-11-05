@@ -4,11 +4,13 @@
 // traits) and the parts it can have too. A part chosen is set in the
 // inspector; a part with a problem is marked. A component is renamed in
 // place (a double click), and its menu duplicates, shows alone or removes
-// it.
+// it, and makes a disk thick or thin (its type: what was added), asking
+// first if it would lose options (see lostIfThin).
 import { useState } from 'react';
-import { DropMenu } from '../../components/ui/overlays';
+import { Button } from '../../components/ui/basics';
+import { Dialog, DropMenu } from '../../components/ui/overlays';
 import { choicesOf, titleOf, type Defs, type Schema } from '../../components/SchemaForm';
-import { COMPONENT_ORDER, COMPONENT_STARTS, GALAXY_PARTS, partsOf, type Part } from './catalogue';
+import { COMPONENT_ORDER, COMPONENT_STARTS, GALAXY_PARTS, isDisk, isThick, lostIfThin, partsOf, type Part } from './catalogue';
 import type { Problem } from './draft';
 import { asList, componentName, getAt, isObject, lineList, lineName, ringRadii, startsWith, type Options, type Path } from './options';
 import { memberOf, typesOf } from './schema';
@@ -30,6 +32,7 @@ export interface OutlineProps {
   onAddComponent: (type: string) => void;
   onRenameComponent: (index: number, name: string) => void;
   onDuplicateComponent: (index: number) => void;
+  onThickness: (index: number, thick: boolean) => void;
   onRemoveComponent: (index: number) => void;
   onIsolate: (name: string | null) => void;
 }
@@ -122,6 +125,7 @@ function ComponentGroup({
   onAddPart,
   onRenameComponent,
   onDuplicateComponent,
+  onThickness,
   onRemoveComponent,
   onIsolate,
 }: OutlineProps & {
@@ -132,7 +136,16 @@ function ComponentGroup({
   flagged: (path: Path) => boolean;
 }) {
   const [renaming, setRenaming] = useState(false);
+  // (what a thick disk to be made thin would lose, while asked)
+  const [losing, setLosing] = useState<string[] | null>(null);
   const name = componentName(component, index);
+  const disk = isDisk(component.type);
+  const thick = isThick(component);
+  const makeThin = () => {
+    const lost = lostIfThin(component);
+    if (lost.length > 0) setLosing(lost);
+    else onThickness(index, false);
+  };
   const parts = partsOf(component);
   const present = parts.filter((p) => p.key === 'geometry' || getAt(component, p.option) !== undefined);
   const absent = parts.filter((p) => p.optional && getAt(component, p.option) === undefined);
@@ -166,6 +179,13 @@ function ComponentGroup({
             { label: 'Rename', onClick: () => setRenaming(true) },
             { label: 'Duplicate', onClick: () => onDuplicateComponent(index) },
             { label: alone ? 'Show all components' : 'Show it alone', onClick: () => onIsolate(alone ? null : name) },
+            ...(disk
+              ? [
+                  thick
+                    ? { label: 'Make it thin…', description: 'Its light in its plane, with no height', onClick: makeThin }
+                    : { label: 'Make it thick', description: 'A height for its light, warps, opacity', onClick: () => onThickness(index, true) },
+                ]
+              : []),
             ...absent.map((p) => {
               const why = p.needs?.(component, options) ?? null;
               return { label: `Add ${p.title.toLowerCase()}`, description: why ?? undefined, disabled: why !== null, onClick: () => onAddPart(index, p) };
@@ -199,6 +219,33 @@ function ComponentGroup({
           })}
           target={<button className="gx-add-part">+ {absent.map((p) => p.title.toLowerCase()).join(', ')}</button>}
         />
+      )}
+      {losing && (
+        <Dialog title={`Make ${name} thin`} onClose={() => setLosing(null)}>
+          <div className="dialog-form">
+            <p>
+              <b className="mono">{name}</b> becomes a thin disk, its light in its plane. It loses:
+            </p>
+            <ul className="gx-losing">
+              {losing.map((what) => (
+                <li key={what}>{what}</li>
+              ))}
+            </ul>
+            <p className="note">Undo brings them back.</p>
+            <div className="dialog-actions">
+              <Button onClick={() => setLosing(null)}>Cancel</Button>
+              <Button
+                kind="primary"
+                onClick={() => {
+                  setLosing(null);
+                  onThickness(index, false);
+                }}
+              >
+                Make it thin
+              </Button>
+            </div>
+          </div>
+        </Dialog>
       )}
     </div>
   );

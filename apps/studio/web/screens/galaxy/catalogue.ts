@@ -5,7 +5,7 @@
 // a list of traits of a family (e.g. the velocity traits, 'vpt'), or one
 // option of a type of a family (e.g. the emission). Each part owns the
 // parameters its option makes (see Param.owner).
-import { asList, getAt, isObject, type Options, type Path } from './options';
+import { asList, asOneOrList, getAt, isObject, setAt, type Options, type Path } from './options';
 
 export type ComponentType = 'thin_disk' | 'thick_disk' | 'cone' | 'spheroid' | 'point' | 'particles';
 
@@ -46,14 +46,41 @@ export function isThick(component: Options): boolean {
 // The height a thick disk gives each of its density traits at first
 export const HEIGHT_START: Options = { type: 'sech2', zmax: 6 };
 
-// The options only a thick disk has: of the disk, and of its density and
-// kinematics (a thick disk made thin loses them)
-export const THICK_OPTIONS: Path[] = [['opacity'], ['zptraits'], ['clouds'], ['density', 'htraits'], ['kinematics', 'vhtraits'], ['kinematics', 'dhtraits'], ['kinematics', 'equilibrium']];
+// The options only a thick disk has, of the disk and of its density and
+// kinematics, and what each is to people (a thick disk made thin loses
+// them)
+const THICK_OPTIONS: { path: Path; what: string }[] = [
+  { path: ['density', 'htraits'], what: 'the heights of its density' },
+  { path: ['kinematics', 'vhtraits'], what: 'the heights of its motions' },
+  { path: ['kinematics', 'dhtraits'], what: 'the heights of its dispersion' },
+  { path: ['zptraits'], what: 'its warps' },
+  { path: ['opacity'], what: 'its opacity' },
+  { path: ['clouds'], what: 'its clouds' },
+  { path: ['kinematics', 'equilibrium'], what: 'its equilibrium' },
+];
+
+// What a thick disk has that it would lose if made thin
+export function lostIfThin(disk: Options): string[] {
+  return THICK_OPTIONS.filter(({ path }) => getAt(disk, path) !== undefined).map(({ what }) => what);
+}
+
+// A disk made thin (without what only a thick disk has) or thick (with a
+// height for each trait of its density)
+export function withThickness(disk: Options, thick: boolean): Options {
+  let next: Options = { ...disk, type: thick ? 'thick_disk' : 'thin_disk' };
+  if (thick) {
+    const count = Math.max(1, asList(getAt(disk, ['density', 'ptraits'])).length);
+    return setAt(next, ['density', 'htraits'], asOneOrList(Array.from({ length: count }, () => ({ ...HEIGHT_START }))));
+  }
+  // (those it has: setAt would make the options they are in)
+  for (const { path } of THICK_OPTIONS) if (getAt(next, path) !== undefined) next = setAt(next, path, undefined);
+  return next;
+}
 
 // The parts of a thin or a thick disk: those of a thick one with their
 // heights; on a thin one, warps and opacity are shown, but need it thick
 function diskParts(thick: boolean): Part[] {
-  const needsThick = thick ? undefined : () => 'Needs a thick disk: make it thick in its density.';
+  const needsThick = thick ? undefined : () => 'Needs a thick disk: Make it thick, in the menu of the disk (⋯).';
   const height = (option: Path, family: string, nullable: boolean) => (thick ? { option, family, title: 'Height', nullable } : undefined);
   return [
     { key: 'geometry', title: 'Geometry', hint: 'Its rings, centre and orientation', option: [] },

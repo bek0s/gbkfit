@@ -52,6 +52,17 @@ function hasDepth(galaxy: Options): boolean {
   });
 }
 
+// Whether a galaxy has height (a thick disk, a cone, a spheroid,
+// particles): one of thin disks and points alone lies in a plane, and is
+// a line seen edge-on
+function hasHeight(galaxy: Options): boolean {
+  const components = Array.isArray(galaxy.components) ? galaxy.components : [galaxy.components];
+  return components.some((c) => {
+    const component = c as Options | undefined;
+    return component !== undefined && component.type !== 'thin_disk' && component.type !== 'point';
+  });
+}
+
 // (a change within this long of the last is one of a gesture: see
 // renderSize)
 const SETTLE_MS = 350;
@@ -82,8 +93,11 @@ export interface ViewerProps {
 }
 
 export function Viewer(props: ViewerProps) {
-  const { project, galaxy, properties, orientation, onOrientation, quantity, onQuantity, components, isolated, onIsolated } = props;
+  const { project, galaxy, properties, onOrientation, quantity, onQuantity, components, isolated, onIsolated } = props;
   const lines = components.length > 0;
+  // (edge-on, as seen, of a galaxy with no height: see hasHeight)
+  const flat = useMemo(() => galaxy !== undefined && !hasHeight(galaxy), [galaxy]);
+  const orientation = flat && props.orientation === 'edge-on' ? 'sky' : props.orientation;
   return (
     <div className="gx-view">
       <div className="gx-toolbar">
@@ -91,7 +105,12 @@ export function Viewer(props: ViewerProps) {
           items={[
             { value: 'sky', label: 'As seen' },
             { value: 'face-on', label: 'Face-on' },
-            { value: 'edge-on', label: 'Edge-on' },
+            {
+              value: 'edge-on',
+              label: 'Edge-on',
+              disabled: flat,
+              title: flat ? 'Its disks are thin, with no height: edge-on, a line. Make a disk thick to see it edge-on.' : undefined,
+            },
           ]}
           value={orientation}
           onChange={onOrientation}

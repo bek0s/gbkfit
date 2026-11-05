@@ -89,21 +89,21 @@ export function NumberField({
   );
 }
 
-// One of a few choices, as segments
+// One of a few choices, as segments (one can be off, and say why on hover)
 export function Segments<T extends string>({
   items,
   value,
   onChange,
   label,
 }: {
-  items: { value: T; label: string; disabled?: boolean }[];
+  items: { value: T; label: string; disabled?: boolean; title?: string }[];
   value: T | null;
   onChange: (value: T) => void;
   label: string;
 }) {
   return (
     <SegmentedControl
-      data={items}
+      data={items.map(({ value: each, label: text, disabled, title }) => ({ value: each, label: title ? <span title={title}>{text}</span> : text, disabled }))}
       value={value ?? ''}
       onChange={(next) => onChange(next as T)}
       aria-label={label}

@@ -3,15 +3,14 @@
 // ParamField), and its other options (a form of the schema). A list of
 // traits has a card for each, with the height trait paired with it on a
 // thick disk or a cone; items are added and removed here, and a part that
-// can be. The density of a disk says whether it is thin or thick (its
-// type).
+// can be.
 import { useState } from 'react';
 import { useComponentTraits, useLines } from '../../api/queries';
 import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { Close } from '../../components/ui/basics';
 import { Check, Choice, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
-import { HEAD_OPTIONS, HEIGHT_START, isDisk, isThick, ITEM_STARTS, MASS_HEAD_OPTIONS, THICK_OPTIONS, type Part } from './catalogue';
+import { HEAD_OPTIONS, HEIGHT_START, isDisk, ITEM_STARTS, MASS_HEAD_OPTIONS, type Part } from './catalogue';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { ParamField } from './ParamField';
 import { asList, asOneOrList, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
@@ -95,7 +94,7 @@ export function Inspector({ draft, options, defs, params, project, field, compon
           </>
         )}
         {part.typed && <TypedPart ctx={ctx} part={part} path={optionPath} value={value} rings={rings} />}
-        {part.family && <ListPart ctx={ctx} part={part} base={base} owner={owner} rings={rings} kind={String(owner.type ?? '')} isGalaxy={component === null} />}
+        {part.family && <ListPart ctx={ctx} part={part} base={base} rings={rings} kind={String(owner.type ?? '')} isGalaxy={component === null} />}
       </div>
     </div>
   );
@@ -232,7 +231,7 @@ function TypedPart({ ctx, part, path, value, rings }: { ctx: Context; part: Part
 
 // A part of a list of items of a family (e.g. the velocity traits, the
 // mass components): a card for each, and a menu that adds one
-function ListPart({ ctx, part, base, owner, rings, kind, isGalaxy }: { ctx: Context; part: Part; base: Path; owner: Options; rings: number[] | null; kind: string; isGalaxy: boolean }) {
+function ListPart({ ctx, part, base, rings, kind, isGalaxy }: { ctx: Context; part: Part; base: Path; rings: number[] | null; kind: string; isGalaxy: boolean }) {
   const { defs, draft, options } = ctx;
   const family = part.family!;
   const listPath = [...base, ...part.option];
@@ -276,7 +275,6 @@ function ListPart({ ctx, part, base, owner, rings, kind, isGalaxy }: { ctx: Cont
   const removable = items.length > 1 || part.optional || isGalaxy;
   return (
     <>
-      {part.key === 'density' && isDisk(owner.type) && <ThicknessToggle ctx={ctx} base={base} owner={owner} />}
       {items.length === 0 && <p className="note gx-none">None yet.</p>}
       {items.map((item, i) => (
         <ItemCard
@@ -324,41 +322,6 @@ const ITEM_NOUNS: Record<string, string> = {
   spt: 'a selection',
   mass_component: 'a mass component',
 };
-
-// Whether a disk is thin (its light in its plane) or thick (a height for
-// each density trait): its type. Made thin, it loses what only a thick
-// disk has (its heights, warps, opacity, clouds and equilibrium)
-function ThicknessToggle({ ctx, base, owner }: { ctx: Context; base: Path; owner: Options }) {
-  const { draft } = ctx;
-  const thick = isThick(owner);
-  const count = asList(getAt(owner, ['density', 'ptraits'])).length;
-  return (
-    <div className="gx-row">
-      <span className="gx-row-label">Thickness</span>
-      <Segments
-        items={[
-          { value: 'thin', label: 'Thin' },
-          { value: 'thick', label: 'Thick' },
-        ]}
-        value={thick ? 'thick' : 'thin'}
-        onChange={(next) =>
-          draft.edit((s) => {
-            let options = setAt(s.options, [...base, 'type'], `${next}_disk`);
-            if (next === 'thin') {
-              // (those it has: setAt would make the options they are in)
-              for (const path of THICK_OPTIONS) if (getAt(options, [...base, ...path]) !== undefined) options = setAt(options, [...base, ...path], undefined);
-            } else {
-              const heights = Array.from({ length: Math.max(1, count) }, () => ({ ...HEIGHT_START }));
-              options = setAt(options, [...base, 'density', 'htraits'], asOneOrList(heights));
-            }
-            return { ...s, options };
-          })
-        }
-        label="The thickness of the disk"
-      />
-    </div>
-  );
-}
 
 // An item of a list: its type, direction and the like, its paired height,
 // its parameters and its other options
