@@ -81,6 +81,10 @@ Example
 
 .. code-block:: yaml
 
+   # the version of the format of the configuration (gbkfit-cli migrate
+   # rewrites those of older versions)
+   version: 5
+
    # where the models are evaluated: host (the default) or cuda; several
    # drivers are declared by name in a section 'drivers', and then each
    # observation names its own (e.g. driver: gpu)
@@ -89,16 +93,15 @@ Example
    # the galaxy: one thin disk, which emits a line
    galaxies:
    - components:
-     - type: smdisk
+     - type: thin_disk
        loose: false
        tilted: false
-       rnmin: 0
-       rnmax: 50
-       rnsep: 10
+       rnodes: {max: 50, sep: 10}
        density:
          ptraits: {type: gauss}
        kinematics:
-         vptraits: {type: tan_arctan}
+         type: traits
+         vptraits: {type: arctan, direction: tan}
          dptraits: {type: uniform}
        # one line, at the velocities of the spectral axis; several lines
        # are named, e.g. lines: [halpha, nii6583], from the catalogue of
@@ -114,11 +117,13 @@ Example
    # on the plane of the sky (a flat line of sight; a thick disk needs a
    # depth axis: {type: grid})
    observations:
-   - line_of_sight: {type: flat}
+   - type: sky
+     line_of_sight: {type: flat}
      observable:
        type: pixel_spectra
-       size: [101, 101, 101]
-       step: [1, 1, 5]
+       size: [101, 101]
+       step: [1, 1]
+       spectral: {size: 101, step: 5, convention: relativistic}
      instrument:
        psf: {type: gauss, sigma: 2}
        lsf: {type: gauss, sigma: 20}

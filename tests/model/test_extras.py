@@ -12,7 +12,7 @@ from gbkfit.model import Extras
 
 
 DISK = dict(
-    type='disk', loose=False, tilted=False, rnodes=list(range(0, 8)),
+    type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 8)),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))
 LINE_DISK = DISK | dict(
@@ -139,7 +139,7 @@ def test_the_cube_of_moments_is_per_km_s_of_their_unit():
 def test_grid_extras_have_a_line_of_sight_axis(evaluate_cases):
     # The depth axis of a grid is along the line of sight, centred on 0
     observable, _, _, _ = CASES['pixel_spectra']
-    thick_disk = LINE_DISK | dict(density=dict(
+    thick_disk = LINE_DISK | dict(type='thick_disk', density=dict(
         ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8)))
     case = dict(
         driver=dict(type='host'), observable=observable,

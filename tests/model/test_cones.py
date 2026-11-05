@@ -167,7 +167,7 @@ def test_the_dust_of_the_disk_dims_the_far_cone(
     # disk the cone flows out of): its far side (positive) is behind all
     # the dust of each line of sight, its near side in front of it
     dust = dict(
-        type='disk', name='dust', loose=False, tilted=False,
+        type='thick_disk', name='dust', loose=False, tilted=False,
         rnodes=list(range(0, 13)), opacity=dict(type='dust'),
         density=dict(
             ptraits=dict(type='exponential'),
@@ -209,7 +209,7 @@ KINEMATICS = dict(
         htraits=dict(type='gauss', zmax=1))),
      "a cone does not take density polar trait mixture_gauss"),
     (dict(density=dict(ptraits=UNIFORM)),
-     "a cone needs density height traits"),
+     "missing required options: 'htraits'"),
     (dict(opacity=dict(type='line', coefficients=UNIFORM)),
      "the opacity of a cone is dust"),
     (dict(sides='up'), "'sides' must be one of")])

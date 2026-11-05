@@ -23,8 +23,8 @@ THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
 def disk(name, density=THIN):
     """A rotating disk of the given density that emits a line."""
     return dict(
-        type='disk', name=name, loose=False, tilted=False,
-        rnodes=list(range(0, 14)),
+        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        name=name, loose=False, tilted=False, rnodes=list(range(0, 14)),
         density=density,
         kinematics=dict(
             type='traits', vptraits=dict(type='arctan', direction='tan'),
@@ -86,7 +86,7 @@ def test_components_with_opacity_always_absorb(driver):
     # that of its dust, which no observation selects (it emits nothing)
     emitters = [disk('ha', THICK), disk('co', THICK)]
     dust = dict(
-        type='disk', name='dust', loose=False, tilted=False,
+        type='thick_disk', name='dust', loose=False, tilted=False,
         rnodes=list(range(0, 14)), density=THICK, opacity=dict(type='dust'))
     galaxy = dict(components=emitters + [dust])
     properties = PROPERTIES | dict(

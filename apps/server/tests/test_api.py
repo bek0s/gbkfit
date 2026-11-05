@@ -132,7 +132,7 @@ def test_projects_and_pieces_are_created_from_templates(client):
     path = client.post('/api/v1/pieces', json=dict(
         project='new', folder='galaxies', name='disk')).json()
     assert path == 'new/galaxies/disk.yaml'
-    assert 'type: disk' in client.get(f'/api/v1/files/{path}').text
+    assert 'type: thin_disk' in client.get(f'/api/v1/files/{path}').text
     assert client.post('/api/v1/pieces', json=dict(
         project='new', folder='galaxies', name='disk')).status_code == 400
     assert sorted(client.get('/api/v1/projects').json()) == ['new', 'study']
@@ -247,10 +247,17 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
 
 def test_the_traits_each_type_of_component_takes_are_given(client):
     takes = client.get('/api/v1/components').json()
-    assert set(takes) == {'disk', 'cone', 'spheroid'}
+    assert set(takes) == {'thin_disk', 'thick_disk', 'cone', 'spheroid'}
     # (a cone takes only some density traits, and flows out or around)
-    assert 'spiral' in takes['disk']['traits']['rpt']
+    assert 'spiral' in takes['thin_disk']['traits']['rpt']
     assert 'spiral' not in takes['cone']['traits']['rpt']
+    # (a thin disk has no heights, warps out of its plane, or speeds away
+    # from it; a thick one has them)
+    for kind in ('rht', 'vht', 'dht', 'zpt'):
+        assert takes['thin_disk']['traits'][kind] == []
+        assert takes['thick_disk']['traits'][kind]
+    assert 'away' not in takes['thin_disk']['directions']
+    assert 'away' in takes['thick_disk']['directions']
     assert set(takes['cone']['directions']) == {'tan', 'out'}
     assert takes['cone']['dispersion_directions'] == ['iso']
     assert 'mass' not in takes['spheroid']['traits']['vpt']
@@ -258,7 +265,7 @@ def test_the_traits_each_type_of_component_takes_are_given(client):
 
 def test_the_parameters_of_a_galaxy_are_described(client):
     disk = dict(
-        type='disk', rnodes=[0, 2, 4],
+        type='thin_disk', rnodes=[0, 2, 4],
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             type='traits', vptraits=dict(type='arctan', direction='tan'),
@@ -280,7 +287,7 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     assert client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[band]))).json()['parameters']
     # A thick disk, which needs a line of sight with a depth axis
-    thick = dict(disk, density=dict(
+    thick = dict(disk, type='thick_disk', density=dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='sech2', zmax=6)))
     info = client.post('/api/v1/parameters', json=dict(
@@ -606,13 +613,13 @@ def render(client, galaxy, **request):
 
 # A rotating gas disk and a stellar disk in a band
 RENDERED = dict(components=[
-    dict(type='disk', name='gas', rnodes=dict(max=10, sep=2),
+    dict(type='thin_disk', name='gas', rnodes=dict(max=10, sep=2),
          density=dict(ptraits=dict(type='exponential')),
          kinematics=dict(
              type='traits', vptraits=dict(type='arctan', direction='tan'),
              dptraits=dict(type='uniform')),
          emission=dict(type='lines')),
-    dict(type='disk', name='stars', rnodes=[0, 2, 4, 6, 8],
+    dict(type='thin_disk', name='stars', rnodes=[0, 2, 4, 6, 8],
          density=dict(ptraits=dict(type='exponential')),
          emission=dict(type='band'))])
 

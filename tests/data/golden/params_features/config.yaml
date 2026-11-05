@@ -1,10 +1,10 @@
 # params_features: Two gas disks (cold and warm) of one warp (the geometric parameters of the warm one tied to those of the cold one) and a nucleus, in a cube: the position angles of the warp given as offsets (mode), ties, extra parameters of the section pdescs (the flux of the nucleus, exp(mu + sigma z)), derived values, and priors on several parameters (gauss on an expression, smooth over the warp).
 # (written by make_golden.py; do not edit)
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thin_disk
     name: cold
     loose: false
     tilted: true
@@ -16,7 +16,7 @@ galaxies:
       vptraits: {type: arctan, direction: tan}
       dptraits: {type: uniform}
     emission: {type: lines}
-  - type: disk
+  - type: thin_disk
     name: warm
     loose: false
     tilted: true

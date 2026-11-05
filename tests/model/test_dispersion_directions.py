@@ -19,8 +19,8 @@ def disk(dptraits, thick=False):
     if thick:
         density['htraits'] = dict(type='sech2', zmax=8)
     return dict(
-        type='disk', loose=False, tilted=False,
-        rnodes=list(range(0, 21, 2)), density=density,
+        type='thick_disk' if thick else 'thin_disk', loose=False,
+        tilted=False, rnodes=list(range(0, 21, 2)), density=density,
         kinematics=dict(
             type='traits', vptraits=dict(type='uniform', direction='tan'),
             dptraits=dptraits),

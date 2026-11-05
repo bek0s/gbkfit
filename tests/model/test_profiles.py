@@ -31,7 +31,7 @@ KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 
 # A gas disk that the mass moves
 GAS = dict(
-    type='disk', name='gas', loose=False, tilted=False,
+    type='thin_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(type='traits',
@@ -157,7 +157,7 @@ def test_mass_that_follows_light_of_a_rotation_curve(caplog):
     # ratio): the profile takes its mass; without it, nothing but derived
     # values can, which a warning says
     light = dict(
-        type='disk', name='stars', loose=False, tilted=False,
+        type='thin_disk', name='stars', loose=False, tilted=False,
         rnodes=list(range(0, 21, 2)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))

@@ -1,7 +1,9 @@
 """
 The density and the kinematics of the components made of nodes (rings or
 shells along a radius, e.g. disks), each a set of traits (see traits),
-and the vertical equilibrium of disks.
+and the vertical equilibrium of thick disks. A thin disk has parts of its
+own (ThinDensity, ThinDiskTraitsKinematics), without what only a thick
+component has: its heights and its equilibrium.
 """
 
 import abc
@@ -20,15 +22,19 @@ __all__ = [
     'CentralEquilibrium',
     'ConeTraitsKinematics',
     'Density',
-    'DiskTraitsKinematics',
     'Equilibrium',
     'JeansEquilibrium',
     'KinematicTraits',
     'SelfGravitatingEquilibrium',
+    'ThickDiskTraitsKinematics',
+    'ThinDensity',
+    'ThinDiskTraitsKinematics',
     'cone_kinematics_parser',
     'density_parser',
-    'disk_kinematics_parser',
-    'equilibrium_parser'
+    'equilibrium_parser',
+    'thick_disk_kinematics_parser',
+    'thin_density_parser',
+    'thin_disk_kinematics_parser'
 ]
 
 
@@ -121,22 +127,54 @@ def _dump_traits(
     return [parser.dump(trait) for trait in value]
 
 
-class Density(Serializable):
+class ThinDensity(Serializable):
     """
-    The density of a component: its polar traits, the density per unit
-    area of its surface (the plane of a disk, seen face-on), and for a
-    thick component its height traits, the probability density of the
-    distance from the surface of each (see traits). What the density is
-    depends on the roles of the component: light for one that emits, the
-    optical depth for dust.
+    The density of a thin disk: its polar traits, the density per unit
+    area of its plane, seen face-on (see traits). What the density is
+    depends on the roles of the disk: light for one that emits.
 
     Parameters
     ----------
     ptraits : RPTrait or Sequence of RPTrait
         The polar traits (parameters 'pt_*').
-    htraits : RHTrait or Sequence of RHTrait, optional
-        The height traits, one for each polar trait (parameters 'ht_*');
-        a component without them is thin.
+
+    Raises
+    ------
+    ValueError
+        If there are no polar traits or too many.
+    """
+
+    def dump(self) -> dict[str, Any]:
+        return dict(ptraits=_dump_traits(traits.rpt_parser, self._ptraits))
+
+    def __init__(
+            self,
+            ptraits: traits.RPTrait | Sequence[traits.RPTrait]
+    ):
+        check_options(ThinDensity.__init__, locals())
+        self._ptraits = _polar_traits('ptraits', ptraits)
+
+    def ptraits(self) -> tuple[traits.RPTrait, ...]:
+        """Return the polar traits."""
+        return self._ptraits
+
+
+class Density(Serializable):
+    """
+    The density of a thick component (a thick disk, or a cone): its polar
+    traits, the density per unit area of its surface (the plane of a
+    disk, seen face-on), and its height traits, the probability density
+    of the distance from the surface of each (see traits). What the
+    density is depends on the roles of the component: light for one that
+    emits, the optical depth for dust. A thin disk has a density of its
+    own, without height traits (see ThinDensity).
+
+    Parameters
+    ----------
+    ptraits : RPTrait or Sequence of RPTrait
+        The polar traits (parameters 'pt_*').
+    htraits : RHTrait or Sequence of RHTrait
+        The height traits, one for each polar trait (parameters 'ht_*').
 
     Raises
     ------
@@ -146,34 +184,29 @@ class Density(Serializable):
     """
 
     def dump(self) -> dict[str, Any]:
-        info = dict(ptraits=_dump_traits(traits.rpt_parser, self._ptraits))
-        if self._htraits is not None:
-            info['htraits'] = _dump_traits(traits.rht_parser, self._htraits)
-        return info
+        return dict(
+            ptraits=_dump_traits(traits.rpt_parser, self._ptraits),
+            htraits=_dump_traits(traits.rht_parser, self._htraits))
 
     def __init__(
             self,
             ptraits: traits.RPTrait | Sequence[traits.RPTrait],
-            htraits: traits.RHTrait | Sequence[traits.RHTrait] | None = None
+            htraits: traits.RHTrait | Sequence[traits.RHTrait]
     ):
         check_options(Density.__init__, locals())
         self._ptraits = _polar_traits('ptraits', ptraits)
         self._htraits = _height_traits(
             'htraits', htraits, len(self._ptraits), 'ptraits')
-        if self._htraits is not None and None in self._htraits:
+        if None in self._htraits:
             raise ValueError("htraits cannot have empty items")
 
     def ptraits(self) -> tuple[traits.RPTrait, ...]:
         """Return the polar traits."""
         return self._ptraits
 
-    def htraits(self) -> tuple[traits.RHTrait, ...] | None:
-        """Return the height traits, if any."""
+    def htraits(self) -> tuple[traits.RHTrait, ...]:
+        """Return the height traits."""
         return self._htraits
-
-    def thick(self) -> bool:
-        """Check whether it has height traits."""
-        return self._htraits is not None
 
 
 # The directions of the dispersion of a vertical equilibrium (see
@@ -189,8 +222,9 @@ class KinematicTraits:
     traits add up, so motions combine; the rotation of a disk in the
     gravity of the galaxy is the velocity trait 'mass' (see
     traits.VPTraitMass). The traits of the kinematics of traits of disks,
-    cones and spheroids (see DiskTraitsKinematics, ConeTraitsKinematics
-    and spheroids.SpheroidTraitsKinematics).
+    cones and spheroids (see ThinDiskTraitsKinematics,
+    ThickDiskTraitsKinematics, ConeTraitsKinematics and
+    spheroids.SpheroidTraitsKinematics).
 
     Parameters
     ----------
@@ -276,12 +310,13 @@ class KinematicTraits:
 
 class Equilibrium(TypedSerializable, abc.ABC):
     """
-    The vertical equilibrium of a thick disk (see DiskTraitsKinematics):
-    the disk is held up against the gravity of its galaxy by its velocity
-    dispersion. Its thickness is that of its density (its density height
-    traits); the equilibrium gives the dispersion that holds it up,
-    sigma_eq(R), which adds to that of its dispersion traits in
-    quadrature, sigma = hypot(sigma_traits, sigma_eq), at every height
+    The vertical equilibrium of a thick disk (see
+    ThickDiskTraitsKinematics): the disk is held up against the gravity of
+    its galaxy by its velocity dispersion. Its thickness is that of its
+    density (its density height traits); the equilibrium gives the
+    dispersion that holds it up, sigma_eq(R), which adds to that of its
+    dispersion traits in quadrature, sigma = hypot(sigma_traits,
+    sigma_eq), at every height
     (the dispersion of the midplane: isothermal in z). It is evaluated at
     the subnodes of the disk (its rings), from the azimuthal means of its
     traits, and interpolated linearly between them. The dispersion of the
@@ -421,19 +456,60 @@ equilibrium_parser = TypedParser(Equilibrium, [
     JeansEquilibrium])
 
 
-class DiskTraitsKinematics(TypedSerializable):
+class ThinDiskTraitsKinematics(TypedSerializable):
     """
-    How a disk moves, as its traits give (see KinematicTraits), and with
-    a vertical equilibrium, the dispersion that holds a thick disk up
-    against the gravity of its galaxy (see Equilibrium). A disk that
-    emits lines into a spectral cube needs kinematics.
+    How a thin disk moves, as its traits give (see KinematicTraits): its
+    velocity and dispersion polar traits, in its plane. A disk that emits
+    lines into a spectral cube needs kinematics.
+
+    Parameters
+    ----------
+    vptraits, dptraits :
+        The traits (see KinematicTraits).
+
+    Raises
+    ------
+    ValueError
+        If the traits are not valid (see KinematicTraits).
+    """
+
+    @staticmethod
+    def type() -> str:
+        return 'traits'
+
+    def dump(self) -> dict[str, Any]:
+        return dict(type=self.type()) | self._traits.dump()
+
+    def __init__(
+            self,
+            vptraits: traits.VPTrait | Sequence[traits.VPTrait],
+            dptraits: traits.DPTrait | Sequence[traits.DPTrait]
+    ):
+        check_options(ThinDiskTraitsKinematics.__init__, locals())
+        self._traits = KinematicTraits(vptraits, dptraits)
+
+    def vptraits(self) -> tuple[traits.VPTrait, ...]:
+        """Return the velocity polar traits."""
+        return self._traits.vptraits()
+
+    def dptraits(self) -> tuple[traits.DPTrait, ...]:
+        """Return the velocity dispersion polar traits."""
+        return self._traits.dptraits()
+
+
+class ThickDiskTraitsKinematics(TypedSerializable):
+    """
+    How a thick disk moves, as its traits give (see KinematicTraits),
+    and with a vertical equilibrium, the dispersion that holds it up
+    against the gravity of its galaxy (see Equilibrium). A disk that emits
+    lines into a spectral cube needs kinematics.
 
     Parameters
     ----------
     vptraits, dptraits, vhtraits, dhtraits : optional
         The traits (see KinematicTraits).
     equilibrium : Equilibrium, optional
-        The vertical equilibrium of a thick disk; none by default.
+        The vertical equilibrium of the disk; none by default.
 
     Raises
     ------
@@ -461,7 +537,7 @@ class DiskTraitsKinematics(TypedSerializable):
             traits.DHTrait | Sequence[traits.DHTrait | None] | None = None,
             equilibrium: Equilibrium | None = None
     ):
-        check_options(DiskTraitsKinematics.__init__, locals())
+        check_options(ThickDiskTraitsKinematics.__init__, locals())
         self._traits = KinematicTraits(vptraits, dptraits, vhtraits, dhtraits)
         self._equilibrium = equilibrium
 
@@ -540,8 +616,13 @@ class ConeTraitsKinematics(TypedSerializable):
 
 density_parser = BasicParser(Density)
 
-disk_kinematics_parser = TypedParser(
-    DiskTraitsKinematics, [DiskTraitsKinematics])
+thin_density_parser = BasicParser(ThinDensity)
+
+thin_disk_kinematics_parser = TypedParser(
+    ThinDiskTraitsKinematics, [ThinDiskTraitsKinematics])
+
+thick_disk_kinematics_parser = TypedParser(
+    ThickDiskTraitsKinematics, [ThickDiskTraitsKinematics])
 
 cone_kinematics_parser = TypedParser(
     ConeTraitsKinematics, [ConeTraitsKinematics])

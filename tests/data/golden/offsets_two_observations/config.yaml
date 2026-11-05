@@ -1,10 +1,10 @@
 # offsets_two_observations: One galaxy in a cube and in moment maps whose reference pixels are 1.4 arcsec apart on the sky (aligned), the maps with fitted offsets of position and velocity.
 # (written by make_golden.py; do not edit)
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thin_disk
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]

@@ -30,7 +30,7 @@ def config(driver, observable, weights, component=None):
     rotation curve, with the given weights.
     """
     gas = component or dict(
-        type='disk', name='gas', rnodes=list(range(0, 12)),
+        type='thin_disk', name='gas', rnodes=list(range(0, 12)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             type='traits', vptraits=dict(type='uniform', direction='tan'),

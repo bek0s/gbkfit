@@ -69,12 +69,14 @@ def test_a_configuration_that_cannot_be_read_has_an_error(tmp_path):
     filename = tmp_path / 'config.yaml'
     assert check(str(filename), {str(filename): 'galaxies: [\n'}) \
         .problems[0].severity == 'error'
+    version = project.FORMAT_VERSION
+    message = (
+        f"the configuration has no version: 'version: {version}' for the "
+        f"format of this gbkfit (gbkfit-cli migrate rewrites configurations "
+        f"of older ones)")
     assert check(str(filename), {str(filename): 'fitter: {}\n'}).problems \
-        == [Problem('error', [], "the configuration has no version: 'version: "
-                                 "4' for the format of this gbkfit (gbkfit-cli "
-                                 "migrate rewrites configurations of older "
-                                 "ones)")]
-    text = 'version: 4\nfitter: {}\n'
+        == [Problem('error', [], message)]
+    text = f'version: {version}\nfitter: {{}}\n'
     assert check(str(filename), {str(filename): text}).problems \
         == [Problem('error', [], "the configuration needs the sections "
                                  "['galaxies', 'observations', 'params']")]

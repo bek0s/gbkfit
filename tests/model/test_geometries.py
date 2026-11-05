@@ -35,7 +35,7 @@ TRAIT_PROPERTIES = dict(
 
 
 def disk(name, **options):
-    return dict(type='disk', name=name, **PARTS, **options)
+    return dict(type='thin_disk', name=name, **PARTS, **options)
 
 
 def test_a_tied_geometry_is_the_geometry_it_is_tied_to(
@@ -61,7 +61,7 @@ def test_a_tied_geometry_is_the_geometry_it_is_tied_to(
 
 
 # A gas disk, a biconical outflow along its axis and a nuclear point
-GAS = dict(type='disk', name='gas', rnodes=RNODES, **PARTS)
+GAS = dict(type='thin_disk', name='gas', rnodes=RNODES, **PARTS)
 OUTFLOW = dict(
     type='cone', name='outflow', rnodes=[0, 1, 3, 6],
     density=dict(

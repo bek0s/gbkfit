@@ -76,8 +76,7 @@ class Cone(Component):
     ValueError
         If the options are not valid (e.g. the shells), the cone does not
         take one of the traits, or its parts and roles do not go together
-        (e.g. lines without kinematics, or a density without height
-        traits).
+        (e.g. lines without kinematics).
     """
 
     @staticmethod

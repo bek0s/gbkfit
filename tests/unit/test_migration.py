@@ -5,6 +5,7 @@ migration rewrites those of older ones (files, with their comments, and
 projects) and leaves the current ones as they are.
 """
 
+import copy
 import importlib
 import json
 import subprocess
@@ -20,6 +21,9 @@ from gbkfit.observation import observable_parser
 
 yaml = ruamel.yaml.YAML(typ='safe')
 
+# The current version of the format
+VERSION = project.FORMAT_VERSION
+
 OBSERVATION = dict(
     type='sky', name='kmos', line_of_sight=dict(type='flat'),
     observable=dict(
@@ -28,9 +32,10 @@ OBSERVATION = dict(
 
 
 @pytest.mark.parametrize('version, message', [
-    (None, "has no version: 'version: 4'"),
-    (3, "is of version 3 of the format, not 4"),
-    (5, "is of version 5 of the format, not 4")])
+    (None, f"has no version: 'version: {VERSION}'"),
+    (3, f"is of version 3 of the format, not {VERSION}"),
+    (VERSION + 1,
+     f"is of version {VERSION + 1} of the format, not {VERSION}")])
 def test_configurations_of_other_versions_are_refused(version, message):
     config = dict(galaxies=[], observations=[], params={})
     if version is not None:
@@ -43,7 +48,8 @@ def test_configurations_of_other_versions_are_refused(version, message):
 @pytest.mark.parametrize('config, from_version, message', [
     (dict(), None, "has no version"),
     (dict(version=2), 1, "is of version 2; not 1"),
-    (dict(version=5), None, "versions of the format are 1 to 4")])
+    (dict(version=VERSION + 1), None,
+     f"versions of the format are 1 to {VERSION}")])
 def test_the_version_of_a_migration_must_be_known(
         config, from_version, message):
     with pytest.raises(ConfigError, match=message):
@@ -67,7 +73,7 @@ def test_a_file_is_migrated_in_place_with_its_comments(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "kmos_calibration -> kmos_flux_scale" in result.stderr
     assert filename.read_text() == (
-        "version: 4\n"
+        f"version: {VERSION}\n"
         "observations:\n"
         "- type: sky\n"
         "  name: kmos\n"
@@ -128,14 +134,17 @@ def test_a_project_of_the_current_version_is_left_as_it_is(tmp_path):
 
 
 def test_the_old_disk_types_are_migrated():
+    thick = dict(ptraits=dict(type='exponential'), htraits=dict(type='one'))
     components = [
         dict(type='smdisk', name='a'),
-        dict(type='mcdisk', name='b', cflux=1e-3, seed=2),
+        dict(type='mcdisk', name='b', cflux=1e-3, seed=2, density=thick),
         dict(type='smcone', name='c')]
     migration.migrate(dict(galaxies=[dict(components=components)]), 1)
-    assert [c['type'] for c in components] == ['disk', 'disk', 'cone']
+    assert [c['type'] for c in components] == [
+        'thin_disk', 'thick_disk', 'cone']
     assert components[1] == dict(
-        type='disk', name='b', clouds=dict(cflux=1e-3, seed=2))
+        type='thick_disk', name='b', clouds=dict(cflux=1e-3, seed=2),
+        density=thick)
 
 
 @pytest.mark.parametrize('components, owns', [
@@ -364,7 +373,7 @@ def test_parallel_evaluations_are_migrated_to_workers_of_threads():
 def test_rings_from_the_centre_lose_rnmin():
     disk = dict(type='disk', rnmin=0, rnmax=4, rnsep=1)
     migration.migrate(dict(galaxies=[dict(components=[disk])]), 2)
-    assert disk == dict(type='disk', rnodes=dict(max=4, sep=1))
+    assert disk == dict(type='thin_disk', rnodes=dict(max=4, sep=1))
     hole = dict(type='disk', rnmin=1, rnmax=4, rnsep=1)
     changes = migration.migrate(
         dict(galaxies=[dict(components=[hole])]), 2)
@@ -407,7 +416,7 @@ SHARED = [
 
 def test_shared_geometries_are_migrated_to_ties():
     config = dict(
-        galaxies=[dict(components=SHARED)],
+        galaxies=[dict(components=copy.deepcopy(SHARED))],
         params=dict(properties=dict(
             xpos=0.5, ypos=0, vsys=10, posa=dict(value=30, min=0, max=90),
             incl=60, agn_flux='xpos * 2')))
@@ -477,20 +486,23 @@ def test_a_geometry_shares_only_the_parameters_it_was_given():
 def test_shared_geometries_without_params_are_migrated_by_hand():
     # A galaxy of a project, whose params are other pieces; the geometry
     # of a galaxy of one component without a name changes nothing
-    changes = migration.migrate(dict(galaxies=[dict(components=SHARED)]), 3)
+    changes = migration.migrate(
+        dict(galaxies=[dict(components=copy.deepcopy(SHARED))]), 3)
     by_hand = [c.message for c in changes if c.message.startswith('by hand')]
     assert "by hand: rename the parameter posa to gas_posa, ion_posa: " \
         "gas_posa" in by_hand
-    alone = dict(galaxies=[dict(components=[DISK])])
+    alone = dict(galaxies=[dict(components=[copy.deepcopy(DISK)])])
     assert migration.migrate(alone, 3) == [
-        migration.Change(['version'], "3 -> 4")]
+        migration.Change(
+            ['galaxies', 0, 'components', 0], "type disk -> thin_disk"),
+        migration.Change(['version'], f"3 -> {VERSION}")]
 
 
 def test_own_geometries_are_migrated_to_their_components():
-    disk = DISK | dict(name='gas', geometry='own', tilted=True)
+    disk = copy.deepcopy(DISK) | dict(name='gas', geometry='own', tilted=True)
     config = dict(galaxies=[dict(components=[disk])])
     migration.migrate(config, 3)
-    assert disk == DISK | dict(name='gas', tilted=True)
+    assert disk == DISK | dict(type='thin_disk', name='gas', tilted=True)
 
 
 @pytest.mark.parametrize('old, new', [
@@ -501,7 +513,7 @@ def test_rings_evenly_spaced_are_migrated_to_one_option(old, new):
     spheroid = dict(type='spheroid', kinematics=dict(type='traits', **old))
     config = dict(galaxies=[dict(components=[disk, spheroid])])
     migration.migrate(config, 3)
-    assert disk == dict(type='disk', name='gas', rnodes=new, rstep=0.5)
+    assert disk == dict(type='thin_disk', name='gas', rnodes=new, rstep=0.5)
     assert list(disk) == ['type', 'name', 'rnodes', 'rstep']
     assert spheroid['kinematics'] == dict(type='traits', rnodes=new)
 
@@ -551,3 +563,66 @@ def test_the_galaxies_of_a_project_have_their_params_renamed_by_hand(
     assert migration.Change([], (
         "by hand: rename the parameter posa to gas_posa")) in \
         changes['galaxies/gas.yaml']
+
+
+THIN_DENSITY = dict(ptraits=dict(type='exponential'))
+THICK_DENSITY = THIN_DENSITY | dict(htraits=dict(type='sech2', zmax=8))
+
+
+@pytest.mark.parametrize('density, new', [
+    (THIN_DENSITY, 'thin_disk'),
+    (THIN_DENSITY | dict(htraits=None), 'thin_disk'),
+    (THICK_DENSITY, 'thick_disk')])
+def test_disks_are_thin_or_thick_by_their_type(density, new):
+    disk = dict(type='disk', name='gas', density=copy.deepcopy(density))
+    mass = dict(type='disk', name='gas', surface=dict(type='exponential'))
+    config = dict(galaxies=[dict(components=[disk], mass=[mass])])
+    changes = migration.migrate(config, 4)
+    expected = THICK_DENSITY if new == 'thick_disk' else THIN_DENSITY
+    assert disk == dict(type=new, name='gas', density=expected)
+    # (the mass disk is of another family)
+    assert mass['type'] == 'disk'
+    assert not any(c.message.startswith('by hand') for c in changes)
+
+
+def test_a_thin_disk_loses_the_options_of_a_thick_disk_that_are_none():
+    disk = dict(
+        type='disk', density=copy.deepcopy(THIN_DENSITY), zptraits=[],
+        opacity=None, kinematics=dict(
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
+            dptraits=dict(type='uniform'), vhtraits=None, equilibrium=None))
+    config = dict(galaxies=[dict(components=[disk])])
+    changes = migration.migrate(config, 4)
+    assert disk == dict(
+        type='thin_disk', density=THIN_DENSITY, kinematics=dict(
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
+            dptraits=dict(type='uniform')))
+    assert not any(c.message.startswith('by hand') for c in changes)
+    from gbkfit.model import galaxy_parser
+    galaxy_parser.load(config['galaxies'][0] | dict(components=[
+        disk | dict(rnodes=[0, 1, 2], emission=dict(type='lines'))]))
+
+
+def test_the_options_of_a_thick_disk_on_a_thin_one_are_changed_by_hand():
+    # (they were errors: a disk with them needed density height traits)
+    disk = dict(
+        type='disk', density=copy.deepcopy(THIN_DENSITY),
+        opacity=dict(type='dust'), clouds=dict(cflux=1e-3),
+        kinematics=dict(
+            type='traits', vptraits=dict(type='uniform', direction='tan'),
+            dptraits=dict(type='uniform'),
+            equilibrium=dict(type='central')))
+    changes = migration.migrate(
+        dict(galaxies=[dict(name='a', components=[disk])]), 4)
+    assert disk['type'] == 'thin_disk'
+    by_hand = [
+        (c.path, c.message.split(':')[1]) for c in changes
+        if c.message.startswith('by hand')]
+    path = ['galaxies', 0, 'components', 0]
+    assert by_hand == [
+        (path, ' a thin disk takes no opacity'),
+        (path, ' a thin disk takes no clouds'),
+        (path + ['kinematics'], ' a thin disk takes no equilibrium')]
+    # (left as they were)
+    assert disk['opacity'] == dict(type='dust')
+    assert disk['kinematics']['equilibrium'] == dict(type='central')

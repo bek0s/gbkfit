@@ -42,7 +42,7 @@ THICK_PA, HS, ZMAX, THICK_SIG = 30.0, 1.0, 6.0, 40.0
 def _disk(**options):
     """A disk of rings to 40 arcsec of arctan rotation that emits a line."""
     return dict(
-        type='disk', loose=False, tilted=False,
+        type='thin_disk', loose=False, tilted=False,
         rnodes=list(np.arange(0, 41, 1.0)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
@@ -196,7 +196,7 @@ def test_a_thick_disk_in_a_cube(driver, incl):
     # the line of sight (of 0.1 arcsec), its pixels split 3 x 3
     cube = _cube(
         driver,
-        dict(components=[_disk(density=dict(
+        dict(components=[_disk(type='thick_disk', density=dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=ZMAX)))]),
         dict(type='pixel_spectra', size=[N, N], step=[STEP, STEP],

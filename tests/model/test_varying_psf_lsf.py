@@ -14,7 +14,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 
 
 GALAXY = dict(components=[dict(
-    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
+    type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(
         type='traits',

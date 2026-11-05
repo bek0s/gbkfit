@@ -57,7 +57,7 @@ def thin_disk(trait, rnodes, **options):
     is the given one.
     """
     return dict(
-        type='disk', rnodes=rnodes, **options,
+        type='thin_disk', rnodes=rnodes, **options,
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(type='traits',
                         vptraits=trait, dptraits=dict(type='uniform')),

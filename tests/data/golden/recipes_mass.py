@@ -28,7 +28,7 @@ def _disk(
         rings: dict[str, Any] = _RINGS, **options: Any
 ) -> dict[str, Any]:
     """A thin exponential disk that emits lines, of the given traits."""
-    return dict(type='disk', name=name) | rings | dict(
+    return dict(type='thin_disk', name=name) | rings | dict(
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             type='traits',
@@ -40,7 +40,8 @@ def _thick(disk: dict[str, Any], **kinematics: Any) -> dict[str, Any]:
     """The disk, thick (sech2 heights), with more options of kinematics."""
     density = disk['density'] | dict(htraits=dict(type='sech2', zmax=6))
     return disk | dict(
-        density=density, kinematics=disk['kinematics'] | kinematics)
+        type='thick_disk', density=density,
+        kinematics=disk['kinematics'] | kinematics)
 
 
 _INSTRUMENT = dict(
@@ -306,7 +307,7 @@ def _c6_gas() -> dict[str, Any]:
 
 
 _C6_DUST = dict(
-    type='disk', name='dust', loose=False, tilted=False,
+    type='thick_disk', name='dust', loose=False, tilted=False,
     rnodes=list(range(0, 11)),
     density=dict(
         ptraits=dict(type='exponential'),

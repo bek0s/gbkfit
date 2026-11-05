@@ -17,7 +17,7 @@ def image_case(driver, observable, **component):
     with the given options (an exponential density by default).
     """
     disk = dict(
-        type='disk', density=dict(ptraits=EXPONENTIAL), emission=BAND)
+        type='thin_disk', density=dict(ptraits=EXPONENTIAL), emission=BAND)
     return dict(
         driver=dict(type=driver.type()),
         observable=observable,
@@ -34,7 +34,7 @@ def spectral_cube_case(driver, **component):
             spectral=dict(size=41, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
-            type='disk',
+            type='thin_disk',
             rnodes=list(range(0, 12)),
             density=dict(ptraits=EXPONENTIAL),
             kinematics=dict(
@@ -65,7 +65,7 @@ def thick_spectral_cube_case(driver, disk, rota, psf=None):
     depth axis rotated by rota, and with the given PSF.
     """
     component = dict(
-        type='disk', loose=False, tilted=False,
+        type='thick_disk', loose=False, tilted=False,
         rnodes=list(range(0, 16, 2)),
         density=dict(ptraits=EXPONENTIAL, htraits=dict(type='sech2', zmax=8)),
         kinematics=dict(

@@ -24,7 +24,7 @@ from gbkfit.params import (
 
 
 GALAXY = dict(components=[dict(
-    type='disk', loose=False, tilted=False,
+    type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))])
@@ -312,7 +312,7 @@ def test_an_observation_without_data_is_an_error(driver):
 
 
 KINEMATICS = dict(components=[dict(
-    type='disk', loose=False, tilted=False,
+    type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 30)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(

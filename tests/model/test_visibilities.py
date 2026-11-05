@@ -21,7 +21,7 @@ C = 299792458.0
 HI = 1420.405752e6
 
 DISK = dict(components=[dict(
-    type='disk', loose=False, tilted=False,
+    type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(

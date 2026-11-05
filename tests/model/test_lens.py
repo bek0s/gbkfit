@@ -20,7 +20,7 @@ from gbkfit.observation import (
 
 
 DISK = dict(
-    type='disk', loose=False, tilted=False,
+    type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(ptraits=dict(type='exponential')))
 

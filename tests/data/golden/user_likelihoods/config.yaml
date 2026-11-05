@@ -1,10 +1,10 @@
 # user_likelihoods: Three observations of user likelihoods of parameters: a cube and moment maps of residuals (Cauchy and Student's t noise), and moment maps of a log-likelihood (Gaussian noise of a free jitter).
 # (written by make_golden.py; do not edit)
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thin_disk
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]

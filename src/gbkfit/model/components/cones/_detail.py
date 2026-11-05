@@ -127,10 +127,6 @@ def make_cone(
         traits (see CONE_TRAITS), or the parts and roles do not go
         together (e.g. lines without kinematics).
     """
-    if not density.thick():
-        raise ValueError(
-            "a cone needs density height traits: its profile across its "
-            "walls")
     if isinstance(emission, LineEmission) and kinematics is None:
         raise ValueError("a cone that emits lines needs kinematics")
     if opacity is not None and not isinstance(opacity, DustOpacity):

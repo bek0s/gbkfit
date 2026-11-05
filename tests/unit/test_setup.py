@@ -12,7 +12,7 @@ from gbkfit.objective import Objective
 
 
 GALAXY = dict(components=[dict(
-    type='disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
+    type='thin_disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))])
 
@@ -198,7 +198,7 @@ def test_observations_use_the_drivers_of_the_configuration():
 # A galaxy with mass, seen as a spectral cube
 MASSIVE = dict(
     components=[dict(
-        type='disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
+        type='thin_disk', loose=False, tilted=False, rnodes=dict(max=4, sep=1),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             type='traits',

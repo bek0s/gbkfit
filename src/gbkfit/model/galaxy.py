@@ -21,7 +21,7 @@ from .components._transfer import TransferMember
 from .components._units import DataUnit
 from .components.base import Component, DepthAxis, OpacityCubes
 from .components.cones import Cone
-from .components.disks import Disk
+from .components.disks import ThickDisk, ThinDisk
 from .components.lines import Band
 from .components.particles import Particles
 from .components.points import Point
@@ -40,7 +40,8 @@ __all__ = [
 
 
 component_parser = TypedParser(Component, [
-    Disk,
+    ThinDisk,
+    ThickDisk,
     Cone,
     Spheroid,
     Point,

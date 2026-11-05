@@ -1,10 +1,10 @@
 # warped_disk: A loose and tilted disk (centre, systemic velocity, position angle and inclination of each ring), with a radial harmonic flow, a vertical flow and an anisotropic dispersion, in Gauss-Hermite maps (h3, h4); the disk fills the maps (fits of spectra of noise alone are wild).
 # (written by make_golden.py; do not edit)
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thin_disk
     loose: true
     tilted: true
     rnodes: [0, 4, 8, 12, 16]

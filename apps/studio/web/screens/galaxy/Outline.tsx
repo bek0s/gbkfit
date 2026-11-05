@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import type { Defs } from '../../components/SchemaForm';
 import { DropMenu } from '../../components/ui/overlays';
-import { COMPONENT_STARTS, GALAXY_PARTS, isThick, partsOf, type Part } from './catalogue';
+import { COMPONENT_ORDER, COMPONENT_STARTS, GALAXY_PARTS, partsOf, typeLabel, type Part } from './catalogue';
 import type { Problem } from './draft';
 import { asList, componentName, getAt, isObject, lineList, lineName, ringRadii, startsWith, type Options, type Path } from './options';
 import { typesOf } from './schema';
@@ -82,17 +82,19 @@ export function Outline(props: OutlineProps) {
   );
 }
 
-// The menu that adds a component of a type
+// The menu that adds a component of a type (the common ones first)
 function AddComponent({ defs, onAdd }: { defs: Defs | undefined; onAdd: (type: string) => void }) {
+  const rank = (type: string) => (COMPONENT_ORDER.includes(type) ? COMPONENT_ORDER.indexOf(type) : COMPONENT_ORDER.length);
+  const types = typesOf(defs, 'component').sort((a, b) => rank(a.value) - rank(b.value));
   return (
     <DropMenu
       label="Add a component"
       width={320}
       at="end"
-      entries={typesOf(defs, 'component').map(({ value, description }) => {
+      entries={types.map(({ value, label, description }) => {
         const ready = COMPONENT_STARTS[value] !== undefined;
         return {
-          label: value,
+          label,
           description: ready ? description : 'Made of a file of particles: give it in the configuration.',
           disabled: !ready,
           onClick: () => onAdd(value),
@@ -152,7 +154,7 @@ function ComponentGroup({
             {name}
           </span>
         )}
-        <span className="gx-type">{String(component.type)}</span>
+        <span className="gx-type">{typeLabel(component.type)}</span>
         <DropMenu
           label={`The actions of ${name}`}
           width={220}
@@ -254,10 +256,8 @@ export function glanceOf(part: Part, owner: Options): string {
   }
   if (part.key === 'mass') return asList(value).map((m) => String(m.name ?? m.type)).join(', ');
   const items = asList(value);
-  const text = items
+  return items
     .map((item) => [item.type, typeof item.direction === 'string' ? item.direction : null].filter(Boolean).join(' '))
     .join(', ')
     .replaceAll('_', ' ');
-  if (part.key === 'density' && isThick(owner)) return `${text} · thick`;
-  return text;
 }

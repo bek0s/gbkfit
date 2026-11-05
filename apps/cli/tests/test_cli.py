@@ -36,7 +36,7 @@ def test_eval_writes_a_run(tmp_path):
         version=FORMAT_VERSION,
         driver=dict(type='host'),
         galaxies=[dict(components=[dict(
-            type='disk', loose=False, tilted=False, rnodes=list(range(8)),
+            type='thin_disk', loose=False, tilted=False, rnodes=list(range(8)),
             density=dict(ptraits=dict(type='exponential')),
             emission=dict(type='band'))])],
         observations=[dict(

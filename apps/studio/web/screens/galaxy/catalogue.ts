@@ -7,7 +7,7 @@
 // parameters its option makes (see Param.owner).
 import { asList, getAt, isObject, type Options, type Path } from './options';
 
-export type ComponentType = 'disk' | 'cone' | 'spheroid' | 'point' | 'particles';
+export type ComponentType = 'thin_disk' | 'thick_disk' | 'cone' | 'spheroid' | 'point' | 'particles';
 
 export interface Part {
   key: string;
@@ -27,48 +27,66 @@ export interface Part {
   // Why it cannot be added to a component (or the galaxy) as it is, if not
   needs?: (owner: Options, galaxy: Options) => string | null;
   // The height traits paired with its items (one each; e.g. the height
-  // traits of the density), on a thick disk
+  // traits of the density), of a thick disk or a cone
   heights?: { option: Path; family: string; title: string; nullable: boolean };
 }
 
-// A disk is thick if its density has height traits
-export function isThick(component: Options): boolean {
-  return asList(getAt(component, ['density', 'htraits'])).length > 0;
+// The types of the disks: thin (its light in its plane) or thick (its
+// density has a height, a trait for each density trait)
+export const DISK_TYPES = ['thin_disk', 'thick_disk'];
+
+export function isDisk(type: unknown): boolean {
+  return DISK_TYPES.includes(String(type));
 }
 
-const needsThick = (owner: Options) => (isThick(owner) ? null : 'Needs a thick disk: give its density a height first.');
+export function isThick(component: Options): boolean {
+  return component.type === 'thick_disk';
+}
 
-const DISK: Part[] = [
-  { key: 'geometry', title: 'Geometry', hint: 'Its rings, centre and orientation', option: [] },
-  {
-    key: 'density',
-    title: 'Density',
-    hint: 'How its light is spread over its plane (and its height)',
-    option: ['density', 'ptraits'],
-    family: 'rpt',
-    heights: { option: ['density', 'htraits'], family: 'rht', title: 'Height', nullable: false },
-  },
-  {
-    key: 'motions',
-    title: 'Motions',
-    hint: 'Its velocities: rotation, inflow, outflow, ...',
-    option: ['kinematics', 'vptraits'],
-    family: 'vpt',
-    heights: { option: ['kinematics', 'vhtraits'], family: 'vht', title: 'Height', nullable: true },
-  },
-  {
-    key: 'dispersion',
-    title: 'Dispersion',
-    hint: 'The spread of its velocities',
-    option: ['kinematics', 'dptraits'],
-    family: 'dpt',
-    heights: { option: ['kinematics', 'dhtraits'], family: 'dht', title: 'Height', nullable: true },
-  },
-  { key: 'warps', title: 'Warps', hint: 'Its plane bent up and down', option: ['zptraits'], family: 'zpt', optional: true, start: [{ type: 'nw_harmonic', order: 1, zmax: 6 }], needs: needsThick },
-  { key: 'selections', title: 'Selections', hint: 'Only some of it: a range of radii or azimuths', option: ['sptraits'], family: 'spt', optional: true, start: [{ type: 'rrange' }] },
-  { key: 'light', title: 'Light', hint: 'What it emits: lines, or light in bands', option: ['emission'], typed: 'emission' },
-  { key: 'opacity', title: 'Opacity', hint: 'Dust, or the absorption of its own lines', option: ['opacity'], typed: 'opacity', optional: true, start: { type: 'dust' }, needs: needsThick },
-];
+// The height a thick disk gives each of its density traits at first
+export const HEIGHT_START: Options = { type: 'sech2', zmax: 6 };
+
+// The options only a thick disk has: of the disk, and of its density and
+// kinematics (a thick disk made thin loses them)
+export const THICK_OPTIONS: Path[] = [['opacity'], ['zptraits'], ['clouds'], ['density', 'htraits'], ['kinematics', 'vhtraits'], ['kinematics', 'dhtraits'], ['kinematics', 'equilibrium']];
+
+// The parts of a thin or a thick disk: those of a thick one with their
+// heights; on a thin one, warps and opacity are shown, but need it thick
+function diskParts(thick: boolean): Part[] {
+  const needsThick = thick ? undefined : () => 'Needs a thick disk: make it thick in its density.';
+  const height = (option: Path, family: string, nullable: boolean) => (thick ? { option, family, title: 'Height', nullable } : undefined);
+  return [
+    { key: 'geometry', title: 'Geometry', hint: 'Its rings, centre and orientation', option: [] },
+    {
+      key: 'density',
+      title: 'Density',
+      hint: thick ? 'How its light is spread over its plane, and its height' : 'How its light is spread over its plane',
+      option: ['density', 'ptraits'],
+      family: 'rpt',
+      heights: height(['density', 'htraits'], 'rht', false),
+    },
+    {
+      key: 'motions',
+      title: 'Motions',
+      hint: 'Its velocities: rotation, inflow, outflow, ...',
+      option: ['kinematics', 'vptraits'],
+      family: 'vpt',
+      heights: height(['kinematics', 'vhtraits'], 'vht', true),
+    },
+    {
+      key: 'dispersion',
+      title: 'Dispersion',
+      hint: 'The spread of its velocities',
+      option: ['kinematics', 'dptraits'],
+      family: 'dpt',
+      heights: height(['kinematics', 'dhtraits'], 'dht', true),
+    },
+    { key: 'warps', title: 'Warps', hint: 'Its plane bent up and down', option: ['zptraits'], family: 'zpt', optional: true, start: [{ type: 'nw_harmonic', order: 1, zmax: 6 }], needs: needsThick },
+    { key: 'selections', title: 'Selections', hint: 'Only some of it: a range of radii or azimuths', option: ['sptraits'], family: 'spt', optional: true, start: [{ type: 'rrange' }] },
+    { key: 'light', title: 'Light', hint: 'What it emits: lines, or light in bands', option: ['emission'], typed: 'emission' },
+    { key: 'opacity', title: 'Opacity', hint: 'Dust, or the absorption of its own lines', option: ['opacity'], typed: 'opacity', optional: true, start: { type: 'dust' }, needs: needsThick },
+  ];
+}
 
 const CONE: Part[] = [
   { key: 'geometry', title: 'Geometry', hint: 'Its shells, apex and axis', option: [] },
@@ -100,7 +118,14 @@ const POINT: Part[] = [
   { key: 'light', title: 'Light', hint: 'What it emits', option: ['emission'], typed: 'emission' },
 ];
 
-export const PARTS: Record<string, Part[]> = { disk: DISK, cone: CONE, spheroid: SPHEROID, point: POINT, particles: POINT };
+export const PARTS: Record<string, Part[]> = {
+  thin_disk: diskParts(false),
+  thick_disk: diskParts(true),
+  cone: CONE,
+  spheroid: SPHEROID,
+  point: POINT,
+  particles: POINT,
+};
 
 export const GALAXY_PARTS: Part[] = [
   {
@@ -138,15 +163,32 @@ export function partsOf(component: Options | undefined): Part[] {
   return PARTS[String(component?.type ?? '')] ?? [];
 }
 
+// The order of the types of components, to add one (others after them)
+export const COMPONENT_ORDER = ['thin_disk', 'thick_disk', 'cone', 'spheroid', 'point', 'particles'];
+
+// The name a new component of a type is given (made unique): a disk is a
+// disk, thin or thick
+export function nameBase(type: string): string {
+  return isDisk(type) ? 'disk' : type;
+}
+
+// A type of component in words (e.g. 'thick disk')
+export function typeLabel(type: unknown): string {
+  return String(type ?? '').replaceAll('_', ' ');
+}
+
 // What each type of component starts with: the least that shows (light,
 // and of a disk or cone of lines, its motions)
+const DISK_START: Options = {
+  rnodes: { max: 16, sep: 2 },
+  density: { ptraits: { type: 'exponential' } },
+  kinematics: { type: 'traits', vptraits: { type: 'arctan', direction: 'tan' }, dptraits: { type: 'uniform' } },
+  emission: { type: 'lines' },
+};
+
 export const COMPONENT_STARTS: Record<string, Options> = {
-  disk: {
-    rnodes: { max: 16, sep: 2 },
-    density: { ptraits: { type: 'exponential' } },
-    kinematics: { type: 'traits', vptraits: { type: 'arctan', direction: 'tan' }, dptraits: { type: 'uniform' } },
-    emission: { type: 'lines' },
-  },
+  thin_disk: DISK_START,
+  thick_disk: { ...DISK_START, density: { ptraits: { type: 'exponential' }, htraits: HEIGHT_START } },
   cone: {
     rnodes: { max: 6, sep: 1 },
     density: { ptraits: { type: 'uniform' }, htraits: { type: 'gauss', zmax: 2 } },

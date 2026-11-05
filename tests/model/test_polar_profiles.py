@@ -42,7 +42,7 @@ def face_on_disk(driver, evaluate_cases, key, trait):
             spectral=dict(size=61, step=5, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
-            type='disk', loose=False, tilted=False,
+            type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 10)), density=density,
             kinematics=kinematics, emission=dict(type='lines'))]))
     properties = dict(
@@ -69,7 +69,7 @@ def map_component(ptraits):
     """A thin disk of the given density polar traits."""
     from gbkfit.model import component_parser
     return component_parser.load(dict(
-        type='disk', loose=False, tilted=False, rnodes=list(range(0, 10)),
+        type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 10)),
         density=dict(ptraits=ptraits),
         kinematics=dict(
             type='traits',

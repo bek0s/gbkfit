@@ -1,10 +1,10 @@
 # equilibrium_heights_mond: A thick gas disk held up by the Jeans vertical equilibrium, rotating at each height in the gravity of its mass (a stellar bulge, and a disk that follows the gas) in MOND (gravity_a0); a small cube.
 # (written by make_golden.py; do not edit)
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thick_disk
     name: gas
     loose: false
     tilted: false

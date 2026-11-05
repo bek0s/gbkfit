@@ -45,7 +45,7 @@ dataset (data + errors + mask, on a grid or in regions)
 observation = observable + line of sight + foreground (lens) + instrument
    |                (PSF, LSF, primary beam)
    |   sees one or more
-galaxy = components (disk, cone, spheroid, point, particles)
+galaxy = components (thin/thick disk, cone, spheroid, point, particles)
          + mass model + gravity law + distance
    |
 objective = observations x likelihood (noise model)  --> fitter
@@ -60,7 +60,8 @@ objective = observations x likelihood (noise model)  --> fitter
 ## Features
 
 - **Components:**
-  - Thin and thick disks: smooth, or made of clouds.
+  - Thin disks, and thick disks (`thin_disk`, `thick_disk`): a thick
+    disk is smooth, or made of clouds.
   - Cones (outflows).
   - Spheroids: a profile, kinematics by traits, isotropic or anisotropic
     Jeans, or Schwarzschild orbits.

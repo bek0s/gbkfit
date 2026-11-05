@@ -19,7 +19,7 @@ from gbkfit.params import ParamSpace
 
 
 GALAXY = dict(components=[dict(
-    type='disk', loose=False, tilted=False, rnodes=[0, 5, 10],
+    type='thin_disk', loose=False, tilted=False, rnodes=[0, 5, 10],
     density=dict(ptraits=[
         dict(type='exponential'), dict(type='mixture_gauss', nblobs=3)]),
     emission=dict(type='band'))])

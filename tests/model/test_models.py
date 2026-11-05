@@ -31,12 +31,14 @@ DUST = dict(type='dust')
 
 
 def smdisk(**options):
-    return dict(type='disk', rnodes=RNODES, **options)
+    thick = 'htraits' in options['density']
+    return dict(
+        type='thick_disk' if thick else 'thin_disk', rnodes=RNODES, **options)
 
 
 def mcdisk(seed=0, **options):
     return dict(
-        type='disk', rnodes=RNODES, clouds=dict(cflux=1e-3, seed=seed),
+        type='thick_disk', rnodes=RNODES, clouds=dict(cflux=1e-3, seed=seed),
         **options)
 
 

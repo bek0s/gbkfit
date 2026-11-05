@@ -15,7 +15,7 @@ from gbkfit.config import ConfigError
 
 yaml = ruamel.yaml.YAML(typ='safe')
 
-GALAXY = dict(components=[dict(type='disk', name='disk')])
+GALAXY = dict(components=[dict(type='thin_disk', name='disk')])
 OBSERVATION = dict(data=dict(data='data/ngc1313/hi.fits'))
 DATASET = dict(type='pixel_spectra', data='data/ngc1313/hi.fits')
 PSF = dict(type='gauss', sigma=1.5)

@@ -14,10 +14,10 @@ KINEMATICS = dict(
     type='traits',
     vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform'))
 THIN_DISK = dict(
-    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
+    type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 12)),
     density=dict(ptraits=dict(type='exponential')), kinematics=KINEMATICS,
     emission=dict(type='lines'))
-THICK_DISK = THIN_DISK | dict(density=dict(
+THICK_DISK = THIN_DISK | dict(type='thick_disk', density=dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8)))
 PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,

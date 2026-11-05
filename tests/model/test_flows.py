@@ -28,7 +28,7 @@ def disk_config(vptraits, ptraits=None):
     traits (by default, an exponential).
     """
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=RNODES,
+        type='thin_disk', loose=False, tilted=False, rnodes=RNODES,
         density=dict(ptraits=ptraits or dict(type='exponential')),
         kinematics=dict(type='traits',
                         vptraits=vptraits, dptraits=dict(type='uniform')),
@@ -252,7 +252,7 @@ def test_the_arms_of_an_image_by_a_given_wavenumber(driver):
     # spiral), in the light of a disk without kinematics: k = -2 / (R
     # tan(20 degrees)), and f its integral by the trapezoid rule
     component = dict(
-        type='disk', loose=False, tilted=False, rnodes=RNODES,
+        type='thin_disk', loose=False, tilted=False, rnodes=RNODES,
         density=dict(ptraits=[
             dict(type='exponential'),
             dict(type='spiral', order=2, wavenumber='given')]),

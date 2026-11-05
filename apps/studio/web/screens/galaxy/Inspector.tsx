@@ -2,14 +2,16 @@
 // (its type, or its items, each of a type), its parameters (see
 // ParamField), and its other options (a form of the schema). A list of
 // traits has a card for each, with the height trait paired with it on a
-// thick disk; items are added and removed here, and a part that can be.
+// thick disk or a cone; items are added and removed here, and a part that
+// can be. The density of a disk says whether it is thin or thick (its
+// type).
 import { useState } from 'react';
 import { useComponentTraits, useLines } from '../../api/queries';
 import { SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { Close } from '../../components/ui/basics';
 import { Check, Choice, Segments } from '../../components/ui/inputs';
 import { DropMenu } from '../../components/ui/overlays';
-import { HEAD_OPTIONS, isThick, ITEM_STARTS, MASS_HEAD_OPTIONS, TYPE_LABELS, type Part } from './catalogue';
+import { HEAD_OPTIONS, HEIGHT_START, isDisk, isThick, ITEM_STARTS, MASS_HEAD_OPTIONS, THICK_OPTIONS, TYPE_LABELS, type Part } from './catalogue';
 import type { EditHow, GalaxyDraft, Problem } from './draft';
 import { ParamField } from './ParamField';
 import { asList, asOneOrList, getAt, isObject, lineList, lineName, ringRadii, roundStep, setAt, startsWith, type Options, type Path } from './options';
@@ -238,8 +240,7 @@ function ListPart({ ctx, part, base, owner, rings, kind, isGalaxy }: { ctx: Cont
   const items = asList(getAt(options, listPath));
   const traits = useComponentTraits().data as Record<string, { traits: Record<string, string[]>; directions: string[]; dispersion_directions: string[] }> | undefined;
   const allowed = traits?.[kind]?.traits[family] ?? null;
-  const thick = isThick(owner);
-  const heights = part.heights && (thick || part.heights.family === 'rht') ? part.heights : undefined;
+  const heights = part.heights;
   const spheroids = asList(options.components)
     .filter((c) => c.type === 'spheroid')
     .map((c) => String(c.name ?? ''));
@@ -249,10 +250,10 @@ function ListPart({ ctx, part, base, owner, rings, kind, isGalaxy }: { ctx: Cont
     const start = startOf(defs, family, type, names, follows ? { component: spheroids[0] } : {});
     draft.edit((s) => {
       let next = setAt(s.options, listPath, asOneOrList([...asList(getAt(s.options, listPath)), start]) ?? []);
-      // (a density trait of a thick disk comes with its height)
-      if (heights && !heights.nullable && thick) {
+      // (a density trait of a thick disk or a cone comes with its height)
+      if (heights && !heights.nullable) {
         const hpath = [...base, ...heights.option];
-        next = setAt(next, hpath, asOneOrList([...asList(getAt(next, hpath)), startOf(defs, heights.family, 'sech2')]));
+        next = setAt(next, hpath, asOneOrList([...asList(getAt(next, hpath)), { ...HEIGHT_START }]));
       }
       return { ...s, options: next };
     });
@@ -276,7 +277,7 @@ function ListPart({ ctx, part, base, owner, rings, kind, isGalaxy }: { ctx: Cont
   const removable = items.length > 1 || part.optional || isGalaxy;
   return (
     <>
-      {part.key === 'density' && owner.type === 'disk' && <ThicknessToggle ctx={ctx} base={base} owner={owner} />}
+      {part.key === 'density' && isDisk(owner.type) && <ThicknessToggle ctx={ctx} base={base} owner={owner} />}
       {items.length === 0 && <p className="note gx-none">None yet.</p>}
       {items.map((item, i) => (
         <ItemCard
@@ -325,10 +326,11 @@ const ITEM_NOUNS: Record<string, string> = {
   mass_component: 'a mass component',
 };
 
-// Whether a disk is thin (no height: its light in its plane) or thick (a
-// height trait for each density trait)
+// Whether a disk is thin (its light in its plane) or thick (a height for
+// each density trait): its type. Made thin, it loses what only a thick
+// disk has (its heights, warps, opacity, clouds and equilibrium)
 function ThicknessToggle({ ctx, base, owner }: { ctx: Context; base: Path; owner: Options }) {
-  const { draft, defs } = ctx;
+  const { draft } = ctx;
   const thick = isThick(owner);
   const count = asList(getAt(owner, ['density', 'ptraits'])).length;
   return (
@@ -342,16 +344,15 @@ function ThicknessToggle({ ctx, base, owner }: { ctx: Context; base: Path; owner
         value={thick ? 'thick' : 'thin'}
         onChange={(next) =>
           draft.edit((s) => {
-            const path = [...base, 'density', 'htraits'];
+            let options = setAt(s.options, [...base, 'type'], `${next}_disk`);
             if (next === 'thin') {
-              // (what a thin disk cannot have goes too)
-              let options = setAt(s.options, path, undefined);
-              for (const key of ['opacity', 'zptraits']) options = setAt(options, [...base, key], undefined);
-              for (const key of ['vhtraits', 'dhtraits', 'equilibrium']) options = setAt(options, [...base, 'kinematics', key], undefined);
-              return { ...s, options };
+              // (those it has: setAt would make the options they are in)
+              for (const path of THICK_OPTIONS) if (getAt(options, [...base, ...path]) !== undefined) options = setAt(options, [...base, ...path], undefined);
+            } else {
+              const heights = Array.from({ length: Math.max(1, count) }, () => ({ ...HEIGHT_START }));
+              options = setAt(options, [...base, 'density', 'htraits'], asOneOrList(heights));
             }
-            const heights = Array.from({ length: Math.max(1, count) }, () => startOf(defs, 'rht', 'sech2'));
-            return { ...s, options: setAt(s.options, path, asOneOrList(heights)) };
+            return { ...s, options };
           })
         }
         label="The thickness of the disk"
@@ -450,8 +451,8 @@ const DIRECTION_LABELS: Record<string, string> = {
   iso: 'isotropic',
 };
 
-// The height trait paired with an item (of a thick disk): its type (or
-// none, if it can be), its parameters and options
+// The height trait paired with an item (of a thick disk or a cone): its
+// type (or none, if it can be), its parameters and options
 function HeightRow({ ctx, heights, rings }: { ctx: Context; heights: { path: Path; family: string; title: string; nullable: boolean; allowed: string[] | null }; rings: number[] | null }) {
   const { defs, draft, options, params } = ctx;
   const value = getAt(options, heights.path);
@@ -536,12 +537,12 @@ function GeometryFields({ component, onChange }: { component: Options; onChange:
       </div>
     );
   }
-  if (type !== 'disk' && type !== 'cone') return null;
+  if (!isDisk(type) && type !== 'cone') return null;
   const flag = (key: string, on: boolean) => (on ? { ...component, [key]: true } : omitKey(component, key));
   return (
     <>
       <RingsField value={component.rnodes} onChange={(rnodes) => onChange({ ...component, rnodes })} title={type === 'cone' ? 'Shells' : 'Rings'} />
-      {type === 'disk' && (
+      {isDisk(type) && (
         <div className="gx-flags">
           <Check checked={component.tilted === true} onChange={(on) => onChange(flag('tilted', on))} label="Tilted rings: orientation per ring (a warp)" />
           <Check checked={component.loose === true} onChange={(on) => onChange(flag('loose', on))} label="Loose rings: centre and systemic velocity per ring" />

@@ -1,8 +1,8 @@
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thin_disk
     loose: false
     tilted: false
     rnodes: {max: 20, sep: 2}

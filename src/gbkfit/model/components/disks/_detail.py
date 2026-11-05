@@ -1,5 +1,5 @@
 """
-Helpers of the disk component (Disk).
+Helpers of the disk components (ThinDisk and ThickDisk).
 """
 
 import logging
@@ -32,10 +32,13 @@ from .clouds import CloudDisk, Clouds
 from .smooth import SmoothDisk
 from .opacity import LineOpacity
 from ..parts import (
-    Density, DiskTraitsKinematics, disk_kinematics_parser)
+    Density, ThickDiskTraitsKinematics, ThinDensity,
+    ThinDiskTraitsKinematics)
 
 
 __all__ = [
+    'THICK_DISK_TRAITS',
+    'THIN_DISK_TRAITS',
     'DiskComponentPlan',
     'disk_plan',
     'dump_disk_component',
@@ -58,10 +61,10 @@ TRAIT_PREFIXES = dict(
     rpt='pt', rht='ht', vpt='vpt', vht='vht', dpt='dpt', dht='dht',
     zpt='zpt', spt='spt')
 
-# The traits that the disks take: every type, along every direction, and
-# the planar velocity traits, in their plane; dispersion traits isotropic
-# or along each direction
-DISK_TRAITS = TraitTable('disk', {
+# The traits that the thick disks take: every type, along every
+# direction, and the planar velocity traits, in their plane; dispersion
+# traits isotropic or along each direction
+THICK_DISK_TRAITS = TraitTable('thick disk', {
     kind: tuple(parser.registered_classes().values())
     for kind, parser in dict(
         rpt=traits.rpt_parser, rht=traits.rht_parser,
@@ -71,13 +74,24 @@ DISK_TRAITS = TraitTable('disk', {
     ('tan', 'rad', 'ver', 'away', 'out', 'los', 'plane'),
     tuple(traits.DPT_DIRECTIONS))
 
+# The traits that the thin disks take: those of the thick ones, but the
+# height traits and the vertical distortions (their kinds are there,
+# empty), and velocity traits along every direction but away from the
+# plane, whose faces only a thick disk has
+THIN_DISK_TRAITS = TraitTable('thin disk', {
+    kind: () if kind in ('rht', 'vht', 'dht', 'zpt') else classes
+    for kind, classes in THICK_DISK_TRAITS.classes.items()},
+    tuple(d for d in THICK_DISK_TRAITS.directions if d != 'away'),
+    THICK_DISK_TRAITS.dispersion_directions)
+
 
 def dump_disk_component(
         component: Component,
         disk: _disk.NodalDisk,
         rnodes: Nodes,
-        density: Density,
-        kinematics: DiskTraitsKinematics | None
+        density: ThinDensity | Density,
+        kinematics: ThinDiskTraitsKinematics | ThickDiskTraitsKinematics
+        | None
 ) -> dict[str, Any]:
     """
     Return the configuration of a disk component made of the given disk,
@@ -89,7 +103,7 @@ def dump_disk_component(
         rnodes=rnodes.dump(), rstep=disk.rstep(),
         interp=disk.interp().type(), density=density.dump())
     if kinematics is not None:
-        info.update(kinematics=disk_kinematics_parser.dump(kinematics))
+        info.update(kinematics=kinematics.dump())
     if component.emission() is not None:
         info.update(emission=emission_parser.dump(component.emission()))
     if component.opacity() is not None:
@@ -103,8 +117,9 @@ def dump_disk_component(
 
 
 def make_disk(
-        density: Density,
-        kinematics: DiskTraitsKinematics | None,
+        density: ThinDensity | Density,
+        kinematics: ThinDiskTraitsKinematics | ThickDiskTraitsKinematics
+        | None,
         emission: Emission | None,
         opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
@@ -117,23 +132,26 @@ def make_disk(
         clouds: Clouds | None
 ) -> _disk.NodalDisk:
     """
-    Return the disk of a disk component, made of its parts (see Disk for
-    the options): smooth, or made of its clouds. A thick disk (with
-    density height traits) takes the default height traits of its velocity
-    and dispersion traits where it has none.
+    Return the disk of a disk component, made of its parts (see ThinDisk
+    and ThickDisk for the options): smooth, or made of its clouds (a thick
+    one). A thick disk (of a Density, with height traits) takes the
+    default height traits of its velocity and dispersion traits where it
+    has none; the parts of a thin one (ThinDensity and
+    ThinDiskTraitsKinematics) have none, and it has no opacity, vertical
+    distortions or clouds.
 
     Raises
     ------
     ValueError
         If the options are not valid, or the parts and roles do not go
-        together (e.g. lines without kinematics, or what only a thick disk
-        can have on a thin one).
+        together (e.g. lines without kinematics).
     """
+    thick = isinstance(density, Density)
     node_args = parse_component_rnode_args(
         rnodes=rnodes, rstep=rstep, interp=interp)
     traits_ = _disk_traits(
-        density, kinematics, emission, opacity, zptraits, sptraits)
-    DISK_TRAITS.check(traits_)
+        density, kinematics, emission, zptraits, sptraits, thick)
+    (THICK_DISK_TRAITS if thick else THIN_DISK_TRAITS).check(traits_)
     _check_waves(traits_)
     # (not the coefficients of line opacity: a uniform one is common, e.g.
     # one spin temperature)
@@ -149,7 +167,8 @@ def make_disk(
             rpt=_units.density_unit(emission),
             opt=_units.line_opacity_unit(emission)),
         opacity_lines=opacity_lines,
-        equilibrium=None if kinematics is None else kinematics.equilibrium())
+        equilibrium=kinematics.equilibrium()
+        if isinstance(kinematics, ThickDiskTraitsKinematics) else None)
     if clouds is None:
         return SmoothDisk(**options)
     return CloudDisk(clouds, **options)
@@ -241,24 +260,22 @@ def line_opacity_traits(
 
 
 def _disk_traits(
-        density: Density,
-        kinematics: DiskTraitsKinematics | None,
+        density: ThinDensity | Density,
+        kinematics: ThinDiskTraitsKinematics | ThickDiskTraitsKinematics
+        | None,
         emission: Emission | None,
-        opacity: Opacity | None,
         zptraits: traits.ZPTrait | Sequence[traits.ZPTrait] | None,
-        sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None
+        sptraits: traits.SPTrait | Sequence[traits.SPTrait] | None,
+        thick: bool
 ) -> dict[str, tuple[traits.Trait, ...]]:
     """
-    Return the traits of a disk by kind (see _disk.TRAIT_KINDS). Raise
-    ConfigError if the parts and roles do not go together.
+    Return the traits of a disk by kind (see _disk.TRAIT_KINDS): those of
+    its parts, and of a thick one, the default height traits of its
+    velocity and dispersion traits where it has none. Raise ValueError if
+    the parts and roles do not go together.
     """
-    thick = density.thick()
     if isinstance(emission, LineEmission) and kinematics is None:
         raise ValueError("a disk that emits lines needs kinematics")
-    if opacity is not None and not thick:
-        raise ValueError(
-            "a disk with opacity needs density height traits (a thick "
-            "disk)")
     zptraits = iterutils.tuplify(zptraits)
     sptraits = iterutils.tuplify(sptraits)
     for name, value in (('zptraits', zptraits), ('sptraits', sptraits)):
@@ -266,47 +283,29 @@ def _disk_traits(
             raise ValueError(
                 f"at most {MAX_TRAITS} {name} are supported; "
                 f"{len(value)} were given")
-    if zptraits and not thick:
-        raise ValueError(
-            "vertical distortion traits (zptraits) need density height "
-            "traits (a thick disk)")
     result = dict(
-        rpt=density.ptraits(), rht=density.htraits() or (),
+        rpt=density.ptraits(), rht=density.htraits() if thick else (),
         zpt=zptraits, spt=sptraits)
-    if kinematics is not None:
-        heights = dict(vht=kinematics.vhtraits(), dht=kinematics.dhtraits())
-        if not thick and any(value is not None for value in heights.values()):
+    if kinematics is None:
+        return result
+    result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
+    if not thick:
+        return result
+    vhtraits, dhtraits = kinematics.vhtraits(), kinematics.dhtraits()
+    # (above the density, pressure support divides by a density of 0:
+    # the table of a mass trait above it was NaN, and its disk with it)
+    zmax = max(trait.zmax() for trait in result['rht'])
+    for trait in vhtraits or ():
+        if isinstance(trait, traits.VHTraitMass) and trait.zmax() > zmax:
             raise ValueError(
-                "the height traits of the kinematics need density height "
-                "traits (a thick disk)")
-        if not thick and kinematics.equilibrium() is not None:
-            raise ValueError(
-                "the vertical equilibrium of the kinematics needs density "
-                "height traits (a thick disk): the height of the disk sets "
-                "its dispersion")
-        if not thick and any(
-                trait.direction() == 'away'
-                for trait in kinematics.vptraits()):
-            raise ValueError(
-                "velocity traits away from the plane ('away') need density "
-                "height traits (a thick disk, whose faces they leave)")
-        result.update(vpt=kinematics.vptraits(), dpt=kinematics.dptraits())
-        # (above the density, pressure support divides by a density of 0:
-        # the table of a mass trait above it was NaN, and its disk with it)
-        zmax = max(trait.zmax() for trait in result['rht']) if thick else 0
-        for trait in heights['vht'] or ():
-            if isinstance(trait, traits.VHTraitMass) and trait.zmax() > zmax:
-                raise ValueError(
-                    f"the zmax of a velocity height trait 'mass' is the "
-                    f"top of its table, which must not be above the zmax "
-                    f"of the density height traits, {zmax}; it is "
-                    f"{trait.zmax()}")
-        if thick:
-            result.update(
-                vht=with_default_height_traits(
-                    heights['vht'], len(result['vpt']), traits.VHTraitOne),
-                dht=with_default_height_traits(
-                    heights['dht'], len(result['dpt']), traits.DHTraitOne))
+                f"the zmax of a velocity height trait 'mass' is the top of "
+                f"its table, which must not be above the zmax of the "
+                f"density height traits, {zmax}; it is {trait.zmax()}")
+    result.update(
+        vht=with_default_height_traits(
+            vhtraits, len(result['vpt']), traits.VHTraitOne),
+        dht=with_default_height_traits(
+            dhtraits, len(result['dpt']), traits.DHTraitOne))
     return result
 
 

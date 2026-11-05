@@ -37,7 +37,7 @@ from gbkfit.params import (
 
 # A disk of rings out to beyond the image
 GALAXY = dict(components=[dict(
-    type='disk', loose=False, tilted=False,
+    type='thin_disk', loose=False, tilted=False,
     rnodes=list(range(0, 30)),
     density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band'))])

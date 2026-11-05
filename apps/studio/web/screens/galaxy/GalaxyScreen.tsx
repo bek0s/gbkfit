@@ -12,7 +12,7 @@ import { Button } from '../../components/ui/basics';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
-import { COMPONENT_STARTS, GALAXY_PARTS, partsOf, type Part } from './catalogue';
+import { COMPONENT_STARTS, GALAXY_PARTS, nameBase, partsOf, type Part } from './catalogue';
 import { useGalaxyDraft } from './draft';
 import { Inspector, inPlace, removedFrom } from './Inspector';
 import { componentName, componentsOf, freshName, getAt, ringRadii, setAt } from './options';
@@ -108,8 +108,8 @@ export function GalaxyScreen({ name }: { name: string }) {
         const list = componentsOf(s.options);
         // (several components are all named: one without a name is named
         // after its type, and its parameters with it)
-        const named = list.map((c, i) => (typeof c.name === 'string' && c.name ? c : { ...c, name: freshName(list.map((o) => o.name), String(c.type ?? `component${i + 1}`)) }));
-        const added = { type, name: freshName(named.map((c) => c.name), type), ...COMPONENT_STARTS[type] };
+        const named = list.map((c, i) => (typeof c.name === 'string' && c.name ? c : { ...c, name: freshName(list.map((o) => o.name), c.type ? nameBase(String(c.type)) : `component${i + 1}`) }));
+        const added = { type, name: freshName(named.map((c) => c.name), nameBase(type)), ...COMPONENT_STARTS[type] };
         return { ...s, options: { ...s.options, components: [...named, added] } };
       },
       { moved: inPlace },

@@ -391,7 +391,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
         ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
     from gbkfit.params import ParamSpace
     disk = dict(
-        type='disk', name='gas', rnodes=list(range(0, 13, 2)),
+        type='thin_disk', name='gas', rnodes=list(range(0, 13, 2)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             type='traits',
@@ -442,7 +442,7 @@ def test_a_disk_rotates_in_the_mass_of_the_light_of_a_spheroid(driver):
 ])
 def test_a_mass_follows_components_of_its_kind(mass, message):
     disk = dict(
-        type='disk', name='gas', rnodes=[0, 2, 4],
+        type='thin_disk', name='gas', rnodes=[0, 2, 4],
         density=dict(ptraits=dict(type='exponential')), emission=BAND)
     with pytest.raises(ValueError, match=message):
         galaxy_parser.load(dict(
@@ -722,7 +722,7 @@ def test_what_sees_the_stars_of_a_spheroid(driver, evaluate_cases,
 
 
 @pytest.mark.parametrize('component, message', [
-    (dict(type='disk', rnodes=[0, 5, 10],
+    (dict(type='thin_disk', rnodes=[0, 5, 10],
           density=dict(ptraits=dict(type='exponential')),
           emission=STARS_EMISSION), "stars of a disk with kinematics only"),
     (dict(type='point', emission=STARS_EMISSION),
@@ -752,7 +752,7 @@ def test_an_image_sees_the_stars_of_a_spheroid(driver, evaluate_cases):
 def test_no_line_is_named_stars():
     with pytest.raises(ValueError, match="no line can be named 'stars'"):
         galaxy_parser.load(dict(components=[dict(
-            type='disk', rnodes=[0, 1, 2],
+            type='thin_disk', rnodes=[0, 1, 2],
             density=dict(ptraits=dict(type='exponential')),
             emission=dict(type='lines', lines=[
                 dict(name='stars', rest='656.28 nm')]))]))

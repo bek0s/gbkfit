@@ -6,7 +6,7 @@ and traits), and their errors.
 
 import numpy as np
 import pytest
-from gbkfit.config import ConfigError
+from gbkfit.config import ConfigError, strict_mode
 from gbkfit.grid import Coords, Grid
 from gbkfit.model import BandEmission, LineEmission, galaxy_parser
 from gbkfit.model.components._component_plans import opacity_cubes
@@ -31,20 +31,35 @@ DUST = dict(type='dust')
 
 # Each kind of disk component, with its required options
 COMPONENTS = dict(
-    band_smdisk_thin=dict(type='disk', density=THIN, emission=BAND),
-    band_smdisk_thick=dict(type='disk', density=THICK, emission=BAND),
+    band_smdisk_thin=dict(type='thin_disk', density=THIN, emission=BAND),
+    band_smdisk_thick=dict(type='thick_disk', density=THICK, emission=BAND),
     band_mcdisk=dict(
-        type='disk', clouds=dict(cflux=1e-3), density=THICK, emission=BAND),
+        type='thick_disk', clouds=dict(cflux=1e-3), density=THICK,
+        emission=BAND),
     lines_smdisk_thin=dict(
-        type='disk', density=THIN, kinematics=KINEMATICS, emission=LINES),
+        type='thin_disk', density=THIN, kinematics=KINEMATICS,
+        emission=LINES),
     lines_smdisk_thick=dict(
-        type='disk', density=THICK, kinematics=KINEMATICS, emission=LINES),
+        type='thick_disk', density=THICK, kinematics=KINEMATICS,
+        emission=LINES),
     lines_mcdisk=dict(
-        type='disk', clouds=dict(cflux=1e-3), density=THICK,
+        type='thick_disk', clouds=dict(cflux=1e-3), density=THICK,
         kinematics=KINEMATICS, emission=LINES),
-    dust_smdisk=dict(type='disk', density=THICK, opacity=DUST),
+    dust_smdisk=dict(type='thick_disk', density=THICK, opacity=DUST),
     dust_mcdisk=dict(
-        type='disk', clouds=dict(cflux=1e-3), density=THICK, opacity=DUST))
+        type='thick_disk', clouds=dict(cflux=1e-3), density=THICK,
+        opacity=DUST))
+
+# The options of a thick disk that a thin one does not take, with the
+# part of the disk they are in (None: the disk itself) and a value
+THICK_OPTIONS = [
+    (None, 'opacity', DUST),
+    (None, 'clouds', dict(cflux=1e-3)),
+    (None, 'zptraits', dict(type='nw_uniform', zmax=1)),
+    ('density', 'htraits', SECH2),
+    ('kinematics', 'vhtraits', dict(type='one')),
+    ('kinematics', 'dhtraits', dict(type='one')),
+    ('kinematics', 'equilibrium', dict(type='central'))]
 
 # The required trait options of each part of a disk
 PART_TRAITS = dict(
@@ -58,10 +73,10 @@ REQUIRED_TRAITS = [
     for part, keys in PART_TRAITS.items() if part in component
     for key in keys]
 
-# Each kind of thick component (with density height traits)
+# Each kind of thick component (a thick disk)
 THICK_COMPONENTS = [
     name for name, component in COMPONENTS.items()
-    if 'htraits' in component['density']]
+    if component['type'] == 'thick_disk']
 
 # Each kind of component that emits lines
 LINE_COMPONENTS = [
@@ -156,35 +171,43 @@ def test_height_traits_must_match_polar_traits(name, htraits):
         f"the number of ptraits ({len(htraits)} != 1)") in message
 
 
-@pytest.mark.parametrize('htraits', [..., None])
-@pytest.mark.parametrize('name', ['band_smdisk_thick', 'lines_smdisk_thick'])
-def test_a_smooth_disk_without_height_traits_is_thin(name, htraits):
-    galaxy = galaxy_parser.load(dict(components=[
-        part_info(name, 'density', htraits=htraits)]))
+@pytest.mark.parametrize('name', COMPONENTS)
+def test_a_disk_is_thin_or_thick_by_its_type(name):
+    galaxy = galaxy_parser.load(dict(components=[component_info(name)]))
+    thick = COMPONENTS[name]['type'] == 'thick_disk'
     for seen_by in (BandEmission, LineEmission):
-        assert not galaxy.components()[0].thick(seen_by)
+        assert galaxy.components()[0].thick(seen_by) == thick
 
 
-@pytest.mark.parametrize('name, message', [
-    ('band_mcdisk', "a disk of clouds needs density height traits"),
-    ('lines_mcdisk', "a disk of clouds needs density height traits"),
-    ('dust_smdisk', "a disk with opacity needs density height traits"),
-    ('dust_mcdisk', "a disk of clouds needs density height traits")])
-def test_thick_components_need_height_traits(name, message):
-    assert message in component_error(name, density=THIN)
+@pytest.mark.parametrize('htraits, message', [
+    (..., "missing required options: 'htraits'"),
+    (None, "option 'htraits' cannot be null")])
+@pytest.mark.parametrize('name', THICK_COMPONENTS)
+def test_a_thick_disk_needs_height_traits(name, htraits, message):
+    assert message in part_error(name, 'density', htraits=htraits)
 
 
-@pytest.mark.parametrize('name, options, message', [
-    ('band_smdisk_thin', dict(zptraits=dict(type='nw_uniform', zmax=1)),
-     "vertical distortion traits (zptraits) need density height traits"),
-    ('lines_smdisk_thin',
-     dict(kinematics=KINEMATICS | dict(vhtraits=dict(type='one'))),
-     "the height traits of the kinematics need density height traits"),
-    ('lines_smdisk_thin',
-     dict(kinematics=KINEMATICS | dict(dhtraits=dict(type='one'))),
-     "the height traits of the kinematics need density height traits")])
-def test_thick_options_need_a_thick_disk(name, options, message):
-    assert message in component_error(name, **options)
+@pytest.mark.parametrize('part, option, value', THICK_OPTIONS)
+def test_a_thin_disk_takes_no_options_of_a_thick_disk(part, option, value):
+    name = 'lines_smdisk_thin'
+    message = part_error(name, part, **{option: value}) if part \
+        else component_error(name, **{option: value})
+    assert (
+        f"options of a thick disk (type: thick_disk), which a thin disk "
+        f"does not take: '{option}'") in message
+
+
+def test_a_lenient_thin_disk_leaves_out_the_options_of_a_thick_disk(caplog):
+    component = part_info(
+        'lines_smdisk_thin', 'kinematics', equilibrium=dict(type='central'))
+    component |= dict(zptraits=dict(type='nw_uniform', zmax=1))
+    with strict_mode(False):
+        galaxy = galaxy_parser.load(dict(components=[component]))
+    dumped = galaxy.components()[0].dump()
+    assert 'zptraits' not in dumped
+    assert 'equilibrium' not in dumped['kinematics']
+    assert "a thin disk does not take: 'zptraits'" in caplog.text
+    assert "a thin disk does not take: 'equilibrium'" in caplog.text
 
 
 @pytest.mark.parametrize('name', LINE_COMPONENTS)

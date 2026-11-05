@@ -486,7 +486,7 @@ def test_the_clouds_of_a_pool_stay_when_another_changes(driver):
         observable=dict(type='pixel_brightness', size=[40, 40], step=0.5),
         line_of_sight=dict(type='grid'),
         galaxy=dict(components=[dict(
-            type='disk', clouds=dict(cflux=1e-3, seed=3), loose=False,
+            type='thick_disk', clouds=dict(cflux=1e-3, seed=3), loose=False,
             tilted=False,
             rnodes=list(range(0, 10)),
             density=dict(

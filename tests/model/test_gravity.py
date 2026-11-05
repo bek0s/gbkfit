@@ -23,7 +23,7 @@ KPC = 3.0856775814913673e19
 # A thick disk that rotates in the mass of its galaxy, held up by the
 # central equilibrium
 DISK = dict(
-    type='disk', name='gas', loose=False, tilted=False,
+    type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=list(range(0, 21, 2)), rstep=0.5,
     density=dict(
         ptraits=dict(type='exponential'),
@@ -432,7 +432,7 @@ def test_palatini_corrections_of_the_density_gradient():
 # A thin disk that rotates in the mass of its galaxy, and a mass disk
 # that follows the gas
 THIN_DISK = DISK | dict(
-    density=dict(ptraits=dict(type='exponential')),
+    type='thin_disk', density=dict(ptraits=dict(type='exponential')),
     kinematics=dict(type='traits',
                     vptraits=dict(type='mass'), dptraits=dict(type='uniform')))
 GAS_MASS = dict(

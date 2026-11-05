@@ -26,7 +26,7 @@ def line_flux(driver, evaluate_cases, dispersion):
             spectral=dict(size=61, step=10, convention='relativistic')),
         line_of_sight=dict(type='flat'),
         galaxy=dict(components=[dict(
-            type='disk', loose=False, tilted=False,
+            type='thin_disk', loose=False, tilted=False,
             rnodes=list(range(0, 12)),
             density=dict(ptraits=dict(type='exponential')),
             kinematics=dict(
@@ -75,7 +75,7 @@ def lines_config(lines, catalogue=None):
     """
     config = dict(
         galaxies=[dict(components=[dict(
-            type='disk', rnodes=[0, 2, 4],
+            type='thin_disk', rnodes=[0, 2, 4],
             density=dict(ptraits=dict(type='exponential')),
             kinematics=dict(
                 type='traits', vptraits=dict(type='arctan', direction='tan'),
@@ -214,7 +214,7 @@ def test_the_dispersion_is_in_the_frame_of_the_galaxy(driver, evaluate_cases):
                     size=201, step=2, rval=centre, rest='1420.405751768 MHz')),
             line_of_sight=dict(type='flat'),
             galaxy=dict(components=[dict(
-                type='disk', loose=False, tilted=False,
+                type='thin_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),
                 density=dict(ptraits=dict(type='uniform')),
                 kinematics=dict(
@@ -255,7 +255,7 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
                 lsf=dict(type='gauss', sigma=32)),
             line_of_sight=dict(type='flat'),
             galaxy=dict(redshift=1.5, components=[dict(
-                type='disk', loose=False, tilted=False,
+                type='thin_disk', loose=False, tilted=False,
                 rnodes=list(range(0, 5)),
                 density=dict(ptraits=dict(type='uniform')),
                 kinematics=dict(

@@ -30,7 +30,8 @@ SPEED_VALUES = dict(
 def disk(density, **options):
     """A disk of the given density, with the speeds of SPEEDS."""
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=density, emission=LINES, kinematics=dict(
             type='traits', vptraits=SPEEDS, dptraits=UNIFORM)) | options
 
@@ -149,7 +150,7 @@ def test_a_radial_flow_points_away_from_the_centre(driver, evaluate_cases):
     # centre, which the sky sees projected as the vector: (vx, vy) along
     # the offset on the sky, outwards (audit 2026-10-31 #86)
     component = dict(
-        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=dict(ptraits=dict(type='exponential')), emission=LINES,
         kinematics=dict(
             type='traits', vptraits=dict(type='uniform', direction='rad'),

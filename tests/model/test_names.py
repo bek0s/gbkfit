@@ -16,13 +16,14 @@ THICK = THIN | dict(htraits=dict(type='sech2', zmax=8))
 
 def disk(density=THICK, **options):
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=[0, 1, 2],
+        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        loose=False, tilted=False, rnodes=[0, 1, 2],
         density=density, emission=dict(type='band'), **options)
 
 
 def dust(**options):
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=[0, 1, 2],
+        type='thick_disk', loose=False, tilted=False, rnodes=[0, 1, 2],
         density=THICK, opacity=dict(type='dust'), **options)
 
 
@@ -177,7 +178,7 @@ def test_galaxy_names_prefix_the_extra_outputs():
 def test_each_parameter_has_the_option_that_makes_it():
     # (for those who show the parameters with their options, e.g. Studio)
     gas = dict(
-        type='disk', name='gas', rnodes=[0, 2, 4], density=THICK,
+        type='thick_disk', name='gas', rnodes=[0, 2, 4], density=THICK,
         kinematics=dict(
             type='traits',
             vptraits=[dict(type='arctan', direction='tan', name='rotation'),

@@ -11,11 +11,11 @@ from modelutils import config_group_plan, group_plan
 from gbkfit.model import LineCatalogue
 
 
-DISK = dict(
-    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)))
+DISK = dict(loose=False, tilted=False, rnodes=list(range(0, 12)))
 
 STARS = dict(
-    DISK, name='stars', density=dict(ptraits=dict(type='exponential')),
+    DISK, type='thin_disk', name='stars',
+    density=dict(ptraits=dict(type='exponential')),
     emission=dict(type='band', bands=['sdss_g', 'sdss_r']))
 
 NUCLEUS = dict(
@@ -99,7 +99,7 @@ def test_dust_dims_an_image_at_the_rest_wavelength_of_its_band(
     # ratio is 3 - 2.5 (wavelength - 0.2): its light crosses half of the
     # optical depth at the rest wavelength of the band (0.6166 / (1 + z))
     dust = dict(
-        DISK, name='dust',
+        DISK, type='thick_disk', name='dust',
         density=dict(
             ptraits=dict(type='exponential'),
             htraits=dict(type='sech2', zmax=8)),

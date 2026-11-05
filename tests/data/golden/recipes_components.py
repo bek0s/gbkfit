@@ -30,9 +30,12 @@ _LSF = dict(type='gauss', sigma=20)
 
 
 def _disk(**options: Any) -> dict[str, Any]:
-    """A disk of rings to 8 arcsec that emits lines, with the given options."""
+    """
+    A thin disk of rings to 8 arcsec that emits lines, with the given
+    options.
+    """
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=_ROTATION, emission=_LINES) | options
 
@@ -122,11 +125,11 @@ def _thick_disk(name: str, **roles: Any) -> dict[str, Any]:
     roles, unmoving.
     """
     return dict(
-        type='disk', name=name, loose=False, tilted=False,
+        type='thick_disk', name=name, loose=False, tilted=False,
         rnodes=list(range(0, 9)), density=_THICK) | roles
 
 
-_GAS = _disk(name='gas', density=_THICK)
+_GAS = _disk(type='thick_disk', name='gas', density=_THICK)
 _DUST = _thick_disk('dust', opacity=dict(type='dust'))
 
 _DUST_TRUTH = dict(
@@ -158,7 +161,9 @@ _MCDISK_CUBE = dict(
         "float64, on a grid.",
     per_dtype="its clouds are drawn anew in each floating type",
     galaxies=[dict(components=[
-        _disk(type='disk', clouds=dict(cflux=1e-4, seed=7), density=_THICK)])],
+        _disk(
+            type='thick_disk', clouds=dict(cflux=1e-4, seed=7),
+            density=_THICK)])],
     observations=[
         _cube([24, 24, 40], [0.8, 0.8, 15], 'grid')],
     truth=_DISK_TRUTH | dict(ht_s=0.5),
@@ -377,7 +382,7 @@ def _write_image(folder: pathlib.Path) -> None:
     from gbkfit.observation import ObservationGroup, observation_parser
     from gbkfit.io import write_data
     galaxy = dict(components=[dict(
-        type='disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
+        type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 9)),
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))])
     observation = dict(

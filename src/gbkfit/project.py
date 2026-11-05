@@ -57,9 +57,9 @@ __all__ = [
 FORMAT = 'gbkfit-project'
 # The version of the format of configurations, which projects (their
 # marker) and configuration files (their section 'version') carry: 2, the
-# configurations of 2026-10-25 on, 3, of 2026-10-28 on, and 4, of
-# 2026-11-04 on; gbkfit.migration rewrites the older ones
-FORMAT_VERSION = 4
+# configurations of 2026-10-25 on, 3, of 2026-10-28 on, 4, of 2026-11-04
+# on, and 5, of 2026-11-05 on; gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 5
 MARKER = 'gbkfit-project.yaml'
 
 # The folders of the pieces, by the sections and options of the
@@ -107,7 +107,7 @@ TEMPLATES = {
 # arctan rotation curve and a uniform velocity dispersion, seen in an
 # emission line. Its parameters are named after its component (disk_*).
 components:
-- type: disk
+- type: thin_disk
   name: disk
   loose: false
   tilted: false

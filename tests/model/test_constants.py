@@ -19,12 +19,13 @@ SECH2 = dict(type='sech2', zmax=8)
 def disk(vptraits, density=None, **options):
     """
     A smooth disk that emits lines, with the given velocity traits and
-    density (thin by default).
+    density (thin by default; thick with height traits).
     """
     if density is None:
         density = dict(ptraits=EXPONENTIAL)
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=RNODES,
+        type='thick_disk' if 'htraits' in density else 'thin_disk',
+        loose=False, tilted=False, rnodes=RNODES,
         density=density,
         kinematics=dict(type='traits',
                         vptraits=vptraits, dptraits=dict(type='uniform')),
@@ -64,7 +65,7 @@ def test_names_of_constants():
     galaxy0 = spectral_cube(
         [disk(vptraits, thick, name='gas'),
          disk(vptraits, thick, name='ring', rnodes=[0, 5, 10]),
-         dict(type='disk', name='dust', loose=False, tilted=False,
+         dict(type='thick_disk', name='dust', loose=False, tilted=False,
               rnodes=[0, 1], density=thick, opacity=dict(type='dust'))],
         dict(type='grid')) | dict(name='g0')
     galaxy1 = spectral_cube(

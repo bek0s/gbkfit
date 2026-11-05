@@ -27,7 +27,7 @@ EXPONENTIAL_PARAMS = dict(pt_a=1, pt_s=1.5)
 def disk(ptraits, **options):
     """A galaxy of a thin disk of the given density polar traits."""
     return dict(components=[dict(
-        type='disk', loose=False, tilted=False, rnodes=[0, 6],
+        type='thin_disk', loose=False, tilted=False, rnodes=[0, 6],
         density=dict(ptraits=ptraits), emission=dict(type='band'))
         | options])
 

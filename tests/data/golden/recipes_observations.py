@@ -17,7 +17,7 @@ _C_KMS = 299792.458
 def _thin_disk(**options: Any) -> dict[str, Any]:
     """A thin disk of rings, emitting lines, with the given options."""
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=list(range(0, 13)),
+        type='thin_disk', loose=False, tilted=False, rnodes=list(range(0, 13)),
         density=dict(ptraits=dict(type='exponential')),
         kinematics=dict(
             type='traits', vptraits=dict(type='arctan', direction='tan'),
@@ -139,7 +139,7 @@ _GRISM = dict(
 def _band_disk() -> dict[str, Any]:
     """A small thin disk emitting in a band (no kinematics), for images."""
     return dict(
-        type='disk', loose=False, tilted=False,
+        type='thin_disk', loose=False, tilted=False,
         rnodes=[round(0.1 * i, 1) for i in range(13)],
         density=dict(ptraits=dict(type='exponential')),
         emission=dict(type='band'))
@@ -277,7 +277,7 @@ _LENS_TRIAL = _LENS_TRUTH | dict(
 # axis of wavelengths reads; Halpha at 1.5 c, [NII] 2360 km/s beyond it,
 # widths stretched by 1 + z), in float32 (the default)
 _CLUMPY_DISK = dict(
-    type='disk', loose=False, tilted=False,
+    type='thick_disk', loose=False, tilted=False,
     rnodes=[0, 0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 1.6],
     density=dict(
         ptraits=[

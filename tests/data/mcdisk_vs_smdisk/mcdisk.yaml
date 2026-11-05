@@ -1,8 +1,8 @@
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thick_disk
     clouds: {cflux: 0.0001}
     loose: false
     tilted: false

@@ -24,8 +24,8 @@ KPC_PER_ARCSEC = 1e4 * np.pi / 648000
 # A thick disk of a Gaussian height profile (its rms height is its s, 1
 # arcsec: its cut at zmax is 1e-22 of it), its rotation of arctan traits
 DISK = dict(
-    type='disk', loose=False, tilted=False, rnodes=list(range(0, 21, 2)),
-    rstep=0.5,
+    type='thick_disk', loose=False, tilted=False,
+    rnodes=list(range(0, 21, 2)), rstep=0.5,
     density=dict(
         ptraits=dict(type='exponential'),
         htraits=dict(type='gauss', zmax=10)),
@@ -75,7 +75,7 @@ def test_central_equilibrium_is_the_dispersion_of_the_rotation(
     # Without mass, the disk is that of node-wise dispersion traits at its
     # subnodes of h V / R, its rotation V (of its traits) and its rms
     # height h; at the centre, h V / R of the next subnode
-    disk = DISK | dict(type='disk')
+    disk = dict(DISK)
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
     balanced = galaxy(disk)
@@ -98,7 +98,7 @@ def test_equilibrium_along_z_is_the_dispersion_of_sigma_z(driver, disk_type):
     # With the direction 'ver', the dispersion of the equilibrium
     # is sigma_z alone: the disk is that of traits of sigma_R = sigma_phi
     # = 0 and sigma_z of h V / R at its subnodes
-    disk = DISK | dict(type='disk')
+    disk = dict(DISK)
     if disk_type == 'clouds':
         disk |= dict(clouds=dict(cflux=1e-3))
     balanced = galaxy(with_kinematics(
@@ -310,8 +310,10 @@ def test_jeans_equilibrium_needs_vertical_forces(tmp_path):
 
 @pytest.mark.parametrize('disk, message', [
     (with_kinematics(DISK, equilibrium=dict(type='thin')), "'thin'"),
-    (DISK | dict(density=dict(ptraits=dict(type='exponential'))),
-     "needs density height traits"),
+    (DISK | dict(
+        type='thin_disk', density=dict(ptraits=dict(type='exponential'))),
+     r"options of a thick disk \(type: thick_disk\), which a thin disk "
+     r"does not take: 'equilibrium'"),
     (with_kinematics(DISK, vptraits=dict(type='arctan', direction='rad')),
      "it has neither"),
     ({key: value for key, value in DISK.items()

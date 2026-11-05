@@ -12,12 +12,13 @@ import pytest
 from modelutils import group_plan
 
 
-DISK = dict(
-    type='disk', loose=False, tilted=False, rnodes=list(range(0, 12)))
+DISK = dict(loose=False, tilted=False, rnodes=list(range(0, 12)))
 
 # The density of a thick exponential disk
 THICK_DENSITY = dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
+
+THICK_DISK = dict(DISK, type='thick_disk', density=THICK_DENSITY)
 
 BAND = dict(type='band')
 LINES = dict(type='lines')
@@ -37,14 +38,14 @@ def spectral_cube_case(driver, with_opacity):
     if with_opacity, of a thick disk of dust.
     """
     components = [dict(
-        DISK, name='gas', density=THICK_DENSITY,
+        THICK_DISK, name='gas',
         kinematics=dict(
             type='traits', vptraits=dict(type='arctan', direction='tan'),
             dptraits=dict(type='uniform')),
         emission=LINES)]
     if with_opacity:
         components.append(dict(
-            DISK, name='dust', density=THICK_DENSITY, opacity=DUST))
+            THICK_DISK, name='dust', opacity=DUST))
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(
@@ -108,14 +109,14 @@ def face_on_optical_depth(
     along the depth axis.
     """
     dust = dict(
-        DISK, type='disk', name='dust',
+        DISK, type='thick_disk', name='dust',
         density=dict(
             ptraits=list(ptraits),
             htraits=[dict(type='sech2', zmax=8)] * len(ptraits)),
         opacity=DUST)
     if disk_type == 'clouds':
         dust['clouds'] = dict(cflux=1e-4)
-    stars = dict(DISK, name='stars', density=THICK_DENSITY, emission=BAND)
+    stars = dict(THICK_DISK, name='stars', emission=BAND)
     case = dict(
         driver=dict(type=driver.type()),
         observable=dict(type='pixel_brightness', size=[24, 24]),
@@ -170,9 +171,9 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
     # brighter) than in the far half: the near half is the more absorbed.
     # Its outflow approaches the viewer (negative velocities).
     nodes = list(range(0, 16, 2))
-    disk = dict(DISK, rnodes=nodes)
+    disk = dict(THICK_DISK, rnodes=nodes)
     gas = dict(
-        disk, name='gas', density=THICK_DENSITY,
+        disk, name='gas',
         kinematics=dict(
             type='traits', vptraits=dict(type='nw_uniform', direction='rad'),
             dptraits=dict(type='uniform')),
@@ -194,7 +195,7 @@ def test_the_near_side_is_where_outflows_approach(driver, evaluate_cases):
         return data[0]['spectra']['d']
     clear = evaluate([gas], properties)
     dusty = evaluate(
-        [gas, dict(disk, name='dust', density=THICK_DENSITY, opacity=DUST)],
+        [gas, dict(disk, name='dust', opacity=DUST)],
         properties | dict(
             dust_xpos=0, dust_ypos=0, dust_posa=0, dust_incl=60,
             dust_pt_a=2.0, dust_pt_s=4, dust_ht_s=0.2))
@@ -222,8 +223,8 @@ def image_and_optical_depth(driver, evaluate_cases, opacity, depth_step):
         line_of_sight=dict(
             type='grid', depth=dict(extent=24.0, step=depth_step)),
         galaxy=dict(components=[
-            dict(DISK, name='stars', density=THICK_DENSITY, emission=BAND),
-            dict(DISK, name='dust', density=THICK_DENSITY, opacity=DUST)]))
+            dict(THICK_DISK, name='stars', emission=BAND),
+            dict(THICK_DISK, name='dust', opacity=DUST)]))
     properties = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=30, stars_incl=60,
         stars_pt_a=1, stars_pt_s=4, stars_ht_s=1,
@@ -253,8 +254,10 @@ def test_mixed_absorbers_let_through_the_exact_fraction(
 
 THIN_DENSITY = dict(ptraits=dict(type='exponential'))
 
+THIN_DISK = dict(DISK, type='thin_disk', density=THIN_DENSITY)
+
 THIN_GAS = dict(
-    DISK, name='gas', density=THIN_DENSITY,
+    THIN_DISK, name='gas',
     kinematics=dict(
         type='traits',
         vptraits=dict(type='arctan', direction='tan'), dptraits=dict(type='uniform')),
@@ -275,7 +278,7 @@ def test_a_grid_sees_a_thin_disk_as_the_sky_does(
         driver, evaluate_cases, observable, key):
     # Without dust, the depth of the plane of the disk changes nothing
     component = THIN_GAS if key == 'spectra' else dict(
-        DISK, name='gas', density=THIN_DENSITY, emission=BAND)
+        THIN_DISK, name='gas', emission=BAND)
     properties = {
         name: value for name, value in THIN_GAS_PROPERTIES.items()
         if key == 'spectra' or not name.startswith(('gas_v', 'gas_d'))}
@@ -294,7 +297,7 @@ def face_on_dust_case(driver, components):
     of dust, symmetric about the plane of the sky, on a depth axis of an
     even number of voxels (that plane is between two of them).
     """
-    dust = dict(DISK, name='dust', density=THICK_DENSITY, opacity=DUST)
+    dust = dict(THICK_DISK, name='dust', opacity=DUST)
     return dict(
         driver=dict(type=driver.type()),
         observable=dict(type='pixel_brightness', size=[24, 24]),
@@ -311,7 +314,7 @@ FACE_ON_DUST = dict(
 def test_dust_dims_a_thin_disk_in_front_of_its_plane(driver, evaluate_cases):
     # The light of a face-on thin disk in the middle of the dust crosses
     # half of it
-    stars = dict(DISK, name='stars', density=THIN_DENSITY, emission=BAND)
+    stars = dict(THIN_DISK, name='stars', emission=BAND)
     properties = dict(
         stars_xpos=0, stars_ypos=0, stars_posa=0, stars_incl=0,
         stars_pt_a=1, stars_pt_s=4)
@@ -372,7 +375,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
     emission = dict(type='lines', lines=['halpha', 'nii6583'])
     if emitter == 'disk':
         gas = dict(
-            DISK, name='gas', density=THIN_DENSITY, emission=emission,
+            THIN_DISK, name='gas', emission=emission,
             kinematics=dict(
                 type='traits', vptraits=dict(type='arctan', direction='tan'),
                 dptraits=dict(type='uniform')))
@@ -386,7 +389,7 @@ def lines_in_dust(driver, evaluate_cases, emitter, laws, lines, opacity):
             gas_xpos=0.5, gas_ypos=0.5, gas_flux=1, gas_vsys=0, gas_disp=20)
     properties['gas_nii6583_ratio'] = 1
     dusts = [
-        dict(DISK, name=f'dust{i}', density=THICK_DENSITY,
+        dict(THICK_DISK, name=f'dust{i}',
              opacity=dict(type='dust', law=law))
         for i, law in enumerate(laws)]
     for i in range(len(laws)):

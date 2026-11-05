@@ -1,10 +1,10 @@
 # image_light: A cube at an RA and Dec of a disk whose light is that of an observed image there (an image trait, with offsets), made by its galaxy at the geometry of the disk.
 # (written by make_golden.py; do not edit)
-version: 4
+version: 5
 driver: {type: host}
 galaxies:
 - components:
-  - type: disk
+  - type: thin_disk
     loose: false
     tilted: false
     rnodes: [0, 1, 2, 3, 4, 5, 6, 7, 8]

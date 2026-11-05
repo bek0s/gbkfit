@@ -25,12 +25,14 @@ def disk(type_, rnodes, vptraits, thick=False, **options):
     polar traits: thick (of sech2 height traits) if thick, as a Monte
     Carlo disk always is.
     """
+    thick = thick or type_ == 'clouds'
     density = dict(ptraits=dict(type='exponential'))
-    if thick or type_ == 'clouds':
+    if thick:
         density['htraits'] = dict(type='sech2', zmax=8)
     mcdisk_options = dict(clouds=dict(cflux=1e-3)) if type_ == 'clouds' else {}
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=rnodes,
+        type='thick_disk' if thick else 'thin_disk',
+        loose=False, tilted=False, rnodes=rnodes,
         density=density,
         kinematics=dict(type='traits',
                         vptraits=vptraits, dptraits=dict(type='uniform')),
@@ -95,11 +97,11 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
     # Node-wise values given at the nodes are interpolated to the subnodes
     # with the interpolation of the disk, and linearly between them, up to
     # its last node; beyond, the density traits go on as their tails
-    from gbkfit.model import BandEmission, Density, Disk
+    from gbkfit.model import BandEmission, ThinDensity, ThinDisk
     from gbkfit.model.components import traits
     rnodes, curve = (0.0, 4.0, 10.0, 20.0), [1.0, 3.0, 2.0, 0.5]
-    component = Disk(
-        Density(traits.RPTraitNWUniform()), emission=BandEmission(),
+    component = ThinDisk(
+        ThinDensity(traits.RPTraitNWUniform()), emission=BandEmission(),
         loose=False, tilted=False, rnodes=rnodes, rstep=1.0,
         interp='akima')
     density_disk = component.density_disk()
@@ -123,7 +125,7 @@ def test_traits_evaluated_apart_are_sampled_as_by_their_disk(driver):
 
 def test_flaring_at_the_subnodes():
     galaxy = galaxy_parser.load(dict(components=[dict(
-        type='disk', loose=False, tilted=False, rnodes=[0, 20],
+        type='thick_disk', loose=False, tilted=False, rnodes=[0, 20],
         rstep=0.5,
         density=dict(
             ptraits=dict(type='exponential'),

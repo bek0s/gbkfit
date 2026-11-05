@@ -18,7 +18,7 @@ from gbkfit.params import ParamSpace
 
 # A disk and a point off its centre, which an offset moves together
 GALAXY = dict(components=[
-    dict(type='disk', name='disk', loose=False, tilted=False,
+    dict(type='thin_disk', name='disk', loose=False, tilted=False,
          rnodes=list(range(0, 12)),
          density=dict(ptraits=dict(type='exponential')),
          kinematics=dict(

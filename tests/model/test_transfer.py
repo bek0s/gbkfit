@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 from modelutils import observation_group
 
+from gbkfit.config import ConfigError
 from gbkfit.grid import Coords, Grid
 from gbkfit.model import Extras, galaxy_parser
 from gbkfit.observation import DepthGroup
@@ -30,7 +31,8 @@ def disk(kind='smooth', thick=True):
         density.update(htraits=dict(type='sech2', zmax=8))
     clouds = dict(clouds=dict(cflux=1e-3)) if kind == 'clouds' else {}
     return dict(
-        type='disk', loose=False, tilted=False, rnodes=dict(max=10, sep=1),
+        type='thick_disk' if thick else 'thin_disk',
+        loose=False, tilted=False, rnodes=dict(max=10, sep=1),
         density=density,
         kinematics=dict(
             type='traits',
@@ -142,11 +144,12 @@ THICK = dict(
     ptraits=dict(type='exponential'), htraits=dict(type='sech2', zmax=8))
 THIN = dict(ptraits=dict(type='exponential'))
 GAS = dict(
-    type='disk', name='gas', loose=False, tilted=False,
+    type='thick_disk', name='gas', loose=False, tilted=False,
     rnodes=dict(max=10, sep=1), density=THICK, kinematics=KINEMATICS,
     emission=LINES)
+THIN_GAS = GAS | dict(type='thin_disk', density=THIN)
 DUST = dict(
-    type='disk', name='dust', loose=False, tilted=False,
+    type='thick_disk', name='dust', loose=False, tilted=False,
     rnodes=dict(max=10, sep=1), density=THICK, opacity=dict(type='dust'))
 NUCLEUS = dict(type='point', name='nucleus', emission=LINES, depth=True)
 OUTFLOW = dict(
@@ -213,9 +216,9 @@ def assert_same_model(actual, desired):
 @pytest.mark.parametrize('components', [
     [GAS],
     [GAS, DUST],
-    [GAS | dict(density=THIN), DUST],
+    [THIN_GAS, DUST],
     [NUCLEUS, DUST],
-    [GAS, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN)]],
+    [GAS, NUCLEUS, DUST, THIN_GAS | dict(name='gas2')]],
     ids=['thick', 'dust', 'thin', 'point', 'all'])
 def test_transfer_gives_what_a_grid_gives(driver, evaluate_cases, components):
     properties = PROPERTIES | {
@@ -263,7 +266,7 @@ def test_transfer_keeps_the_moments_of_monte_carlo_clouds(
         driver, evaluate_cases):
     # The clouds of a voxel become one line of their flux, mean velocity
     # and width: the moments of each spaxel are kept
-    gas = GAS | dict(type='disk', clouds=dict(cflux=1e-3))
+    gas = GAS | dict(type='thick_disk', clouds=dict(cflux=1e-3))
     grid, transfer = cubes_of(
         evaluate_cases, driver, [gas, DUST], PROPERTIES,
         observable=dict(
@@ -383,8 +386,9 @@ def test_a_uniform_coefficient_is_not_discouraged(caplog):
         GAS | dict(emission=dict(type='lines', lines=['halpha', 'nii6583'])),
         dict(halpha=dict(type='uniform'))), 'transfer',
      "needs the coefficients of every line"),
-    (line_opacity(GAS | dict(density=THIN), dict(type='uniform')), 'transfer',
-     "needs density height traits"),
+    (line_opacity(THIN_GAS, dict(type='uniform')), 'transfer',
+     r"options of a thick disk \(type: thick_disk\), which a thin disk "
+     r"does not take: 'opacity'"),
     (line_opacity(
         GAS | dict(emission=dict(type='band')), dict(type='uniform')),
      'transfer', "needs emission lines")])
@@ -397,7 +401,7 @@ def test_line_opacity_errors(driver, component, line_of_sight, message):
             type='pixel_spectra', size=[24, 24], step=[1, 1],
             spectral=dict(size=31, step=10, convention='relativistic')),
         galaxy=dict(components=[component]))
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises((ConfigError, ValueError), match=message):
         group_plan([case])
 
 
@@ -409,7 +413,7 @@ def test_slabs_give_the_same_model(driver, evaluate_cases, disk_type):
     gas = line_opacity(GAS, dict(type='uniform')) | (
         dict(clouds=dict(cflux=1e-3)) if disk_type == 'clouds' else {})
     components = [
-        gas, NUCLEUS, DUST, GAS | dict(name='gas2', density=THIN), OUTFLOW]
+        gas, NUCLEUS, DUST, THIN_GAS | dict(name='gas2'), OUTFLOW]
     properties = PROPERTIES | dict(gas_op_a=0.5) | {
         key.replace('gas_', 'gas2_'): value
         for key, value in PROPERTIES.items() if key.startswith('gas_')} \
@@ -500,8 +504,7 @@ def test_the_dust_of_a_galaxy_dims_the_galaxies_behind_it(
     # band in its own rest frame; behind them, not at all
     from gbkfit.model import LineCatalogue
     stars = dict(
-        GAS, name='stars', density=THIN, emission=dict(type='band'),
-        kinematics=None)
+        THIN_GAS, name='stars', emission=dict(type='band'), kinematics=None)
     dust = DUST | dict(opacity=dict(type='dust', law=dict(
         type='table', wavelengths=[0.2, 1.0], ratios=[3.0, 1.0])))
     galaxies = [

@@ -17,9 +17,13 @@ A galaxy is a set of components, with optional mass and distance.
 
 Components
 ^^^^^^^^^^
-- The smooth disk
-- The Monte Carlo disk
+- The thin disk (thin_disk): its light in its plane
+- The thick disk (thick_disk): its density has a height; smooth, or made
+  of clouds (the Monte Carlo disk)
+- The cone
+- The spheroid
 - The point
+- The particles
 
 Each component emits light (in a band, seen by images, or in lines, seen
 by spectral cubes and the data made from them), removes light (dust), or

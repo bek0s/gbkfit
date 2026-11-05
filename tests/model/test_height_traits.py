@@ -17,7 +17,7 @@ from modelutils import group_plan
 
 
 DISK = dict(
-    type='disk', loose=False, tilted=False,
+    type='thick_disk', loose=False, tilted=False,
     rnodes=list(range(0, 14)),
     density=dict(
         ptraits=dict(type='exponential'),
@@ -289,7 +289,7 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
     # holds it: each column keeps its light (exactly for the clouds; the
     # smooth disk samples its profile at the centres of the voxels)
     component = DISK | dict(
-        type='disk', zptraits=dict(type='nw_uniform', zmax=20))
+        type='thick_disk', zptraits=dict(type='nw_uniform', zmax=20))
     if disk_type == 'clouds':
         component |= dict(clouds=dict(cflux=1e-3))
     plan = observe(driver, component)
@@ -324,7 +324,8 @@ def test_a_lifted_midplane_carries_its_light(driver, caplog, disk_type):
 
 def test_outward_speeds_of_a_thin_disk_are_radial(driver):
     # In its plane, the radius of the sphere is that of the disk
-    thin = DISK | dict(density=dict(ptraits=dict(type='exponential')))
+    thin = DISK | dict(
+        type='thin_disk', density=dict(ptraits=dict(type='exponential')))
     properties = {
         key: value for key, value in PROPERTIES.items()
         if key not in ('ht_s', 'vpt_rt', 'vpt_vt')}
@@ -387,9 +388,12 @@ def test_speeds_away_from_the_plane_leave_both_faces(driver):
 
 def test_speeds_away_from_the_plane_need_a_thick_disk():
     thin = DISK | dict(
-        density=dict(ptraits=dict(type='exponential')),
+        type='thin_disk', density=dict(ptraits=dict(type='exponential')),
         kinematics=DISK['kinematics'] | dict(
             vptraits=dict(type='uniform', direction='away')))
     from gbkfit.model import component_parser
-    with pytest.raises(ValueError, match="need density height traits"):
+    with pytest.raises(
+            ValueError, match=r"a thin disk takes velocity traits along "
+                              r"\['tan', 'rad', 'ver', 'out', 'los', "
+                              r"'plane'\]; .* is along 'away'"):
         component_parser.load(thin)
