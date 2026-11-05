@@ -67,10 +67,14 @@ def create_app(
     Returns
     -------
     FastAPI
-        The app; it closes the server as it shuts down.
+        The app; it clears the previews of prep left by another server as
+        it starts (see Jobs.clear_previews), and closes the server as it
+        shuts down.
     """
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        if server is not None:
+            server.jobs.clear_previews()
         yield
         if server is not None:
             await server.close()

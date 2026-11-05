@@ -7,6 +7,7 @@ a dataset of it.
 
 import dataclasses
 import warnings
+from typing import Any
 
 import astropy.io.fits
 import astropy.units
@@ -86,7 +87,7 @@ class HDUDescription:
 
 
 def describe_fits(
-        filename: str, velocity: str | None = None
+        filename: str, velocity: str | None = None, rest: Any = None
 ) -> list[HDUDescription]:
     """
     Describe the HDUs of a FITS file that hold an array (e.g. data, their
@@ -100,6 +101,10 @@ def describe_fits(
     velocity : str, optional
         The convention of the velocities of spectral axes that the headers
         leave ambiguous (see read_data): 'radio' or 'optical'.
+    rest : str or Quantity, optional
+        The rest of their spectral axes (e.g. '6562.8 Angstrom'), which
+        turns axes of wavelengths or frequencies into velocities, as a
+        dataset with that rest reads them (see read_coords).
 
     Returns
     -------
@@ -117,7 +122,8 @@ def describe_fits(
             (index, hdu.name, hdu.header.copy())
             for index, hdu in enumerate(hdus)
             if hdu.is_image and hdu.header.get('NAXIS', 0) > 0]
-    return [_describe(filename, *header, velocity) for header in headers]
+    return [
+        _describe(filename, *header, velocity, rest) for header in headers]
 
 
 def _describe(
@@ -125,7 +131,8 @@ def _describe(
         index: int,
         name: str,
         header: astropy.io.fits.Header,
-        velocity: str | None
+        velocity: str | None,
+        rest: Any
 ) -> HDUDescription:
     """Return the description of an HDU of a FITS file with an array."""
     problems = []
@@ -141,7 +148,7 @@ def _describe(
     coords = None
     if not ambiguous or velocity is not None:
         try:
-            coords = read_coords(filename, index, velocity)
+            coords = read_coords(filename, index, velocity, rest)
         except ValueError as e:
             problems.append(str(e))
     unit = read_unit(filename, index)

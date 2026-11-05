@@ -386,7 +386,8 @@ def read_array(
 def read_coords(
         filename: str,
         hdu: int | str = 0,
-        velocity: str | None = None
+        velocity: str | None = None,
+        rest: typing.Any = None
 ) -> Coords:
     """
     Read the world coordinates of the data of a FITS file, as read_data
@@ -401,6 +402,9 @@ def read_coords(
     velocity : str, optional
         The convention of the velocities of an ambiguous spectral axis
         (see read_data).
+    rest : str or Quantity, optional
+        The rest of the spectral axis, which turns an axis of wavelengths
+        or frequencies into velocities (see model_header).
 
     Returns
     -------
@@ -414,7 +418,7 @@ def read_coords(
     """
     header = astropy.io.fits.getheader(filename, hdu)
     header, _ = model_header(
-        filename, header, header_shape(header), velocity=velocity)
+        filename, header, header_shape(header), rest, velocity)
     return coords_from_header(filename, header)
 
 

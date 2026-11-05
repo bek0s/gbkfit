@@ -5,15 +5,22 @@ The paths of the requests are relative to it, and stay in it.
 """
 
 import dataclasses
+import datetime
 import filecmp
 import itertools
+import json
 import os
 import shutil
+import threading
 import uuid
-from collections.abc import AsyncIterator, Iterator
+import warnings
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
+import astropy.units
+import astropy.wcs
+import astropy.wcs.utils
 import numpy as np
 import ruamel.yaml
 from astropy.io import fits
@@ -39,6 +46,14 @@ _SKIPPED = ('data', 'runs', 'node_modules', '__pycache__')
 
 # The endings of the names of the files of data that GBKFIT reads (FITS)
 _DATA_FILES = ('.fits', '.fit', '.fts', '.fits.gz')
+
+# The record of how the files of a folder of data were prepared (see
+# Workspace.record_preparation), in that folder
+_PREPARED = '.prepared.json'
+
+# The options of prep that name files of data (a path, or a path and an
+# HDU, {file, hdu}; of moment maps, a list of them)
+_PREP_FILES = ('file_d', 'file_e', 'file_m')
 
 # The folders of the pieces and of the setups of a project
 _PIECES = (
@@ -87,6 +102,8 @@ class Workspace:
         self._root = os.path.realpath(root)
         if not os.path.isdir(self._root):
             raise NotADirectoryError(f"{root} is not a folder")
+        # (the records of preparations are read and written one at a time)
+        self._records = threading.Lock()
 
     @property
     def root(self) -> str:
@@ -403,16 +420,19 @@ class Workspace:
              for entry in entries if entry.is_file()])
 
     def describe(
-            self, relative: str, velocity: str | None = None
+            self, relative: str, velocity: str | None = None,
+            rest: str | None = None
     ) -> list[dict[str, Any]]:
         """
         Describe a file of data from its headers (see
         gbkfit.dataset.describe_fits), with the convention of velocities
-        that its headers leave ambiguous, if given: each of its arrays (its
-        index, name, shape and axes, in the order of the model, unit, the
-        size of its pixels in that order (only the spatial ones while its
-        velocities are ambiguous), beam, the noise its header states,
-        whether its velocities are ambiguous, and problems).
+        that its headers leave ambiguous and the rest of its spectral axis
+        (which makes wavelengths or frequencies velocities), if given: each
+        of its arrays (its index, name, shape and axes, in the order of the
+        model, unit, the size of its pixels in that order (only the
+        spatial ones while its spectral axis cannot be read: velocities of
+        no convention, or wavelengths without a rest), beam, the noise its
+        header states, whether its velocities are ambiguous, and problems).
 
         Raises
         ------
@@ -427,21 +447,13 @@ class Workspace:
                 f"'{relative}' is not a file of data that GBKFIT reads: "
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
-            hdus = gbkfit.dataset.describe_fits(path, velocity)
-            # (the size of the pixels of arrays of ambiguous velocities is
-            # that of either convention: their spatial steps are given)
-            spatial = {
-                hdu.index: [float(step) for step in hdu.coords.step[:2]]
-                for hdu in gbkfit.dataset.describe_fits(path, 'radio')
-                if hdu.coords is not None} \
-                if velocity is None \
-                and any(hdu.ambiguous_velocity for hdu in hdus) else {}
+            hdus = gbkfit.dataset.describe_fits(path, velocity, rest)
         except OSError as e:
             raise Invalid(f"cannot read '{relative}': {e}") from e
         return [
             dict(index=hdu.index, name=hdu.name, shape=list(hdu.shape),
                  axes=list(hdu.axes), unit=_readable_unit(hdu.unit),
-                 step=spatial.get(hdu.index) if hdu.coords is None
+                 step=_spatial_step(path, hdu.index) if hdu.coords is None
                  else [float(step) for step in hdu.coords.step],
                  beam=None if hdu.beam is None else dict(
                      bmaj=np.asarray(hdu.beam.bmaj).tolist(),
@@ -451,6 +463,116 @@ class Workspace:
                  # (the paths of the problems in the workspace)
                  problems=[p.replace(path, relative) for p in hdu.problems])
             for hdu in hdus]
+
+    def record_preparation(
+            self, task: str, options: dict[str, Any],
+            files: dict[str, str | list[str | None]]
+    ) -> None:
+        """
+        Record how files of data were prepared: the task of prep, its
+        options (those of its files, paths relative to the workspace) and
+        the files it prepared (by the options of their files, as those of
+        a job; relative to the workspace), with the time, in the record of
+        the folder of the prepared files, under the name of each prepared
+        file of data (see preparation). Its paths are kept relative to that
+        folder, so that the record follows the project as it moves.
+        """
+        data = files['file_d']
+        first = data if isinstance(data, str) else next(
+            path for path in data if path is not None)
+        folder = Path(self.path(first)).parent
+
+        def kept(path: str) -> str:
+            return Path(os.path.relpath(self.path(path), folder)).as_posix()
+        entry = dict(
+            task=task,
+            options={
+                key: _file_paths(value, kept) if key in _PREP_FILES
+                else value
+                for key, value in options.items()
+                if key not in ('output_dir', 'output_dir_mode')},
+            files={
+                key: _file_paths(value, kept) for key, value in files.items()},
+            time=datetime.datetime.now(datetime.UTC).isoformat(
+                timespec='seconds'))
+        names = [data] if isinstance(data, str) else data
+        with self._records:
+            records = _read_records(folder)
+            for name in names:
+                if name is not None:
+                    records[Path(name).name] = entry
+            _write_records(folder, records)
+
+    def preparation(self, relative: str) -> dict[str, Any] | None:
+        """
+        Return how a file of data was prepared, if a record of its folder
+        has it (see record_preparation): the task, its options and the
+        files it prepared (paths relative to the workspace), and when;
+        None if the file was not prepared by the server (e.g. an imported
+        file, or one prepared by the command line).
+
+        Raises
+        ------
+        NotFound
+            If the file does not exist.
+        """
+        path = Path(self.file(relative))
+        entry = _read_records(path.parent).get(path.name)
+        if entry is None:
+            return None
+
+        def workspace(name: str) -> str:
+            return self.relative(os.path.normpath(path.parent / name))
+        return dict(
+            task=entry['task'],
+            options={
+                key: _file_paths(value, workspace) if key in _PREP_FILES
+                else value
+                for key, value in entry['options'].items()},
+            files={
+                key: _file_paths(value, workspace)
+                for key, value in entry['files'].items()},
+            time=entry['time'])
+
+    def delete_data(self, relative: str) -> None:
+        """
+        Delete a file of data of a project (one of its folder data), if
+        no piece, setup or run of the project names it (by its name, as
+        a careful check), and forget how it was prepared.
+
+        Raises
+        ------
+        NotFound
+            If the file does not exist.
+        Invalid
+            If it is not a file of data of the folder data of a project,
+            or the project names it.
+        """
+        path = Path(self.file(relative))
+        if not path.name.lower().endswith(_DATA_FILES) \
+                or path.parent.name != 'data':
+            raise Invalid(
+                f"'{relative}' is not a file of data of the folder data of "
+                f"a project")
+        project = path.parent.parent
+        try:
+            gbkfit.project.open(str(project))
+        except ValueError as e:
+            raise Invalid(
+                f"'{relative}' is not a file of data of a project") from e
+        for text in project.rglob('*.yaml'):
+            if any(part.startswith('.') for part in
+                   text.relative_to(project).parts):
+                continue
+            if path.name in text.read_text(errors='replace'):
+                raise Invalid(
+                    f"'{relative}' is in use: "
+                    f"{text.relative_to(project).as_posix()} names it")
+        path.unlink()
+        with self._records:
+            records = _read_records(path.parent)
+            if records.pop(path.name, None) is not None:
+                _write_records(path.parent, records)
 
     def import_data(self, project: str, relative: str) -> str:
         """
@@ -655,6 +777,65 @@ def _numbered(folder: Path, name: str) -> Iterator[Path]:
     yield folder / name
     for number in itertools.count(2):
         yield folder / f'{stem}-{number}{ending}'
+
+
+def _spatial_step(path: str, index: int) -> list[float] | None:
+    """
+    Return the size of the pixels of an array of a file on the sky
+    (arcsec; x, then y) from the celestial axes of its header, for an
+    array whose coordinates GBKFIT cannot read yet (e.g. velocities of no
+    convention, or wavelengths without a rest); None if its header has no
+    celestial axes.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            celestial = astropy.wcs.WCS(fits.getheader(path, index)).celestial
+            if celestial.naxis != 2:
+                return None
+            scales = astropy.wcs.utils.proj_plane_pixel_scales(celestial)
+            return [
+                float(astropy.units.Quantity(
+                    scale, unit or astropy.units.deg).to_value('arcsec'))
+                for scale, unit in zip(scales, celestial.wcs.cunit)]
+    except Exception:
+        # (any error of astropy: no size)
+        return None
+
+
+def _file_paths(value: Any, change: Callable[[str], str]) -> Any:
+    """
+    Return a file option of prep (a path, or a path and an HDU, {file,
+    hdu}; a list of them, or None) with its paths changed.
+    """
+    if isinstance(value, str):
+        return change(value)
+    if isinstance(value, dict):
+        return value | dict(file=change(value['file']))
+    if isinstance(value, list):
+        return [_file_paths(item, change) for item in value]
+    return value
+
+
+def _read_records(folder: Path) -> dict[str, Any]:
+    """
+    Return the records of the preparations of the files of a folder, by
+    the names of their files (none if it has none, or if they cannot be
+    read).
+    """
+    try:
+        records = json.loads((folder / _PREPARED).read_text())
+    except (OSError, ValueError):
+        return {}
+    return records.get('files', {}) if isinstance(records, dict) else {}
+
+
+def _write_records(folder: Path, records: dict[str, Any]) -> None:
+    """Write the records of the preparations of a folder, atomically."""
+    path = folder / _PREPARED
+    temporary = _temporary(path)
+    temporary.write_text(json.dumps(dict(version=1, files=records), indent=1))
+    os.replace(temporary, path)
 
 
 def _readable_unit(text: str | None) -> str | None:

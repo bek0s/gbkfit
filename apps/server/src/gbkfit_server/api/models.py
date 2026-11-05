@@ -210,8 +210,10 @@ class ArrayInfo(BaseModel):
     its axes, in the order of the model (x, y, then the spectral axis),
     the unit of its values, the size of its pixels in that order (arcsec,
     and km/s along a velocity axis; the spatial ones alone while its
-    velocities are ambiguous; none if its coordinates cannot be read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
-    a beam of each channel), the noise of its values that its header
+    spectral axis cannot be read, e.g. velocities of no convention or
+    wavelengths without a rest; none if its header has no coordinates on
+    the sky), its beam (bmaj and bmin in arcsec, bpa in degrees; lists
+    for a beam of each channel), the noise of its values that its header
     states (keyword RMS or NOISE), whether its header leaves it open
     whether its velocities are radio or optical (a dataset of it gives
     their convention), and what a dataset of it refuses or needs given.
@@ -261,24 +263,30 @@ class JobRequest(BaseModel):
     needs the folder of the run of the fit ('output_dir'); prep needs the
     folder of the prepared files ('output_dir'), where they are kept as
     imported files are (an identical file is reused; a name taken is
-    numbered).
+    numbered), and how they were prepared is recorded (see
+    PreparationInfo). A job of prep can be a preview: its files stay
+    apart, to be looked at, until kept (POST /jobs/{id}/keep); previews
+    not kept are removed in time.
     """
     task: Literal[TASKS]
     options: dict[str, Any] = {}
+    preview: bool = False
 
 
 class JobInfo(BaseModel):
     """
-    A job: its id, task and options, its state, its run, the files that
-    a job of prep prepared (by the options of their files, e.g. file_d;
-    of moment maps, a list, one for each map, None for a file not
-    prepared), when it was created, started and ended, the exit status
+    A job: its id, task and options, whether it is a preview of prep not
+    kept, its state, its run, the files that a job of prep prepared (by
+    the options of their files, e.g. file_d; of moment maps, a list, one
+    for each map, None for a file not prepared; none for a preview
+    removed), when it was created, started and ended, the exit status
     of its process, and the end of its log.
     """
     id: str
     task: str
     options: dict[str, Any]
     created: str
+    preview: bool
     state: Literal[
         'queued', 'running', 'complete', 'failed', 'stopped', 'cancelled']
     run: str | None
@@ -287,6 +295,20 @@ class JobInfo(BaseModel):
     ended: str | None
     status: int | None
     output: str
+
+
+class PreparationInfo(BaseModel):
+    """
+    How a file of data was prepared by a job of prep: the task, its
+    options (their files: a path, or {file, hdu}; of moment maps, lists),
+    the files it prepared (by the options of their files, as those of a
+    job), with their paths relative to the workspace, and when (ISO 8601,
+    UTC).
+    """
+    task: str
+    options: dict[str, Any]
+    files: dict[str, str | list[str | None]]
+    time: str
 
 
 class SessionRequest(BaseModel):

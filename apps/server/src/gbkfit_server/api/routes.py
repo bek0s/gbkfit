@@ -31,7 +31,7 @@ from .models import (
     GalaxyInfo,
     GalaxyRenderRequest, GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
-    PieceReference, PieceRename, PieceRequest,
+    PieceReference, PieceRename, PieceRequest, PreparationInfo,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
     SessionInfo, SessionRequest, SpectrumView)
 
@@ -169,17 +169,20 @@ def folder(server: ServerDep, path: str) -> FolderInfo:
 def describe(
         server: ServerDep,
         path: str,
-        velocity: Literal['radio', 'optical'] | None = None
+        velocity: Literal['radio', 'optical'] | None = None,
+        rest: str | None = None
 ) -> list[ArrayInfo]:
     """
     Describe a file of data from its headers, without reading its data:
     each of its arrays, and what a dataset of it refuses or needs given;
     velocity is the convention of velocities that its headers leave
-    ambiguous (see ArrayInfo).
+    ambiguous, and rest the rest of its spectral axis (e.g. '6562.8
+    Angstrom'), which makes wavelengths or frequencies velocities, as a
+    dataset with that rest reads them (see ArrayInfo).
     """
     return [
         ArrayInfo.model_validate(array)
-        for array in server.workspace.describe(path, velocity)]
+        for array in server.workspace.describe(path, velocity, rest)]
 
 
 # (the responses of frames of arrays)
@@ -477,7 +480,7 @@ async def jobs(server: ServerDep) -> list[JobInfo]:
 @router.post('/jobs', status_code=status.HTTP_201_CREATED)
 async def submit_job(server: ServerDep, request: JobRequest) -> JobInfo:
     """Queue a job, which starts when there is room."""
-    job = server.jobs.submit(request.task, request.options)
+    job = server.jobs.submit(request.task, request.options, request.preview)
     return JobInfo.model_validate(job.info())
 
 
@@ -494,6 +497,36 @@ async def stop_job(server: ServerDep, id_: str) -> JobInfo:
     Ctrl-C does (e.g. a fit ends with its best so far).
     """
     return JobInfo.model_validate(server.jobs.stop(id_).info())
+
+
+@router.post('/jobs/{id_}/keep')
+async def keep_job(server: ServerDep, id_: str) -> JobInfo:
+    """
+    Keep the files of a preview of prep into the folder of its output_dir
+    (see JobRequest); the job then gives the files kept.
+    """
+    return JobInfo.model_validate(server.jobs.keep(id_).info())
+
+
+@router.get('/preparations/{path:path}')
+def preparation(server: ServerDep, path: str) -> PreparationInfo | None:
+    """
+    Return how a file of data was prepared by a job of prep (see
+    PreparationInfo); null if it was not (e.g. a file imported as it is).
+    """
+    info = server.workspace.preparation(path)
+    return None if info is None else PreparationInfo.model_validate(info)
+
+
+@router.delete('/data/{path:path}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_data(server: ServerDep, path: str) -> None:
+    """
+    Delete a file of data of a project (of its folder data), unless the
+    project names it (a piece, a setup or a run) or a job uses it.
+    """
+    if server.jobs.busy(path):
+        raise Invalid(f"'{path}' is in use by a job")
+    server.workspace.delete_data(path)
 
 
 @router.get('/events', response_class=EventSourceResponse)

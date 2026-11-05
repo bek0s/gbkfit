@@ -365,6 +365,133 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
     assert [abs(step) for step in array['step']] == pytest.approx([1, 1, 10])
 
 
+def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
+        client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-0.2 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--TAN', CDELT2=0.2 / 3600, CUNIT2='deg',
+        CTYPE3='AWAV', CRVAL3=6600, CDELT3=1.25, CUNIT3='Angstrom'))
+    fits.writeto(
+        pathlib.Path(root, 'study/data/ifu.fits'),
+        np.zeros((4, 3, 2), np.float32), header)
+    # (without a rest, the size of its pixels on the sky alone, and the
+    # problem of its axis)
+    (array,) = client.get('/api/v1/describe/study/data/ifu.fits').json()
+    assert array['step'] == pytest.approx([0.2, 0.2])
+    assert len(array['problems']) == 1 and 'AWAV' in array['problems'][0]
+    (array,) = client.get(
+        '/api/v1/describe/study/data/ifu.fits',
+        params=dict(rest='6562.8 Angstrom')).json()
+    assert array['problems'] == []
+    assert [abs(step) for step in array['step']] == pytest.approx(
+        [0.2, 0.2, 299792.458 * 1.25 / 6562.8], rel=1e-3)
+
+
+def wait(client, job):
+    """Return a job once it ends."""
+    for _ in range(600):
+        job = client.get(f"/api/v1/jobs/{job['id']}").json()
+        if job['state'] not in ('queued', 'running'):
+            return job
+        time.sleep(0.1)
+    raise AssertionError(f"the job {job['id']} does not end")
+
+
+def test_a_preview_of_prep_is_kept_and_its_preparation_recorded(
+        client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600))
+    folder = pathlib.Path(root, 'study/data')
+    fits.writeto(
+        folder / 'image.fits',
+        np.arange(12, dtype=np.float32).reshape(3, 4), header)
+    options = dict(
+        file_d='study/data/image.fits', file_e=None, file_m=None,
+        roi_spat=[1, 3, 0, 3], clip_min=None, clip_max=None,
+        ccl_lcount=None, ccl_pcount=None, ccl_lratio=None,
+        sclip_sigma=None, sclip_iters=5, minify=False, nanpad=None,
+        dtype='float32', output_dir='study/data')
+    job = wait(client, client.post('/api/v1/jobs', json=dict(
+        task='prep_pixel_brightness', options=options, preview=True)).json())
+    assert job['state'] == 'complete' and job['preview']
+    # (its files stay apart, out of the listing of the folder)
+    preview = job['files']['file_d']
+    assert preview.startswith('study/data/.prep-')
+    assert fits.getdata(pathlib.Path(root, preview)).shape == (3, 2)
+    assert [f['name'] for f in client.get(
+        '/api/v1/folders/study/data').json()['files']] == ['image.fits']
+    kept = client.post(f"/api/v1/jobs/{job['id']}/keep").json()
+    assert not kept['preview']
+    assert kept['files'] == dict(file_d='study/data/prep_image.fits')
+    assert not pathlib.Path(root, preview).exists()
+    # (kept once)
+    assert client.post(
+        f"/api/v1/jobs/{job['id']}/keep").status_code == 400
+    record = client.get(
+        '/api/v1/preparations/study/data/prep_image.fits').json()
+    assert record['task'] == 'prep_pixel_brightness'
+    assert record['options']['file_d'] == 'study/data/image.fits'
+    assert record['options']['roi_spat'] == [1, 3, 0, 3]
+    assert 'output_dir' not in record['options']
+    assert record['files'] == kept['files']
+    assert client.get(
+        '/api/v1/preparations/study/data/image.fits').json() is None
+    # (the record follows the project as it moves)
+    client.patch('/api/v1/projects/study', json=dict(path='moved'))
+    record = client.get(
+        '/api/v1/preparations/moved/data/prep_image.fits').json()
+    assert record['options']['file_d'] == 'moved/data/image.fits'
+
+
+def test_previews_not_kept_are_removed_as_newer_ones_end(client, root):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600))
+    fits.writeto(
+        pathlib.Path(root, 'study/data/image.fits'),
+        np.ones((3, 4), np.float32), header)
+    jobs = [wait(client, client.post('/api/v1/jobs', json=dict(
+        task='prep_pixel_brightness', preview=True, options=dict(
+            file_d='study/data/image.fits', file_e=None, file_m=None,
+            roi_spat=None, clip_min=clip, clip_max=None, ccl_lcount=None,
+            ccl_pcount=None, ccl_lratio=None, sclip_sigma=None,
+            sclip_iters=5, minify=False, nanpad=None, dtype='float32',
+            output_dir='study/data'))).json())
+        for clip in range(4)]
+    first = client.get(f"/api/v1/jobs/{jobs[0]['id']}").json()
+    assert first['files'] is None
+    assert not pathlib.Path(root, jobs[0]['files']['file_d']).exists()
+    assert all(pathlib.Path(root, job['files']['file_d']).exists()
+               for job in jobs[1:])
+    assert client.post(
+        f"/api/v1/jobs/{jobs[0]['id']}/keep").status_code == 400
+    assert client.post('/api/v1/jobs', json=dict(
+        task='fit', preview=True,
+        options=dict(config='study/setups/disk.yaml'))).status_code == 400
+
+
+def test_files_of_data_are_deleted_unless_the_project_names_them(
+        client, root):
+    folder = pathlib.Path(root, 'study/data')
+    fits.writeto(folder / 'used.fits', np.ones((3, 4), np.float32))
+    fits.writeto(folder / 'free.fits', np.ones((3, 4), np.float32))
+    client.post('/api/v1/pieces', json=dict(
+        project='study', folder='datasets', name='image', content=dict(
+            type='pixel_brightness', data='data/used.fits')))
+    response = client.delete('/api/v1/data/study/data/used.fits')
+    assert response.status_code == 400
+    assert 'datasets/image.yaml' in response.json()['detail']
+    assert client.delete(
+        '/api/v1/data/study/data/free.fits').status_code == 204
+    assert not (folder / 'free.fits').exists()
+    assert client.delete(
+        '/api/v1/data/study/data/free.fits').status_code == 404
+    # (only files of data of the folder data of a project)
+    assert client.delete(
+        '/api/v1/data/study/datasets/image.yaml').status_code == 400
+
+
 def test_files_of_data_are_imported_and_uploaded_into_a_project(client, root):
     survey = pathlib.Path(root, 'survey')
     for name, value in (('cube.fits', 0), ('other/cube.fits', 1)):
@@ -520,8 +647,14 @@ def test_a_job_prepares_a_cube_into_the_project(client, root):
     assert prepare(0)['file_d'] == 'study/data/prep_cube.fits'
     assert prepare(None)['file_d'] == 'study/data/prep_cube-2.fits'
     assert sorted(os.listdir(pathlib.Path(root, 'study/data'))) == [
-        'cube.fits', 'prep_cube-2.fits', 'prep_cube.fits',
+        '.prepared.json', 'cube.fits', 'prep_cube-2.fits', 'prep_cube.fits',
         'prep_cube_error-2.fits', 'prep_cube_error.fits']
+    # (how each was prepared is recorded)
+    record = client.get(
+        '/api/v1/preparations/study/data/prep_cube-2.fits').json()
+    assert record['options']['clip_min'] is None
+    assert record['options']['file_e'] == dict(
+        file='study/data/cube.fits', hdu='STAT')
 
 
 def test_a_job_prepares_a_flux_map_into_the_project(client, root):

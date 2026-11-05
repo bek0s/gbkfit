@@ -639,6 +639,21 @@ def test_fits_files_are_described_from_their_headers(tmp_path):
     assert third.problems == (problem,)
 
 
+def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
+        tmp_path):
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-0.2 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=0.2 / 3600, CTYPE3='AWAV', CRVAL3=6600, CDELT3=1.25,
+        CRPIX3=1, CUNIT3='Angstrom'))
+    fits.writeto(tmp_path / 'ifu.fits', np.zeros((4, 3, 2)), header)
+    (hdu,) = describe_fits(str(tmp_path / 'ifu.fits'))
+    assert hdu.coords is None and 'AWAV' in hdu.problems[0]
+    (hdu,) = describe_fits(str(tmp_path / 'ifu.fits'), rest='6562.8 Angstrom')
+    assert hdu.problems == ()
+    np.testing.assert_allclose(
+        hdu.coords.step, (0.2, 0.2, 299792.458 * 1.25 / 6562.8), rtol=1e-3)
+
+
 def test_the_mask_of_signal_keeps_a_line_and_leaves_the_noise():
     from gbkfit import prep
     rng = np.random.default_rng(1)

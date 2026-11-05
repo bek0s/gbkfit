@@ -51,6 +51,10 @@ _PREPARE_MAPS = ('prep_pixel_moments',)
 # The options of the files that prep prepares
 _FILES = ('file_d', 'file_e', 'file_m')
 
+# The previews of prep (see Jobs.submit) of a folder kept at most: the
+# older ones are removed as a new one ends
+_PREVIEWS = 3
+
 # How often the run of a job is read, for its events (seconds)
 _POLL = 0.5
 
@@ -63,16 +67,19 @@ class Job:
     """
     A job: its id, task and options (those of the task, with its paths
     relative to the workspace), its state, its run (relative to the
-    workspace), the files that a job of prep prepared, by the options of
-    their files (e.g. file_d; relative to the workspace; of moment maps,
-    a list, None for a file not prepared), when it was
-    created, started and ended (ISO 8601, UTC), the exit status of its
-    process, and the end of its log.
+    workspace), whether it is a preview of prep (its files stay in a
+    folder of their own until kept; see Jobs.submit), its state, its run
+    (relative to the workspace), the files that a job of prep prepared, by
+    the options of their files (e.g. file_d; relative to the workspace; of
+    moment maps, a list, None for a file not prepared; none for a preview
+    removed), when it was created, started and ended (ISO 8601, UTC), the
+    exit status of its process, and the end of its log.
     """
     id: str
     task: str
     options: dict[str, Any]
     created: str
+    preview: bool = False
     state: State = 'queued'
     run: str | None = None
     files: dict[str, str | list[str | None]] | None = None
@@ -131,24 +138,33 @@ class Jobs:
             raise NotFound(f"no job '{id_}'")
         return self._jobs[id_]
 
-    def submit(self, task: str, options: Mapping[str, Any]) -> Job:
+    def submit(
+            self, task: str, options: Mapping[str, Any], preview: bool = False
+    ) -> Job:
         """
-        Queue a job, and start it if there is room.
+        Queue a job, and start it if there is room. A job of prep can be a
+        preview: its files stay in a folder of their own (in that of its
+        output_dir) to be looked at, until they are kept (see keep) or
+        removed (as newer previews of that folder end, or as the server
+        closes or starts).
 
         Raises
         ------
         Invalid
             If the task is not one of TASKS, or an option it needs is
-            missing or out of the workspace.
+            missing or out of the workspace, or a preview is not of prep.
         """
         if task not in TASKS:
             raise Invalid(
                 f"the task of a job is one of {TASKS}; it is {task!r}")
+        if preview and task not in _PREPARE:
+            raise Invalid(f"only a job of prep is a preview, not {task}")
         key = 'config' if task in _MAKE_RUN else 'output_dir'
         if not isinstance(options.get(key), str):
             raise Invalid(f"the task {task} needs the option '{key}'")
         self._workspace.path(options[key])
-        job = Job(uuid.uuid4().hex[:12], task, dict(options), _now())
+        job = Job(
+            uuid.uuid4().hex[:12], task, dict(options), _now(), preview)
         self._jobs[job.id] = job
         self._queue.append(job)
         self._publish(job)
@@ -204,13 +220,69 @@ class Jobs:
             self._processes[job.id].interrupt()
         return job
 
+    def keep(self, id_: str) -> Job:
+        """
+        Keep the files of a preview of prep (see submit) into the folder of
+        its output_dir, as the files of a job of prep are kept (see
+        Workspace.keep_data), and record how they were prepared; the job
+        is then one of prep like the others, of the files kept.
+
+        Raises
+        ------
+        NotFound
+            If there is no job of the id.
+        Invalid
+            If the job is not a complete preview whose files are there.
+        """
+        job = self.get(id_)
+        if not job.preview or job.state != 'complete' or job.files is None:
+            raise Invalid(
+                f"the job {id_} is not a preview of prep whose files are "
+                f"there (complete, and not removed)")
+        folder = self._prep_folder(job)
+        target = self._workspace.path(job.options['output_dir'])
+
+        def keep(output: str | None) -> str | None:
+            return output and self._workspace.keep_data(
+                self._workspace.path(output), target)
+        try:
+            job.files = {
+                key: [keep(output) for output in outputs]
+                if isinstance(outputs, list) else keep(outputs)
+                for key, outputs in job.files.items()}
+            self._workspace.record_preparation(
+                job.task, job.options, job.files)
+        except OSError as e:
+            raise Invalid(f"cannot keep the prepared files: {e}") from e
+        finally:
+            shutil.rmtree(folder, ignore_errors=True)
+        job.preview = False
+        self._publish(job)
+        return job
+
+    def clear_previews(self) -> None:
+        """
+        Remove the folders of previews of prep left in the folders of data
+        of the projects (e.g. by a server that did not close).
+        """
+        for project in self._workspace.projects():
+            data = Path(self._workspace.path(project), 'data')
+            for folder in data.glob('.prep-*'):
+                shutil.rmtree(folder, ignore_errors=True)
+
     async def close(self) -> None:
-        """Cancel the queued jobs, and stop the running ones."""
+        """
+        Cancel the queued jobs, stop the running ones, and remove the
+        previews not kept.
+        """
         for job in list(self._queue):
             self.stop(job.id)
         for id_ in list(self._processes):
             self.stop(id_)
         await asyncio.gather(*self._running)
+        for job in self._jobs.values():
+            if job.preview:
+                shutil.rmtree(self._prep_folder(job), ignore_errors=True)
 
     def _start_queued(self) -> None:
         """Start the queued jobs that the executor has room for."""
@@ -280,9 +352,8 @@ class Jobs:
                 options[key] = files and [self._fits_file(f) for f in files]
             # (prep writes into a folder of its own, whose files are kept
             # as it ends; see _keep_prepared)
-            folder = Path(self._workspace.path(options['output_dir']))
             return options | dict(
-                output_dir=str(folder / f'.prep-{job.id}'),
+                output_dir=str(self._prep_folder(job)),
                 output_dir_mode='overwrite')
         if job.task in _CONTINUE_RUN:
             options['output_dir'] = self._workspace.path(options['output_dir'])
@@ -326,15 +397,22 @@ class Jobs:
         Keep the files that a complete job of prep wrote in a folder of
         its own (see _prepare: its options) into that of its option
         output_dir, as imported files are kept (see Workspace.keep_data),
-        as its files; then remove its folder.
+        as its files, record how they were prepared, and remove its
+        folder; of a preview, its files stay in its folder (see keep), and
+        the older previews of that output_dir go.
         """
         folder = options['output_dir']
+        previewed = False
         try:
             if job.state == 'complete':
                 target = self._workspace.path(job.options['output_dir'])
 
                 def keep(output: str | None) -> str | None:
-                    return output and self._workspace.keep_data(output, target)
+                    if output is None:
+                        return None
+                    if job.preview:
+                        return self._workspace.relative(output)
+                    return self._workspace.keep_data(output, target)
                 if job.task in _PREPARE_MAPS:
                     # (of each map, its files; those of a role, a list)
                     nmaps = len(options['file_d'])
@@ -355,11 +433,38 @@ class Jobs:
                         key: keep(output)
                         for key, output in zip(_FILES, outputs)
                         if output is not None}
+                if job.preview:
+                    previewed = True
+                    self._prune_previews(job)
+                else:
+                    self._workspace.record_preparation(
+                        job.task, job.options, job.files)
         except (Invalid, OSError) as e:
             job.state = 'failed'
             job.output += f"\ncannot keep the prepared files: {e}"
         finally:
-            shutil.rmtree(folder, ignore_errors=True)
+            if not previewed:
+                shutil.rmtree(folder, ignore_errors=True)
+
+    def _prune_previews(self, job: Job) -> None:
+        """
+        Remove the files of the previews of the output_dir of a preview
+        that has just ended, but the newest (_PREVIEWS, with it).
+        """
+        others = sorted(
+            (other for other in self._jobs.values()
+             if other is not job and other.preview and other.files is not None
+             and other.options['output_dir'] == job.options['output_dir']),
+            key=lambda other: other.ended or '', reverse=True)
+        for other in others[_PREVIEWS - 1:]:
+            shutil.rmtree(self._prep_folder(other), ignore_errors=True)
+            other.files = None
+            self._publish(other)
+
+    def _prep_folder(self, job: Job) -> Path:
+        """Return the folder of its own that a job of prep writes into."""
+        return Path(self._workspace.path(job.options['output_dir'])) \
+            / f'.prep-{job.id}'
 
     async def _watch(self, job: Job) -> None:
         """

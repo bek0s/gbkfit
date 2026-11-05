@@ -476,7 +476,7 @@
     "/api/v1/describe/{path}": {
       "get": {
         "summary": "Describe",
-        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given;\nvelocity is the convention of velocities that its headers leave\nambiguous (see ArrayInfo).",
+        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given;\nvelocity is the convention of velocities that its headers leave\nambiguous, and rest the rest of its spectral axis (e.g. '6562.8\nAngstrom'), which makes wavelengths or frequencies velocities, as a\ndataset with that rest reads them (see ArrayInfo).",
         "operationId": "describe_api_v1_describe__path__get",
         "parameters": [
           {
@@ -506,6 +506,22 @@
                 }
               ],
               "title": "Velocity"
+            }
+          },
+          {
+            "name": "rest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest"
             }
           }
         ],
@@ -1537,6 +1553,127 @@
         }
       }
     },
+    "/api/v1/jobs/{id_}/keep": {
+      "post": {
+        "summary": "Keep Job",
+        "description": "Keep the files of a preview of prep into the folder of its output_dir\n(see JobRequest); the job then gives the files kept.",
+        "operationId": "keep_job_api_v1_jobs__id___keep_post",
+        "parameters": [
+          {
+            "name": "id_",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Id "
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/preparations/{path}": {
+      "get": {
+        "summary": "Preparation",
+        "description": "Return how a file of data was prepared by a job of prep (see\nPreparationInfo); null if it was not (e.g. a file imported as it is).",
+        "operationId": "preparation_api_v1_preparations__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/PreparationInfo"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Preparation Api V1 Preparations  Path  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/{path}": {
+      "delete": {
+        "summary": "Delete Data",
+        "description": "Delete a file of data of a project (of its folder data), unless the\nproject names it (a piece, a setup or a run) or a job uses it.",
+        "operationId": "delete_data_api_v1_data__path__delete",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/events": {
       "get": {
         "summary": "Events",
@@ -1813,7 +1950,7 @@
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nvelocities are ambiguous; none if its coordinates cannot be read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for\na beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), and what a dataset of it refuses or needs given."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), its beam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), and what a dataset of it refuses or needs given."
       },
       "CheckRequest": {
         "properties": {
@@ -2130,6 +2267,10 @@
             "type": "string",
             "title": "Created"
           },
+          "preview": {
+            "type": "boolean",
+            "title": "Preview"
+          },
           "state": {
             "type": "string",
             "enum": [
@@ -2228,6 +2369,7 @@
           "task",
           "options",
           "created",
+          "preview",
           "state",
           "run",
           "files",
@@ -2237,7 +2379,7 @@
           "output"
         ],
         "title": "JobInfo",
-        "description": "A job: its id, task and options, its state, its run, the files that\na job of prep prepared (by the options of their files, e.g. file_d;\nof moment maps, a list, one for each map, None for a file not\nprepared), when it was created, started and ended, the exit status\nof its process, and the end of its log."
+        "description": "A job: its id, task and options, whether it is a preview of prep not\nkept, its state, its run, the files that a job of prep prepared (by\nthe options of their files, e.g. file_d; of moment maps, a list, one\nfor each map, None for a file not prepared; none for a preview\nremoved), when it was created, started and ended, the exit status\nof its process, and the end of its log."
       },
       "JobRequest": {
         "properties": {
@@ -2258,6 +2400,11 @@
             "type": "object",
             "title": "Options",
             "default": {}
+          },
+          "preview": {
+            "type": "boolean",
+            "title": "Preview",
+            "default": false
           }
         },
         "type": "object",
@@ -2265,7 +2412,7 @@
           "task"
         ],
         "title": "JobRequest",
-        "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir'); prep needs the\nfolder of the prepared files ('output_dir'), where they are kept as\nimported files are (an identical file is reused; a name taken is\nnumbered)."
+        "description": "A job to run: its task, and the options of the task (see\ngbkfit.tasks), with their paths relative to the workspace. eval and\nfit need a configuration ('config'), and write their run in the runs\nof its setup, unless they give its folder ('output_dir'); resume\nneeds the folder of the run of the fit ('output_dir'); prep needs the\nfolder of the prepared files ('output_dir'), where they are kept as\nimported files are (an identical file is reused; a name taken is\nnumbered), and how they were prepared is recorded (see\nPreparationInfo). A job of prep can be a preview: its files stay\napart, to be looked at, until kept (POST /jobs/{id}/keep); previews\nnot kept are removed in time."
       },
       "LSFRequest": {
         "properties": {
@@ -2532,6 +2679,56 @@
         ],
         "title": "PieceRequest",
         "description": "A piece (or a setup) to create: its project, its folder (e.g.\ngalaxies, psfs or setups), its name (its path in the folder, without\n.yaml), and its content (its options); by default, that of the\ntemplate of its folder."
+      },
+      "PreparationInfo": {
+        "properties": {
+          "task": {
+            "type": "string",
+            "title": "Task"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "files": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "type": "array"
+                }
+              ]
+            },
+            "type": "object",
+            "title": "Files"
+          },
+          "time": {
+            "type": "string",
+            "title": "Time"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task",
+          "options",
+          "files",
+          "time"
+        ],
+        "title": "PreparationInfo",
+        "description": "How a file of data was prepared by a job of prep: the task, its\noptions (their files: a path, or {file, hdu}; of moment maps, lists),\nthe files it prepared (by the options of their files, as those of a\njob), with their paths relative to the workspace, and when (ISO 8601,\nUTC)."
       },
       "ProjectInfo": {
         "properties": {
