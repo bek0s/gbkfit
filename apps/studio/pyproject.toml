@@ -33,12 +33,15 @@ studio = 'gbkfit_studio:page'
 [tool.setuptools.package-data]
 gbkfit_studio = ['page/**/*']
 
+# (the tools of the developers: the palette, see palette/; the tests)
 [dependency-groups]
-test = ['pytest>=8']
+palette = ['coloraide>=8', 'matplotlib>=3.8', 'cmcrameri>=1.9', 'cmocean>=4']
+test = ['pytest>=8', { include-group = 'palette' }]
 
 [tool.pytest.ini_options]
 minversion = '8.0'
 testpaths = ['tests']
+pythonpath = ['.']
 addopts = ['-ra', '--strict-markers', '--strict-config']
 xfail_strict = true
 
