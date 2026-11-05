@@ -245,6 +245,17 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
         step=0.001)).status_code == 400
 
 
+def test_the_traits_each_type_of_component_takes_are_given(client):
+    takes = client.get('/api/v1/components').json()
+    assert set(takes) == {'disk', 'cone', 'spheroid'}
+    # (a cone takes only some density traits, and flows out or around)
+    assert 'spiral' in takes['disk']['traits']['rpt']
+    assert 'spiral' not in takes['cone']['traits']['rpt']
+    assert set(takes['cone']['directions']) == {'tan', 'out'}
+    assert takes['cone']['dispersion_directions'] == ['iso']
+    assert 'mass' not in takes['spheroid']['traits']['vpt']
+
+
 def test_the_parameters_of_a_galaxy_are_described(client):
     disk = dict(
         type='disk', rnodes=[0, 2, 4],

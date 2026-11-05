@@ -26,7 +26,8 @@ from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    ArrayInfo, CheckRequest, CheckResult, CubeRenderInfo, FolderInfo,
+    ArrayInfo, CheckRequest, CheckResult, ComponentTraits, CubeRenderInfo,
+    FolderInfo,
     GalaxyInfo,
     GalaxyRenderRequest, GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
@@ -343,6 +344,26 @@ def catalogue_lines() -> list[dict[str, str]]:
     return [
         dict(name=name, rest=_rest_text(catalogue.line(name).rest()))
         for name in catalogue.names()]
+
+
+@router.get('/components')
+def component_traits() -> dict[str, ComponentTraits]:
+    """
+    Return the traits that each type of component takes, by its type (see
+    gbkfit.model.components.TRAIT_TABLES): the types of its traits of each
+    kind, and the directions of its velocity and dispersion traits. (The
+    schema has every type of each kind, as the library reads them; a
+    component takes some of them.)
+    """
+    return {
+        component: ComponentTraits(
+            traits={
+                kind: [cls.type() for cls in classes]
+                for kind, classes in table.classes.items()},
+            directions=list(table.directions),
+            dispersion_directions=list(table.dispersion_directions))
+        for component, table in
+        gbkfit.model.components.TRAIT_TABLES.items()}
 
 
 def _rest_text(rest: Any) -> str:

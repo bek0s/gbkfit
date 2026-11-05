@@ -1029,6 +1029,29 @@
         }
       }
     },
+    "/api/v1/components": {
+      "get": {
+        "summary": "Component Traits",
+        "description": "Return the traits that each type of component takes, by its type (see\ngbkfit.model.components.TRAIT_TABLES): the types of its traits of each\nkind, and the directions of its velocity and dispersion traits. (The\nschema has every type of each kind, as the library reads them; a\ncomponent takes some of them.)",
+        "operationId": "component_traits_api_v1_components_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/ComponentTraits"
+                  },
+                  "type": "object",
+                  "title": "Response Component Traits Api V1 Components Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/imports": {
       "post": {
         "summary": "Import Data",
@@ -1827,6 +1850,42 @@
         ],
         "title": "CheckResult",
         "description": "The problems of a text (see the checker of the server)."
+      },
+      "ComponentTraits": {
+        "properties": {
+          "traits": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Traits"
+          },
+          "directions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Directions"
+          },
+          "dispersion_directions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Dispersion Directions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "traits",
+          "directions",
+          "dispersion_directions"
+        ],
+        "title": "ComponentTraits",
+        "description": "The traits a type of component takes (see TraitTable): the types of its\ntraits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and the\ndirections of its velocity and dispersion traits."
       },
       "CubeRenderInfo": {
         "properties": {

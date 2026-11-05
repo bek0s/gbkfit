@@ -14,6 +14,7 @@ __all__ = [
     'ArrayInfo',
     'CheckRequest',
     'CheckResult',
+    'ComponentTraits',
     'Diagnostic',
     'FileEntry',
     'FolderInfo',
@@ -85,6 +86,17 @@ class GalaxyRequest(BaseModel):
     """
     project: str
     galaxy: dict[str, Any]
+
+
+class ComponentTraits(BaseModel):
+    """
+    The traits a type of component takes (see TraitTable): the types of its
+    traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and the
+    directions of its velocity and dispersion traits.
+    """
+    traits: dict[str, list[str]]
+    directions: list[str]
+    dispersion_directions: list[str]
 
 
 class GalaxyInfo(BaseModel):

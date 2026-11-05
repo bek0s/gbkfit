@@ -402,6 +402,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/components": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Component Traits
+         * @description Return the traits that each type of component takes, by its type (see
+         *     gbkfit.model.components.TRAIT_TABLES): the types of its traits of each
+         *     kind, and the directions of its velocity and dispersion traits. (The
+         *     schema has every type of each kind, as the library reads them; a
+         *     component takes some of them.)
+         */
+        get: operations["component_traits_api_v1_components_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/imports": {
         parameters: {
             query?: never;
@@ -764,6 +788,22 @@ export interface components {
         CheckResult: {
             /** Diagnostics */
             diagnostics: components["schemas"]["Diagnostic"][];
+        };
+        /**
+         * ComponentTraits
+         * @description The traits a type of component takes (see TraitTable): the types of its
+         *     traits of each kind (e.g. 'vpt': ['uniform', 'arctan', ...]), and the
+         *     directions of its velocity and dispersion traits.
+         */
+        ComponentTraits: {
+            /** Traits */
+            traits: {
+                [key: string]: string[];
+            };
+            /** Directions */
+            directions: string[];
+            /** Dispersion Directions */
+            dispersion_directions: string[];
         };
         /**
          * CubeRenderInfo
@@ -1934,6 +1974,28 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     }[];
+                };
+            };
+        };
+    };
+    component_traits_api_v1_components_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["ComponentTraits"];
+                    };
                 };
             };
         };
