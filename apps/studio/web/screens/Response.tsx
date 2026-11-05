@@ -287,7 +287,7 @@ function DrawnOn({
           <Menu.Sub.Target>
             <Menu.Sub.Item data-current={drawn.source === 'observation' || undefined}>From an observation</Menu.Sub.Item>
           </Menu.Sub.Target>
-          <Menu.Sub.Dropdown className="ui-menu">
+          <Menu.Sub.Dropdown className="ui-menu ui-menu-scroll">
             {items('observation', [...observations.filter((o) => users.has(o)), ...observations.filter((o) => !users.has(o))], (o) => (users.has(o) ? 'Uses it' : undefined))}
           </Menu.Sub.Dropdown>
         </Menu.Sub>
@@ -295,7 +295,7 @@ function DrawnOn({
           <Menu.Sub.Target>
             <Menu.Sub.Item data-current={drawn.source === 'dataset' || undefined}>From a dataset</Menu.Sub.Item>
           </Menu.Sub.Target>
-          <Menu.Sub.Dropdown className="ui-menu">{items('dataset', pieces?.datasets ?? [])}</Menu.Sub.Dropdown>
+          <Menu.Sub.Dropdown className="ui-menu ui-menu-scroll">{items('dataset', pieces?.datasets ?? [])}</Menu.Sub.Dropdown>
         </Menu.Sub>
         <Menu.Divider />
         <Menu.Label className="response-pixels-hint">Or type a size in the box</Menu.Label>

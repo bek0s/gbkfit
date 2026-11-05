@@ -4,7 +4,8 @@
 // traits has a card for each, with the height trait paired with it on a
 // thick disk or a cone; items are added and removed here, and a part that
 // can be.
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useComponentTraits, useLines } from '../../api/queries';
 import { choicesOf, SchemaForm, type Defs, type Schema } from '../../components/SchemaForm';
 import { Close } from '../../components/ui/basics';
@@ -60,6 +61,9 @@ export function Inspector({ draft, options, defs, params, project, field, compon
   const set = (path: Path, next: unknown, how?: EditHow) => draft.edit((s) => ({ ...s, options: setAt(s.options, path, next) }), how);
   const own = problems.filter((p) => startsWith(p.path, optionPath) || (part.key === 'geometry' && p.path.length <= base.length + 1 && startsWith(p.path, base)));
   const rings = component === null ? null : ringRadii(owner.rnodes);
+  // (the actions of the head, which stays at the top as the part scrolls:
+  // e.g. what adds an item to a list)
+  const [actions, setActions] = useState<HTMLDivElement | null>(null);
   return (
     <div className="gx-inspector">
       <div className="gx-inspector-head">
@@ -70,7 +74,7 @@ export function Inspector({ draft, options, defs, params, project, field, compon
             {part.hint && <span> · {part.hint}</span>}
           </div>
         </div>
-        <div className="gx-inspector-actions">
+        <div className="gx-inspector-actions" ref={setActions}>
           {part.optional && (
             <button className="gx-link gx-danger" onClick={() => (set(optionPath, undefined), onClose())}>
               Remove
@@ -94,7 +98,7 @@ export function Inspector({ draft, options, defs, params, project, field, compon
           </>
         )}
         {part.typed && <TypedPart ctx={ctx} part={part} path={optionPath} value={value} rings={rings} />}
-        {part.family && <ListPart ctx={ctx} part={part} base={base} rings={rings} kind={String(owner.type ?? '')} isGalaxy={component === null} />}
+        {part.family && <ListPart ctx={ctx} part={part} base={base} rings={rings} kind={String(owner.type ?? '')} isGalaxy={component === null} head={actions} />}
       </div>
     </div>
   );
@@ -230,8 +234,26 @@ function TypedPart({ ctx, part, path, value, rings }: { ctx: Context; part: Part
 }
 
 // A part of a list of items of a family (e.g. the velocity traits, the
-// mass components): a card for each, and a menu that adds one
-function ListPart({ ctx, part, base, rings, kind, isGalaxy }: { ctx: Context; part: Part; base: Path; rings: number[] | null; kind: string; isGalaxy: boolean }) {
+// mass components): a card for each, and a menu that adds one, in the head
+// of the inspector (always in sight, however long the list); the one
+// added is scrolled to
+function ListPart({
+  ctx,
+  part,
+  base,
+  rings,
+  kind,
+  isGalaxy,
+  head,
+}: {
+  ctx: Context;
+  part: Part;
+  base: Path;
+  rings: number[] | null;
+  kind: string;
+  isGalaxy: boolean;
+  head: HTMLElement | null;
+}) {
   const { defs, draft, options } = ctx;
   const family = part.family!;
   const listPath = [...base, ...part.option];
@@ -243,7 +265,13 @@ function ListPart({ ctx, part, base, rings, kind, isGalaxy }: { ctx: Context; pa
     .filter((c) => c.type === 'spheroid')
     .map((c) => String(c.name ?? ''));
   const names = items.map((item) => String(item.name ?? ''));
+  const end = useRef<HTMLSpanElement>(null);
+  const [added, setAdded] = useState(0);
+  useEffect(() => {
+    if (added > 0) (end.current?.previousElementSibling as HTMLElement | null)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }, [added]);
   const add = (type: string) => {
+    setAdded((n) => n + 1);
     const follows = family === 'mass_component' && type === 'light_spheroid';
     const start = startOf(defs, family, type, names, follows ? { component: spheroids[0] } : {});
     draft.edit((s) => {
@@ -294,21 +322,27 @@ function ListPart({ ctx, part, base, rings, kind, isGalaxy }: { ctx: Context; pa
           moreOpen={family === 'mass_component'}
         />
       ))}
-      <DropMenu
-        label={`Add to the ${part.title.toLowerCase()}`}
-        width={MENU_WIDTH}
-        entries={typesOf(defs, family, allowed).map((t) => {
-          const follows = family === 'mass_component' && t.value === 'light_spheroid';
-          const blocked = follows && spheroids.length === 0;
-          return {
-            label: t.label,
-            description: blocked ? 'Add a spheroid component first: this mass follows its light.' : t.description,
-            disabled: blocked,
-            onClick: () => add(t.value),
-          };
-        })}
-        target={<button className="gx-add-item">+ Add {ITEM_NOUNS[family] ?? 'an item'}</button>}
-      />
+      <span ref={end} hidden />
+      {head &&
+        createPortal(
+          <DropMenu
+            label={`Add to the ${part.title.toLowerCase()}`}
+            width={MENU_WIDTH}
+            at="end"
+            entries={typesOf(defs, family, allowed).map((t) => {
+              const follows = family === 'mass_component' && t.value === 'light_spheroid';
+              const blocked = follows && spheroids.length === 0;
+              return {
+                label: t.label,
+                description: blocked ? 'Add a spheroid component first: this mass follows its light.' : t.description,
+                disabled: blocked,
+                onClick: () => add(t.value),
+              };
+            })}
+            target={<button className="gx-add-item">+ Add {ITEM_NOUNS[family] ?? 'an item'}</button>}
+          />,
+          head,
+        )}
     </>
   );
 }

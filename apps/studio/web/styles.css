@@ -256,6 +256,19 @@ h2 { margin: 0; font: var(--text-heading); }
 .ui-menu { font: var(--text-body); }
 .ui-menu [data-current] { color: var(--accent-text); }
 .ui-menu-description { margin-top: 2px; font: var(--text-caption); color: var(--muted); white-space: normal; }
+/* (a menu of a list: never taller than MENU_MOST, see overlays.tsx, or
+   than the window lets it be, and scrolled; one of many items, a field at
+   its top that finds them, over the list, which scrolls) */
+.ui-menu-scroll { max-height: min(420px, 70vh); overflow-y: auto; overscroll-behavior: contain; }
+.ui-search-menu { display: flex; flex-direction: column; padding: 4px; }
+.ui-search-menu .mantine-Combobox-search { flex: none; margin: 0 0 4px; }
+.ui-search-options { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.ui-search-menu .mantine-Combobox-option { padding: 6px 10px; border-radius: 4px; }
+.ui-search-menu .mantine-Combobox-option[data-combobox-selected], .ui-search-menu .mantine-Combobox-option:hover:not([data-combobox-disabled]) { background: var(--panel2); color: var(--fg); }
+.ui-search-menu .mantine-Combobox-option[data-current] { color: var(--accent-text); }
+.ui-search-menu .mantine-Combobox-option[data-combobox-disabled] { opacity: .5; }
+.ui-search-menu .mantine-Combobox-groupLabel { font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
+.ui-search-option { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ui-choice-dropdown .mantine-Select-option { padding: 6px 10px; font: var(--text-body); }
 .ui-choice-dropdown .mantine-Select-option[data-combobox-selected] { color: var(--accent-text); background: transparent; }
 .ui-choice-dropdown .mantine-Select-option:hover { background: var(--panel2); }
@@ -572,6 +585,8 @@ h2 { margin: 0; font: var(--text-heading); }
 .gx-inspector-head h2 { font: var(--text-subtitle); }
 .gx-inspector-of { margin-top: 3px; font: var(--text-label); color: var(--faint); }
 .gx-inspector-of b { color: var(--fg2); font-weight: 600; }
+.gx-inspector-actions { flex: none; display: flex; align-items: center; gap: 10px; }
+.gx-inspector-actions .gx-add-item { white-space: nowrap; }
 .gx-inspector-body { display: grid; gap: 14px; padding: 14px 14px 28px; }
 .gx-link { padding: 0; border: 0; background: none; color: var(--accent-text); font: var(--text-label); }
 .gx-link:hover { text-decoration: underline; }
@@ -582,7 +597,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .gx-row-label { font: var(--text-label); color: var(--muted); }
 .gx-row .ui-segments { justify-self: start; }
 .gx-none { padding: 2px; }
-.gx-card { display: grid; gap: 12px; padding: 11px 12px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); }
+.gx-card { display: grid; gap: 12px; padding: 11px 12px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel2); scroll-margin-top: 96px; }
 .gx-card-head { display: flex; align-items: center; gap: 6px; }
 .gx-card-head .ui-choice { flex: 1; min-width: 0; }
 /* (the type, of a longer title, before the direction) */
