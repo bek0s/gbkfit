@@ -41,7 +41,7 @@ _Length: TypeAlias = Annotated[float, Gt(0), Unit('arcsec')]
 # The extents of a depth axis that are not lengths (see Depth)
 _Extent: TypeAlias = Annotated[
     Literal['galaxy', 'legacy'], Choices(
-        galaxy='Whole galaxies', legacy='Longer image axis (legacy)')]
+        galaxy='Spans the galaxies', legacy='Longer image axis (legacy)')]
 
 
 class Depth(Serializable):

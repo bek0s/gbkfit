@@ -115,6 +115,10 @@ class RHTraitP2(RHTrait, abc.ABC):
     A density height trait of two parameters, s and b.
     """
 
+    # The value above which b is valid: the profile of 'ggauss' is defined
+    # for b > 0 (see its subclasses)
+    _B_MIN = 0.0
+
     def __init__(
             self,
             zmax: Annotated[FiniteFloat, Gt(0), Unit('arcsec')],
@@ -132,7 +136,8 @@ class RHTraitP2(RHTrait, abc.ABC):
                 title='Scale height', desc=_SCALE_HEIGHT, min=0,
                 unit='arcsec', default=0.2),
             b=ParamScalarDesc(
-                title='Shape', desc=_SHAPE, min=0, unit='', default=1))
+                title='Shape', desc=_SHAPE, min=self._B_MIN,
+                min_exclusive=True, unit='', default=1))
 
     def params_rnw(self, nrnodes: int) -> dict[str, ParamDesc]:
         return {} if not self.nodewise() else dict(
@@ -140,8 +145,8 @@ class RHTraitP2(RHTrait, abc.ABC):
                 nrnodes, title='Scale height', desc=_SCALE_HEIGHT, min=0,
                 unit='arcsec', default=0.2),
             b=ParamVectorDesc(
-                nrnodes, title='Shape', desc=_SHAPE, min=0, unit='',
-                default=1))
+                nrnodes, title='Shape', desc=_SHAPE, min=self._B_MIN,
+                min_exclusive=True, unit='', default=1))
 
 
 class RHTraitUniform(RHTraitP1):
@@ -385,6 +390,9 @@ class RHTraitMoffat(RHTraitP2):
     ValueError
         If an option is not valid.
     """
+
+    # (its normalisation, Gamma(b - 1/2), needs b > 1/2)
+    _B_MIN = 0.5
 
     @staticmethod
     def type() -> str:

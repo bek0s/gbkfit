@@ -639,7 +639,7 @@ class VPTraitCourteau(VPTrait):
                 title=self.speed_title(), desc='the speed scale', unit='km/s',
                 default=200),
             'b': ParamScalarDesc(
-                title='Outer shape',
+                title='Outer slope',
                 desc='the fall (b > 0) or the rise (b < 0) of the speed to '
                      'its scale beyond the turnover', unit='', default=0),
             'g': ParamScalarDesc(
