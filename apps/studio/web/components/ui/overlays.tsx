@@ -17,14 +17,18 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
 
 // An item of a menu: an action (current: the one in use; with a picture
 // after its label, at the end of the item, e.g. a swatch), or the label of
-// the items after it
-export type MenuEntry = { label: string; onClick: () => void; current?: boolean; picture?: ReactNode } | { section: string };
+// the items after it; an action can say what it is under its label, and
+// be disabled (its description then says why)
+export type MenuEntry =
+  | { label: string; onClick: () => void; current?: boolean; picture?: ReactNode; description?: string; disabled?: boolean }
+  | { section: string };
 
 export function DropMenu({
   target,
   entries,
   label,
   at = 'start',
+  width,
   returnFocus = true,
 }: {
   target: ReactElement;
@@ -33,6 +37,8 @@ export function DropMenu({
   // (from its left, its right, or, of a tall button, at its left from its
   // top)
   at?: 'start' | 'end' | 'side';
+  // Its width (px), for items wider than the button, e.g. with what each is
+  width?: number;
   // Whether the target has the focus again as it closes (not when an entry
   // gives it to something else, e.g. an input)
   returnFocus?: boolean;
@@ -40,7 +46,7 @@ export function DropMenu({
   return (
     <Menu
       position={at === 'side' ? 'left-start' : at === 'end' ? 'bottom-end' : 'bottom-start'}
-      width={at === 'start' ? 'target' : undefined}
+      width={width ?? (at === 'start' ? 'target' : undefined)}
       offset={4}
       returnFocus={returnFocus}
       classNames={{ dropdown: 'ui-menu' }}
@@ -52,8 +58,9 @@ export function DropMenu({
           'section' in entry ? (
             <Menu.Label key={`section-${i}`}>{entry.section}</Menu.Label>
           ) : (
-            <Menu.Item key={`${entry.label}-${i}`} onClick={entry.onClick} rightSection={entry.picture} data-current={entry.current || undefined}>
+            <Menu.Item key={`${entry.label}-${i}`} onClick={entry.onClick} disabled={entry.disabled} rightSection={entry.picture} data-current={entry.current || undefined}>
               {entry.label}
+              {entry.description && <div className="ui-menu-description">{entry.description}</div>}
             </Menu.Item>
           ),
         )}

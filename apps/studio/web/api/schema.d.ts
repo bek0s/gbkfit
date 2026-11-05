@@ -337,6 +337,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/views/galaxy-cube": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Galaxy Cube
+         * @description Render the cube of a galaxy (see Renders.cube), of its components that
+         *     emit lines, and keep it for the views of cubes (channel, spectrum and
+         *     moments) at the path returned.
+         */
+        post: operations["view_galaxy_cube_api_v1_views_galaxy_cube_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/schema": {
         parameters: {
             query?: never;
@@ -351,6 +373,27 @@ export interface paths {
          *     are made of it.
          */
         get: operations["config_schema_api_v1_schema_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/lines": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catalogue Lines
+         * @description Return the emission lines of the catalogue of GBKFIT ({name, rest}, the
+         *     rest as text, e.g. '6564.61 Angstrom'), which emissions name.
+         */
+        get: operations["catalogue_lines_api_v1_lines_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -721,6 +764,21 @@ export interface components {
         CheckResult: {
             /** Diagnostics */
             diagnostics: components["schemas"]["Diagnostic"][];
+        };
+        /**
+         * CubeRenderInfo
+         * @description The cube of a galaxy rendered (see Renders.cube): the path the views
+         *     of cubes take it at (its array 0; kept for a while, see Views.put), its
+         *     shape in the order of the model (nx, ny, nchannels), and the unit of
+         *     the coordinates of its channels (km/s).
+         */
+        CubeRenderInfo: {
+            /** Path */
+            path: string;
+            /** Shape */
+            shape: number[];
+            /** Unit */
+            unit: string;
         };
         /**
          * Diagnostic
@@ -1803,6 +1861,39 @@ export interface operations {
             };
         };
     };
+    view_galaxy_cube_api_v1_views_galaxy_cube_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GalaxyRenderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CubeRenderInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     config_schema_api_v1_schema_get: {
         parameters: {
             query?: never;
@@ -1821,6 +1912,28 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    catalogue_lines_api_v1_lines_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    }[];
                 };
             };
         };

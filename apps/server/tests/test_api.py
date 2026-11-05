@@ -268,6 +268,14 @@ def test_the_parameters_of_a_galaxy_are_described(client):
     band = dict(disk, emission=dict(type='band'), kinematics=None)
     assert client.post('/api/v1/parameters', json=dict(
         project='study', galaxy=dict(components=[band]))).json()['parameters']
+    # A thick disk, which needs a line of sight with a depth axis
+    thick = dict(disk, density=dict(
+        ptraits=dict(type='exponential'),
+        htraits=dict(type='sech2', zmax=6)))
+    info = client.post('/api/v1/parameters', json=dict(
+        project='study', galaxy=dict(components=[thick]))).json()
+    assert 'ht_s' in [p['name'] for p in info['parameters']]
+    assert info['problems'] == []
     info = client.post('/api/v1/parameters', json=dict(
         project='study',
         galaxy=dict(components=[dict(disk, rnodes=[1, 2, 4])])
@@ -635,6 +643,43 @@ def test_a_galaxy_is_rendered_face_on_and_edge_on(client):
     assert np.all(edge_on['gas/light'] == 0)
 
 
+def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
+    info = client.post('/api/v1/views/galaxy-cube', json=dict(
+        project='study', galaxy=RENDERED,
+        properties=dict(gas_vpt_vt=200, gas_posa=0), size=48)).json()
+    nx, ny, nchannels = info['shape']
+    assert (nx, ny) == (48, 48) and 2 < nchannels <= 128
+    assert info['unit'] == 'km/s'
+    # Its channels hold the light of the gas: none at their ends, and its
+    # total spectrum of two horns about 0
+    spectrum = client.get(
+        f"/api/v1/views/spectrum/{info['path']}", params=dict(hdu=0)).json()
+    values = np.array(spectrum['values'])
+    velocities = np.array(spectrum['spectral'])
+    assert values[0] < 1e-3 * values.max() and values[-1] < 1e-3 * values.max()
+    assert velocities[0] < -200 < 200 < velocities[-1]
+    np.testing.assert_allclose(
+        velocities[np.argmax(values)], -velocities[np.argmax(values[::-1])],
+        atol=2 * (velocities[1] - velocities[0]))
+    # Its channels and moments, as those of a cube of a file
+    response = client.get(
+        f"/api/v1/views/channel/{info['path']}",
+        params=dict(hdu=0, channel=nchannels // 2))
+    assert response.status_code == 200
+    response = client.get(
+        f"/api/v1/views/moments/{info['path']}", params=dict(hdu=0, snr=0))
+    assert response.status_code == 200
+    # A galaxy without lines has no cube
+    stars = dict(components=[RENDERED['components'][1]])
+    response = client.post('/api/v1/views/galaxy-cube', json=dict(
+        project='study', galaxy=stars))
+    assert response.status_code == 400 and 'emits lines' in response.text
+    # A cube no longer kept is asked for again
+    response = client.get(
+        '/api/v1/views/spectrum/@render/999', params=dict(hdu=0))
+    assert response.status_code == 400 and 'make it again' in response.text
+
+
 @pytest.mark.parametrize('galaxy, request_, message', [
     (dict(components=[]), {}, "at least one component"),
     # (a galaxy of mass alone has nothing to see)
@@ -648,3 +693,11 @@ def test_invalid_renders_are_refused(client, galaxy, request_, message):
     assert response.status_code in (400, 422)
     if message is not None:
         assert message in response.text
+
+
+def test_the_lines_of_the_catalogue_are_served(client):
+    lines = {line['name']: line['rest'] for line in client.get(
+        '/api/v1/lines').json()}
+    assert lines['halpha'] == '6564.61 Angstrom'
+    assert lines['hi21'] == '1.420406 GHz'
+    assert lines['paalpha'] == '1.87561 um'

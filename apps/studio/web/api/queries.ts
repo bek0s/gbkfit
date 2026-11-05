@@ -262,6 +262,12 @@ export function useSchema() {
   return useQuery({ queryKey: ['schema'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/schema')) });
 }
 
+// The emission lines of the catalogue of GBKFIT ({name, rest}; see the
+// server's /lines), which emissions name
+export function useLines() {
+  return useQuery({ queryKey: ['lines'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/lines')) });
+}
+
 // Write the options of a block of a project (by its path)
 export function useUpdateBlock() {
   const client = useQueryClient();
@@ -324,6 +330,27 @@ export interface GalaxyRender {
   step: number;
   curves: Record<string, (number | null)[]>;
   problems: string[];
+}
+
+// The cube of a galaxy rendered (see the server's /views/galaxy-cube): the
+// path the views of cubes take it at, its shape (x, y, channels) and the
+// unit of its channels; made again as the galaxy or its values change
+export function useGalaxyCube(
+  project: string,
+  galaxy: Record<string, unknown> | undefined,
+  properties: Record<string, unknown>,
+  view: 'sky' | 'face-on' | 'edge-on',
+  size = 160,
+) {
+  return useQuery({
+    queryKey: keys.view('galaxy-cube', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), view, size),
+    enabled: galaxy !== undefined,
+    placeholderData: keepPreviousData,
+    retry: false,
+    // (a cube is kept by the server for a while only)
+    gcTime: 0,
+    queryFn: () => data(api.POST('/api/v1/views/galaxy-cube', { body: { project, galaxy: galaxy ?? {}, properties, view, size } })),
+  });
 }
 
 export function useGalaxyRender(

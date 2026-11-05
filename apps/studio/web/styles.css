@@ -304,6 +304,7 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .ui-dialog .mantine-Modal-body { display: grid; gap: 12px; }
 .ui-menu { font-size: 12.5px; }
 .ui-menu [data-current] { color: var(--accent); }
+.ui-menu-description { margin-top: 2px; font-size: 11.5px; line-height: 1.35; color: var(--muted); white-space: normal; }
 .ui-choice-dropdown .mantine-Select-option { padding: 6px 10px; font-size: 12.5px; }
 .ui-choice-dropdown .mantine-Select-option[data-combobox-selected] { color: var(--accent); background: transparent; }
 .ui-choice-dropdown .mantine-Select-option:hover { background: var(--panel2); }
@@ -497,9 +498,28 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .galaxy-what { color: var(--faint); font-size: 12px; font-weight: 400; }
 .galaxy-add { padding: 5px 10px 5px 22px; color: var(--faint); font: inherit; font-size: 12px; text-align: left; background: none; border: 0; cursor: pointer; }
 .galaxy-add:hover { color: var(--fg2); }
-.galaxy-add-component { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+/* (the head of the components, with its +, where it stays however many
+   there are) */
+.galaxy-components-head { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); border-radius: 0; }
+.galaxy-add-icon { width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1px solid var(--line2); border-radius: 6px; color: var(--fg2); font: 15px/1 var(--sans); background: var(--panel2); cursor: pointer; }
+.galaxy-add-icon:hover { color: var(--fg); border-color: var(--fg2); }
+.galaxy-fields { display: grid; gap: 10px; padding-bottom: 12px; border-bottom: 1px solid var(--line); font-size: 12px; color: var(--fg2); }
+.galaxy-field { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.galaxy-rings { display: grid; gap: 6px; }
+.galaxy-rings-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.galaxy-rings-row { display: flex; align-items: center; gap: 6px; }
+.galaxy-number { display: inline-flex; align-items: center; gap: 4px; }
+.galaxy-number .ui-number { width: 58px; }
+.galaxy-lines { display: grid; gap: 6px; }
+.galaxy-line-own { flex: 1; font: 12px var(--mono); color: var(--fg2); }
+.galaxy-line-role { width: 34px; text-align: right; }
 .galaxy-view { flex: none; width: 440px; display: grid; gap: 10px; align-content: start; }
 .galaxy-view-bar { display: flex; justify-content: space-between; gap: 8px; }
+/* (the cube, in the viewer of the cubes of datasets, wider than the maps
+   and of a fixed height) */
+.galaxy-view[data-cube] { width: 700px; }
+.galaxy-cube { height: 620px; display: flex; flex-direction: column; }
+.galaxy-cube > .viewer { flex: 1; min-height: 0; }
 .galaxy-start { display: grid; gap: 10px; justify-items: start; padding: 40px 0; }
 .galaxy-map { display: grid; gap: 6px; }
 .galaxy-map-frame { position: relative; border-radius: 8px; overflow: hidden; background: var(--panel); }

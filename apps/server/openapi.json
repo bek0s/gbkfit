@@ -943,6 +943,45 @@
         }
       }
     },
+    "/api/v1/views/galaxy-cube": {
+      "post": {
+        "summary": "View Galaxy Cube",
+        "description": "Render the cube of a galaxy (see Renders.cube), of its components that\nemit lines, and keep it for the views of cubes (channel, spectrum and\nmoments) at the path returned.",
+        "operationId": "view_galaxy_cube_api_v1_views_galaxy_cube_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GalaxyRenderRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CubeRenderInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/schema": {
       "get": {
         "summary": "Config Schema",
@@ -957,6 +996,32 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Config Schema Api V1 Schema Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/lines": {
+      "get": {
+        "summary": "Catalogue Lines",
+        "description": "Return the emission lines of the catalogue of GBKFIT ({name, rest}, the\nrest as text, e.g. '6564.61 Angstrom'), which emissions name.",
+        "operationId": "catalogue_lines_api_v1_lines_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": {
+                      "type": "string"
+                    },
+                    "type": "object"
+                  },
+                  "type": "array",
+                  "title": "Response Catalogue Lines Api V1 Lines Get"
                 }
               }
             }
@@ -1762,6 +1827,33 @@
         ],
         "title": "CheckResult",
         "description": "The problems of a text (see the checker of the server)."
+      },
+      "CubeRenderInfo": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "shape": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Shape"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "shape",
+          "unit"
+        ],
+        "title": "CubeRenderInfo",
+        "description": "The cube of a galaxy rendered (see Renders.cube): the path the views\nof cubes take it at (its array 0; kept for a while, see Views.put), its\nshape in the order of the model (nx, ny, nchannels), and the unit of\nthe coordinates of its channels (km/s)."
       },
       "Diagnostic": {
         "properties": {

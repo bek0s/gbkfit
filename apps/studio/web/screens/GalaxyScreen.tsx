@@ -1,6 +1,6 @@
 // The screen of a galaxy, built as it is seen: a short list of what it is
 // made of (the galaxy as a whole: its distance, mass and gravity; and its
-// components, each of its parts: density, motions, light, ...), the view
+// components, each of its parts: geometry, density, motions, light, ...), the view
 // of the galaxy (its maps, face-on, edge-on or as seen, and its curves),
 // and the part chosen in the list with its few parameters as sliders.
 // Only what has been added shows; the rest is added from the list. The
@@ -8,13 +8,15 @@
 // in the params block of the same name as the galaxy.
 import { useDebouncedValue } from '@mantine/hooks';
 import { useMemo, useRef, useState } from 'react';
-import { useCreateBlock, useGalaxyParameters, useGalaxyRender, usePiece, useUpdateBlock, type GalaxyRender } from '../api/queries';
+import { useCreateBlock, useGalaxyCube, useGalaxyParameters, useGalaxyRender, useLines, usePiece, useUpdateBlock, type GalaxyRender } from '../api/queries';
+import { CubeViewer } from '../components/CubeViewer';
+import type { Region } from '../components/MapView';
 import { joinPath } from '../components/FilePicker';
 import { GalaxyCurves, GalaxyMap, type Quantity } from '../components/GalaxyView';
 import { significant } from '../components/format';
 import { membersOf, resolve, typeOf, type Defs, type Options, type Schema } from '../components/SchemaForm';
-import { Button, Close } from '../components/ui/basics';
-import { Choice, Segments } from '../components/ui/inputs';
+import { Button, Close, TextField } from '../components/ui/basics';
+import { Check, Choice, NumberField, Segments } from '../components/ui/inputs';
 import { DropMenu } from '../components/ui/overlays';
 import { StepSlider } from '../components/ui/sliders';
 import { useBlockHead } from '../shell/BlockMenu';
@@ -112,19 +114,20 @@ interface PartKind {
 }
 
 const DISK_PARTS: PartKind[] = [
-  { key: 'position', title: 'Position', option: [] },
+  { key: 'position', title: 'Geometry', option: [] },
   { key: 'density', title: 'Density', option: ['density', 'ptraits'], family: 'rpt' },
   { key: 'thickness', title: 'Thickness', option: ['density', 'htraits'], family: 'rht', optional: true, start: { type: 'sech2', zmax: 6 } },
   { key: 'motions', title: 'Motions', option: ['kinematics', 'vptraits'], family: 'vpt' },
   { key: 'dispersion', title: 'Dispersion', option: ['kinematics', 'dptraits'], family: 'dpt' },
   { key: 'light', title: 'Light', option: ['emission'], typed: 'emission' },
+  { key: 'opacity', title: 'Opacity', option: ['opacity'], typed: 'opacity', optional: true, start: { type: 'dust' } },
 ];
 
 const PARTS: Record<string, PartKind[]> = {
   disk: DISK_PARTS,
   cone: DISK_PARTS.map((part) => (part.key === 'thickness' ? { ...part, title: 'Walls', optional: false } : part)),
   spheroid: [
-    { key: 'position', title: 'Position', option: [] },
+    { key: 'position', title: 'Geometry', option: [] },
     { key: 'profile', title: 'Profile', option: ['profile'], typed: 'light_profile' },
     { key: 'shape', title: 'Shape', option: ['shape'], typed: 'spheroid_shape', optional: true, start: { type: 'flattened' } },
     { key: 'motions', title: 'Motions', option: ['kinematics'], typed: 'spheroid_kinematics', optional: true, start: { type: 'jeans' } },
@@ -229,8 +232,10 @@ function shortName(param: Param, options: Options): string {
   if (section === 'components' && typeof index === 'number') {
     const name = getAt(options, ['components', index, 'name']);
     if (typeof name === 'string' && rest.startsWith(`${name}_`)) rest = rest.slice(name.length + 1);
-    // (of a trait, its prefix: its kind and position, or its name)
-    if (typeof param.owner[param.owner.length - 1] === 'number' && param.owner.length > 3) rest = rest.slice(rest.indexOf('_') + 1);
+    // (of a trait, its prefix: its kind and position, or its name; of a
+    // line, its name stays: 'nii6583 ratio')
+    if (param.owner[2] === 'emission') rest = rest.replace(/_ratio$/, ' ratio');
+    else if (typeof param.owner[param.owner.length - 1] === 'number' && param.owner.length > 3) rest = rest.slice(rest.indexOf('_') + 1);
   } else if (section === 'mass' && typeof index === 'number') {
     const name = getAt(options, ['mass', index, 'name']) ?? getAt(options, ['mass', 'name']);
     if (typeof name === 'string' && rest.startsWith(`mass_${name}_`)) rest = rest.slice(`mass_${name}_`.length);
@@ -268,11 +273,15 @@ export function GalaxyScreen({ name }: { name: string }) {
   const params = (description.data?.parameters ?? []) as unknown as Param[];
   const [selected, setSelected] = useState<Selected | null>(null);
   const [view, setView] = useState<View>('sky');
-  const [quantity, setQuantity] = useState<Quantity>('light');
+  const [quantity, setQuantity] = useState<Quantity | 'cube'>('light');
+  const [cubeSelection, setCubeSelection] = useState<Region | null>(null);
+  const [cubeBand, setCubeBand] = useState<[number, number] | null>(null);
   const [isolated, setIsolated] = useState<string | null>(null);
   const [settledValues] = useDebouncedValue(values.properties, 120);
   const components = componentsOf(options);
   const render = useGalaxyRender(project ?? '.', components.length ? settled : undefined, settledValues, view);
+  // (the cube, while it is shown)
+  const cube = useGalaxyCube(project ?? '.', components.length && quantity === 'cube' ? settled : undefined, settledValues, view);
   // The last render that worked stays while the galaxy has a problem
   const last = useRef<GalaxyRender | undefined>(undefined);
   if (render.data) last.current = render.data;
@@ -289,7 +298,7 @@ export function GalaxyScreen({ name }: { name: string }) {
     edited.revert();
     values.revert();
   };
-  const setOptions = (next: Options) => edited.set(next);
+  const setOptions = (next: Options) => edited.set(withOpacitiesInStep(next));
   const component = selected?.component ?? null;
   const kind = component === null ? null : String(components[component]?.type ?? '');
   const part = selected === null ? null : (component === null ? GALAXY_PARTS : (PARTS[kind ?? ''] ?? [])).find((p) => p.key === selected.part) ?? null;
@@ -316,7 +325,7 @@ export function GalaxyScreen({ name }: { name: string }) {
       {edited.error && <p className="error screen-error">{edited.error.message}</p>}
       <div className="galaxy-screen">
         <GalaxyList options={options} defs={defs} selected={selected} onSelect={setSelected} onChange={setOptions} />
-        <div className="galaxy-view">
+        <div className="galaxy-view" data-cube={quantity === 'cube' || undefined}>
           {components.length === 0 ? (
             <div className="galaxy-start">
               <p className="note">An empty galaxy. Add its first component to see it.</p>
@@ -340,13 +349,33 @@ export function GalaxyScreen({ name }: { name: string }) {
                     { value: 'light', label: 'Light' },
                     { value: 'velocity', label: 'Velocity' },
                     { value: 'dispersion', label: 'Dispersion' },
+                    { value: 'cube', label: 'Cube' },
                   ]}
                   value={quantity}
                   onChange={setQuantity}
                   label="What the map shows"
                 />
               </div>
-              {shown ? (
+              {quantity === 'cube' ? (
+                <div className="galaxy-cube">
+                  {cube.data ? (
+                    <CubeViewer
+                      layers={[{ key: 'data', title: 'Cube', path: cube.data.path, hdu: 0, unit: null }]}
+                      shape={cube.data.shape}
+                      selection={cubeSelection}
+                      band={cubeBand !== null && cubeBand[1] < cube.data.shape[2] ? cubeBand : null}
+                      onSelection={setCubeSelection}
+                      onBand={setCubeBand}
+                      noiseless
+                    />
+                  ) : cube.error ? (
+                    <p className="error">{cube.error.message}</p>
+                  ) : (
+                    <div className="galaxy-map-frame galaxy-map-wait" />
+                  )}
+                  {cube.data && cube.error && <p className="error">{cube.error.message}</p>}
+                </div>
+              ) : shown ? (
                 <GalaxyMap
                   render={shown}
                   quantity={quantity}
@@ -358,7 +387,7 @@ export function GalaxyScreen({ name }: { name: string }) {
                 <div className="galaxy-map-frame galaxy-map-wait" />
               )}
               {render.error && <p className="error">{render.error.message}</p>}
-              {components.length > 1 && (
+              {components.length > 1 && quantity !== 'cube' && (
                 <Segments
                   items={[{ value: '', label: 'All' }, ...components.map((c, i) => ({ value: String(c.name ?? i), label: String(c.name ?? `component ${i + 1}`) }))]}
                   value={isolated ?? ''}
@@ -429,16 +458,25 @@ function useParamsBlock(project: string, name: string) {
 }
 
 // The menu that adds a component of a type, named after it
-function AddComponent({ defs, components, onAdd }: { defs: Defs; components: Options[]; onAdd: (component: Options) => void }) {
-  const types = [...new Set(membersOf(defs.component ?? {}, defs).map((m) => typeOf(m)!))];
+function AddComponent({ defs, components, onAdd, small }: { defs: Defs; components: Options[]; onAdd: (component: Options) => void; small?: boolean }) {
   return (
     <DropMenu
       label="Add a component"
-      entries={types.map((type) => ({
+      width={MENU_WIDTH}
+      entries={typesOf(defs, 'component').map(({ value: type, description }) => ({
         label: STARTS[type] ? type : `${type} (needs a file: in the configuration)`,
+        description,
         onClick: () => STARTS[type] && onAdd({ type, name: freshName(components, type), ...STARTS[type] }),
       }))}
-      target={<Button kind="small">+ Component</Button>}
+      target={
+        small ? (
+          <button className="galaxy-add-icon" aria-label="Add a component" title="Add a component">
+            +
+          </button>
+        ) : (
+          <Button kind="small">+ Component</Button>
+        )
+      }
     />
   );
 }
@@ -475,13 +513,24 @@ function GalaxyList({
           label="Add to the galaxy"
           entries={missing.map((p) => ({
             label: p.title,
+            // (gravity acts on the mass: none without it)
+            ...(p.key === 'gravity' && asList(options.mass).length === 0 ? { disabled: true, description: 'Add mass first: gravity is that of the mass.' } : {}),
+            // (mass needs the distance of the galaxy: a direct one comes with it)
+            ...(p.key === 'mass' && options.distance === undefined ? { description: 'With a distance, which mass needs.' } : {}),
             onClick: () => {
-              onChange(setAt(options, p.option, p.start ?? []));
+              const withDistance = p.key === 'mass' && options.distance === undefined ? setAt(options, ['distance'], { type: 'direct' }) : options;
+              onChange(setAt(withDistance, p.option, p.start ?? []));
               onSelect({ component: null, part: p.key });
             },
           }))}
           target={<button className="galaxy-add">+ {missing.map((p) => p.title.toLowerCase()).join(', ')}</button>}
         />
+      )}
+      {components.length > 0 && defs && (
+        <div className="galaxy-node galaxy-group galaxy-components-head">
+          <span>Components</span>
+          <AddComponent defs={defs} components={components} onAdd={(c) => onChange({ ...options, components: [...components, c] })} small />
+        </div>
       )}
       {components.map((c, i) => {
         const kinds = PARTS[String(c.type)] ?? [];
@@ -519,11 +568,6 @@ function GalaxyList({
           </div>
         );
       })}
-      {components.length > 0 && defs && (
-        <div className="galaxy-add-component">
-          <AddComponent defs={defs} components={components} onAdd={(c) => onChange({ ...options, components: [...components, c] })} />
-        </div>
-      )}
     </div>
   );
 }
@@ -537,15 +581,31 @@ function typesOf(defs: Defs | undefined, family: string): { value: string; label
   const types = new Map<string, string | undefined>();
   for (const m of membersOf(defs[family], defs)) {
     const type = typeOf(m)!;
-    if (!types.has(type)) types.set(type, typeof m.description === 'string' ? m.description.split('.')[0] : undefined);
+    if (!types.has(type)) types.set(type, typeof m.description === 'string' ? firstSentence(m.description) : undefined);
   }
   return [...types].map(([type, description]) => ({ value: type, label: type, description }));
 }
+
+// The first sentence of a description (not cut at e.g. or i.e.)
+function firstSentence(text: string): string {
+  const match = /^.*?\.(?=\s+[A-Z(]|$)/s.exec(text);
+  return (match ? match[0] : text).trim();
+}
+
+// The width of the menus that add an item of a type, with what each is
+const MENU_WIDTH = 320;
+
+// What the numbers that an item requires start at, by name, if the schema
+// gives them no default (e.g. the zmax of a density height trait); others
+// start at their least
+const NUMBER_STARTS: Record<string, number> = { zmax: 6, order: 2, nblobs: 1, ngauss: 1 };
 
 // What some new items start with, by family and type, before the options
 // they require (see filled): a halo of an NFW profile, a mass disk of an
 // exponential surface, thin
 const ITEM_STARTS: Record<string, Record<string, Options>> = {
+  // (self-absorption the same everywhere; see withOpacitiesInStep)
+  opacity: { line: { coefficients: { type: 'uniform' } } },
   mass_component: {
     spheroid: { profile: { type: 'nfw' } },
     disk: { surface: { type: 'exponential' }, vertical: { type: 'thin' } },
@@ -570,6 +630,10 @@ function filled(defs: Defs, node: Schema, given: Options, names: string[]): Opti
     const first = branches[0];
     if (!first) continue;
     if (Array.isArray(first.enum)) result[key] = first.enum[0];
+    else if (first.type === 'number' || first.type === 'integer') {
+      const start = NUMBER_STARTS[key] ?? property.default ?? first.default ?? first.minimum;
+      if (typeof start === 'number') result[key] = start;
+    }
     else if (membersOf(first, defs).length) {
       const member = membersOf(first, defs)[0];
       result[key] = filled(defs, member, { type: typeOf(member) }, []);
@@ -584,6 +648,272 @@ function startOf(defs: Defs | undefined, family: string, type: string, names: st
   const member = defs?.[family] ? membersOf(defs[family], defs).find((m) => typeOf(m) === type) : undefined;
   const start = { type, ...(ITEM_STARTS[family]?.[type] ?? {}) };
   return defs && member ? filled(defs, member, start, names) : start;
+}
+
+// An item of a family given another type: it keeps the options of the old
+// that the new type has too (e.g. the zmax and name of a height trait), and
+// starts the others (see startOf)
+function retyped(defs: Defs | undefined, family: string, item: Options | undefined, type: string): Options {
+  const member = defs?.[family] ? membersOf(defs[family], defs).find((m) => typeOf(m) === type) : undefined;
+  const has = (member && defs ? (resolve(member, defs).properties ?? {}) : {}) as Record<string, unknown>;
+  const kept = Object.entries(item ?? {}).filter(([key]) => key !== 'type' && key in has);
+  return { ...startOf(defs, family, type), ...Object.fromEntries(kept) };
+}
+
+// The labels of some types where their names say too little
+const TYPE_LABELS: Record<string, Record<string, string>> = {
+  opacity: { dust: 'dust', line: 'self-absorption (of its lines)' },
+};
+
+// The geometry of a component beyond its sliders: the radii of the rings
+// of a disk or cone (evenly spaced to a radius, every sep or len of them,
+// or given), whether the rings of a disk tilt (posa and incl per ring) or
+// wander (centre and vsys per ring); how far the light of a spheroid is
+// drawn
+function GeometryFields({ component, onChange }: { component: Options; onChange: (component: Options) => void }) {
+  const type = component.type;
+  if (type === 'spheroid') {
+    return (
+      <div className="galaxy-fields">
+        <label className="galaxy-field">
+          <span>Light drawn out to</span>
+          <NumberOption value={Number(component.rmax)} onCommit={(rmax) => onChange({ ...component, rmax })} label="rmax" unit="″" />
+        </label>
+      </div>
+    );
+  }
+  if (type !== 'disk' && type !== 'cone') return null;
+  return (
+    <div className="galaxy-fields">
+      <RingsField value={component.rnodes} onChange={(rnodes) => onChange({ ...component, rnodes })} title={type === 'cone' ? 'Shells' : 'Rings'} />
+      {type === 'disk' && (
+        <>
+          <Check
+            checked={component.tilted === true}
+            onChange={(tilted) => onChange(withFlag(component, 'tilted', tilted))}
+            label="Tilted rings: position angle and inclination per ring (a warp)"
+          />
+          <Check
+            checked={component.loose === true}
+            onChange={(loose) => onChange(withFlag(component, 'loose', loose))}
+            label="Loose rings: centre and systemic velocity per ring"
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+// Options with a flag set (true) or left to its default (false: removed)
+function withFlag(options: Options, key: string, on: boolean): Options {
+  const copy = { ...options };
+  if (on) copy[key] = true;
+  else delete copy[key];
+  return copy;
+}
+
+type RingsForm = 'sep' | 'len' | 'list';
+
+// The radii of the rings: {max, sep}, {max, len} or a list of them; a
+// change of form keeps the reach of the rings and about their number
+function RingsField({ value, onChange, title }: { value: unknown; onChange: (value: unknown) => void; title: string }) {
+  const form: RingsForm = Array.isArray(value) ? 'list' : value && typeof value === 'object' && 'len' in value ? 'len' : 'sep';
+  const radii = ringRadii(value);
+  const max = radii.length ? radii[radii.length - 1] : 16;
+  const options = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Options;
+  const toForm = (next: RingsForm) => {
+    const count = Math.max(radii.length, 2);
+    if (next === 'sep') onChange({ max, sep: significantStep(max / (count - 1)) });
+    else if (next === 'len') onChange({ max, len: count });
+    else onChange(radii);
+  };
+  return (
+    <div className="galaxy-rings">
+      <div className="galaxy-rings-head">
+        <span>{title}</span>
+        <Segments
+          items={[
+            { value: 'sep', label: 'Spacing' },
+            { value: 'len', label: 'Count' },
+            { value: 'list', label: 'Radii' },
+          ]}
+          value={form}
+          onChange={toForm}
+          label={`How the ${title.toLowerCase()} are given`}
+        />
+      </div>
+      {form === 'list' ? (
+        <RadiiOption radii={radii} onCommit={onChange} />
+      ) : (
+        <div className="galaxy-rings-row">
+          <span>out to</span>
+          <NumberOption value={Number(options.max)} onCommit={(m) => onChange({ ...options, max: m })} label="max" unit="″" />
+          {form === 'sep' ? (
+            <>
+              <span>every</span>
+              <NumberOption value={Number(options.sep)} onCommit={(sep) => onChange({ ...options, sep })} label="sep" unit="″" />
+            </>
+          ) : (
+            <>
+              <span>in</span>
+              <NumberOption value={Number(options.len)} onCommit={(len) => onChange({ ...options, len: Math.round(len) })} label="len" unit="radii" />
+            </>
+          )}
+        </div>
+      )}
+      <div className="note">
+        {radii.length} radii, 0 to {significant(max, 4)}″
+      </div>
+    </div>
+  );
+}
+
+// The radii of rings of any form (see Nodes): every sep from 0 to the first
+// at or beyond max, len of them from 0 to max, or those given
+function ringRadii(value: unknown): number[] {
+  if (Array.isArray(value)) return value.map(Number).filter(Number.isFinite);
+  const { max, sep, len } = (value ?? {}) as { max?: number; sep?: number; len?: number };
+  if (!(Number(max) > 0)) return [];
+  if (Number(sep) > 0 && Number(sep) <= Number(max)) {
+    const n = Math.ceil(Number(max) / Number(sep) - 1e-9);
+    return Array.from({ length: n + 1 }, (_, i) => i * Number(sep));
+  }
+  if (Number(len) >= 2) return Array.from({ length: Number(len) }, (_, i) => (i * Number(max)) / (Number(len) - 1));
+  return [];
+}
+
+// A round step near a value (1, 2 or 5 times a power of 10)
+function significantStep(value: number): number {
+  const power = 10 ** Math.floor(Math.log10(value));
+  const lead = value / power;
+  return (lead < 1.5 ? 1 : lead < 3.5 ? 2 : lead < 7.5 ? 5 : 10) * power;
+}
+
+// A positive number, as typed: it is set once it reads as one
+function NumberOption({ value, onCommit, label, unit }: { value: number; onCommit: (value: number) => void; label: string; unit: string }) {
+  const [text, setText] = useState<string | null>(null);
+  return (
+    <span className="galaxy-number">
+      <NumberField
+        value={text ?? (Number.isFinite(value) ? String(value) : '')}
+        onChange={(next) => {
+          setText(next);
+          const number = Number(next);
+          if (next.trim() !== '' && Number.isFinite(number) && number > 0) onCommit(number);
+        }}
+        label={label}
+      />
+      <span className="note">{unit}</span>
+    </span>
+  );
+}
+
+// Radii given as a list, as typed (by commas or spaces): set once each
+// reads as a number
+function RadiiOption({ radii, onCommit }: { radii: number[]; onCommit: (radii: number[]) => void }) {
+  const [text, setText] = useState<string | null>(null);
+  return (
+    <TextField
+      value={text ?? radii.join(', ')}
+      onChange={(next) => {
+        setText(next);
+        const parts = next.split(/[\s,]+/).filter(Boolean);
+        const numbers = parts.map(Number);
+        if (numbers.length >= 2 && numbers.every(Number.isFinite)) onCommit(numbers);
+      }}
+      onBlur={() => setText(null)}
+      label="The radii (arcsec)"
+      mono
+    />
+  );
+}
+
+// The lines of an emission of lines: by default one line at the velocity
+// of the spectral axis, whatever it is; else lines of the catalogue (or of
+// the configuration, kept as they are), the first the one whose flux the
+// density gives, the others of a flux ratio to it
+function LinesField({ emission, onChange }: { emission: Options; onChange: (emission: Options) => void }) {
+  const catalogue = (useLines().data ?? []) as { name: string; rest: string }[];
+  const lines = lineList(emission.lines);
+  const rests = new Map(catalogue.map((l) => [l.name, l.rest]));
+  const set = (next: unknown[]) => {
+    const copy = { ...emission };
+    if (next.length === 0) delete copy.lines;
+    else copy.lines = next.length === 1 ? next[0] : next;
+    onChange(copy);
+  };
+  const named = lines.map(lineName);
+  return (
+    <div className="galaxy-lines">
+      {lines.length === 0 ? (
+        <p className="note">One line, at the velocity of the spectral axis, whatever line it is.</p>
+      ) : (
+        lines.map((line, i) => (
+          <div key={i} className="galaxy-item-head">
+            {typeof line === 'string' ? (
+              <Choice
+                items={catalogue
+                  .filter((l) => l.name === line || !named.includes(l.name))
+                  .map((l) => ({ value: l.name, label: l.name, description: l.rest }))}
+                value={line}
+                onChange={(name) => set(lines.map((l, j) => (j === i ? name : l)))}
+                label={`Line ${i + 1}`}
+              />
+            ) : (
+              <span className="galaxy-line-own">{lineName(line)} (of the configuration)</span>
+            )}
+            <span className="note galaxy-line-role">{i === 0 ? 'flux' : 'ratio'}</span>
+            <Close label={`Remove the line ${lineName(line)}`} onClick={() => set(lines.filter((_, j) => j !== i))} />
+          </div>
+        ))
+      )}
+      <DropMenu
+        label="Add a line"
+        width={MENU_WIDTH}
+        entries={catalogue
+          .filter((l) => !named.includes(l.name))
+          .map((l) => ({ label: l.name, description: rests.get(l.name), onClick: () => set([...lines, l.name]) }))}
+        target={<button className="galaxy-add">+ line</button>}
+      />
+    </div>
+  );
+}
+
+// The lines of an emission as a list: names, or lines of the configuration
+function lineList(value: unknown): unknown[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+// The name of a line: its name in the catalogue, or that of its options
+function lineName(line: unknown): string {
+  return typeof line === 'string' ? line : String((line as Options | null)?.name ?? '?');
+}
+
+// The galaxy with the coefficients of the opacity of the lines of each
+// component (self-absorption) in step with its lines: of one unnamed line,
+// its traits; of named lines, the traits of each by its name (kept where
+// it had them; else uniform)
+function withOpacitiesInStep(options: Options): Options {
+  const components = componentsOf(options);
+  let changed = false;
+  const next = components.map((c) => {
+    const opacity = c.opacity as Options | undefined;
+    if (opacity?.type !== 'line') return c;
+    const names = lineList((c.emission as Options | undefined)?.lines).map(lineName);
+    const given = opacity.coefficients;
+    const isMapping = given !== null && typeof given === 'object' && !Array.isArray(given) && !('type' in given);
+    const single = isMapping ? Object.values(given as Options)[0] : given;
+    const fallback = single ?? { type: 'uniform' };
+    const coefficients =
+      names.length === 0
+        ? fallback
+        : Object.fromEntries(names.map((name) => [name, (isMapping ? (given as Options)[name] : undefined) ?? fallback]));
+    if (JSON.stringify(coefficients) === JSON.stringify(given)) return c;
+    changed = true;
+    return { ...c, opacity: { ...opacity, coefficients } };
+  });
+  return changed ? { ...options, components: Array.isArray(options.components) ? next : next[0] } : options;
 }
 
 // The panel of a part: its type (or the types of its items, each with its
@@ -624,6 +954,9 @@ function PartPanel({
     onOptions(setAt(options, option, undefined));
     onClose();
   };
+  const spheroids = componentsOf(options)
+    .filter((c) => c.type === 'spheroid')
+    .map((c) => String(c.name ?? ''));
   return (
     <div className="card galaxy-part-panel">
       <div className="card-head galaxy-panel-head">
@@ -634,13 +967,19 @@ function PartPanel({
         {part.optional && <Close label={`Remove the ${part.title.toLowerCase()}`} onClick={remove} />}
       </div>
       <div className="card-body">
+        {part.key === 'position' && component !== null && (
+          <GeometryFields component={getAt(options, base) as Options} onChange={(next) => onOptions(setAt(options, base, next))} />
+        )}
         {part.typed && (
           <Choice
-            items={typesOf(defs, part.typed)}
+            items={typesOf(defs, part.typed).map((t) => ({ ...t, label: TYPE_LABELS[part.typed!]?.[t.value] ?? t.label }))}
             value={String((value as Options | undefined)?.type ?? '')}
-            onChange={(type) => onOptions(setAt(options, option, startOf(defs, part.typed!, type)))}
+            onChange={(type) => onOptions(setAt(options, option, retyped(defs, part.typed!, value as Options | undefined, type)))}
             label={`The ${part.title.toLowerCase()}`}
           />
+        )}
+        {part.key === 'light' && (value as Options | undefined)?.type === 'lines' && (
+          <LinesField emission={value as Options} onChange={(next) => onOptions(setAt(options, option, next))} />
         )}
         {part.typed && sliders(params)}
         {part.family &&
@@ -652,7 +991,7 @@ function PartPanel({
               onOptions(setAt(options, option, withItems(changed)));
             };
             const directions = (defs?.[part.family!] ? membersOf(defs[part.family!], defs).find((m) => typeOf(m) === item.type)?.properties : undefined) as
-              | Record<string, { enum?: string[] }>
+              | Record<string, { enum?: string[]; type?: string }>
               | undefined;
             return (
               <div key={i} className="galaxy-item">
@@ -660,9 +999,17 @@ function PartPanel({
                   <Choice
                     items={typesOf(defs, part.family!)}
                     value={String(item.type ?? '')}
-                    onChange={(type) => replace({ ...startOf(defs, part.family!, type), ...(item.name ? { name: item.name } : {}) })}
+                    onChange={(type) => replace(retyped(defs, part.family!, item, type))}
                     label={`The type of the ${part.title.toLowerCase()} ${i + 1}`}
                   />
+                  {directions?.component && (
+                    <Choice
+                      items={spheroids.map((s) => ({ value: s, label: s }))}
+                      value={String(item.component ?? '')}
+                      onChange={(followed) => replace({ ...item, component: followed })}
+                      label="The spheroid whose light it follows"
+                    />
+                  )}
                   {directions?.direction?.enum && (
                     <Choice
                       items={directions.direction.enum.map((d) => ({ value: d, label: d }))}
@@ -680,14 +1027,22 @@ function PartPanel({
         {part.family && (
           <DropMenu
             label={`Add to the ${part.title.toLowerCase()}`}
-            entries={typesOf(defs, part.family).map((t) => ({
-              label: t.label,
-              onClick: () => {
-                const items = asList(value);
-                const names = items.map((item) => String(item.name ?? ''));
-                onOptions(setAt(options, option, withItems([...items, startOf(defs, part.family!, t.value, names)])));
-              },
-            }))}
+            width={MENU_WIDTH}
+            entries={typesOf(defs, part.family).map((t) => {
+              // (mass that follows the light of a spheroid needs one)
+              const follows = part.family === 'mass_component' && t.value === 'light_spheroid';
+              return {
+                label: t.label,
+                description: follows && spheroids.length === 0 ? 'Add a spheroid component first: this mass follows its light.' : t.description,
+                disabled: follows && spheroids.length === 0,
+                onClick: () => {
+                  const items = asList(value);
+                  const names = items.map((item) => String(item.name ?? ''));
+                  const start = startOf(defs, part.family!, t.value, names);
+                  onOptions(setAt(options, option, withItems([...items, follows ? { ...start, component: spheroids[0] } : start])));
+                },
+              };
+            })}
             target={<button className="galaxy-add">+ {part.title.toLowerCase()}</button>}
           />
         )}

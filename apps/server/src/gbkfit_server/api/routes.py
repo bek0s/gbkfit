@@ -26,7 +26,8 @@ from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 from .models import (
-    ArrayInfo, CheckRequest, CheckResult, FolderInfo, GalaxyInfo,
+    ArrayInfo, CheckRequest, CheckResult, CubeRenderInfo, FolderInfo,
+    GalaxyInfo,
     GalaxyRenderRequest, GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest,
@@ -305,6 +306,23 @@ def view_galaxy(server: ServerDep, request: GalaxyRenderRequest) -> Response:
         media_type='application/octet-stream')
 
 
+@router.post('/views/galaxy-cube')
+def view_galaxy_cube(
+        server: ServerDep, request: GalaxyRenderRequest) -> CubeRenderInfo:
+    """
+    Render the cube of a galaxy (see Renders.cube), of its components that
+    emit lines, and keep it for the views of cubes (channel, spectrum and
+    moments) at the path returned.
+    """
+    cube = server.renders.cube(
+        request.project, request.galaxy, request.properties, request.view,
+        request.size)
+    path = server.views.put(cube)
+    nchannels, ny, nx = cube.values.shape
+    return CubeRenderInfo(
+        path=path, shape=[nx, ny, nchannels], unit=cube.unit or '')
+
+
 @router.get('/schema')
 def config_schema() -> dict[str, Any]:
     """
@@ -313,6 +331,30 @@ def config_schema() -> dict[str, Any]:
     are made of it.
     """
     return _schema()
+
+
+@router.get('/lines')
+def catalogue_lines() -> list[dict[str, str]]:
+    """
+    Return the emission lines of the catalogue of GBKFIT ({name, rest}, the
+    rest as text, e.g. '6564.61 Angstrom'), which emissions name.
+    """
+    catalogue = gbkfit.model.LineCatalogue()
+    return [
+        dict(name=name, rest=_rest_text(catalogue.line(name).rest()))
+        for name in catalogue.names()]
+
+
+def _rest_text(rest: Any) -> str:
+    """
+    Return a rest as short text: a wavelength in Angstrom (um from 1 um),
+    a frequency in GHz (MHz below 1 GHz).
+    """
+    if rest.unit.physical_type == 'length':
+        unit = 'Angstrom' if rest.to_value('um') < 1 else 'um'
+    else:
+        unit = 'GHz' if rest.to_value('GHz') >= 1 else 'MHz'
+    return f"{rest.to_value(unit):.7g} {unit}"
 
 
 @functools.cache

@@ -113,6 +113,18 @@ class GalaxyRenderRequest(BaseModel):
     size: int = 160
 
 
+class CubeRenderInfo(BaseModel):
+    """
+    The cube of a galaxy rendered (see Renders.cube): the path the views
+    of cubes take it at (its array 0; kept for a while, see Views.put), its
+    shape in the order of the model (nx, ny, nchannels), and the unit of
+    the coordinates of its channels (km/s).
+    """
+    path: str
+    shape: list[int]
+    unit: str
+
+
 class PSFRequest(BaseModel):
     """
     A PSF to draw: the project of its piece, its options (its files

@@ -6,7 +6,8 @@ analysis.moment_maps). A cube is read once, in the orientation of the
 model, and kept for the next views (the latest few cubes). Its spectral
 axis is that of its header, in a unit to read (km/s, GHz or micron),
 whatever the model makes of it: a cube of wavelengths is seen before it
-is made one of velocities.
+is made one of velocities. Cubes made here (e.g. a render of a galaxy, see
+Views.put) are kept the same way, at paths of their own ('@render/1').
 """
 
 import collections
@@ -28,13 +29,20 @@ from .workspace import Workspace
 
 
 __all__ = [
+    'MADE_PREFIX',
     'Cube',
-    'Views'
+    'Views',
+    'cube_range'
 ]
 
 
 # The cubes kept
 _KEPT = 2
+
+# The cubes made here that are kept (the latest), and the start of their
+# paths
+_MADE = 4
+MADE_PREFIX = '@render/'
 
 # The units of the spectral axes shown, by the kind of their coordinates
 # (the first four letters of their type)
@@ -92,6 +100,25 @@ class Views:
         # ratios)
         self._moments: dict[tuple, dict[float, dict[str, np.ndarray]]] = {}
         self._lock = threading.Lock()
+        # (the cubes made here, by their paths, and how many were made)
+        self._made: collections.OrderedDict[str, Cube] = \
+            collections.OrderedDict()
+        self._count = 0
+
+    def put(self, cube: Cube) -> str:
+        """
+        Keep a cube made here (not of a file), and return its path, which
+        the views take as that of a file (its array 0); the latest few are
+        kept.
+        """
+        with self._lock:
+            self._count += 1
+            path = f'{MADE_PREFIX}{self._count}'
+            self._made[path] = cube
+            while len(self._made) > _MADE:
+                old, _ = self._made.popitem(last=False)
+                self._moments.pop((old, 0, 0), None)
+        return path
 
     def cube(self, path: str, hdu: int) -> Cube:
         """
@@ -102,8 +129,14 @@ class Views:
         NotFound
             If the file does not exist.
         Invalid
-            If the array is not a cube.
+            If the array is not a cube, or a cube made here is no longer
+            kept.
         """
+        if path.startswith(MADE_PREFIX):
+            with self._lock:
+                if path in self._made and hdu == 0:
+                    return self._made[path]
+            raise Invalid(f"the cube {path} is no longer kept; make it again")
         key = self._key(path, hdu)
         with self._lock:
             if key in self._cubes:
@@ -215,8 +248,11 @@ class Views:
     def _key(self, path: str, hdu: int) -> tuple:
         """
         Return the key of a cube: its file and array, and when the file
-        changed (a file written again is read again).
+        changed (a file written again is read again); of a cube made here,
+        its path.
         """
+        if path.startswith(MADE_PREFIX):
+            return path, hdu, 0
         filename = self._workspace.file(path)
         return filename, hdu, os.stat(filename).st_mtime_ns
 
@@ -244,9 +280,9 @@ def _read(filename: str, hdu: int) -> Cube:
             f"its shape is {values.shape}")
     values = np.asarray(values, dtype=np.float32)
     if values.ndim == 2:
-        return Cube(values[np.newaxis], None, None, _range(values))
+        return Cube(values[np.newaxis], None, None, cube_range(values))
     spectral, unit = _spectral(wcs, values.shape[0])
-    return Cube(values, spectral, unit, _range(values))
+    return Cube(values, spectral, unit, cube_range(values))
 
 
 def _spectral(
@@ -270,7 +306,7 @@ def _spectral(
         return None, None
 
 
-def _range(values: np.ndarray) -> tuple[float, float]:
+def cube_range(values: np.ndarray) -> tuple[float, float]:
     """
     Return the range of the values of a cube for colours: percentiles of
     a sample of its finite values ((0, 1) if it has none).

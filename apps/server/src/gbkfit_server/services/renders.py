@@ -3,9 +3,10 @@ The renders of galaxies, to see a galaxy as it is built: its maps (its
 light, velocity and dispersion, of each component and of all) through an
 ideal observation (fine pixels, no PSF, LSF or noise), seen as given or
 face-on or edge-on, and its curves (the rotation and dispersion of its
-disks, and the circular velocity of its mass), of its options as a piece
-of a project gives them (their files relative to it) and of values of its
-parameters.
+disks, and the circular velocity of its mass), and its cube (of its
+components that emit lines, through an ideal cube of channels that hold
+their light), of its options as a piece of a project gives them (their
+files relative to it) and of values of its parameters.
 """
 
 import dataclasses
@@ -13,6 +14,8 @@ import math
 from collections.abc import Mapping
 from typing import Any, Literal
 
+import astropy.constants
+import astropy.units
 import numpy as np
 
 from gbkfit.config import ConfigError, error_message, paths_relative_to
@@ -24,6 +27,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
 from .errors import Invalid
+from .views import Cube, cube_range
 from .workspace import Workspace
 
 
@@ -50,6 +54,13 @@ _MOST = 512
 # or _FIELD arcsec without one
 _MARGIN = 1.15
 _FIELD = 20.0
+
+# The most channels of a cube, the light of its lines beyond their mean
+# velocities that its channels hold (this many times their dispersion),
+# and its channels without any (km/s)
+_NCHANNELS = 128
+_SIGMAS = 4
+_NO_VELOCITIES = (-300.0, 300.0)
 
 # The radii a curve is drawn at, to the largest radius, from just off the
 # centre (where some are not defined, e.g. the slope of a density)
@@ -113,16 +124,8 @@ class Renders:
             If the galaxy or the values are not valid, or it cannot be
             rendered.
         """
-        if view not in ('sky', *_ORIENTATIONS):
-            raise Invalid(f"unknown view {view!r}")
-        if not 16 <= size <= _MOST:
-            raise Invalid(f"the size must be from 16 to {_MOST}; it is {size}")
-        root = self._workspace.path(project)
+        galaxy, radius, step = self._load(project, options, view, size)
         try:
-            with paths_relative_to(root):
-                galaxy = galaxy_parser.load(dict(options))
-            radius = _radius(galaxy)
-            step = 2 * _MARGIN * radius / size
             observations = _observations(galaxy, size, step)
             if not observations:
                 raise Invalid("the galaxy has no component that emits light")
@@ -138,6 +141,86 @@ class Renders:
         curves, problems = _curves(galaxy, values, radius)
         return GalaxyRender(step, size, maps, curves, problems)
 
+    def cube(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            properties: Mapping[str, Any],
+            view: View = 'sky',
+            size: int = _SIZE
+    ) -> Cube:
+        """
+        Render the cube of a galaxy (as galaxy renders its maps): of its
+        components that emit lines, through an ideal cube of the pixels of
+        its maps, whose channels of velocities (km/s; of the rest of the
+        first line named, if any) hold their light: the velocities of its
+        maps, each within _SIGMAS times its dispersion, of each line (at
+        most _NCHANNELS channels, of a round width).
+
+        Raises
+        ------
+        Invalid
+            If the galaxy or the values are not valid, or it has no
+            component that emits lines, or it cannot be rendered.
+        """
+        galaxy, _, step = self._load(project, options, view, size)
+        try:
+            seen = [
+                c for c in galaxy.components()
+                if isinstance(c.emission(), LineEmission)]
+            if not seen:
+                raise Invalid(
+                    "the galaxy has no component that emits lines: a cube "
+                    "sees lines")
+            observations = _observations(galaxy, size, step)
+            group = ObservationGroup([galaxy], observations)
+            values = _oriented(galaxy, _values(group, properties), view)
+            extras = Extras()
+            group.plan(DriverHost()).model_h(values, extras)
+            low, high = _velocity_range(_maps(galaxy, extras))
+            offsets = _line_offsets(seen)
+            low, high = low + min(offsets), high + max(offsets)
+            width = _round_width((high - low) / (_NCHANNELS - 1))
+            low = math.floor(low / width) * width
+            nchannels = min(_NCHANNELS, math.ceil((high - low) / width) + 1)
+            spectral = dict(size=nchannels, step=width, rpix=0, rval=low)
+            cube = _observations(galaxy, size, step, spectral)[0]
+            group = ObservationGroup([galaxy], [cube])
+            data = group.plan(DriverHost()).model_h(values)[0]
+        except (ConfigError, ValueError, TypeError, RuntimeError) as e:
+            raise Invalid(error_message(e)) from e
+        cube_values = np.array(data['spectra']['d'], dtype=np.float32)
+        velocities = low + width * np.arange(nchannels)
+        return Cube(cube_values, velocities, 'km/s', cube_range(cube_values))
+
+    def _load(
+            self, project: str, options: Mapping[str, Any], view: View,
+            size: int
+    ) -> tuple[Galaxy, float, float]:
+        """
+        Return a galaxy of the options of a piece of a project, its
+        largest radius (arcsec) and the size of the pixels of its renders
+        of size pixels across (arcsec).
+
+        Raises
+        ------
+        Invalid
+            If the view or the size is not one, or the galaxy is not
+            valid.
+        """
+        if view not in ('sky', *_ORIENTATIONS):
+            raise Invalid(f"unknown view {view!r}")
+        if not 16 <= size <= _MOST:
+            raise Invalid(f"the size must be from 16 to {_MOST}; it is {size}")
+        root = self._workspace.path(project)
+        try:
+            with paths_relative_to(root):
+                galaxy = galaxy_parser.load(dict(options))
+            radius = _radius(galaxy)
+        except (ConfigError, ValueError, TypeError, RuntimeError) as e:
+            raise Invalid(error_message(e)) from e
+        return galaxy, radius, 2 * _MARGIN * radius / size
+
 
 def _radius(galaxy: Galaxy) -> float:
     """
@@ -152,30 +235,113 @@ def _radius(galaxy: Galaxy) -> float:
     return radius if radius > 0 else _FIELD
 
 
-def _observations(galaxy: Galaxy, size: int, step: float) -> list[Any]:
+def _observations(
+        galaxy: Galaxy, size: int, step: float,
+        spectral: dict[str, Any] | None = None
+) -> list[Any]:
     """
     Return the ideal observations of a galaxy, of size pixels of the given
-    step: a cube of the components that emit lines (one line of no rest,
-    whose velocities its maps hold whatever its channels), and an image
-    of those that emit in bands; each with a depth axis if a component it
-    sees is thick.
+    step: a cube of the components that emit lines (of the channels of the
+    options of a spectral axis given, or else of two, whose velocities its
+    maps hold whatever its channels; at the rest of the first line named,
+    if any), and an image of those that emit in
+    bands; each with a depth axis if a component it sees is thick or has
+    an opacity, and with radiative transfer if one absorbs its own lines.
     """
     components = galaxy.components()
     infos = []
     for kind, observable in (
             (LineEmission, dict(
                 type='pixel_spectra',
-                spectral=dict(size=2, step=100, convention='relativistic'))),
+                spectral=(spectral or dict(size=2, step=100))
+                | dict(convention='relativistic'))),
             (BandEmission, dict(type='pixel_brightness'))):
         seen = [c for c in components if isinstance(c.emission(), kind)]
         if not seen:
             continue
-        thick = any(c.thick(kind) for c in seen)
+        # (the convention then that of the rest)
+        if kind is LineEmission and (rest := _rest(seen)) is not None:
+            observable = observable | dict(spectral={
+                key: value for key, value in observable['spectral'].items()
+                if key != 'convention'} | dict(rest=rest))
+        opacities = [c.opacity() for c in seen if c.opacity() is not None]
+        if any(o.type() == 'line' for o in opacities):
+            line_of_sight = 'transfer'
+        elif opacities or any(c.thick(kind) for c in seen):
+            line_of_sight = 'grid'
+        else:
+            line_of_sight = 'flat'
         infos.append(dict(
             type='sky',
             observable=observable | dict(size=[size, size], step=[step, step]),
-            line_of_sight=dict(type='grid' if thick else 'flat')))
+            line_of_sight=dict(type=line_of_sight)))
     return observation_parser.load(infos)
+
+
+def _rest(components: list[Any]) -> dict[str, Any] | None:
+    """
+    Return the rest of the first line named by components that emit lines,
+    as an option of a spectral axis; None if they name none.
+    """
+    for component in components:
+        if lines := component.emission().lines().lines():
+            rest = lines[0].rest()
+            return dict(value=float(rest.value), unit=rest.unit.to_string())
+    return None
+
+
+def _velocity_range(maps: Mapping[str, np.ndarray]) -> tuple[float, float]:
+    """
+    Return the velocities (km/s) that hold the light of the maps of a
+    galaxy (see _maps): those of each component, each within _SIGMAS times
+    its dispersion; _NO_VELOCITIES if it has none.
+    """
+    lows, highs = [], []
+    for name, velocity in maps.items():
+        if not name.endswith('velocity'):
+            continue
+        dispersion = maps.get(name.replace('velocity', 'dispersion'))
+        spread = _SIGMAS * np.nan_to_num(dispersion) \
+            if dispersion is not None else 0
+        finite = np.isfinite(velocity)
+        if finite.any():
+            lows.append(float(np.min((velocity - spread)[finite])))
+            highs.append(float(np.max((velocity + spread)[finite])))
+    if not lows or max(highs) <= min(lows):
+        return _NO_VELOCITIES
+    return min(lows), max(highs)
+
+
+def _line_offsets(components: list[Any]) -> list[float]:
+    """
+    Return the velocities (km/s) of the lines that components emit
+    relative to the first line named (of its rest: optical velocities of a
+    wavelength, radio ones of a frequency): [0] if they name none.
+    """
+    rests = [
+        line.rest() for component in components
+        for line in component.emission().lines().lines() or ()]
+    if not rests:
+        return [0.0]
+    first = rests[0]
+    c = astropy.constants.c.to_value('km/s')
+    offsets = []
+    for rest in rests:
+        ratio = rest.to_value(first.unit, astropy.units.spectral()) \
+            / first.value
+        offsets.append(
+            c * (ratio - 1) if first.unit.physical_type == 'length'
+            else c * (1 - ratio))
+    return offsets
+
+
+def _round_width(width: float) -> float:
+    """Return a round width at least the one given: 1, 2 or 5 times 10^n."""
+    power = 10 ** math.floor(math.log10(width))
+    for lead in (1, 2, 5, 10):
+        if lead * power >= width * (1 - 1e-9):
+            return lead * power
+    return 10 * power
 
 
 def _values(

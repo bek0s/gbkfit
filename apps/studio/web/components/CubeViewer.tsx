@@ -82,6 +82,7 @@ export function CubeViewer({
   onSelection,
   onBand,
   actions,
+  noiseless = false,
 }: {
   layers: Layer[];
   // Its shape in the order of the model (x, y, then its channels)
@@ -99,19 +100,25 @@ export function CubeViewer({
   kept?: [number | null, number | null] | null;
   // What the head of the viewer has at its right (e.g. a toggle)
   actions?: ReactNode;
+  // Whether it is a model without noise (e.g. a render of a galaxy): its
+  // moments are of all its voxels at first, and are not of a dataset
+  noiseless?: boolean;
 }) {
   const [nx, ny, nchannels] = shape;
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
   const [view, setView] = useState<View>('channel');
   const [tool, setTool] = useState<Tool>('select');
-  const [channel, setChannel] = useState(Math.floor(nchannels / 2));
+  // (within the cube: one made again can have fewer channels, e.g. a render)
+  const [picked, setChannel] = useState(Math.floor(nchannels / 2));
+  const channel = Math.min(picked, nchannels - 1);
   // The pixel picked (none: the total spectrum is shown)
   const [pixel, setPixel] = useState<[number, number] | null>(null);
-  const [snr, setSnr] = useState(SNR);
+  const [snr, setSnr] = useState(noiseless ? 0 : SNR);
   // The window of the map shown (null: all of it)
   const [zoom, setZoom] = useState<Region | null>(null);
   // The window of the spectrum shown (first and last channel; null: all)
-  const [spectrumZoom, setSpectrumZoom] = useState<[number, number] | null>(null);
+  const [zoomedSpectrum, setSpectrumZoom] = useState<[number, number] | null>(null);
+  const spectrumZoom = zoomedSpectrum !== null && zoomedSpectrum[1] < nchannels ? zoomedSpectrum : null;
   // Whether the range of the values of the spectrum is its own (autoscale),
   // or else the ends typed (from those it had as autoscale was turned off)
   const [autoscale, setAutoscale] = useState(true);
@@ -310,8 +317,11 @@ export function CubeViewer({
                     label={shown === 'channel' ? `A channel of the ${layer.title.toLowerCase()}` : `The ${shown} map of the data`}
                   />
                   {shown !== 'channel' && (
-                    <div className="map-source derived" title="A quick moment map of the data, measured here from the cube; the dataset stays a cube">
-                      ≈ quick look · not part of the dataset
+                    <div
+                      className="map-source derived"
+                      title={noiseless ? 'A quick moment map, measured here from the cube' : 'A quick moment map of the data, measured here from the cube; the dataset stays a cube'}
+                    >
+                      {noiseless ? '≈ quick look' : '≈ quick look · not part of the dataset'}
                     </div>
                   )}
                   {selecting && selection === null && pixel === null && <div className="map-hint">Drag on the map to select a region</div>}
