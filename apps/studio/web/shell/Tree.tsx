@@ -8,8 +8,7 @@ import { useCreateBlock, useProject } from '../api/queries';
 import { DataIcon, FitIcon, ModelIcon } from '../components/icons';
 import { Button, IconButton, NavItem, TextField } from '../components/ui/basics';
 import { useStudio } from '../studio';
-import { kindOf, SECTIONS, type Group as GroupInfo, type Section } from './blocks';
-import { DRAFTS } from './drafts';
+import { SECTIONS, type Group as GroupInfo, type Section } from './blocks';
 import { DataKindDialog } from './DataKindDialog';
 import { ProjectMenu } from './ProjectMenu';
 import { useRemembered } from './remember';
@@ -105,7 +104,6 @@ function Blocks({ project, folds }: { project: string; folds: Folds }) {
           <SectionView key={section.key} project={project} section={section} find={query} folds={folds} />
         ))}
         {query && found.length === 0 && <p className="tree-note">Nothing called “{find.trim()}”.</p>}
-        {!query && <DraftsSection />}
       </div>
     </>
   );
@@ -250,26 +248,6 @@ function NewBlock({ project, folder, onDone }: AdderProps) {
         onBlur={() => !name.trim() && onDone()}
       />
       {create.error && <p className="error">{create.error.message}</p>}
-    </div>
-  );
-}
-
-// The drafts of the layouts of the screens of observations,
-// to compare (see drafts), until one of each is chosen
-function DraftsSection() {
-  const { screen, go } = useStudio();
-  return (
-    <div>
-      <div className="tree-section">Screen drafts</div>
-      {DRAFTS.map((d) => (
-        <div key={d.id} className="tree-item">
-          <NavItem
-            label={`${kindOf(d.folder)} ${d.letter} · ${d.title}`}
-            active={screen.kind === 'draft' && screen.id === d.id}
-            onClick={() => go({ kind: 'draft', id: d.id, name: null })}
-          />
-        </div>
-      ))}
     </div>
   );
 }

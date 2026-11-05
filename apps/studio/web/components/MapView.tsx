@@ -108,7 +108,7 @@ export function MapView({
   // (whether the right button is down, stretching the colours)
   const stretching = useRef(false);
   const [keepLow, keepHigh] = kept ?? [null, null];
-  // (drawn again in the colours of another scheme)
+  // (drawn again in the colours of another theme or scheme)
   const scheme = useScheme();
   // (and in another colour map)
   const colourMap = useColourMap();

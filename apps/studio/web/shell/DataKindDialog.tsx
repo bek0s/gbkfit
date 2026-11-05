@@ -1,5 +1,5 @@
 // The first step of adding data: what kind of data it is. The dataset
-// screen then asks for its files (see screens/Dataset).
+// screen then asks for its files (see screens/dataset).
 import { NavItem } from '../components/ui/basics';
 import { Dialog } from '../components/ui/overlays';
 import { useStudio } from '../studio';

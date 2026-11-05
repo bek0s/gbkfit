@@ -166,7 +166,9 @@ export interface paths {
          * @description Describe a file of data from its headers, without reading its data:
          *     each of its arrays, and what a dataset of it refuses or needs given;
          *     velocity is the convention of velocities that its headers leave
-         *     ambiguous (see ArrayInfo).
+         *     ambiguous, and rest the rest of its spectral axis (e.g. '6562.8
+         *     Angstrom'), which makes wavelengths or frequencies velocities, as a
+         *     dataset with that rest reads them (see ArrayInfo).
          */
         get: operations["describe_api_v1_describe__path__get"];
         put?: never;
@@ -642,6 +644,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/{id_}/keep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Keep Job
+         * @description Keep the files of a preview of prep into the folder of its output_dir
+         *     (see JobRequest); the job then gives the files kept.
+         */
+        post: operations["keep_job_api_v1_jobs__id___keep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preparations/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preparation
+         * @description Return how a file of data was prepared by a job of prep (see
+         *     PreparationInfo); null if it was not (e.g. a file imported as it is).
+         */
+        get: operations["preparation_api_v1_preparations__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Data
+         * @description Delete a file of data of a project (of its folder data), unless the
+         *     project names it (a piece, a setup or a run) or a job uses it.
+         */
+        delete: operations["delete_data_api_v1_data__path__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -741,8 +806,10 @@ export interface components {
          *     its axes, in the order of the model (x, y, then the spectral axis),
          *     the unit of its values, the size of its pixels in that order (arcsec,
          *     and km/s along a velocity axis; the spatial ones alone while its
-         *     velocities are ambiguous; none if its coordinates cannot be read), its beam (bmaj and bmin in arcsec, bpa in degrees; lists for
-         *     a beam of each channel), the noise of its values that its header
+         *     spectral axis cannot be read, e.g. velocities of no convention or
+         *     wavelengths without a rest; none if its header has no coordinates on
+         *     the sky), its beam (bmaj and bmin in arcsec, bpa in degrees; lists
+         *     for a beam of each channel), the noise of its values that its header
          *     states (keyword RMS or NOISE), whether its header leaves it open
          *     whether its velocities are radio or optical (a dataset of it gives
          *     their convention), and what a dataset of it refuses or needs given.
@@ -940,10 +1007,11 @@ export interface components {
         };
         /**
          * JobInfo
-         * @description A job: its id, task and options, its state, its run, the files that
-         *     a job of prep prepared (by the options of their files, e.g. file_d;
-         *     of moment maps, a list, one for each map, None for a file not
-         *     prepared), when it was created, started and ended, the exit status
+         * @description A job: its id, task and options, whether it is a preview of prep not
+         *     kept, its state, its run, the files that a job of prep prepared (by
+         *     the options of their files, e.g. file_d; of moment maps, a list, one
+         *     for each map, None for a file not prepared; none for a preview
+         *     removed), when it was created, started and ended, the exit status
          *     of its process, and the end of its log.
          */
         JobInfo: {
@@ -957,6 +1025,8 @@ export interface components {
             };
             /** Created */
             created: string;
+            /** Preview */
+            preview: boolean;
             /**
              * State
              * @enum {string}
@@ -986,7 +1056,10 @@ export interface components {
          *     needs the folder of the run of the fit ('output_dir'); prep needs the
          *     folder of the prepared files ('output_dir'), where they are kept as
          *     imported files are (an identical file is reused; a name taken is
-         *     numbered).
+         *     numbered), and how they were prepared is recorded (see
+         *     PreparationInfo). A job of prep can be a preview: its files stay
+         *     apart, to be looked at, until kept (POST /jobs/{id}/keep); previews
+         *     not kept are removed in time.
          */
         JobRequest: {
             /**
@@ -1001,6 +1074,11 @@ export interface components {
             options: {
                 [key: string]: unknown;
             };
+            /**
+             * Preview
+             * @default false
+             */
+            preview: boolean;
         };
         /**
          * LSFRequest
@@ -1116,6 +1194,28 @@ export interface components {
             content?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * PreparationInfo
+         * @description How a file of data was prepared by a job of prep: the task, its
+         *     options (their files: a path, or {file, hdu}; of moment maps, lists),
+         *     the files it prepared (by the options of their files, as those of a
+         *     job), with their paths relative to the workspace, and when (ISO 8601,
+         *     UTC).
+         */
+        PreparationInfo: {
+            /** Task */
+            task: string;
+            /** Options */
+            options: {
+                [key: string]: unknown;
+            };
+            /** Files */
+            files: {
+                [key: string]: string | (string | null)[];
+            };
+            /** Time */
+            time: string;
         };
         /**
          * ProjectInfo
@@ -1633,6 +1733,7 @@ export interface operations {
         parameters: {
             query?: {
                 velocity?: ("radio" | "optical") | null;
+                rest?: string | null;
             };
             header?: never;
             path: {
@@ -2364,6 +2465,97 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["JobInfo"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    keep_job_api_v1_jobs__id___keep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id_: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preparation_api_v1_preparations__path__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreparationInfo"] | null;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_data_api_v1_data__path__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

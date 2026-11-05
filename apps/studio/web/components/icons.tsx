@@ -57,6 +57,13 @@ export const DarkIcon = () => (
 );
 
 // The select tool: a pointer at the corner of a dashed box
+// A check: a choice made (e.g. in a menu)
+export const CheckIcon = () => (
+  <Icon>
+    <path d="M5 12.5l4.5 4.5L19 7.5" />
+  </Icon>
+);
+
 export const SelectIcon = () => (
   <Icon>
     <path d="M3 3h3M9 3h3M3 3v3M3 9v3M3 12h3" />

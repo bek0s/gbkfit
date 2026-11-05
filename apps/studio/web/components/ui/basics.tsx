@@ -37,7 +37,7 @@ export function Button({
       {...rest}
       type={submit ? 'submit' : 'button'}
       variant={variant}
-      color={kind === 'danger' ? 'red' : undefined}
+      color={kind === 'danger' ? 'err' : undefined}
       size={kind === 'small' ? 'compact-xs' : 'xs'}
       onClick={onClick}
       disabled={disabled}

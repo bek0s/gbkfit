@@ -1,27 +1,30 @@
 // The colours of the maps: ramps of the tokens of the page (see
 // styles.css), sequential (low to high), or diverging about the middle;
-// they change with the colour scheme of the page (see useScheme). The
+// they change with the theme and scheme of the page (see useScheme). The
 // sequential ramp can be another colour map, and inverted, as chosen (see
 // useColourMap); the diverging one stays, its middle meaning a value (e.g.
 // 0, or the median of velocities).
 import { useState, useSyncExternalStore } from 'react';
-import { colourMaps } from '../palette';
+import { colourMaps, STEPS } from '../palette';
 import { recall, remember } from '../shell/remember';
 
-const SEQUENTIAL = ['--seq0', '--seq1', '--seq2', '--seq3'];
-const DIVERGING = ['--map-neg2', '--map-neg', '--map-mid', '--map-pos', '--map-pos2'];
+const SEQUENTIAL = Array.from({ length: STEPS }, (_, i) => `--seq${i}`);
+const DIVERGING = Array.from({ length: STEPS }, (_, i) => `--div${i}`);
 
-// The colour scheme of the page (that chosen in the bar, or the system's),
-// which marks its root (data-mantine-color-scheme), followed as it changes:
-// the tokens of the page change with it, and so must what is drawn with them
-export function useScheme(): 'dark' | 'light' {
+// The theme and scheme of the page (the scheme chosen in the bar, or the
+// system's), which mark its root (data-theme, data-mantine-color-scheme),
+// followed as they change: the tokens of the page change with them, and so
+// must what is drawn with them
+const MARKS = ['data-theme', 'data-mantine-color-scheme'];
+
+export function useScheme(): string {
   return useSyncExternalStore(
     (onChange) => {
       const observer = new MutationObserver(onChange);
-      observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-mantine-color-scheme'] });
+      observer.observe(document.documentElement, { attributes: true, attributeFilter: MARKS });
       return () => observer.disconnect();
     },
-    () => (document.documentElement.getAttribute('data-mantine-color-scheme') === 'light' ? 'light' : 'dark'),
+    () => MARKS.map((mark) => document.documentElement.getAttribute(mark)).join(' '),
   );
 }
 
@@ -34,14 +37,12 @@ export function token(name: string): number[] {
 }
 
 // The colour maps that can be chosen for the sequential ramp: that of
-// the scheme, or one of the palette
-export type ColourMap = 'studio' | keyof typeof colourMaps;
+// the theme, or one of the palette
+export type ColourMap = string;
 
 export const COLOUR_MAPS: { name: ColourMap; label: string }[] = [
-  { name: 'studio', label: 'Default' },
-  { name: 'grey', label: 'Grey' },
-  { name: 'viridis', label: 'Viridis' },
-  { name: 'cividis', label: 'Cividis' },
+  { name: 'studio', label: 'Of the theme' },
+  ...Object.entries(colourMaps).map(([name, { title }]) => ({ name, label: title })),
 ];
 
 export type ColourChoice = { map: ColourMap; inverted: boolean };
@@ -74,7 +75,8 @@ const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 
 
 // The colours of a colour map, from low to high, or from high to low
 function mapStops({ map, inverted }: ColourChoice): number[][] {
-  const stops = map === 'studio' ? SEQUENTIAL.map(token) : colourMaps[map].map(rgb);
+  // (that of the theme, also for a map no longer known)
+  const stops = map in colourMaps ? colourMaps[map].colours.map(rgb) : SEQUENTIAL.map(token);
   return inverted ? stops.reverse() : stops;
 }
 

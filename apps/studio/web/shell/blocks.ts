@@ -84,14 +84,3 @@ export const DATA_KINDS: { title: string; kinds: DataKind[] }[] = [
     ],
   },
 ];
-
-const KINDS_OF_DATA = DATA_KINDS.flatMap((group) => group.kinds);
-
-export function dataKind(key: string): DataKind | undefined {
-  return KINDS_OF_DATA.find((kind) => kind.key === key);
-}
-
-// The kind of data of a type of GBKFIT (e.g. that of a dataset)
-export function dataKindOfType(type: unknown): DataKind | undefined {
-  return KINDS_OF_DATA.find((kind) => kind.type === type);
-}

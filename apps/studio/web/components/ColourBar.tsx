@@ -23,8 +23,8 @@ export function ColourBar({
   stretch?: Stretch;
   onReset?: () => void;
 }) {
-  // (in the colours of the scheme of the system, and the colour map chosen,
-  // as they change)
+  // (in the colours of the theme and scheme of the page, and the colour map
+  // chosen, as they change)
   useScheme();
   const chosen = useColourMap();
   const ramp = (direction: string) => {

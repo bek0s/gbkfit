@@ -4,13 +4,12 @@
 import { useServerEvents } from './api/events';
 import { useJobs } from './api/queries';
 import { Logo } from './components/icons';
-import { SchemeMenu } from './components/ui/scheme';
-import { Dataset, NewDataset } from './screens/Dataset';
+import { LookMenu } from './components/ui/scheme';
+import { Dataset, NewDataset } from './screens/dataset/DatasetScreen';
+import { isKind } from './screens/dataset/model';
 import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
-import { BlockInLayout, DraftScreen } from './screens/Drafts';
 import { Home } from './screens/Home';
-import { NewImage } from './screens/Image';
-import { NewMoments } from './screens/Moments';
+import { ObservationScreen } from './screens/observation/ObservationScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
 import { Welcome } from './screens/Welcome';
@@ -41,7 +40,7 @@ function Layout() {
         </div>
         <Tabs />
         <ServerStatus />
-        <SchemeMenu />
+        <LookMenu />
       </header>
       <Tree />
       <main className="stage">{project === null ? <Welcome /> : <ScreenView screen={screen} />}</main>
@@ -70,16 +69,11 @@ function ScreenView({ screen }: { screen: Screen }) {
       if (screen.folder === 'psfs') return <ResponseScreen key={address(screen)} family="psf" name={screen.name} />;
       if (screen.folder === 'lsfs') return <ResponseScreen key={address(screen)} family="lsf" name={screen.name} />;
       if (screen.folder === 'galaxies') return <GalaxyScreen key={address(screen)} name={screen.name} />;
-      if (screen.folder === 'observations') {
-        return <BlockInLayout key={address(screen)} folder={screen.folder} name={screen.name} />;
-      }
+      if (screen.folder === 'observations') return <ObservationScreen key={address(screen)} name={screen.name} />;
       return <Pending key={address(screen)} eyebrow={kindOf(screen.folder)} title={screen.name} folder={screen.folder} />;
     case 'new-dataset':
-      if (screen.data === 'moments') return <NewMoments key={address(screen)} />;
-      if (screen.data === 'image') return <NewImage key={address(screen)} />;
-      return <NewDataset key={address(screen)} data={screen.data} />;
-    case 'draft':
-      return <DraftScreen key={address(screen)} id={screen.id} name={screen.name} />;
+      if (!isKind(screen.data)) return <Pending eyebrow="New dataset" title="This kind of data comes later" />;
+      return <NewDataset key={address(screen)} kind={screen.data} />;
     case 'observe':
       return <Pending eyebrow="Observe · no data" title="Galaxies through observations" />;
     case 'compare':

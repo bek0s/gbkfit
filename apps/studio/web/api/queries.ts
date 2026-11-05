@@ -1,6 +1,6 @@
 // What the page reads from the server and changes on it, with the keys of
 // its cache (which the events of the server refresh, see events.ts).
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, data } from './client';
 import { decodeFrame } from './frames';
 import type { components } from './schema';
@@ -10,7 +10,8 @@ export const keys = {
   project: (path: string) => ['project', path],
   piece: (path: string) => ['piece', path],
   folder: (path: string) => ['folder', path],
-  description: (path: string, velocity: string | null) => ['description', path, velocity],
+  description: (path: string, velocity: string | null, rest: string | null = null) => ['description', path, velocity, rest],
+  preparation: (path: string) => ['preparation', path],
   view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
 };
@@ -51,20 +52,50 @@ export function useFolder(path: string) {
 export type Velocity = 'radio' | 'optical';
 
 // The arrays of a file of data, from its headers, its ambiguous velocities
-// read by a convention, if given
-export function useDescription(path: string | null, velocity: Velocity | null = null) {
+// read by a convention, and its wavelengths or frequencies as velocities of
+// a rest, if given
+export function useDescription(path: string | null, velocity: Velocity | null = null, rest: string | null = null) {
   return useQuery({
-    queryKey: keys.description(path ?? '', velocity),
+    queryKey: keys.description(path ?? '', velocity, rest),
     enabled: path !== null,
-    // (the description of the same file stays while another convention is
-    // read; never that of another file)
+    // (the description of the same file stays while another convention or
+    // rest is read; never that of another file)
     placeholderData: (previous, query) => (query?.queryKey[1] === path ? previous : undefined),
-    queryFn: () =>
-      data(
-        api.GET('/api/v1/describe/{path}', {
-          params: { path: { path: path ?? '' }, query: velocity ? { velocity } : {} },
-        }),
-      ),
+    queryFn: () => describe(path ?? '', velocity, rest),
+  });
+}
+
+// The descriptions of several files (as useDescription), as a lookup by
+// path: its arrays once described, or why it cannot be
+export function useDescriptions(paths: string[], velocity: Velocity | null = null, rest: string | null = null) {
+  const unique = [...new Set(paths)];
+  const results = useQueries({
+    queries: unique.map((path) => ({
+      queryKey: keys.description(path, velocity, rest),
+      placeholderData: keepPreviousData,
+      queryFn: () => describe(path, velocity, rest),
+    })),
+  });
+  const byPath = new Map(unique.map((path, i) => [path, results[i]]));
+  return (path: string) => {
+    const result = byPath.get(path);
+    return { arrays: result?.data, error: result?.error?.message };
+  };
+}
+
+function describe(path: string, velocity: Velocity | null, rest: string | null) {
+  const query: { velocity?: Velocity; rest?: string } = {};
+  if (velocity) query.velocity = velocity;
+  if (rest) query.rest = rest;
+  return data(api.GET('/api/v1/describe/{path}', { params: { path: { path }, query } }));
+}
+
+// How a file of data was prepared by the server (null: it was not)
+export function usePreparation(path: string | null) {
+  return useQuery({
+    queryKey: keys.preparation(path ?? ''),
+    enabled: path !== null,
+    queryFn: () => data(api.GET('/api/v1/preparations/{path}', { params: { path: { path: path ?? '' } } })),
   });
 }
 
@@ -79,24 +110,37 @@ export function useChannel(path: string | null, hdu: number, channel: number) {
     queryKey: keys.view('channel', path ?? '', hdu, channel),
     enabled: path !== null,
     placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const frame = decodeFrame(
-        await data(
-          api.GET('/api/v1/views/channel/{path}', {
-            params: { path: { path: path ?? '' }, query: { hdu, channel } },
-            parseAs: 'arrayBuffer',
-          }),
-        ),
-      );
-      const { nchannels, spectral, unit, range } = frame.header as {
-        nchannels: number;
-        spectral: number | null;
-        unit: string | null;
-        range: [number, number];
-      };
-      return { plane: frame.arrays[0], nchannels, spectral, unit, range };
-    },
+    queryFn: () => readChannel(path ?? '', hdu, channel),
   });
+}
+
+// The values of maps (arrays of files of data, as the first channel of
+// useChannel), in their order (undefined until read)
+export function useMaps(maps: { path: string; hdu: number }[]) {
+  return useQueries({
+    queries: maps.map(({ path, hdu }) => ({
+      queryKey: keys.view('channel', path, hdu, 0),
+      queryFn: () => readChannel(path, hdu, 0),
+    })),
+  }).map((result) => result.data?.plane.values);
+}
+
+async function readChannel(path: string, hdu: number, channel: number) {
+  const frame = decodeFrame(
+    await data(
+      api.GET('/api/v1/views/channel/{path}', {
+        params: { path: { path }, query: { hdu, channel } },
+        parseAs: 'arrayBuffer',
+      }),
+    ),
+  );
+  const { nchannels, spectral, unit, range } = frame.header as {
+    nchannels: number;
+    spectral: number | null;
+    unit: string | null;
+    range: [number, number];
+  };
+  return { plane: frame.arrays[0], nchannels, spectral, unit, range };
 }
 
 // The spectrum of a pixel of a cube, or (none) its total spectrum: the sum
@@ -161,6 +205,32 @@ export function useSubmitJob() {
   return useMutation({
     mutationFn: (job: components['schemas']['JobRequest']) => data(api.POST('/api/v1/jobs', { body: job })),
     onSuccess: () => client.invalidateQueries({ queryKey: keys.jobs }),
+  });
+}
+
+// Keep the files of a preview of prep (see the server's JobRequest);
+// resolves to the job, of the files kept
+export function useKeepJob() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => data(api.POST('/api/v1/jobs/{id_}/keep', { params: { path: { id_: id } } })),
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.jobs }),
+  });
+}
+
+// Delete a file of data of a project (refused while the project names it)
+export function useDeleteData() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (path: string) => {
+      const { error, response } = await api.DELETE('/api/v1/data/{path}', { params: { path: { path } } });
+      if (!response.ok) throw new Error(String((error as { detail?: unknown } | undefined)?.detail ?? response.statusText));
+    },
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ['folder'] });
+      void client.invalidateQueries({ queryKey: ['description'] });
+      void client.invalidateQueries({ queryKey: ['preparation'] });
+    },
   });
 }
 

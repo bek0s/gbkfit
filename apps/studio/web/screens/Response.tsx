@@ -23,7 +23,7 @@ import { SchemaForm, titleOf, type Defs, type Options } from '../components/Sche
 import { SpectrumPlot } from '../components/SpectrumPlot';
 import { Button, NavItem } from '../components/ui/basics';
 import { Segments } from '../components/ui/inputs';
-import { Panel } from '../components/ui/panel';
+import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
 import { kindOf } from '../shell/blocks';
 import { useStudio } from '../studio';
@@ -149,7 +149,8 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {schema.error && <p className="error screen-error">{schema.error.message}</p>}
       {options !== undefined && (
-        <div className="screen-body response-layout">
+        <div className="rs-body">
+          <div className="rs-view">
           <Preview
             family={family}
             project={project}
@@ -164,21 +165,22 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
               ) : null
             }
           />
-          <div className="col">
-            <Panel id={`${family}-options`} title="Options">
+          </div>
+          <Dock label={`The ${family.toUpperCase()}`}>
+            <DockSection id={`${family}-options`} title="Options">
               {schema.data ? (
                 <SchemaForm defs={defs} def={family} project={project} value={options} onChange={setDraft} starts={STARTS} sliders />
               ) : (
                 <p className="note">Reading the options of the library…</p>
               )}
-            </Panel>
+            </DockSection>
             {family === 'psf' ? (
               <PsfProperties project={project} options={settled ?? options} step={step} />
             ) : (
               <LsfProperties project={project} options={settled ?? options} step={step} />
             )}
             <NamedBy path={path} />
-          </div>
+          </Dock>
         </div>
       )}
     </section>
@@ -433,7 +435,7 @@ function NamedBy({ path }: { path: string }) {
   const { go } = useStudio();
   const references = useReferences(path).data ?? [];
   return (
-    <Panel id="named-by" title="Used by">
+    <DockSection id="named-by" title="Used by">
       {references.length === 0 ? (
         <p className="note">No observation uses it yet.</p>
       ) : (
@@ -447,7 +449,7 @@ function NamedBy({ path }: { path: string }) {
           />
         ))
       )}
-    </Panel>
+    </DockSection>
   );
 }
 
@@ -670,7 +672,7 @@ function PsfProperties({ project, options, step }: { project: string; options: O
   // (none from a server older than its measure: that of its beam)
   const axes = data === undefined ? null : ((data.axes ?? (data.fwhm === null ? null : [data.fwhm, data.fwhm, null])) as [number, number, number | null] | null);
   return (
-    <Panel id="psf-resolution" title="Resolution">
+    <DockSection id="psf-resolution" title="Resolution">
       {data === undefined ? (
         <p className="note">Measuring…</p>
       ) : (
@@ -699,7 +701,7 @@ function PsfProperties({ project, options, step }: { project: string; options: O
             <dd>{data.beam_area === null ? 'None' : `${significant(data.beam_area, 4)} arcsec²`}</dd>
           </dl>
       )}
-    </Panel>
+    </DockSection>
   );
 }
 
@@ -742,7 +744,7 @@ function LsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
 function LsfProperties({ project, options, step }: { project: string; options: Options; step: Step }) {
   const data = useLsfView(project, options, widthOf(step)).data;
   return (
-    <Panel id="lsf-resolution" title="Resolution">
+    <DockSection id="lsf-resolution" title="Resolution">
       {data === undefined ? (
         <p className="note">Measuring…</p>
       ) : (
@@ -759,7 +761,7 @@ function LsfProperties({ project, options, step }: { project: string; options: O
           )}
         </dl>
       )}
-    </Panel>
+    </DockSection>
   );
 }
 

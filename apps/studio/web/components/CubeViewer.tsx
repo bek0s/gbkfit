@@ -167,18 +167,19 @@ export function CubeViewer({
     for (let c = 1; c < values.length; c++) if ((values[c] ?? -Infinity) > (values[peak] ?? -Infinity)) peak = c;
     setChannel(peak);
   }, [spectrum.data, shownPixel, selection]);
-  // The text of a channel (its number and its coordinate) and of a band of
-  // channels (their coordinates, or numbers if unknown)
+  // The text of a channel (its number, from 0 as pixels are, and its
+  // coordinate) and of a band of channels (their coordinates, or numbers
+  // if unknown)
   const spectralOf = (c: number) => spectrum.data?.spectral?.[c];
   const spectralUnit = spectrum.data?.unit ?? '';
   const channelText = (c: number) => {
     const at = spectralOf(c);
-    return at === undefined ? `channel ${c + 1}` : `${c + 1} · ${significant(at, 4)} ${spectralUnit}`;
+    return at === undefined ? `channel ${c}` : `${c} · ${significant(at, 4)} ${spectralUnit}`;
   };
   const bandText = ([c0, c1]: [number, number]) => {
     const [a, b] = [spectralOf(c0), spectralOf(c1)];
     return a === undefined || b === undefined
-      ? `channels ${c0 + 1}–${c1 + 1}`
+      ? `channels ${c0}–${c1}`
       : `${significant(Math.min(a, b), 4)}–${significant(Math.max(a, b), 4)} ${spectralUnit}`;
   };
   // The range of the values of the spectrum shown (autoscale), as the fields

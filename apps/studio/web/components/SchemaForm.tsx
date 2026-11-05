@@ -10,7 +10,7 @@
 import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
-import { FileSources } from '../screens/items';
+import { FileSources } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
 import { joinPath } from './FilePicker';
 import { Choice } from './ui/inputs';
