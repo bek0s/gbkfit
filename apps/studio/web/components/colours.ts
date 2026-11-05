@@ -6,7 +6,7 @@
 // 0, or the median of velocities).
 import { useState, useSyncExternalStore } from 'react';
 import { colourMaps, STEPS } from '../palette';
-import { recall, remember } from '../shell/remember';
+import { preference, setPreference, usePreference } from '../shell/preferences';
 
 const SEQUENTIAL = Array.from({ length: STEPS }, (_, i) => `--seq${i}`);
 const DIVERGING = Array.from({ length: STEPS }, (_, i) => `--div${i}`);
@@ -47,27 +47,21 @@ export const COLOUR_MAPS: { name: ColourMap; label: string }[] = [
 
 export type ColourChoice = { map: ColourMap; inverted: boolean };
 
-// The colour map chosen, one for all the maps of the Studio, remembered in
-// this browser, and those that follow it
-let choice: ColourChoice = recall('colour-map', { map: 'studio', inverted: false });
-const followers = new Set<() => void>();
+// The colour map chosen, one for all the maps of the Studio, a preference
+// of the user (see shell/preferences.ts): that of the theme, not inverted,
+// if none
+const UNCHOSEN: ColourChoice = { map: 'studio', inverted: false };
+const isChoice = (value: unknown): value is ColourChoice =>
+  typeof value === 'object' && value !== null && typeof (value as ColourChoice).map === 'string' && typeof (value as ColourChoice).inverted === 'boolean';
 
 export function setColourMap(next: ColourChoice): void {
-  choice = next;
-  remember('colour-map', next);
-  followers.forEach((onChange) => onChange());
+  setPreference('colour-map', next);
 }
 
 // The colour map chosen, followed as it changes: what draws with the ramps
 // must draw again with it
 export function useColourMap(): ColourChoice {
-  return useSyncExternalStore(
-    (onChange) => {
-      followers.add(onChange);
-      return () => followers.delete(onChange);
-    },
-    () => choice,
-  );
+  return usePreference('colour-map', isChoice, UNCHOSEN);
 }
 
 // (a colour of the palette, #rrggbb, as r, g, b)
@@ -82,7 +76,7 @@ function mapStops({ map, inverted }: ColourChoice): number[][] {
 
 // The colours of a ramp, from low to high
 export function rampStops(diverging: boolean): number[][] {
-  return diverging ? DIVERGING.map(token) : mapStops(choice);
+  return diverging ? DIVERGING.map(token) : mapStops(preference('colour-map', isChoice, UNCHOSEN));
 }
 
 // A colour map as a CSS gradient, to the right (e.g. its swatch in a menu)

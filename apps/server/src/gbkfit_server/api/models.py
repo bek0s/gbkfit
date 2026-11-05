@@ -31,6 +31,7 @@ __all__ = [
     'PieceReference',
     'PieceRename',
     'PieceRequest',
+    'PreferencesInfo',
     'ProjectInfo',
     'ProjectRename',
     'ProjectRequest',
@@ -309,6 +310,16 @@ class PreparationInfo(BaseModel):
     options: dict[str, Any]
     files: dict[str, str | list[str | None]]
     time: str
+
+
+class PreferencesInfo(BaseModel):
+    """
+    The preferences of the user (of the pages, e.g. the theme of the
+    Studio): their values by name, and the file they are kept in, in
+    the folder of the user.
+    """
+    file: str
+    values: dict[str, Any]
 
 
 class SessionRequest(BaseModel):

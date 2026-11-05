@@ -1,6 +1,7 @@
 """
 Shared fixtures: a workspace with a project of a small model (an image
-of a disk), whose setup names its pieces, with one free parameter.
+of a disk), whose setup names its pieces, with one free parameter; and,
+for every test, a folder of the user of its own (not ~/.gbkfit).
 """
 
 import pytest
@@ -26,6 +27,14 @@ PIECES = {
     'setups/disk.yaml': dict(
         driver=dict(type='host'), galaxies=['disk'], observations='image',
         params=['disk'])}
+
+
+@pytest.fixture(autouse=True)
+def user_home(tmp_path_factory, monkeypatch):
+    """The folder of GBKFIT of the user (see GBKFIT_HOME), empty."""
+    folder = tmp_path_factory.mktemp('user') / '.gbkfit'
+    monkeypatch.setenv('GBKFIT_HOME', str(folder))
+    return folder
 
 
 @pytest.fixture

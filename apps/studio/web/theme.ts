@@ -5,14 +5,15 @@
 // as their primary colour, its error as their red, its greys as those
 // Mantine draws its dark scheme (dark) and its light one (gray) with (no
 // grey of another palette shows), and the colours of its components those
-// tokens. The theme chosen is remembered in this browser, and marks the
-// root of the page (data-theme), which what draws with the tokens follows
+// tokens. The theme chosen, and the colour scheme, are preferences of the
+// user (see shell/preferences.ts); the theme marks the root of the page
+// (data-theme), and Mantine marks it with the scheme in use
+// (data-mantine-color-scheme), which what draws with the tokens follows
 // (see useScheme in components/colours.ts).
-import { Button, Checkbox, createTheme, Slider, type CSSVariablesResolver, type MantineColorsTuple } from '@mantine/core';
-import { useSyncExternalStore } from 'react';
+import { Button, Checkbox, createTheme, Slider, type CSSVariablesResolver, type MantineColorScheme, type MantineColorSchemeManager, type MantineColorsTuple } from '@mantine/core';
 import { FONTS } from './fonts';
 import { THEMES, variables, type Theme } from './palette';
-import { recall, remember } from './shell/remember';
+import { followPreferences, preference, setPreference, usePreference } from './shell/preferences';
 
 const tuple = (colours: string[]) => colours as unknown as MantineColorsTuple;
 
@@ -85,27 +86,41 @@ export function resolver({ dark, light }: Theme): CSSVariablesResolver {
   });
 }
 
-// The theme chosen, remembered in this browser (the first if none, or one
-// no longer known), and those that follow it
+// The theme chosen (the first if none, or one no longer known)
+const isText = (value: unknown): value is string => typeof value === 'string';
 const themeOf = (id: string) => THEMES.find((theme) => theme.id === id) ?? THEMES[0];
-
-let chosen = themeOf(recall('theme', THEMES[0].id));
-const followers = new Set<() => void>();
-document.documentElement.dataset.theme = chosen.id;
+const chosenTheme = () => themeOf(preference('theme', isText, THEMES[0].id));
 
 export function setTheme(id: string): void {
-  chosen = themeOf(id);
-  remember('theme', chosen.id);
-  document.documentElement.dataset.theme = chosen.id;
-  followers.forEach((onChange) => onChange());
+  setPreference('theme', id);
 }
 
 export function useTheme(): Theme {
-  return useSyncExternalStore(
-    (onChange) => {
-      followers.add(onChange);
-      return () => followers.delete(onChange);
-    },
-    () => chosen,
-  );
+  return themeOf(usePreference('theme', isText, THEMES[0].id));
 }
+
+// (the root marked with the theme, as it changes)
+const markRoot = () => (document.documentElement.dataset.theme = chosenTheme().id);
+markRoot();
+followPreferences(markRoot);
+
+// The colour scheme chosen (that of the system, 'auto', if none), for
+// Mantine, which sets it and follows it as it changes in another page
+const SCHEMES: readonly MantineColorScheme[] = ['auto', 'light', 'dark'];
+const isScheme = (value: unknown): value is MantineColorScheme => SCHEMES.includes(value as MantineColorScheme);
+const chosenScheme = () => preference('scheme', isScheme, 'auto');
+let unfollowScheme = () => {};
+
+export const schemeManager: MantineColorSchemeManager = {
+  get: (fallback) => preference('scheme', isScheme, fallback),
+  // (not again as it is told the scheme of another page)
+  set: (scheme) => scheme !== chosenScheme() && setPreference('scheme', scheme),
+  subscribe: (onUpdate) => {
+    let last = chosenScheme();
+    unfollowScheme = followPreferences(() => {
+      if (chosenScheme() !== last) onUpdate((last = chosenScheme()));
+    });
+  },
+  unsubscribe: () => unfollowScheme(),
+  clear: () => setPreference('scheme', null),
+};

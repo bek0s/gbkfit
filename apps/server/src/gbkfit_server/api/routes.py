@@ -31,7 +31,8 @@ from .models import (
     GalaxyInfo,
     GalaxyRenderRequest, GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
-    PieceReference, PieceRename, PieceRequest, PreparationInfo,
+    PieceReference, PieceRename, PieceRequest, PreferencesInfo,
+    PreparationInfo,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
     SessionInfo, SessionRequest, SpectrumView)
 
@@ -529,12 +530,39 @@ def delete_data(server: ServerDep, path: str) -> None:
     server.workspace.delete_data(path)
 
 
+@router.get('/preferences')
+def preferences(server: ServerDep) -> PreferencesInfo:
+    """
+    Return the preferences of the user (of the pages, e.g. the theme of
+    the Studio), and their file, in the folder of the user (~/.gbkfit),
+    the same for every folder served.
+    """
+    return PreferencesInfo(
+        file=str(server.preferences.file), values=server.preferences.read())
+
+
+@router.patch('/preferences')
+async def update_preferences(
+        server: ServerDep, changes: Annotated[dict[str, Any], Body()]
+) -> PreferencesInfo:
+    """
+    Set preferences of the user (a value of null removes one), keeping
+    the others; the clients are told (the event 'preferences').
+    """
+    # (in the event loop, so that the changes and their events are in the
+    # order they came; the file is small)
+    values = server.preferences.update(changes)
+    server.events.publish('preferences', dict(values=values))
+    return PreferencesInfo(file=str(server.preferences.file), values=values)
+
+
 @router.get('/events', response_class=EventSourceResponse)
 async def events(server: ServerDep) -> AsyncIterator[ServerSentEvent]:
     """
     Follow the events of the server: 'job' (a job whose state changed),
-    'run' (the run of a job, when its manifest changed) and 'progress'
-    (a report of the progress of a fit).
+    'run' (the run of a job, when its manifest changed), 'progress' (a
+    report of the progress of a fit) and 'preferences' (the preferences
+    of the user, all of them, as they changed).
     """
     # (a comment first, which clients pass over: the response starts with
     # it, so that they know they are connected before any event)

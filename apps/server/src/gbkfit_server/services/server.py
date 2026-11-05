@@ -7,6 +7,7 @@ from .events import Events
 from .galaxies import Galaxies
 from .executors import Executor
 from .jobs import Jobs
+from .preferences import Preferences
 from .renders import Renders
 from .responses import Responses
 from .sessions import Sessions
@@ -29,6 +30,9 @@ class Server:
         The folder (see Workspace).
     executor : Executor
         What runs the jobs.
+    preferences : Preferences, optional
+        The preferences of the user; by default those in their folder
+        (see Preferences).
 
     Attributes
     ----------
@@ -41,9 +45,12 @@ class Server:
     responses : Responses
     galaxies : Galaxies
     renders : Renders
+    preferences : Preferences
     """
 
-    def __init__(self, root: str, executor: Executor):
+    def __init__(
+            self, root: str, executor: Executor,
+            preferences: Preferences | None = None):
         self.workspace = Workspace(root)
         self.events = Events()
         self.jobs = Jobs(self.workspace, executor, self.events)
@@ -53,6 +60,8 @@ class Server:
         self.responses = Responses(self.workspace)
         self.galaxies = Galaxies(self.workspace)
         self.renders = Renders(self.workspace)
+        self.preferences = preferences if preferences is not None \
+            else Preferences()
 
     async def close(self) -> None:
         """Close the sessions, and stop the jobs."""

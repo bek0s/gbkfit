@@ -1,7 +1,9 @@
 // The page of the Studio: its look (the components of Mantine in the
-// theme chosen, its fonts and colours, see theme.ts, in the scheme of the system unless
-// another is chosen), the cache of the answers of the server (refreshed by
-// its events, see api/events.ts), and the Studio.
+// theme chosen, its fonts and colours, see theme.ts, in the scheme of the
+// system unless another is chosen), the cache of the answers of the server
+// (refreshed by its events, see api/events.ts), and the Studio; started
+// once the preferences of the user are read (see shell/preferences.ts),
+// so that it starts in them.
 import '@mantine/core/styles.css';
 import './styles.css';
 import { MantineProvider } from '@mantine/core';
@@ -10,7 +12,8 @@ import { StrictMode, useMemo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { takeToken } from './api/client';
 import { App } from './App';
-import { mantineTheme, resolver, useTheme } from './theme';
+import { loadPreferences } from './shell/preferences';
+import { mantineTheme, resolver, schemeManager, useTheme } from './theme';
 
 takeToken();
 
@@ -21,18 +24,20 @@ function Themed({ children }: { children: ReactNode }) {
   const chosen = useTheme();
   const [theme, variables] = useMemo(() => [mantineTheme(chosen), resolver(chosen)], [chosen]);
   return (
-    <MantineProvider theme={theme} cssVariablesResolver={variables} defaultColorScheme="auto">
+    <MantineProvider theme={theme} cssVariablesResolver={variables} colorSchemeManager={schemeManager} defaultColorScheme="auto">
       {children}
     </MantineProvider>
   );
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <Themed>
-      <QueryClientProvider client={client}>
-        <App />
-      </QueryClientProvider>
-    </Themed>
-  </StrictMode>,
+void loadPreferences().then(() =>
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <Themed>
+        <QueryClientProvider client={client}>
+          <App />
+        </QueryClientProvider>
+      </Themed>
+    </StrictMode>,
+  ),
 );

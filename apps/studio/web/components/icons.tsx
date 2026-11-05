@@ -56,6 +56,14 @@ export const DarkIcon = () => (
   </Icon>
 );
 
+// The settings: a gear
+export const SettingsIcon = () => (
+  <Icon>
+    <path d="M18.88 10.24L21.39 10.58L21.39 13.42L18.88 13.76A7.1 7.1 0 0 1 18.11 15.62L19.65 17.64L17.64 19.65L15.62 18.11A7.1 7.1 0 0 1 13.76 18.88L13.42 21.39L10.58 21.39L10.24 18.88A7.1 7.1 0 0 1 8.38 18.11L6.36 19.65L4.35 17.64L5.89 15.62A7.1 7.1 0 0 1 5.12 13.76L2.61 13.42L2.61 10.58L5.12 10.24A7.1 7.1 0 0 1 5.89 8.38L4.35 6.36L6.36 4.35L8.38 5.89A7.1 7.1 0 0 1 10.24 5.12L10.58 2.61L13.42 2.61L13.76 5.12A7.1 7.1 0 0 1 15.62 5.89L17.64 4.35L19.65 6.36L18.11 8.38A7.1 7.1 0 0 1 18.88 10.24z" />
+    <circle cx="12" cy="12" r="3" />
+  </Icon>
+);
+
 // The select tool: a pointer at the corner of a dashed box
 // A check: a choice made (e.g. in a menu)
 export const CheckIcon = () => (

@@ -1,6 +1,6 @@
 /* The look of the Studio (that of its mock-up): dark first, light where
-   asked (the scheme chosen in the bar, or that of the system; Mantine
-   marks the root with it, see components/ui/scheme.tsx), in the theme
+   asked (the scheme chosen in the settings, or that of the system;
+   Mantine marks the root with it, see theme.ts), in the theme
    chosen. Every colour is a token, a CSS variable set from palette.ts in
    the theme and scheme in use (see theme.ts): no colour is written here.
    The accent is what is chosen, focused or done (as text, --accent-text);
@@ -26,8 +26,8 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .logo-text span { color: var(--muted); font-weight: 400; }
 .app.folded .logo-text { display: none; }
 .logo-mark { width: 22px; height: 22px; flex: none; fill: none; stroke: var(--accent); stroke-width: 1.6; }
-.ui-scheme { flex: none; color: var(--muted); }
-.ui-scheme:hover { color: var(--fg); }
+.ui-settings-button { flex: none; color: var(--muted); }
+.ui-settings-button:hover { color: var(--fg); }
 .ui-menu .icon { width: 16px; height: 16px; }
 .status { margin-left: auto; display: flex; align-items: center; gap: 8px; font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--ok-fill); }
@@ -266,10 +266,49 @@ h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .03em; }
 .ui-choice-option { display: grid; gap: 1px; }
 /* (a long description, e.g. of a fitter, in three lines; all of it on hover) */
 .ui-choice-option small { font-size: 11px; color: var(--faint); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.ui-swatch { position: relative; width: 30px; height: 18px; flex: none; display: block; border: 1px solid var(--swatch-line); border-radius: 4px; background: var(--swatch-panel); overflow: hidden; }
-.ui-swatch i { position: absolute; left: 4px; top: 4px; width: 8px; height: 8px; border-radius: 50%; background: var(--swatch-accent); }
-.ui-swatch b { position: absolute; right: 3px; top: 3px; bottom: 3px; width: 10px; border-radius: 2px; background: var(--swatch-ramp); }
 .ui-menu .mantine-Menu-label { font: 500 10px var(--mono); letter-spacing: .09em; text-transform: uppercase; color: var(--faint); }
+/* the settings: the sections at the left, the settings of one at the
+   right, and the file they are kept in under them */
+.settings { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; min-height: 380px; }
+.settings-nav { display: grid; align-content: start; gap: 2px; padding-right: 12px; border-right: 1px solid var(--line); }
+.settings-page { display: grid; align-content: start; gap: 22px; }
+.setting { display: grid; gap: 8px; justify-items: start; }
+.setting h3 { margin: 0; font: 600 13px var(--display); }
+.setting p { margin: -4px 0 2px; max-width: 60ch; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.settings-file { margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--line); font-size: 11px; color: var(--faint); overflow-wrap: anywhere; }
+.settings-file code { font: 11px var(--mono); color: var(--muted); }
+.settings-file[data-problem] { color: var(--warn); }
+/* (the themes, each as a sample of the Studio in its colours, and its
+   name; the one chosen outlined in the accent) */
+.theme-choices { width: 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px; }
+.theme-choice { display: grid; gap: 6px; padding: 0; border: 0; background: none; text-align: left; }
+.theme-choice-name { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fg2); }
+.theme-choice-name .icon { width: 14px; height: 14px; color: var(--accent-text); }
+.theme-choice[aria-checked="true"] .theme-choice-name { color: var(--fg); }
+.theme-choice:hover .theme-sample { border-color: var(--line2); }
+.theme-choice[aria-checked="true"] .theme-sample { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-choice:focus-visible { outline: none; }
+.theme-choice:focus-visible .theme-sample { outline: 2px solid var(--accent); outline-offset: 2px; }
+.theme-sample { height: 78px; display: grid; grid-template-columns: 34% 1fr; grid-template-rows: 12px 1fr; overflow: hidden; border: 1px solid var(--sample-line); border-radius: 6px; background: var(--sample-bg); }
+:where(.theme-sample i, .theme-sample b) { display: block; }
+.theme-sample-bar { grid-column: 1 / -1; position: relative; background: var(--sample-panel); border-bottom: 1px solid var(--sample-line); }
+.theme-sample-bar::before { content: ""; position: absolute; left: 5px; top: 3px; width: 5px; height: 5px; border-radius: 50%; border: 1px solid var(--sample-accent); }
+.theme-sample-list { display: grid; align-content: start; gap: 4px; padding: 6px 4px; background: var(--sample-panel); border-right: 1px solid var(--sample-line); }
+.theme-sample-list b { height: 4px; width: 70%; margin-left: 3px; border-radius: 2px; background: var(--sample-muted); }
+.theme-sample-list b:first-child { width: 55%; background: var(--sample-fg); }
+.theme-sample-list b[data-chosen] { width: auto; height: 9px; margin: 0; padding: 2.5px 3px; border-radius: 3px; background: var(--sample-sel); }
+.theme-sample-list b[data-chosen]::before { content: ""; display: block; width: 60%; height: 4px; border-radius: 2px; background: var(--sample-accent-text); }
+.theme-sample-stage { position: relative; }
+.theme-sample-map { position: absolute; inset: 6px 6px 18px; border-radius: 3px; background: var(--sample-map), var(--sample-sky); }
+.theme-sample-button { position: absolute; right: 6px; bottom: 5px; width: 26px; height: 9px; border-radius: 3px; background: var(--sample-fill); }
+.theme-sample-button::before { content: ""; position: absolute; left: 6px; right: 6px; top: 3px; height: 3px; border-radius: 2px; background: var(--sample-on-fill); }
+/* (the colour maps, each with its ramp, in a list of two columns) */
+.map-choices { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 12px; }
+.map-choice { display: grid; grid-template-columns: 64px minmax(0, 1fr) 14px; align-items: center; gap: 10px; padding: 5px 8px; border: 0; border-radius: 6px; background: none; text-align: left; font-size: 12.5px; color: var(--fg2); }
+.map-choice:hover { background: var(--panel2); }
+.map-choice[aria-checked="true"] { background: var(--sel); color: var(--fg); }
+.map-choice .icon { width: 14px; height: 14px; color: var(--accent-text); }
+.map-choice-ramp { height: 12px; border-radius: 3px; border: 1px solid var(--line); }
 .dialog-form { display: grid; gap: 10px; }
 .dialog-form label { display: grid; gap: 5px; font-size: 12px; color: var(--muted); }
 .dialog-form input { border: 1px solid var(--line2); background: var(--field); border-radius: 7px; padding: 6px 8px; font: 12.5px var(--mono); }

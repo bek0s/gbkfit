@@ -1,6 +1,7 @@
 """
 Tests for the services of the server: the workspace, the jobs (which run
-the tasks of the library) and the live sessions.
+the tasks of the library), the live sessions, and the preferences of
+the user.
 """
 
 import asyncio
@@ -14,6 +15,7 @@ from astropy.io import fits
 from gbkfit_server.services import frames
 from gbkfit_server.services.errors import Invalid
 from gbkfit_server.services.executors import LocalExecutor
+from gbkfit_server.services.preferences import Preferences, user_folder
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
 
@@ -205,3 +207,29 @@ def test_a_session_of_an_invalid_configuration_does_not_open(root):
         await server.sessions.open('study/galaxies/disk.yaml')
     with pytest.raises(Invalid, match="cannot set up"):
         asyncio.run(run())
+
+
+
+def test_preferences_are_kept_in_the_folder_of_the_user(user_home):
+    preferences = Preferences()
+    assert user_folder() == user_home
+    assert preferences.file == user_home / 'preferences.json'
+    # (none until one is set; the folder is made then)
+    assert preferences.read() == {} and not user_home.exists()
+    assert preferences.update(dict(theme='clay', scheme='dark')) \
+        == dict(theme='clay', scheme='dark')
+    # (others are kept; null removes one)
+    assert preferences.update(dict(theme='glacier', scheme=None)) \
+        == dict(theme='glacier')
+    assert Preferences().read() == dict(theme='glacier')
+    assert sorted(path.name for path in user_home.iterdir()) \
+        == ['preferences.json']
+
+
+@pytest.mark.parametrize('text', ['{"theme": ', '["clay"]'])
+def test_preferences_mended_by_hand_are_kept_until_valid(user_home, text):
+    user_home.mkdir()
+    (user_home / 'preferences.json').write_text(text)
+    with pytest.raises(Invalid, match='mend or delete'):
+        Preferences().update(dict(theme='clay'))
+    assert (user_home / 'preferences.json').read_text() == text

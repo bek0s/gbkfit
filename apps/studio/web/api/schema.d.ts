@@ -707,6 +707,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/preferences": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preferences
+         * @description Return the preferences of the user (of the pages, e.g. the theme of
+         *     the Studio), and their file, in the folder of the user (~/.gbkfit),
+         *     the same for every folder served.
+         */
+        get: operations["preferences_api_v1_preferences_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Preferences
+         * @description Set preferences of the user (a value of null removes one), keeping
+         *     the others; the clients are told (the event 'preferences').
+         */
+        patch: operations["update_preferences_api_v1_preferences_patch"];
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -717,8 +744,9 @@ export interface paths {
         /**
          * Events
          * @description Follow the events of the server: 'job' (a job whose state changed),
-         *     'run' (the run of a job, when its manifest changed) and 'progress'
-         *     (a report of the progress of a fit).
+         *     'run' (the run of a job, when its manifest changed), 'progress' (a
+         *     report of the progress of a fit) and 'preferences' (the preferences
+         *     of the user, all of them, as they changed).
          */
         get: operations["events_api_v1_events_get"];
         put?: never;
@@ -1194,6 +1222,20 @@ export interface components {
             content?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * PreferencesInfo
+         * @description The preferences of the user (of the pages, e.g. the theme of the
+         *     Studio): their values by name, and the file they are kept in, in
+         *     the folder of the user.
+         */
+        PreferencesInfo: {
+            /** File */
+            file: string;
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
         };
         /**
          * PreparationInfo
@@ -2556,6 +2598,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preferences_api_v1_preferences_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesInfo"];
+                };
+            };
+        };
+    };
+    update_preferences_api_v1_preferences_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreferencesInfo"];
+                };
             };
             /** @description Validation Error */
             422: {

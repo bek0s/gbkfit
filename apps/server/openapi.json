@@ -1674,10 +1674,68 @@
         }
       }
     },
+    "/api/v1/preferences": {
+      "get": {
+        "summary": "Preferences",
+        "description": "Return the preferences of the user (of the pages, e.g. the theme of\nthe Studio), and their file, in the folder of the user (~/.gbkfit),\nthe same for every folder served.",
+        "operationId": "preferences_api_v1_preferences_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesInfo"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update Preferences",
+        "description": "Set preferences of the user (a value of null removes one), keeping\nthe others; the clients are told (the event 'preferences').",
+        "operationId": "update_preferences_api_v1_preferences_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Changes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreferencesInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/events": {
       "get": {
         "summary": "Events",
-        "description": "Follow the events of the server: 'job' (a job whose state changed),\n'run' (the run of a job, when its manifest changed) and 'progress'\n(a report of the progress of a fit).",
+        "description": "Follow the events of the server: 'job' (a job whose state changed),\n'run' (the run of a job, when its manifest changed), 'progress' (a\nreport of the progress of a fit) and 'preferences' (the preferences\nof the user, all of them, as they changed).",
         "operationId": "events_api_v1_events_get",
         "responses": {
           "200": {
@@ -2679,6 +2737,26 @@
         ],
         "title": "PieceRequest",
         "description": "A piece (or a setup) to create: its project, its folder (e.g.\ngalaxies, psfs or setups), its name (its path in the folder, without\n.yaml), and its content (its options); by default, that of the\ntemplate of its folder."
+      },
+      "PreferencesInfo": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "title": "File"
+          },
+          "values": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Values"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "values"
+        ],
+        "title": "PreferencesInfo",
+        "description": "The preferences of the user (of the pages, e.g. the theme of the\nStudio): their values by name, and the file they are kept in, in\nthe folder of the user."
       },
       "PreparationInfo": {
         "properties": {

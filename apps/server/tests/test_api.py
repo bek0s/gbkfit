@@ -852,3 +852,17 @@ def test_the_lines_of_the_catalogue_are_served(client):
     assert lines['halpha'] == '6564.61 Angstrom'
     assert lines['hi21'] == '1.420406 GHz'
     assert lines['paalpha'] == '1.87561 um'
+
+
+def test_the_preferences_of_the_user_are_set_and_read(client, user_home):
+    info = client.get('/api/v1/preferences').json()
+    assert info == dict(file=str(user_home / 'preferences.json'), values={})
+    response = client.patch(
+        '/api/v1/preferences', json={'theme': 'clay', 'colour-map': dict(
+            map='viridis', inverted=False)})
+    assert response.status_code == 200
+    client.patch('/api/v1/preferences', json=dict(theme='amber'))
+    assert client.get('/api/v1/preferences').json()['values'] == {
+        'theme': 'amber', 'colour-map': dict(map='viridis', inverted=False)}
+    assert client.patch(
+        '/api/v1/preferences', json=['clay']).status_code == 422

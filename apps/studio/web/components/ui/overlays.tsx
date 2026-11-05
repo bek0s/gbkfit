@@ -7,9 +7,10 @@
 import { Menu, Modal } from '@mantine/core';
 import type { ReactElement, ReactNode } from 'react';
 
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+// (wide: for more than a form, e.g. the settings)
+export function Dialog({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
   return (
-    <Modal opened onClose={onClose} title={title} size="md" yOffset="12vh" className="ui-dialog">
+    <Modal opened onClose={onClose} title={title} size={wide ? 640 : 'md'} yOffset="12vh" className="ui-dialog">
       {children}
     </Modal>
   );
