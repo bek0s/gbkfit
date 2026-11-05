@@ -39,6 +39,14 @@ export interface Scheme {
   'map-mid': string;
   'map-pos': string;
   'map-pos2': string;
+  // The colours of things told apart by colour alone (e.g. the components
+  // of a galaxy, their curves): distinct in hue and of one lightness
+  cat1: string;
+  cat2: string;
+  cat3: string;
+  cat4: string;
+  cat5: string;
+  cat6: string;
 }
 
 export const dark: Scheme = {
@@ -70,6 +78,12 @@ export const dark: Scheme = {
   'map-mid': '#1a2233',
   'map-pos': '#ef4f5c',
   'map-pos2': '#ffb3aa',
+  cat1: '#e8b04b',
+  cat2: '#6cb4ff',
+  cat3: '#5fd39a',
+  cat4: '#f07a8a',
+  cat5: '#b79cff',
+  cat6: '#4fd2d2',
 };
 
 export const light: Scheme = {
@@ -101,6 +115,12 @@ export const light: Scheme = {
   'map-mid': '#eef1f5',
   'map-pos': '#d6333c',
   'map-pos2': '#7d151b',
+  cat1: '#a8700f',
+  cat2: '#1f6fbf',
+  cat3: '#1f8a55',
+  cat4: '#c23a52',
+  cat5: '#6f4cc4',
+  cat6: '#137f86',
 };
 
 // The shades of the accent, from light to dark, that Mantine needs (ten):

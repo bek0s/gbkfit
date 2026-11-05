@@ -268,6 +268,13 @@ export function useLines() {
   return useQuery({ queryKey: ['lines'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/lines')) });
 }
 
+// The traits each type of component takes (see the server's /components):
+// by its type, the types of its traits of each kind (e.g. 'vpt'), and the
+// directions of its velocity and dispersion traits
+export function useComponentTraits() {
+  return useQuery({ queryKey: ['components'], staleTime: Infinity, queryFn: () => data(api.GET('/api/v1/components')) });
+}
+
 // Write the options of a block of a project (by its path)
 export function useUpdateBlock() {
   const client = useQueryClient();

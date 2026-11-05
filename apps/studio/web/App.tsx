@@ -6,7 +6,7 @@ import { useJobs } from './api/queries';
 import { Logo } from './components/icons';
 import { SchemeMenu } from './components/ui/scheme';
 import { Dataset, NewDataset } from './screens/Dataset';
-import { GalaxyScreen } from './screens/GalaxyScreen';
+import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
 import { BlockInLayout, DraftScreen } from './screens/Drafts';
 import { Home } from './screens/Home';
 import { NewImage } from './screens/Image';

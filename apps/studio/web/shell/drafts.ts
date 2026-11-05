@@ -2,7 +2,7 @@
 // chosen, each reachable from the tree (its section Screen drafts). The
 // blocks of observations open in the layout chosen for them (see
 // useLayout), the first by default. (Galaxies have their screen, see
-// screens/GalaxyScreen.)
+// screens/galaxy/GalaxyScreen.)
 
 export interface Draft {
   id: string;

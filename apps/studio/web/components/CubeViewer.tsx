@@ -155,6 +155,18 @@ export function CubeViewer({
   const plane = useChannel(layer.path, layer.hdu, channel);
   const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel');
   const spectrum = useSpectrum(layer.path, layer.hdu, shownPixel, selection);
+  // (a model without noise starts at the brightest channel of its total
+  // spectrum, as its middle one may hold none of its light, e.g. between
+  // two lines; once, before a channel is picked)
+  const started = useRef(!noiseless);
+  useEffect(() => {
+    if (started.current || !spectrum.data || shownPixel !== null || selection !== null) return;
+    started.current = true;
+    const values = spectrum.data.values;
+    let peak = 0;
+    for (let c = 1; c < values.length; c++) if ((values[c] ?? -Infinity) > (values[peak] ?? -Infinity)) peak = c;
+    setChannel(peak);
+  }, [spectrum.data, shownPixel, selection]);
   // The text of a channel (its number and its coordinate) and of a band of
   // channels (their coordinates, or numbers if unknown)
   const spectralOf = (c: number) => spectrum.data?.spectral?.[c];
