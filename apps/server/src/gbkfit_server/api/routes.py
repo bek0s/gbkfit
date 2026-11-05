@@ -503,6 +503,9 @@ async def events(server: ServerDep) -> AsyncIterator[ServerSentEvent]:
     'run' (the run of a job, when its manifest changed) and 'progress'
     (a report of the progress of a fit).
     """
+    # (a comment first, which clients pass over: the response starts with
+    # it, so that they know they are connected before any event)
+    yield ServerSentEvent(comment='connected')
     async for event in server.events.subscribe():
         yield ServerSentEvent(event=event.kind, data=event.data)
 
