@@ -59,7 +59,7 @@ export function ParamField(props: ParamFieldProps) {
           onClick={() => onFree(setting.kind !== 'free')}
           title={setting.kind === 'free' ? 'Free in a fit, in its range: click to fix it' : 'Fixed in a fit: click to free it'}
         >
-          {setting.kind === 'free' ? 'free' : 'fixed'}
+          {setting.kind === 'free' ? 'Free' : 'Fixed'}
         </button>
       )}
     </div>

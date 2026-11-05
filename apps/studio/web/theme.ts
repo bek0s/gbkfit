@@ -1,6 +1,8 @@
 // The look of the components of Mantine (see components/ui), made that of
-// the page in the theme chosen (palette.ts): the fonts (fonts.ts, also the
-// CSS variables of the page: --sans, --display, --mono), and its colours in
+// the page in the theme chosen (palette.ts): its type (fonts.ts, also the
+// CSS variables of the page: the fonts, --sans, --display, --mono, and the
+// roles of text, --text-<role>; Mantine's sizes those of the roles, its
+// compact controls, xs, of the text of controls), and its colours in
 // the scheme in use: the tokens of the page as CSS variables, its accent
 // as their primary colour, its error as their red, its greys as those
 // Mantine draws its dark scheme (dark) and its light one (gray) with (no
@@ -11,18 +13,20 @@
 // (data-mantine-color-scheme), which what draws with the tokens follows
 // (see useScheme in components/colours.ts).
 import { Button, Checkbox, createTheme, Slider, type CSSVariablesResolver, type MantineColorScheme, type MantineColorSchemeManager, type MantineColorsTuple } from '@mantine/core';
-import { FONTS } from './fonts';
+import { FONTS, TYPE, typeVariables } from './fonts';
 import { THEMES, variables, type Theme } from './palette';
 import { followPreferences, preference, setPreference, usePreference } from './shell/preferences';
 
 const tuple = (colours: string[]) => colours as unknown as MantineColorsTuple;
+const px = (size: number) => `${size}px`;
 
 export function mantineTheme({ dark, greys, shades }: Theme) {
   return createTheme({
     fontFamily: FONTS.sans,
     fontFamilyMonospace: FONTS.mono,
     headings: { fontFamily: FONTS.display },
-    fontSizes: { xs: '11.5px', sm: '12.5px', md: '13px', lg: '15px', xl: '18px' },
+    fontSizes: { xs: px(TYPE.label.size), sm: px(TYPE.body.size), md: px(TYPE.body.size), lg: px(TYPE.subtitle.size), xl: px(TYPE.title.size) },
+    lineHeights: { xs: `${TYPE.label.line}`, sm: `${TYPE.body.line}`, md: `${TYPE.body.line}`, lg: `${TYPE.subtitle.line}`, xl: `${TYPE.title.line}` },
     colors: {
       accent: tuple(shades.accent),
       err: tuple(shades.err),
@@ -80,7 +84,7 @@ const components = {
 
 export function resolver({ dark, light }: Theme): CSSVariablesResolver {
   return () => ({
-    variables: { '--sans': FONTS.sans, '--display': FONTS.display, '--mono': FONTS.mono },
+    variables: typeVariables(),
     dark: { ...variables(dark), ...components },
     light: { ...variables(light), ...components },
   });
