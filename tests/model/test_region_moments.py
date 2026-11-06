@@ -259,6 +259,23 @@ def test_region_moments_of_the_columns_of_a_table(tmp_path):
     assert dataset['h3'].unit() is None
 
 
+def test_errors_of_a_table_without_a_unit_are_in_that_of_the_values(
+        tmp_path):
+    # The velocities in m/s, given in km/s, and their errors without a
+    # unit: in m/s too, so in km/s as the velocities
+    Table(dict(V=[1.4e6, 1.5e6] * u.m / u.s, V_ERR=[5e3, 6e3])).write(
+        tmp_path / 'kinematics.fits')
+    regions = dict(type='apertures', apertures=[
+        dict(type='circle', x=0, y=0, radius=1),
+        dict(type='circle', x=3, y=0, radius=1)])
+    dataset = gbkfit.dataset.dataset_parser.load(dict(
+        type='region_moments', regions=regions,
+        file=str(tmp_path / 'kinematics.fits'),
+        moment1=dict(column='V', error='V_ERR', unit='km/s')))
+    np.testing.assert_allclose(dataset['moment1'].data(), [1400, 1500])
+    np.testing.assert_allclose(dataset['moment1'].error(), [5, 6])
+
+
 @pytest.mark.parametrize('method, other, message', [
     ('gauss_hermite', dict(moments={3: Data(np.zeros(2))}),
      "moment3 is a central moment"),

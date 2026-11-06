@@ -179,7 +179,9 @@ def _dimensionless(data: Data, order: int) -> Data:
 def table_item(table: Table, columns: DataColumns) -> Data:
     """
     Return a data item of the columns of a table: its values, errors and
-    mask, in its unit (by default that of its column).
+    mask, in its unit (by default that of its column). Errors without a
+    unit are in that of the column of the values (or in the unit given,
+    if the column has none).
     """
     with config_path('column'):
         values = read_column(table, columns.column, columns.unit)
@@ -199,14 +201,15 @@ def table_item(table: Table, columns: DataColumns) -> Data:
     elif error is not None:
         with config_path('error'):
             error = read_column(table, error, None)
-            if error.unit is not astropy.units.dimensionless_unscaled:
-                try:
-                    error = error.to(values.unit)
-                except astropy.units.UnitConversionError:
-                    raise ValueError(
-                        f"the errors are in {error.unit}, but the values in "
-                        f"{values.unit}") from None
-            error = error.value
+            if error.unit is astropy.units.dimensionless_unscaled:
+                error = error.value * (
+                    table[columns.column].unit or values.unit)
+            try:
+                error = error.to_value(values.unit)
+            except astropy.units.UnitConversionError:
+                raise ValueError(
+                    f"the errors are in {error.unit}, but the values in "
+                    f"{values.unit}") from None
     mask = None
     if columns.mask is not None:
         with config_path('mask'):
