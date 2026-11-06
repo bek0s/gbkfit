@@ -56,16 +56,14 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Return the unit that a text states, e.g. 'Jy/beam', 'MJy/sr' or
     '1e-17 erg/s/cm2/arcsec2'.
 
-    The text is read in up to two passes:
+    First, the invalid names of the text are made valid: those of
+    _STANDARD_NAMES, in any case, that astropy does not read as a unit
+    that makes sense for astronomical data (see _MISREAD_UNITS). For
+    example, 'JY/BEAM' becomes 'Jy/beam' and 'erg/s/cm2/A' becomes
+    'erg/s/cm2/Angstrom', but 'mJy' stays (the table would make it 'MJy').
 
-    1. As it is. If that gives no unit, or a unit that makes no sense for
-       astronomical data (see _MISREAD_UNITS; e.g. 'erg/s/cm2/A', where A
-       is the ampere), the second pass is made.
-    2. With its invalid names made valid (see _STANDARD_NAMES; e.g. A as
-       the angstrom, 'JY/BEAM' as 'Jy/beam').
-
-    Each pass reads the text as terms that multiply each other, separated
-    by spaces, '*' or '.', each read on its own; or else as a whole, by
+    Then the text is read as terms that multiply each other, separated by
+    spaces, '*' or '.', each read on its own; or else as a whole, by
     astropy (e.g. astropy's own 'Jy / beam' and 'Jy km / (beam s)', whose
     spaces do not separate terms). The terms are read on their own because
     the FITS standard (4.0, 4.3.1) reads a unit by the normal precedence
@@ -88,25 +86,19 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Raises
     ------
     ValueError
-        If neither pass gives a unit that makes sense for astronomical
-        data: e.g. 'G', the gauss in both passes (but not 'A', the ampere
-        in the first pass, and the angstrom in the second).
+        If the text is not a unit, or is one that makes no sense for
+        astronomical data (see _MISREAD_UNITS; e.g. 'G', the gauss).
     """
-    refused = None
-    for candidate in dict.fromkeys((text, _standardised(text))):
-        unit = _reading(candidate)
-        if unit is None:
-            continue
-        if _makes_sense(unit):
-            return unit
-        refused = unit
-    if refused is not None:
+    unit = _reading(_standardised(text))
+    if unit is None:
         raise ValueError(
-            f"{text!r} reads as {refused.to_string()!r}, which no data are "
-            f"in (a unit of the ampere or of the bit)")
-    raise ValueError(
-        f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
-        f"'1e-17 erg/s/cm2/arcsec2')")
+            f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
+            f"'1e-17 erg/s/cm2/arcsec2')")
+    if not _makes_sense(unit):
+        raise ValueError(
+            f"{text!r} reads as {unit.to_string()!r}, which no data are in "
+            f"(a unit of the ampere or of the bit)")
+    return unit
 
 
 def format_unit(unit: astropy.units.UnitBase) -> str:
@@ -211,16 +203,15 @@ def _divided(term: str) -> astropy.units.UnitBase:
 
 def _standardised(text: str) -> str:
     """
-    Return the text of a unit with its invalid names made valid: those of
-    _STANDARD_NAMES, in any case, that astropy does not read as a unit
-    that makes sense for astronomical data (e.g. 'JY' and 'B' in 'JY/B',
-    but not 'mJy', which the table would make 'MJy').
+    Return the text of a unit with its invalid names made valid (see
+    parse_unit). A name is of letters and underscores (e.g. 'M_sun'), not
+    digits, which give powers (e.g. 'cm2').
     """
     def valid(match: re.Match) -> str:
         name = match.group(0)
         standard = _STANDARD_NAMES.get(name.upper())
         return name if standard is None or _is_valid(name) else standard
-    return re.sub(r'[A-Za-z]+', valid, text)
+    return re.sub(r'[A-Za-z_]+', valid, text)
 
 
 def _is_valid(name: str) -> bool:

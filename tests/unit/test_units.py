@@ -47,6 +47,8 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('1.5e-17 erg/s/cm2/arcsec2',
      1.5e-17 * u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
     ('Msun/pc2', u.Msun / u.pc ** 2),
+    # (M_sun is a name: not M, which would be the metre)
+    ('M_sun/pc2', u.Msun / u.pc ** 2),
     # The spellings of HST and of CCD software
     ('ELECTRONS/S', u.electron / u.s),
     ('counts/s', u.ct / u.s),
