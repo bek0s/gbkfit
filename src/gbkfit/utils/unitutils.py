@@ -327,7 +327,6 @@ def _corrected(text: str) -> str:
 
 def _makes_sense(unit: astropy.units.UnitBase) -> bool:
     """
-    Return whether a unit makes sense for astronomical data (see
-    _NON_DATA_BASES).
+    Return whether a unit makes sense for astronomical data.
     """
     return _NON_DATA_BASES.isdisjoint(unit.decompose().bases)
