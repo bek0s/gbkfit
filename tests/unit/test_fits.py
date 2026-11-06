@@ -694,6 +694,22 @@ def test_distortions_are_left_out_with_a_warning(tmp_path, caplog):
     assert "distortions" in caplog.text
 
 
+def test_the_beam_of_aips_is_read_from_the_history(tmp_path):
+    # (as AIPS writes it, e.g. in the maps and cubes of THINGS: in
+    # degrees, the last of its cleanings)
+    header = fits.Header(SKY)
+    header.add_history('AIPS   CLEAN BMAJ=  1.0000E-03 BMIN=  1.0000E-03 '
+                       'BPA=   0.00')
+    header.add_history('AIPS   CLEAN BMAJ=  3.1753E-03 BMIN=  2.6007E-03 '
+                       'BPA= -80.43')
+    path = str(tmp_path / 'map.fits')
+    fits.writeto(path, np.zeros((20, 24), np.float32), header)
+    beam = read_arrays(path).beam
+    assert beam['bmaj'] == pytest.approx(11.43108)
+    assert beam['bmin'] == pytest.approx(9.36252)
+    assert beam['bpa'] == pytest.approx(-80.43)
+
+
 def test_a_cube_of_one_channel_has_the_beam_of_its_table(tmp_path):
     # A cube of CASA of one channel, which reading leaves out, with its
     # beam in its table BEAMS

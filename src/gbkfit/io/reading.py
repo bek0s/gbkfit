@@ -5,6 +5,7 @@ read_data), or as they are, to look at them (see read_array); and their
 world coordinates, unit and beam alone.
 """
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -27,6 +28,13 @@ __all__ = [
     'read_data',
     'read_unit'
 ]
+
+
+# The beam that AIPS writes in the history of an image it cleaned, in
+# degrees (e.g. 'AIPS   CLEAN BMAJ=  3.1753E-03 BMIN=  2.6007E-03 BPA=
+# -80.43', of THINGS)
+_AIPS_BEAM = re.compile(
+    r'AIPS\s+CLEAN\s+BMAJ=\s*(\S+)\s+BMIN=\s*(\S+)\s+BPA=\s*(\S+)')
 
 
 def read_data(
@@ -225,7 +233,8 @@ def header_beam(
     channels of its file (filename, if given; e.g. the table BEAMS of a
     cube of CASA, see read_channel_beams), as arrays with their spectral
     points ('spectral', a Quantity), in the order of the channels of the
-    file.
+    file; or else the last that AIPS wrote in its history (see
+    _AIPS_BEAM).
     """
     if 'BMAJ' in header and 'BMIN' in header:
         return dict(
@@ -235,9 +244,21 @@ def header_beam(
     table = None if filename is None else read_channel_beams(
         filename, header)
     if table is None:
-        return None
+        return _history_beam(header)
     return dict(
         bmaj=table['bmaj'].to_value('arcsec'),
         bmin=table['bmin'].to_value('arcsec'),
         bpa=table['bpa'].to_value('deg'),
         spectral=table.columns[0])
+
+
+def _history_beam(header: astropy.io.fits.Header) -> dict[str, Any] | None:
+    """
+    Return the beam of the last cleaning of AIPS in the history of a
+    header (see _AIPS_BEAM), as header_beam does, if it has one.
+    """
+    for card in reversed(header.get('HISTORY', [])):
+        if match := _AIPS_BEAM.search(str(card)):
+            bmaj, bmin, bpa = map(float, match.groups())
+            return dict(bmaj=bmaj * 3600, bmin=bmin * 3600, bpa=bpa)
+    return None
