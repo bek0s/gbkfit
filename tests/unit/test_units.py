@@ -75,7 +75,11 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('(km/s)2', u.km ** 2 / u.s ** 2),
     ('(km/s)**2', u.km ** 2 / u.s ** 2),
     ('(km/s)^(-2)', u.s ** 2 / u.km ** 2),
-    ('(m2)^(1/2)', u.m)])
+    ('(m2)^(1/2)', u.m),
+    # (a power in braces, as MaNGA writes inverse variances)
+    ('(km/s)^{-2}', u.s ** 2 / u.km ** 2),
+    ('(1E-17 erg/s/cm^2/ang/spaxel)^{-2}',
+     (1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom / u.pix) ** -2)])
 def test_units_are_read_as_they_are_meant(text, unit):
     parsed = parse_unit(text)
     assert parsed.is_equivalent(unit)

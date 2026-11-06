@@ -276,9 +276,12 @@ def _bracketed(operand: str) -> astropy.units.UnitBase:
 
 def _power(text: str) -> Fraction:
     """
-    Return the power after the brackets of an operand (see _bracketed): a
-    number, alone or after '**' or '^', in brackets or not; 1 if there is
-    none. Raise ValueError if it is not a number.
+    Return the power after the brackets of an operand, or 1 if there is
+    none. The power is a number, alone or after '**' or '^', and in
+    brackets or braces or not.
+    For example, '2', '**2', '^(1/2)' or '^{-2}' (as MaNGA writes it).
+
+    Raise ValueError if it is not a number.
     """
     if not text:
         return Fraction(1)
@@ -287,6 +290,8 @@ def _power(text: str) -> Fraction:
     elif text.startswith('^'):
         text = text[1:]
     if text.startswith('(') and text.endswith(')'):
+        text = text[1:-1]
+    if text.startswith('{') and text.endswith('}'):
         text = text[1:-1]
     try:
         return Fraction(text)
