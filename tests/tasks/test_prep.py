@@ -611,6 +611,34 @@ def test_binned_maps_keep_their_unit():
     np.testing.assert_allclose(dataset['moment1'].error(), [5, 5])
 
 
+@pytest.mark.parametrize('cdelt1', [-1 / 3600, 1 / 3600])
+def test_bins_without_world_coordinates_are_on_the_pixels_of_the_file(
+        cdelt1):
+    # Bins without world coordinates (as vorbin often writes them) are on
+    # the pixels of the file of the data: of a cube or a map with east to
+    # the right of north too (CDELT1 > 0), which reading mirrors, each bin
+    # takes its own pixels of the file, not those of the mirrored bin
+    sky = dict(
+        CTYPE1='RA---TAN', CUNIT1='deg', CRVAL1=150.0, CRPIX1=5.0,
+        CDELT1=cdelt1, CTYPE2='DEC--TAN', CUNIT2='deg', CRVAL2=2.0,
+        CRPIX2=4.0, CDELT2=1 / 3600)
+    bins = np.where(np.arange(10) < 5, 0, 1) * np.ones((8, 1), np.int32)
+    fits.writeto('bins.fits', bins)
+    cube = np.random.default_rng(2).uniform(0, 1, (6, 8, 10))
+    fits.writeto('cube.fits', cube, fits.Header(sky | dict(
+        CTYPE3='VRAD', CUNIT3='km/s', CRVAL3=1000.0, CRPIX3=1.0,
+        CDELT3=10.0)))
+    fits.writeto(
+        'map.fits', np.where(bins == 0, 100.0, 200.0), fits.Header(sky))
+    prep.prep_region_spectra(
+        'bins.fits', 'cube.fits', None, None, None, 'float64')
+    np.testing.assert_allclose(
+        fits.getdata('prep_cube.fits'),
+        np.stack([cube[:, bins == k].sum(axis=1) for k in (0, 1)], axis=1))
+    prep.prep_region_moments('bins.fits', ['map.fits'], None, None, 'float64')
+    np.testing.assert_array_equal(fits.getdata('prep_map.fits'), [100, 200])
+
+
 def test_binned_maps_must_hold_one_value_per_bin():
     bins = np.zeros((4, 4))
     values = np.ones((4, 4))

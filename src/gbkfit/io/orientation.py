@@ -82,6 +82,27 @@ class Orientation(NamedTuple):
             array = flip_data(array, axis)
         return np.ascontiguousarray(array)
 
+    def sky(self) -> 'Orientation':
+        """
+        Return how an image of the sky of the array, in the axes of its
+        file, is put in the orientation of the model, as the array is:
+        an image of the two axes that become the first two of the model
+        (the celestial axes, which the model puts first).
+
+        Raises
+        ------
+        ValueError
+            If the array has fewer than two axes in the model.
+        """
+        if len(self.order) < 2:
+            raise ValueError("the array has no sky of two axes")
+        sky = sorted(self.order[:2])
+        sizes = squeezed_shape(self.shape)[::-1]
+        shape = (sizes[sky[1]], sizes[sky[0]])
+        return Orientation(
+            shape, shape, tuple(sky.index(axis) for axis in self.order[:2]),
+            tuple(axis for axis in self.flips if axis < 2))
+
 
 def model_header(
         source: str,

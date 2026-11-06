@@ -15,7 +15,8 @@ import numpy as np
 import numpy.typing as npt
 
 from gbkfit.config import DataFile
-from gbkfit.io import ErrorKind, has_wcs, read_arrays, with_wcs
+from gbkfit.io import (
+    ErrorKind, Orientation, has_wcs, read_arrays, read_sky_map, with_wcs)
 from .masks import bounding_box
 
 
@@ -63,12 +64,17 @@ class FitsArrays:
     beam : dict or None
         The beam of the data, if any (see Arrays): of a cube of
         CASA, that of each of its channels, in their order.
+    orientation : Orientation or None
+        How the file of the data was put in the orientation of the model,
+        while the arrays are on the pixels of the file (see read_sky_map;
+        None once cropped or padded).
     """
     data: np.ndarray
     error: np.ndarray | None
     mask: np.ndarray
     header: fits.Header
     beam: dict[str, Any] | None = None
+    orientation: Orientation | None = None
 
     @classmethod
     def read(
@@ -129,7 +135,26 @@ class FitsArrays:
             raise ValueError(
                 f"the data have no spectral axis to give the rest {rest}")
         return cls(
-            arrays.data, arrays.error, arrays.mask, header, arrays.beam)
+            arrays.data, arrays.error, arrays.mask, header, arrays.beam,
+            arrays.orientation)
+
+    def read_sky_map(self, file: DataFile) -> tuple[np.ndarray, fits.Header]:
+        """
+        Read an image of the sky of the data (e.g. the bin of each pixel)
+        on their pixels, as their errors and mask are read (see
+        gbkfit.io.read_sky_map), and its header.
+
+        Raises
+        ------
+        ValueError
+            If the arrays are no longer on the pixels of the file of the
+            data (cropped or padded), or as read_sky_map.
+        """
+        if self.orientation is None:
+            raise ValueError(
+                "an image of the sky is read on the pixels of the file of "
+                "the data, before they are cropped or padded")
+        return read_sky_map(file, self.header, self.orientation)
 
     def masked(self, mask: npt.ArrayLike) -> 'FitsArrays':
         """

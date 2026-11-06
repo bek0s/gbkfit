@@ -397,32 +397,31 @@ def prep_pixel_moments(
         _write(arrays, False, nanpad, outputs[i], dtype)
 
 
-def _read_bins(filename: str) -> tuple[FitsArrays, np.ndarray, int]:
+def _read_bins(
+        filename: str, data: FitsArrays
+) -> tuple[fits.Header, np.ndarray, int]:
     """
-    Return a map of bins, the bin of each pixel numbered from 0 (-1 for
-    none; see gbkfit.prep.bin_index), and the number of bins.
+    Return the header of a map of bins, read on the pixels of the sky of
+    data as their errors and mask are (see FitsArrays.read_sky_map), the
+    bin of each pixel numbered from 0 (-1 for none; see
+    gbkfit.prep.bin_index), and the number of bins.
     """
-    bins = FitsArrays.read(filename)
-    if bins.data.ndim != 2:
-        raise ValueError(
-            f"{filename}: the bins must be an image; they have "
-            f"{bins.data.ndim} axes")
+    bins, header = data.read_sky_map(filename)
     try:
-        index, nbins = prep.bin_index(bins.data)
+        index, nbins = prep.bin_index(bins)
     except ValueError as e:
         raise ValueError(f"{filename}: {e}") from e
-    _log.info(f"{nbins} bins")
-    return bins, index, nbins
+    return header, index, nbins
 
 
 def _write_bins(
-        bins: FitsArrays,
+        header: fits.Header,
         index: np.ndarray,
         filename: str,
         output_dir: str
 ) -> None:
     """Write the bins numbered from 0 (prep_<bins>.fits)."""
-    FitsArrays(index, None, np.ones(index.shape), bins.header).write(
+    FitsArrays(index, None, np.ones(index.shape), header).write(
         _output(output_dir, filename), dtype=np.int32)
 
 
@@ -439,14 +438,15 @@ def prep_region_moments(
     """
     Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for
     region_moments: a map of the bin of each pixel (file_bins; negative or
-    NaN for no bin), and moment maps (file_d, with optional errors file_e,
-    of the kind error_kind, see read_arrays, and masks file_m)
-    whose pixels hold the value of their bin. Write the bins, numbered from
-    0 in the order of their numbers in the map (prep_<bins>.fits), and for
-    each map a vector of the value of each bin (prep_<map>.fits), whose
-    masked or empty bins are NaN, and of their errors, standard deviations
-    (prep_<map>_error.fits), in the unit of the map (BUNIT), if it has
-    one.
+    NaN for no bin, on the pixels of the maps as their errors and masks
+    are, see FitsArrays.read_sky_map), and moment maps (file_d, with
+    optional errors file_e, of the kind error_kind, see read_arrays, and
+    masks file_m) whose pixels hold the value of their bin. Write the
+    bins, numbered from 0 in the order of their numbers in the map
+    (prep_<bins>.fits), and for each map a vector of the value of each bin
+    (prep_<map>.fits), whose masked or empty bins are NaN, and of their
+    errors, standard deviations (prep_<map>_error.fits), in the unit of
+    the map (BUNIT), if it has one.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
@@ -455,15 +455,18 @@ def prep_region_moments(
     _check_distinct(
         [_output(output_dir, file_bins)]
         + [_output(output_dir, file) for file in file_d])
-    bins, index, nbins = _read_bins(file_bins)
-    _write_bins(bins, index, file_bins, output_dir)
-    for i in range(nmaps):
-        arrays = FitsArrays.read(
-            file_d[i], file_e[i], file_m[i], error_kind=error_kind)
-        if arrays.data.shape != index.shape:
+    maps = [
+        FitsArrays.read(file_d[i], file_e[i], file_m[i], error_kind=error_kind)
+        for i in range(nmaps)]
+    bins_header, index, nbins = _read_bins(file_bins, maps[0])
+    _log.info(f"{nbins} bins")
+    for file, arrays in zip(file_d[1:], maps[1:]):
+        if not np.array_equal(_read_bins(file_bins, arrays)[1], index):
             raise ValueError(
-                f"{file_d[i]}: the maps must have the shape of the bins "
-                f"{index.shape}; they have {arrays.data.shape}")
+                f"{file}: the bins on its pixels are not those on the "
+                f"pixels of {file_d[0]}")
+    _write_bins(bins_header, index, file_bins, output_dir)
+    for i, arrays in enumerate(maps):
         # (the errors are in the unit of the map, see read_arrays)
         header = fits.Header()
         if (unit := header_unit(arrays.header)) is not None:
@@ -526,7 +529,8 @@ def prep_region_spectra(
     """
     Prepare the spectra of the bins of a cube for region_spectra: a map of
     the bin of each pixel (file_bins; negative or NaN for no bin, on the
-    pixels of the cube), and a cube (file_d, with optional errors file_e
+    pixels of the cube as its errors and mask are, see
+    FitsArrays.read_sky_map), and a cube (file_d, with optional errors file_e
     and mask file_m), with its spectral axis in velocities of a rest
     (velocity_rest), if given, and optionally cropped to channels
     (roi_spec, of the axis in velocities, increasing). velocity is the
@@ -548,20 +552,17 @@ def prep_region_spectra(
     output_dir = _output_dir(output_dir, output_dir_mode)
     _check_distinct(
         [_output(output_dir, file_bins), _output(output_dir, file_d)])
-    bins, index, nbins = _read_bins(file_bins)
     cube = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type,
         error_kind=error_kind)
+    bins_header, index, nbins = _read_bins(file_bins, cube)
+    _log.info(f"{nbins} bins")
     fluxes = prep.pixel_fluxes(cube.header, cube.beam, file_d)
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))
         if fluxes is not None and np.ndim(fluxes[0]):
             fluxes = (fluxes[0][slice(*roi_spec)], fluxes[1])
-    if cube.data.shape[1:] != index.shape:
-        raise ValueError(
-            f"{file_d}: the cube must have the spatial shape of the bins "
-            f"{index.shape}; it has {cube.data.shape[1:]}")
     spectra, errors = prep.bin_spectra(index, nbins, cube)
     header = _spectral_header(cube, nbins)
     # (the sums of the fluxes of the pixels: the values of the pixels per
@@ -571,7 +572,7 @@ def prep_region_spectra(
         spectra = spectra * factor
         errors = None if errors is None else errors * factor
         header['BUNIT'] = unitutils.format_unit(fluxes[1])
-    _write_bins(bins, index, file_bins, output_dir)
+    _write_bins(bins_header, index, file_bins, output_dir)
     FitsArrays(
         spectra, errors, np.isfinite(spectra).astype(float),
         header).write(

@@ -19,7 +19,8 @@ from gbkfit.config import Choices, DataFile, warn
 from gbkfit.grid import Rest
 from gbkfit.utils import unitutils
 from .formats import read_image, split_file
-from .headers import has_wcs, header_shape, header_unit
+from .headers import (
+    has_wcs, header_shape, header_unit, parse_wcs, with_shape, with_wcs)
 from .orientation import Orientation, model_header
 from .reading import header_beam
 
@@ -28,7 +29,8 @@ __all__ = [
     'ERROR_KINDS',
     'Arrays',
     'ErrorKind',
-    'read_arrays'
+    'read_arrays',
+    'read_sky_map'
 ]
 
 
@@ -73,6 +75,9 @@ class Arrays:
     footprint : np.ndarray or None
         Where the instrument looked, if given (see Data), on the pixels of
         the values.
+    orientation : Orientation or None
+        How the file of the values was put in the orientation of the
+        model, if they were read from one (see read_sky_map).
     """
     data: np.ndarray
     error: np.ndarray | None
@@ -81,6 +86,7 @@ class Arrays:
     unit: u.UnitBase | None
     beam: dict[str, Any] | None = None
     footprint: np.ndarray | None = None
+    orientation: Orientation | None = None
 
 
 def read_arrays(
@@ -200,7 +206,59 @@ def read_arrays(
     return Arrays(
         np.where(valid, values, np.nan),
         None if errors is None else np.where(valid, errors, np.nan),
-        valid.astype(float), header, unit, beam, footprints)
+        valid.astype(float), header, unit, beam, footprints, orientation)
+
+
+def read_sky_map(
+        file: DataFile,
+        data_header: astropy.io.fits.Header,
+        data_orientation: Orientation
+) -> tuple[np.ndarray, astropy.io.fits.Header]:
+    """
+    Read an image of the sky of data read from a file (e.g. the bin of
+    each of their pixels) on the pixels of the data, as their errors and
+    mask are read (see read_arrays): by its own world coordinates, which
+    must put its pixels on those of the celestial axes of the data; or,
+    if it or the data have none, in the axes of the file of the data,
+    whose sky it must have the shape of.
+
+    Parameters
+    ----------
+    file : DataFile
+        The file of the image.
+    data_header : astropy.io.fits.Header
+        The header of the data, in the orientation of the model (see
+        Arrays).
+    data_orientation : Orientation
+        How the file of the data was put in the orientation of the model
+        (see Arrays).
+
+    Returns
+    -------
+    np.ndarray
+        The image, in the orientation of the model.
+    astropy.io.fits.Header
+        Its header.
+
+    Raises
+    ------
+    ValueError
+        If the data have no sky of two axes, or the image is not on the
+        pixels of their sky.
+    """
+    orientation = data_orientation.sky()
+    shape = header_shape(data_header)[-2:]
+    header = with_shape(data_header, shape)
+    if has_wcs(data_header):
+        wcs = parse_wcs(split_file(file)[0], data_header)
+        if wcs.wcs.spec in (0, 1):
+            raise ValueError(
+                f"{split_file(file)[0]}: the data have no sky of two axes "
+                f"to put an image of the sky on")
+        header = with_wcs(header, wcs.sub(2))
+    return _read_companion(
+        file, header, orientation, rest=None, velocity=None,
+        spectral_type=None, medium=None)
 
 
 def _read(
@@ -277,8 +335,9 @@ def _read_companion(
         medium: str | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
-    Return the values of the errors or the mask of data in the orientation
-    of the model, and their header (see read_arrays).
+    Return the values of a file on the pixels of data (their errors, mask
+    or footprint, see read_arrays, or an image of their sky, see
+    read_sky_map) in the orientation of the model, and its header.
     """
     filename, key = split_file(file)
     values, header = read_image(filename, key)

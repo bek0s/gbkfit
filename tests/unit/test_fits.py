@@ -14,7 +14,7 @@ from gbkfit.grid import (
     Coords, Grid, air_refractive_index, make_convention, make_grid, make_rest)
 from gbkfit.io import (
     centre_missing_crpix, model_header, read_array, read_arrays,
-    read_coords, read_data, read_hdu, read_unit, write_data)
+    read_coords, read_data, read_hdu, read_sky_map, read_unit, write_data)
 
 
 def position_angle(header, pixel_from, pixel_to):
@@ -273,6 +273,39 @@ def test_data_are_read_in_the_orientation_of_the_model(header, data):
         np.testing.assert_allclose(
             getattr(result, field), getattr(expected, field), atol=1e-9)
     assert result.rota == pytest.approx(expected.rota, abs=1e-9)
+
+
+@pytest.mark.parametrize('header, data, sky', [
+    # Dec before RA
+    (axes_header(DEC, RA, VEL), CUBE_DATA.transpose(0, 2, 1), np.transpose),
+    # The velocity before RA and Dec
+    (axes_header(VEL, RA, DEC), CUBE_DATA.transpose(1, 2, 0), np.asarray),
+    # Mirrored (east to the right of north)
+    (CUBE | dict(CDELT1=1 / 3600, CRPIX1=15.0), CUBE_DATA[:, :, ::-1],
+     lambda image: image[:, ::-1]),
+    # Velocities decreasing along the spectral axis
+    (CUBE | dict(CDELT3=-10.0, CRPIX3=5.0), CUBE_DATA[::-1], np.asarray)])
+def test_an_image_of_the_sky_is_read_on_the_pixels_of_the_data(
+        header, data, sky):
+    # An image of the sky of a cube without world coordinates (e.g. the
+    # bins of its pixels) is in the axes of the file of the cube, and so
+    # is put on its pixels as the cube is
+    image = np.arange(20 * 24, dtype=np.float32).reshape(20, 24)
+    fits.writeto('cube.fits', data, fits.Header(header))
+    fits.writeto('image.fits', sky(image))
+    arrays = read_arrays('cube.fits')
+    result, _ = read_sky_map('image.fits', arrays.header, arrays.orientation)
+    np.testing.assert_array_equal(result, image)
+    # With world coordinates, it must be on the pixels of the sky of the
+    # cube; with those of the cube, it is
+    fits.writeto('wcs.fits', image, fits.Header(CELESTIAL | dict(
+        CRPIX1=10.0, CDELT1=-1 / 3600, CDELT2=1 / 3600)))
+    result, _ = read_sky_map('wcs.fits', arrays.header, arrays.orientation)
+    np.testing.assert_array_equal(result, image)
+    fits.writeto('off.fits', image, fits.Header(CELESTIAL | dict(
+        CRPIX1=12.0, CDELT1=-1 / 3600, CDELT2=1 / 3600)))
+    with pytest.raises(ValueError, match="not put its pixels on"):
+        read_sky_map('off.fits', arrays.header, arrays.orientation)
 
 
 def test_spectral_axis_is_read_last():
