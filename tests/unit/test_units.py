@@ -34,6 +34,9 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     # (only the names that need it: mJy is not MJy)
     ('mJy/B', u.mJy / u.beam),
     ('mHz/S', u.mHz / u.s),
+    # (invalid names in any case)
+    ('Jy/Beam', u.Jy / u.beam),
+    ('Km/s', u.km / u.s),
     ('METR/SEC', u.m / u.s),
     # The spellings of SDSS (e.g. MaNGA): ang is the angstrom, a spaxel a
     # pixel
@@ -70,9 +73,9 @@ def test_units_are_read_as_they_are_meant(text, unit):
 def test_what_is_not_a_unit_is_an_error():
     with pytest.raises(ValueError, match="is not a unit"):
         parse_unit('banana')
-    # No data are in units of the ampere (e.g. G, the gauss) or of the
-    # bit
-    for text in ('G', 'mA', 'bit'):
+    # No data are in units of the ampere (e.g. G, the gauss), the mole,
+    # the candela or the bit
+    for text in ('G', 'mA', 'mol', 'cd', 'bit'):
         with pytest.raises(ValueError, match="which no data are in"):
             parse_unit(text)
 
