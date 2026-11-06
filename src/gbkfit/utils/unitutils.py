@@ -29,7 +29,7 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 # is not a unit, 'S' is the siemens and 'B' is the byte.
 # A name is looked up in any case ('Jy/Beam' has 'BEAM'), and replaced
 # only if astropy does not read it as a unit that makes sense for data
-# (see _MISREAD_UNITS): 'MJY' becomes MJy, but 'mJy' stays.
+# (see _NON_DATA_BASES): 'MJY' becomes MJy, but 'mJy' stays.
 # Invalid names come from software that ignores the standard:
 # - some radio software, in capitals: 'JY/BEAM';
 # - AIPS, with names of its own: 'JY/B*M/S', 'METR/SEC';
@@ -48,13 +48,16 @@ _NAME_CORRECTIONS = {
     'COUNTS': 'ct', 'ADU': 'adu'}
 
 # The base units that no astronomical data are made of: the ampere, the
-# mole, the candela and the bit. A unit made of one of them (e.g. the
-# siemens, of the ampere; the byte, of bits) makes no sense for data:
-# - a name that astropy reads as one most likely means another unit,
-#   from _NAME_CORRECTIONS: 'A' (the ampere) the angstrom, 'S' (the
-#   siemens) the second, 'B' (the byte) the beam;
-# - a text that still reads as one is refused (e.g. 'G', the gauss).
-_MISREAD_UNITS = frozenset({
+# mole, the candela and the bit.
+# A unit made of one of them makes no sense for data. So if astropy reads
+# a name as such a unit, the name means another unit, which
+# _NAME_CORRECTIONS gives:
+# - 'A' is the ampere to astropy, but means the angstrom;
+# - 'S' is the siemens (made of the ampere), but means the second;
+# - 'B' is the byte (made of bits), but means the beam.
+# A text that is still made of one of them after the corrections is
+# refused, e.g. 'G' (the gauss, made of the ampere).
+_NON_DATA_BASES = frozenset({
     astropy.units.A, astropy.units.mol, astropy.units.cd, astropy.units.bit})
 
 
@@ -65,7 +68,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
 
     First, the invalid names of the text are made valid: those of
     _NAME_CORRECTIONS, in any case, that astropy does not read as a unit
-    that makes sense for astronomical data (see _MISREAD_UNITS). For
+    that makes sense for astronomical data (see _NON_DATA_BASES). For
     example, 'JY/BEAM' becomes 'Jy/beam' and 'erg/s/cm2/A' becomes
     'erg/s/cm2/Angstrom', but 'mJy' stays (the table would make it 'MJy').
 
@@ -94,9 +97,9 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     ------
     ValueError
         If the text is not a unit, or is one that makes no sense for
-        astronomical data (see _MISREAD_UNITS; e.g. 'G', the gauss).
+        astronomical data (see _NON_DATA_BASES; e.g. 'G', the gauss).
     """
-    unit = _reading(_corrected(text))
+    unit = _unit_of(_corrected(text))
     if unit is None:
         raise ValueError(
             f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
@@ -161,10 +164,12 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     return astropy.units.dimensionless_unscaled
 
 
-def _reading(text: str) -> astropy.units.UnitBase | None:
+def _unit_of(text: str) -> astropy.units.UnitBase | None:
     """
-    Return the unit of a text read as terms that multiply each other (see
-    _product), or else as a whole by astropy, or None if neither reads it.
+    Return the unit of a text, or None if it is not a unit.
+
+    The text is read as terms that multiply each other (see _product), or
+    else as a whole, by astropy.
     """
     for parse in (_product, astropy.units.Unit):
         try:
@@ -184,11 +189,11 @@ def _product(text: str) -> astropy.units.UnitBase:
         raise ValueError("no unit")
     unit = astropy.units.dimensionless_unscaled
     for term in terms:
-        unit = unit * _divided(term)
+        unit = unit * _quotient(term)
     return unit
 
 
-def _divided(term: str) -> astropy.units.UnitBase:
+def _quotient(term: str) -> astropy.units.UnitBase:
     """
     Return the unit of a term of parts separated by '/', each dividing all
     before it (e.g. 'erg/s/cm2' is erg / (s cm2)). Raise ValueError if a
@@ -217,24 +222,18 @@ def _corrected(text: str) -> str:
     def corrected_name(match: re.Match) -> str:
         name = match.group(0)
         correction = _NAME_CORRECTIONS.get(name.upper())
-        return name if correction is None or _is_valid(name) else correction
+        if correction is None:
+            return name
+        unit = _unit_of(name)
+        if unit is not None and _makes_sense(unit):
+            return name
+        return correction
     return re.sub(r'[A-Za-z_]+', corrected_name, text)
-
-
-def _is_valid(name: str) -> bool:
-    """
-    Return whether astropy reads the name of a unit as a unit that makes
-    sense for astronomical data.
-    """
-    try:
-        return _makes_sense(astropy.units.Unit(name))
-    except ValueError:
-        return False
 
 
 def _makes_sense(unit: astropy.units.UnitBase) -> bool:
     """
     Return whether a unit makes sense for astronomical data (see
-    _MISREAD_UNITS).
+    _NON_DATA_BASES).
     """
-    return _MISREAD_UNITS.isdisjoint(unit.decompose().bases)
+    return _NON_DATA_BASES.isdisjoint(unit.decompose().bases)
