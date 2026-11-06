@@ -28,46 +28,50 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 # astropy reads only valid names, which are case-sensitive: to it, 'JY'
 # is not a unit, 'S' is the siemens and 'B' is the byte.
 # Invalid names come from software that ignores the standard:
-# - radio software, in capitals: 'JY/BEAM';
+# - some radio software, in capitals: 'JY/BEAM';
 # - AIPS, with names of its own: 'JY/B*M/S', 'METR/SEC';
 # - SDSS (MaNGA): 'ang' for the angstrom, 'spaxel' for a pixel;
-# - HST and CCD software: 'ELECTRONS/S', 'COUNTS/S', 'ADU'.
+# - some optical spectra: 'A' for the angstrom, as in 'erg/s/cm2/A';
+# - the pipelines of HST: 'ELECTRONS/S', 'COUNTS/S';
+# - some CCD software: 'ADU'.
 _STANDARD_NAMES = {
     'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'B': 'beam', 'KM': 'km',
     'M': 'm', 'METR': 'm', 'S': 's', 'SEC': 's', 'HZ': 'Hz', 'KHZ': 'kHz',
     'MHZ': 'MHz', 'GHZ': 'GHz', 'SR': 'sr', 'ERG': 'erg', 'CM': 'cm',
-    'ANGSTROM': 'Angstrom', 'ANG': 'Angstrom', 'ARCSEC': 'arcsec',
+    'ANGSTROM': 'Angstrom', 'ANG': 'Angstrom', 'A': 'Angstrom',
+    'ARCSEC': 'arcsec',
     'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix', 'SPAXEL': 'pix',
     'ELECTRON': 'electron', 'ELECTRONS': 'electron', 'COUNT': 'ct',
     'COUNTS': 'ct', 'ADU': 'adu'}
 
-# Units that no data are in: the ampere and the bit. If a reading of a
-# unit contains either, a name in it was misread, and the next reading is
-# tried. For example:
-# - 'A' is the ampere, but is meant as the angstrom;
-# - 'S' is the siemens, which contains the ampere (A2 s3 / (kg m2)), but
-#   is meant as the second;
-# - 'B' is the byte, which is 8 bits, but is meant as the beam.
+# Units that are valid in FITS and astropy but make no sense for
+# astronomical data. A name read as one of them, or as a unit built from
+# one, most likely means another unit: 'A' (the ampere) the angstrom,
+# 'S' (the siemens) the second, 'B' (the byte) the beam.
 _MISREAD_UNITS = frozenset({astropy.units.A, astropy.units.bit})
 
 
 def parse_unit(text: str) -> astropy.units.UnitBase:
     """
-    Return the unit that a text states (e.g. 'Jy/beam', 'MJy/sr',
-    '1e-17 erg/s/cm2/arcsec2', or the BUNIT of a FITS header).
+    Return the unit that a text states, e.g. 'Jy/beam', 'MJy/sr' or
+    '1e-17 erg/s/cm2/arcsec2'.
 
-    The text as it is is read, then the text with its invalid names made
-    valid (e.g. 'JY/BEAM.KM/S' as 'Jy/beam.km/s'; see _STANDARD_NAMES),
-    until a reading gives a unit that data can be in (see _MISREAD_UNITS).
-    Each is read in two ways, the first that works:
+    The text is read in up to two passes:
 
-    1. As terms that multiply each other, separated by spaces, '*' or '.',
-       each read on its own. The FITS standard (4.0, 4.3.1) reads a unit
-       by the normal precedence of operations, from the left:
-       'Jy/beam km/s' is (Jy/beam) (km/s), as maps of moment 0 mean it.
-       astropy reads everything after a '/' as dividing: Jy / (beam km s).
-    2. As a whole, by astropy: e.g. astropy's own 'Jy / beam' and
-       'Jy km / (beam s)', whose spaces do not separate terms.
+    1. As it is. If that gives no unit, or a unit that makes no sense for
+       astronomical data (see _MISREAD_UNITS; e.g. 'erg/s/cm2/A', where A
+       is the ampere), the second pass is made.
+    2. With its invalid names made valid (see _STANDARD_NAMES; e.g. A as
+       the angstrom, 'JY/BEAM' as 'Jy/beam').
+
+    Each pass reads the text as terms that multiply each other, separated
+    by spaces, '*' or '.', each read on its own; or else as a whole, by
+    astropy (e.g. astropy's own 'Jy / beam' and 'Jy km / (beam s)', whose
+    spaces do not separate terms). The terms are read on their own because
+    the FITS standard (4.0, 4.3.1) reads a unit by the normal precedence
+    of operations, from the left: 'Jy/beam km/s' is (Jy/beam) (km/s), as
+    maps of moment 0 mean it; astropy reads everything after a '/' as
+    dividing: Jy / (beam km s).
 
     An empty text is dimensionless, as format_unit writes it.
 
@@ -84,9 +88,9 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Raises
     ------
     ValueError
-        If the text is not a unit, or every reading of it is a unit that
-        no data are in (see _MISREAD_UNITS). For example, in
-        'erg/s/cm2/A', A is the ampere: the angstrom is written Angstrom.
+        If neither pass gives a unit that makes sense for astronomical
+        data: e.g. 'G', the gauss in both passes (but not 'A', the ampere
+        in the first pass, and the angstrom in the second).
     """
     refused = None
     for candidate in dict.fromkeys((text, _standardised(text))):
@@ -99,8 +103,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     if refused is not None:
         raise ValueError(
             f"{text!r} reads as {refused.to_string()!r}, which no data are "
-            f"in (a unit of the ampere or of the bit: if A is meant as the "
-            f"angstrom, write Angstrom; if B as the beam, beam)")
+            f"in (a unit of the ampere or of the bit)")
     raise ValueError(
         f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
         f"'1e-17 erg/s/cm2/arcsec2')")

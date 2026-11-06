@@ -39,6 +39,8 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('MJy/sr', u.MJy / u.sr),
     ('10**(-20)*erg/s/cm**2/Angstrom',
      1e-20 * u.erg / u.s / u.cm ** 2 / u.Angstrom),
+    # A is the angstrom (no data are in amperes)
+    ('1E-20 erg/s/cm2/A', 1e-20 * u.erg / u.s / u.cm ** 2 / u.Angstrom),
     ('1.5e-17 erg/s/cm2/arcsec2',
      1.5e-17 * u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
     ('Msun/pc2', u.Msun / u.pc ** 2),
@@ -63,9 +65,9 @@ def test_units_are_read_as_they_are_meant(text, unit):
 def test_what_is_not_a_unit_is_an_error():
     with pytest.raises(ValueError, match="is not a unit"):
         parse_unit('banana')
-    # A is the ampere, not the angstrom; and no data are in units of
-    # magnetism (G, the gauss) or of information (bit)
-    for text in ('1E-20 erg/s/cm2/A', 'G', 'bit'):
+    # No data are in units of the ampere (e.g. G, the gauss) or of the
+    # bit
+    for text in ('G', 'mA', 'bit'):
         with pytest.raises(ValueError, match="which no data are in"):
             parse_unit(text)
 
@@ -74,8 +76,8 @@ def test_a_unit_that_is_refused_raises_no_warnings():
     # (astropy warns of several '/' when it reads the text as a whole)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        with pytest.raises(ValueError, match="write Angstrom"):
-            parse_unit('erg/s/cm2/A')
+        with pytest.raises(ValueError, match="which no data are in"):
+            parse_unit('erg/s/cm2/G')
     assert not caught
 
 
