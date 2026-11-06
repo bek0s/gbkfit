@@ -1,12 +1,11 @@
 """
-Physical units of data and models: parsing them from the text of
-configurations and FITS headers (BUNIT).
+Physical units of data and models: reading them from the text of
+configurations and of FITS headers (BUNIT), and writing them back as text.
 """
 
 import re
 
 import astropy.units
-
 
 
 __all__ = [
@@ -16,16 +15,23 @@ __all__ = [
 ]
 
 
-# The terms of a unit that multiply each other: separated by spaces, '*'
-# (not '**', a power) or '.' (FITS: 'JY/BEAM.KM/S'; not the point of a
-# number)
+# A regular expression for the separators between the terms of a unit.
+# Terms multiply each other: 'Jy/beam km/s' is 'Jy/beam' times 'km/s'.
+# A separator is one of:
+# - a space, as in 'Jy/beam km/s';
+# - a '*', as in 'Jy/beam*km/s' ('**' is a power, as in 'm**2');
+# - a '.', as in 'Jy/beam.km/s' (a '.' between digits is a decimal
+#   point, as in '1.5').
 _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 
-# The units of FITS headers that are written in capitals (e.g. 'JY/BEAM'),
-# with the spellings of AIPS (e.g. 'JY/B*M/S', 'METR/SEC': B is the beam
-# there, not the byte) and of SDSS (e.g. MaNGA's
-# '1E-17 erg/s/cm^2/ang/spaxel': ang is the angstrom, and a spaxel a pixel)
-_CAPITALS = {
+# A map from invalid unit names to the valid names of the FITS standard.
+# astropy reads only valid names, which are case-sensitive: to it, 'JY'
+# is not a unit, 'S' is the siemens and 'B' is the byte.
+# Invalid names come from software that ignores the standard:
+# - radio software, in capitals: 'JY/BEAM';
+# - AIPS, with names of its own: 'JY/B*M/S', 'METR/SEC';
+# - SDSS (MaNGA): 'ang' for the angstrom, 'spaxel' for a pixel.
+_STANDARD_NAMES = {
     'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'B': 'beam', 'KM': 'km',
     'M': 'm', 'METR': 'm', 'S': 's', 'SEC': 's', 'HZ': 'Hz', 'KHZ': 'kHz',
     'MHZ': 'MHz', 'GHZ': 'GHz', 'SR': 'sr', 'ERG': 'erg', 'CM': 'cm',
@@ -35,20 +41,26 @@ _CAPITALS = {
 
 def parse_unit(text: str) -> astropy.units.UnitBase:
     """
-    Return the unit of the given text (e.g. 'Jy/beam', 'MJy/sr',
-    '1e-17 erg/s/cm2/arcsec2', or BUNIT of a FITS header).
+    Return the unit that a text states (e.g. 'Jy/beam', 'MJy/sr',
+    '1e-17 erg/s/cm2/arcsec2', or the BUNIT of a FITS header).
 
-    Terms separated by spaces, '*' or '.' multiply each other, each read
-    on its own: astropy reads 'Jy/beam km/s' as Jy / (beam km s), but the
-    unit of a moment 0 map is Jy km/s per beam. Units written in capitals
-    (e.g. 'JY/BEAM.KM/S') are read in the case of their names. Else the
-    text is read by astropy as a whole (e.g. its own 'Jy / beam' or
-    'Jy km / (beam s)', whose spaces are not between terms).
+    The text is read in two ways, in this order:
+
+    1. As terms that multiply each other, separated by spaces, '*' or '.',
+       each read on its own. astropy alone reads 'Jy/beam km/s' as
+       Jy / (beam km s), but the unit of a map of moment 0 means
+       (Jy/beam) (km/s).
+    2. As a whole, by astropy: e.g. astropy's own 'Jy / beam' and
+       'Jy km / (beam s)', whose spaces do not separate terms.
+
+    Each way is tried on the text as it is, then with its invalid names
+    made valid (e.g. 'JY/BEAM.KM/S' as 'Jy/beam.km/s'; see
+    _STANDARD_NAMES).
 
     Parameters
     ----------
     text : str
-        The unit.
+        The text of the unit.
 
     Returns
     -------
@@ -58,15 +70,16 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Raises
     ------
     ValueError
-        If the text is not a unit, or is one of electricity, which no data
-        are in (e.g. 'erg/s/cm2/A': A is the ampere, the angstrom is
-        Angstrom).
+        If the text is not a unit, or is a unit of electricity, which no
+        data are in (e.g. 'erg/s/cm2/A', where A is the ampere; the
+        angstrom is Angstrom).
     """
-    # A unit of electricity may be the capitals of another (e.g. S, the
-    # siemens, for s), so the other readings are tried before it is refused
+    # A reading that gives a unit of electricity is set aside, not refused
+    # at once: a later reading may be the one meant (e.g. 'S' is the
+    # siemens, but in capitals it is the second)
     electric = False
     for parse in (_product, astropy.units.Unit):
-        for candidate in (text, _uncapitalised(text)):
+        for candidate in (text, _standardised(text)):
             try:
                 unit = parse(candidate)
             except ValueError:
@@ -87,10 +100,12 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
 
 def format_unit(unit: astropy.units.UnitBase) -> str:
     """
-    Return a unit as text that parse_unit reads as the same unit: its
-    scale and its terms with their powers (e.g. 'Jy km beam-1 s-1').
+    Return a unit as text that parse_unit reads back as the same unit: its
+    scale, then each of its units with its power (e.g. 'Jy km beam-1
+    s-1').
     """
-    # repr gives the shortest text of the scale that reads back exactly
+    # (repr gives the shortest text of the scale that reads back as the
+    # same number)
     terms = [] if unit.scale == 1 else [repr(float(unit.scale))]
     for base, power in zip(unit.bases, unit.powers):
         name = base.to_string()
@@ -100,10 +115,13 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
 
 def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     """
-    Return what light in a unit is per: a beam (e.g. Jy/beam), a solid
-    angle (sr; e.g. MJy/sr, erg/s/cm2/arcsec2), a pixel named so (pix;
-    e.g. Jy/pixel), or neither (dimensionless): a pixel, or a region (e.g.
-    1e-20 erg/s/cm2/Angstrom of a spaxel).
+    Return what a unit of light is per, on the sky:
+
+    - a beam (beam), e.g. Jy/beam;
+    - a solid angle (sr), e.g. MJy/sr or erg/s/cm2/arcsec2;
+    - a pixel, if the unit names it (pix), e.g. Jy/pixel;
+    - nothing else (dimensionless): the light is that of a whole pixel or
+      region, e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel.
 
     Raises
     ------
@@ -115,8 +133,9 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
         return astropy.units.beam
     if astropy.units.pix in unit.bases:
         return astropy.units.pix
-    # The power of the angles of the unit: -2 per solid angle (an angle
-    # squared, e.g. arcsec2, or a solid angle, e.g. sr)
+    # The sum of the powers of the angles of the unit, a solid angle (e.g.
+    # sr) counting as an angle squared: -2 for a unit per solid angle (per
+    # sr, or per arcsec2)
     power = 0
     for base, base_power in zip(unit.bases, unit.powers):
         if base.physical_type == 'solid angle':
@@ -134,8 +153,8 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
 
 def _product(text: str) -> astropy.units.UnitBase:
     """
-    Return the product of the terms of a unit (see parse_unit). Raise
-    ValueError if a term is not a unit.
+    Return the unit of a text as terms that multiply each other (see
+    parse_unit). Raise ValueError if a term is not a unit.
     """
     terms = [term for term in _TERM_SEPARATOR.split(text.strip()) if term]
     if not terms:
@@ -148,13 +167,13 @@ def _product(text: str) -> astropy.units.UnitBase:
 
 def _divided(term: str) -> astropy.units.UnitBase:
     """
-    Return the unit of a term whose parts are divided by '/', from the
-    left (e.g. 'erg/s/cm2' is erg / (s cm2)). Raise ValueError if a part
-    is empty or not a unit.
+    Return the unit of a term of parts separated by '/', each dividing all
+    before it (e.g. 'erg/s/cm2' is erg / (s cm2)). Raise ValueError if a
+    part is empty or not a unit.
 
-    The parts are read one by one because astropy warns of a text with
-    several '/' (as the FITS standard discourages it), and silencing that
-    warning would change the warnings of every thread.
+    The parts are read one at a time because astropy warns of a text with
+    several '/' (the FITS standard discourages them), and silencing that
+    warning here would silence it in every other thread too.
     """
     first, *divisors = term.split('/')
     if not first and not divisors or '' in divisors:
@@ -166,9 +185,14 @@ def _divided(term: str) -> astropy.units.UnitBase:
     return unit
 
 
-def _uncapitalised(text: str) -> str:
-    """Return a unit with the names of _CAPITALS in their case."""
+def _standardised(text: str) -> str:
+    """
+    Return the text of a unit with its invalid names, in any case, made
+    valid (see _STANDARD_NAMES; e.g. 'JY/BEAM' as 'Jy/beam'); other names
+    are left as they are.
+    """
     return re.sub(
         r'[A-Za-z]+',
-        lambda match: _CAPITALS.get(match.group(0).upper(), match.group(0)),
+        lambda match: _STANDARD_NAMES.get(
+            match.group(0).upper(), match.group(0)),
         text)
