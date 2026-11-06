@@ -1,5 +1,6 @@
-// Maps on one grid (e.g. moment maps), to look at: one at a time, chosen on
-// a rail at its left, with its colour bar, as large as the space left
+// Maps on one grid (e.g. moment maps), to look at: one at a time, chosen in
+// its head (as segments, or of many, from a list), with its colour bar, as
+// large as the space left
 // allows; its data, or the map of their errors or of their mask (its
 // layers). The map has two tools (see MapTools): select (a drag selects a
 // region) and pan (a drag moves the zoomed map). The selection (a region;
@@ -15,16 +16,14 @@ import { robustRange, useFitted, type Layer } from './CubeViewer';
 import { significant } from './format';
 import { MapTools, type Tool } from './MapTools';
 import { MapView, type Region } from './MapView';
-import { Chip, NavItem } from './ui/basics';
-import { Segments } from './ui/inputs';
+import { Chip } from './ui/basics';
+import { Choice, Segments } from './ui/inputs';
 
-// A map: its key, its title on the rail (and its short name), how its
-// colours run (sequential, diverging about its median, or about 0), and
-// its layers (its data first)
+// A map: its key, its title, how its colours run (sequential, diverging
+// about its median, or about 0), and its layers (its data first)
 export interface MapItem {
   key: string;
   title: string;
-  short: string;
   colours: 'sequential' | 'median' | 'zero';
   layers: Layer[];
 }
@@ -94,10 +93,15 @@ export function MapsViewer({
   return (
     <div className="viewer">
       <div className="viewer-head">
-        {map.layers.length > 1 ? (
-          <Segments items={map.layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The map shown" />
+        {maps.length > 4 ? (
+          <Choice items={maps.map((m) => ({ value: m.key, label: m.title }))} value={map.key} onChange={setMapKey} label="The map shown" />
+        ) : maps.length > 1 ? (
+          <Segments items={maps.map((m) => ({ value: m.key, label: m.title }))} value={map.key} onChange={setMapKey} label="The map shown" />
         ) : (
           <h2>{map.title}</h2>
+        )}
+        {map.layers.length > 1 && (
+          <Segments items={map.layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The layer of the map shown" />
         )}
         <div className="selection-chips" aria-label="The selection">
           {selection !== null && (
@@ -109,12 +113,6 @@ export function MapsViewer({
         {actions}
       </div>
       <div className="viewer-body">
-        <nav className="rail" aria-label="The maps">
-          <div className="rail-label">maps</div>
-          {maps.map((m) => (
-            <NavItem key={m.key} label={m.title} left={<span className="order">{m.short}</span>} active={m.key === map.key} onClick={() => setMapKey(m.key)} />
-          ))}
-        </nav>
         <div className="viewer-main">
           <div className="viewer-stage" ref={fitted.stage}>
             {plane.error && <p className="error">{plane.error.message}</p>}
@@ -149,14 +147,15 @@ export function MapsViewer({
                     onWhole={zoom ? () => setZoom(null) : undefined}
                   />
                 </div>
-                <ColourBar
-                  range={range}
-                  diverging={colours !== 'sequential'}
-                  horizontal
-                  unit={layer.unit ?? ''}
-                  stretch={stretch}
-                  onReset={() => setStretch(UNSTRETCHED)}
-                />
+                <div className="map-side" style={{ height: fitted.size[1] }}>
+                  <ColourBar
+                    range={range}
+                    diverging={colours !== 'sequential'}
+                    unit={layer.unit ?? ''}
+                    stretch={stretch}
+                    onReset={() => setStretch(UNSTRETCHED)}
+                  />
+                </div>
               </div>
             )}
           </div>

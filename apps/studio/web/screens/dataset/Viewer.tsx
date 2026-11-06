@@ -79,7 +79,6 @@ export function DatasetViewer({
   const maps: MapItem[] = fitting.map((slot) => ({
     key: slot.key,
     title: slot.title,
-    short: slot.short,
     colours: slot.colours,
     layers: layersOf(draft.items[slot.key], arrays[slot.key]),
   }));

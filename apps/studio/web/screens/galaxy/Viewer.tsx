@@ -259,7 +259,7 @@ function RenderPane({
           <div className="gx-map-wait" />
         )}
       </div>
-      <div className="gx-map-side">
+      <div className="map-side" style={{ height: 'var(--side)' }}>
         {map && map.any && <ColourBar range={map.bar} diverging={what === 'velocity'} unit={unit} stretch={stretch} onReset={() => setStretch({ middle: 0.5, width: 1 })} />}
         {quantity === 'light' && (
           <div className="gx-scale" role="group" aria-label="The scale of the light">
@@ -470,6 +470,9 @@ function CubeView({ project, galaxy, properties, orientation }: { project: strin
         onSelection={setSelection}
         onBand={setBand}
         noiseless
+        // (its light, velocity and dispersion are those of the galaxy; the
+        // shapes of its spectra are measured here)
+        moments="higher"
       />
       {cube.error && <p className="gx-error">{cube.error.message}</p>}
     </div>

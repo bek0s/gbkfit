@@ -73,7 +73,7 @@ function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam
   const plane = useChannel(data.cube ? null : data.path, data.array.index, 0);
   const map = data.cube ? moments.data?.find((array) => array.info.name === 'flux') : plane.data?.plane;
   const [ny, nx] = map?.shape ?? [1, 1];
-  const fitted = useFitted(nx, ny);
+  const fitted = useFitted(nx, ny, 0);
   const step = data.array.step ? Math.abs(data.array.step[0]) : null;
   const error = (data.cube ? moments.error : plane.error)?.message;
   return (
@@ -93,7 +93,7 @@ function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam
 // The grid of an observable without data: a frame of its size on the sky
 function GridSky({ grid, psf }: { grid: { size: [number, number]; step: [number, number] }; psf: Ellipse | null }) {
   const [nx, ny] = grid.size;
-  const fitted = useFitted(nx, ny);
+  const fitted = useFitted(nx, ny, 0);
   const [sx, sy] = grid.step.map(Math.abs);
   return (
     <div className="ob-stage" ref={fitted.stage}>

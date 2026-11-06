@@ -26,6 +26,9 @@ __all__ = [
     'JobRequest',
     'LSFRequest',
     'LSFViewInfo',
+    'ObservedArrayInfo',
+    'ObservedInfo',
+    'ObservedRequest',
     'PSFRequest',
     'PSFViewInfo',
     'PieceReference',
@@ -124,6 +127,46 @@ class GalaxyRenderRequest(BaseModel):
     properties: dict[str, Any] = {}
     view: Literal['sky', 'face-on', 'edge-on'] = 'sky'
     size: int = 160
+
+
+class ObservedRequest(BaseModel):
+    """
+    A galaxy to observe (see Renders.observed): the project of its piece,
+    its options and the values of its parameters (as a galaxy to render;
+    the defaults for those not given, also of the observation), and the
+    observation of the project that sees it, by name.
+    """
+    project: str
+    galaxy: dict[str, Any]
+    properties: dict[str, Any] = {}
+    observation: str
+
+
+class ObservedArrayInfo(BaseModel):
+    """
+    An array of a galaxy observed: its kind ('model', 'data' or 'error'),
+    its item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of
+    cubes take it at (its array 0; a map, a cube of one channel; kept for a
+    while, see Views.put), its shape in the order of the model (nx, ny,
+    nchannels: 1 for a map), and the unit of its values ('' if unknown).
+    """
+    kind: str
+    item: str
+    path: str
+    shape: list[int]
+    unit: str
+
+
+class ObservedInfo(BaseModel):
+    """
+    A galaxy as an observation of its project sees it: the type of its
+    observable (e.g. 'pixel_spectra'), its arrays (the model of each item,
+    and the data and errors of the data, if it has them), and the warnings
+    of the library as it set them up.
+    """
+    observable: str
+    arrays: list[ObservedArrayInfo]
+    notes: list[str]
 
 
 class CubeRenderInfo(BaseModel):

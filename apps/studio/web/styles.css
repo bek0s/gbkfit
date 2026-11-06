@@ -140,20 +140,27 @@ h2 { margin: 0; font: var(--text-heading); }
 .viewer { display: flex; flex-direction: column; min-height: 0; }
 .viewer-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px; }
 .selection-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-/* (the rail of views and tools at the left of the map, and the map, its
-   controls and the spectrum) */
-.viewer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 14px; padding: 0 14px 12px; }
+/* (the map, its controls and the spectrum; what is shown is chosen in the
+   head: the views of a cube, e.g. a channel or a moment, a menu of more,
+   and its layers) */
+.viewer-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 0 14px 12px; }
+.viewer-views { display: flex; align-items: center; gap: 6px; }
+.viewer-more { height: 30px; padding: 0 10px; border: 1px solid var(--line2); border-radius: 4px; background: var(--panel2); color: var(--muted); font: var(--text-label); white-space: nowrap; }
+.viewer-more:hover, .viewer-more[aria-expanded="true"] { color: var(--fg); }
+.viewer-more[data-on] { background: var(--sel); color: var(--accent-text); }
 /* (the viewer of a dataset: no frame, as the preview of a PSF, so that the
    room the map leaves is page, not an empty box; its parts at the edges of
    the page) */
 .viewer:not(.card):not(.response) > .viewer-head { padding: 0 0 10px; }
 .viewer:not(.card):not(.response) > .viewer-body { padding: 0; }
 .viewer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-.rail { min-height: 0; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
-.rail-label { margin-top: 12px; padding: 0 8px 3px; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
-.rail-label:first-child { margin-top: 2px; }
 .viewer-stage { flex: 1; min-height: 160px; display: grid; place-items: center; overflow: hidden; }
-.viewer-map { display: grid; gap: 10px; }
+.viewer-map { display: flex; align-items: flex-start; gap: 12px; }
+/* (the side of a map: its colour bar, as tall as it, and what sets its
+   scale; of a dataset, a galaxy or an observation) */
+.map-side { flex: none; min-width: 44px; max-width: 64px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.map-side .colour-bar { flex: 1; min-height: 0; }
+.map-side .colour-unit { text-align: center; overflow-wrap: anywhere; }
 .map { position: relative; width: 100%; height: 100%; }
 .map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .map[data-drag="pan"] canvas { cursor: default; }
@@ -187,7 +194,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .viewer-controls-row > .ui-slider { flex: 1; }
 .control-text { flex: none; width: 31ch; font: var(--text-data-small); color: var(--muted); }
 .ui-slider-labelled .mantine-Slider-label { font: var(--text-data-small); background: var(--raise); color: var(--fg); border: 1px solid var(--line2); white-space: nowrap; }
-.order { margin-right: 5px; font: var(--text-data-small); color: var(--faint); }
 .viewer-canvas { position: relative; }
 .map-hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 3px 10px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-label); pointer-events: none; white-space: nowrap; opacity: 0; transition: opacity .2s; }
 /* (the hint shows as the pointer is over the map) */
@@ -547,8 +553,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .gx-arrows path { fill: var(--hint-fg); }
 .gx-arrow-halo line { stroke: var(--bg); stroke-width: 3.6; opacity: .7; }
 .gx-arrow-halo path { fill: var(--bg); stroke: var(--bg); stroke-width: 1.5; opacity: .7; }
-.gx-map-side { flex: none; width: 44px; height: var(--side); display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.gx-map-side .colour-bar { flex: 1; min-height: 0; }
 .gx-scale { display: grid; gap: 2px; padding: 2px; border: 1px solid var(--line2); border-radius: 7px; }
 .gx-scale button { width: 36px; height: 22px; padding: 0; border: 0; border-radius: 5px; background: none; color: var(--faint); font: var(--text-data-small); }
 .gx-scale button:hover { color: var(--fg); }
@@ -875,3 +879,17 @@ h2 { margin: 0; font: var(--text-heading); }
 .ob-checks-row label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .ob-checks-row input { accent-color: var(--accent); }
 .ob-number { display: block; min-width: 0; }
+
+/* observe: a galaxy through an observation, chosen in the head; the notes
+   of the library over the viewer, or why the observation cannot see it */
+.obs-through { color: var(--muted); font-weight: 400; }
+.obs-choices { align-items: flex-end; gap: 12px; }
+.obs-choice { display: grid; gap: 4px; min-width: 170px; font: var(--text-label); color: var(--muted); }
+.obs-view { flex: 1; min-height: 0; gap: 10px; }
+.obs-notes { margin: 0; padding: 6px 9px 6px 24px; border-left: 3px solid var(--warn-fill); border-radius: 4px; background: color-mix(in srgb, var(--warn-fill) 11%, transparent); font: var(--text-label); color: var(--fg2); overflow-wrap: anywhere; }
+.obs-problem { display: grid; gap: 8px; justify-items: start; max-width: 720px; margin: 24px auto; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--err-fill) 40%, transparent); border-radius: 8px; background: var(--panel); }
+.obs-problem p { margin: 0; font: var(--text-body); }
+.obs-problem-actions { display: flex; gap: 8px; }
+.obs-wait { margin: auto; color: var(--muted); font: var(--text-body); }
+.obs-empty { margin: 60px auto; max-width: 440px; display: grid; gap: 8px; justify-items: center; text-align: center; color: var(--muted); font: var(--text-body); }
+.obs-empty p { margin: 0; }

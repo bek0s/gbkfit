@@ -567,6 +567,12 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     np.testing.assert_allclose(flux, 10)
     np.testing.assert_allclose(velocity, 20)
     np.testing.assert_allclose(dispersion, 0, atol=1e-6)
+    # (of a Gauss-Hermite series, h3 and h4 alone)
+    header, data = frames.decode(client.get(
+        f'/api/v1/views/moments/{path}',
+        params=query | dict(snr=0, method='gauss_hermite')).content)
+    assert [a['name'] for a in header['arrays']] == ['h3', 'h4']
+    assert all(a.shape == flux.shape for a in frames.arrays(header, data))
     assert client.get(
         f'/api/v1/views/channel/{path}', params=query | dict(channel=5)
     ).status_code == 400
@@ -792,6 +798,26 @@ def test_a_galaxy_is_rendered_face_on_and_edge_on(client):
     _, edge_on = render(client, RENDERED, view='edge-on', size=64)
     # A thin disk edge-on has no light
     assert np.all(edge_on['gas/light'] == 0)
+
+
+def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
+    galaxy = client.get('/api/v1/pieces/study/galaxies/disk.yaml').json()
+    info = client.post('/api/v1/views/observed', json=dict(
+        project='study', galaxy=galaxy, properties=dict(pt_s=2),
+        observation='image')).json()
+    assert info['observable'] == 'pixel_brightness'
+    [array] = info['arrays']
+    assert (array['kind'], array['item'], array['shape']) \
+        == ('model', 'brightness', [16, 12, 1])
+    # (its map, as a channel of a cube, has the light of the disk)
+    header, data = frames.decode(client.get(
+        f"/api/v1/views/channel/{array['path']}",
+        params=dict(hdu=0, channel=0)).content)
+    assert frames.arrays(header, data)[0].max() > 0
+    # (an observation it cannot be, or one not there, is refused)
+    assert client.post('/api/v1/views/observed', json=dict(
+        project='study', galaxy=galaxy, observation='none')
+    ).status_code in (400, 404)
 
 
 def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):

@@ -25,12 +25,14 @@ from gbkfit_server.services import frames
 from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
+from gbkfit_server.services.views import Cube, cube_range
 from .models import (
     ArrayInfo, CheckRequest, CheckResult, ComponentTraits, CubeRenderInfo,
     FolderInfo,
     GalaxyInfo,
     GalaxyRenderRequest, GalaxyRequest, ImportRequest,
-    JobInfo, JobRequest, LSFRequest, LSFViewInfo, PSFRequest, PSFViewInfo,
+    JobInfo, JobRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
+    ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest, PreferencesInfo,
     PreparationInfo,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
@@ -237,16 +239,18 @@ def view_spectrum(
 @router.get(
     '/views/moments/{path:path}', response_class=Response, responses=_FRAME)
 def view_moments(
-        server: ServerDep, path: str, hdu: int, snr: float = 5
+        server: ServerDep, path: str, hdu: int, snr: float = 5,
+        method: Literal['moments', 'gauss_hermite'] = 'moments'
 ) -> Response:
     """
     Return the quick moment maps of a cube (NaN where they are not
-    defined) as a frame of five arrays (ny, nx): its flux, velocity,
-    dispersion, skewness and kurtosis (named so), of the voxels of the
-    mask of its signal grown from seeds of signal-to-noise ratio snr (0:
-    of all of them; see Views.moments).
+    defined) as a frame of arrays (ny, nx), named so, of the voxels of
+    the mask of its signal grown from seeds of signal-to-noise ratio snr
+    (0: of all of them; see Views.moments): measured as moments, its
+    flux, velocity, dispersion, skewness and kurtosis; or of a
+    Gauss-Hermite series fitted to each spectrum, its h3 and h4.
     """
-    maps = server.views.moments(path, hdu, snr)
+    maps = server.views.moments(path, hdu, snr, method)
     arrays = [(dict(name=name), data) for name, data in maps.items()]
     return Response(
         frames.array_frame(dict(path=path, hdu=hdu), arrays),
@@ -326,6 +330,33 @@ def view_galaxy_cube(
     nchannels, ny, nx = cube.values.shape
     return CubeRenderInfo(
         path=path, shape=[nx, ny, nchannels], unit=cube.unit or '')
+
+
+@router.post('/views/observed')
+def view_observed(server: ServerDep, request: ObservedRequest) -> ObservedInfo:
+    """
+    Evaluate a galaxy through an observation of its project (see
+    Renders.observed), and keep its arrays (the model of each item, and
+    the data and errors of the observation, if it has them) for the views
+    of cubes (channel, spectrum and moments), each at the path returned.
+    """
+    observed = server.renders.observed(
+        request.project, request.galaxy, request.properties,
+        request.observation)
+    arrays = []
+    for array in observed.arrays:
+        values = array.values if array.values.ndim == 3 \
+            else array.values[np.newaxis]
+        spectral = observed.velocities if array.values.ndim == 3 else None
+        cube = Cube(
+            values, spectral, 'km/s' if spectral is not None else None,
+            cube_range(values))
+        nchannels, ny, nx = values.shape
+        arrays.append(ObservedArrayInfo(
+            kind=array.kind, item=array.item, path=server.views.put(cube),
+            shape=[nx, ny, nchannels], unit=array.unit))
+    return ObservedInfo(
+        observable=observed.observable, arrays=arrays, notes=observed.notes)
 
 
 @router.get('/schema')

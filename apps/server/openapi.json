@@ -755,7 +755,7 @@
     "/api/v1/views/moments/{path}": {
       "get": {
         "summary": "View Moments",
-        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of five arrays (ny, nx): its flux, velocity,\ndispersion, skewness and kurtosis (named so), of the voxels of the\nmask of its signal grown from seeds of signal-to-noise ratio snr (0:\nof all of them; see Views.moments).",
+        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of arrays (ny, nx), named so, of the voxels of\nthe mask of its signal grown from seeds of signal-to-noise ratio snr\n(0: of all of them; see Views.moments): measured as moments, its\nflux, velocity, dispersion, skewness and kurtosis; or of a\nGauss-Hermite series fitted to each spectrum, its h3 and h4.",
         "operationId": "view_moments_api_v1_views_moments__path__get",
         "parameters": [
           {
@@ -784,6 +784,20 @@
               "type": "number",
               "default": 5,
               "title": "Snr"
+            }
+          },
+          {
+            "name": "method",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "moments",
+                "gauss_hermite"
+              ],
+              "type": "string",
+              "default": "moments",
+              "title": "Method"
             }
           }
         ],
@@ -981,6 +995,45 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CubeRenderInfo"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/views/observed": {
+      "post": {
+        "summary": "View Observed",
+        "description": "Evaluate a galaxy through an observation of its project (see\nRenders.observed), and keep its arrays (the model of each item, and\nthe data and errors of the observation, if it has them) for the views\nof cubes (channel, spectrum and moments), each at the path returned.",
+        "operationId": "view_observed_api_v1_views_observed_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ObservedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ObservedInfo"
                 }
               }
             }
@@ -2536,6 +2589,104 @@
         ],
         "title": "LSFViewInfo",
         "description": "An LSF drawn on channels (see Responses.lsf): its values (they sum\nto 1), the width of the channels (km/s), and its full width at half\nmaximum (km/s; none for a point)."
+      },
+      "ObservedArrayInfo": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "item": {
+            "type": "string",
+            "title": "Item"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "shape": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Shape"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "item",
+          "path",
+          "shape",
+          "unit"
+        ],
+        "title": "ObservedArrayInfo",
+        "description": "An array of a galaxy observed: its kind ('model', 'data' or 'error'),\nits item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of\ncubes take it at (its array 0; a map, a cube of one channel; kept for a\nwhile, see Views.put), its shape in the order of the model (nx, ny,\nnchannels: 1 for a map), and the unit of its values ('' if unknown)."
+      },
+      "ObservedInfo": {
+        "properties": {
+          "observable": {
+            "type": "string",
+            "title": "Observable"
+          },
+          "arrays": {
+            "items": {
+              "$ref": "#/components/schemas/ObservedArrayInfo"
+            },
+            "type": "array",
+            "title": "Arrays"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "observable",
+          "arrays",
+          "notes"
+        ],
+        "title": "ObservedInfo",
+        "description": "A galaxy as an observation of its project sees it: the type of its\nobservable (e.g. 'pixel_spectra'), its arrays (the model of each item,\nand the data and errors of the data, if it has them), and the warnings\nof the library as it set them up."
+      },
+      "ObservedRequest": {
+        "properties": {
+          "project": {
+            "type": "string",
+            "title": "Project"
+          },
+          "galaxy": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Galaxy"
+          },
+          "properties": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Properties",
+            "default": {}
+          },
+          "observation": {
+            "type": "string",
+            "title": "Observation"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project",
+          "galaxy",
+          "observation"
+        ],
+        "title": "ObservedRequest",
+        "description": "A galaxy to observe (see Renders.observed): the project of its piece,\nits options and the values of its parameters (as a galaxy to render;\nthe defaults for those not given, also of the observation), and the\nobservation of the project that sees it, by name."
       },
       "PSFRequest": {
         "properties": {

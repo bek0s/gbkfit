@@ -6,11 +6,16 @@ face-on or edge-on, and its curves (the rotation and dispersion of its
 disks, and the circular velocity of its mass), and its cube (of its
 components that emit lines, through an ideal cube of channels that hold
 their light), of its options as a piece of a project gives them (their
-files relative to it) and of values of its parameters.
+files relative to it) and of values of its parameters; and a galaxy as
+an observation of its project sees it (its model, on the grid of the
+observation, through its instrument; and its data, if it has them).
 """
 
 import dataclasses
+import logging
 import math
+import os
+import threading
 from collections.abc import Mapping
 from typing import Any, Literal
 
@@ -18,6 +23,8 @@ import astropy.constants
 import astropy.units
 import numpy as np
 
+import gbkfit.outputs
+import gbkfit.project
 from gbkfit.config import ConfigError, error_message, paths_relative_to
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import (
@@ -33,6 +40,8 @@ from .workspace import Workspace
 
 __all__ = [
     'GalaxyRender',
+    'Observed',
+    'ObservedArray',
     'Renders',
     'View'
 ]
@@ -90,6 +99,35 @@ class GalaxyRender:
     maps: dict[str, np.ndarray]
     curves: dict[str, list[float]]
     problems: list[str]
+
+
+@dataclasses.dataclass
+class ObservedArray:
+    """
+    An array of a galaxy observed: its kind ('model', or 'data' and
+    'error'), its item (e.g. 'spectra', 'brightness', 'moment1'), its values (a
+    cube, channels by ny by nx, or a map, ny by nx) and their unit ('' if
+    none is known).
+    """
+    kind: str
+    item: str
+    values: np.ndarray
+    unit: str
+
+
+@dataclasses.dataclass
+class Observed:
+    """
+    A galaxy as an observation sees it (see Renders.observed): the type of
+    the observable of the observation, its arrays (the model of each item,
+    and the data and errors of the data, if it has them), the velocities of
+    its channels (km/s; None without a spectral axis), and the warnings of
+    the library as it set them up (e.g. a PSF narrower than the pixels).
+    """
+    observable: str
+    arrays: list[ObservedArray]
+    velocities: np.ndarray | None
+    notes: list[str]
 
 
 class Renders:
@@ -193,6 +231,77 @@ class Renders:
         velocities = low + width * np.arange(nchannels)
         return Cube(cube_values, velocities, 'km/s', cube_range(cube_values))
 
+    def observed(
+            self,
+            project: str,
+            options: Mapping[str, Any],
+            properties: Mapping[str, Any],
+            observation: str
+    ) -> Observed:
+        """
+        Evaluate a galaxy of the options of a piece of a project, at the
+        values of its parameters of the given properties (the defaults for
+        the others, also of the observation), through an observation of
+        the project (by name: the pieces it names, its dataset, PSF and
+        LSF, in place): its model on the grid of the observation, through
+        its instrument and line of sight, and its data, if it has them.
+
+        Raises
+        ------
+        Invalid
+            If the galaxy, the observation or the values are not valid, or
+            the observation cannot see the galaxy (e.g. a thick disk along
+            a flat line of sight).
+        """
+        root = self._workspace.path(project)
+        notes: list[str] = []
+        try:
+            with _noted(notes):
+                resolved = gbkfit.project.resolve(
+                    dict(observations=[observation]),
+                    os.path.join(root, 'observe.yaml'),
+                    gbkfit.project.open(root))
+                with paths_relative_to(root):
+                    galaxy = galaxy_parser.load(dict(options))
+                    seen = observation_parser.load(
+                        resolved.config['observations'])
+                group = ObservationGroup([galaxy], seen)
+                values = _values(group, properties)
+                plan = group.plan(DriverHost())
+                outputs = gbkfit.outputs.evaluation_outputs(
+                    plan, None, values, True, False, False) \
+                    | gbkfit.outputs.data_outputs(plan)
+        except (ConfigError, ValueError, TypeError, RuntimeError) as e:
+            raise Invalid(error_message(e)) from e
+        observable = seen[0].observable()
+        light = seen[0].data_unit()
+        arrays = []
+        for output in outputs.values():
+            data = getattr(output.value, 'data', output.value)
+            item = output.ids.get('item')
+            if output.kind in ('model', 'data', 'error') and item \
+                    and isinstance(data, np.ndarray) and data.ndim in (2, 3):
+                arrays.append(ObservedArray(
+                    output.kind, item, np.asarray(data, dtype=np.float32),
+                    _item_unit(item, light)))
+        spectral = observable.spectral()
+        velocities = None if spectral is None or spectral.size() is None \
+            else spectral.rval() + spectral.step() * (
+                np.arange(spectral.size()) - spectral.rpix())
+        # (a model with no light at all: say where it may have gone)
+        models = [a.values for a in arrays if a.kind == 'model']
+        if models and not any(np.nanmax(np.abs(m), initial=0) > 0
+                              for m in models):
+            where = '' if velocities is None else (
+                f", or its velocities out of the channels of the "
+                f"observation ({velocities.min():g} to "
+                f"{velocities.max():g} km/s; see its systemic velocity)")
+            notes.append(
+                f"the model has no light in the observation: the galaxy "
+                f"may be out of its field, or too small for its pixels"
+                f"{where}")
+        return Observed(observable.type(), arrays, velocities, notes)
+
     def _load(
             self, project: str, options: Mapping[str, Any], view: View,
             size: int
@@ -220,6 +329,40 @@ class Renders:
         except (ConfigError, ValueError, TypeError, RuntimeError) as e:
             raise Invalid(error_message(e)) from e
         return galaxy, radius, 2 * _MARGIN * radius / size
+
+
+class _noted:
+    """
+    Keep the warnings that the library logs in this thread while in it, as
+    notes (e.g. of an observation, as it is set up).
+    """
+
+    def __init__(self, notes: list[str]):
+        self._notes = notes
+        self._handler = logging.Handler(logging.WARNING)
+        thread = threading.get_ident()
+        self._handler.addFilter(lambda record: record.thread == thread)
+        self._handler.emit = lambda record: notes.append(record.getMessage())
+
+    def __enter__(self) -> None:
+        logging.getLogger('gbkfit').addHandler(self._handler)
+
+    def __exit__(self, *_: object) -> None:
+        logging.getLogger('gbkfit').removeHandler(self._handler)
+
+
+def _item_unit(item: str, light: Any) -> str:
+    """
+    Return the unit of an item of an observation, of the unit of its
+    light (None: unknown): of a cube or an image, that; of a moment map,
+    the light times km/s (moment 0), or km/s (moments 1 and 2), or none.
+    """
+    if item in ('moment1', 'moment2'):
+        return 'km/s'
+    unit = getattr(light, 'unit', light)
+    if unit is None or str(unit) == '':
+        return ''
+    return f'{unit} km/s' if item == 'moment0' else str(unit)
 
 
 def _radius(galaxy: Galaxy) -> float:

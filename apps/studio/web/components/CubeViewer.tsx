@@ -2,7 +2,9 @@
 // mask (its layers), one map at a time, with its colour bar, as large as
 // the space left allows: a channel, or one of the quick moment maps of the
 // data (a look, measured here; not part of the dataset, as its corner
-// says), chosen on a rail at its left. A selection (a region of the map, a band of channels of the
+// says; unless the moments are shown elsewhere, e.g. of a galaxy), chosen
+// in its head: the first three as segments, the others in a menu beside
+// them. A selection (a region of the map, a band of channels of the
 // spectrum) is made to look at: the map and the spectrum zoom to it (or
 // with the wheel) and back, and the total spectrum is of it; it is never
 // kept. The map has two tools (see MapTools): to select (a drag selects;
@@ -25,8 +27,9 @@ import { MapView, type Region } from './MapView';
 import { SpectrumPlot, valueRange } from './SpectrumPlot';
 import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
 import { MapTools, type Tool } from './MapTools';
-import { Chip, IconButton, NavItem } from './ui/basics';
+import { Chip, IconButton } from './ui/basics';
 import { Check, NumberField, Segments } from './ui/inputs';
+import { DropMenu } from './ui/overlays';
 import { StepSlider } from './ui/sliders';
 
 // A cube of a dataset: its data (the first), their errors or their mask;
@@ -39,12 +42,15 @@ export interface Layer {
   unit: string | null;
 }
 
-type Moment = 'flux' | 'velocity' | 'dispersion' | 'skewness' | 'kurtosis';
+type Moment = 'flux' | 'velocity' | 'dispersion' | 'skewness' | 'kurtosis' | 'h3' | 'h4';
 type View = 'channel' | Moment;
 
-// The moment maps (by order), what they are, and how their colours run:
-// sequential, diverging about their median (velocities), or about 0
-const MOMENTS: { view: Moment; title: string; text: string; colours: 'sequential' | 'median' | 'zero' }[] = [
+// The moment maps (by order), what they are, how their colours run
+// (sequential, diverging about their median, e.g. velocities, or about 0),
+// and how they are measured: as moments, or by a Gauss-Hermite series
+// fitted to each spectrum (h3, h4)
+type Method = 'moments' | 'gauss_hermite';
+const MOMENTS: { view: Moment; title: string; text: string; colours: 'sequential' | 'median' | 'zero'; method?: Method }[] = [
   {
     view: 'flux',
     title: 'Intensity',
@@ -55,15 +61,21 @@ const MOMENTS: { view: Moment; title: string; text: string; colours: 'sequential
   { view: 'dispersion', title: 'Dispersion', text: 'Moment 2: the dispersion of the velocities of each spectrum', colours: 'sequential' },
   { view: 'skewness', title: 'Skewness', text: 'Moment 3 over the dispersion cubed: the asymmetry of each spectrum', colours: 'zero' },
   { view: 'kurtosis', title: 'Kurtosis', text: 'Moment 4 over the dispersion to the 4th, less 3 (0 for a Gaussian): the tails of each spectrum', colours: 'zero' },
+  { view: 'h3', title: 'h3', text: 'Of a Gauss-Hermite series fitted to each spectrum: its asymmetry (0 for a Gaussian)', colours: 'zero', method: 'gauss_hermite' },
+  { view: 'h4', title: 'h4', text: 'Of a Gauss-Hermite series fitted to each spectrum: peaked (above 0) or flat-topped (below 0)', colours: 'zero', method: 'gauss_hermite' },
 ];
+
+// (those of the segments, and those of the menu beside them)
+const FIRST_MOMENTS = MOMENTS.slice(0, 3);
+const MORE_MOMENTS = MOMENTS.slice(3);
 
 // The signal-to-noise ratio of the mask of the moments, at first (see the
 // server's views)
 const SNR = 5;
 
-// The height of the colour bar under the map (its ramp and the line of its
-// numbers and unit), with its gap
-const BAR = 40;
+// The width of the side of a map (its colour bar, and the like), with its
+// gap
+const SIDE = 76;
 
 // How often (ms) the spectrum of the pixel under the pointer is updated
 const HOVER = 40;
@@ -83,6 +95,7 @@ export function CubeViewer({
   onBand,
   actions,
   noiseless = false,
+  moments: which = 'all',
 }: {
   layers: Layer[];
   // Its shape in the order of the model (x, y, then its channels)
@@ -103,6 +116,10 @@ export function CubeViewer({
   // Whether it is a model without noise (e.g. a render of a galaxy): its
   // moments are of all its voxels at first, and are not of a dataset
   noiseless?: boolean;
+  // Which of its quick moment maps can be shown: all, those above the
+  // dispersion alone (where the others are shown another way, e.g. the
+  // maps of a galaxy), or none
+  moments?: 'all' | 'higher' | 'none';
 }) {
   const [nx, ny, nchannels] = shape;
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
@@ -148,12 +165,16 @@ export function CubeViewer({
   // (a layer gone, the data; the moments are of the data alone)
   const layer = layers.find((l) => l.key === layerKey) ?? layers[0];
   const data = layers[0];
-  const shown: View = layer.key === 'data' ? view : 'channel';
+  const withMoments = which !== 'none';
+  const shown: View = withMoments && layer.key === 'data' ? view : 'channel';
+  const ofData = layer.key === 'data';
+  const more = MORE_MOMENTS.find((m) => m.view === shown);
   // (the colours of each, as the right button stretches them on the map)
   const [stretch, setStretch] = useStretches(`${layer.key}/${shown}`);
   const selecting = tool === 'select';
   const plane = useChannel(layer.path, layer.hdu, channel);
-  const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel');
+  const method = MOMENTS.find((m) => m.view === shown)?.method ?? 'moments';
+  const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel', method);
   const spectrum = useSpectrum(layer.path, layer.hdu, shownPixel, selection);
   // (a model without noise starts at the brightest channel of its total
   // spectrum, as its middle one may hold none of its light, e.g. between
@@ -245,10 +266,34 @@ export function CubeViewer({
   return (
     <div className="viewer">
       <div className="viewer-head">
+        {withMoments && (
+          <div className="viewer-views">
+            <Segments<View>
+              items={[
+                { value: 'channel', label: 'Channel', title: 'One channel of the cube at a time' },
+                ...(which === 'all' ? FIRST_MOMENTS : []).map((m) => ({ value: m.view, label: m.title, disabled: !ofData, title: ofData ? `≈ ${m.text}` : 'The moments are of the data' })),
+              ]}
+              value={more ? null : shown}
+              onChange={setView}
+              label="The view of the cube"
+            />
+            <DropMenu
+              label="More moments"
+              at="end"
+              width={320}
+              entries={MORE_MOMENTS.map((m) => ({ label: m.title, description: m.text, current: shown === m.view, disabled: !ofData, onClick: () => setView(m.view) }))}
+              target={
+                <button className="viewer-more" data-on={more ? true : undefined} title="The shape of each spectrum: its skewness and kurtosis, or h3 and h4 of a Gauss-Hermite series">
+                  {more ? more.title : 'More'} ▾
+                </button>
+              }
+            />
+          </div>
+        )}
         {layers.length > 1 ? (
           <Segments items={layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The cube shown" />
         ) : (
-          <h2>{data.title}</h2>
+          !withMoments && <h2>{data.title}</h2>
         )}
         {/* (the selection, a chip of each of its parts, each cleared by its
             own button; Esc clears them all): a place (a region, or a pixel:
@@ -273,28 +318,10 @@ export function CubeViewer({
         {actions}
       </div>
       <div className="viewer-body">
-        <nav className="rail" aria-label="The views of the cube">
-          <div className="rail-label">view</div>
-          <NavItem label="Channel" active={shown === 'channel'} title="One channel of the cube at a time" onClick={() => setView('channel')} />
-          <div className="rail-label" title="Quick moment maps of the data: a look, measured here; the dataset stays a cube">
-            quick look
-          </div>
-          {MOMENTS.map(({ view: v, title, text }, order) => (
-            <NavItem
-              key={v}
-              label={title}
-              left={<span className="order">≈{order}</span>}
-              active={shown === v}
-              disabled={layer.key !== 'data'}
-              title={layer.key === 'data' ? text : 'The moments are of the data'}
-              onClick={() => setView(v)}
-            />
-          ))}
-        </nav>
         <div className="viewer-main">
           <div className="viewer-stage" ref={fitted.stage}>
             {error && <p className="error">{error.message}</p>}
-            {shown !== 'channel' && moments.isPending && <p className="note">Measuring the moments of the cube…</p>}
+            {shown !== 'channel' && moments.isPending && <p className="note">{method === 'gauss_hermite' ? 'Fitting a Gauss-Hermite series to each spectrum…' : 'Measuring the moments of the cube…'}</p>}
             {map && range && fitted.size && (
               <div className="viewer-map">
                 <div className="viewer-canvas" style={{ width: fitted.size[0], height: fitted.size[1] }}>
@@ -346,14 +373,15 @@ export function CubeViewer({
                     onWhole={zoom ? () => setZoom(null) : undefined}
                   />
                 </div>
-                <ColourBar
-                  range={range}
-                  diverging={colours !== 'sequential'}
-                  horizontal
-                  unit={mapUnit(shown, layer.unit)}
-                  stretch={stretch}
-                  onReset={() => setStretch(UNSTRETCHED)}
-                />
+                <div className="map-side" style={{ height: fitted.size[1] }}>
+                  <ColourBar
+                    range={range}
+                    diverging={colours !== 'sequential'}
+                    unit={mapUnit(shown, layer.unit)}
+                    stretch={stretch}
+                    onReset={() => setStretch(UNSTRETCHED)}
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -468,7 +496,9 @@ export function CubeViewer({
 
 // The size of a map of nx by ny pixels that fits the space of its stage,
 // over its colour bar (undefined until the stage is measured)
-export function useFitted(nx: number, ny: number) {
+// (the size of a map of nx by ny pixels in the space of its stage, less
+// that of its side: none for a map without one)
+export function useFitted(nx: number, ny: number, side = SIDE) {
   const stage = useRef<HTMLDivElement>(null);
   const [space, setSpace] = useState<[number, number] | null>(null);
   useLayoutEffect(() => {
@@ -479,7 +509,7 @@ export function useFitted(nx: number, ny: number) {
     return () => observer.disconnect();
   }, []);
   if (space === null) return { stage, size: undefined };
-  const scale = Math.max(0, Math.min(space[0] / nx, (space[1] - BAR) / ny));
+  const scale = Math.max(0, Math.min((space[0] - side) / nx, space[1] / ny));
   return { stage, size: [Math.floor(nx * scale), Math.floor(ny * scale)] as [number, number] };
 }
 

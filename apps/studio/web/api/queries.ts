@@ -166,19 +166,20 @@ export function useSpectrum(
   });
 }
 
-// The quick moment maps of a cube (its flux, velocity, dispersion,
-// skewness and kurtosis, by name), of the voxels where the cube, smoothed,
-// is above a signal-to-noise ratio (0: all of them)
-export function useMoments(path: string, hdu: number, snr: number, enabled: boolean) {
+// The quick moment maps of a cube, by name, of the voxels where the cube,
+// smoothed, is above a signal-to-noise ratio (0: all of them): measured as
+// moments, its flux, velocity, dispersion, skewness and kurtosis; or of a
+// Gauss-Hermite series fitted to each spectrum, its h3 and h4
+export function useMoments(path: string, hdu: number, snr: number, enabled: boolean, method: 'moments' | 'gauss_hermite' = 'moments') {
   return useQuery({
-    queryKey: keys.view('moments', path, hdu, snr),
+    queryKey: keys.view('moments', path, hdu, snr, method),
     enabled,
     placeholderData: keepPreviousData,
     queryFn: async () =>
       decodeFrame(
         await data(
           api.GET('/api/v1/views/moments/{path}', {
-            params: { path: { path }, query: { hdu, snr } },
+            params: { path: { path }, query: { hdu, snr, method } },
             parseAs: 'arrayBuffer',
           }),
         ),
@@ -455,5 +456,30 @@ export function useGalaxyRender(
       const maps = Object.fromEntries(frame.arrays.map((a) => [String(a.info.name), a.values]));
       return { maps, size: header.size, step: header.step, curves: header.curves, problems: header.problems };
     },
+  });
+}
+
+// A galaxy as an observation of its project sees it (see the server's
+// /views/observed): its model of each item (and the data of the
+// observation, if it has them), each kept by the server for the views of
+// cubes; the type of the observable; and what the library noted. Asked
+// again as the galaxy, its values or the observation change.
+export function useObserved(
+  project: string,
+  galaxy: Record<string, unknown> | undefined,
+  properties: Record<string, unknown>,
+  observation: string | null,
+  // (the options of the observation, so that it is asked again as they
+  // change)
+  seen: unknown,
+) {
+  return useQuery({
+    queryKey: keys.view('observed', project, JSON.stringify(galaxy ?? null), JSON.stringify(properties), observation ?? '', JSON.stringify(seen ?? null)),
+    enabled: galaxy !== undefined && observation !== null,
+    placeholderData: keepPreviousData,
+    retry: false,
+    // (its arrays are kept by the server for a while only)
+    gcTime: 0,
+    queryFn: () => data(api.POST('/api/v1/views/observed', { body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '' } })),
   });
 }

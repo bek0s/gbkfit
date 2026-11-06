@@ -235,10 +235,11 @@ export interface paths {
         /**
          * View Moments
          * @description Return the quick moment maps of a cube (NaN where they are not
-         *     defined) as a frame of five arrays (ny, nx): its flux, velocity,
-         *     dispersion, skewness and kurtosis (named so), of the voxels of the
-         *     mask of its signal grown from seeds of signal-to-noise ratio snr (0:
-         *     of all of them; see Views.moments).
+         *     defined) as a frame of arrays (ny, nx), named so, of the voxels of
+         *     the mask of its signal grown from seeds of signal-to-noise ratio snr
+         *     (0: of all of them; see Views.moments): measured as moments, its
+         *     flux, velocity, dispersion, skewness and kurtosis; or of a
+         *     Gauss-Hermite series fitted to each spectrum, its h3 and h4.
          */
         get: operations["view_moments_api_v1_views_moments__path__get"];
         put?: never;
@@ -355,6 +356,29 @@ export interface paths {
          *     moments) at the path returned.
          */
         post: operations["view_galaxy_cube_api_v1_views_galaxy_cube_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/views/observed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * View Observed
+         * @description Evaluate a galaxy through an observation of its project (see
+         *     Renders.observed), and keep its arrays (the model of each item, and
+         *     the data and errors of the observation, if it has them) for the views
+         *     of cubes (channel, spectrum and moments), each at the path returned.
+         */
+        post: operations["view_observed_api_v1_views_observed_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1139,6 +1163,65 @@ export interface components {
             fwhm: number | null;
         };
         /**
+         * ObservedArrayInfo
+         * @description An array of a galaxy observed: its kind ('model', 'data' or 'error'),
+         *     its item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of
+         *     cubes take it at (its array 0; a map, a cube of one channel; kept for a
+         *     while, see Views.put), its shape in the order of the model (nx, ny,
+         *     nchannels: 1 for a map), and the unit of its values ('' if unknown).
+         */
+        ObservedArrayInfo: {
+            /** Kind */
+            kind: string;
+            /** Item */
+            item: string;
+            /** Path */
+            path: string;
+            /** Shape */
+            shape: number[];
+            /** Unit */
+            unit: string;
+        };
+        /**
+         * ObservedInfo
+         * @description A galaxy as an observation of its project sees it: the type of its
+         *     observable (e.g. 'pixel_spectra'), its arrays (the model of each item,
+         *     and the data and errors of the data, if it has them), and the warnings
+         *     of the library as it set them up.
+         */
+        ObservedInfo: {
+            /** Observable */
+            observable: string;
+            /** Arrays */
+            arrays: components["schemas"]["ObservedArrayInfo"][];
+            /** Notes */
+            notes: string[];
+        };
+        /**
+         * ObservedRequest
+         * @description A galaxy to observe (see Renders.observed): the project of its piece,
+         *     its options and the values of its parameters (as a galaxy to render;
+         *     the defaults for those not given, also of the observation), and the
+         *     observation of the project that sees it, by name.
+         */
+        ObservedRequest: {
+            /** Project */
+            project: string;
+            /** Galaxy */
+            galaxy: {
+                [key: string]: unknown;
+            };
+            /**
+             * Properties
+             * @default {}
+             */
+            properties: {
+                [key: string]: unknown;
+            };
+            /** Observation */
+            observation: string;
+        };
+        /**
          * PSFRequest
          * @description A PSF to draw: the project of its piece, its options (its files
          *     relative to the project), and the size of the pixels (x, y; arcsec;
@@ -1883,6 +1966,7 @@ export interface operations {
             query: {
                 hdu: number;
                 snr?: number;
+                method?: "moments" | "gauss_hermite";
             };
             header?: never;
             path: {
@@ -2064,6 +2148,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CubeRenderInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    view_observed_api_v1_views_observed_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObservedRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ObservedInfo"];
                 };
             };
             /** @description Validation Error */

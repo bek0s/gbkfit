@@ -14,6 +14,7 @@ import collections
 import dataclasses
 import os
 import threading
+from typing import Literal
 
 import astropy.units as u
 import astropy.wcs
@@ -41,7 +42,7 @@ _KEPT = 2
 
 # The cubes made here that are kept (the latest), and the start of their
 # paths
-_MADE = 4
+_MADE = 8
 MADE_PREFIX = '@render/'
 
 # The units of the spectral axes shown, by the kind of their coordinates
@@ -97,8 +98,9 @@ class Views:
         self._cubes: collections.OrderedDict[tuple, Cube] = \
             collections.OrderedDict()
         # (the moment maps of the cubes kept, by their signal-to-noise
-        # ratios)
-        self._moments: dict[tuple, dict[float, dict[str, np.ndarray]]] = {}
+        # ratios and methods)
+        self._moments: dict[
+            tuple, dict[tuple[float, str], dict[str, np.ndarray]]] = {}
         self._lock = threading.Lock()
         # (the cubes made here, by their paths, and how many were made)
         self._made: collections.OrderedDict[str, Cube] = \
@@ -198,14 +200,16 @@ class Views:
         return np.where(missing, np.nan, np.nansum(pixels, axis=(1, 2)))
 
     def moments(
-            self, path: str, hdu: int, snr: float
+            self, path: str, hdu: int, snr: float,
+            method: Literal['moments', 'gauss_hermite'] = 'moments'
     ) -> dict[str, np.ndarray]:
         """
-        Return the quick moment maps of a cube, by name: its flux,
-        velocity, dispersion, skewness and kurtosis (see
-        gbkfit.analysis.moment_maps), of the voxels of the mask of its
-        signal grown from seeds of a signal-to-noise ratio (see
-        prep.signal_mask; 0: of all of them).
+        Return the quick moment maps of a cube, by name, of the voxels of
+        the mask of its signal grown from seeds of a signal-to-noise ratio
+        (see prep.signal_mask; 0: of all of them): measured as moments,
+        its flux, velocity, dispersion, skewness and kurtosis; or of a
+        Gauss-Hermite series fitted to each spectrum (slower), its h3 and
+        h4 (see gbkfit.analysis.moment_maps).
 
         Raises
         ------
@@ -214,9 +218,10 @@ class Views:
         """
         cube = self.cube(path, hdu)
         key = self._key(path, hdu)
+        kept = (snr, method)
         with self._lock:
-            if snr in self._moments.get(key, {}):
-                return self._moments[key][snr]
+            if kept in self._moments.get(key, {}):
+                return self._moments[key][kept]
         if (velocities := cube.velocities()) is None:
             raise Invalid(
                 f"the channels of '{path}' are not of velocities: its "
@@ -231,18 +236,19 @@ class Views:
             values = np.where(mask, cube.values, 0)
             blank = ~mask.any(axis=0)
         maps = gbkfit.analysis.moment_maps(
-            values, velocities, orders=(0, 1, 2, 3, 4))
+            values, velocities, orders=(0, 1, 2, 3, 4), method=method)
         result = dict(
             flux=maps.data['moment0'], velocity=maps.data['moment1'],
             dispersion=maps.data['moment2'], skewness=maps.skewness(),
-            kurtosis=maps.kurtosis())
+            kurtosis=maps.kurtosis()) if method == 'moments' \
+            else dict(h3=maps.data['h3'], h4=maps.data['h4'])
         if blank is not None:
             result = {
                 name: np.where(blank, np.nan, values)
                 for name, values in result.items()}
         with self._lock:
             if key in self._cubes:
-                self._moments.setdefault(key, {})[snr] = result
+                self._moments.setdefault(key, {})[kept] = result
         return result
 
     def _key(self, path: str, hdu: int) -> tuple:

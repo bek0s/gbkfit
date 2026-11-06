@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/basics';
 import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
+import { useObserve } from '../observe/ObserveScreen';
 import { COMPONENT_STARTS, GALAXY_PARTS, nameBase, partsOf, withThickness, type Part } from './catalogue';
 import { useGalaxyDraft } from './draft';
 import { Inspector, inPlace, removedFrom } from './Inspector';
@@ -30,6 +31,7 @@ const MARGIN = 1.15;
 
 export function GalaxyScreen({ name }: { name: string }) {
   const { project } = useStudio();
+  const observe = useObserve();
   const draft = useGalaxyDraft(project ?? '.', name);
   const head = useBlockHead(project ?? '', 'galaxies', name);
   useUnsaved(draft.dirty);
@@ -180,6 +182,9 @@ export function GalaxyScreen({ name }: { name: string }) {
           {head.title}
         </div>
         <div className="head-actions">
+          <Button onClick={() => observe({ galaxy: name })} title="See it through an observation of the project (as saved)">
+            Observe
+          </Button>
           <div className="gx-history" role="group" aria-label="History">
             <button onClick={draft.undo} disabled={!draft.canUndo} title="Undo (Ctrl+Z)" aria-label="Undo">
               <svg className="icon" viewBox="0 0 24 24">
