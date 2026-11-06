@@ -24,9 +24,11 @@ __all__ = [
 #   point, as in '1.5').
 _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 
-# A map from invalid unit names to the valid names of the FITS standard.
-# astropy reads only valid names, which are case-sensitive: to it, 'JY'
-# is not a unit, 'S' is the siemens and 'B' is the byte.
+# A map from invalid unit names, exactly as software writes them, to the
+# valid names of the FITS standard. astropy reads only valid names, which
+# are case-sensitive: to it, 'JY' is not a unit, 'S' is the siemens and
+# 'B' is the byte. Case matters here too: 'MJY' is MJy, but 'mJy' is
+# valid, and left as it is.
 # Invalid names come from software that ignores the standard:
 # - some radio software, in capitals: 'JY/BEAM';
 # - AIPS, with names of its own: 'JY/B*M/S', 'METR/SEC';
@@ -38,16 +40,15 @@ _STANDARD_NAMES = {
     'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'B': 'beam', 'KM': 'km',
     'M': 'm', 'METR': 'm', 'S': 's', 'SEC': 's', 'HZ': 'Hz', 'KHZ': 'kHz',
     'MHZ': 'MHz', 'GHZ': 'GHz', 'SR': 'sr', 'ERG': 'erg', 'CM': 'cm',
-    'ANGSTROM': 'Angstrom', 'ANG': 'Angstrom', 'A': 'Angstrom',
-    'ARCSEC': 'arcsec',
-    'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix', 'SPAXEL': 'pix',
-    'ELECTRON': 'electron', 'ELECTRONS': 'electron', 'COUNT': 'ct',
-    'COUNTS': 'ct', 'ADU': 'adu'}
+    'ANGSTROM': 'Angstrom', 'A': 'Angstrom', 'ang': 'Angstrom',
+    'ARCSEC': 'arcsec', 'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix',
+    'spaxel': 'pix', 'ELECTRONS': 'electron', 'electrons': 'electron',
+    'COUNTS': 'ct', 'counts': 'ct', 'ADU': 'adu'}
 
 # Units that are valid in FITS and astropy but make no sense for
-# astronomical data. A name read as one of them, or as a unit built from
-# one, most likely means another unit: 'A' (the ampere) the angstrom,
-# 'S' (the siemens) the second, 'B' (the byte) the beam.
+# astronomical data. A text that reads as one of them, or as a unit made
+# of one, was most likely written wrongly, and is refused: e.g. 'G' (the
+# gauss, made of the ampere) or 'mA' (the milliampere).
 _MISREAD_UNITS = frozenset({astropy.units.A, astropy.units.bit})
 
 
@@ -56,11 +57,9 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Return the unit that a text states, e.g. 'Jy/beam', 'MJy/sr' or
     '1e-17 erg/s/cm2/arcsec2'.
 
-    First, the invalid names of the text are made valid: those of
-    _STANDARD_NAMES, in any case, that astropy does not read as a unit
-    that makes sense for astronomical data (see _MISREAD_UNITS). For
-    example, 'JY/BEAM' becomes 'Jy/beam' and 'erg/s/cm2/A' becomes
-    'erg/s/cm2/Angstrom', but 'mJy' stays (the table would make it 'MJy').
+    First, the invalid names of the text are made valid (see
+    _STANDARD_NAMES): e.g. 'JY/BEAM' becomes 'Jy/beam', and
+    'erg/s/cm2/A' becomes 'erg/s/cm2/Angstrom'.
 
     Then the text is read as terms that multiply each other, separated by
     spaces, '*' or '.', each read on its own; or else as a whole, by
@@ -207,22 +206,10 @@ def _standardised(text: str) -> str:
     parse_unit). A name is of letters and underscores (e.g. 'M_sun'), not
     digits, which give powers (e.g. 'cm2').
     """
-    def valid(match: re.Match) -> str:
-        name = match.group(0)
-        standard = _STANDARD_NAMES.get(name.upper())
-        return name if standard is None or _is_valid(name) else standard
-    return re.sub(r'[A-Za-z_]+', valid, text)
-
-
-def _is_valid(name: str) -> bool:
-    """
-    Return whether astropy reads the name of a unit as a unit that makes
-    sense for astronomical data.
-    """
-    try:
-        return _makes_sense(astropy.units.Unit(name))
-    except ValueError:
-        return False
+    return re.sub(
+        r'[A-Za-z_]+',
+        lambda match: _STANDARD_NAMES.get(match.group(0), match.group(0)),
+        text)
 
 
 def _makes_sense(unit: astropy.units.UnitBase) -> bool:
