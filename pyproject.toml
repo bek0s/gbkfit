@@ -39,7 +39,6 @@ dependencies = [
     'gwcs',
     'numpy>=2.5',
     'pydantic>=2',
-    'pyparsing>=3.1',
     'rich',
     'ruamel.yaml',
     'scipy',

@@ -7,7 +7,6 @@ import re
 from fractions import Fraction
 
 import astropy.units
-import pyparsing as pp
 
 
 __all__ = [
@@ -17,18 +16,18 @@ __all__ = [
 ]
 
 
-# Regular expressions for the parts of the text of a unit (see _GRAMMAR):
-# - a name, of any characters but digits, signs, spaces, operators and
-#   brackets, as in 'km', 'M_sun' or '%';
-# - a number, as in '2', '1.5' or '1e-17';
-# - a power, after a name, a number or brackets: a number, alone or after
-#   '**' or '^', in brackets or not, as in 'cm2', 's-1', 'm**2',
-#   '10**(-20)' or 'Hz(1/2)'.
-_NAME = r'[^\s*./()^+\-0-9]+'
-_NUMBER = r'[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?'
-_EXPONENT = (
-    r'[+-]?[0-9]+(?:\.[0-9]+)?|\([+-]?[0-9]+(?:\.[0-9]+)?(?:/[0-9]+)?\)')
-_POWER = rf'\s*(?:\*\*|\^)\s*(?:{_EXPONENT})|(?:{_EXPONENT})'
+# A regular expression for the separators between the terms of a unit.
+# Terms multiply each other: 'Jy/beam km/s' is 'Jy/beam' times 'km/s'.
+# A separator is one of:
+# - a space, as in 'Jy/beam km/s';
+# - a '*', as in 'Jy/beam*km/s' ('**' is a power, as in 'm**2');
+# - a '.', as in 'Jy/beam.km/s' (a '.' between digits is a decimal
+#   point, as in '1.5').
+_TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
+
+# A regular expression for what splits the text of a unit into operands
+# (see _split): a separator of terms, a '/' or a bracket.
+_SPLITTER = re.compile(rf'{_TERM_SEPARATOR.pattern}|[/()]')
 
 # A map from invalid unit names to the valid names of the FITS standard.
 # astropy reads only valid names, which are case-sensitive: to it, 'JY'
@@ -81,7 +80,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Then the text is read by the precedence of the FITS standard
     (4.0, 4.3.1): from the left, each '/' divides by what follows it, and
     each space, '*' or '.' multiplies by it; brackets are read first, at
-    any depth (see _GRAMMAR). For example, 'Jy/beam km/s' is
+    any depth (see _expression). For example, 'Jy/beam km/s' is
     (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone reads it
     as Jy / (beam km s).
 
@@ -170,84 +169,129 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
 
 def _unit_of(text: str) -> astropy.units.UnitBase | None:
     """
-    Return the unit of a text (see _GRAMMAR), or None if it is not a unit.
-    An empty text is dimensionless.
+    Return the unit of a text (see _expression), or None if it is not a
+    unit.
     """
-    if not text.strip():
-        return astropy.units.dimensionless_unscaled
     try:
-        return _GRAMMAR.parse_string(text, parse_all=True)[0]
-    except (pp.ParseBaseException, ValueError):
+        return _expression(text)
+    except ValueError:
         return None
+
+
+def _expression(text: str) -> astropy.units.UnitBase:
+    """
+    Return the unit of a text of operands and operators, read from the left
+    by the precedence of the FITS standard (4.0, 4.3.1): a '/' divides by
+    the operand after it, and a separator of terms (see _TERM_SEPARATOR)
+    multiplies by it.
+    For example, 'Jy/beam km/s' is Jy km / (beam s).
+
+    An operand is either an expression in brackets (see _bracketed), or
+    else a unit that astropy reads, e.g. 'km', 'cm2' or '10**(-17)'.
+    astropy never reads a '/' between operands, so it never warns of a text
+    with several '/' (the FITS standard discourages them); silencing that
+    warning here would silence it in every other thread too.
+
+    An empty text is dimensionless, and so is the operand before a '/' that
+    starts the text: '/s' is 1/s.
+
+    Raise ValueError if an operand is not a unit or is missing (e.g. 'Jy/'
+    or 'Jy..km'), or if the brackets do not match.
+    """
+    # Remove the spaces around each '/', '*' and '.', and at the ends of the
+    # text, as they do not separate terms.
+    # For example, 'Jy/beam km / s' becomes 'Jy/beam km/s'.
+    for operator in '/*.':
+        text = operator.join(part.strip() for part in text.split(operator))
+    unit = astropy.units.dimensionless_unscaled
+    for index, (operator, operand) in enumerate(_split(text)):
+        if not operand:
+            if text and not (index == 0 and text.startswith('/')):
+                raise ValueError(
+                    f"{text!r} has an operator without an operand")
+            continue
+        if operand.startswith('('):
+            value = _bracketed(operand)
+        else:
+            value = astropy.units.Unit(operand)
+        unit = unit / value if operator == '/' else unit * value
+    return unit
+
+
+def _split(text: str) -> list[tuple[str, str]]:
+    """
+    Return the operands of a text, split at the operators outside brackets,
+    each with the operator before it: '/', or '*' for a separator of terms
+    and for the first operand.
+    For example, 'Jy/(beam pix) km' gives
+    [('*', 'Jy'), ('/', '(beam pix)'), ('*', 'km')].
+
+    Raise ValueError if the brackets do not match.
+    """
+    operands = []
+    operator, start, depth = '*', 0, 0
+    for match in _SPLITTER.finditer(text):
+        token = match.group()
+        if token == '(':
+            depth += 1
+        elif token == ')':
+            depth -= 1
+            if depth < 0:
+                raise ValueError(f"{text!r} has a ')' without a '('")
+        elif depth == 0:
+            operands.append((operator, text[start:match.start()]))
+            operator = '/' if token == '/' else '*'
+            start = match.end()
+    if depth > 0:
+        raise ValueError(f"{text!r} has a '(' without a ')'")
+    operands.append((operator, text[start:]))
+    return operands
+
+
+def _bracketed(operand: str) -> astropy.units.UnitBase:
+    """
+    Return the unit of an operand that starts with a bracket: the
+    expression in the brackets (see _expression), to the power after them,
+    if any.
+    For example, '(km/s)', '(km/s)2', '(km/s)**2' or '(km/s)^(-1/2)'.
+
+    Raise ValueError if the expression is empty or not a unit, or if the
+    power is not a number.
+    """
+    # The index of the bracket that closes the first one (the brackets of
+    # an operand match, see _split)
+    depth = 0
+    for close, char in enumerate(operand):
+        if char == '(':
+            depth += 1
+        elif char == ')':
+            depth -= 1
+            if depth == 0:
+                break
+    inner, power = operand[1:close], operand[close + 1:]
+    if not inner.strip():
+        raise ValueError(f"{operand!r} has nothing in its brackets")
+    return _expression(inner) ** _power(power)
 
 
 def _power(text: str) -> Fraction:
     """
-    Return the number of a power (see _POWER), e.g. 2 of '**2' and 1/2 of
-    '^(1/2)'. Raise ValueError if it divides by 0.
+    Return the power after the brackets of an operand (see _bracketed): a
+    number, alone or after '**' or '^', in brackets or not; 1 if there is
+    none. Raise ValueError if it is not a number.
     """
-    number = text.strip().removeprefix('**').removeprefix('^').strip()
+    if not text:
+        return Fraction(1)
+    if text.startswith('**'):
+        text = text[2:]
+    elif text.startswith('^'):
+        text = text[1:]
+    if text.startswith('(') and text.endswith(')'):
+        text = text[1:-1]
     try:
-        return Fraction(number.removeprefix('(').removesuffix(')'))
+        return Fraction(text)
     except ZeroDivisionError:
         raise ValueError(f"{text!r} divides by 0") from None
-
-
-def _product(tokens: pp.ParseResults) -> astropy.units.UnitBase:
-    """
-    Return the unit of the operands of an expression, each after its
-    operator: '/' divides by it, and anything else multiplies by it.
-    """
-    items = tokens.as_list()
-    unit = astropy.units.dimensionless_unscaled
-    for operator, operand in zip(items[::2], items[1::2]):
-        unit = unit / operand if operator == '/' else unit * operand
-    return unit
-
-
-def _grammar() -> pp.ParserElement:
-    """
-    Return the grammar of the text of a unit, by the precedence of the FITS
-    standard (4.0, 4.3.1): from the left, a '/' divides by the operand after
-    it, and a space, '*' or '.' multiplies by it.
-    For example, 'Jy/beam km/s' is Jy km / (beam s).
-
-    An operand is one of:
-    - a name or a number, with its power, if any, which astropy reads (e.g.
-      'km', 'cm2', 's-1', '1e-17' or '10**(-20)');
-    - an expression in brackets, at any depth, with its power, if any (e.g.
-      '(km/s)' or '(km/s)2');
-    - the square root of an expression in brackets (e.g. 'sqrt(Hz)').
-
-    A text may start with a '/': '/s' is 1/s.
-
-    astropy never reads a '/' between operands, so it never warns of a
-    text with several '/' (the FITS standard discourages them); silencing
-    that warning here would silence it in every other thread too.
-    """
-    expression = pp.Forward()
-    # (a power after brackets, with no space before it unless it has '**' or
-    # '^': '(km/s) 2' is 2 km/s)
-    power = pp.Regex(_POWER).leave_whitespace()
-    atom = pp.Regex(rf'(?:{_NAME}|{_NUMBER})(?:{_POWER})?')
-    atom.set_parse_action(lambda tokens: astropy.units.Unit(tokens[0]))
-    group = (
-        pp.Suppress('(') + expression + pp.Suppress(')')
-        + pp.Opt(power, default='1'))
-    group.set_parse_action(lambda tokens: tokens[0] ** _power(tokens[1]))
-    root = (
-        pp.Suppress(pp.Keyword('sqrt') + '(') + expression
-        + pp.Suppress(')'))
-    root.set_parse_action(lambda tokens: tokens[0] ** Fraction(1, 2))
-    operand = root | group | atom
-    first = pp.Opt('/', default='') + operand
-    rest = pp.Opt(pp.one_of('* . /'), default='') + operand
-    expression <<= first + rest[...]
-    expression.set_parse_action(_product)
-    return expression
-
-
-_GRAMMAR = _grammar()
 
 
 def _corrected(text: str) -> str:
