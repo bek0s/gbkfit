@@ -216,7 +216,8 @@ def read_arrays(
 def read_sky_map(
         file: DataFile,
         data_header: astropy.io.fits.Header,
-        data_orientation: Orientation
+        data_orientation: Orientation,
+        plane: int | None = None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
     Read an image of the sky of data read from a file (e.g. the bin of
@@ -236,6 +237,9 @@ def read_sky_map(
     data_orientation : Orientation
         How the file of the data was put in the orientation of the model
         (see Arrays).
+    plane : int, optional
+        The plane to read of a file of images of the sky, along its last
+        axis (FITS order; e.g. the BINID of the MAPS of MaNGA's DAP).
 
     Returns
     -------
@@ -247,8 +251,8 @@ def read_sky_map(
     Raises
     ------
     ValueError
-        If the data have no sky of two axes, or the image is not on the
-        pixels of their sky.
+        If the data have no sky of two axes, the image is not on the
+        pixels of their sky, or the file has no such plane.
     """
     orientation = data_orientation.sky()
     shape = header_shape(data_header)[-2:]
@@ -262,7 +266,7 @@ def read_sky_map(
         header = with_wcs(header, wcs.sub(2))
     return _read_companion(
         file, header, orientation, rest=None, velocity=None,
-        spectral_type=None, medium=None, ndim=None)
+        spectral_type=None, medium=None, ndim=None, plane=plane)
 
 
 def _read(
@@ -338,15 +342,19 @@ def _read_companion(
         velocity: str | None,
         spectral_type: str | None,
         medium: str | None,
-        ndim: int | None
+        ndim: int | None,
+        plane: int | None = None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
-    Return the values of a file on the pixels of data (their errors, mask
-    or footprint, see read_arrays, or an image of their sky, see
-    read_sky_map) in the orientation of the model, and its header.
+    Return the values of a file (of a plane of it, if given; see
+    read_sky_map) on the pixels of data (their errors, mask or footprint,
+    see read_arrays, or an image of their sky, see read_sky_map) in the
+    orientation of the model, and its header.
     """
     filename, key = split_file(file)
     values, header = read_image(filename, key)
+    if plane is not None:
+        values, header = _plane(filename, values, header, plane)
     if has_wcs(header) and has_wcs(data_header):
         header, orientation = model_header(
             filename, header, values.shape, rest, velocity, spectral_type,
@@ -361,6 +369,26 @@ def _read_companion(
             f"them), its values must be of the shape of the data, {shape}, "
             f"in the axes of their file; they are of {values.shape}")
     return _floats(data_orientation.apply(values)), header
+
+
+def _plane(
+        source: str,
+        values: np.ndarray,
+        header: astropy.io.fits.Header,
+        plane: int
+) -> tuple[np.ndarray, astropy.io.fits.Header]:
+    """
+    Return a plane of an array of three axes, along its last (FITS
+    order), and its header without that axis.
+    """
+    if values.ndim != 3 or not 0 <= plane < values.shape[0]:
+        raise ValueError(
+            f"{source}: plane {plane} is not one of its array of shape "
+            f"{values.shape} (of planes along its first axis, numpy order)")
+    header = with_shape(header, values.shape[1:])
+    if has_wcs(header):
+        header = with_wcs(header, parse_wcs(source, header).sub(2))
+    return values[plane], header
 
 
 def _check_same_pixels(

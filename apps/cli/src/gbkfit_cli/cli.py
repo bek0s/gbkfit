@@ -430,8 +430,12 @@ def _make_parser() -> argparse.ArgumentParser:
         help="moments in regions: binned moment maps, whose pixels hold "
              "the value of their bin, to one value per bin")
     parser_prep_region_moments.add_argument(
-        '--bins', type=str, required=True, metavar='BINS',
+        '--bins', type=_data_file, required=True, metavar='BINS',
         help="the map of the bin of each pixel (negative for none)")
+    parser_prep_region_moments.add_argument(
+        '--bins-plane', type=int, metavar='PLANE',
+        help="the plane of the map of bins, if the file has several along "
+             "its last axis (e.g. 1 of the BINID of MaNGA's DAP)")
     parser_prep_region_spectra = parsers_prep.add_parser(
         'region_spectra', parents=[
             parser_prep_input_1, parser_prep_rest, parser_prep_roi_spec_1d,
@@ -439,9 +443,13 @@ def _make_parser() -> argparse.ArgumentParser:
         help="spectra in regions: the sums of the spectra of the bins of a "
              "cube")
     parser_prep_region_spectra.add_argument(
-        '--bins', type=str, required=True, metavar='BINS',
+        '--bins', type=_data_file, required=True, metavar='BINS',
         help="the map of the bin of each pixel of the cube (negative for "
              "none)")
+    parser_prep_region_spectra.add_argument(
+        '--bins-plane', type=int, metavar='PLANE',
+        help="the plane of the map of bins, if the file has several along "
+             "its last axis")
     parser_prep_pixel_spectra = parsers_prep.add_parser(
         'pixel_spectra', parents=[
             parser_prep_input_1, parser_prep_rest,
@@ -601,8 +609,9 @@ def _run_prep(args: argparse.Namespace) -> None:
             error_kind=args.error_kind)
     elif task in ('region_moments', 'region_spectra'):
         options = dict(
-            file_bins=args.bins, file_d=args.data_d, file_e=args.data_e,
-            file_m=args.data_m, dtype=args.dtype, error_kind=args.error_kind)
+            file_bins=args.bins, bins_plane=args.bins_plane,
+            file_d=args.data_d, file_e=args.data_e, file_m=args.data_m,
+            dtype=args.dtype, error_kind=args.error_kind)
     elif task == 'gauss_hermite_moments':
         options = dict(
             file=args.table, columns=args.columns, errors=args.errors,

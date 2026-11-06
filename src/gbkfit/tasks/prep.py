@@ -398,18 +398,19 @@ def prep_pixel_moments(
 
 
 def _read_bins(
-        filename: str, data: FitsArrays
+        file: DataFile, plane: int | None, data: FitsArrays
 ) -> tuple[fits.Header, np.ndarray, int]:
     """
-    Return the header of a map of bins, read on the pixels of the sky of
-    data as their errors and mask are (see FitsArrays.read_sky_map), the
-    bin of each pixel numbered from 0 (-1 for none; see
-    gbkfit.prep.bin_index), and the number of bins.
+    Return the header of a map of bins (of a plane of a file of them, if
+    given), read on the pixels of the sky of data as their errors and mask
+    are (see FitsArrays.read_sky_map), the bin of each pixel numbered from
+    0 (-1 for none; see gbkfit.prep.bin_index), and the number of bins.
     """
-    bins, header = data.read_sky_map(filename)
+    bins, header = data.read_sky_map(file, plane)
     try:
         index, nbins = prep.bin_index(bins)
     except ValueError as e:
+        filename = file if isinstance(file, str) else file[0]
         raise ValueError(f"{filename}: {e}") from e
     return header, index, nbins
 
@@ -426,20 +427,23 @@ def _write_bins(
 
 
 def prep_region_moments(
-        file_bins: str,
+        file_bins: DataFile,
         file_d: Sequence[DataFile],
         file_e: Sequence[DataFile | None] | None,
         file_m: Sequence[DataFile | None] | None,
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma',
+        bins_plane: int | None = None
 ) -> None:
     """
     Prepare binned moment maps (e.g. of MaNGA DAP or GIST) for
     region_moments: a map of the bin of each pixel (file_bins; negative or
     NaN for no bin, on the pixels of the maps as their errors and masks
-    are, see FitsArrays.read_sky_map), and moment maps (file_d, with
+    are, see FitsArrays.read_sky_map; of the plane bins_plane of a file of
+    them, if given: e.g. 1, of the stellar continuum, of the BINID of the
+    MAPS of MaNGA's DAP), and moment maps (file_d, with
     optional errors file_e, of the kind error_kind, see read_arrays, and
     masks file_m) whose pixels hold the value of their bin. Write the
     bins, numbered from 0 in the order of their numbers in the map
@@ -458,10 +462,11 @@ def prep_region_moments(
     maps = [
         FitsArrays.read(file_d[i], file_e[i], file_m[i], error_kind=error_kind)
         for i in range(nmaps)]
-    bins_header, index, nbins = _read_bins(file_bins, maps[0])
+    bins_header, index, nbins = _read_bins(file_bins, bins_plane, maps[0])
     _log.info(f"{nbins} bins")
     for file, arrays in zip(file_d[1:], maps[1:]):
-        if not np.array_equal(_read_bins(file_bins, arrays)[1], index):
+        if not np.array_equal(
+                _read_bins(file_bins, bins_plane, arrays)[1], index):
             raise ValueError(
                 f"{file}: the bins on its pixels are not those on the "
                 f"pixels of {file_d[0]}")
@@ -513,7 +518,7 @@ def _spectral_header(cube: FitsArrays, nbins: int) -> fits.Header:
 
 
 def prep_region_spectra(
-        file_bins: str,
+        file_bins: DataFile,
         file_d: DataFile,
         file_e: DataFile | None,
         file_m: DataFile | None,
@@ -524,13 +529,15 @@ def prep_region_spectra(
         spectral_type: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma',
+        bins_plane: int | None = None
 ) -> None:
     """
     Prepare the spectra of the bins of a cube for region_spectra: a map of
     the bin of each pixel (file_bins; negative or NaN for no bin, on the
     pixels of the cube as its errors and mask are, see
-    FitsArrays.read_sky_map), and a cube (file_d, with optional errors file_e
+    FitsArrays.read_sky_map; of the plane bins_plane of a file of them, if
+    given), and a cube (file_d, with optional errors file_e
     and mask file_m), with its spectral axis in velocities of a rest
     (velocity_rest), if given, and optionally cropped to channels
     (roi_spec, of the axis in velocities, increasing). velocity is the
@@ -556,7 +563,7 @@ def prep_region_spectra(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type,
         error_kind=error_kind)
-    bins_header, index, nbins = _read_bins(file_bins, cube)
+    bins_header, index, nbins = _read_bins(file_bins, bins_plane, cube)
     _log.info(f"{nbins} bins")
     fluxes = prep.pixel_fluxes(cube.header, cube.beam, file_d)
     if roi_spec is not None:

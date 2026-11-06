@@ -138,11 +138,14 @@ class FitsArrays:
             arrays.data, arrays.error, arrays.mask, header, arrays.beam,
             arrays.orientation)
 
-    def read_sky_map(self, file: DataFile) -> tuple[np.ndarray, fits.Header]:
+    def read_sky_map(
+            self, file: DataFile, plane: int | None = None
+    ) -> tuple[np.ndarray, fits.Header]:
         """
-        Read an image of the sky of the data (e.g. the bin of each pixel)
-        on their pixels, as their errors and mask are read (see
-        gbkfit.io.read_sky_map), and its header.
+        Read an image of the sky of the data (e.g. the bin of each pixel;
+        of a plane of a file of them, if given) on their pixels, as their
+        errors and mask are read (see gbkfit.io.read_sky_map), and its
+        header.
 
         Raises
         ------
@@ -154,7 +157,7 @@ class FitsArrays:
             raise ValueError(
                 "an image of the sky is read on the pixels of the file of "
                 "the data, before they are cropped or padded")
-        return read_sky_map(file, self.header, self.orientation)
+        return read_sky_map(file, self.header, self.orientation, plane)
 
     def masked(self, mask: npt.ArrayLike) -> 'FitsArrays':
         """

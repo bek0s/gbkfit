@@ -611,6 +611,26 @@ def test_binned_maps_keep_their_unit():
     np.testing.assert_allclose(dataset['moment1'].error(), [5, 5])
 
 
+def test_bins_of_a_plane_of_a_file_of_planes():
+    # e.g. the BINID of the MAPS of MaNGA's DAP: the bins of each step of
+    # its analysis, a plane each along the last axis
+    sky = dict(
+        CTYPE1='RA---TAN', CUNIT1='deg', CRVAL1=150.0, CRPIX1=5.0,
+        CDELT1=-1 / 3600, CTYPE2='DEC--TAN', CUNIT2='deg', CRVAL2=2.0,
+        CRPIX2=4.0, CDELT2=1 / 3600)
+    halves = np.where(np.arange(10) < 5, 0, 1) * np.ones((8, 1), np.int32)
+    fits.writeto('binid.fits', np.stack([np.zeros_like(halves), halves]),
+                 fits.Header(sky | dict(WCSAXES=3, CRPIX3=1.0, CDELT3=1.0)))
+    fits.writeto(
+        'vel.fits', np.where(halves == 0, 100.0, 200.0), fits.Header(sky))
+    prep.prep_region_moments(
+        'binid.fits', ['vel.fits'], None, None, 'float64', bins_plane=1)
+    np.testing.assert_array_equal(fits.getdata('prep_vel.fits'), [100, 200])
+    with pytest.raises(ValueError, match="plane 2 is not one"):
+        prep.prep_region_moments(
+            'binid.fits', ['vel.fits'], None, None, 'float64', bins_plane=2)
+
+
 @pytest.mark.parametrize('cdelt1', [-1 / 3600, 1 / 3600])
 def test_bins_without_world_coordinates_are_on_the_pixels_of_the_file(
         cdelt1):
