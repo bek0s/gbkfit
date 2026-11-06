@@ -97,7 +97,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
         unit = _reading(candidate)
         if unit is None:
             continue
-        if _MISREAD_UNITS.isdisjoint(unit.decompose().bases):
+        if _makes_sense(unit):
             return unit
         refused = unit
     if refused is not None:
@@ -211,12 +211,32 @@ def _divided(term: str) -> astropy.units.UnitBase:
 
 def _standardised(text: str) -> str:
     """
-    Return the text of a unit with its invalid names, in any case, made
-    valid (see _STANDARD_NAMES; e.g. 'JY/BEAM' as 'Jy/beam'); other names
-    are left as they are.
+    Return the text of a unit with its invalid names made valid: those of
+    _STANDARD_NAMES, in any case, that astropy does not read as a unit
+    that makes sense for astronomical data (e.g. 'JY' and 'B' in 'JY/B',
+    but not 'mJy', which the table would make 'MJy').
     """
-    return re.sub(
-        r'[A-Za-z]+',
-        lambda match: _STANDARD_NAMES.get(
-            match.group(0).upper(), match.group(0)),
-        text)
+    def valid(match: re.Match) -> str:
+        name = match.group(0)
+        standard = _STANDARD_NAMES.get(name.upper())
+        return name if standard is None or _is_valid(name) else standard
+    return re.sub(r'[A-Za-z]+', valid, text)
+
+
+def _is_valid(name: str) -> bool:
+    """
+    Return whether astropy reads the name of a unit as a unit that makes
+    sense for astronomical data.
+    """
+    try:
+        return _makes_sense(astropy.units.Unit(name))
+    except ValueError:
+        return False
+
+
+def _makes_sense(unit: astropy.units.UnitBase) -> bool:
+    """
+    Return whether a unit makes sense for astronomical data (see
+    _MISREAD_UNITS).
+    """
+    return _MISREAD_UNITS.isdisjoint(unit.decompose().bases)

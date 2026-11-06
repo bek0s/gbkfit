@@ -31,6 +31,9 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     # (not the byte, which no data are in, in any case)
     ('Jy/B', u.Jy / u.beam),
     ('B', u.beam),
+    # (only the names that need it: mJy is not MJy)
+    ('mJy/B', u.mJy / u.beam),
+    ('mHz/S', u.mHz / u.s),
     ('METR/SEC', u.m / u.s),
     # The spellings of SDSS (e.g. MaNGA): ang is the angstrom, a spaxel a
     # pixel
