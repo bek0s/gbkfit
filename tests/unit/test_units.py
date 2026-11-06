@@ -119,6 +119,13 @@ def test_units_of_several_slashes_are_read_without_warnings():
             u.erg / u.s / u.cm ** 2 / u.arcsec ** 2)
 
 
+def test_a_power_that_is_not_whole_is_written_in_brackets():
+    # The FITS standard does not allow 'Hz0.5'
+    unit = u.Hz ** 0.5 / u.m ** (1 / 3)
+    assert format_unit(unit) == 'Hz(0.5) m(-1/3)'
+    assert parse_unit(format_unit(unit)) == unit
+
+
 @pytest.mark.parametrize('text, spatial', [
     ('Jy/beam', u.beam),
     ('JY/B*M/S', u.beam),

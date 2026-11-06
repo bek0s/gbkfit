@@ -117,15 +117,23 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
 def format_unit(unit: astropy.units.UnitBase) -> str:
     """
     Return a unit as text that parse_unit reads back as the same unit: its
-    scale, then each of its units with its power (e.g. 'Jy km beam-1
-    s-1').
+    scale, then each of its units with its power.
+    For example, 'Jy km beam-1 s-1', or 'Hz(0.5)' for a power that is not
+    whole.
     """
     # (repr gives the shortest text of the scale that reads back as the
     # same number)
     terms = [] if unit.scale == 1 else [repr(float(unit.scale))]
     for base, power in zip(unit.bases, unit.powers):
         name = base.to_string()
-        terms.append(name if power == 1 else f'{name}{power:g}')
+        if power == 1:
+            terms.append(name)
+        elif power == int(power):
+            terms.append(f'{name}{int(power)}')
+        else:
+            # The FITS standard allows a power that is not whole only in
+            # brackets: 'Hz(0.5)', not 'Hz0.5'
+            terms.append(f'{name}({power})')
     return ' '.join(terms)
 
 
