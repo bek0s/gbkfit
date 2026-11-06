@@ -34,30 +34,49 @@ export function rescale(box: Region, [fx, fy]: [number, number], [tx, ty]: [numb
   return [...along(x0, x1, fx, tx), ...along(y0, y1, fy, ty)];
 }
 
-// The window of a map of nx by ny pixels (null: all of it), and how the
-// wheel zooms it about a pixel (by a factor, at least LEAST pixels across)
-// and a drag pans it (within the map); kept as the map is made again at
-// another size (see rescale)
+// The view of a map of nx by ny pixels: a square window of its pixels (as
+// wide as its larger side, about its middle, when it is shown whole), so
+// that every map, whatever its shape, is shown in the same square, which
+// keeps its size as it zooms; a map narrower than it is in its middle,
+// the rest clear. How the wheel zooms it about a pixel (by a factor, at
+// least LEAST pixels across), how it zooms to a box (the box in its
+// middle), and how a drag pans it (its middle kept on the map). It is kept
+// as fractions of the map, so that it stays as the map is made again at
+// another size (e.g. a render).
 export function useZoom(nx: number, ny: number, least = 8) {
-  const [kept, setKept] = useState<{ window: Region; of: [number, number] } | null>(null);
-  const zoom = kept && rescale(kept.window, kept.of, [nx, ny]);
-  const setZoom = (window: Region | null) => setKept(window && { window, of: [nx, ny] });
-  const [x0, x1, y0, y1] = zoom ?? [0, nx - 1, 0, ny - 1];
+  // (its middle, as fractions of the width and the height of the map, and
+  // its side, of the larger side of the map; null: the map whole)
+  const [view, setView] = useState<{ cx: number; cy: number; side: number } | null>(null);
+  const big = Math.max(nx, ny);
+  const windowOf = ({ cx, cy, side }: { cx: number; cy: number; side: number }): Region => {
+    const n = Math.max(1, Math.round(side * big));
+    const x0 = Math.round(cx * nx - n / 2);
+    const y0 = Math.round(cy * ny - n / 2);
+    return [x0, x0 + n - 1, y0, y0 + n - 1];
+  };
+  const shown = windowOf(view ?? { cx: 0.5, cy: 0.5, side: 1 });
+  const [x0, , y0] = shown;
+  const across = shown[1] - shown[0] + 1;
+  // (a view n pixels across about a point of the map, in pixels; none if
+  // it is as wide as the map, or wider)
+  const viewOf = (n: number, mx: number, my: number) => {
+    const side = Math.max(n, Math.min(least, big));
+    if (side >= big) return null;
+    return { cx: Math.min(1, Math.max(0, mx / nx)), cy: Math.min(1, Math.max(0, my / ny)), side: side / big };
+  };
   const zoomAt = (x: number, y: number, factor: number) => {
-    const w = Math.min(nx, Math.max(least, Math.round((x1 - x0 + 1) / factor)));
-    const h = Math.min(ny, Math.max(least, Math.round((y1 - y0 + 1) / factor)));
-    if (w >= nx && h >= ny) return setZoom(null);
-    const left = Math.min(nx - w, Math.max(0, Math.round(x - ((x - x0) * w) / (x1 - x0 + 1))));
-    const bottom = Math.min(ny - h, Math.max(0, Math.round(y - ((y - y0) * h) / (y1 - y0 + 1))));
-    setZoom([left, left + w - 1, bottom, bottom + h - 1]);
+    // (the pixel under the pointer kept where it is on the screen)
+    const n = Math.round(across / factor);
+    const scale = n / across;
+    const [px, py] = [x + 0.5, y + 0.5];
+    setView(viewOf(n, px + (x0 + across / 2 - px) * scale, py + (y0 + across / 2 - py) * scale));
   };
+  const zoomTo = ([bx0, bx1, by0, by1]: Region) => setView(viewOf(Math.max(bx1 - bx0 + 1, by1 - by0 + 1), (bx0 + bx1 + 1) / 2, (by0 + by1 + 1) / 2));
   const panBy = (dx: number, dy: number) => {
-    if (zoom === null) return;
-    const mx = Math.min(nx - 1 - x1, Math.max(-x0, dx));
-    const my = Math.min(ny - 1 - y1, Math.max(-y0, dy));
-    setZoom([x0 + mx, x1 + mx, y0 + my, y1 + my]);
+    if (view === null) return;
+    setView({ ...view, cx: Math.min(1, Math.max(0, view.cx + dx / nx)), cy: Math.min(1, Math.max(0, view.cy + dy / ny)) });
   };
-  return { zoom, setZoom, zoomAt, panBy, shown: [x0, x1, y0, y1] as Region };
+  return { zoomed: view !== null, whole: () => setView(null), zoomAt, zoomTo, panBy, shown };
 }
 
 // Whether Space is held (a drag then pans, as in image editors), not as it
@@ -82,6 +101,10 @@ function followSpace() {
 
 // How far the pointer moves (in screen pixels) before a click is a drag
 const DRAG = 4;
+
+// The steps of the colours of a ramp a map is drawn in (more than a screen
+// can tell apart)
+const LEVELS = 1024;
 
 // The stretch of the colours of a point of a map (x and y the fractions of
 // the map to its left and above it; none outside it), as QFitsView sets
@@ -180,27 +203,51 @@ export function MapView({
     if (!element || !context) return;
     element.width = w;
     element.height = h;
+    // (the colours of the ramp at LEVELS steps, each packed as the four
+    // bytes of a pixel, RGBA: a pixel takes the nearest, rather than one
+    // mixed of its own, so that a map is drawn fast enough to scrub its
+    // channels)
     const stops = rampStops(diverging);
-    const empty = token('--panel2');
+    const pack = ([r, g, b]: number[]) => ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0;
+    const colours = new Uint32Array(LEVELS);
+    for (let k = 0; k < LEVELS; k++) colours[k] = pack(rampColour(stops, k / (LEVELS - 1)));
+    const empty = pack(token('--panel2'));
     const [low, high] = range;
+    const span = high - low || 1;
     const image = context.createImageData(w, h);
-    for (let y = wy0; y <= wy1; y++) {
-      for (let x = wx0; x <= wx1; x++) {
-        const value = values[y * nx + x];
-        const shown = Number.isFinite(value) && !out?.[y * nx + x] && (keepLow === null || value >= keepLow) && (keepHigh === null || value <= keepHigh);
-        const colour = shown ? rampColour(stops, stretched((value - low) / (high - low || 1), stretch)) : empty;
-        // (the row y is drawn from the bottom)
-        image.data.set([...colour, 255], ((wy1 - y) * w + (x - wx0)) * 4);
+    const pixels = new Uint32Array(image.data.buffer);
+    // (a window can reach beyond the map, e.g. a narrow one in a square
+    // view: those pixels are left clear)
+    for (let y = Math.max(0, wy0); y <= Math.min(ny - 1, wy1); y++) {
+      // (the row y is drawn from the bottom)
+      const row = (wy1 - y) * w - wx0;
+      for (let x = Math.max(0, wx0); x <= Math.min(nx - 1, wx1); x++) {
+        const i = y * nx + x;
+        const value = values[i];
+        const shown = Number.isFinite(value) && !out?.[i] && (keepLow === null || value >= keepLow) && (keepHigh === null || value <= keepHigh);
+        if (!shown) {
+          pixels[row + x] = empty;
+          continue;
+        }
+        const at = stretched((value - low) / span, stretch);
+        pixels[row + x] = colours[at <= 0 ? 0 : at >= 1 ? LEVELS - 1 : Math.round(at * (LEVELS - 1))];
       }
     }
     context.putImageData(image, 0, 0);
-  }, [values, nx, range, diverging, stretch, keepLow, keepHigh, out, wx0, wx1, wy0, wy1, w, h, scheme, colourMap]);
-  // The pixel under a point of the screen
-  const pixelAt = (clientX: number, clientY: number): [number, number] => {
+  }, [values, nx, ny, range, diverging, stretch, keepLow, keepHigh, out, wx0, wx1, wy0, wy1, w, h, scheme, colourMap]);
+  // The pixel under a point of the screen (within the map and the window,
+  // or else, if asked, as it is: maybe beyond the map)
+  const pixelAt = (clientX: number, clientY: number, within = true): [number, number] => {
     const box = canvas.current!.getBoundingClientRect();
     const x = wx0 + Math.floor(((clientX - box.left) / box.width) * w);
     const y = wy1 - Math.floor(((clientY - box.top) / box.height) * h);
-    return [Math.min(wx1, Math.max(wx0, x)), Math.min(wy1, Math.max(wy0, y))];
+    if (!within) return [x, y];
+    return [Math.min(Math.min(wx1, nx - 1), Math.max(Math.max(wx0, 0), x)), Math.min(Math.min(wy1, ny - 1), Math.max(Math.max(wy0, 0), y))];
+  };
+  // (the pixel of the map under the pointer; none beyond the map)
+  const onMap = (clientX: number, clientY: number): [number, number] | null => {
+    const [x, y] = pixelAt(clientX, clientY, false);
+    return x >= 0 && x < nx && y >= 0 && y < ny ? [x, y] : null;
   };
   // (the wheel zooms, without scrolling the page: a listener that is not
   // passive, which reads the latest window through a ref)
@@ -208,7 +255,7 @@ export function MapView({
   zoom.current = (event) => {
     if (onZoom === undefined) return;
     event.preventDefault();
-    onZoom(...pixelAt(event.clientX, event.clientY), event.deltaY < 0 ? 1.25 : 0.8);
+    onZoom(...pixelAt(event.clientX, event.clientY, false), event.deltaY < 0 ? 1.25 : 0.8);
   };
   useEffect(() => {
     const element = canvas.current;
@@ -258,7 +305,7 @@ export function MapView({
           }
           const start = press.current;
           if (start === null) {
-            onHover?.(pixelAt(event.clientX, event.clientY));
+            onHover?.(onMap(event.clientX, event.clientY));
             return;
           }
           const moved = Math.hypot(event.clientX - start.at[0], event.clientY - start.at[1]);

@@ -105,8 +105,10 @@ export function MapPanel({
   over,
 }: MapPanelProps) {
   const [ny, nx] = shape;
-  const { zoom, setZoom, zoomAt, panBy, shown } = useZoom(nx, ny);
-  const fitted = useFitted(shown[1] - shown[0] + 1, shown[3] - shown[2] + 1, SIDE, UNDER);
+  const { zoomed, whole, zoomAt, zoomTo, panBy, shown } = useZoom(nx, ny);
+  // (a square, the same for every map, whatever its shape, and as it
+  // zooms: see useZoom)
+  const fitted = useFitted(1, 1, SIDE, UNDER);
   const [stretch, setStretch] = useStretches(stretchKey);
   const [hover, setHover] = useState<[number, number] | null>(null);
   const [selecting, setSelecting] = useState(false);
@@ -129,7 +131,8 @@ export function MapPanel({
     const value = readValues?.[at[1] * nx + at[0]];
     return value === undefined || !Number.isFinite(value) ? 'no value' : `${significant(value, 4)}${unit ? ` ${unit}` : ''}`;
   };
-  const [w, h] = [shown[1] - shown[0] + 1, shown[3] - shown[2] + 1];
+  // (the part of the map shown, within it)
+  const [w, h] = [Math.min(nx - 1, shown[1]) - Math.max(0, shown[0]) + 1, Math.min(ny - 1, shown[3]) - Math.max(0, shown[2]) + 1];
   return (
     <div className="map-panel">
       <div className="viewer-stage" ref={fitted.stage}>
@@ -145,7 +148,7 @@ export function MapPanel({
                 diverging={diverging}
                 kept={kept}
                 out={out}
-                window={zoom}
+                window={shown}
                 mark={mark}
                 region={selected}
                 outline={outline}
@@ -154,7 +157,7 @@ export function MapPanel({
                 onRegion={selecting ? select : undefined}
                 onZoom={zoomAt}
                 onPan={panBy}
-                onWhole={() => setZoom(null)}
+                onWhole={whole}
                 onHover={(at) => {
                   setHover(at);
                   onHover?.(at);
@@ -170,10 +173,10 @@ export function MapPanel({
                   <SelectIcon />
                 </IconButton>
                 <span className="map-tools-gap" />
-                <IconButton label="Zoom to the selection" disabled={selected === null} onClick={() => selected && setZoom(selected)}>
+                <IconButton label="Zoom to the selection" disabled={selected === null} onClick={() => selected && zoomTo(selected)}>
                   <ZoomSelectionIcon />
                 </IconButton>
-                <IconButton label="The whole map (double click)" disabled={zoom === null} onClick={() => setZoom(null)}>
+                <IconButton label="The whole map (double click)" disabled={!zoomed} onClick={whole}>
                   <ZoomWholeIcon />
                 </IconButton>
               </div>

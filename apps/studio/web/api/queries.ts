@@ -1,16 +1,17 @@
 // What the page reads from the server and changes on it, with the keys of
 // its cache (which the events of the server refresh, see events.ts).
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { api, data } from './client';
 import { decodeFrame } from './frames';
-import type { components } from './schema';
+import type { components, operations } from './schema';
 
 export const keys = {
   projects: ['projects'],
   project: (path: string) => ['project', path],
   piece: (path: string) => ['piece', path],
   folder: (path: string) => ['folder', path],
-  description: (path: string, velocity: string | null, rest: string | null = null) => ['description', path, velocity, rest],
+  description: (path: string, velocity: string | null, rest: string | null = null, type: string | null = null) => ['description', path, velocity, rest, type],
   preparation: (path: string) => ['preparation', path],
   view: (...parts: (string | number)[]) => ['view', ...parts],
   jobs: ['jobs'],
@@ -50,6 +51,9 @@ export function useFolder(path: string) {
 // The convention of velocities that a header leaves ambiguous (see the
 // server's ArrayInfo)
 export type Velocity = 'radio' | 'optical';
+// (what a spectral axis whose header gives it a type FITS does not define
+// is said to be; see the server's describe)
+export type SpectralTypeOption = NonNullable<NonNullable<operations['describe_api_v1_describe__path__get']['parameters']['query']>['spectral_type']>;
 
 // The arrays of a file of data, from its headers, its ambiguous velocities
 // read by a convention, and its wavelengths or frequencies as velocities of
@@ -65,28 +69,44 @@ export function useDescription(path: string | null, velocity: Velocity | null = 
   });
 }
 
+// The header of an array (an HDU) of a file of data, as it is in the file
+// (null: none asked for)
+export function useHeader(path: string | null, hdu: number) {
+  return useQuery({
+    queryKey: ['header', path ?? '', hdu],
+    enabled: path !== null,
+    queryFn: () => data(api.GET('/api/v1/header/{path}', { params: { path: { path: path ?? '' }, query: { hdu } } })),
+  });
+}
+
 // The descriptions of several files (as useDescription), as a lookup by
-// path: its arrays once described, or why it cannot be
-export function useDescriptions(paths: string[], velocity: Velocity | null = null, rest: string | null = null) {
+// path: its arrays once described, or why it cannot be, and whether they
+// are of the inputs given (current). While a file is read again (e.g.
+// with another rest), its last description stays, not current: what shows
+// it stays, and nothing judges it (e.g. its problems are of the inputs it
+// was read with).
+export function useDescriptions(paths: string[], velocity: Velocity | null = null, rest: string | null = null, type: SpectralTypeOption | null = null) {
   const unique = [...new Set(paths)];
   const results = useQueries({
     queries: unique.map((path) => ({
-      queryKey: keys.description(path, velocity, rest),
-      placeholderData: keepPreviousData,
-      queryFn: () => describe(path, velocity, rest),
+      queryKey: keys.description(path, velocity, rest, type),
+      queryFn: () => describe(path, velocity, rest, type),
     })),
   });
+  const last = useRef(new Map<string, NonNullable<(typeof results)[number]['data']>>());
   const byPath = new Map(unique.map((path, i) => [path, results[i]]));
+  for (const [path, result] of byPath) if (result.data) last.current.set(path, result.data);
   return (path: string) => {
     const result = byPath.get(path);
-    return { arrays: result?.data, error: result?.error?.message };
+    return { arrays: result?.data ?? last.current.get(path), error: result?.error?.message, current: result?.data !== undefined };
   };
 }
 
-function describe(path: string, velocity: Velocity | null, rest: string | null) {
-  const query: { velocity?: Velocity; rest?: string } = {};
+function describe(path: string, velocity: Velocity | null, rest: string | null, type: SpectralTypeOption | null = null) {
+  const query: { velocity?: Velocity; rest?: string; spectral_type?: SpectralTypeOption } = {};
   if (velocity) query.velocity = velocity;
   if (rest) query.rest = rest;
+  if (type) query.spectral_type = type;
   return data(api.GET('/api/v1/describe/{path}', { params: { path: { path }, query } }));
 }
 

@@ -14,6 +14,7 @@ import collections
 import dataclasses
 import os
 import threading
+import warnings
 from typing import Literal
 
 import astropy.units as u
@@ -32,8 +33,7 @@ from .workspace import Workspace
 __all__ = [
     'MADE_PREFIX',
     'Cube',
-    'Views',
-    'cube_range'
+    'Views'
 ]
 
 
@@ -70,13 +70,26 @@ class Cube:
     A cube in the orientation of the model: its values (channels, ny,
     nx), the coordinates of its channels along its spectral axis and
     their unit (see _SPECTRAL_UNITS; None if its header does not give
-    them), and the range of its values for colours (percentiles of its
-    finite values).
+    them), the range of its values for colours (percentiles of its
+    finite values, see cube_range), and the least and the greatest of its
+    finite values (None if it has none; see cube_extent).
     """
     values: np.ndarray
     spectral: np.ndarray | None
     unit: str | None
     range: tuple[float, float]
+    extent: tuple[float, float] | None
+
+    @classmethod
+    def of(
+            cls,
+            values: np.ndarray,
+            spectral: np.ndarray | None = None,
+            unit: str | None = None
+    ) -> 'Cube':
+        """Return the cube of values (with the coordinates of channels)."""
+        return cls(
+            values, spectral, unit, cube_range(values), cube_extent(values))
 
     def velocities(self) -> np.ndarray | None:
         """Return the velocities of its channels (km/s), if they are."""
@@ -286,9 +299,9 @@ def _read(filename: str, hdu: int) -> Cube:
             f"its shape is {values.shape}")
     values = np.asarray(values, dtype=np.float32)
     if values.ndim == 2:
-        return Cube(values[np.newaxis], None, None, cube_range(values))
+        return Cube.of(values[np.newaxis])
     spectral, unit = _spectral(wcs, values.shape[0])
-    return Cube(values, spectral, unit, cube_range(values))
+    return Cube.of(values, spectral, unit)
 
 
 def _spectral(
@@ -322,4 +335,22 @@ def cube_range(values: np.ndarray) -> tuple[float, float]:
     if sample.size == 0:
         return 0.0, 1.0
     low, high = np.percentile(sample, _PERCENTILES)
+    return float(low), float(high)
+
+
+def cube_extent(values: np.ndarray) -> tuple[float, float] | None:
+    """
+    Return the least and the greatest of the finite values of a cube
+    (None if it has none).
+    """
+    with warnings.catch_warnings():
+        # (of no values: NaN)
+        warnings.simplefilter('ignore', RuntimeWarning)
+        low, high = np.nanmin(values), np.nanmax(values)
+    if not (np.isfinite(low) and np.isfinite(high)):
+        # (no values, or infinities among them: of the finite ones)
+        finite = values[np.isfinite(values)]
+        if finite.size == 0:
+            return None
+        low, high = finite.min(), finite.max()
     return float(low), float(high)

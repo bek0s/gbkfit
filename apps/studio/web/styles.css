@@ -165,7 +165,10 @@ h2 { margin: 0; font: var(--text-heading); }
 .map-side .colour-bar { flex: 1; min-height: 0; }
 .map-side .colour-unit { text-align: center; overflow-wrap: anywhere; }
 .map { position: relative; width: 100%; height: 100%; }
-.map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
+.map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; border-radius: 4px; cursor: crosshair; touch-action: none; }
+/* (the square of a map panel, outlined: a map narrower than it is in its
+   middle, the rest clear) */
+.map-panel .viewer-canvas { border-radius: 4px; box-shadow: 0 0 0 1px var(--line); }
 .map[data-drag="pan"] canvas { cursor: default; }
 .viewer-canvas[data-smooth] .map canvas { image-rendering: auto; }
 .map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
@@ -197,7 +200,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .viewer-controls { height: 40px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 2px 6px; }
 .viewer-controls-row { flex-direction: row; align-items: center; justify-content: flex-start; gap: 16px; padding-bottom: 2px; }
 .viewer-controls-row > .ui-slider { flex: 1; }
-.viewer-channel-hint { margin-left: auto; font: var(--text-caption); color: var(--faint); }
 .control-text { flex: none; width: 31ch; font: var(--text-data-small); color: var(--muted); }
 .ui-slider-labelled .mantine-Slider-label { font: var(--text-data-small); background: var(--raise); color: var(--fg); border: 1px solid var(--line2); white-space: nowrap; }
 .viewer-canvas { position: relative; }
@@ -245,6 +247,17 @@ h2 { margin: 0; font: var(--text-heading); }
 .spectrum .marked { stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
 .spectrum .zero { stroke: var(--line2); vector-effect: non-scaling-stroke; }
 .spectrum .now { stroke: var(--muted); stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+/* (the grip of the line of the channel shown: a thin tab at its top, the
+   line itself the rest of what a drag takes; and, the channel out of the
+   window, an arrow at the edge it is beyond) */
+.spectrum-grip { position: absolute; top: 0; bottom: 0; width: 14px; margin-left: -7px; cursor: ew-resize; touch-action: none; }
+.spectrum-grip::before { content: ''; position: absolute; left: 50%; top: 3px; width: 7px; height: 14px; transform: translateX(-50%); border-radius: 3px; background: var(--fg2); box-shadow: 0 0 0 2px var(--panel2); transition: background .12s; }
+.spectrum-grip:hover::before, .spectrum-grip:active::before { background: var(--accent); }
+.spectrum-bubble { position: absolute; top: 21px; left: 50%; transform: translateX(-50%); padding: 2px 7px; border-radius: 5px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); white-space: nowrap; pointer-events: none; }
+.spectrum-off { position: absolute; top: 50%; width: 20px; height: 28px; transform: translateY(-50%); display: grid; place-items: center; padding: 0 0 2px; border: 1px solid var(--line2); border-radius: 5px; background: var(--panel); color: var(--fg2); font: 600 15px/1 var(--sans); cursor: pointer; }
+.spectrum-off:hover { color: var(--fg); border-color: var(--muted); }
+.spectrum-off[data-side="left"] { left: 4px; }
+.spectrum-off[data-side="right"] { right: 4px; }
 .spectrum figcaption { display: flex; justify-content: space-between; margin-top: 3px; font: var(--text-data-small); color: var(--faint); }
 
 /* home */
@@ -271,6 +284,7 @@ h2 { margin: 0; font: var(--text-heading); }
 .ui-dialog .mantine-Modal-title { font: var(--text-subtitle); }
 .ui-dialog .mantine-Modal-body { display: grid; gap: 12px; }
 .ui-menu { font: var(--text-body); }
+.ui-point-menu { position: absolute; width: 0; height: 0; pointer-events: none; }
 .ui-menu [data-current] { color: var(--accent-text); }
 .ui-menu-description { margin-top: 2px; font: var(--text-caption); color: var(--muted); white-space: normal; }
 /* (a menu of a list: never taller than MENU_MOST, see overlays.tsx, or
@@ -734,10 +748,21 @@ h2 { margin: 0; font: var(--text-heading); }
 .ds-slot { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 30px; padding: 2px 4px 2px 9px; border: 1px solid var(--line2); border-radius: 7px; background: var(--bg); }
 .ds-slot > .ui-close { margin-left: auto; flex: none; }
 .ds-slot .ui-choice { flex: 0 0 104px; }
-.ds-slot-empty { justify-content: flex-start; padding-left: 4px; border-style: dashed; background: transparent; }
 .ds-file { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--text-data); }
 .ds-array { flex: none; font: var(--text-data-small); color: var(--faint); }
 .ds-none { display: block; padding: 6px 0 0; font: var(--text-data); color: var(--faint); }
+/* (the chevron of a file, and what it opens: what GBKFIT reads from the
+   header of its array, and the header as it is, in a box that scrolls) */
+.ds-chevron { flex: none; width: 18px; height: 22px; display: grid; place-items: center; padding: 0; border: 0; background: none; color: var(--faint); font: 10px/1 var(--sans); transition: transform .12s; }
+.ds-chevron:hover:not(:disabled) { color: var(--fg); }
+.ds-chevron[aria-expanded="true"] { transform: rotate(90deg); }
+.ds-header-of { margin: 2px 0 6px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel2); }
+.ds-full-header { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding: 2px 0; border: 0; background: none; color: var(--muted); font: var(--text-label); }
+.ds-full-header:hover { color: var(--fg); }
+.ds-chevron-sign { font-size: 10px; transition: transform .12s; }
+.ds-full-header[aria-expanded="true"] .ds-chevron-sign { transform: rotate(90deg); }
+.ds-header-count { color: var(--faint); }
+.ds-header-text { max-height: 280px; margin: 6px 0 0; padding: 8px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--field); color: var(--fg2); font: var(--text-data-small); white-space: pre; }
 .ds-add-file { justify-self: start; height: 26px; margin-top: 2px; padding: 0 9px; border: 1px dashed var(--line2); border-radius: 7px; background: none; color: var(--muted); font: var(--text-label); }
 .ds-add-file:hover, .ds-add-file[aria-expanded="true"] { border-color: var(--muted); color: var(--fg); }
 .ds-add { justify-self: start; padding: 6px 10px; border: 1px dashed var(--line2); border-radius: 8px; background: none; color: var(--muted); font: var(--text-label); }

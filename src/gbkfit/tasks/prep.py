@@ -226,6 +226,7 @@ def prep_slit_spectra(
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
         velocity: str | None = None,
+        spectral_type: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma'
@@ -237,12 +238,15 @@ def prep_slit_spectra(
     channels (roi_spec, of the axis in velocities, increasing), clip them,
     crop them to their valid pixels (minify), and pad them (nanpad).
     velocity is the convention of the velocities of an axis that does not
-    state it, and error_kind what the file of the errors holds (see
-    FitsArrays.read); the prepared errors are standard deviations.
+    state it, spectral_type the type of an axis whose header gives one
+    that FITS does not define, and error_kind what the file of the errors
+    holds (see FitsArrays.read); the prepared errors are standard
+    deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
+        spectral_type=spectral_type,
         error_kind=error_kind)
     rows, columns = slice(None), slice(None)
     if roi_spec is not None:
@@ -274,6 +278,7 @@ def prep_pixel_spectra(
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
         velocity: str | None = None,
+        spectral_type: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         noise_error: bool = False,
@@ -285,9 +290,10 @@ def prep_pixel_spectra(
     from, x to, y from, y to) and channels (roi_spec, of the axis in
     velocities, increasing), clip it, crop it to its valid pixels
     (minify), and pad it (nanpad). velocity is the convention of the
-    velocities of an axis that does not state it, and error_kind what the
-    file of the errors holds (see FitsArrays.read); the prepared errors
-    are standard deviations. With noise_error, the errors are the noise
+    velocities of an axis that does not state it, spectral_type the type
+    of an axis whose header gives one that FITS does not define, and
+    error_kind what the file of the errors holds (see FitsArrays.read);
+    the prepared errors are standard deviations. With noise_error, the errors are the noise
     of each channel of the cropped cube, from its negative values (see
     prep.noise_errors; see output_files for the names of the prepared
     files).
@@ -304,6 +310,7 @@ def prep_pixel_spectra(
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
+        spectral_type=spectral_type,
         error_kind=error_kind)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
@@ -502,6 +509,7 @@ def prep_region_spectra(
         dtype: npt.DTypeLike,
         velocity_rest: str | None = None,
         velocity: str | None = None,
+        spectral_type: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma'
@@ -513,8 +521,10 @@ def prep_region_spectra(
     and mask file_m), with its spectral axis in velocities of a rest
     (velocity_rest), if given, and optionally cropped to channels
     (roi_spec, of the axis in velocities, increasing). velocity is the
-    convention of the velocities of an axis that does not state it, and
-    error_kind what the file of the errors holds (see FitsArrays.read).
+    convention of the velocities of an axis that does not state it,
+    spectral_type the type of an axis whose header gives one that FITS
+    does not define, and error_kind what the file of the errors holds
+    (see FitsArrays.read).
     Write the bins, numbered from 0 in the order of their numbers in the
     map (prep_<bins>.fits), the sum of the valid spectra of the pixels of
     each bin (prep_<cube>.fits: the bins along x, the channels along y),
@@ -532,6 +542,7 @@ def prep_region_spectra(
     bins, index, nbins = _read_bins(file_bins)
     cube = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
+        spectral_type=spectral_type,
         error_kind=error_kind)
     fluxes = prep.pixel_fluxes(cube.header, cube.beam, file_d)
     if roi_spec is not None:

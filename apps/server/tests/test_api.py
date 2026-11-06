@@ -351,6 +351,11 @@ def test_folders_are_listed_and_files_of_data_described(client, root):
     assert array['problems'] == []
     assert client.get(
         '/api/v1/describe/study/setups/disk.yaml').status_code == 400
+    # (the header as it is in the file, of each HDU)
+    cards = client.get('/api/v1/header/study/data/cube.fits').json()['cards']
+    assert any(card.startswith("BUNIT   = 'Jy/beam") for card in cards)
+    assert client.get(
+        '/api/v1/header/study/data/cube.fits?hdu=3').status_code == 404
     # (of velocities of no convention, the size of its pixels on the sky
     # alone, until one is given)
     header['CTYPE3'] = 'VELO-HEL'
@@ -385,6 +390,26 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     assert array['problems'] == []
     assert [abs(step) for step in array['step']] == pytest.approx(
         [0.2, 0.2, 299792.458 * 1.25 / 6562.8], rel=1e-3)
+    # (an axis of a type FITS does not define, as CALIFA writes: what it
+    # is is said, never taken from its name)
+    header['CTYPE3'] = 'WAVELENGTH'
+    fits.writeto(
+        pathlib.Path(root, 'study/data/califa.fits'),
+        np.zeros((4, 3, 2), np.float32), header)
+    rest = dict(rest='6562.8 Angstrom')
+    (array,) = client.get(
+        '/api/v1/describe/study/data/califa.fits', params=rest).json()
+    assert array['nonstandard_type'] == 'WAVELENGTH'
+    assert 'is not one FITS defines' in array['problems'][0]
+    (array,) = client.get(
+        '/api/v1/describe/study/data/califa.fits',
+        params=rest | dict(spectral_type='AWAV')).json()
+    assert array['problems'] == [] and array['nonstandard_type'] == 'WAVELENGTH'
+    assert abs(array['step'][2]) == pytest.approx(
+        299792.458 * 1.25 / 6562.8, rel=1e-3)
+    assert client.get(
+        '/api/v1/describe/study/data/califa.fits',
+        params=dict(spectral_type='WAVELENGTH')).status_code == 422
 
 
 def wait(client, job):
@@ -541,6 +566,7 @@ def test_cubes_are_viewed_by_channel_spectrum_and_moments(client, root):
     assert channel.shape == (3, 4) and np.all(channel == 1)
     assert (header['nchannels'], header['spectral'], header['unit']) == (
         5, 20, 'km/s')
+    assert header['extent'] == [0, 1]
     spectrum = client.get(
         f'/api/v1/views/spectrum/{path}', params=query | dict(x=1, y=2)
     ).json()
@@ -591,6 +617,7 @@ def test_a_map_is_viewed_as_a_cube_of_one_channel(client, root):
     (plane,) = frames.arrays(header, data)
     np.testing.assert_array_equal(plane, values[0])
     assert (header['nchannels'], header['spectral']) == (1, None)
+    assert header['extent'] == [0, 11]
 
 
 def test_the_moments_of_a_cube_are_of_the_mask_of_its_signal(client, root):
@@ -875,11 +902,19 @@ def test_invalid_renders_are_refused(client, galaxy, request_, message):
 
 
 def test_the_lines_of_the_catalogue_are_served(client):
-    lines = {line['name']: line['rest'] for line in client.get(
+    lines = {line['name']: line for line in client.get(
         '/api/v1/lines').json()}
-    assert lines['halpha'] == '6564.61 Angstrom'
-    assert lines['hi21'] == '1.420406 GHz'
-    assert lines['paalpha'] == '1.87561 um'
+    assert lines['halpha']['rest'] == '6564.61 Angstrom'
+    assert lines['hi21']['rest'] == '1.420406 GHz'
+    assert lines['paalpha']['rest'] == '1.87561 um'
+    # (in vacuum and in air: Halpha is at 6562.80 Angstrom in air)
+    halpha = lines['halpha']
+    assert halpha['wavelength'] == pytest.approx(6564.61e-10)
+    assert halpha['air'] == pytest.approx(6562.797e-10, abs=1e-14)
+    assert halpha['frequency'] is None
+    hi21 = lines['hi21']
+    assert hi21['frequency'] == pytest.approx(1420405751.768)
+    assert hi21['wavelength'] is None and hi21['air'] is None
 
 
 def test_the_preferences_of_the_user_are_set_and_read(client, user_home):

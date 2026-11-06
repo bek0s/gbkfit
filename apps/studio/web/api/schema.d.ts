@@ -166,11 +166,35 @@ export interface paths {
          * @description Describe a file of data from its headers, without reading its data:
          *     each of its arrays, and what a dataset of it refuses or needs given;
          *     velocity is the convention of velocities that its headers leave
-         *     ambiguous, and rest the rest of its spectral axis (e.g. '6562.8
+         *     ambiguous, rest the rest of its spectral axis (e.g. '6562.8
          *     Angstrom'), which makes wavelengths or frequencies velocities, as a
-         *     dataset with that rest reads them (see ArrayInfo).
+         *     dataset with that rest reads them, and spectral_type what a spectral
+         *     axis whose header gives a type FITS does not define is (e.g. 'AWAV';
+         *     see ArrayInfo).
          */
         get: operations["describe_api_v1_describe__path__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/header/{path}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Header
+         * @description Return the header of an array (an HDU) of a file of data, as it is in
+         *     the file (one header per HDU: the data and the errors of one file have
+         *     each their own).
+         */
+        get: operations["header_api_v1_header__path__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -416,8 +440,9 @@ export interface paths {
         };
         /**
          * Catalogue Lines
-         * @description Return the emission lines of the catalogue of GBKFIT ({name, rest}, the
-         *     rest as text, e.g. '6564.61 Angstrom'), which emissions name.
+         * @description Return the emission lines of the catalogue of GBKFIT, which emissions
+         *     name and a spectral axis of wavelengths or frequencies takes the rest
+         *     of (in vacuum or in air, as its type says).
          */
         get: operations["catalogue_lines_api_v1_lines_get"];
         put?: never;
@@ -866,7 +891,12 @@ export interface components {
          *     for a beam of each channel), the noise of its values that its header
          *     states (keyword RMS or NOISE), whether its header leaves it open
          *     whether its velocities are radio or optical (a dataset of it gives
-         *     their convention), and what a dataset of it refuses or needs given.
+         *     their convention), what a dataset of it refuses or needs given, and
+         *     what its values are as errors, if its header states it ('sigma',
+         *     'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),
+         *     and the type its header gives a spectral axis that FITS does not
+         *     define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
+         *     gbkfit's HDUDescription.nonstandard_type).
          */
         ArrayInfo: {
             /** Index */
@@ -893,6 +923,30 @@ export interface components {
             ambiguous_velocity: boolean;
             /** Problems */
             problems: string[];
+            /** Holds */
+            holds?: ("sigma" | "variance" | "inverse_variance") | null;
+            /** Nonstandard Type */
+            nonstandard_type?: string | null;
+        };
+        /**
+         * CatalogueLine
+         * @description An emission line of the catalogue of GBKFIT (see its LineCatalogue):
+         *     its name, its rest as text (e.g. '6564.61 Angstrom', in vacuum), and
+         *     as a number: its rest wavelength in vacuum (m) and in air (m; above
+         *     2000 Angstrom, where air wavelengths are used), or its rest frequency
+         *     (Hz), as the catalogue gives it.
+         */
+        CatalogueLine: {
+            /** Name */
+            name: string;
+            /** Rest */
+            rest: string;
+            /** Wavelength */
+            wavelength: number | null;
+            /** Air */
+            air: number | null;
+            /** Frequency */
+            frequency: number | null;
         };
         /**
          * CheckRequest
@@ -1049,6 +1103,15 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HeaderInfo
+         * @description The header of an array (an HDU) of a file of data, as it is in the
+         *     file: its cards, as lines of text.
+         */
+        HeaderInfo: {
+            /** Cards */
+            cards: string[];
         };
         /**
          * ImportRequest
@@ -1869,6 +1932,7 @@ export interface operations {
             query?: {
                 velocity?: ("radio" | "optical") | null;
                 rest?: string | null;
+                spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
             };
             header?: never;
             path: {
@@ -1885,6 +1949,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArrayInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    header_api_v1_header__path__get: {
+        parameters: {
+            query?: {
+                hdu?: number;
+            };
+            header?: never;
+            path: {
+                path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HeaderInfo"];
                 };
             };
             /** @description Validation Error */
@@ -2241,9 +2338,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: string;
-                    }[];
+                    "application/json": components["schemas"]["CatalogueLine"][];
                 };
             };
         };

@@ -10,10 +10,15 @@
 // inclusive), which is shown with the channels out of it dimmed. Another
 // band (e.g. a crop) can be marked by its edges, and its width at a level
 // (e.g. at half its peak: its FWHM). A line marks 0, unless it means
-// nothing (e.g. on a log scale, where 0 is the peak).
+// nothing (e.g. on a log scale, where 0 is the peak). The line of the
+// channel shown can have a grip, at its top, that a drag moves along the
+// channels shown (scrubs); the channel out of the window, an arrow at the
+// edge it is beyond points to it, and a click on it shows it. A right
+// click opens a menu of what can be done there (e.g. zoom), if any.
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { Width } from './contour';
 import { significant } from './format';
+import { PointMenu, type MenuEntry } from './ui/overlays';
 
 const WIDTH = 800;
 const HEIGHT = 130;
@@ -42,6 +47,9 @@ export function SpectrumPlot({
   onPick,
   onBand,
   onZoom,
+  onScrub,
+  onReveal,
+  menu,
   children,
 }: {
   values: (number | null)[];
@@ -62,6 +70,13 @@ export function SpectrumPlot({
   onPick: (channel: number) => void;
   onBand?: (band: [number, number]) => void;
   onZoom?: (channel: number, factor: number) => void;
+  // How the grip of the channel shown moves it (none: no grip), and how the
+  // arrow to it, out of the window, shows it
+  onScrub?: (channel: number) => void;
+  onReveal?: (channel: number) => void;
+  // What a right click can do, at the channel under it (none: the menu of
+  // the browser)
+  menu?: (channel: number) => MenuEntry[];
   // What shows over the plot (e.g. its zoom buttons)
   children?: ReactNode;
 }) {
@@ -69,6 +84,10 @@ export function SpectrumPlot({
   const clip = useId();
   const press = useRef<{ channel: number; at: number } | null>(null);
   const [dragged, setDragged] = useState<[number, number] | null>(null);
+  // (whether the grip is being dragged: a bubble then names the channel)
+  const [scrubbing, setScrubbing] = useState(false);
+  // (the menu of a right click: where, in the box of the plot, and what)
+  const [opened, setOpened] = useState<{ at: [number, number]; entries: MenuEntry[] } | null>(null);
   const xs = spectral ?? values.map((_, i) => i);
   const [i0, i1] = window ?? [0, values.length - 1];
   const inWindow = (i: number) => i >= i0 && i <= i1;
@@ -164,6 +183,13 @@ export function SpectrumPlot({
             press.current = null;
             setDragged(null);
           }}
+          onContextMenu={(event) => {
+            const entries = menu?.(channelAt(event.clientX)) ?? [];
+            if (entries.length === 0) return;
+            event.preventDefault();
+            const box = event.currentTarget.getBoundingClientRect();
+            setOpened({ at: [event.clientX - box.left, event.clientY - box.top], entries });
+          }}
         >
           {shown && (
             <>
@@ -187,6 +213,44 @@ export function SpectrumPlot({
             ))}
           </g>
         </svg>
+        {onScrub &&
+          (inWindow(channel) ? (
+            <span
+              className="spectrum-grip"
+              style={{ left: `${((X(xs[channel]) / WIDTH) * 100).toFixed(3)}%` }}
+              title="Drag: the channel shown (← → step)"
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                setScrubbing(true);
+              }}
+              onPointerMove={(event) => {
+                if (!scrubbing) return;
+                const now = channelAt(event.clientX);
+                if (now !== channel) onScrub(now);
+              }}
+              onPointerUp={() => setScrubbing(false)}
+              onPointerCancel={() => setScrubbing(false)}
+            >
+              {scrubbing && (
+                <span className="spectrum-bubble">
+                  {spectral ? `${significant(spectral[channel], 4)}${unit ? ` ${unit}` : ''}` : `channel ${channel}`}
+                </span>
+              )}
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="spectrum-off"
+              data-side={channel < i0 ? 'left' : 'right'}
+              title={`The channel shown (${channel}) is ${channel < i0 ? 'before' : 'after'} these: show it`}
+              onClick={() => onReveal?.(channel)}
+            >
+              {channel < i0 ? '‹' : '›'}
+            </button>
+          ))}
+        {opened && <PointMenu at={opened.at} entries={opened.entries} label="The spectrum" onClose={() => setOpened(null)} />}
         <span className="spectrum-y" style={{ top: at(y1) }}>
           {significant(y1, 3)}
         </span>

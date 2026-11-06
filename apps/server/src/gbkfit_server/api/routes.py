@@ -20,16 +20,18 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from starlette.requests import HTTPConnection
 
 import gbkfit
+from gbkfit.grid import SPECTRAL_TYPES, air_refractive_index
 
 from gbkfit_server.services import frames
 from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
-from gbkfit_server.services.views import Cube, cube_range
+from gbkfit_server.services.views import Cube
 from .models import (
-    ArrayInfo, CheckRequest, CheckResult, ComponentTraits, CubeRenderInfo,
+    ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentTraits,
+    CubeRenderInfo,
     FolderInfo,
-    GalaxyInfo,
+    GalaxyInfo, HeaderInfo,
     GalaxyRenderRequest, GalaxyRequest, ImportRequest,
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
@@ -173,19 +175,33 @@ def describe(
         server: ServerDep,
         path: str,
         velocity: Literal['radio', 'optical'] | None = None,
-        rest: str | None = None
+        rest: str | None = None,
+        spectral_type: Literal[SPECTRAL_TYPES] | None = None
 ) -> list[ArrayInfo]:
     """
     Describe a file of data from its headers, without reading its data:
     each of its arrays, and what a dataset of it refuses or needs given;
     velocity is the convention of velocities that its headers leave
-    ambiguous, and rest the rest of its spectral axis (e.g. '6562.8
+    ambiguous, rest the rest of its spectral axis (e.g. '6562.8
     Angstrom'), which makes wavelengths or frequencies velocities, as a
-    dataset with that rest reads them (see ArrayInfo).
+    dataset with that rest reads them, and spectral_type what a spectral
+    axis whose header gives a type FITS does not define is (e.g. 'AWAV';
+    see ArrayInfo).
     """
     return [
         ArrayInfo.model_validate(array)
-        for array in server.workspace.describe(path, velocity, rest)]
+        for array in server.workspace.describe(
+            path, velocity, rest, spectral_type)]
+
+
+@router.get('/header/{path:path}')
+def header(server: ServerDep, path: str, hdu: int = 0) -> HeaderInfo:
+    """
+    Return the header of an array (an HDU) of a file of data, as it is in
+    the file (one header per HDU: the data and the errors of one file have
+    each their own).
+    """
+    return HeaderInfo(cards=server.workspace.header(path, hdu))
 
 
 # (the responses of frames of arrays)
@@ -201,7 +217,8 @@ def view_channel(
     orientation of the model) as a frame of one array (ny, nx), with the
     number of channels of the cube, the coordinate of the channel along
     the spectral axis and its unit (null if unknown; see SpectrumView),
-    and the range of the values of the cube for colours.
+    the range of the values of the cube for colours, and the least and
+    the greatest of its values (extent; null if it has none).
     """
     cube = server.views.cube(path, hdu)
     plane = server.views.channel(path, hdu, channel)
@@ -210,7 +227,8 @@ def view_channel(
     header = dict(
         path=path, hdu=hdu, channel=channel,
         nchannels=cube.values.shape[0], spectral=spectral, unit=cube.unit,
-        range=list(cube.range))
+        range=list(cube.range),
+        extent=None if cube.extent is None else list(cube.extent))
     return Response(
         frames.array_frame(header, [({}, plane)]),
         media_type='application/octet-stream')
@@ -348,9 +366,8 @@ def view_observed(server: ServerDep, request: ObservedRequest) -> ObservedInfo:
         values = array.values if array.values.ndim == 3 \
             else array.values[np.newaxis]
         spectral = observed.velocities if array.values.ndim == 3 else None
-        cube = Cube(
-            values, spectral, 'km/s' if spectral is not None else None,
-            cube_range(values))
+        cube = Cube.of(
+            values, spectral, 'km/s' if spectral is not None else None)
         nchannels, ny, nx = values.shape
         arrays.append(ObservedArrayInfo(
             kind=array.kind, item=array.item, path=server.views.put(cube),
@@ -371,15 +388,29 @@ def config_schema() -> dict[str, Any]:
 
 
 @router.get('/lines')
-def catalogue_lines() -> list[dict[str, str]]:
+def catalogue_lines() -> list[CatalogueLine]:
     """
-    Return the emission lines of the catalogue of GBKFIT ({name, rest}, the
-    rest as text, e.g. '6564.61 Angstrom'), which emissions name.
+    Return the emission lines of the catalogue of GBKFIT, which emissions
+    name and a spectral axis of wavelengths or frequencies takes the rest
+    of (in vacuum or in air, as its type says).
     """
     catalogue = gbkfit.model.LineCatalogue()
-    return [
-        dict(name=name, rest=_rest_text(catalogue.line(name).rest()))
-        for name in catalogue.names()]
+    return [_catalogue_line(catalogue.line(name)) for name in catalogue.names()]
+
+
+def _catalogue_line(line: Any) -> CatalogueLine:
+    """Return a line of the catalogue (see CatalogueLine)."""
+    rest = line.rest()
+    wavelength = air = frequency = None
+    if rest.unit.physical_type == 'length':
+        wavelength = rest.to_value('m')
+        if wavelength >= 2e-7:
+            air = wavelength / air_refractive_index(wavelength)
+    else:
+        frequency = rest.to_value('Hz')
+    return CatalogueLine(
+        name=line.name(), rest=_rest_text(rest), wavelength=wavelength,
+        air=air, frequency=frequency)
 
 
 @router.get('/components')

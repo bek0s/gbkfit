@@ -368,6 +368,8 @@ function Arrows({ render, component, window }: { render: GalaxyRender; component
     const result: { x: number; y: number; dx: number; dy: number; key: number }[] = [];
     for (let y = y0 + every / 2; y <= y1; y += every) {
       for (let x = x0 + every / 2; x <= x1; x += every) {
+        // (the window can reach beyond the map: see useZoom)
+        if (x < 0 || y < 0 || x >= n || y >= n) continue;
         const i = Math.floor(y) * n + Math.floor(x);
         if (!Number.isFinite(vx[i]) || !Number.isFinite(vy[i]) || !(light[i] > faintest)) continue;
         result.push({ x: x + 0.5, y: n - y - 0.5, dx: vx[i] * length, dy: -vy[i] * length, key: i });

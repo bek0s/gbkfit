@@ -3,13 +3,15 @@
 // and its mask, a row each. A file is given from the workspace or from
 // this computer (each copied into the project), or is another array of
 // the file of the data. Read only, the rows say what the dataset reads.
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { ArrayInfo } from '../../api/client';
+import { useHeader } from '../../api/queries';
 import { useFileSource } from '../../components/FileSources';
 import { significant } from '../../components/format';
-import { Button, Close } from '../../components/ui/basics';
+import { Close } from '../../components/ui/basics';
 import { Choice } from '../../components/ui/inputs';
 import { DropMenu, type MenuEntry } from '../../components/ui/overlays';
+import { HeaderFacts } from './Header';
 import {
   arrayLabel,
   arrayRef,
@@ -19,7 +21,10 @@ import {
   kept,
   KINDS,
   NO_ARRAYS,
+  headerProblems,
   presentSlots,
+  restOf,
+  sameShape,
   siblings,
   slotTitle,
   type Arrays,
@@ -29,6 +34,7 @@ import {
   type Kind,
   type Resolved,
   type Role,
+  type SpectralType,
 } from './model';
 
 export function Files({
@@ -47,6 +53,7 @@ export function Files({
 }) {
   const { kind, draft, arrays } = resolved;
   const slots = presentSlots(kind, draft);
+  const problems = headerProblems(resolved);
   const absent = KINDS[kind].slots.filter((slot) => draft.items[slot.key] === undefined);
   return (
     <div className="ds-files">
@@ -61,6 +68,11 @@ export function Files({
           )}
           <ItemRows
             project={project}
+            header={{
+              rest: kind === 'cube' ? restOf(draft.spectral) : null,
+              type: kind === 'cube' ? draft.spectral.type : null,
+              problems: problems[slot.key] ?? [],
+            }}
             kind={kind}
             item={draft.items[slot.key]}
             arrays={arrays[slot.key] ?? NO_ARRAYS}
@@ -79,24 +91,39 @@ export function Files({
   );
 }
 
+// What the facts of the header of the data are read with: the rest and the
+// type of the spectral axis as given, and the problems a dataset of them
+// has (see headerProblems)
+interface HeaderContext {
+  rest: string | null;
+  type: SpectralType | null;
+  problems: string[];
+}
+
 function ItemRows({
   project,
+  header,
   kind,
   item,
   arrays,
   onChange,
 }: {
   project: string;
+  header: HeaderContext;
   kind: Kind;
   item: Item;
   arrays: Arrays;
   onChange?: (item: Item) => void;
 }) {
-  const setFile = (role: Role, file: FileArray | undefined) => onChange?.({ ...item, files: { ...item.files, [role]: file }, ...(role === 'error' ? { errorKind: null } : {}) });
+  // (a file removed is no longer among the files, rather than one of none)
+  const setFile = (role: Role, file: FileArray | undefined) => {
+    const { [role]: _gone, ...others } = item.files;
+    onChange?.({ ...item, files: file ? { ...others, [role]: file } : others, ...(role === 'error' ? { errorKind: null } : {}) });
+  };
   return (
     <div className="ds-rows">
       <Row title="Data">
-        <FileSlot project={project} role="data" kind={kind} item={item} arrays={arrays} onFile={onChange && ((file) => setFile('data', file))} />
+        <FileSlot project={project} header={header} role="data" kind={kind} item={item} arrays={arrays} onFile={onChange && ((file) => setFile('data', file))} />
       </Row>
       <Row title="Errors">
         {item.errorValue !== null ? (
@@ -104,6 +131,7 @@ function ItemRows({
         ) : (
           <FileSlot
             project={project}
+            header={header}
             role="error"
             kind={kind}
             item={item}
@@ -119,7 +147,7 @@ function ItemRows({
         )}
       </Row>
       <Row title="Mask">
-        <FileSlot project={project} role="mask" kind={kind} item={item} arrays={arrays} onFile={onChange && ((file) => setFile('mask', file))} />
+        <FileSlot project={project} header={header} role="mask" kind={kind} item={item} arrays={arrays} onFile={onChange && ((file) => setFile('mask', file))} />
         {arrays.found.mask && isFlags(arrays.found.mask) && (
           <p className="ds-warn">
             {arrays.found.mask.name} flags the bad pixels (0 where the data are good), but GBKFIT keeps the pixels where a mask is not 0: this mask keeps
@@ -141,9 +169,13 @@ function Row({ title, children }: { title: string; children: ReactNode }) {
 }
 
 // The file of a role: its name and its array (chosen among those of its
-// file), or the ways to give one
+// file), or the ways to give one; a chevron opens what GBKFIT reads from
+// the header of its array (one header for each array, an HDU: the data
+// and the errors of one file have each their own), and the header as it
+// is in the file (open at first if GBKFIT finds a problem in it)
 function FileSlot({
   project,
+  header,
   role,
   kind,
   item,
@@ -153,6 +185,7 @@ function FileSlot({
   extra,
 }: {
   project: string;
+  header: HeaderContext;
   role: Role;
   kind: Kind;
   item: Item;
@@ -166,11 +199,24 @@ function FileSlot({
   const inFile = arrays.inFile[role] ?? [];
   const found = arrays.found[role];
   const error = arrays.errors[role];
+  // (whether the header shows: as the user chose; its problems are in the
+  // head of the screen too)
+  const [open, setOpen] = useState(false);
   if (chosen !== undefined) {
     const name = chosen.file.split('/').pop();
     return (
       <>
         <div className="ds-slot">
+          <button
+            type="button"
+            className="ds-chevron"
+            aria-expanded={open}
+            disabled={found === undefined}
+            title={open ? 'Hide the header' : 'What GBKFIT reads from the header, and the header'}
+            onClick={() => setOpen(!open)}
+          >
+            ▸
+          </button>
           <span className="ds-file" title={chosen.file}>
             {name}
           </span>
@@ -198,6 +244,7 @@ function FileSlot({
           )}
           {onFile && <Close label={`Remove the ${role === 'data' ? 'data' : role === 'error' ? 'errors' : 'mask'}`} onClick={() => onFile(undefined)} />}
         </div>
+        {open && found && <HeaderOf path={chosen.file} role={role} array={found} data={arrays.found.data} header={header} />}
         {extra}
         {error && <p className="error">{error}</p>}
       </>
@@ -211,10 +258,10 @@ function FileSlot({
     { label: 'A file of this computer…', description: 'Uploaded into the project', onClick: source.fromComputer },
   ];
   if (others.length > 0 && dataFile !== undefined) {
-    entries.push({ section: `In ${dataFile.split('/').pop()}` });
-    for (const array of others) {
-      entries.push({ label: arrayLabel(array), onClick: () => onFile({ file: dataFile, array: arrayRef(arrays.inFile.data ?? [], array) }) });
-    }
+    entries.push({
+      label: `An array of ${dataFile.split('/').pop()}`,
+      entries: others.map((array) => ({ label: arrayLabel(array), onClick: () => onFile({ file: dataFile, array: arrayRef(arrays.inFile.data ?? [], array) }) })),
+    });
   }
   if (onValue) {
     const rms = arrays.found.data?.rms;
@@ -227,21 +274,62 @@ function FileSlot({
   }
   return (
     <>
-      {role === 'data' ? (
-        <div className="ds-slot ds-slot-empty">
-          <Button kind="small" onClick={source.fromWorkspace} title="A file of the server's workspace; the project keeps a copy">
-            From the workspace
-          </Button>
-          <Button kind="small" onClick={source.fromComputer} title="A file of this computer, uploaded into the project">
-            From this computer
-          </Button>
-        </div>
-      ) : (
-        <DropMenu label={`Add the ${role === 'error' ? 'errors' : 'mask'}`} width={250} entries={entries} target={<button className="ds-add-file">+ Add</button>} />
-      )}
+      <DropMenu
+        label={`Add the ${role === 'data' ? 'data' : role === 'error' ? 'errors' : 'mask'}`}
+        entries={entries}
+        target={<button className="ds-add-file">+ Add</button>}
+      />
       {source.status}
       {source.hidden}
     </>
+  );
+}
+
+// What GBKFIT reads from the header of an array, and the header as it is
+// in the file, read as it is asked for (in a box of its own, which
+// scrolls: a header can be thousands of lines). Of the data, all that
+// GBKFIT reads (see HeaderFacts): the dataset is on their grid. Of their
+// errors and mask, which are on that grid whatever their headers say
+// (GBKFIT reads the coordinates of the data alone), whether their shape is
+// that of the data, and what the errors are, if their header says.
+function HeaderOf({ path, role, array, data, header }: { path: string; role: Role; array: ArrayInfo; data: ArrayInfo | undefined; header: HeaderContext }) {
+  const [full, setFull] = useState(false);
+  const cards = useHeader(full ? path : null, array.index);
+  const holds = ERROR_KINDS.find((k) => k.kind === array.holds);
+  return (
+    <div className="ds-header-of">
+      {role === 'data' ? (
+        <HeaderFacts array={array} rest={header.rest} type={header.type} problems={header.problems} />
+      ) : (
+        <dl className="ds-facts">
+          <dt>Shape</dt>
+          <dd>
+            {kept(array).join(' × ')}
+            {data && (sameShape(array, data) ? ', that of the data' : `: not that of the data (${kept(data).join(' × ')})`)}
+          </dd>
+          <dt>Coordinates</dt>
+          <dd>those of the data</dd>
+          {role === 'error' && (
+            <>
+              <dt>They are</dt>
+              <dd>{holds ? `${holds.text.toLowerCase()} (${holds.title}), as the header says` : 'not said by the header'}</dd>
+            </>
+          )}
+        </dl>
+      )}
+      <button type="button" className="ds-full-header" aria-expanded={full} onClick={() => setFull(!full)}>
+        <span className="ds-chevron-sign">▸</span> The header of {array.name || `HDU ${array.index}`}
+        {cards.data && <span className="ds-header-count"> · {cards.data.cards.length} lines</span>}
+      </button>
+      {full &&
+        (cards.data ? (
+          <pre className="ds-header-text">{cards.data.cards.join('\n')}</pre>
+        ) : cards.error ? (
+          <p className="error">{cards.error.message}</p>
+        ) : (
+          <p className="note">Reading the header…</p>
+        ))}
+    </div>
   );
 }
 
@@ -278,16 +366,19 @@ function ErrorValue({ item, arrays, onChange }: { item: Item; arrays: Arrays; on
   );
 }
 
+// What the errors are: as chosen, or as their header says, or else to be
+// chosen (nothing is assumed)
 function ErrorKindChoice({ item, arrays, onChange }: { item: Item; arrays: Arrays; onChange?: (kind: ErrorKind) => void }) {
   const kind = errorKindOf(item, arrays);
-  const known = ERROR_KINDS.find((k) => k.kind === kind)!;
-  if (!onChange) return <span className="ds-array">{known.text}</span>;
+  const known = ERROR_KINDS.find((k) => k.kind === kind);
+  if (!onChange) return <span className="ds-array">{known?.text ?? 'Not said'}</span>;
   return (
     <div className="ds-error-kind">
       <span>They are</span>
       <Choice
         items={ERROR_KINDS.map(({ kind: value, title, text }) => ({ value, label: `${text} (${title})` }))}
-        value={kind}
+        value={kind ?? ''}
+        placeholder="Choose: the header does not say"
         label="What the errors are"
         onChange={(value) => onChange(value as ErrorKind)}
       />

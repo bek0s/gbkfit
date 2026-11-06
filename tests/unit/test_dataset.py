@@ -639,6 +639,60 @@ def test_fits_files_are_described_from_their_headers(tmp_path):
     assert third.problems == (problem,)
 
 
+def test_what_errors_hold_is_described_as_their_header_states_it(
+        tmp_path):
+    # (as ESO's science data products state it: MUSE, MaNGA; a header
+    # that does not, nothing)
+    data = fits.PrimaryHDU(np.zeros((3, 4, 5), np.float32))
+    hdus = [data] + [
+        fits.ImageHDU(np.zeros((3, 4, 5), np.float32), fits.Header(
+            dict(HDUCLAS1='IMAGE', HDUCLAS2='ERROR', HDUCLAS3=kind)),
+            name=kind)
+        for kind in ('RMSE', 'MSE', 'INVMSE', 'OTHER')]
+    hdus.append(fits.ImageHDU(np.zeros((3, 4, 5), np.float32), name='ERR'))
+    fits.HDUList(hdus).writeto(tmp_path / 'f.fits')
+    assert [h.holds for h in describe_fits(str(tmp_path / 'f.fits'))] == [
+        None, 'sigma', 'variance', 'inverse_variance', None, None]
+
+
+def test_an_axis_of_a_type_fits_does_not_define_is_read_as_given(
+        tmp_path):
+    # (as CALIFA writes its cubes: CTYPE3 = 'WAVELENGTH', which says
+    # nothing of air or vacuum, or of linear or logarithmic wavelengths)
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3='WAVELENGTH', CRVAL3=6500, CDELT3=2,
+        CRPIX3=1, CUNIT3='Angstrom'))
+    fits.writeto(tmp_path / 'califa.fits', np.zeros((4, 3, 2)), header)
+    filename = str(tmp_path / 'califa.fits')
+    (hdu,) = describe_fits(filename, rest='6562.8 Angstrom')
+    assert hdu.nonstandard_type == 'WAVELENGTH' and hdu.coords is None
+    (problem,) = hdu.problems
+    assert "'WAVELENGTH' (in Angstrom), is not one FITS defines" in problem
+    (hdu,) = describe_fits(
+        filename, rest='6562.8 Angstrom', spectral_type='AWAV')
+    assert hdu.problems == () and hdu.coords.medium == 'air'
+    np.testing.assert_allclose(
+        hdu.coords.step[2], 299792.458 * 2 / 6562.8, rtol=1e-6)
+    # (read as data, as describe reads them; a type not of FITS refused)
+    from gbkfit.io import read_data
+    with pytest.raises(ValueError, match='is not one FITS defines'):
+        read_data(filename, rest='6562.8 Angstrom')
+    _, coords = read_data(
+        filename, rest='6562.8 Angstrom', spectral_type='AWAV')
+    np.testing.assert_allclose(coords.step[2], hdu.coords.step[2])
+    with pytest.raises(ValueError, match="must be one of"):
+        read_data(filename, spectral_type='WAVELENGTH')
+    # (a header of FITS types is read as it is: the type is of an axis of
+    # a type FITS does not define)
+    header['CTYPE3'] = 'AWAV'
+    fits.writeto(tmp_path / 'fits.fits', np.zeros((4, 3, 2)), header)
+    (hdu,) = describe_fits(
+        str(tmp_path / 'fits.fits'), rest='6562.8 Angstrom',
+        spectral_type='WAVE')
+    assert hdu.nonstandard_type is None and hdu.coords.medium == 'air'
+
+
 def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
         tmp_path):
     header = fits.Header(dict(

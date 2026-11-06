@@ -22,7 +22,8 @@ import astropy.wcs.utils
 import numpy as np
 
 from gbkfit.config import warn
-from gbkfit.grid import Coords, FRAMES, make_convention, make_medium, make_rest
+from gbkfit.grid import (
+    Coords, FRAMES, SPECTRAL_TYPES, make_convention, make_medium, make_rest)
 
 
 __all__ = [
@@ -37,10 +38,12 @@ __all__ = [
     'has_wcs',
     'header_beam',
     'header_shape',
+    'header_unit',
     'linear_header',
     'model_axis_flips',
     'model_axis_order',
     'model_header',
+    'nonstandard_spectral_axis',
     'read_array',
     'read_beam',
     'read_coords',
@@ -51,6 +54,7 @@ __all__ = [
     'reorder_wcs',
     'to_model_axes',
     'velocity_is_ambiguous',
+    'with_spectral_type',
     'with_velocity_convention',
     'with_wcs',
     'write_data',
@@ -185,7 +189,15 @@ def read_unit(filename: str, hdu: int | str = 0) -> str | None:
     Return the unit of the data of a FITS file, as its header gives it
     (BUNIT), if it does.
     """
-    unit = astropy.io.fits.getheader(filename, hdu).get('BUNIT')
+    return header_unit(astropy.io.fits.getheader(filename, hdu))
+
+
+def header_unit(header: astropy.io.fits.Header) -> str | None:
+    """
+    Return the unit of the data of a header, as it gives it (BUNIT), if
+    it does.
+    """
+    unit = header.get('BUNIT')
     if unit is None or not str(unit).strip():
         return None
     return str(unit).strip()
@@ -280,7 +292,8 @@ def read_data(
         rest: typing.Any = None,
         spectral_axis: int | None = None,
         medium: str | None = None,
-        velocity: str | None = None
+        velocity: str | None = None,
+        spectral_type: str | None = None
 ) -> tuple[np.ndarray, Coords]:
     """
     Read the data of a FITS file and its world coordinates.
@@ -311,6 +324,9 @@ def read_data(
     velocity : str, optional
         The convention of the velocities of a spectral axis that the
         header leaves ambiguous (see model_header).
+    spectral_type : str, optional
+        The type of an axis whose header gives one that FITS does not
+        define (see with_spectral_type).
 
     Returns
     -------
@@ -328,7 +344,7 @@ def read_data(
     """
     data, header = read_hdu(filename, hdu)
     header, orientation = model_header(
-        filename, header, data.shape, rest, velocity)
+        filename, header, data.shape, rest, velocity, spectral_type)
     coords = coords_from_header(
         filename, header, rpix, rval, spectral_axis, medium, rest)
     return orientation.apply(data), coords
@@ -387,7 +403,8 @@ def read_coords(
         filename: str,
         hdu: int | str = 0,
         velocity: str | None = None,
-        rest: typing.Any = None
+        rest: typing.Any = None,
+        spectral_type: str | None = None
 ) -> Coords:
     """
     Read the world coordinates of the data of a FITS file, as read_data
@@ -418,7 +435,8 @@ def read_coords(
     """
     header = astropy.io.fits.getheader(filename, hdu)
     header, _ = model_header(
-        filename, header, header_shape(header), rest, velocity)
+        filename, header, header_shape(header), rest, velocity,
+        spectral_type)
     return coords_from_header(filename, header)
 
 
@@ -476,11 +494,16 @@ def model_header(
         header: astropy.io.fits.Header,
         shape: tuple[int, ...],
         rest: typing.Any = None,
-        velocity: str | None = None
+        velocity: str | None = None,
+        spectral_type: str | None = None
 ) -> tuple[astropy.io.fits.Header, Orientation]:
     """
     Return the header of an array of a file in the orientation of the
     model, and how the array is put in it (see Orientation).
+
+    An axis whose type FITS does not define (e.g. CTYPE3 = 'WAVELENGTH',
+    as CALIFA writes) is read as the type given (see with_spectral_type),
+    and is refused without one: nothing else says what its values are.
 
     The orientation of the model has the celestial axes first, longitude
     (e.g. RA) then latitude, and the spectral axis last (see
@@ -519,6 +542,9 @@ def model_header(
         The convention of the velocities of a spectral axis that the
         header leaves ambiguous: 'radio' or 'optical' (see
         with_velocity_convention); it is not used for others.
+    spectral_type : str, optional
+        The type of an axis whose header gives one that FITS does not
+        define (see with_spectral_type); it is not used for others.
 
     Returns
     -------
@@ -534,8 +560,10 @@ def model_header(
         If the world coordinates are invalid, or of fewer axes than the
         array, or the header does not say whether its velocities are radio
         or optical and velocity is not given; or the rest is given for a
-        spectral axis that does not take one (see above).
+        spectral axis that does not take one (see above); or an axis has a
+        type that FITS does not define and spectral_type is not given.
     """
+    header = with_spectral_type(header, shape, spectral_type, source)
     header = with_velocity_convention(
         header, velocity if velocity_is_ambiguous(header) else None, source)
     return _oriented(source, header, shape, rest)
@@ -1623,6 +1651,126 @@ def _header_medium(
             f"{source}: AIRORVAC must be one of {list(mediums)}; it is "
             f"{value!r}")
     return mediums[value]
+
+
+def nonstandard_spectral_axis(
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None = None
+) -> tuple[int, str] | None:
+    """
+    Return the axis of a header whose type (CTYPE) is not one FITS
+    defines and whose unit is one of a spectral axis (of wavelengths,
+    frequencies or velocities), and that type (e.g. 2 and 'WAVELENGTH',
+    in Angstrom, as CALIFA writes the spectral axis of its cubes); None if
+    no axis is one.
+
+    The type of such an axis says nothing of what its values are
+    (astropy and wcslib read it as an axis of no kind): FITS defines the
+    spectral types (FITS 4.0, Table 25), and any other is a name alone
+    (e.g. 'WAVELENGTH' says neither air or vacuum, nor linear or
+    logarithmic). Its unit says that it is spectral, not what it is.
+    Other axes of types FITS does not define (e.g. LINEAR or OFFSET, of
+    positions along a slit, in angles or of no unit) are positions, as
+    they are read, and VLOG is GBKFIT's own (its log velocities without a
+    rest, see _CONVENTIONS_OF_TYPES); axes without a type, and axes of
+    length 1 of an array of the given shape (numpy order), which reading
+    leaves out, are not looked at.
+
+    Parameters
+    ----------
+    header : Header
+        The header.
+    shape : tuple of int, optional
+        The shape of its array (numpy order).
+
+    Returns
+    -------
+    tuple of int and str, or None
+        The axis (FITS order, from 0) and its type.
+    """
+    if not has_wcs(header):
+        return None
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
+            wcs = astropy.wcs.WCS(header)
+    except Exception:
+        # (any error of astropy: the world coordinates are reported as
+        # invalid where they are read, see _wcs)
+        return None
+    for axis, kind in enumerate(wcs.wcs.axis_types):
+        ctype = str(wcs.wcs.ctype[axis]).strip()
+        if kind != 0 or not ctype or ctype in _CONVENTIONS_OF_TYPES:
+            continue
+        if shape is not None and axis < len(shape) \
+                and shape[len(shape) - 1 - axis] == 1:
+            continue
+        unit = wcs.wcs.cunit[axis]
+        if any(unit.is_equivalent(of) for of in _SPECTRAL_UNITS):
+            return axis, ctype
+    return None
+
+
+# (the units of spectral axes, see nonstandard_spectral_axis: of
+# wavelengths, frequencies and velocities)
+_SPECTRAL_UNITS = (
+    astropy.units.m, astropy.units.Hz, astropy.units.m / astropy.units.s)
+
+
+def with_spectral_type(
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...] | None,
+        spectral_type: str | None,
+        source: str
+) -> astropy.io.fits.Header:
+    """
+    Return the header with the type of its spectral axis whose type is not
+    one FITS defines (see nonstandard_spectral_axis) replaced by the type
+    given, or as it is if it has no such axis.
+
+    Such an axis cannot be read without its type: its name (e.g.
+    'WAVELENGTH') does not say whether its values are wavelengths in
+    vacuum or in air, linear or logarithmic, and nothing in the header
+    has to; the type is given, never taken from its name.
+
+    Parameters
+    ----------
+    header : Header
+        The header.
+    shape : tuple of int, optional
+        The shape of its array (numpy order; see
+        nonstandard_spectral_axis).
+    spectral_type : str, optional
+        The type the axis is read as: one of SPECTRAL_TYPES (e.g. 'AWAV'
+        for linear wavelengths in air).
+    source : str
+        The name of the file of the header, for messages.
+
+    Raises
+    ------
+    ValueError
+        If the type given is not one of SPECTRAL_TYPES, or the header has
+        an axis of a type FITS does not define and no type is given.
+    """
+    if spectral_type is not None and spectral_type not in SPECTRAL_TYPES:
+        raise ValueError(
+            f"the type of the spectral axis must be one of "
+            f"{list(SPECTRAL_TYPES)}; it is {spectral_type!r}")
+    found = nonstandard_spectral_axis(header, shape)
+    if found is None:
+        return header
+    axis, ctype = found
+    if spectral_type is None:
+        unit = str(header.get(f'CUNIT{axis + 1}', '')).strip()
+        raise ValueError(
+            f"{source}: the type of the axis {axis + 1}, {ctype!r}"
+            f"{f' (in {unit})' if unit else ''}, is not one FITS defines: "
+            f"it does not say what its values are; give the type of the "
+            f"spectral axis (spectral: {{type: ...}}), one of "
+            f"{', '.join(SPECTRAL_TYPES)}")
+    header = header.copy()
+    header[f'CTYPE{axis + 1}'] = spectral_type
+    return header
 
 
 def with_velocity_convention(

@@ -5,8 +5,11 @@ import { describe, expect, it } from 'vitest';
 import type { ArrayInfo } from '../../api/client';
 import {
   arraysOf,
+  catalogueLineOf,
+  catalogueRests,
   draftOfPreparation,
   EMPTY_ITEM,
+  headerProblems,
   needsOf,
   NO_EDITS,
   NO_SPECTRAL,
@@ -22,18 +25,20 @@ function array(index: number, name: string, shape: number[], axes = ['RA---TAN',
   return { index, name, shape, axes: axes.slice(0, shape.length), unit: 'Jy/beam', step: null, beam: null, rms: null, ambiguous_velocity: false, problems: [] };
 }
 
-function resolve(kind: Kind, draft: Draft, files: Record<string, ArrayInfo[]>): Resolved {
-  const describe = (path: string) => ({ arrays: files[path] });
+// (stale: the files described for other inputs, being read again)
+function resolve(kind: Kind, draft: Draft, files: Record<string, ArrayInfo[]>, stale: string[] = []): Resolved {
+  const describe = (path: string) => ({ arrays: files[path], current: !stale.includes(path) });
   const ndim = kind === 'cube' ? 3 : 2;
   return { kind, draft, arrays: Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, ndim)])) };
 }
 
 describe('a draft prepared and edited again', () => {
   it('gives back the files and the edits of a cube', () => {
-    const files = { 'p/data/cube.fits': [array(0, 'PRIMARY', [40, 30, 20]), array(1, 'STAT', [40, 30, 20])] };
+    // (of errors whose header says they are variances, as that of MUSE does)
+    const files = { 'p/data/cube.fits': [array(0, 'PRIMARY', [40, 30, 20]), { ...array(1, 'STAT', [40, 30, 20]), holds: 'variance' as const }] };
     const draft: Draft = {
       items: { cube: { files: { data: { file: 'p/data/cube.fits' }, error: { file: 'p/data/cube.fits', array: 'STAT' } }, errorValue: null, errorKind: null } },
-      spectral: { convention: 'radio', line: '', unit: '', redshift: '' },
+      spectral: { type: null, convention: 'radio', line: '', unit: '', redshift: '' },
       edits: { ...NO_EDITS, x: ['2', '30'], channels: ['5', '14'], values: { cube: { below: '0.001', above: '', sigma: '' } }, regions: '1', minify: true },
     };
     const request = prepRequest(resolve('cube', draft, files), 'p');
@@ -78,6 +83,19 @@ describe('the spectral axis of a cube', () => {
     expect(needsOf(resolve('cube', draft(''), ifu)).map((need) => need.place)).toEqual(['spectral']);
     expect(needsOf(resolve('cube', draft('6562.8'), ifu))).toEqual([]);
   });
+
+  it('judges the problems of a header once nothing is missing and it is of what is given', () => {
+    const problem = 'the spectral axis is of type AWAV: give a rest';
+    const described = { 'ifu.fits': [{ ...ifu['ifu.fits'][0], problems: [problem] }] };
+    // (the line missing: its problem is the line asked for)
+    expect(headerProblems(resolve('cube', draft(''), described))).toEqual({});
+    // (the line typed, the header read again for it: not judged yet)
+    expect(headerProblems(resolve('cube', draft('6562.8'), described, ['ifu.fits']))).toEqual({});
+    expect(needsOf(resolve('cube', draft('6562.8'), described, ['ifu.fits']))).toEqual([]);
+    // (read for it: its own)
+    expect(headerProblems(resolve('cube', draft('6562.8'), described))).toEqual({ cube: [problem] });
+    expect(needsOf(resolve('cube', draft('6562.8'), described))).toEqual([{ place: 'files', text: problem }]);
+  });
 });
 
 describe('the arrays offered for a mask', () => {
@@ -86,5 +104,26 @@ describe('the arrays offered for a mask', () => {
     const resolved = resolve('cube', { items: { cube: { ...EMPTY_ITEM, files: { data: { file: 'muse.fits' } } } }, spectral: NO_SPECTRAL, edits: NO_EDITS }, files);
     expect(siblings(resolved.arrays.cube, 'mask').map((a) => a.name)).toEqual(['MASK']);
     expect(siblings(resolved.arrays.cube, 'error').map((a) => a.name)).toEqual(['STAT', 'MASK']);
+  });
+});
+
+describe('the lines of the catalogue', () => {
+  const catalogue = [
+    { name: 'halpha', rest: '6564.61 Angstrom', wavelength: 6564.61e-10, air: 6562.797294e-10, frequency: null },
+    { name: 'hi21', rest: '1.420406 GHz', wavelength: null, air: null, frequency: 1420405751.768 },
+  ];
+
+  it('are those of the axis, in its medium and unit', () => {
+    expect(catalogueRests(catalogue, 'wave', 'air', 'Angstrom')).toEqual([{ name: 'halpha', rest: '6562.7973' }]);
+    expect(catalogueRests(catalogue, 'wave', 'vacuum', 'nm')).toEqual([{ name: 'halpha', rest: '656.461' }]);
+    expect(catalogueRests(catalogue, 'freq', null, 'MHz')).toEqual([{ name: 'hi21', rest: '1420.4058' }]);
+    expect(catalogueRests(catalogue, 'wave', 'air', 'MHz')).toEqual([]);
+  });
+
+  it('name a typed rest that is one of theirs', () => {
+    const rests = catalogueRests(catalogue, 'wave', 'air', 'Angstrom');
+    expect(catalogueLineOf(rests, '6562.7973')).toBe('halpha');
+    expect(catalogueLineOf(rests, '6562.8')).toBeNull();
+    expect(catalogueLineOf(rests, '')).toBeNull();
   });
 });

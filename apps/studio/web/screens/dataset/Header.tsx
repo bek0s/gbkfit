@@ -3,16 +3,32 @@
 // the axes it leaves out, and the problems a dataset of them has.
 import type { ArrayInfo } from '../../api/client';
 import { significant } from '../../components/format';
-import { kept, keptAxes, spectrumOf } from './model';
+import { kept, keptAxes, SPECTRAL_TYPES, spectrumOf, type SpectralType } from './model';
 
-export function HeaderFacts({ array, rest, waiting }: { array: ArrayInfo | undefined; rest: string | null; waiting?: boolean }) {
+export function HeaderFacts({
+  array,
+  rest,
+  type = null,
+  problems,
+  waiting,
+}: {
+  array: ArrayInfo | undefined;
+  rest: string | null;
+  // (what the spectral axis is said to be, where its header gives it a
+  // type FITS does not define)
+  type?: SpectralType | null;
+  // (the problems a dataset of them has, as judged: see headerProblems)
+  problems: string[];
+  waiting?: boolean;
+}) {
   if (array === undefined) {
     return <p className="note">{waiting ? 'Reading the header…' : 'What GBKFIT reads from the header of the data shows here once they are chosen.'}</p>;
   }
   const flat = array.shape.map((size, i) => [size, array.axes[i]] as const).filter(([size]) => size === 1);
   const [nx, ny, nz] = kept(array);
   const axis = keptAxes(array)[2];
-  const spectrum = spectrumOf(array);
+  const spectrum = spectrumOf(array, type);
+  const said = array.nonstandard_type ? SPECTRAL_TYPES.find((t) => t.type === type) : undefined;
   const step = array.step;
   return (
     <>
@@ -26,6 +42,7 @@ export function HeaderFacts({ array, rest, waiting }: { array: ArrayInfo | undef
             <dt>Channels</dt>
             <dd>
               {axis || 'no type'}
+              {array.nonstandard_type && (said ? ` → ${said.type}` : ' (not a FITS type)')}
               {spectrum && (rest ? ` → velocities of ${rest}` : ' (needs a line)')}
               {step && step.length === 3 && ` · ${significant(Math.abs(step[2]), 3)} km/s`}
             </dd>
@@ -49,9 +66,9 @@ export function HeaderFacts({ array, rest, waiting }: { array: ArrayInfo | undef
           ✓ Left out: the {flat.length > 1 ? 'axes' : 'axis'} of length 1 ({flat.map(([, name]) => name || 'no type').join(', ')})
         </p>
       )}
-      {array.problems.length > 0 && !(spectrum && !rest) && (
+      {problems.length > 0 && (
         <ul className="ds-problems">
-          {array.problems.map((problem) => (
+          {problems.map((problem) => (
             <li key={problem}>{problem}</li>
           ))}
         </ul>

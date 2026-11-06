@@ -421,13 +421,14 @@ class Workspace:
 
     def describe(
             self, relative: str, velocity: str | None = None,
-            rest: str | None = None
+            rest: str | None = None, spectral_type: str | None = None
     ) -> list[dict[str, Any]]:
         """
         Describe a file of data from its headers (see
         gbkfit.dataset.describe_fits), with the convention of velocities
-        that its headers leave ambiguous and the rest of its spectral axis
-        (which makes wavelengths or frequencies velocities), if given: each
+        that its headers leave ambiguous, the rest of its spectral axis
+        (which makes wavelengths or frequencies velocities) and what a
+        spectral axis of a type FITS does not define is, if given: each
         of its arrays (its index, name, shape and axes, in the order of the
         model, unit, the size of its pixels in that order (only the
         spatial ones while its spectral axis cannot be read: velocities of
@@ -447,7 +448,8 @@ class Workspace:
                 f"'{relative}' is not a file of data that GBKFIT reads: "
                 f"FITS ({', '.join(_DATA_FILES)})")
         try:
-            hdus = gbkfit.dataset.describe_fits(path, velocity, rest)
+            hdus = gbkfit.dataset.describe_fits(
+                path, velocity, rest, spectral_type)
         except OSError as e:
             raise Invalid(f"cannot read '{relative}': {e}") from e
         return [
@@ -464,8 +466,37 @@ class Workspace:
                      bpa=np.asarray(hdu.beam.bpa).tolist()),
                  rms=hdu.rms, ambiguous_velocity=hdu.ambiguous_velocity,
                  # (the paths of the problems in the workspace)
-                 problems=[p.replace(path, relative) for p in hdu.problems])
+                 problems=[p.replace(path, relative) for p in hdu.problems],
+                 holds=hdu.holds, nonstandard_type=hdu.nonstandard_type)
             for hdu in hdus]
+
+    def header(self, relative: str, hdu: int) -> list[str]:
+        """
+        Return the header of an array (an HDU) of a file of data as it is
+        in the file: its cards, as lines of text (their spaces at the end
+        left out; the END card too).
+
+        Raises
+        ------
+        NotFound
+            If the file, or its HDU, does not exist.
+        Invalid
+            If it is not a file of data that GBKFIT reads.
+        """
+        path = self.file(relative)
+        if not path.lower().endswith(_DATA_FILES):
+            raise Invalid(
+                f"'{relative}' is not a file of data that GBKFIT reads: "
+                f"FITS ({', '.join(_DATA_FILES)})")
+        try:
+            with fits.open(path) as hdus:
+                if not 0 <= hdu < len(hdus):
+                    raise NotFound(
+                        f"'{relative}' has no HDU {hdu} (it has "
+                        f"{len(hdus)})")
+                return [str(card).rstrip() for card in hdus[hdu].header.cards]
+        except OSError as e:
+            raise Invalid(f"cannot read '{relative}': {e}") from e
 
     def record_preparation(
             self, task: str, options: dict[str, Any],

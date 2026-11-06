@@ -93,7 +93,8 @@ def read_arrays(
         unit: str | astropy.units.UnitBase | None = None,
         rest: str | astropy.units.Quantity | None = None,
         velocity: str | None = None,
-        footprint: DataFile | None = None
+        footprint: DataFile | None = None,
+        spectral_type: str | None = None
 ) -> Arrays:
     """
     Read data, and their errors, mask and footprint, from files in the
@@ -145,6 +146,9 @@ def read_arrays(
         headers leave ambiguous: 'radio' or 'optical'.
     footprint : DataFile, optional
         The file of where the instrument looked (see Data).
+    spectral_type : str, optional
+        The type of an axis whose headers give one that FITS does not
+        define (see model_header).
 
     Returns
     -------
@@ -164,20 +168,21 @@ def read_arrays(
         raise ValueError(
             f"the kind of the errors must be one of {list(ERROR_KINDS)}; "
             f"it is {error_kind!r}")
-    values, header, orientation, beam = _read(data, rest, velocity)
+    read = dict(rest=rest, velocity=velocity, spectral_type=spectral_type)
+    values, header, orientation, beam = _read(data, **read)
     if isinstance(unit, str):
         unit = unitutils.parse_unit(unit)
     unit = unit or _header_unit(_filename(data), header)
     errors = None
     if error is not None:
         errors, error_header = _read_companion(
-            error, header, orientation, rest, velocity)
+            error, header, orientation, **read)
         errors = _standard_deviations(
             _filename(error), errors, error_kind,
             _header_unit(_filename(error), error_header), unit)
     masks = None
     if mask is not None:
-        masks, _ = _read_companion(mask, header, orientation, rest, velocity)
+        masks, _ = _read_companion(mask, header, orientation, **read)
     valid = np.isfinite(values)
     if errors is not None:
         valid &= np.isfinite(errors) & (errors > 0)
@@ -186,7 +191,7 @@ def read_arrays(
     footprints = None
     if footprint is not None:
         footprints, _ = _read_companion(
-            footprint, header, orientation, rest, velocity)
+            footprint, header, orientation, **read)
     return Arrays(
         np.where(valid, values, np.nan),
         None if errors is None else np.where(valid, errors, np.nan),
@@ -201,7 +206,8 @@ def _filename(file: DataFile) -> str:
 def _read(
         file: DataFile,
         rest: typing.Any,
-        velocity: str | None
+        velocity: str | None,
+        spectral_type: str | None
 ) -> tuple[
         np.ndarray, astropy.io.fits.Header, Orientation,
         dict[str, typing.Any] | None]:
@@ -213,7 +219,7 @@ def _read(
     filename = _filename(file)
     values, header = _read_file(file)
     model, orientation = model_header(
-        filename, header, values.shape, rest, velocity)
+        filename, header, values.shape, rest, velocity, spectral_type)
     return (_floats(orientation.apply(values)), model, orientation,
             _beam(filename, header, model, orientation))
 
@@ -324,7 +330,8 @@ def _read_companion(
         data_header: astropy.io.fits.Header,
         data_orientation: Orientation,
         rest: typing.Any,
-        velocity: str | None
+        velocity: str | None,
+        spectral_type: str | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
     Return the values of the errors or the mask of data in the orientation
@@ -334,7 +341,7 @@ def _read_companion(
     values, header = _read_file(file)
     if has_wcs(header) and has_wcs(data_header):
         header, orientation = model_header(
-            filename, header, values.shape, rest, velocity)
+            filename, header, values.shape, rest, velocity, spectral_type)
         values = orientation.apply(values)
         _check_same_pixels(filename, header, values.shape, data_header)
         return _floats(values), header

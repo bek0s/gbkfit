@@ -21,6 +21,7 @@ __all__ = [
     'GalaxyInfo',
     'GalaxyRenderRequest',
     'GalaxyRequest',
+    'HeaderInfo',
     'ImportRequest',
     'JobInfo',
     'JobRequest',
@@ -101,6 +102,21 @@ class ComponentTraits(BaseModel):
     traits: dict[str, list[str]]
     directions: list[str]
     dispersion_directions: list[str]
+
+
+class CatalogueLine(BaseModel):
+    """
+    An emission line of the catalogue of GBKFIT (see its LineCatalogue):
+    its name, its rest as text (e.g. '6564.61 Angstrom', in vacuum), and
+    as a number: its rest wavelength in vacuum (m) and in air (m; above
+    2000 Angstrom, where air wavelengths are used), or its rest frequency
+    (Hz), as the catalogue gives it.
+    """
+    name: str
+    rest: str
+    wavelength: float | None
+    air: float | None
+    frequency: float | None
 
 
 class GalaxyInfo(BaseModel):
@@ -266,7 +282,12 @@ class ArrayInfo(BaseModel):
     for a beam of each channel), the noise of its values that its header
     states (keyword RMS or NOISE), whether its header leaves it open
     whether its velocities are radio or optical (a dataset of it gives
-    their convention), and what a dataset of it refuses or needs given.
+    their convention), what a dataset of it refuses or needs given, and
+    what its values are as errors, if its header states it ('sigma',
+    'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),
+    and the type its header gives a spectral axis that FITS does not
+    define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
+    gbkfit's HDUDescription.nonstandard_type).
     """
     index: int
     name: str
@@ -279,6 +300,8 @@ class ArrayInfo(BaseModel):
     rms: float | None
     ambiguous_velocity: bool
     problems: list[str]
+    holds: Literal['sigma', 'variance', 'inverse_variance'] | None = None
+    nonstandard_type: str | None = None
 
 
 class SpectrumView(BaseModel):
@@ -370,6 +393,14 @@ class PreferencesInfo(BaseModel):
     """
     file: str
     values: dict[str, Any]
+
+
+class HeaderInfo(BaseModel):
+    """
+    The header of an array (an HDU) of a file of data, as it is in the
+    file: its cards, as lines of text.
+    """
+    cards: list[str]
 
 
 class SessionRequest(BaseModel):

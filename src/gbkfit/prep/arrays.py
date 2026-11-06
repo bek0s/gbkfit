@@ -79,7 +79,8 @@ class FitsArrays:
             velocity: str | None = None,
             *,
             rest: str | astropy.units.Quantity | None = None,
-            error_kind: ErrorKind = 'sigma'
+            error_kind: ErrorKind = 'sigma',
+            spectral_type: str | None = None
     ) -> 'FitsArrays':
         """
         Read the data, errors and mask from files in the orientation of
@@ -102,6 +103,9 @@ class FitsArrays:
             frequencies into velocities (see model_header).
         error_kind : str, optional
             What the file of the errors holds (see read_arrays).
+        spectral_type : str, optional
+            The type of an axis whose header gives one that FITS does not
+            define (see model_header).
 
         Returns
         -------
@@ -117,7 +121,7 @@ class FitsArrays:
         """
         arrays = read_arrays(
             data, error, mask, error_kind=error_kind, rest=rest,
-            velocity=velocity)
+            velocity=velocity, spectral_type=spectral_type)
         header = arrays.header
         if rest is not None and not (
                 has_wcs(header)

@@ -272,7 +272,8 @@ class Data:
             spectral_correlation: LSF | None = None,
             velocity: str | None = None,
             error_kind: ErrorKind = 'sigma',
-            footprint: DataFile | None = None
+            footprint: DataFile | None = None,
+            spectral_type: str | None = None
     ) -> tuple['Data', Coords]:
         """
         Read a data item from files, with the unit and the beam of the
@@ -312,6 +313,9 @@ class Data:
         velocity : str, optional
             The convention of the velocities of a spectral axis that the
             headers leave ambiguous (see model_header).
+        spectral_type : str, optional
+            The type of an axis whose headers give one that FITS does not
+            define (see model_header).
         error_kind : str, optional
             What the file of the errors holds (see
             read_arrays).
@@ -348,7 +352,8 @@ class Data:
             error_file = error
         arrays = read_arrays(
             data, error_file, mask, error_kind=error_kind, unit=unit,
-            rest=rest, velocity=velocity, footprint=footprint)
+            rest=rest, velocity=velocity, footprint=footprint,
+            spectral_type=spectral_type)
         filename = data if isinstance(data, str) else data[0]
         coords = coords_from_header(
             filename, arrays.header, rpix, rval, spectral_axis, medium, rest)

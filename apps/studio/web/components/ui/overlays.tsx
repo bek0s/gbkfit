@@ -15,16 +15,22 @@ const MENU_MOST = 420;
 const SEARCHED = 10;
 
 // (the menu on the side of its button with the more room, as tall as that
-// room lets it be, less a margin)
+// room lets it be, less a margin; as wide as its items, one a line, but at
+// least as wide as its button, and within the window)
 const fitted: PopoverProps['middlewares'] = {
   flip: true,
   shift: true,
   size: {
-    apply: ({ availableHeight, elements }) => {
+    apply: ({ availableHeight, availableWidth, elements, rects }) => {
       elements.floating.style.maxHeight = `${Math.max(140, Math.min(MENU_MOST, availableHeight - 12))}px`;
+      elements.floating.style.minWidth = `${Math.round(rects.reference.width)}px`;
+      elements.floating.style.maxWidth = `${Math.max(200, Math.min(MENU_WIDEST, availableWidth - 12))}px`;
     },
   },
 };
+
+// The widest a menu is (px), unless it is given a width
+const MENU_WIDEST = 420;
 
 // (wide: for more than a form, e.g. the settings)
 export function Dialog({ title, onClose, wide, children }: { title: string; onClose: () => void; wide?: boolean; children: ReactNode }) {
@@ -41,7 +47,9 @@ export function Dialog({ title, onClose, wide, children }: { title: string; onCl
 // be disabled (its description then says why)
 export type MenuEntry =
   | { label: string; onClick: () => void; current?: boolean; picture?: ReactNode; description?: string; disabled?: boolean }
-  | { section: string };
+  | { section: string }
+  // (a submenu: its entries open at the side of its label)
+  | { label: string; entries: MenuEntry[] };
 
 export function DropMenu({
   target,
@@ -65,36 +73,66 @@ export function DropMenu({
 }) {
   const position = at === 'side' ? 'left-start' : at === 'end' ? 'bottom-end' : 'bottom-start';
   if (entries.filter((entry) => !('section' in entry)).length > SEARCHED) {
-    return <SearchMenu target={target} entries={entries} label={label} position={position} width={width ?? (at === 'start' ? 'target' : 280)} />;
+    // (a menu that finds has no submenus: their entries are under their
+    // label, as a section)
+    const flat = entries.flatMap((entry) => ('entries' in entry ? [{ section: entry.label }, ...entry.entries] : [entry]));
+    return <SearchMenu target={target} entries={flat} label={label} position={position} width={width ?? (at === 'start' ? 'target' : 280)} />;
   }
   return (
     <Menu
       position={position}
-      width={width ?? (at === 'start' ? 'target' : undefined)}
+      width={width}
       offset={4}
       returnFocus={returnFocus}
       middlewares={fitted}
-      classNames={{ dropdown: 'ui-menu ui-menu-scroll' }}
+      // (a menu with a submenu does not scroll: a scrolling menu would clip
+      // its submenu, which is drawn within it; such a menu is short)
+      classNames={{ dropdown: entries.some((entry) => 'entries' in entry) ? 'ui-menu' : 'ui-menu ui-menu-scroll' }}
       aria-label={label}
     >
       <Menu.Target>{target}</Menu.Target>
-      <Menu.Dropdown>
-        {entries.map((entry, i) =>
-          'section' in entry ? (
-            <Menu.Label key={`section-${i}`}>{entry.section}</Menu.Label>
-          ) : (
-            <Menu.Item key={`${entry.label}-${i}`} onClick={entry.onClick} disabled={entry.disabled} rightSection={entry.picture} data-current={entry.current || undefined}>
-              {entry.label}
-              {entry.description && <div className="ui-menu-description">{entry.description}</div>}
-            </Menu.Item>
-          ),
-        )}
-      </Menu.Dropdown>
+      <Menu.Dropdown>{menuItems(entries)}</Menu.Dropdown>
     </Menu>
   );
 }
 
-type Action = Exclude<MenuEntry, { section: string }>;
+// A menu at a point (e.g. where a right click was, in the box of the
+// element it is in, which is positioned), open until an entry is chosen or
+// it is closed
+export function PointMenu({ at, entries, label, onClose }: { at: [number, number]; entries: MenuEntry[]; label: string; onClose: () => void }) {
+  return (
+    <Menu opened onChange={(open) => !open && onClose()} position="bottom-start" offset={2} middlewares={fitted} classNames={{ dropdown: 'ui-menu ui-menu-scroll' }} aria-label={label}>
+      <Menu.Target>
+        <span className="ui-point-menu" style={{ left: at[0], top: at[1] }} />
+      </Menu.Target>
+      <Menu.Dropdown>{menuItems(entries)}</Menu.Dropdown>
+    </Menu>
+  );
+}
+
+function menuItems(entries: MenuEntry[]): ReactNode {
+  return entries.map((entry, i) =>
+    'section' in entry ? (
+      <Menu.Label key={`section-${i}`}>{entry.section}</Menu.Label>
+    ) : 'entries' in entry ? (
+      // (at the side with the room for it: the left, near the right edge
+      // of the window)
+      <Menu.Sub key={`sub-${entry.label}-${i}`} middlewares={{ flip: true, shift: true }}>
+        <Menu.Sub.Target>
+          <Menu.Sub.Item>{entry.label}</Menu.Sub.Item>
+        </Menu.Sub.Target>
+        <Menu.Sub.Dropdown className="ui-menu ui-menu-scroll">{menuItems(entry.entries)}</Menu.Sub.Dropdown>
+      </Menu.Sub>
+    ) : (
+      <Menu.Item key={`${entry.label}-${i}`} onClick={entry.onClick} disabled={entry.disabled} rightSection={entry.picture} data-current={entry.current || undefined}>
+        {entry.label}
+        {entry.description && <div className="ui-menu-description">{entry.description}</div>}
+      </Menu.Item>
+    ),
+  );
+}
+
+type Action = Extract<MenuEntry, { onClick: () => void }>;
 
 // A menu of many items, with a field at its top that finds them (by their
 // labels and what they are): typed in as it opens, the arrow keys move
@@ -131,7 +169,8 @@ function SearchMenu({
   const groups: { section: string | null; items: number[] }[] = [];
   for (const entry of entries) {
     if ('section' in entry) groups.push({ section: entry.section, items: [] });
-    else {
+    // (submenus come flat, see DropMenu)
+    else if ('onClick' in entry) {
       if (groups.length === 0) groups.push({ section: null, items: [] });
       groups[groups.length - 1].items.push(actions.push(entry) - 1);
     }

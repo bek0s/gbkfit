@@ -34,7 +34,7 @@ from gbkfit.observation import ObservationGroup, observation_parser
 from gbkfit.params import ParamSpace
 
 from .errors import Invalid
-from .views import Cube, cube_range
+from .views import Cube
 from .workspace import Workspace
 
 
@@ -233,7 +233,7 @@ class Renders:
             raise Invalid(error_message(e)) from e
         cube_values = np.array(data['spectra']['d'], dtype=np.float32)
         velocities = low + width * np.arange(nchannels)
-        return Cube(cube_values, velocities, 'km/s', cube_range(cube_values))
+        return Cube.of(cube_values, velocities, 'km/s')
 
     def observed(
             self,

@@ -21,8 +21,7 @@ import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { useUnsaved } from '../editing';
 import { Files } from './Files';
-import { HeaderFacts } from './Header';
-import { requestKey, useDraftState, useErrorGuess, usePrepJob, useResolved, type DraftState } from './hooks';
+import { requestKey, useDraftState, usePrepJob, useResolved, type DraftState } from './hooks';
 import { MadeFrom, originalsOf, preparedFilesOf } from './MadeFrom';
 import {
   dataFiles,
@@ -43,7 +42,6 @@ import {
   presentSlots,
   preparedOptions,
   prepRequest,
-  restOf,
   suggestName,
   type Draft,
   type Kind,
@@ -64,7 +62,6 @@ const PLACES: Record<Place, string> = {
   files: 'ds-files',
   spectral: 'ds-spectral',
   prepare: 'ds-prepare',
-  header: 'ds-header',
 };
 
 const NO_SELECTION: Selection = { region: null, band: null };
@@ -162,7 +159,6 @@ export function Dataset({ name }: { name: string }) {
     const canRedo = record !== null && originals.every((path) => !describeOriginals(path).error);
     setEditing(canRedo ? draftOfPreparation(kind, options, record, root) : draft);
   };
-  const first = firstArray(resolved);
   return (
     <section className="screen ds-screen">
       <div className="screen-head">
@@ -194,9 +190,6 @@ export function Dataset({ name }: { name: string }) {
                 <SpectralFields resolved={resolved} />
               </DockSection>
             )}
-            <DockSection id={PLACES.header} title="Header">
-              <HeaderFacts array={first} rest={restOf(draft.spectral)} waiting />
-            </DockSection>
           </Dock>
         </div>
       )}
@@ -285,7 +278,6 @@ interface Editor {
 function useEditor(project: string, kind: Kind, initial: Draft): Editor {
   const state = useDraftState(initial);
   const resolved = useResolved(kind, state.draft);
-  useErrorGuess(resolved, state);
   const needs = needsOf(resolved);
   const request = needs.length === 0 && needsPrep(resolved) ? prepRequest(resolved, project) : null;
   const preview = usePrepJob();
@@ -441,9 +433,6 @@ function EditorBody({ project, editor, dataset }: { project: string; editor: Edi
             <PreviewBar editor={editor} onShow={() => setShowing('prepared')} />
           </DockSection>
         )}
-        <DockSection id={PLACES.header} title="Header" needed={places.has('header')}>
-          <HeaderFacts array={first} rest={restOf(draft.spectral)} waiting={keys.some((key) => draft.items[key].files.data !== undefined)} />
-        </DockSection>
         {dataset && <p className="ds-dock-note">Saving prepares new copies from the originals; the copies of the last preparation that are no longer used go.</p>}
       </Dock>
     </div>

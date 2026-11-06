@@ -476,7 +476,7 @@
     "/api/v1/describe/{path}": {
       "get": {
         "summary": "Describe",
-        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given;\nvelocity is the convention of velocities that its headers leave\nambiguous, and rest the rest of its spectral axis (e.g. '6562.8\nAngstrom'), which makes wavelengths or frequencies velocities, as a\ndataset with that rest reads them (see ArrayInfo).",
+        "description": "Describe a file of data from its headers, without reading its data:\neach of its arrays, and what a dataset of it refuses or needs given;\nvelocity is the convention of velocities that its headers leave\nambiguous, rest the rest of its spectral axis (e.g. '6562.8\nAngstrom'), which makes wavelengths or frequencies velocities, as a\ndataset with that rest reads them, and spectral_type what a spectral\naxis whose header gives a type FITS does not define is (e.g. 'AWAV';\nsee ArrayInfo).",
         "operationId": "describe_api_v1_describe__path__get",
         "parameters": [
           {
@@ -523,6 +523,31 @@
               ],
               "title": "Rest"
             }
+          },
+          {
+            "name": "spectral_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "WAVE",
+                    "AWAV",
+                    "WAVE-LOG",
+                    "AWAV-LOG",
+                    "FREQ",
+                    "VRAD",
+                    "VOPT"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Type"
+            }
           }
         ],
         "responses": {
@@ -536,6 +561,56 @@
                     "$ref": "#/components/schemas/ArrayInfo"
                   },
                   "title": "Response Describe Api V1 Describe  Path  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/header/{path}": {
+      "get": {
+        "summary": "Header",
+        "description": "Return the header of an array (an HDU) of a file of data, as it is in\nthe file (one header per HDU: the data and the errors of one file have\neach their own).",
+        "operationId": "header_api_v1_header__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "hdu",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Hdu"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeaderInfo"
                 }
               }
             }
@@ -1075,7 +1150,7 @@
     "/api/v1/lines": {
       "get": {
         "summary": "Catalogue Lines",
-        "description": "Return the emission lines of the catalogue of GBKFIT ({name, rest}, the\nrest as text, e.g. '6564.61 Angstrom'), which emissions name.",
+        "description": "Return the emission lines of the catalogue of GBKFIT, which emissions\nname and a spectral axis of wavelengths or frequencies takes the rest\nof (in vacuum or in air, as its type says).",
         "operationId": "catalogue_lines_api_v1_lines_get",
         "responses": {
           "200": {
@@ -1084,10 +1159,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "type": "object"
+                    "$ref": "#/components/schemas/CatalogueLine"
                   },
                   "type": "array",
                   "title": "Response Catalogue Lines Api V1 Lines Get"
@@ -2059,6 +2131,33 @@
             },
             "type": "array",
             "title": "Problems"
+          },
+          "holds": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "sigma",
+                  "variance",
+                  "inverse_variance"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holds"
+          },
+          "nonstandard_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nonstandard Type"
           }
         },
         "type": "object",
@@ -2075,7 +2174,62 @@
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), and what a dataset of it refuses or needs given."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), what a dataset of it refuses or needs given, and\nwhat its values are as errors, if its header states it ('sigma',\n'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),\nand the type its header gives a spectral axis that FITS does not\ndefine (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see\ngbkfit's HDUDescription.nonstandard_type)."
+      },
+      "CatalogueLine": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "rest": {
+            "type": "string",
+            "title": "Rest"
+          },
+          "wavelength": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wavelength"
+          },
+          "air": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Air"
+          },
+          "frequency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frequency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "rest",
+          "wavelength",
+          "air",
+          "frequency"
+        ],
+        "title": "CatalogueLine",
+        "description": "An emission line of the catalogue of GBKFIT (see its LineCatalogue):\nits name, its rest as text (e.g. '6564.61 Angstrom', in vacuum), and\nas a number: its rest wavelength in vacuum (m) and in air (m; above\n2000 Angstrom, where air wavelengths are used), or its rest frequency\n(Hz), as the catalogue gives it."
       },
       "CheckRequest": {
         "properties": {
@@ -2353,6 +2507,23 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HeaderInfo": {
+        "properties": {
+          "cards": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Cards"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cards"
+        ],
+        "title": "HeaderInfo",
+        "description": "The header of an array (an HDU) of a file of data, as it is in the\nfile: its cards, as lines of text."
       },
       "ImportRequest": {
         "properties": {

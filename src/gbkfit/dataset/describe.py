@@ -15,8 +15,9 @@ import astropy.wcs
 
 from gbkfit.grid import Coords
 from gbkfit.io import (
-    centre_missing_crpix, header_shape, model_axis_order, read_beam,
-    read_coords, read_unit, velocity_is_ambiguous)
+    centre_missing_crpix, coords_from_header, header_beam, header_shape,
+    header_unit, model_axis_order, model_header, nonstandard_spectral_axis,
+    velocity_is_ambiguous)
 from gbkfit.utils import unitutils
 from .data import Beam
 
@@ -30,6 +31,12 @@ __all__ = [
 # The keywords of headers that state the noise of the values (see
 # HDUDescription.rms), in order
 _RMS_KEYS = ('RMS', 'NOISE')
+
+# What an HDU of errors holds, as its header states it in the classes of
+# HDUs of ESO's science data products (e.g. MUSE, and MaNGA): HDUCLAS2 =
+# 'ERROR', and HDUCLAS3 one of these (see HDUDescription.holds)
+_ERROR_CLASSES = dict(
+    RMSE='sigma', MSE='variance', INVMSE='inverse_variance')
 
 
 @dataclasses.dataclass(frozen=True)
@@ -73,6 +80,17 @@ class HDUDescription:
         What a dataset of it refuses or needs given (e.g. the convention
         of velocities that the header does not state, or the beam of a
         unit per beam).
+    holds : str or None
+        What its values are, as errors, if its header states it (HDUCLAS2
+        = 'ERROR', and HDUCLAS3 'RMSE', 'MSE' or 'INVMSE'): 'sigma'
+        (standard deviations), 'variance' or 'inverse_variance' (the
+        error_kind of a dataset); None if it does not.
+    nonstandard_type : str or None
+        The type its header gives an axis that FITS does not define (e.g.
+        'WAVELENGTH', as CALIFA writes the spectral axis of its cubes; see
+        nonstandard_spectral_axis), if it does: a dataset of it gives what the axis
+        is (its spectral type), and so does a description of it; until
+        then, its coordinates cannot be read (one of its problems).
     """
     index: int
     name: str
@@ -84,10 +102,13 @@ class HDUDescription:
     rms: float | None
     ambiguous_velocity: bool
     problems: tuple[str, ...]
+    holds: str | None = None
+    nonstandard_type: str | None = None
 
 
 def describe_fits(
-        filename: str, velocity: str | None = None, rest: Any = None
+        filename: str, velocity: str | None = None, rest: Any = None,
+        spectral_type: str | None = None
 ) -> list[HDUDescription]:
     """
     Describe the HDUs of a FITS file that hold an array (e.g. data, their
@@ -105,6 +126,9 @@ def describe_fits(
         The rest of their spectral axes (e.g. '6562.8 Angstrom'), which
         turns axes of wavelengths or frequencies into velocities, as a
         dataset with that rest reads them (see read_coords).
+    spectral_type : str, optional
+        What an axis whose header gives it a type FITS does not define
+        is (see HDUDescription.nonstandard_type, and with_spectral_type).
 
     Returns
     -------
@@ -117,13 +141,18 @@ def describe_fits(
     OSError
         If the file cannot be read as a FITS file.
     """
+    # (the file is read once: its headers are described as they are read,
+    # each of its HDUs then in memory; a compressed file is read from its
+    # start each time it is opened)
     with astropy.io.fits.open(filename) as hdus:
         headers = [
             (index, hdu.name, hdu.header.copy())
             for index, hdu in enumerate(hdus)
             if hdu.is_image and hdu.header.get('NAXIS', 0) > 0]
+        beams = 'BEAMS' in hdus
     return [
-        _describe(filename, *header, velocity, rest) for header in headers]
+        _describe(filename, *header, velocity, rest, spectral_type, beams)
+        for header in headers]
 
 
 def _describe(
@@ -132,9 +161,15 @@ def _describe(
         name: str,
         header: astropy.io.fits.Header,
         velocity: str | None,
-        rest: Any
+        rest: Any,
+        spectral_type: str | None,
+        beams: bool
 ) -> HDUDescription:
-    """Return the description of an HDU of a FITS file with an array."""
+    """
+    Return the description of an HDU of a FITS file with an array, from
+    its header (and the table of the beams of the file, if it has one:
+    beams), as read_coords, read_unit and read_beam read them.
+    """
     problems = []
     order = _model_order(header)
     # (world axes beyond those of the array are of length 1, see
@@ -148,13 +183,16 @@ def _describe(
     coords = None
     if not ambiguous or velocity is not None:
         try:
-            coords = read_coords(filename, index, velocity, rest)
+            model, _ = model_header(
+                filename, header, header_shape(header), rest, velocity,
+                spectral_type)
+            coords = coords_from_header(filename, model)
         except ValueError as e:
             problems.append(str(e))
-    unit = read_unit(filename, index)
+    unit = header_unit(header)
     beam = None
     try:
-        options = read_beam(filename, index)
+        options = header_beam(header, filename if beams else None)
         beam = None if options is None else Beam(**options)
     except ValueError as e:
         problems.append(str(e))
@@ -174,11 +212,17 @@ def _describe(
         (float(header[key]) for key in _RMS_KEYS
          if isinstance(header.get(key), (int, float))
          and not isinstance(header.get(key), bool)), None)
+    holds = None
+    if str(header.get('HDUCLAS2', '')).strip().upper() == 'ERROR':
+        holds = _ERROR_CLASSES.get(
+            str(header.get('HDUCLAS3', '')).strip().upper())
+    nonstandard = nonstandard_spectral_axis(header, header_shape(header))
     return HDUDescription(
         index=index, name=name, shape=shape, axes=axes, unit=unit,
         beam=beam, coords=coords, rms=rms,
         ambiguous_velocity=ambiguous,
-        problems=tuple(problems))
+        problems=tuple(problems), holds=holds,
+        nonstandard_type=None if nonstandard is None else nonstandard[1])
 
 
 def _model_order(header: astropy.io.fits.Header) -> tuple[int, ...]:

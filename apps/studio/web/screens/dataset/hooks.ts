@@ -1,13 +1,12 @@
 // The hooks of the dataset screen: a draft resolved against the server's
 // descriptions of its files, the state of a draft as the user edits it,
 // and a job of prep that the screen follows.
-import { useEffect, useRef, useState } from 'react';
+import { useDebouncedValue } from '@mantine/hooks';
+import { useState } from 'react';
 import { useDescriptions, useJob, useSubmitJob } from '../../api/queries';
 import {
   arraysOf,
-  errorSibling,
   KINDS,
-  NO_ARRAYS,
   restOf,
   type Draft,
   type Edits,
@@ -20,14 +19,19 @@ import {
 
 // A draft with the arrays of the files of its items, as the server
 // describes them: with the convention of velocities given, and the rest
-// of the spectral axis of a cube
+// of the spectral axis of a cube (as it is typed: once it has stood a
+// while, not at each key, which would read the files again at each)
 export function useResolved(kind: Kind, draft: Draft): Resolved {
   const items = Object.values(draft.items);
   const paths = items.flatMap((item) => Object.values(item.files).map((file) => file.file));
-  const describe = useDescriptions(paths, draft.spectral.convention, kind === 'cube' ? restOf(draft.spectral) : null);
+  const [rest] = useDebouncedValue(kind === 'cube' ? restOf(draft.spectral) : null, TYPED_MS);
+  const describe = useDescriptions(paths, draft.spectral.convention, rest, kind === 'cube' ? draft.spectral.type : null);
   const arrays = Object.fromEntries(Object.entries(draft.items).map(([key, item]) => [key, arraysOf(item, describe, KINDS[kind].ndim)]));
   return { kind, draft, arrays };
 }
+
+// (how long a value typed stands before it is used, ms)
+const TYPED_MS = 600;
 
 export interface DraftState {
   draft: Draft;
@@ -59,36 +63,6 @@ export function useDraftState(initial: Draft): DraftState {
     setEdits: (edits) => setDraft((now) => ({ ...now, edits })),
     reset: setDraft,
   };
-}
-
-// Gives the errors of an item an array of the file of its data named as
-// its errors (e.g. STAT of a cube of MUSE, MOM1_ERR of MOM1), once for
-// each array of data; errors removed or chosen stay so, and those guessed
-// follow the data to another array
-export function useErrorGuess({ draft, arrays }: Resolved, state: DraftState) {
-  const guessed = useRef<Record<string, { at: string; error: string | number | null }>>({});
-  useEffect(() => {
-    for (const [key, item] of Object.entries(draft.items)) {
-      const data = item.files.data;
-      const array = (arrays[key] ?? NO_ARRAYS).found.data;
-      if (data === undefined || array === undefined) continue;
-      const at = `${data.file}:${array.index}`;
-      const last = guessed.current[key];
-      if (last?.at === at) continue;
-      const error = item.files.error;
-      const ours = error === undefined ? last === undefined || last.error === null : error.file === data.file && error.array === last?.error;
-      if (!ours || item.errorValue !== null) {
-        guessed.current[key] = { at, error: null };
-        continue;
-      }
-      const next = errorSibling(arrays[key]) ?? null;
-      guessed.current[key] = { at, error: next };
-      const files = { ...item.files };
-      if (next === null) delete files.error;
-      else files.error = { file: data.file, array: next };
-      if (next !== null || error !== undefined) state.setItem(key, { ...item, files, errorKind: null });
-    }
-  });
 }
 
 // A job of prep that the screen starts and follows: the request it ran

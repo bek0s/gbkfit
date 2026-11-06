@@ -237,6 +237,16 @@ export function CubeViewer({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onBand]);
+  // (a channel shown, as the spectrum picks it: its map)
+  const showChannel = (picked: number) => {
+    setChannel(picked);
+    setView('channel');
+  };
+  // (all the channels, and the range of their values: autoscale)
+  const showWholeSpectrum = () => {
+    setSpectrumZoom(null);
+    setAutoscale(true);
+  };
   // Zoom the spectrum about a channel by a factor, keeping it where it is;
   // out to all the channels, the window is none
   const zoomSpectrum = (at: number, factor: number) => {
@@ -324,9 +334,8 @@ export function CubeViewer({
           {shown === 'channel' ? (
             // (the channel shown: set on the spectrum, or stepped by the
             // arrow keys)
-            <div className="viewer-controls viewer-controls-row" title="A click on the spectrum shows its channel; ← and → step through them">
+            <div className="viewer-controls viewer-controls-row" title="The grip of the line on the spectrum drags the channel; a click on the spectrum shows its channel; ← and → step through them">
               <span className="control-text">Channel {channelText(channel)}</span>
-              <span className="viewer-channel-hint">click the spectrum · ← →</span>
             </div>
           ) : (
             // (the value at the side, not on the handle, which would cover
@@ -405,10 +414,7 @@ export function CubeViewer({
               <IconButton
                 label="The whole spectrum, and its values"
                 disabled={spectrumZoom === null && autoscale}
-                onClick={() => {
-                  setSpectrumZoom(null);
-                  setAutoscale(true);
-                }}
+                onClick={showWholeSpectrum}
               >
                 <ZoomWholeIcon />
               </IconButton>
@@ -423,10 +429,24 @@ export function CubeViewer({
               channel={channel}
               band={band}
               marked={cropChannels}
-              onPick={(picked) => {
-                setChannel(picked);
-                setView('channel');
+              onPick={showChannel}
+              onScrub={showChannel}
+              onReveal={(c) => {
+                // (the window moved to have it in its middle, as wide)
+                if (spectrumZoom === null) return;
+                const n = spectrumZoom[1] - spectrumZoom[0] + 1;
+                const first = Math.min(nchannels - n, Math.max(0, c - Math.floor(n / 2)));
+                setSpectrumZoom([first, first + n - 1]);
               }}
+              menu={(at) => [
+                ...(band ? [{ label: 'Zoom to the selected channels', onClick: () => setSpectrumZoom(band) }] : []),
+                ...(spectrumZoom
+                  ? [
+                      { label: 'Zoom out', onClick: () => zoomSpectrum(at, 0.5) },
+                      { label: 'The whole spectrum', onClick: showWholeSpectrum },
+                    ]
+                  : []),
+              ]}
               onBand={onBand}
               window={spectrumZoom}
               limits={autoscale ? null : typedRange}

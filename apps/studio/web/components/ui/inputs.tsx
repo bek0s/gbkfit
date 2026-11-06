@@ -13,18 +13,23 @@ export function Choice({
   onChange,
   label,
   title,
+  placeholder,
 }: {
   items: { value: string; label: string; disabled?: boolean; description?: string }[];
+  // (none of the items: the placeholder shows)
   value: string;
   onChange: (value: string) => void;
   label: string;
   title?: string;
+  placeholder?: string;
 }) {
   const described = new Map(items.map((item) => [item.value, item.description]));
   return (
     <Select
       data={items.map(({ value, label, disabled }) => ({ value, label, disabled }))}
-      value={value}
+      // (null for a value of none of the items: Mantine would keep showing
+      // the item chosen before)
+      value={items.some((item) => item.value === value) ? value : null}
       onChange={(next) => next !== null && onChange(next)}
       allowDeselect={false}
       checkIconPosition="right"
@@ -43,6 +48,7 @@ export function Choice({
       }}
       aria-label={label}
       title={title}
+      placeholder={placeholder}
       size="xs"
       className="ui-choice"
       classNames={{ dropdown: 'ui-menu ui-choice-dropdown' }}

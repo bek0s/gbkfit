@@ -8,6 +8,7 @@ import type { components, paths } from './schema';
 export type ProjectInfo = components['schemas']['ProjectInfo'];
 export type Job = components['schemas']['JobInfo'];
 export type ArrayInfo = components['schemas']['ArrayInfo'];
+export type CatalogueLine = components['schemas']['CatalogueLine'];
 
 const TOKEN_KEY = 'gbkfit-token';
 let token = '';

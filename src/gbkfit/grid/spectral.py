@@ -24,6 +24,7 @@ if typing.TYPE_CHECKING:
 __all__ = [
     'CONVENTIONS',
     'FRAMES',
+    'SPECTRAL_TYPES',
     'SpectralAxis',
     'VelocityConvention',
     'air_refractive_index',
@@ -55,8 +56,18 @@ FRAMES = (
     'TOPOCENT', 'GEOCENTR', 'BARYCENT', 'HELIOCEN', 'LSRK', 'LSRD',
     'GALACTOC', 'LOCALGRP', 'CMBDIPOL', 'SOURCE')
 
+# The types (FITS 4.0, Table 25, and WCS Paper III) that the spectral
+# axis of data whose header gives it a type FITS does not define (e.g.
+# CTYPE3 = 'WAVELENGTH') is read as (see SpectralAxis, and
+# gbkfit.io.with_spectral_type): linear wavelengths in vacuum or in air,
+# logarithmic wavelengths in vacuum or in air, frequencies, and radio or
+# optical velocities
+SPECTRAL_TYPES = (
+    'WAVE', 'AWAV', 'WAVE-LOG', 'AWAV-LOG', 'FREQ', 'VRAD', 'VOPT')
+
 # The options of a spectral axis: the convention of its velocities, the
-# medium of its wavelengths and its frame of rest (see SpectralAxis)
+# medium of its wavelengths, its frame of rest and its type (see
+# SpectralAxis)
 _Convention: TypeAlias = Annotated[Literal[CONVENTIONS], Choices(
     optical='Optical', log='Logarithmic (as pPXF)', radio='Radio',
     relativistic='Relativistic')]
@@ -68,6 +79,12 @@ _Frame: TypeAlias = Annotated[Literal[FRAMES], Choices(
     LSRK='Kinematic LSR (LSRK)', LSRD='Dynamical LSR (LSRD)',
     GALACTOC='Galactocentric', LOCALGRP='Local Group',
     CMBDIPOL='CMB dipole', SOURCE='Rest frame of the source')]
+_Type: TypeAlias = Annotated[Literal[SPECTRAL_TYPES], Choices({
+    'WAVE': 'Wavelengths in vacuum', 'AWAV': 'Wavelengths in air',
+    'WAVE-LOG': 'Logarithmic wavelengths in vacuum',
+    'AWAV-LOG': 'Logarithmic wavelengths in air',
+    'FREQ': 'Frequencies', 'VRAD': 'Radio velocities',
+    'VOPT': 'Optical velocities'})]
 
 
 def check_convention(spectral: 'SpectralAxis') -> None:
@@ -458,12 +475,20 @@ class SpectralAxis(Serializable):
         velocities of one galaxy in two frames differ (by up to some 30
         km/s), which a joint fit of them must know (see
         ObservationGroup).
+    type : str, optional
+        What the spectral axis of data is (see SPECTRAL_TYPES: e.g.
+        'AWAV', linear wavelengths in air), where their header gives it a
+        type that FITS does not define (e.g. CTYPE3 = 'WAVELENGTH', as
+        CALIFA writes): such a header does not say what its values are,
+        and data of one are not read without it (see
+        gbkfit.io.with_spectral_type).
 
     Raises
     ------
     ValueError
         If size is not a positive integer, step is not positive, or the
-        rest, the medium, the convention or the frame is not valid.
+        rest, the medium, the convention, the frame or the type is not
+        valid.
     """
 
     @classmethod
@@ -481,7 +506,7 @@ class SpectralAxis(Serializable):
             size=self._size, step=self._step, rpix=self._rpix,
             rval=self._rval, convention=self._convention,
             rest=None if self._rest is None else str(self._rest),
-            medium=self._medium, frame=self._frame)
+            medium=self._medium, frame=self._frame, type=self._type)
         return {k: v for k, v in options.items() if v is not None}
 
     def __init__(
@@ -493,7 +518,8 @@ class SpectralAxis(Serializable):
             convention: _Convention | None = None,
             rest: str | astropy.units.Quantity | None = None,
             medium: _Medium | None = None,
-            frame: _Frame | None = None
+            frame: _Frame | None = None,
+            type: _Type | None = None
     ):
         check_options(SpectralAxis.__init__, locals())
         self._rest = make_rest(rest)
@@ -506,6 +532,7 @@ class SpectralAxis(Serializable):
         self._convention = convention
         self._medium = medium
         self._frame = frame
+        self._type = type
 
     def size(self) -> int | None:
         """Return the number of channels, if given."""
@@ -538,6 +565,13 @@ class SpectralAxis(Serializable):
     def frame(self) -> str | None:
         """Return the frame of rest of the velocities, if given."""
         return self._frame
+
+    def type(self) -> str | None:
+        """
+        Return what the spectral axis of data is, where their header does
+        not say (see SPECTRAL_TYPES), if given.
+        """
+        return self._type
 
     def given(self) -> tuple[str, ...]:
         """Return the names of its options that are given."""
