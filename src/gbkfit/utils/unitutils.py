@@ -195,19 +195,18 @@ def _product(text: str) -> astropy.units.UnitBase:
 
 def _quotient(term: str) -> astropy.units.UnitBase:
     """
-    Return the unit of a term of parts separated by '/', each dividing all
-    before it (e.g. 'erg/s/cm2' is erg / (s cm2)). Raise ValueError if a
-    part is empty or not a unit.
+    Return the unit of a term of parts separated by '/': the first divided
+    by each of the others (e.g. 'erg/s/cm2' is erg / (s cm2)). Raise
+    ValueError if a part is not a unit, or if nothing follows a '/'.
 
     The parts are read one at a time because astropy warns of a text with
     several '/' (the FITS standard discourages them), and silencing that
     warning here would silence it in every other thread too.
     """
     first, *divisors = term.split('/')
-    if not first and not divisors or '' in divisors:
-        raise ValueError(f"{term!r} has an empty part")
-    unit = astropy.units.Unit(first) if first else (
-        astropy.units.dimensionless_unscaled)
+    if '' in divisors:
+        raise ValueError(f"{term!r} has nothing after a '/'")
+    unit = astropy.units.Unit(first)
     for divisor in divisors:
         unit = unit / astropy.units.Unit(divisor)
     return unit
