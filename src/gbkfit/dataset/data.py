@@ -296,8 +296,12 @@ class Data:
         error : str or tuple or float, optional
             The file of the errors, or one error (a standard deviation)
             for all the values.
-        rpix, rval, spectral_axis, medium : optional
+        rpix, rval, spectral_axis : optional
             Passed to coords_from_header.
+        medium : str, optional
+            The medium of the wavelengths of the spectral axis and of the
+            rest, if the header does not state it (see read_arrays and
+            coords_from_header).
         rest : str or Quantity, optional
             The rest of the spectral axis, which turns one of wavelengths
             or frequencies into velocities (see model_header).
@@ -353,7 +357,7 @@ class Data:
         arrays = read_arrays(
             data, error_file, mask, error_kind=error_kind, unit=unit,
             rest=rest, velocity=velocity, footprint=footprint,
-            spectral_type=spectral_type)
+            spectral_type=spectral_type, medium=medium)
         filename = data if isinstance(data, str) else data[0]
         coords = coords_from_header(
             filename, arrays.header, rpix, rval, spectral_axis, medium, rest)

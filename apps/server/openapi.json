@@ -631,7 +631,7 @@
     "/api/v1/views/channel/{path}": {
       "get": {
         "summary": "View Channel",
-        "description": "Return a channel of a cube (an array of a file of data, in the\norientation of the model) as a frame of one array (ny, nx), with the\nnumber of channels of the cube, the coordinate of the channel along\nthe spectral axis and its unit (null if unknown; see SpectrumView),\nand the range of the values of the cube for colours.",
+        "description": "Return a channel of a cube (an array of a file of data, in the\norientation of the model) as a frame of one array (ny, nx), with the\nnumber of channels of the cube, the coordinate of the channel along\nthe spectral axis and its unit (null if unknown; see SpectrumView),\nthe range of the values of the cube for colours, and the least and\nthe greatest of its values (extent; null if it has none).",
         "operationId": "view_channel_api_v1_views_channel__path__get",
         "parameters": [
           {

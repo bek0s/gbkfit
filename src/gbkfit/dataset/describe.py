@@ -6,7 +6,6 @@ a dataset of it.
 """
 
 import dataclasses
-import warnings
 from typing import Any
 
 import astropy.io.fits
@@ -16,8 +15,8 @@ import astropy.wcs
 from gbkfit.grid import Coords
 from gbkfit.io import (
     centre_missing_crpix, coords_from_header, header_beam, header_shape,
-    header_unit, model_axis_order, model_header, nonstandard_spectral_axis,
-    velocity_is_ambiguous)
+    header_unit, ignoring_wcs_fixes, model_axis_order, model_header,
+    nonstandard_spectral_axis, velocity_is_ambiguous)
 from gbkfit.utils import unitutils
 from .data import Beam
 
@@ -88,9 +87,9 @@ class HDUDescription:
     nonstandard_type : str or None
         The type its header gives an axis that FITS does not define (e.g.
         'WAVELENGTH', as CALIFA writes the spectral axis of its cubes; see
-        nonstandard_spectral_axis), if it does: a dataset of it gives what the axis
-        is (its spectral type), and so does a description of it; until
-        then, its coordinates cannot be read (one of its problems).
+        nonstandard_spectral_axis), if it does: a dataset of it gives what
+        the axis is (its spectral type), and so does a description of it;
+        until then, its coordinates cannot be read (one of its problems).
     """
     index: int
     name: str
@@ -121,7 +120,7 @@ def describe_fits(
         The name of the file.
     velocity : str, optional
         The convention of the velocities of spectral axes that the headers
-        leave ambiguous (see read_data): 'radio' or 'optical'.
+        leave ambiguous (see model_header): 'radio' or 'optical'.
     rest : str or Quantity, optional
         The rest of their spectral axes (e.g. '6562.8 Angstrom'), which
         turns axes of wavelengths or frequencies into velocities, as a
@@ -234,8 +233,7 @@ def _model_order(header: astropy.io.fits.Header) -> tuple[int, ...]:
     shape = header_shape(header)
     try:
         # (the fixes of astropy to the header are for the coords)
-        with warnings.catch_warnings():
-            warnings.simplefilter('ignore', astropy.wcs.FITSFixedWarning)
+        with ignoring_wcs_fixes():
             wcs = astropy.wcs.WCS(
                 centre_missing_crpix(header, shape))
     except Exception:

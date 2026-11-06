@@ -10,9 +10,11 @@ import astropy.wcs
 import numpy as np
 import pytest
 
-from gbkfit.grid import Coords, Grid, make_convention, make_grid, make_rest
+from gbkfit.grid import (
+    Coords, Grid, air_refractive_index, make_convention, make_grid, make_rest)
 from gbkfit.io import (
-    centre_missing_crpix, read_array, read_data, read_hdu, write_data)
+    centre_missing_crpix, model_header, read_array, read_arrays,
+    read_coords, read_data, read_hdu, read_unit, write_data)
 
 
 def position_angle(header, pixel_from, pixel_to):
@@ -300,13 +302,15 @@ def test_a_position_axis_in_degrees_is_in_arcsec():
 
 
 def test_hdu_without_data():
-    # e.g. the empty primary HDU of JWST data: a clear error, not a crash
+    # e.g. the empty primary HDU of JWST data: asked for, a clear error, not
+    # a crash; by default, the first HDU with data is read
     fits.HDUList([
         fits.PrimaryHDU(),
         fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
     ]).writeto('data.fits')
     with pytest.raises(ValueError, match="HDU 0 has no data"):
-        read_data('data.fits')
+        read_data('data.fits', 0)
+    assert read_data('data.fits')[0].shape == (20, 24)
 
 
 def test_grid_zero_and_spatial_axes():
@@ -417,15 +421,21 @@ def test_rest_round_trip(rest, convention, ctype, keyword):
 
 @pytest.mark.parametrize('ctype, keywords, medium, expected', [
     # The wavelengths of optical velocities are in vacuum (FITS), or in the
-    # medium of AIRORVAC, or in that given; a rest frequency has none
+    # medium of AIRORVAC, or else in that given (one that AIRORVAC
+    # contradicts is refused); a rest frequency has none
     ('VOPT', dict(RESTWAV=6.5628e-7), None, 'vacuum'),
     ('VOPT', dict(RESTWAV=6.5628e-7, AIRORVAC='air'), None, 'air'),
-    ('VOPT', dict(RESTWAV=6.5628e-7, AIRORVAC='air'), 'vacuum', 'vacuum'),
+    ('VOPT', dict(RESTWAV=6.5628e-7, AIRORVAC='air'), 'air', 'air'),
+    ('VOPT', dict(RESTWAV=6.5628e-7, AIRORVAC='air'), 'vacuum', ValueError),
     ('VOPT', dict(RESTWAV=6.5628e-7), 'air', 'air'),
     ('VRAD', dict(RESTFRQ=1.420405752e9, AIRORVAC='air'), None, None)])
 def test_medium_of_the_wavelengths(ctype, keywords, medium, expected):
     fits.writeto('data.fits', np.zeros((6, 20, 24), np.float32),
                  fits.Header(_spectral_header(ctype, **keywords)))
+    if expected is ValueError:
+        with pytest.raises(ValueError, match="not the one the header"):
+            read_data('data.fits', medium=medium)
+        return
     coords = read_data('data.fits', medium=medium)[1]
     assert coords.medium == expected
 
@@ -483,3 +493,302 @@ def test_read_array_of_maps_cubes_and_stale_axes(tmp_path):
     fits.writeto(tmp_path / 'cube.fits', np.ones((5, 3, 4)), stale)
     data, wcs = read_array(str(tmp_path / 'cube.fits'))
     assert data.shape == (5, 3, 4) and wcs.naxis == 3
+
+
+# A field on the sky of 24 x 20 pixels of 10 arcsec, east to the left
+SKY = dict(
+    CTYPE1='RA---TAN', CRVAL1=150.0, CRPIX1=12.5, CDELT1=-10 / 3600,
+    CUNIT1='deg', CTYPE2='DEC--TAN', CRVAL2=2.0, CRPIX2=10.5,
+    CDELT2=10 / 3600, CUNIT2='deg')
+
+
+def write_map(path, header, shape=(20, 24)):
+    fits.writeto(path, np.zeros(shape, np.float32), fits.Header(header))
+    return str(path)
+
+
+@pytest.mark.parametrize('frame', [
+    dict(RADESYS='FK4', EQUINOX=1950.0),
+    dict(CTYPE1='GLON-TAN', CRVAL1=120.0, CTYPE2='GLAT-TAN', CRVAL2=30.0)])
+def test_a_given_reference_value_is_of_icrs_whatever_the_frame(
+        tmp_path, frame):
+    # The position of ICRS of a pixel, given as the reference value, puts
+    # the reference pixel at that pixel, and stays as given, whatever the
+    # frame of the header
+    header = SKY | frame
+    path = write_map(tmp_path / 'map.fits', header)
+    sky = astropy.wcs.WCS(fits.Header(header)).pixel_to_world(6, 4).icrs
+    coords = read_data(path, rval=[sky.ra.deg, sky.dec.deg])[1]
+    np.testing.assert_allclose(coords.rpix, [6, 4], atol=1e-6)
+    np.testing.assert_allclose(
+        coords.rval, [sky.ra.deg, sky.dec.deg], rtol=0, atol=1e-10)
+
+
+def test_rota_is_that_of_the_reference_pixel(tmp_path):
+    # At Dec 60, the +y axis of a grid whose north is up at its CRPIX turns
+    # away from north 200 pixels east of it: the rotation is that at the
+    # reference pixel given, as the position angle on the sky says
+    header = SKY | dict(CRVAL2=60.0, CRPIX1=1, CRPIX2=1)
+    path = write_map(tmp_path / 'map.fits', header, shape=(20, 240))
+    expected = position_angle(fits.Header(header), (200, 0), (200, 1))
+    assert not same_angle(expected, 0, tolerance=0.5)
+    assert same_angle(
+        read_data(path, rpix=[200, 0])[1].rota, expected, tolerance=1e-3)
+    assert same_angle(read_data(path)[1].rota, 0)
+
+
+def test_rota_follows_lonpole(tmp_path):
+    # A zenithal projection of LONPOLE 170 turns the grid by 10 degrees
+    header = SKY | dict(LONPOLE=170.0)
+    path = write_map(tmp_path / 'map.fits', header)
+    expected = position_angle(fits.Header(header), (11.5, 9.5), (11.5, 10.5))
+    assert same_angle(expected, -10, tolerance=1e-3)
+    assert same_angle(read_data(path)[1].rota, expected, tolerance=1e-4)
+
+
+@pytest.mark.parametrize('option', [
+    dict(rpix=[10, None]), dict(rval=[None, 2.0]), dict(rpix=[10, None],
+                                                        rval=[None, 2.0])])
+def test_the_reference_of_one_celestial_axis_alone_is_refused(
+        tmp_path, option):
+    path = write_map(tmp_path / 'map.fits', SKY)
+    with pytest.raises(ValueError, match="both of them or for neither"):
+        read_data(path, **option)
+
+
+# A cube of 24 x 20 pixels and 30 channels of wavelengths in air
+AIR_CUBE = SKY | dict(
+    CTYPE3='AWAV', CUNIT3='Angstrom', CRVAL3=6600.0, CDELT3=2.0, CRPIX3=1)
+
+
+def test_a_medium_given_that_the_header_contradicts_is_refused(tmp_path):
+    path = write_map(tmp_path / 'cube.fits', AIR_CUBE, (30, 20, 24))
+    rest = '6562.8 Angstrom'
+    assert read_data(path, rest=rest)[1].medium == 'air'
+    assert read_data(path, rest=rest, medium='air')[1].medium == 'air'
+    with pytest.raises(ValueError, match="not the one the header states"):
+        read_data(path, rest=rest, medium='vacuum')
+    # (an axis of optical velocities does not state it)
+    velocities = write_map(tmp_path / 'velocities.fits', SKY | dict(
+        CTYPE3='VOPT', CUNIT3='km/s', CRVAL3=0.0, CDELT3=10.0, CRPIX3=1,
+        RESTWAV=6.5628e-7), (30, 20, 24))
+    assert read_data(velocities, medium='air')[1].medium == 'air'
+
+
+def test_a_rest_in_the_medium_given_is_the_line_of_the_header(tmp_path):
+    # Optical velocities of Halpha (RESTWAV, in vacuum) read with the rest
+    # of Halpha in air and the medium air: the same line, so the same
+    # velocities (the rest of the air, as given), for the data of a
+    # dataset too
+    from gbkfit.dataset import Data
+    vacuum = 6564.614e-10
+    air = vacuum / air_refractive_index(vacuum) * u.m
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='VOPT', CUNIT3='km/s', CRVAL3=1000.0, CDELT3=50.0, CRPIX3=1,
+        RESTWAV=vacuum), (30, 20, 24))
+    plain = read_data(path)[1]
+    for read in (read_data, Data.from_files):
+        coords = read(path, rest=air, medium='air')[1]
+        np.testing.assert_allclose(coords.rval, plain.rval, rtol=1e-12)
+        np.testing.assert_allclose(coords.step, plain.step, rtol=1e-12)
+        assert (coords.medium, coords.rest) == ('air', air)
+    # (a medium that AIRORVAC contradicts is refused)
+    stated = write_map(tmp_path / 'stated.fits', SKY | dict(
+        CTYPE3='VOPT', CUNIT3='km/s', CRVAL3=1000.0, CDELT3=50.0, CRPIX3=1,
+        RESTWAV=vacuum, AIRORVAC='vac'), (30, 20, 24))
+    with pytest.raises(ValueError, match="not the one the header states"):
+        read_data(stated, rest=air, medium='air')
+
+
+def test_the_first_image_is_that_of_the_header_alone(tmp_path):
+    # A file of an empty primary HDU and an image after it: its first
+    # image is the same for its data and for its header alone
+    path = str(tmp_path / 'data.fits')
+    fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU(
+        np.zeros((20, 24), np.float32), fits.Header(SKY | dict(BUNIT='Jy')),
+        name='SCI')]).writeto(path)
+    assert read_coords(path, None) == read_data(path, None)[1]
+    assert read_unit(path, None) == 'Jy'
+    # (and the first is what the readers read by default)
+    assert read_coords(path) == read_data(path)[1] == read_data(path, 1)[1]
+    assert read_array(path)[0].shape == (20, 24)
+    assert read_unit(path) == 'Jy'
+
+
+def test_another_orientation_leaves_no_stale_keywords_of_axes():
+    # The axes (velocity, Dec, RA) reordered: the name and the error of
+    # the first, and an alternate description of the axes, would be those
+    # of other axes; they are left out
+    header = fits.Header(dict(
+        NAXIS=3, NAXIS1=30, NAXIS2=20, NAXIS3=24,
+        CTYPE1='VRAD', CUNIT1='km/s', CRVAL1=0.0, CDELT1=10.0, CRPIX1=1,
+        CNAME1='Velocity', CRDER1=0.5,
+        CTYPE2='DEC--TAN', CUNIT2='deg', CRVAL2=2.0, CDELT2=10 / 3600,
+        CRPIX2=10.5,
+        CTYPE3='RA---TAN', CUNIT3='deg', CRVAL3=150.0, CDELT3=-10 / 3600,
+        CRPIX3=12.5, CTYPE1F='FREQ', CRVAL1F=1.42e9))
+    model, orientation = model_header('test', header, (24, 20, 30))
+    assert orientation.order == (2, 1, 0)
+    assert not {'CNAME1', 'CRDER1', 'CTYPE1F', 'CRVAL1F'} & set(model)
+    assert model['CTYPE1'] == 'RA---TAN' and model['CTYPE3'] == 'VRAD'
+
+
+def test_distortions_are_left_out_with_a_warning(tmp_path, caplog):
+    path = write_map(tmp_path / 'map.fits', SKY | dict(
+        CTYPE1='RA---TAN-SIP', CTYPE2='DEC--TAN-SIP', A_ORDER=2, B_ORDER=2,
+        A_2_0=1e-5, B_0_2=1e-5))
+    with caplog.at_level('WARNING'):
+        read_data(path)
+    assert "distortions" in caplog.text
+
+
+def test_a_cube_of_one_channel_has_the_beam_of_its_table(tmp_path):
+    # A cube of CASA of one channel, which reading leaves out, with its
+    # beam in its table BEAMS
+    path = str(tmp_path / 'cube.fits')
+    beams = fits.BinTableHDU.from_columns([
+        fits.Column(name='BMAJ', format='E', unit='arcsec', array=[10.0]),
+        fits.Column(name='BMIN', format='E', unit='arcsec', array=[5.0]),
+        fits.Column(name='BPA', format='E', unit='deg', array=[30.0]),
+        fits.Column(name='CHAN', format='J', array=[0]),
+        fits.Column(name='POL', format='J', array=[0])], name='BEAMS')
+    fits.HDUList([fits.PrimaryHDU(
+        np.zeros((1, 20, 24), np.float32), fits.Header(SKY | dict(
+            CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.42e9, CDELT3=1e5,
+            CRPIX3=1))), beams]).writeto(path)
+    arrays = read_arrays(path)
+    assert arrays.data.shape == (20, 24)
+    assert arrays.beam == dict(bmaj=10.0, bmin=5.0, bpa=30.0)
+
+
+def test_a_nonstandard_type_of_an_axis_beyond_the_array_is_left_out(
+        tmp_path):
+    # A map whose header keeps the spectral axis of its cube (as an axis
+    # beyond those of the array), of a type FITS does not define
+    path = write_map(tmp_path / 'map.fits', SKY | dict(
+        WCSAXES=3, CTYPE3='WAVELENGTH', CUNIT3='Angstrom', CRVAL3=6600.0,
+        CDELT3=2.0, CRPIX3=1))
+    assert read_data(path)[0].shape == (20, 24)
+
+
+def test_a_rest_for_a_map_of_one_velocity_of_no_rest(tmp_path):
+    # A moment map that keeps an axis of one pixel of relativistic
+    # velocities (VELO), which have no rest: given one, the map is read,
+    # and the rest is its
+    path = write_map(tmp_path / 'map.fits', SKY | dict(
+        CTYPE3='VELO', CUNIT3='m/s', CRVAL3=0.0, CDELT3=1e4, CRPIX3=1),
+        (1, 20, 24))
+    data, coords = read_data(path, rest='1420.405752 MHz')
+    assert data.shape == (20, 24)
+    assert coords.rest.to_value(u.MHz) == pytest.approx(1420.405752)
+
+
+def test_the_keywords_of_a_rest_wavelength_without_a_medium(tmp_path):
+    # Coords of a rest wavelength and no medium (that of the default of
+    # make_medium, vacuum) are written, and read back in vacuum
+    coords = Coords(
+        (10.0, 10.0, 10.0), (11.5, 9.5, 0.0), (150.0, 2.0, 0.0), 0.0,
+        make_rest('6564.61 Angstrom'), None, 'optical')
+    path = str(tmp_path / 'cube.fits')
+    write_data(path, np.zeros((30, 20, 24), np.float32), coords, 2)
+    assert read_data(path)[1].medium == 'vacuum'
+
+
+
+def test_a_rest_in_air_is_in_vacuum_in_headers(tmp_path):
+    # An axis of wavelengths in air, read in velocities of Halpha in air:
+    # its rest is in air, as given, and its header has it in vacuum
+    # (RESTWAV, as FITS defines it: about 6564.61 Angstrom); written and
+    # read back, the same
+    def in_air(vacuum):
+        return vacuum / air_refractive_index(vacuum)
+    path = write_map(tmp_path / 'cube.fits', AIR_CUBE, (30, 20, 24))
+    rest = make_rest('6562.80 Angstrom')
+    model, _ = model_header(path, fits.getheader(path), (30, 20, 24), rest)
+    assert model['AIRORVAC'] == 'air'
+    assert model['RESTWAV'] == pytest.approx(6564.61e-10, abs=1e-12)
+    assert in_air(model['RESTWAV']) == pytest.approx(
+        rest.to_value(u.m), rel=1e-12)
+    data, coords = read_data(path, rest=rest)
+    assert (coords.medium, coords.rest) == ('air', rest)
+    copy = str(tmp_path / 'copy.fits')
+    write_data(copy, data, coords, 2)
+    assert fits.getheader(copy)['RESTWAV'] == pytest.approx(
+        model['RESTWAV'], rel=1e-12)
+    back = read_data(copy)[1]
+    assert back.medium == 'air'
+    assert back.rest.to_value(u.m) == pytest.approx(
+        rest.to_value(u.m), rel=1e-12)
+    np.testing.assert_allclose(back.rval, coords.rval, rtol=1e-12)
+
+
+def test_logarithmic_wavelengths_in_air_of_a_rest_in_vacuum(tmp_path):
+    # A cube of logarithmic wavelengths in air, of another program, whose
+    # first channel is Halpha in air, and whose rest is Halpha (RESTWAV,
+    # in vacuum): the first channel is at 0 km/s
+    halpha = 6562.797e-10
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='AWAV-LOG', CUNIT3='m', CRVAL3=halpha,
+        CDELT3=halpha * 30 / 299792.458, CRPIX3=1, RESTWAV=6564.61e-10),
+        (30, 20, 24))
+    coords = read_data(path)[1]
+    assert coords.medium == 'air'
+    assert coords.rest.to_value(u.m) == pytest.approx(halpha, abs=1e-14)
+    assert coords.rval[2] == pytest.approx(0, abs=1e-3)
+
+
+def test_the_coordinates_of_a_map_alone_have_the_rest_given(tmp_path):
+    path = write_map(tmp_path / 'map.fits', SKY)
+    rest = make_rest('6562.80 Angstrom')
+    assert read_coords(path, rest=rest).rest == read_data(
+        path, rest=rest)[1].rest == rest
+
+
+def test_the_rest_of_the_kind_of_the_axis_comes_first(tmp_path):
+    # Optical velocities whose header has a rest wavelength and a rest
+    # frequency of another line: read in velocities of that wavelength,
+    # they are as they are
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='VOPT', CUNIT3='km/s', CRVAL3=100.0, CDELT3=10.0, CRPIX3=1,
+        RESTWAV=6.5646e-7, RESTFRQ=1.420405752e9), (30, 20, 24))
+    coords = read_data(path, rest='6.5646e-7 m')[1]
+    assert coords.rval[2] == pytest.approx(100.0)
+    assert coords.step[2] == pytest.approx(10.0)
+
+
+@pytest.mark.parametrize('value, medium', [
+    ('AIR', 'air'), (' air ', 'air'), ('Vac', 'vacuum')])
+def test_airorvac_in_any_case(tmp_path, value, medium):
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='VOPT', CUNIT3='km/s', CRVAL3=0.0, CDELT3=10.0, CRPIX3=1,
+        RESTWAV=6.5628e-7, AIRORVAC=value), (30, 20, 24))
+    assert read_data(path)[1].medium == medium
+
+
+def test_the_type_of_the_axis_states_its_medium(tmp_path, caplog):
+    # Wavelengths in vacuum (WAVE) whose AIRORVAC says air: read in
+    # vacuum, as FITS defines WAVE, with a warning
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='WAVE', CUNIT3='Angstrom', CRVAL3=6600.0, CDELT3=2.0,
+        CRPIX3=1, AIRORVAC='air'), (30, 20, 24))
+    with caplog.at_level('WARNING'):
+        coords = read_data(path, rest='6564.61 Angstrom')[1]
+    assert coords.medium == 'vacuum'
+    assert "AIRORVAC says" in caplog.text
+
+
+def test_an_axis_of_length_1_keeps_its_coupling(tmp_path):
+    # A map whose third axis, of one pixel at the pixel 1 (FITS) of a
+    # reference pixel 3, is coupled to RA: its sky is that of the full
+    # world coordinates at that pixel
+    header = SKY | dict(
+        CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.42e9, CDELT3=1e5, CRPIX3=3,
+        PC1_3=0.5)
+    path = write_map(tmp_path / 'map.fits', header, (1, 20, 24))
+    full = astropy.wcs.WCS(fits.Header(header))
+    model, _ = model_header(path, fits.getheader(path), (1, 20, 24))
+    sky = astropy.wcs.WCS(model).celestial.pixel_to_world(5, 4)
+    ra, dec, _ = full.wcs_pix2world([[5, 4, 0]], 0)[0]
+    assert abs(sky.ra.deg - ra) < 1e-10 and abs(sky.dec.deg - dec) < 1e-10
+    # (at the reference pixel of the third axis, the sky is elsewhere)
+    assert abs(full.wcs_pix2world([[5, 4, 2]], 0)[0][0] - ra) > 1e-4

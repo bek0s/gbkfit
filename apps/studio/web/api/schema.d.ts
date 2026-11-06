@@ -216,7 +216,8 @@ export interface paths {
          *     orientation of the model) as a frame of one array (ny, nx), with the
          *     number of channels of the cube, the coordinate of the channel along
          *     the spectral axis and its unit (null if unknown; see SpectrumView),
-         *     and the range of the values of the cube for colours.
+         *     the range of the values of the cube for colours, and the least and
+         *     the greatest of its values (extent; null if it has none).
          */
         get: operations["view_channel_api_v1_views_channel__path__get"];
         put?: never;

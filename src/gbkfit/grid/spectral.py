@@ -25,6 +25,7 @@ __all__ = [
     'CONVENTIONS',
     'FRAMES',
     'SPECTRAL_TYPES',
+    'Rest',
     'SpectralAxis',
     'VelocityConvention',
     'air_refractive_index',
@@ -33,7 +34,8 @@ __all__ = [
     'make_convention',
     'make_medium',
     'make_rest',
-    'spectral_axis_parser'
+    'spectral_axis_parser',
+    'vacuum_wavelength'
 ]
 
 
@@ -105,9 +107,11 @@ def check_convention(spectral: 'SpectralAxis') -> None:
             "VELO or WAVE-LOG")
 
 
-def make_rest(
-        value: str | astropy.units.Quantity | None
-) -> astropy.units.Quantity | None:
+# The rest of a spectral axis, as it is given (see make_rest)
+Rest: TypeAlias = str | astropy.units.Quantity | None
+
+
+def make_rest(value: Rest) -> astropy.units.Quantity | None:
     """
     Make the rest wavelength or frequency of a spectral axis.
 
@@ -242,6 +246,19 @@ def air_refractive_index(wavelength: float) -> float:
     # The wavenumber (1 / um), squared
     s2 = (1e-6 / wavelength) ** 2
     return 1 + 8.34254e-5 + 2.406147e-2 / (130 - s2) + 1.5998e-4 / (38.9 - s2)
+
+
+def vacuum_wavelength(air: float) -> float:
+    """
+    Return the wavelength in vacuum (m) of one in air: the inverse of
+    dividing by air_refractive_index, by fixed point (the refractive index
+    of air changes by about 1e-9 between the two, so that three steps
+    leave rounding).
+    """
+    vacuum = air
+    for _ in range(3):
+        vacuum = air * air_refractive_index(vacuum)
+    return vacuum
 
 
 class VelocityConvention:
