@@ -219,6 +219,23 @@ def test_region_spectra_data_round_trip(tmp_path):
         loaded['spectra'].data(), dataset['spectra'].data())
 
 
+def test_the_correlations_of_region_spectra_are_dumped_by_name(tmp_path):
+    # The file of the correlation of the noise of the spectra (e.g. of an
+    # image PSF) is named after the dataset, next to it
+    from gbkfit.instrument import PSFImage
+    regions = RegionsApertures([
+        gbkfit.region.aperture_parser.load(info) for info in APERTURES])
+    dataset = DatasetRegionSpectra(
+        Data(np.ones((51, 3)),
+             spatial_correlation=PSFImage(np.ones((5, 5)), step=(1, 1))),
+        regions,
+        spectral=SpectralAxis(
+            step=10, rpix=4, rval=1500, convention='relativistic'))
+    info = dataset.dump(prefix=str(tmp_path / 'data_'))
+    assert info['spatial_correlation']['file'] == str(
+        tmp_path / 'data_spectra_spatial_correlation_psf.fits')
+
+
 def test_region_spectra_options_replace_the_spectral_axis_of_files(tmp_path):
     from gbkfit.dataset import dataset_parser
     regions = RegionsApertures([

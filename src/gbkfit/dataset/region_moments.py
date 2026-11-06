@@ -178,7 +178,8 @@ class DatasetRegionMoments(Dataset):
                 overwrite=overwrite))
         for key, item in self.items():
             info[key] = dump_data(
-                item, _detail.item_filenames(prefix, key), write, dump_path)
+                item, _detail.item_filenames(prefix, key), write, dump_path,
+                f'{prefix}{key}_', overwrite)
         return info
 
     def __init__(

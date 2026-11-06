@@ -122,6 +122,25 @@ def test_region_moments_output_is_a_map_of_the_bins():
     assert output.coords == bmaps.regions().grid().coords
 
 
+def test_the_correlations_of_region_moments_are_dumped_by_item(tmp_path):
+    # The files of the correlations of the noise of each moment (e.g. of an
+    # image PSF) are named after the dataset and the moment, as those of the
+    # datasets of grids: next to the dataset, and apart
+    from gbkfit.instrument import PSFImage
+    index = np.array([[0, 0, -1], [1, 2, 2]])
+    psf = PSFImage(np.ones((5, 5)), step=(1, 1))
+    dataset = DatasetRegionMoments(
+        {0: Data(np.ones(3), spatial_correlation=psf),
+         1: Data(np.array([1400.0, 1500, 1600]), spatial_correlation=psf)},
+        RegionsBins(index))
+    info = dataset.dump(prefix=str(tmp_path / 'data_'))
+    files = {info[key]['spatial_correlation']['file']
+             for key in ('moment0', 'moment1')}
+    assert files == {
+        str(tmp_path / f'data_{key}_spatial_correlation_psf.fits')
+        for key in ('moment0', 'moment1')}
+
+
 def test_region_moments_observation_from_data(tmp_path):
     # The regions come from the data, and the spectral axis covers the
     # velocities of moment1
