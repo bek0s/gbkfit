@@ -10,7 +10,6 @@ import { isKind } from './screens/dataset/model';
 import { GalaxyScreen } from './screens/galaxy/GalaxyScreen';
 import { Home } from './screens/Home';
 import { ObservationScreen } from './screens/observation/ObservationScreen';
-import { ObserveScreen } from './screens/observe/ObserveScreen';
 import { Pending } from './screens/Pending';
 import { ResponseScreen } from './screens/Response';
 import { Welcome } from './screens/Welcome';
@@ -75,8 +74,6 @@ function ScreenView({ screen }: { screen: Screen }) {
     case 'new-dataset':
       if (!isKind(screen.data)) return <Pending eyebrow="New dataset" title="This kind of data comes later" />;
       return <NewDataset key={address(screen)} kind={screen.data} />;
-    case 'observe':
-      return <ObserveScreen />;
     case 'compare':
       return <Pending eyebrow="Compare with data" title="Galaxies and data" />;
     case 'fit':

@@ -883,16 +883,15 @@ h2 { margin: 0; font: var(--text-heading); }
 .ob-checks-row input { accent-color: var(--accent); }
 .ob-number { display: block; min-width: 0; }
 
-/* observe: a galaxy through an observation, chosen in the head; the notes
-   of the library over the viewer, or why the observation cannot see it */
-.obs-through { color: var(--muted); font-weight: 400; }
-.obs-choices { align-items: flex-end; gap: 12px; }
-.obs-choice { display: grid; gap: 4px; min-width: 170px; font: var(--text-label); color: var(--muted); }
-.obs-view { flex: 1; min-height: 0; gap: 10px; }
+/* a galaxy seen by an observation (see screens/galaxy/Seen.tsx): the
+   notes of the library over the viewer, or why the observation cannot see
+   it; and what sees it, in the toolbar of the galaxy */
+.gx-seen-by { display: flex; align-items: center; gap: 8px; font: var(--text-label); color: var(--muted); }
+.gx-seen-by .ui-choice { width: 180px; }
+.gx-seen { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.gx-seen-view { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.gx-seen-view > .viewer { flex: 1; min-height: 0; }
+.gx-seen-wait { flex: 1; border-radius: 12px; }
 .obs-notes { margin: 0; padding: 6px 9px 6px 24px; border-left: 3px solid var(--warn-fill); border-radius: 4px; background: color-mix(in srgb, var(--warn-fill) 11%, transparent); font: var(--text-label); color: var(--fg2); overflow-wrap: anywhere; }
 .obs-problem { display: grid; gap: 8px; justify-items: start; max-width: 720px; margin: 24px auto; padding: 14px 16px; border: 1px solid color-mix(in srgb, var(--err-fill) 40%, transparent); border-radius: 8px; background: var(--panel); }
 .obs-problem p { margin: 0; font: var(--text-body); }
-.obs-problem-actions { display: flex; gap: 8px; }
-.obs-wait { margin: auto; color: var(--muted); font: var(--text-body); }
-.obs-empty { margin: 60px auto; max-width: 440px; display: grid; gap: 8px; justify-items: center; text-align: center; color: var(--muted); font: var(--text-body); }
-.obs-empty p { margin: 0; }

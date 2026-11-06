@@ -7,7 +7,6 @@ export type Screen =
   | { kind: 'block'; folder: string; name: string }
   // A dataset being added: the key of its kind of data (see DATA_KINDS)
   | { kind: 'new-dataset'; data: string }
-  | { kind: 'observe' }
   | { kind: 'compare' }
   | { kind: 'fit' };
 
@@ -22,7 +21,7 @@ export function parseAddress(hash: string): Screen {
   const [kind, ...rest] = hash.replace(/^#/, '').split('/');
   if (kind === 'block' && rest.length === 2) return { kind, folder: rest[0], name: decodeURIComponent(rest[1]) };
   if (kind === 'new-dataset' && rest.length === 1) return { kind, data: rest[0] };
-  if (kind === 'observe' || kind === 'compare' || kind === 'fit') return { kind };
+  if (kind === 'compare' || kind === 'fit') return { kind };
   return { kind: 'home' };
 }
 

@@ -77,7 +77,6 @@ export function Home() {
             <Button kind={hasData && !hasGalaxy ? 'primary' : 'plain'} onClick={() => startAdding('galaxies')}>
               + New galaxy
             </Button>
-            <Button onClick={() => go({ kind: 'observe' })}>Observe</Button>
           </Step>
           <Step
             number={3}

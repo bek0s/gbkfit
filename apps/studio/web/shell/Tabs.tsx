@@ -1,5 +1,5 @@
 // The tabs of the bar: the home of the project, and the tasks done with
-// its blocks (observe, compare, fit), with a dot on Fit while a job of the
+// its blocks (compare, fit), with a dot on Fit while a job of the
 // project runs. Without a project, they are off.
 import { useJobs } from '../api/queries';
 import { BarTabs } from '../components/ui/basics';
@@ -7,7 +7,6 @@ import { useStudio } from '../studio';
 
 const TABS = [
   { kind: 'home', title: 'Home' },
-  { kind: 'observe', title: 'Observe' },
   { kind: 'compare', title: 'Compare' },
   { kind: 'fit', title: 'Fit' },
 ] as const;

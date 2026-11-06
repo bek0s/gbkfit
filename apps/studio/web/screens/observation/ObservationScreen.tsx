@@ -9,9 +9,7 @@ import { joinPath } from '../../components/FilePicker';
 import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../components/SchemaForm';
 import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
 import { useBlockHead } from '../../shell/BlockMenu';
-import { Button } from '../../components/ui/basics';
 import { useStudio } from '../../studio';
-import { useObserve } from '../observe/ObserveScreen';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { SaveActions, useEditedBlock } from '../editing';
 import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse } from './model';
@@ -20,7 +18,6 @@ import { Checks, Resolution, Sky, Stages, type SkyData } from './View';
 
 export function ObservationScreen({ name }: { name: string }) {
   const { project, go } = useStudio();
-  const observe = useObserve();
   const root = project ?? '.';
   const edited = useEditedBlock(root, 'observations', name);
   const head = useBlockHead(root, 'observations', name);
@@ -73,9 +70,6 @@ export function ObservationScreen({ name }: { name: string }) {
         </div>
         <div className="head-actions">
           <NeedsNote needs={needs.map((need) => ({ text: need.text, at: need.section }))} />
-          <Button onClick={() => observe({ observation: name })} title="See a galaxy of the project through it (as saved)">
-            Observe a galaxy
-          </Button>
           <SaveActions edited={edited} />
           {head.menu}
         </div>

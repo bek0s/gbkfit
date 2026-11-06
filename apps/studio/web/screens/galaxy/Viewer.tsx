@@ -1,8 +1,8 @@
 // The view of a galaxy as it is built (see the server's /views/galaxy and
 // /views/galaxy-cube): a map of its light, velocity or dispersion, of all
 // its components or of one, as seen, face-on (its motions in its plane as
-// arrows) or edge-on. (Its cube, of the channels of an observation, is that
-// of the galaxy as the observation sees it.) The map is as
+// arrows) or edge-on; or seen by an observation of the project (see Seen:
+// its cube, or its maps, as the observation records them). The map is as
 // large as its place, rendered at about its size on the screen; the wheel
 // zooms it, a drag pans it, and the pointer reads it (its place on the
 // sky, in arcsec from the centre, and its value). Light can be shown on a
@@ -17,8 +17,9 @@ import { GESTURES } from '../../components/MapTools';
 import { MapView, type Region } from '../../components/MapView';
 import { regionStats, statsText } from '../../components/regions';
 import { Close, IconButton } from '../../components/ui/basics';
-import { Segments } from '../../components/ui/inputs';
+import { Choice, Segments } from '../../components/ui/inputs';
 import { Curves, type CurvesFocus } from './Curves';
+import { SeenView } from './Seen';
 import type { Options } from './options';
 
 export type Orientation = 'sky' | 'face-on' | 'edge-on';
@@ -65,6 +66,9 @@ function hasHeight(galaxy: Options): boolean {
   });
 }
 
+// (what "Seen by" lists first: nothing, the galaxy as it is)
+const IDEAL = '@ideal';
+
 // (a change within this long of the last is one of a gesture: see
 // renderSize)
 const SETTLE_MS = 350;
@@ -77,6 +81,11 @@ const CURVES_FRAME = 44;
 
 export interface ViewerProps {
   project: string;
+  // What sees it: none (it as it is), or an observation of the project, by
+  // name; and the observations there are
+  seenBy: string | null;
+  onSeenBy: (observation: string | null) => void;
+  observations: string[];
   // The options and the properties (for the render; see params.forRender)
   // of the galaxy, as they settle
   galaxy: Options | undefined;
@@ -95,29 +104,44 @@ export interface ViewerProps {
 }
 
 export function Viewer(props: ViewerProps) {
-  const { galaxy, onOrientation, quantity, onQuantity, components, isolated, onIsolated } = props;
+  const { galaxy, onOrientation, quantity, onQuantity, components, isolated, onIsolated, seenBy, onSeenBy, observations } = props;
+  // (one no longer there: none)
+  const seen = seenBy !== null && observations.includes(seenBy) ? seenBy : null;
   // (edge-on, as seen, of a galaxy with no height: see hasHeight)
   const flat = useMemo(() => galaxy !== undefined && !hasHeight(galaxy), [galaxy]);
   const orientation = flat && props.orientation === 'edge-on' ? 'sky' : props.orientation;
   return (
     <div className="gx-view">
       <div className="gx-toolbar">
+        <label className="gx-seen-by" title="As it is (fine pixels, no instrument), or as an observation of the project records it: its grid, PSF, LSF and line of sight">
+          <span>Seen by</span>
+          <Choice
+            items={[{ value: IDEAL, label: 'Nothing: as it is' }, ...observations.map((name) => ({ value: name, label: name }))]}
+            value={seen ?? IDEAL}
+            onChange={(next) => onSeenBy(next === IDEAL ? null : next)}
+            label="What sees the galaxy"
+          />
+        </label>
         <Segments
           items={[
             { value: 'sky', label: 'As seen' },
-            { value: 'face-on', label: 'Face-on' },
+            { value: 'face-on', label: 'Face-on', disabled: seen !== null, title: seen ? 'An observation sees it on the sky' : undefined },
             {
               value: 'edge-on',
               label: 'Edge-on',
-              disabled: flat,
-              title: flat ? 'Its disks are thin, with no height: edge-on, a line. Make a disk thick to see it edge-on.' : undefined,
+              disabled: flat || seen !== null,
+              title: seen
+                ? 'An observation sees it on the sky'
+                : flat
+                  ? 'Its disks are thin, with no height: edge-on, a line. Make a disk thick to see it edge-on.'
+                  : undefined,
             },
           ]}
-          value={orientation}
+          value={seen ? 'sky' : orientation}
           onChange={onOrientation}
           label="How the galaxy is seen"
         />
-        <Segments
+        {seen === null && <Segments
           items={[
             { value: 'light', label: 'Light' },
             { value: 'velocity', label: 'Velocity' },
@@ -126,8 +150,8 @@ export function Viewer(props: ViewerProps) {
           value={quantity}
           onChange={onQuantity}
           label="What is shown"
-        />
-        {components.length > 1 && (
+        />}
+        {components.length > 1 && seen === null && (
           <div className="gx-isolate" role="group" aria-label="The components shown">
             <button className="gx-chip" data-on={isolated === null || undefined} onClick={() => onIsolated(null)}>
               All
@@ -147,6 +171,8 @@ export function Viewer(props: ViewerProps) {
             <p>An empty galaxy.</p>
             <p className="note">Add its first component in the outline to see it.</p>
           </div>
+        ) : seen !== null ? (
+          <SeenView project={props.project} galaxy={galaxy} properties={props.properties} observation={seen} curves={props.curves} components={components} />
         ) : (
           <RenderPane {...props} galaxy={galaxy} quantity={quantity} />
         )}
