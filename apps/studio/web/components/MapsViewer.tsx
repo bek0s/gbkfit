@@ -2,8 +2,8 @@
 // its head (as segments, or of many, from a list), with its colour bar, as
 // large as the space left
 // allows; its data, or the map of their errors or of their mask (its
-// layers). The map has two tools (see MapTools): select (a drag selects a
-// region) and pan (a drag moves the zoomed map). The selection (a region;
+// layers). Its gestures need no tool (see MapView): a drag selects a
+// region, a drag with the middle button or Space held pans. The selection (a region;
 // never kept) shows as a chip in the head, and the map zooms to it (or
 // with the wheel) and back; a crop (an edit) is outlined, and the pixels
 // the edits leave out are blank on the data. Over its corner, its file;
@@ -14,7 +14,8 @@ import { ColourBar } from './ColourBar';
 import { UNSTRETCHED, useStretches } from './colours';
 import { robustRange, useFitted, type Layer } from './CubeViewer';
 import { significant } from './format';
-import { MapTools, type Tool } from './MapTools';
+import { MapTools } from './MapTools';
+import { regionStats, statsText } from './regions';
 import { MapView, type Region } from './MapView';
 import { Chip } from './ui/basics';
 import { Choice, Segments } from './ui/inputs';
@@ -53,7 +54,6 @@ export function MapsViewer({
   const [nx, ny] = shape;
   const [mapKey, setMapKey] = useState(maps[0]?.key);
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
-  const [tool, setTool] = useState<Tool>('select');
   const [zoom, setZoom] = useState<Region | null>(null);
   const [hover, setHover] = useState<[number, number] | null>(null);
   // (a map gone, the first; a layer it has not, its data)
@@ -69,7 +69,6 @@ export function MapsViewer({
   // values, as the map's colours run)
   const colours = layer.key === 'data' ? map.colours : 'sequential';
   const range: [number, number] | undefined = values && (layer.key === 'mask' ? [0, 1] : robustRange(values.values, colours));
-  const selecting = tool === 'select';
   // Zoom about a pixel by a factor, keeping it where it is on the screen;
   // out to the whole map, the window is none
   const zoomAt = (x: number, y: number, factor: number) => {
@@ -105,8 +104,9 @@ export function MapsViewer({
         )}
         <div className="selection-chips" aria-label="The selection">
           {selection !== null && (
-            <Chip title="The region selected on the map" removeLabel="Clear the region" onRemove={() => onSelection(null)}>
+            <Chip title="The region selected on the map, and the statistics of the map in it" removeLabel="Clear the region" onRemove={() => onSelection(null)}>
               x {selection[0]}–{selection[1]} · y {selection[2]}–{selection[3]}
+              {values && ` · ${statsText(regionStats(values.values, nx, selection), layer.unit ?? '')}`}
             </Chip>
           )}
         </div>
@@ -126,12 +126,12 @@ export function MapsViewer({
                     diverging={colours !== 'sequential'}
                     out={layer.key === 'data' ? out : null}
                     window={zoom}
-                    drag={selecting ? 'region' : 'pan'}
                     region={selection}
                     outline={crop}
-                    onRegion={selecting ? onSelection : undefined}
+                    onRegion={onSelection}
                     onZoom={zoomAt}
                     onPan={panBy}
+                    onWhole={() => setZoom(null)}
                     onHover={setHover}
                     stretch={stretch}
                     onStretch={setStretch}
@@ -141,8 +141,6 @@ export function MapsViewer({
                     {layer.path.split('/').pop()}
                   </div>
                   <MapTools
-                    tool={tool}
-                    onTool={setTool}
                     onZoomToSelection={selection ? () => setZoom(selection) : undefined}
                     onWhole={zoom ? () => setZoom(null) : undefined}
                   />

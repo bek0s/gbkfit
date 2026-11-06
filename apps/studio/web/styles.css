@@ -189,9 +189,10 @@ h2 { margin: 0; font: var(--text-heading); }
    map keeps its size) */
 /* (a slider as wide as the spectrum under it, its value on its handle,
    above it) */
-.viewer-controls { height: 58px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 2px 6px; }
+.viewer-controls { height: 40px; display: flex; flex-direction: column; justify-content: flex-end; padding: 0 2px 6px; }
 .viewer-controls-row { flex-direction: row; align-items: center; justify-content: flex-start; gap: 16px; padding-bottom: 2px; }
 .viewer-controls-row > .ui-slider { flex: 1; }
+.viewer-channel-hint { margin-left: auto; font: var(--text-caption); color: var(--faint); }
 .control-text { flex: none; width: 31ch; font: var(--text-data-small); color: var(--muted); }
 .ui-slider-labelled .mantine-Slider-label { font: var(--text-data-small); background: var(--raise); color: var(--fg); border: 1px solid var(--line2); white-space: nowrap; }
 .viewer-canvas { position: relative; }
@@ -674,6 +675,8 @@ h2 { margin: 0; font: var(--text-heading); }
 @media (max-width: 1280px) {
   .gx-body { grid-template-columns: 220px minmax(0, 1fr) 320px; }
 }
+.map-region-tag { position: absolute; left: 8px; top: 8px; z-index: 2; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 90px); padding: 2px 2px 2px 8px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); }
+.map-region-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gx-map-tag { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); pointer-events: none; }
 /* (the options of a family nested in the options of an item: under their
    name, a rule at their left) */

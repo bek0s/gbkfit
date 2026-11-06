@@ -1,26 +1,28 @@
 // The view of a galaxy as it is built (see the server's /views/galaxy and
 // /views/galaxy-cube): a map of its light, velocity or dispersion, of all
 // its components or of one, as seen, face-on (its motions in its plane as
-// arrows) or edge-on; or its cube, in the viewer of cubes. The map is as
+// arrows) or edge-on. (Its cube, of the channels of an observation, is that
+// of the galaxy as the observation sees it.) The map is as
 // large as its place, rendered at about its size on the screen; the wheel
 // zooms it, a drag pans it, and the pointer reads it (its place on the
 // sky, in arcsec from the centre, and its value). Light can be shown on a
 // linear, square-root or logarithmic scale.
 import { useDebouncedValue, useElementSize } from '@mantine/hooks';
-import { useMemo, useRef, useState } from 'react';
-import { useGalaxyCube, useGalaxyRender, type GalaxyRender } from '../../api/queries';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useGalaxyRender, type GalaxyRender } from '../../api/queries';
 import { ColourBar } from '../../components/ColourBar';
 import { useStretches } from '../../components/colours';
-import { CubeViewer } from '../../components/CubeViewer';
 import { significant } from '../../components/format';
+import { GESTURES } from '../../components/MapTools';
 import { MapView, type Region } from '../../components/MapView';
-import { IconButton } from '../../components/ui/basics';
+import { regionStats, statsText } from '../../components/regions';
+import { Close, IconButton } from '../../components/ui/basics';
 import { Segments } from '../../components/ui/inputs';
 import { Curves, type CurvesFocus } from './Curves';
 import type { Options } from './options';
 
 export type Orientation = 'sky' | 'face-on' | 'edge-on';
-export type Quantity = 'light' | 'velocity' | 'dispersion' | 'cube';
+export type Quantity = 'light' | 'velocity' | 'dispersion';
 type Scale = 'linear' | 'sqrt' | 'log';
 
 // The faintest light whose velocity and dispersion show, of the peak of
@@ -93,8 +95,7 @@ export interface ViewerProps {
 }
 
 export function Viewer(props: ViewerProps) {
-  const { project, galaxy, properties, onOrientation, quantity, onQuantity, components, isolated, onIsolated } = props;
-  const lines = components.length > 0;
+  const { galaxy, onOrientation, quantity, onQuantity, components, isolated, onIsolated } = props;
   // (edge-on, as seen, of a galaxy with no height: see hasHeight)
   const flat = useMemo(() => galaxy !== undefined && !hasHeight(galaxy), [galaxy]);
   const orientation = flat && props.orientation === 'edge-on' ? 'sky' : props.orientation;
@@ -121,13 +122,12 @@ export function Viewer(props: ViewerProps) {
             { value: 'light', label: 'Light' },
             { value: 'velocity', label: 'Velocity' },
             { value: 'dispersion', label: 'Dispersion' },
-            { value: 'cube', label: 'Cube', disabled: !lines },
           ]}
           value={quantity}
           onChange={onQuantity}
           label="What is shown"
         />
-        {components.length > 1 && quantity !== 'cube' && (
+        {components.length > 1 && (
           <div className="gx-isolate" role="group" aria-label="The components shown">
             <button className="gx-chip" data-on={isolated === null || undefined} onClick={() => onIsolated(null)}>
               All
@@ -147,8 +147,6 @@ export function Viewer(props: ViewerProps) {
             <p>An empty galaxy.</p>
             <p className="note">Add its first component in the outline to see it.</p>
           </div>
-        ) : quantity === 'cube' ? (
-          <CubeView project={project} galaxy={galaxy} properties={properties} orientation={orientation} />
         ) : (
           <RenderPane {...props} galaxy={galaxy} quantity={quantity} />
         )}
@@ -168,7 +166,7 @@ function RenderPane({
   isolated,
   components,
   curves,
-}: ViewerProps & { galaxy: Options; quantity: Exclude<Quantity, 'cube'> }) {
+}: ViewerProps & { galaxy: Options; quantity: Quantity }) {
   // (the map as large as the column allows, over curves of their least
   // height; the curves taller where the map leaves room)
   const { ref: column, width, height } = useElementSize();
@@ -185,6 +183,14 @@ function RenderPane({
   const [scale, setScale] = useState<Scale>('sqrt');
   const [zoom, setZoom] = useState<{ window: Region; size: number } | null>(null);
   const [hover, setHover] = useState<[number, number] | null>(null);
+  // (a region drawn on the sky, in the pixels of a render of a size; Esc
+  // clears it)
+  const [selected, setSelected] = useState<{ region: Region; size: number } | null>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setSelected(null);
+    globalThis.addEventListener('keydown', onKey);
+    return () => globalThis.removeEventListener('keydown', onKey);
+  }, []);
   const [stretch, setStretch] = useStretches(`galaxy/${quantity}`);
   const n = shown?.size ?? size;
   // (a zoom of a render of another size, scaled to this one)
@@ -210,6 +216,10 @@ function RenderPane({
   };
   const unit = quantity === 'light' ? '' : 'km/s';
   const readout = hover && shown && map ? readAt(shown, map, hover) : null;
+  // (regions are of the sky: not of the galaxy turned face-on or edge-on,
+  // where a drag pans)
+  const sky = orientation === 'sky';
+  const region = sky && selected && shown ? scaleRegion(selected.region, selected.size, n) : null;
   return (
     <div className="gx-render" ref={column}>
     <div className="gx-map-pane" style={{ ['--side' as string]: `${side}px` }}>
@@ -222,15 +232,23 @@ function RenderPane({
               range={map.range}
               diverging={what === 'velocity'}
               window={window}
-              drag="pan"
               stretch={stretch}
               onStretch={setStretch}
               onZoom={zoomAt}
               onPan={panBy}
+              onWhole={() => setZoom(null)}
+              region={region}
+              onRegion={sky ? (drawn) => setSelected({ region: drawn, size: n }) : undefined}
               onHover={setHover}
               label={`The ${quantity} of the galaxy`}
             />
             {arrows && <Arrows render={shown} component={isolated} window={[x0, x1, y0, y1]} />}
+            {region && (
+              <div className="map-region-tag" title="The region drawn, and the statistics of the map in it (Esc clears it)">
+                <span>{statsText(regionStats(map.values, n, region), unit)}</span>
+                <Close label="Clear the region" onClick={() => setSelected(null)} />
+              </div>
+            )}
             <div className="gx-map-corner">
               {render.isFetching && <span className="gx-busy" title="Rendering" />}
               {window !== null && (
@@ -241,7 +259,7 @@ function RenderPane({
                 </IconButton>
               )}
             </div>
-            <div className="gx-readout" aria-live="off">
+            <div className="gx-readout" aria-live="off" title={GESTURES}>
               {readout ? (
                 <>
                   <span>x {signed(readout.x)}″</span>
@@ -278,6 +296,13 @@ function RenderPane({
   );
 }
 
+// A region of pixels of a render of one size, in those of another
+function scaleRegion(region: Region, from: number, to: number): Region {
+  if (from === to) return region;
+  const at = (pixel: number) => Math.min(to - 1, Math.max(0, Math.round(((pixel + 0.5) * to) / from - 0.5)));
+  return region.map(at) as Region;
+}
+
 // A window of pixels of a render of one size, in those of another
 function scaleWindow(window: Region, from: number, to: number): Region {
   if (from === to) return window;
@@ -290,7 +315,7 @@ function scaleWindow(window: Region, from: number, to: number): Region {
 }
 
 // What a map shows: a quantity, or (face-on) the speed in the plane
-type Shown = Exclude<Quantity, 'cube'> | 'speed';
+type Shown = Quantity | 'speed';
 
 function speedOf(vx: Float32Array | undefined, vy: Float32Array | undefined): Float32Array | undefined {
   if (!vx || !vy) return undefined;
@@ -393,7 +418,7 @@ function signed(value: number): string {
 // The width of the window, as a hint where the pointer is not
 function scaleBar(render: GalaxyRender | undefined, pixels: number): string {
   if (!render) return '';
-  return `${significant(pixels * render.step, 3)}″ across · wheel to zoom, drag to pan`;
+  return `${significant(pixels * render.step, 3)}″ across`;
 }
 
 // The motions in the plane of the sky (vx, vy) as arrows over the map,
@@ -449,32 +474,5 @@ function Arrows({ render, component, window }: { render: GalaxyRender; component
         <line key={a.key} x1={a.x - a.dx / 2} y1={a.y - a.dy / 2} x2={a.x + a.dx / 2} y2={a.y + a.dy / 2} markerEnd="url(#gx-arrow)" />
       ))}
     </svg>
-  );
-}
-
-// The cube of the galaxy, in the viewer of cubes (its channels, spectra
-// and quick moments)
-function CubeView({ project, galaxy, properties, orientation }: { project: string; galaxy: Options; properties: Record<string, unknown>; orientation: Orientation }) {
-  const cube = useGalaxyCube(project, galaxy, properties, orientation);
-  const [selection, setSelection] = useState<Region | null>(null);
-  const [band, setBand] = useState<[number, number] | null>(null);
-  if (cube.error && !cube.data) return <p className="gx-error">{cube.error.message}</p>;
-  if (!cube.data) return <div className="gx-map-wait" />;
-  return (
-    <div className="gx-cube">
-      <CubeViewer
-        layers={[{ key: 'data', title: 'Cube', path: cube.data.path, hdu: 0, unit: null }]}
-        shape={cube.data.shape}
-        selection={selection}
-        band={band !== null && band[1] < cube.data.shape[2] ? band : null}
-        onSelection={setSelection}
-        onBand={setBand}
-        noiseless
-        // (its light, velocity and dispersion are those of the galaxy; the
-        // shapes of its spectra are measured here)
-        moments="higher"
-      />
-      {cube.error && <p className="gx-error">{cube.error.message}</p>}
-    </div>
   );
 }

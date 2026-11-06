@@ -7,9 +7,9 @@
 // them. A selection (a region of the map, a band of channels of the
 // spectrum) is made to look at: the map and the spectrum zoom to it (or
 // with the wheel) and back, and the total spectrum is of it; it is never
-// kept. The map has two tools (see MapTools): to select (a drag selects;
-// Esc clears) and to pan (a drag pans the zoomed map); a click picks a
-// pixel with either. A crop (an edit of the dataset, set from the selection; see
+// kept. Its gestures need no tool (see MapView): a drag selects (Esc
+// clears), a drag with the middle button or Space held pans, a click picks
+// a pixel, a double click shows it whole. A crop (an edit of the dataset, set from the selection; see
 // Edits) is outlined. Under the map, the channel (a slider), or the mask
 // of the moments (grown by prep's tools from seeds above a number of times
 // the noise), in a row of one height, so that the map keeps its size; and
@@ -26,7 +26,8 @@ import { significant } from './format';
 import { MapView, type Region } from './MapView';
 import { SpectrumPlot, valueRange } from './SpectrumPlot';
 import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
-import { MapTools, type Tool } from './MapTools';
+import { MapTools } from './MapTools';
+import { regionStats, statsText } from './regions';
 import { Chip, IconButton } from './ui/basics';
 import { Check, NumberField, Segments } from './ui/inputs';
 import { DropMenu } from './ui/overlays';
@@ -124,7 +125,6 @@ export function CubeViewer({
   const [nx, ny, nchannels] = shape;
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
   const [view, setView] = useState<View>('channel');
-  const [tool, setTool] = useState<Tool>('select');
   // (within the cube: one made again can have fewer channels, e.g. a render)
   const [picked, setChannel] = useState(Math.floor(nchannels / 2));
   const channel = Math.min(picked, nchannels - 1);
@@ -171,7 +171,6 @@ export function CubeViewer({
   const more = MORE_MOMENTS.find((m) => m.view === shown);
   // (the colours of each, as the right button stretches them on the map)
   const [stretch, setStretch] = useStretches(`${layer.key}/${shown}`);
-  const selecting = tool === 'select';
   const plane = useChannel(layer.path, layer.hdu, channel);
   const method = MOMENTS.find((m) => m.view === shown)?.method ?? 'moments';
   const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel', method);
@@ -222,9 +221,23 @@ export function CubeViewer({
   const range: [number, number] | undefined =
     shown !== 'channel' ? map && robustRange(map.values, colours) : layer.key === 'mask' ? [0, 1] : plane.data?.range;
   const error = shown === 'channel' ? plane.error : moments.error;
-  // (Esc clears the selection, all its parts, as the select tool is in use)
+  // (the arrow keys step through the channels, as a channel is shown, unless
+  // they move something else: a field, a slider, a choice)
   useEffect(() => {
-    if (!selecting) return;
+    if (shown !== 'channel') return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.isContentEditable || target.closest('input, textarea, select, [role="slider"], [role="radiogroup"], [role="listbox"], [role="menu"]'))) return;
+      event.preventDefault();
+      const [first, last] = spectrumZoom ?? [0, nchannels - 1];
+      setChannel((c) => Math.min(last, Math.max(first, Math.min(c, nchannels - 1) + (event.key === 'ArrowRight' ? 1 : -1))));
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [shown, spectrumZoom, nchannels]);
+  // (Esc clears the selection, all its parts)
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         onSelection(null);
@@ -234,7 +247,7 @@ export function CubeViewer({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selecting, onSelection, onBand]);
+  }, [onSelection, onBand]);
   // Zoom about a pixel by a factor, keeping it where it is on the screen;
   // out to the whole map, the window is none
   const zoomAt = (x: number, y: number, factor: number) => {
@@ -300,8 +313,9 @@ export function CubeViewer({
             one at a time) and a band of channels */}
         <div className="selection-chips" aria-label="The selection">
           {selection !== null && (
-            <Chip title="The region selected on the map" removeLabel="Clear the region" onRemove={() => onSelection(null)}>
+            <Chip title="The region selected on the map, and the statistics of the map in it" removeLabel="Clear the region" onRemove={() => onSelection(null)}>
               x {selection[0]}–{selection[1]} · y {selection[2]}–{selection[3]}
+              {map && ` · ${statsText(regionStats(map.values, nx, selection), mapUnit(shown, layer.unit))}`}
             </Chip>
           )}
           {pixel !== null && (
@@ -332,7 +346,6 @@ export function CubeViewer({
                     diverging={colours !== 'sequential'}
                     kept={shown === 'channel' && layer.key === 'data' ? kept : null}
                     window={zoom}
-                    drag={selecting ? 'region' : 'pan'}
                     mark={pixel ?? undefined}
                     region={selection}
                     outline={crop}
@@ -341,17 +354,14 @@ export function CubeViewer({
                       setPixel([x, y]);
                       onSelection(null);
                     }}
-                    onRegion={
-                      selecting
-                        ? (region) => {
-                            setPixel(null);
-                            onSelection(region);
-                          }
-                        : undefined
-                    }
+                    onRegion={(region) => {
+                      setPixel(null);
+                      onSelection(region);
+                    }}
                     onHover={hoverAt}
                     onZoom={zoomAt}
                     onPan={panBy}
+                    onWhole={() => setZoom(null)}
                     stretch={stretch}
                     onStretch={setStretch}
                     label={shown === 'channel' ? `A channel of the ${layer.title.toLowerCase()}` : `The ${shown} map of the data`}
@@ -364,11 +374,8 @@ export function CubeViewer({
                       {noiseless ? '≈ quick look' : '≈ quick look · not part of the dataset'}
                     </div>
                   )}
-                  {selecting && selection === null && pixel === null && <div className="map-hint">Drag on the map to select a region</div>}
+                  {selection === null && pixel === null && <div className="map-hint">Drag on the map to select a region</div>}
                   <MapTools
-                    tool={tool}
-                    onTool={setTool}
-                    selectTitle="Select: a drag selects a region of the map (Esc clears the selection)"
                     onZoomToSelection={selection ? () => setZoom(selection) : undefined}
                     onWhole={zoom ? () => setZoom(null) : undefined}
                   />
@@ -386,16 +393,11 @@ export function CubeViewer({
             )}
           </div>
           {shown === 'channel' ? (
-            <div className="viewer-controls">
-              <StepSlider
-                min={spectrumZoom?.[0] ?? 0}
-                max={spectrumZoom?.[1] ?? nchannels - 1}
-                value={channel}
-                format={channelText}
-                always
-                label="Channel"
-                onChange={setChannel}
-              />
+            // (the channel shown: set on the spectrum, or stepped by the
+            // arrow keys)
+            <div className="viewer-controls viewer-controls-row" title="A click on the spectrum shows its channel; ← and → step through them">
+              <span className="control-text">Channel {channelText(channel)}</span>
+              <span className="viewer-channel-hint">click the spectrum · ← →</span>
             </div>
           ) : (
             // (the value at the side, not on the handle, which would cover

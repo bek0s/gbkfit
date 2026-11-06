@@ -4,10 +4,13 @@
 // out of the range of the values kept, or left out (e.g. by the edits of
 // moment maps), has the colour of the panel. It
 // shows a window of its pixels (all of them by default), which the wheel
-// asks to zoom about a pixel. A click gives the pixel (x, y), which a mark
-// can show; a drag gives a region (x0, x1, y0, y1, inclusive), which is
-// shown with the pixels out of it dimmed, or pans the window. The pixel
-// under the pointer is given as it moves (none as it leaves, or drags).
+// asks to zoom about a pixel, and a double click to show whole. Its
+// gestures need no mode, as in DS9 or CARTA: a click gives the pixel (x,
+// y), which a mark can show; a drag draws a region (x0, x1, y0, y1,
+// inclusive), shown with the pixels out of it dimmed (on a map without
+// regions, e.g. one not of the sky, it pans); a drag with the middle
+// button, or with Space held, pans the window. The pixel under the
+// pointer is given as it moves (none as it leaves, or drags).
 // Another region (e.g. a crop) can be outlined, and a contour drawn. A
 // press or a drag with the right button stretches its colours as QFitsView
 // does (see stretchAt), by where the pointer is on the map: across, the
@@ -19,6 +22,49 @@ import { useEffect, useRef, useState } from 'react';
 import { rampColour, rampStops, stretched, token, UNSTRETCHED, useColourMap, useScheme, type Stretch } from './colours';
 
 export type Region = [number, number, number, number];
+
+// The window of a map of nx by ny pixels (null: all of it), and how the
+// wheel zooms it about a pixel (by a factor, at least LEAST pixels across)
+// and a drag pans it (within the map)
+export function useZoom(nx: number, ny: number, least = 8) {
+  const [zoom, setZoom] = useState<Region | null>(null);
+  const [x0, x1, y0, y1] = zoom ?? [0, nx - 1, 0, ny - 1];
+  const zoomAt = (x: number, y: number, factor: number) => {
+    const w = Math.min(nx, Math.max(least, Math.round((x1 - x0 + 1) / factor)));
+    const h = Math.min(ny, Math.max(least, Math.round((y1 - y0 + 1) / factor)));
+    if (w >= nx && h >= ny) return setZoom(null);
+    const left = Math.min(nx - w, Math.max(0, Math.round(x - ((x - x0) * w) / (x1 - x0 + 1))));
+    const bottom = Math.min(ny - h, Math.max(0, Math.round(y - ((y - y0) * h) / (y1 - y0 + 1))));
+    setZoom([left, left + w - 1, bottom, bottom + h - 1]);
+  };
+  const panBy = (dx: number, dy: number) => {
+    if (zoom === null) return;
+    const mx = Math.min(nx - 1 - x1, Math.max(-x0, dx));
+    const my = Math.min(ny - 1 - y1, Math.max(-y0, dy));
+    setZoom([x0 + mx, x1 + mx, y0 + my, y1 + my]);
+  };
+  return { zoom, setZoom, zoomAt, panBy, shown: [x0, x1, y0, y1] as Region };
+}
+
+// Whether Space is held (a drag then pans, as in image editors), not as it
+// is typed in a field; the root of the page is marked with it, for the
+// cursor (followed once, for every map)
+const space = { held: false, followed: false };
+
+function followSpace() {
+  if (space.followed) return;
+  space.followed = true;
+  const typing = (target: EventTarget | null) =>
+    target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName));
+  const set = (held: boolean) => {
+    space.held = held;
+    if (held) document.documentElement.dataset.space = '';
+    else delete document.documentElement.dataset.space;
+  };
+  window.addEventListener('keydown', (event) => event.code === 'Space' && !typing(event.target) && set(true));
+  window.addEventListener('keyup', (event) => event.code === 'Space' && set(false));
+  window.addEventListener('blur', () => set(false));
+}
 
 // How far the pointer moves (in screen pixels) before a click is a drag
 const DRAG = 4;
@@ -53,7 +99,6 @@ export function MapView({
   kept = null,
   out = null,
   window = null,
-  drag = 'region',
   mark,
   region = null,
   outline = null,
@@ -64,6 +109,7 @@ export function MapView({
   onRegion,
   onZoom,
   onPan,
+  onWhole,
   onHover,
   label,
 }: {
@@ -89,9 +135,10 @@ export function MapView({
   onPick?: (x: number, y: number) => void;
   onRegion?: (region: Region) => void;
   onZoom?: (x: number, y: number, factor: number) => void;
-  // What a drag does: give a region, or pan the window (by whole pixels)
-  drag?: 'region' | 'pan';
+  // How a drag pans the window (by whole pixels), and how a double click
+  // shows it whole
   onPan?: (dx: number, dy: number) => void;
+  onWhole?: () => void;
   onHover?: (pixel: [number, number] | null) => void;
   label: string;
 }) {
@@ -99,9 +146,10 @@ export function MapView({
   const [ny, nx] = shape;
   const [wx0, wx1, wy0, wy1] = window ?? [0, nx - 1, 0, ny - 1];
   const [w, h] = [wx1 - wx0 + 1, wy1 - wy0 + 1];
-  // Where a press started (its pixel and its point on the screen), and the
-  // region dragged from it so far
-  const press = useRef<{ pixel: [number, number]; at: [number, number] } | null>(null);
+  // Where a press started (its pixel and its point on the screen, and
+  // whether it pans), and the region dragged from it so far
+  const press = useRef<{ pixel: [number, number]; at: [number, number]; pans: boolean } | null>(null);
+  useEffect(followSpace, []);
   const [dragged, setDragged] = useState<Region | null>(null);
   // (the pan not yet made whole pixels, and where the pointer was)
   const panned = useRef<{ at: [number, number]; rest: [number, number] } | null>(null);
@@ -168,7 +216,7 @@ export function MapView({
   ];
   const shown = dragged ?? region;
   return (
-    <div className="map" data-drag={drag}>
+    <div className="map" data-drag={onRegion ? 'region' : 'pan'}>
       <canvas
         ref={canvas}
         aria-label={label}
@@ -181,9 +229,12 @@ export function MapView({
             stretchTo(event);
             return;
           }
-          if (event.button !== 0) return;
+          if (event.button !== 0 && event.button !== 1) return;
+          // (the middle button pans, not scrolls)
+          if (event.button === 1) event.preventDefault();
           event.currentTarget.setPointerCapture(event.pointerId);
-          press.current = { pixel: pixelAt(event.clientX, event.clientY), at: [event.clientX, event.clientY] };
+          const pans = event.button === 1 || space.held || onRegion === undefined;
+          press.current = { pixel: pixelAt(event.clientX, event.clientY), at: [event.clientX, event.clientY], pans };
           panned.current = null;
         }}
         onPointerMove={(event) => {
@@ -200,7 +251,7 @@ export function MapView({
           // (a press that becomes a drag hides the pixel under the pointer;
           // a click keeps it, the pixel it picks)
           if (moved > DRAG) onHover?.(null);
-          if (drag === 'pan') {
+          if (start.pans) {
             if (onPan === undefined || (panned.current === null && moved <= DRAG)) return;
             // (the pixels moved since the last move: the map follows the
             // pointer, so the window moves the other way)
@@ -232,7 +283,7 @@ export function MapView({
           // lag behind it)
           const now = pixelAt(event.clientX, event.clientY);
           if (dragged !== null) onRegion?.(between(start.pixel, now));
-          else onPick?.(...now);
+          else if (event.button === 0) onPick?.(...now);
           setDragged(null);
         }}
         onPointerCancel={() => {
@@ -241,6 +292,8 @@ export function MapView({
           setDragged(null);
         }}
         onPointerLeave={() => press.current === null && onHover?.(null)}
+        onDoubleClick={() => onWhole?.()}
+        onAuxClick={(event) => event.button === 1 && event.preventDefault()}
       />
       {/* (in the pixels of the whole map; the window is its view) */}
       <svg viewBox={`${wx0} ${ny - 1 - wy1} ${w} ${h}`} preserveAspectRatio="none" aria-hidden="true">

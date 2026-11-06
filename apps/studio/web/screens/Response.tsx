@@ -626,7 +626,6 @@ function PsfPreview({ project, options, step, scale, tools, problem }: PreviewPr
             shape={[ny, nx]}
             range={range}
             window={nx > 1 ? window : null}
-            drag="pan"
             mark={pinned ?? undefined}
             contour={half}
             stretch={stretch}

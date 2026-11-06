@@ -1,43 +1,28 @@
-// The tools of a map, as icons over its corner: select (a drag selects a
-// region) or pan (a drag moves the zoomed map); and zoom to the selection
-// (the wheel zooms about the pointer) or out to the whole map.
-import { PanIcon, SelectIcon, ZoomSelectionIcon, ZoomWholeIcon } from './icons';
+// The zoom of a map, as icons over its corner: to the selection, or out to
+// the whole map (as a double click). Its other gestures need no tool (see
+// MapView): the wheel zooms about the pointer, a drag draws a region, a
+// drag with the middle button or Space held pans, and one with the right
+// button stretches the colours; the title of the corner says so.
+import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
 import { IconButton } from './ui/basics';
 
-export type Tool = 'select' | 'pan';
+export const GESTURES = 'Drag: a region · wheel: zoom · middle drag or Space drag: pan · right drag: colours · double click: whole';
 
 export function MapTools({
-  tool,
-  onTool,
-  selectTitle = 'Select: a drag selects a region of the map',
   onZoomToSelection,
   onWhole,
 }: {
-  tool: Tool;
-  onTool: (tool: Tool) => void;
-  selectTitle?: string;
   // How the map zooms to the selection, and out to the whole map (none:
   // nothing selected, or not zoomed)
   onZoomToSelection?: () => void;
   onWhole?: () => void;
 }) {
   return (
-    <div className="map-tools">
-      <IconButton label={selectTitle} pressed={tool === 'select'} onClick={() => onTool('select')}>
-        <SelectIcon />
-      </IconButton>
-      <IconButton label="Pan: a drag moves the zoomed map" pressed={tool === 'pan'} onClick={() => onTool('pan')}>
-        <PanIcon />
-      </IconButton>
-      <span className="map-tools-gap" />
-      <IconButton
-        label="Zoom to the selection (the wheel zooms about the pointer)"
-        disabled={onZoomToSelection === undefined}
-        onClick={() => onZoomToSelection?.()}
-      >
+    <div className="map-tools" title={GESTURES}>
+      <IconButton label="Zoom to the selection" disabled={onZoomToSelection === undefined} onClick={() => onZoomToSelection?.()}>
         <ZoomSelectionIcon />
       </IconButton>
-      <IconButton label="The whole map" disabled={onWhole === undefined} onClick={() => onWhole?.()}>
+      <IconButton label="The whole map (double click)" disabled={onWhole === undefined} onClick={() => onWhole?.()}>
         <ZoomWholeIcon />
       </IconButton>
     </div>
