@@ -22,6 +22,9 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('JY/BEAM.KM/S', u.Jy * u.km / u.s / u.beam),
     # (a '.' after a digit separates terms too, as one after a letter)
     ('W/m2.Hz', u.W * u.Hz / u.m ** 2),
+    # (spaces around a '/' do not separate terms)
+    ('Jy/beam km / s', u.Jy * u.km / u.s / u.beam),
+    ('Jy / beam km/s', u.Jy * u.km / u.s / u.beam),
     ('Jy beam-1 km s-1', u.Jy * u.km / u.s / u.beam),
     ('K km/s', u.K * u.km / u.s),
     # Capitals that are units of their own too (S, the siemens)

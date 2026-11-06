@@ -184,6 +184,9 @@ def _product(text: str) -> astropy.units.UnitBase:
     Return the unit of a text as terms that multiply each other. Raise
     ValueError if a term is not a unit.
     """
+    # Remove the spaces around each '/', as they do not separate terms.
+    # For example, 'Jy/beam km / s' becomes 'Jy/beam km/s'.
+    text = '/'.join(part.strip() for part in text.split('/'))
     unit = astropy.units.dimensionless_unscaled
     for term in _TERM_SEPARATOR.split(text):
         if term:
