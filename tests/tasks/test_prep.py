@@ -580,7 +580,8 @@ def test_binned_maps_to_one_value_per_bin():
     np.testing.assert_array_equal(fits.getdata('prep_vel.fits'), [-40, 120, np.nan])
     from gbkfit.dataset import dataset_parser
     dataset = dataset_parser.load(dict(
-        type='region_moments', regions=dict(type='bins', file='prep_bins.fits'),
+        type='region_moments',
+        regions=dict(type='bins', file='prep_bins.fits'),
         moment1=dict(data='prep_vel.fits', error='prep_vel_error.fits')))
     assert dataset.regions().nregions() == 3
     np.testing.assert_array_equal(dataset['moment1'].mask(), [1, 1, 0])
@@ -588,6 +589,26 @@ def test_binned_maps_to_one_value_per_bin():
     # The world coordinates of the bins are kept
     _, coords = read_data('prep_bins.fits')
     assert coords.rpix == (11.5, 9.5)
+
+
+def test_binned_maps_keep_their_unit():
+    # (a moment 1 in m/s: without its unit, it would be read in km/s)
+    bins = np.array([[0, 0], [1, 1]])
+    fits.writeto('bins.fits', bins.astype(np.int32))
+    fits.writeto('vel.fits', np.array([[1e5, 1e5], [2e5, 2e5]]),
+                 fits.Header(dict(BUNIT='METR/SEC')))
+    fits.writeto('evel.fits', np.full((2, 2), 5e3))
+    prep.prep_region_moments(
+        'bins.fits', ['vel.fits'], ['evel.fits'], None, 'float32')
+    assert fits.getheader('prep_vel.fits')['BUNIT'] == 'METR/SEC'
+    assert fits.getheader('prep_vel_error.fits')['BUNIT'] == 'METR/SEC'
+    from gbkfit.dataset import dataset_parser
+    dataset = dataset_parser.load(dict(
+        type='region_moments',
+        regions=dict(type='bins', file='prep_bins.fits'),
+        moment1=dict(data='prep_vel.fits', error='prep_vel_error.fits')))
+    np.testing.assert_allclose(dataset['moment1'].data(), [100, 200])
+    np.testing.assert_allclose(dataset['moment1'].error(), [5, 5])
 
 
 def test_binned_maps_must_hold_one_value_per_bin():
@@ -652,6 +673,9 @@ def test_the_moments_of_the_gauss_hermite_series_of_a_table():
     # wavelength normalised to [-0.5, 0.5] from 5000 to 9000 Angstrom)
     dict(FSFMODE='MOFFAT1', FSF00BET=2.5, FSF00FWA=0.94, FSF00FWB=-2e-5),
     dict(FSFMODE='MOFFAT2', FSFLB1=5000, FSFLB2=9000, FSF00FNC=2,
+         FSF00F00=-0.08, FSF00F01=0.8, FSF00BNC=1, FSF00B00=2.5),
+    # (as MPDAF writes its mode 2: the integer)
+    dict(FSFMODE=2, FSFLB1=5000, FSFLB2=9000, FSF00FNC=2,
          FSF00F00=-0.08, FSF00F01=0.8, FSF00BNC=1, FSF00B00=2.5)])
 def test_psf_of_muse(tmp_path, keywords):
     import astropy.units as u
@@ -713,6 +737,28 @@ def test_beams_of_casa(tmp_path):
     beam = psf.at(1.4201e9 * u.Hz)
     assert beam.dump() == pytest.approx(
         dict(type='gauss_beam', bmaj=12, bmin=9, bpa=31))
+
+
+def test_region_spectra_keep_the_spectral_axis_of_the_cube():
+    # Logarithmic wavelengths (e.g. MaNGA's LOGCUBE): the wavelengths of
+    # the spectra are those of the channels of the cube, all of them (not
+    # the linear axis of the first two), and the frame is kept
+    sky = {k: v for k, v in HEADER.items() if k[-1] in '12'}
+    nw = 400
+    cube = sky | dict(
+        CTYPE3='WAVE-LOG', CUNIT3='m', CRVAL3=6e-7, CDELT3=6e-7 * 1e-3,
+        CRPIX3=1, SPECSYS='BARYCENT')
+    fits.writeto('cube.fits', np.ones((nw, 20, 24)), fits.Header(cube))
+    fits.writeto('bins.fits', np.zeros((20, 24)), fits.Header(sky))
+    prep.prep_region_spectra(
+        'bins.fits', 'cube.fits', None, None, None, 'float64')
+    header = fits.getheader('prep_cube.fits')
+    assert header['SPECSYS'] == 'BARYCENT'
+    channels = np.arange(nw)
+    out = astropy.wcs.WCS(header).sub([2]).pixel_to_world_values(channels)
+    expected = astropy.wcs.WCS(fits.Header(cube)).sub([3]) \
+        .pixel_to_world_values(channels)
+    np.testing.assert_allclose(out, expected, rtol=1e-12)
 
 
 def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():

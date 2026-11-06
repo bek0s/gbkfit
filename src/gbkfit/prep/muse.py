@@ -19,11 +19,15 @@ __all__ = [
 # The wavelengths (Angstrom) of the tables of MUSE (its range, and more)
 _MUSE_WAVELENGTHS = np.arange(4600.0, 9401.0, 50.0)
 
+# The names of the modes of the PSFs of MUSE (FSFMODE) that MPDAF writes as
+# numbers
+_MOFFAT_MODES = {2: 'MOFFAT2', '2': 'MOFFAT2'}
+
 
 def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
     """
     Return the PSF of a MUSE cube (from the keywords of its header: the
-    MOFFAT1 and MOFFAT2 modes of MPDAF, its first field) as a table of the
+    modes MOFFAT1 and 2 of MPDAF, its first field) as a table of the
     options alpha and beta of a Moffat PSF against wavelength.
 
     Raises
@@ -32,13 +36,15 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
         If the header has no PSF of MUSE.
     """
     wavelengths = _MUSE_WAVELENGTHS
+    # (MPDAF writes its mode 2, of polynomials, as the integer 2)
     mode = header.get('FSFMODE')
+    mode = _MOFFAT_MODES.get(mode, mode)
     fields = [f for f in (*range(10), 99) if f'FSF{f:02d}BET' in header
               or f'FSF{f:02d}FNC' in header]
     if mode not in ('MOFFAT1', 'MOFFAT2') or not fields:
         raise ValueError(
-            f"the header has no PSF of MUSE (FSFMODE MOFFAT1 or MOFFAT2); "
-            f"FSFMODE is {mode!r}")
+            f"the header has no PSF of MUSE (FSFMODE MOFFAT1, or 2); "
+            f"FSFMODE is {header.get('FSFMODE')!r}")
     key = f'FSF{fields[0]:02d}'
     if mode == 'MOFFAT1':
         fwhm = header[f'{key}FWA'] + header[f'{key}FWB'] * wavelengths

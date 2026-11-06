@@ -24,7 +24,8 @@ import numpy.typing as npt
 from astropy.io import fits
 
 from gbkfit.config import DataFile
-from gbkfit.io import ErrorKind, casa_beam_table, read_column, read_table
+from gbkfit.io import (
+    ErrorKind, casa_beam_table, header_unit, read_column, read_table)
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
@@ -444,7 +445,8 @@ def prep_region_moments(
     0 in the order of their numbers in the map (prep_<bins>.fits), and for
     each map a vector of the value of each bin (prep_<map>.fits), whose
     masked or empty bins are NaN, and of their errors, standard deviations
-    (prep_<map>_error.fits).
+    (prep_<map>_error.fits), in the unit of the map (BUNIT), if it has
+    one.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
@@ -462,6 +464,10 @@ def prep_region_moments(
             raise ValueError(
                 f"{file_d[i]}: the maps must have the shape of the bins "
                 f"{index.shape}; they have {arrays.data.shape}")
+        # (the errors are in the unit of the map, see read_arrays)
+        header = fits.Header()
+        if (unit := header_unit(arrays.header)) is not None:
+            header['BUNIT'] = unit
         for filename, data, role in (
                 (file_d[i], arrays.data, ''),
                 (file_e[i], arrays.error, 'error')):
@@ -473,29 +479,32 @@ def prep_region_moments(
                 raise ValueError(f"{filename}: {e}") from e
             fits.writeto(
                 _output(output_dir, file_d[i], role), values.astype(dtype),
-                overwrite=True)
+                header, overwrite=True)
 
 
 def _spectral_header(cube: FitsArrays, nbins: int) -> fits.Header:
     """
     Return the header of the spectra of the bins of a cube: the bins along
-    x (in pixels), and the spectral axis of the cube along y.
+    x (in pixels), and the spectral axis of the cube along y, as the cube
+    states it (e.g. of logarithmic wavelengths, WAVE-LOG), with its rest
+    and its frame.
     """
     wcs = astropy.wcs.WCS(cube.header)
     if wcs.wcs.spec < 0:
         raise ValueError("the cube has no spectral axis")
     spectral = wcs.sub([wcs.wcs.spec + 1])
-    points = spectral.pixel_to_world_values(np.arange(2))
-    header = fits.Header()
-    header['CTYPE1'], header['CRPIX1'], header['CRVAL1'] = 'LINEAR', 1, 0
-    header['CDELT1'] = 1
-    header['CTYPE2'] = spectral.wcs.ctype[0]
-    header['CUNIT2'] = str(spectral.wcs.cunit[0])
-    header['CRPIX2'], header['CRVAL2'] = 1, float(points[0])
-    header['CDELT2'] = float(points[1] - points[0])
-    for key in ('RESTFRQ', 'RESTWAV'):
-        if key in cube.header:
-            header[key] = cube.header[key]
+    out = astropy.wcs.WCS(naxis=2)
+    out.wcs.ctype = ['LINEAR', spectral.wcs.ctype[0]]
+    out.wcs.cunit = ['', spectral.wcs.cunit[0]]
+    out.wcs.crpix = [1, spectral.wcs.crpix[0]]
+    out.wcs.crval = [0, spectral.wcs.crval[0]]
+    out.wcs.cdelt = [1, spectral.pixel_scale_matrix[0, 0]]
+    out.wcs.restfrq, out.wcs.restwav = (
+        spectral.wcs.restfrq, spectral.wcs.restwav)
+    out.wcs.specsys = spectral.wcs.specsys
+    header = out.to_header()
+    if 'AIRORVAC' in cube.header:
+        header['AIRORVAC'] = cube.header['AIRORVAC']
     return fits.PrimaryHDU(
         np.zeros((cube.data.shape[0], nbins)), header).header
 

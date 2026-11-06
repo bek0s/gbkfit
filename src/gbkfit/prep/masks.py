@@ -9,6 +9,7 @@ import astropy.stats
 import numpy as np
 import scipy.ndimage
 
+from gbkfit.utils.numutils import MAD_TO_STD
 
 
 __all__ = [
@@ -84,7 +85,7 @@ def noise_errors(data: np.ndarray, mask: np.ndarray) -> np.ndarray:
     for channel, (values, kept) in enumerate(zip(data, mask)):
         negative = values[(kept != 0) & (values < 0)]
         if negative.size >= 5:
-            errors[channel] = 1.4826 * np.median(-negative)
+            errors[channel] = MAD_TO_STD * np.median(-negative)
     return np.broadcast_to(errors[:, None, None], data.shape).copy()
 
 
