@@ -55,10 +55,6 @@ _PREPARED = '.prepared.json'
 # HDU, {file, hdu}; of moment maps, a list of them)
 _PREP_FILES = ('file_d', 'file_e', 'file_m')
 
-# The regions of the sky of a project (of the Studio, not of GBKFIT: in a
-# hidden folder of the project, which GBKFIT passes over)
-_REGIONS = os.path.join('.studio', 'regions.json')
-
 # The folders of the pieces and of the setups of a project
 _PIECES = (
     'galaxies', 'observations', 'datasets', 'psfs', 'lsfs', 'noise',
@@ -325,42 +321,6 @@ class Workspace:
         """
         target, folder, name = self._piece_of(relative)
         target.delete_piece(folder, name)
-
-    def regions(self, project: str) -> list[dict[str, Any]]:
-        """
-        Return the regions of the sky of a project (see set_regions); none
-        if it has none, or if their file is not valid.
-
-        Raises
-        ------
-        NotFound
-            If the folder is not a project.
-        """
-        path = Path(self._project_path(project), _REGIONS)
-        try:
-            regions = json.loads(path.read_text(encoding='utf-8'))
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []
-        return regions if isinstance(regions, list) else []
-
-    def set_regions(
-            self, project: str, regions: list[dict[str, Any]]) -> None:
-        """
-        Keep the regions of the sky of a project (each its id, name and
-        box; see the API), all of them, in its hidden folder of the
-        Studio; the file is written whole, then moved over the old one.
-
-        Raises
-        ------
-        NotFound
-            If the folder is not a project.
-        """
-        path = Path(self._project_path(project), _REGIONS)
-        path.parent.mkdir(exist_ok=True)
-        written = path.with_name(f'{path.name}.new')
-        written.write_text(
-            json.dumps(regions, indent=2) + '\n', encoding='utf-8')
-        os.replace(written, path)
 
     def _project_path(self, relative: str) -> str:
         """

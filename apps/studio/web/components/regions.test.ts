@@ -17,6 +17,7 @@ describe('the statistics of a region', () => {
 
   it('are none without values, and read as text', () => {
     expect(regionStats(values, 3, [2, 2, 0, 0])).toBeNull();
-    expect(statsText(regionStats(values, 3, [0, 0, 0, 1]), 'km/s')).toBe('2 px · mean 2.5 · median 2.5 · σ 1.5 km/s');
+    expect(statsText(regionStats(values, 3, [0, 0, 0, 1]), 'km/s', 2)).toBe('mean 2.5 · median 2.5 · σ 1.5 km/s');
+    expect(statsText(regionStats(values, 3, [0, 2, 0, 0]), '', 3)).toBe('mean 1.5 · median 1.5 · σ 0.5 (of 2 px with a value)');
   });
 });

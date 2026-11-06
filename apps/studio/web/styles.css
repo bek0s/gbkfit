@@ -139,7 +139,7 @@ h2 { margin: 0; font: var(--text-heading); }
    left allows; the controls under it, and the spectrum of a pixel */
 .viewer { display: flex; flex-direction: column; min-height: 0; }
 .viewer-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px; }
-.selection-chips { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.viewer-head-gap { flex: 1; }
 /* (the map, its controls and the spectrum; what is shown is chosen in the
    head: the views of a cube, e.g. a channel or a moment, a menu of more,
    and its layers) */
@@ -154,6 +154,9 @@ h2 { margin: 0; font: var(--text-heading); }
 .viewer:not(.card):not(.response) > .viewer-head { padding: 0 0 10px; }
 .viewer:not(.card):not(.response) > .viewer-body { padding: 0; }
 .viewer-main { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* (a map panel, see MapPanel: the same on every screen) */
+.map-panel { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.map-block { max-width: 100%; display: flex; flex-direction: column; }
 .viewer-stage { flex: 1; min-height: 160px; display: grid; place-items: center; overflow: hidden; }
 .viewer-map { display: flex; align-items: flex-start; gap: 12px; }
 /* (the side of a map: its colour bar, as tall as it, and what sets its
@@ -164,15 +167,12 @@ h2 { margin: 0; font: var(--text-heading); }
 .map { position: relative; width: 100%; height: 100%; }
 .map canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--panel2); border-radius: 4px; cursor: crosshair; touch-action: none; }
 .map[data-drag="pan"] canvas { cursor: default; }
+.viewer-canvas[data-smooth] .map canvas { image-rendering: auto; }
 .map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 /* (the pixels out of a crop, dimmed alike in both schemes) */
 .map-out { fill: var(--dim); }
-.map-region { fill: none; stroke: var(--fg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
-.map-other-region { fill: none; stroke: var(--fg2); stroke-width: 1px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
-.regions-bar { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
-.region-chip { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.region-chip b { font-weight: 600; margin-right: 4px; }
-.ui-chip:has(.region-chip[data-active]) { border-color: var(--accent); background: var(--sel); }
+.map-region { fill: none; stroke: #fff; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.map-region-halo { fill: none; stroke: #000; stroke-opacity: .55; stroke-width: 3.5; vector-effect: non-scaling-stroke; }
 /* (the crop of the dataset: dashed, in the accent) */
 .map-outline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
 .map-mark { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -201,19 +201,24 @@ h2 { margin: 0; font: var(--text-heading); }
 .control-text { flex: none; width: 31ch; font: var(--text-data-small); color: var(--muted); }
 .ui-slider-labelled .mantine-Slider-label { font: var(--text-data-small); background: var(--raise); color: var(--fg); border: 1px solid var(--line2); white-space: nowrap; }
 .viewer-canvas { position: relative; }
-.map-hint { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); padding: 3px 10px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-label); pointer-events: none; white-space: nowrap; opacity: 0; transition: opacity .2s; }
-/* (the hint shows as the pointer is over the map) */
-.viewer-canvas:hover .map-hint { opacity: 1; }
 .map-tools .icon, .spectrum-actions .icon { width: 16px; height: 16px; }
 .map-tools { position: absolute; top: 6px; right: 6px; display: flex; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--line2); border-radius: 7px; background: color-mix(in srgb, var(--panel) 85%, transparent); }
-.map-source { position: absolute; top: 6px; left: 6px; max-width: calc(100% - 140px); padding: 4px 8px; border: 1px solid var(--line2); border-radius: 7px; background: color-mix(in srgb, var(--panel) 85%, transparent); font: var(--text-data-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.map-tags { position: absolute; top: 6px; left: 6px; max-width: calc(100% - 120px); display: flex; align-items: center; gap: 6px; pointer-events: none; }
+.map-source { min-width: 0; padding: 4px 8px; border: 1px solid var(--line2); border-radius: 7px; background: color-mix(in srgb, var(--panel) 85%, transparent); font: var(--text-data-small); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
 .map-source.derived { border-color: var(--accent); color: var(--accent-text); }
 .map-tools-gap { width: 1px; height: 16px; margin: 0 3px; background: var(--line2); }
 .spectrum-head { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font: var(--text-data-small); color: var(--faint); }
 .spectrum-what, .spectrum-actions { display: inline-flex; align-items: center; gap: 8px; }
 .spectrum-what { color: var(--muted); }
-/* (the value under the pointer, under a map) */
-.map-status { height: 22px; margin-top: 6px; font: var(--text-data-small); color: var(--muted); }
+/* (under every map, two lines of one height: what the pointer is over,
+   and the selection) */
+.map-status { flex: none; width: max-content; min-width: 100%; display: grid; grid-template-rows: 20px 22px; margin-top: 4px; font: var(--text-data-small); color: var(--faint); white-space: nowrap; }
+.map-status-at, .map-status-selection { min-width: 0; display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.map-status-at[data-hover] { color: var(--muted); }
+.map-status-at b { font-weight: 600; color: var(--fg2); }
+.map-status-selection { color: var(--muted); }
+.map-status-at > span, .map-status-selection > span { overflow: hidden; text-overflow: ellipsis; }
+.map-status .icon, .spectrum-what .icon { width: 14px; height: 14px; }
 .add-map { display: flex; justify-content: flex-start; }
 .spectrum-what[data-hover] { color: var(--faint); font-style: italic; }
 .spectrum-unit { color: var(--faint); }
@@ -539,20 +544,12 @@ h2 { margin: 0; font: var(--text-heading); }
 .gx-empty { margin: auto; text-align: center; }
 .gx-empty p:first-child { margin: 0 0 4px; font: var(--text-subtitle); }
 .gx-render { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 12px; }
-.gx-map-pane { flex: none; height: var(--side); display: flex; justify-content: center; align-items: flex-start; gap: 12px; position: relative; }
-.gx-map { position: relative; flex: none; width: var(--side); height: var(--side); overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--panel2); box-shadow: 0 18px 50px -30px var(--shadow); }
-.gx-map .map canvas { image-rendering: auto; border-radius: 0; }
+.viewer-stage > .gx-map-wait { width: min(100%, 480px); height: auto; aspect-ratio: 1; border-radius: 4px; }
+.viewer-stage > .gx-error { position: static; transform: none; }
 .gx-map-wait { width: 100%; height: 100%; background: linear-gradient(110deg, var(--panel2) 30%, var(--raise) 50%, var(--panel2) 70%) 0 0 / 300% 100%; animation: gx-wait 1.4s linear infinite; }
 @keyframes gx-wait { to { background-position: -150% 0; } }
-.gx-map-pane > .gx-map-wait { width: min(100%, 480px); aspect-ratio: 1; border-radius: 12px; }
-.gx-map-corner { position: absolute; top: 8px; right: 8px; display: flex; align-items: center; gap: 6px; }
-.gx-map-corner .ui-icon-button { background: color-mix(in srgb, var(--panel) 85%, transparent); }
 .gx-busy { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: gx-pulse 0.9s ease-in-out infinite alternate; }
 @keyframes gx-pulse { from { opacity: .25; } to { opacity: 1; } }
-.gx-readout { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: baseline; gap: 10px; max-width: calc(100% - 16px); padding: 4px 9px; border-radius: 7px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); pointer-events: none; white-space: nowrap; overflow: hidden; }
-.gx-readout span { opacity: .8; }
-.gx-readout b { font-weight: 600; }
-.gx-readout-hint { opacity: .7; }
 .gx-map-note { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 20px; color: var(--muted); font: var(--text-body); text-align: center; pointer-events: none; }
 .gx-arrows { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .gx-arrows line { stroke: var(--hint-fg); stroke-width: 1.3; vector-effect: non-scaling-stroke; }
@@ -680,10 +677,6 @@ h2 { margin: 0; font: var(--text-heading); }
 @media (max-width: 1280px) {
   .gx-body { grid-template-columns: 220px minmax(0, 1fr) 320px; }
 }
-.map-regions-over { position: absolute; left: 8px; top: 8px; right: 96px; z-index: 2; pointer-events: none; }
-.map-regions-over .regions-bar { pointer-events: auto; }
-.map-regions-over .ui-chip { background: var(--hint-bg); color: var(--hint-fg); border-color: transparent; }
-.gx-map-tag { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); pointer-events: none; }
 /* (the options of a family nested in the options of an item: under their
    name, a rule at their left) */
 .gx-more .schema-row:has(> .schema-field > .schema-member) { grid-template-columns: minmax(0, 1fr); gap: 6px; }

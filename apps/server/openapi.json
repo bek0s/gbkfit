@@ -1727,95 +1727,6 @@
         }
       }
     },
-    "/api/v1/regions/{path}": {
-      "get": {
-        "summary": "Regions",
-        "description": "Return the regions of the sky of a project (see set_regions); those of\nits file that are not valid (e.g. edited by hand) are passed over.",
-        "operationId": "regions_api_v1_regions__path__get",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RegionInfo"
-                  },
-                  "title": "Response Regions Api V1 Regions  Path  Get"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "summary": "Set Regions",
-        "description": "Keep the regions of the sky of a project, all of them (those not\ngiven are gone), for every map of it.",
-        "operationId": "set_regions_api_v1_regions__path__put",
-        "parameters": [
-          {
-            "name": "path",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Path"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/components/schemas/RegionInfo"
-                },
-                "title": "Regions"
-              }
-            }
-          }
-        },
-        "responses": {
-          "204": {
-            "description": "Successful Response"
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/v1/preferences": {
       "get": {
         "summary": "Preferences",
@@ -3138,35 +3049,6 @@
         ],
         "title": "ProjectRequest",
         "description": "A project to create: its folder (its path)."
-      },
-      "RegionInfo": {
-        "properties": {
-          "id": {
-            "type": "string",
-            "title": "Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "box": {
-            "items": {
-              "type": "number"
-            },
-            "type": "array",
-            "maxItems": 4,
-            "minItems": 4,
-            "title": "Box"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "name",
-          "box"
-        ],
-        "title": "RegionInfo",
-        "description": "A region of the sky of a project, to look at and measure on every map\nof it: its id, its name, and its box (x0, x1, y0, y1, x0 < x1 and\ny0 < y1), in arcsec on the sky as the model measures positions (from\nthe reference pixel of the data, as xpos and ypos)."
       },
       "RunInfo": {
         "properties": {

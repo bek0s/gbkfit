@@ -731,32 +731,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/regions/{path}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Regions
-         * @description Return the regions of the sky of a project (see set_regions); those of
-         *     its file that are not valid (e.g. edited by hand) are passed over.
-         */
-        get: operations["regions_api_v1_regions__path__get"];
-        /**
-         * Set Regions
-         * @description Keep the regions of the sky of a project, all of them (those not
-         *     given are gone), for every map of it.
-         */
-        put: operations["set_regions_api_v1_regions__path__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/preferences": {
         parameters: {
             query?: never;
@@ -1408,21 +1382,6 @@ export interface components {
         ProjectRequest: {
             /** Path */
             path: string;
-        };
-        /**
-         * RegionInfo
-         * @description A region of the sky of a project, to look at and measure on every map
-         *     of it: its id, its name, and its box (x0, x1, y0, y1, x0 < x1 and
-         *     y0 < y1), in arcsec on the sky as the model measures positions (from
-         *     the reference pixel of the data, as xpos and ypos).
-         */
-        RegionInfo: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Box */
-            box: number[];
         };
         /**
          * RunInfo
@@ -2759,70 +2718,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    regions_api_v1_regions__path__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                path: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegionInfo"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_regions_api_v1_regions__path__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                path: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RegionInfo"][];
-            };
-        };
         responses: {
             /** @description Successful Response */
             204: {

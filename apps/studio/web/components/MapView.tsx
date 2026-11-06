@@ -5,11 +5,10 @@
 // moment maps), has the colour of the panel. It
 // shows a window of its pixels (all of them by default), which the wheel
 // asks to zoom about a pixel, and a double click to show whole. Its
-// gestures need no mode, as in DS9 or CARTA: a click gives the pixel (x,
-// y), which a mark can show; a drag draws a region (x0, x1, y0, y1,
-// inclusive), shown with the pixels out of it dimmed (on a map without
-// regions, e.g. one not of the sky, it pans); a drag with the middle
-// button, or with Space held, pans the window. The pixel under the
+// gestures: a click gives the pixel (x, y), which a mark can show; a drag
+// pans the window, or, as a viewer asks (see MapPanel: its select tool),
+// draws a region (x0, x1, y0, y1, inclusive), shown with the pixels out of
+// it dimmed; a drag with the middle button, or with Space held, pans. The pixel under the
 // pointer is given as it moves (none as it leaves, or drags).
 // Another region (e.g. a crop) can be outlined, and a contour drawn. A
 // press or a drag with the right button stretches its colours as QFitsView
@@ -23,11 +22,26 @@ import { rampColour, rampStops, stretched, token, UNSTRETCHED, useColourMap, use
 
 export type Region = [number, number, number, number];
 
+// A box of pixels of a map of one size in those of another (e.g. a render
+// made again at another size): the same part of it
+export function rescale(box: Region, [fx, fy]: [number, number], [tx, ty]: [number, number]): Region {
+  if (fx === tx && fy === ty) return box;
+  const [x0, x1, y0, y1] = box;
+  const along = (a: number, b: number, from: number, to: number): [number, number] => {
+    const first = Math.min(to - 1, Math.max(0, Math.floor((a * to) / from)));
+    return [first, Math.min(to - 1, Math.max(first, Math.ceil(((b + 1) * to) / from) - 1))];
+  };
+  return [...along(x0, x1, fx, tx), ...along(y0, y1, fy, ty)];
+}
+
 // The window of a map of nx by ny pixels (null: all of it), and how the
 // wheel zooms it about a pixel (by a factor, at least LEAST pixels across)
-// and a drag pans it (within the map)
+// and a drag pans it (within the map); kept as the map is made again at
+// another size (see rescale)
 export function useZoom(nx: number, ny: number, least = 8) {
-  const [zoom, setZoom] = useState<Region | null>(null);
+  const [kept, setKept] = useState<{ window: Region; of: [number, number] } | null>(null);
+  const zoom = kept && rescale(kept.window, kept.of, [nx, ny]);
+  const setZoom = (window: Region | null) => setKept(window && { window, of: [nx, ny] });
   const [x0, x1, y0, y1] = zoom ?? [0, nx - 1, 0, ny - 1];
   const zoomAt = (x: number, y: number, factor: number) => {
     const w = Math.min(nx, Math.max(least, Math.round((x1 - x0 + 1) / factor)));
@@ -101,7 +115,6 @@ export function MapView({
   window = null,
   mark,
   region = null,
-  regions = [],
   outline = null,
   contour = null,
   stretch = UNSTRETCHED,
@@ -127,9 +140,6 @@ export function MapView({
   window?: Region | null;
   mark?: [number, number];
   region?: Region | null;
-  // (other regions, outlined: e.g. those of the sky of the project not the
-  // selection)
-  regions?: Region[];
   outline?: Region | null;
   // (a path in its pixels, as of contourPath)
   contour?: string | null;
@@ -309,6 +319,14 @@ export function MapView({
               fillRule="evenodd"
               d={`M0 0H${nx}V${ny}H0Z M${shown[0]} ${ny - 1 - shown[3]}H${shown[1] + 1}V${ny - shown[2]}H${shown[0]}Z`}
             />
+            {/* (light over a dark halo, to read on any map, in either scheme) */}
+            <rect
+              className="map-region-halo"
+              x={shown[0]}
+              y={ny - 1 - shown[3]}
+              width={shown[1] - shown[0] + 1}
+              height={shown[3] - shown[2] + 1}
+            />
             <rect
               className="map-region"
               x={shown[0]}
@@ -318,9 +336,6 @@ export function MapView({
             />
           </>
         )}
-        {regions.map((box, i) => (
-          <rect key={i} className="map-other-region" x={box[0]} y={ny - 1 - box[3]} width={box[1] - box[0] + 1} height={box[3] - box[2] + 1} />
-        ))}
         {outline && (
           <rect
             className="map-outline"

@@ -1,35 +1,32 @@
 // A cube, to look at: its data, or the cube of their errors or of their
-// mask (its layers), one map at a time, with its colour bar, as large as
-// the space left allows: a channel, or one of the quick moment maps of the
-// data (a look, measured here; not part of the dataset, as its corner
-// says; unless the moments are shown elsewhere, e.g. of a galaxy), chosen
-// in its head: the first three as segments, the others in a menu beside
-// them. A selection (a region of the map, a band of channels of the
-// spectrum) is made to look at: the map and the spectrum zoom to it (or
-// with the wheel) and back, and the total spectrum is of it; it is never
-// kept. Its gestures need no tool (see MapView): a drag selects (Esc
-// clears), a drag with the middle button or Space held pans, a click picks
-// a pixel, a double click shows it whole. A crop (an edit of the dataset, set from the selection; see
-// Edits) is outlined. Under the map, the channel (a slider), or the mask
-// of the moments (grown by prep's tools from seeds above a number of times
-// the noise), in a row of one height, so that the map keeps its size; and
-// the spectrum of the pixel picked, or else the total of the selection (or
-// of the cube), with the channel marked (a click on the spectrum picks a
-// channel; a drag selects a band). The values out of the range kept are
-// blank on the channel map of the data.
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+// mask (its layers), one map at a time: a channel, or one of the quick
+// moment maps of the data (a look, measured here; not part of the
+// dataset, as its corner says; unless the moments are shown elsewhere,
+// e.g. of a galaxy), chosen in its head: the first three as segments, the
+// others in a menu beside them; in a map panel (see MapPanel: as every map
+// of the Studio). Its selection (a box of the map, see MapPanel; a band of
+// channels, dragged on the spectrum) is made to look at: the total
+// spectrum is of it, and the spectrum zooms to the band; it is never kept.
+// A crop (an edit of the dataset, set from the selection; see Edits) is
+// outlined. Under the map, the channel shown, or the mask of the moments
+// (grown by prep's tools from seeds above a number of times the noise), in
+// a row of one height, so that the map keeps its size; and the spectrum of
+// the pixel under the pointer, or of the one picked (a click), or else the
+// total of the selection (or of the cube), with the channel marked (a
+// click on the spectrum shows its channel; a drag selects a band). What
+// the spectrum is of, and the band, are cleared at its head, or by Esc.
+// The values out of the range kept are blank on the channel map of the
+// data.
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FrameArray } from '../api/frames';
 import { useChannel, useMoments, useSpectrum } from '../api/queries';
-import { ColourBar } from './ColourBar';
-import { UNSTRETCHED, useStretches } from './colours';
 import { significant } from './format';
-import { MapView, type Region } from './MapView';
+import { ClearIcon, ZoomSelectionIcon, ZoomWholeIcon } from './icons';
+import { MapPanel, robustRange } from './MapPanel';
+import type { Region } from './MapView';
 import { SpectrumPlot, valueRange } from './SpectrumPlot';
-import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
-import { MapTools } from './MapTools';
-import { RegionsBar, useSkyRegions } from './RegionsBar';
 import type { SkyFrame } from './sky';
-import { Chip, IconButton } from './ui/basics';
+import { IconButton } from './ui/basics';
 import { Check, NumberField, Segments } from './ui/inputs';
 import { DropMenu } from './ui/overlays';
 import { StepSlider } from './ui/sliders';
@@ -75,10 +72,6 @@ const MORE_MOMENTS = MOMENTS.slice(3);
 // server's views)
 const SNR = 5;
 
-// The width of the side of a map (its colour bar, and the like), with its
-// gap
-const SIDE = 76;
-
 // How often (ms) the spectrum of the pixel under the pointer is updated
 const HOVER = 40;
 
@@ -96,7 +89,6 @@ export function CubeViewer({
   onSelection,
   onBand,
   actions,
-  project = null,
   frame = null,
   noiseless = false,
   moments: which = 'all',
@@ -117,9 +109,7 @@ export function CubeViewer({
   kept?: [number | null, number | null] | null;
   // What the head of the viewer has at its right (e.g. a toggle)
   actions?: ReactNode;
-  // The project, whose regions of the sky (see RegionsBar) are on the map,
-  // and the pixels of the map on the sky (none: a selection of its own)
-  project?: string | null;
+  // The pixels of the map on the sky (none: not known)
   frame?: SkyFrame | null;
   // Whether it is a model without noise (e.g. a render of a galaxy): its
   // moments are of all its voxels at first, and are not of a dataset
@@ -130,14 +120,6 @@ export function CubeViewer({
   moments?: 'all' | 'higher' | 'none';
 }) {
   const [nx, ny, nchannels] = shape;
-  // (the regions of the sky on it; the one chosen is the selection)
-  const regions = useSkyRegions(project, frame, [nx, ny]);
-  const activePixels = regions.active?.pixels ?? null;
-  const activeKey = activePixels ? activePixels.join() : '';
-  useEffect(() => {
-    // (as the selection, or its pixels, change)
-    onSelection(activePixels);
-  }, [activeKey]);
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
   const [view, setView] = useState<View>('channel');
   // (within the cube: one made again can have fewer channels, e.g. a render)
@@ -146,8 +128,6 @@ export function CubeViewer({
   // The pixel picked (none: the total spectrum is shown)
   const [pixel, setPixel] = useState<[number, number] | null>(null);
   const [snr, setSnr] = useState(noiseless ? 0 : SNR);
-  // The window of the map shown (null: all of it)
-  const [zoom, setZoom] = useState<Region | null>(null);
   // The window of the spectrum shown (first and last channel; null: all)
   const [zoomedSpectrum, setSpectrumZoom] = useState<[number, number] | null>(null);
   const spectrumZoom = zoomedSpectrum !== null && zoomedSpectrum[1] < nchannels ? zoomedSpectrum : null;
@@ -184,8 +164,6 @@ export function CubeViewer({
   const shown: View = withMoments && layer.key === 'data' ? view : 'channel';
   const ofData = layer.key === 'data';
   const more = MORE_MOMENTS.find((m) => m.view === shown);
-  // (the colours of each, as the right button stretches them on the map)
-  const [stretch, setStretch] = useStretches(`${layer.key}/${shown}`);
   const plane = useChannel(layer.path, layer.hdu, channel);
   const method = MOMENTS.find((m) => m.view === shown)?.method ?? 'moments';
   const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel', method);
@@ -226,15 +204,12 @@ export function CubeViewer({
     const [low, high] = limits.map((text) => (text.trim() === '' ? NaN : Number(text)));
     return Number.isFinite(low) && Number.isFinite(high) && high > low ? [low, high] : null;
   })();
-  // (the pixels shown)
-  const shownPixels = zoom ?? ([0, nx - 1, 0, ny - 1] as Region);
-  const fitted = useFitted(shownPixels[1] - shownPixels[0] + 1, shownPixels[3] - shownPixels[2] + 1);
   const colours = MOMENTS.find((m) => m.view === shown)?.colours ?? 'sequential';
   const map: FrameArray | undefined =
     shown === 'channel' ? plane.data?.plane : moments.data?.find((array) => array.info.name === shown);
   // (the mask, 0 to 1; the other cubes over the range of their values)
-  const range: [number, number] | undefined =
-    shown !== 'channel' ? map && robustRange(map.values, colours) : layer.key === 'mask' ? [0, 1] : plane.data?.range;
+  const range: [number, number] =
+    (shown !== 'channel' ? map && robustRange(map.values, colours) : layer.key === 'mask' ? [0, 1] : plane.data?.range) ?? [0, 1];
   const error = shown === 'channel' ? plane.error : moments.error;
   // (the arrow keys step through the channels, as a channel is shown, unless
   // they move something else: a field, a slider, a choice)
@@ -251,29 +226,17 @@ export function CubeViewer({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [shown, spectrumZoom, nchannels]);
-  // (Esc clears the selection, all its parts)
+  // (Esc clears the pixel picked and the band; the map, its selection)
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        onSelection(null);
         onBand(null);
         setPixel(null);
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onSelection, onBand]);
-  // Zoom about a pixel by a factor, keeping it where it is on the screen;
-  // out to the whole map, the window is none
-  const zoomAt = (x: number, y: number, factor: number) => {
-    const [x0, x1, y0, y1] = shownPixels;
-    const w = Math.min(nx, Math.max(LEAST, Math.round((x1 - x0 + 1) / factor)));
-    const h = Math.min(ny, Math.max(LEAST, Math.round((y1 - y0 + 1) / factor)));
-    if (w >= nx && h >= ny) return setZoom(null);
-    const left = Math.min(nx - w, Math.max(0, Math.round(x - ((x - x0) * w) / (x1 - x0 + 1))));
-    const bottom = Math.min(ny - h, Math.max(0, Math.round(y - ((y - y0) * h) / (y1 - y0 + 1))));
-    setZoom([left, left + w - 1, bottom, bottom + h - 1]);
-  };
+  }, [onBand]);
   // Zoom the spectrum about a channel by a factor, keeping it where it is;
   // out to all the channels, the window is none
   const zoomSpectrum = (at: number, factor: number) => {
@@ -282,14 +245,6 @@ export function CubeViewer({
     if (n >= nchannels) return setSpectrumZoom(null);
     const first = Math.min(nchannels - n, Math.max(0, Math.round(at - ((at - c0) * n) / (c1 - c0 + 1))));
     setSpectrumZoom([first, first + n - 1]);
-  };
-  // Pan the window by pixels, within the map
-  const panBy = (dx: number, dy: number) => {
-    if (zoom === null) return;
-    const [x0, x1, y0, y1] = zoom;
-    const mx = Math.min(nx - 1 - x1, Math.max(-x0, dx));
-    const my = Math.min(ny - 1 - y1, Math.max(-y0, dy));
-    setZoom([x0 + mx, x1 + mx, y0 + my, y1 + my]);
   };
   return (
     <div className="viewer">
@@ -323,87 +278,49 @@ export function CubeViewer({
         ) : (
           !withMoments && <h2>{data.title}</h2>
         )}
-        {/* (the selection, a chip of each of its parts, each cleared by its
-            own button; Esc clears them all): a place (a region, or a pixel:
-            one at a time) and a band of channels */}
-        <div className="selection-chips" aria-label="The selection">
-          <RegionsBar regions={regions} values={map?.values} nx={nx} unit={mapUnit(shown, layer.unit)} />
-          {pixel !== null && (
-            <Chip title="The pixel picked on the map" removeLabel="Clear the pixel" onRemove={() => setPixel(null)}>
-              Pixel {pixel[0]}, {pixel[1]}
-            </Chip>
-          )}
-          {band !== null && (
-            <Chip title="The channels selected on the spectrum" removeLabel="Clear the channels" onRemove={() => onBand(null)}>
-              {bandText(band)}
-            </Chip>
-          )}
-        </div>
+        <span className="viewer-head-gap" />
         {actions}
       </div>
       <div className="viewer-body">
         <div className="viewer-main">
-          <div className="viewer-stage" ref={fitted.stage}>
-            {error && <p className="error">{error.message}</p>}
-            {shown !== 'channel' && moments.isPending && <p className="note">{method === 'gauss_hermite' ? 'Fitting a Gauss-Hermite series to each spectrum…' : 'Measuring the moments of the cube…'}</p>}
-            {map && range && fitted.size && (
-              <div className="viewer-map">
-                <div className="viewer-canvas" style={{ width: fitted.size[0], height: fitted.size[1] }}>
-                  <MapView
-                    values={map.values}
-                    shape={map.shape}
-                    range={range}
-                    diverging={colours !== 'sequential'}
-                    kept={shown === 'channel' && layer.key === 'data' ? kept : null}
-                    window={zoom}
-                    mark={pixel ?? undefined}
-                    region={selection}
-                    regions={regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!)}
-                    outline={crop}
-                    onPick={(x, y) => {
-                      // (one place is selected at a time: a pixel, or a region)
-                      setPixel([x, y]);
-                      onSelection(null);
-                    }}
-                    onRegion={(region) => {
-                      setPixel(null);
-                      regions.add(region);
-                      onSelection(region);
-                    }}
-                    onHover={hoverAt}
-                    onZoom={zoomAt}
-                    onPan={panBy}
-                    onWhole={() => setZoom(null)}
-                    stretch={stretch}
-                    onStretch={setStretch}
-                    label={shown === 'channel' ? `A channel of the ${layer.title.toLowerCase()}` : `The ${shown} map of the data`}
-                  />
-                  {shown !== 'channel' && (
-                    <div
-                      className="map-source derived"
-                      title={noiseless ? 'A quick moment map, measured here from the cube' : 'A quick moment map of the data, measured here from the cube; the dataset stays a cube'}
-                    >
-                      {noiseless ? '≈ quick look' : '≈ quick look · not part of the dataset'}
-                    </div>
-                  )}
-                  {selection === null && pixel === null && <div className="map-hint">Drag on the map to select a region</div>}
-                  <MapTools
-                    onZoomToSelection={selection ? () => setZoom(selection) : undefined}
-                    onWhole={zoom ? () => setZoom(null) : undefined}
-                  />
-                </div>
-                <div className="map-side" style={{ height: fitted.size[1] }}>
-                  <ColourBar
-                    range={range}
-                    diverging={colours !== 'sequential'}
-                    unit={mapUnit(shown, layer.unit)}
-                    stretch={stretch}
-                    onReset={() => setStretch(UNSTRETCHED)}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <MapPanel
+            values={map?.values ?? null}
+            shape={[ny, nx]}
+            range={range}
+            diverging={colours !== 'sequential'}
+            unit={mapUnit(shown, layer.unit)}
+            stretchKey={`${layer.key}/${shown}`}
+            frame={frame}
+            selection={selection}
+            onSelection={(region) => {
+              // (the spectrum then of the selection)
+              setPixel(null);
+              onSelection(region);
+            }}
+            kept={shown === 'channel' && layer.key === 'data' ? kept : null}
+            mark={pixel ?? undefined}
+            onPick={(x, y) => setPixel([x, y])}
+            onHover={hoverAt}
+            outline={crop}
+            label={shown === 'channel' ? `A channel of the ${layer.title.toLowerCase()}` : `The ${shown} map of the data`}
+            note={
+              error ? (
+                <p className="error">{error.message}</p>
+              ) : shown !== 'channel' && moments.isPending ? (
+                <p className="note">{method === 'gauss_hermite' ? 'Fitting a Gauss-Hermite series to each spectrum…' : 'Measuring the moments of the cube…'}</p>
+              ) : null
+            }
+            tags={
+              shown !== 'channel' && (
+                <span
+                  className="map-source derived"
+                  title={noiseless ? 'A quick moment map, measured here from the cube' : 'A quick moment map of the data, measured here from the cube; the dataset stays a cube'}
+                >
+                  {noiseless ? '≈ quick look' : '≈ quick look · not part of the dataset'}
+                </span>
+              )
+            }
+          />
           {shown === 'channel' ? (
             // (the channel shown: set on the spectrum, or stepped by the
             // arrow keys)
@@ -434,20 +351,34 @@ export function CubeViewer({
             {/* (what the spectrum is of, and the unit of its values: of a pixel
                 hovered or picked, or else the sum of the pixels of the
                 selection or of the cube; a picked pixel can go) */}
-            <span
-              className="spectrum-what"
-              data-hover={hover !== null || undefined}
-              title={
-                hover !== null
-                  ? 'The pixel under the pointer (a click keeps it)'
-                  : pixel !== null
-                    ? 'The pixel picked'
-                    : 'The sum of the pixels in each channel (the pointer over the map shows a pixel)'
-              }
-            >
-              {layer.key !== 'data' && `${layer.title} of `}
-              {shownPixel !== null ? `Pixel ${shownPixel[0]}, ${shownPixel[1]}` : `Σ ${selection === null ? 'cube' : 'selection'}`}
-              {layer.unit && <span className="spectrum-unit"> · {layer.unit}</span>}
+            <span className="spectrum-what">
+              <span
+                data-hover={hover !== null || undefined}
+                title={
+                  hover !== null
+                    ? 'The pixel under the pointer (a click keeps it)'
+                    : pixel !== null
+                      ? 'The pixel picked'
+                      : 'The sum of the pixels in each channel (the pointer over the map shows a pixel)'
+                }
+              >
+                {layer.key !== 'data' && `${layer.title} of `}
+                {shownPixel !== null ? `Pixel ${shownPixel[0]}, ${shownPixel[1]}` : `Σ ${selection === null ? 'cube' : 'selection'}`}
+                {layer.unit && <span className="spectrum-unit"> · {layer.unit}</span>}
+              </span>
+              {hover === null && pixel !== null && (
+                <IconButton label="Clear the pixel picked (Esc)" onClick={() => setPixel(null)}>
+                  <ClearIcon />
+                </IconButton>
+              )}
+              {band !== null && (
+                <>
+                  <span title="The channels selected on the spectrum">· {bandText(band)}</span>
+                  <IconButton label="Clear the channels (Esc)" onClick={() => onBand(null)}>
+                    <ClearIcon />
+                  </IconButton>
+                </>
+              )}
             </span>
             <span className="spectrum-actions">
               <span className="spectrum-scale">
@@ -508,43 +439,10 @@ export function CubeViewer({
   );
 }
 
-// The size of a map of nx by ny pixels that fits the space of its stage,
-// over its colour bar (undefined until the stage is measured)
-// (the size of a map of nx by ny pixels in the space of its stage, less
-// that of its side: none for a map without one)
-export function useFitted(nx: number, ny: number, side = SIDE) {
-  const stage = useRef<HTMLDivElement>(null);
-  const [space, setSpace] = useState<[number, number] | null>(null);
-  useLayoutEffect(() => {
-    const element = stage.current;
-    if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setSpace([entry.contentRect.width, entry.contentRect.height]));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  if (space === null) return { stage, size: undefined };
-  const scale = Math.max(0, Math.min((space[0] - side) / nx, space[1] / ny));
-  return { stage, size: [Math.floor(nx * scale), Math.floor(ny * scale)] as [number, number] };
-}
-
 // The unit of a map, from that of the values of the cube
 function mapUnit(view: View, unit: string | null): string {
   if (view === 'channel') return unit ?? '';
   if (view === 'flux') return unit ? `${unit} km/s` : 'km/s';
   if (view === 'velocity' || view === 'dispersion') return 'km/s';
   return '';
-}
-
-// The range of the colours of a map: from the 1st to the 99th percentile
-// of its values; for one diverging, about its median or 0, as wide on
-// each side
-export function robustRange(values: Float32Array, colours: 'sequential' | 'median' | 'zero'): [number, number] {
-  const sorted = Array.from(values.filter(Number.isFinite)).sort((a, b) => a - b);
-  if (sorted.length === 0) return [0, 1];
-  const at = (q: number) => sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
-  const [low, high] = [at(0.01), at(0.99)];
-  if (colours === 'sequential') return [low, high];
-  const middle = colours === 'median' ? at(0.5) : 0;
-  const half = Math.max(middle - low, high - middle) || 1;
-  return [middle - half, middle + half];
 }

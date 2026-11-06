@@ -3,9 +3,9 @@ The models of the requests and responses of the API (their schemas are
 in its contract, openapi.json).
 """
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from gbkfit_server.services.jobs import TASKS
 
@@ -38,7 +38,6 @@ __all__ = [
     'ProjectInfo',
     'ProjectRename',
     'ProjectRequest',
-    'RegionInfo',
     'RunInfo',
     'ServerInfo',
     'SessionInfo',
@@ -371,18 +370,6 @@ class PreferencesInfo(BaseModel):
     """
     file: str
     values: dict[str, Any]
-
-
-class RegionInfo(BaseModel):
-    """
-    A region of the sky of a project, to look at and measure on every map
-    of it: its id, its name, and its box (x0, x1, y0, y1, x0 < x1 and
-    y0 < y1), in arcsec on the sky as the model measures positions (from
-    the reference pixel of the data, as xpos and ypos).
-    """
-    id: str
-    name: str
-    box: Annotated[list[float], Field(min_length=4, max_length=4)]
 
 
 class SessionRequest(BaseModel):

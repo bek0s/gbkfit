@@ -4,12 +4,8 @@
 // its spectral resolution (the LSF against the channels), and its checks.
 import type { ArrayInfo } from '../../api/client';
 import { useChannel, useMoments } from '../../api/queries';
-import { robustRange, useFitted } from '../../components/CubeViewer';
-import { useStretches } from '../../components/colours';
-import { MapView, useZoom } from '../../components/MapView';
-import { RegionsBar, useSkyRegions } from '../../components/RegionsBar';
+import { MapPanel, robustRange, useFitted } from '../../components/MapPanel';
 import { frameOf } from '../../components/sky';
-import { useStudio } from '../../studio';
 import { showSection } from '../../components/ui/dock';
 import type { Options } from '../../components/SchemaForm';
 import { glanceOf, STAGES, type Check, type Ellipse } from './model';
@@ -71,51 +67,32 @@ function size(ellipse: Ellipse): string {
   return ellipse.major === ellipse.minor ? `${r(ellipse.major)}″` : `${r(ellipse.major)}″ × ${r(ellipse.minor)}″ at ${r(ellipse.angle)}°`;
 }
 
-// The map of the data, with the ellipses at its lower left corner
+// The map of the data, in a map panel (see MapPanel: as every map of the
+// Studio), with the ellipses at its lower left corner
 function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam: Ellipse | null }) {
   const moments = useMoments(data.path, data.array.index, 3, data.cube);
   const plane = useChannel(data.cube ? null : data.path, data.array.index, 0);
   const map = data.cube ? moments.data?.find((array) => array.info.name === 'flux') : plane.data?.plane;
   const [ny, nx] = map?.shape ?? [1, 1];
-  // (as every map: zoomed, panned, and a region drawn on it, with the
-  // statistics of the map in it; Esc clears it)
-  const { zoom, setZoom, zoomAt, panBy, shown } = useZoom(nx, ny);
-  const { project } = useStudio();
-  const regions = useSkyRegions(project, frameOf(data.array.step, data.array.rpix), [nx, ny]);
-  const region = regions.active?.pixels ?? null;
-  const [stretch, setStretch] = useStretches('observation/data');
-  const across = shown[1] - shown[0] + 1;
-  const fitted = useFitted(across, shown[3] - shown[2] + 1, 0);
   const step = data.array.step ? Math.abs(data.array.step[0]) : null;
   const error = (data.cube ? moments.error : plane.error)?.message;
+  const unit = data.array.unit ?? '';
   return (
-    <div className="ob-stage" ref={fitted.stage}>
-      {error && <p className="error">{error}</p>}
-      {!map && !error && <p className="ob-empty">{data.cube ? 'Measuring the intensity of the cube…' : 'Reading the map…'}</p>}
-      {map && fitted.size && (
-        <div className="ob-canvas" style={{ width: fitted.size[0], height: fitted.size[1] }}>
-          <MapView
-            values={map.values}
-            shape={map.shape}
-            range={robustRange(map.values, 'sequential')}
-            window={zoom}
-            region={region}
-            regions={regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!)}
-            onRegion={regions.add}
-            onZoom={zoomAt}
-            onPan={panBy}
-            onWhole={() => setZoom(null)}
-            stretch={stretch}
-            onStretch={setStretch}
-            label="The data"
-          />
-          {step && <Ellipses width={fitted.size[0]} height={fitted.size[1]} scale={fitted.size[0] / (across * step)} psf={psf} beam={beam} />}
-          <div className="map-regions-over">
-            <RegionsBar regions={regions} values={map.values} nx={nx} unit="" />
-          </div>
-        </div>
-      )}
-    </div>
+    <MapPanel
+      key={`${data.path}:${data.array.index}`}
+      values={map?.values ?? null}
+      shape={[ny, nx]}
+      range={map ? robustRange(map.values, 'sequential') : [0, 1]}
+      unit={data.cube ? (unit ? `${unit} km/s` : 'km/s') : unit}
+      stretchKey="observation/data"
+      frame={frameOf(data.array.step, data.array.rpix)}
+      label="The data"
+      note={error ? <p className="error">{error}</p> : <p className="ob-empty">{data.cube ? 'Measuring the intensity of the cube…' : 'Reading the map…'}</p>}
+      tags={data.cube && <span className="map-source derived" title="The intensity (moment 0) of the cube, measured here">≈ intensity</span>}
+      over={(size, shown) =>
+        step && <Ellipses width={size[0]} height={size[1]} scale={size[0] / ((shown[1] - shown[0] + 1) * step)} psf={psf} beam={beam} />
+      }
+    />
   );
 }
 

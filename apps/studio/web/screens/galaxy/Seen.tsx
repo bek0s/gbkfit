@@ -70,7 +70,7 @@ export function SeenView({
           </div>
         )}
         {!observed.error && !observed.data && <div className="gx-map-wait gx-seen-wait" />}
-        {!observed.error && observed.data && <Shown key={observation} observed={observed.data} project={project} />}
+        {!observed.error && observed.data && <Shown key={observation} observed={observed.data} />}
       </div>
       {render.data && <Curves render={render.data} focus={curves} components={components} height={CURVES_HEIGHT} />}
     </div>
@@ -80,7 +80,7 @@ export function SeenView({
 type Observed = NonNullable<ReturnType<typeof useObserved>['data']>;
 
 // The model as observed, in the viewer of its kind
-function Shown({ observed, project }: { observed: Observed; project: string }) {
+function Shown({ observed }: { observed: Observed }) {
   const [selection, setSelection] = useState<Region | null>(null);
   const [band, setBand] = useState<[number, number] | null>(null);
   const models = observed.arrays.filter((array) => array.kind === 'model');
@@ -99,7 +99,6 @@ function Shown({ observed, project }: { observed: Observed; project: string }) {
         onSelection={setSelection}
         onBand={setBand}
         noiseless
-        project={project}
         frame={frameOf(model.step, model.rpix)}
       />
     );
@@ -118,7 +117,6 @@ function Shown({ observed, project }: { observed: Observed; project: string }) {
       shape={[nx, ny]}
       selection={selection}
       onSelection={setSelection}
-      project={project}
       frame={frameOf(models[0].step, models[0].rpix)}
     />
   );

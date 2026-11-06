@@ -34,7 +34,7 @@ from .models import (
     JobInfo, JobRequest, LSFRequest, LSFViewInfo, ObservedArrayInfo,
     ObservedInfo, ObservedRequest, PSFRequest, PSFViewInfo,
     PieceReference, PieceRename, PieceRequest, PreferencesInfo,
-    PreparationInfo, RegionInfo,
+    PreparationInfo,
     ProjectInfo, ProjectRename, ProjectRequest, RunInfo,
     SessionInfo, SessionRequest, SpectrumView)
 
@@ -560,32 +560,6 @@ def delete_data(server: ServerDep, path: str) -> None:
     if server.jobs.busy(path):
         raise Invalid(f"'{path}' is in use by a job")
     server.workspace.delete_data(path)
-
-
-@router.get('/regions/{path:path}')
-def regions(server: ServerDep, path: str) -> list[RegionInfo]:
-    """
-    Return the regions of the sky of a project (see set_regions); those of
-    its file that are not valid (e.g. edited by hand) are passed over.
-    """
-    regions = []
-    for region in server.workspace.regions(path):
-        try:
-            regions.append(RegionInfo.model_validate(region))
-        except ValueError:
-            continue
-    return regions
-
-
-@router.put('/regions/{path:path}', status_code=status.HTTP_204_NO_CONTENT)
-def set_regions(
-        server: ServerDep, path: str, regions: list[RegionInfo]) -> None:
-    """
-    Keep the regions of the sky of a project, all of them (those not
-    given are gone), for every map of it.
-    """
-    server.workspace.set_regions(
-        path, [region.model_dump() for region in regions])
 
 
 @router.get('/preferences')

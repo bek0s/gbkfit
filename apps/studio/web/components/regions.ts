@@ -33,8 +33,10 @@ export function regionStats(values: ArrayLike<number>, nx: number, [x0, x1, y0, 
   return { count: found.length, sum, mean, median, scatter, min: found[0], max: found[found.length - 1] };
 }
 
-export function statsText(stats: RegionStats | null, unit: string): string {
+// (of a region of so many pixels: how many have a value, if not all)
+export function statsText(stats: RegionStats | null, unit: string, pixels: number): string {
   if (stats === null) return 'no values';
   const of = (value: number) => significant(value, 3);
-  return `${stats.count} px · mean ${of(stats.mean)} · median ${of(stats.median)} · σ ${of(stats.scatter)}${unit ? ` ${unit}` : ''}`;
+  const some = stats.count < pixels ? ` (of ${stats.count} px with a value)` : '';
+  return `mean ${of(stats.mean)} · median ${of(stats.median)} · σ ${of(stats.scatter)}${unit ? ` ${unit}` : ''}${some}`;
 }

@@ -2,21 +2,16 @@
 // /views/galaxy-cube): a map of its light, velocity or dispersion, of all
 // its components or of one, as seen, face-on (its motions in its plane as
 // arrows) or edge-on; or seen by an observation of the project (see Seen:
-// its cube, or its maps, as the observation records them). The map is as
-// large as its place, rendered at about its size on the screen; the wheel
-// zooms it, a drag pans it, and the pointer reads it (its place on the
-// sky, in arcsec from the centre, and its value). Light can be shown on a
-// linear, square-root or logarithmic scale.
+// its cube, or its maps, as the observation records them). The map is in a
+// map panel (see MapPanel: as every map of the Studio), rendered at about
+// its size on the screen; its place on the sky is in arcsec from its
+// centre. Light can be shown on a linear, square-root or logarithmic
+// scale.
 import { useDebouncedValue, useElementSize } from '@mantine/hooks';
 import { useMemo, useRef, useState } from 'react';
 import { useGalaxyRender, type GalaxyRender } from '../../api/queries';
-import { ColourBar } from '../../components/ColourBar';
-import { useStretches } from '../../components/colours';
-import { significant } from '../../components/format';
-import { GESTURES } from '../../components/MapTools';
-import { MapView, type Region } from '../../components/MapView';
-import { RegionsBar, useSkyRegions } from '../../components/RegionsBar';
-import { IconButton } from '../../components/ui/basics';
+import { MapPanel } from '../../components/MapPanel';
+import type { Region } from '../../components/MapView';
 import { Choice, Segments } from '../../components/ui/inputs';
 import { Curves, type CurvesFocus } from './Curves';
 import { SeenView } from './Seen';
@@ -181,8 +176,7 @@ export function Viewer(props: ViewerProps) {
   );
 }
 
-// A render of the galaxy: its map, as large as its place, with its colour
-// bar, and its curves under it
+// A render of the galaxy: its map, in a map panel, and its curves under it
 function RenderPane({
   project,
   galaxy,
@@ -196,8 +190,8 @@ function RenderPane({
   // (the map as large as the column allows, over curves of their least
   // height; the curves taller where the map leaves room)
   const { ref: column, width, height } = useElementSize();
-  const side = Math.max(160, Math.min(width - 64, height - CURVES_LEAST - CURVES_FRAME - 12));
-  const curvesHeight = Math.max(CURVES_LEAST, Math.min(CURVES_MOST, height - side - CURVES_FRAME - 12));
+  const side = Math.max(160, Math.min(width - 76, height - CURVES_LEAST - CURVES_FRAME - 40));
+  const curvesHeight = Math.max(CURVES_LEAST, Math.min(CURVES_MOST, height - side - CURVES_FRAME - 40));
   const key = JSON.stringify([galaxy, properties, orientation]);
   const [settledKey] = useDebouncedValue(key, SETTLE_MS);
   const size = renderSize(side || 400, useMemo(() => hasDepth(galaxy), [galaxy]), settledKey !== key);
@@ -207,125 +201,60 @@ function RenderPane({
   if (render.data) last.current = render.data;
   const shown = render.data ?? last.current;
   const [scale, setScale] = useState<Scale>('sqrt');
-  const [zoom, setZoom] = useState<{ window: Region; size: number } | null>(null);
-  const [hover, setHover] = useState<[number, number] | null>(null);
-  const [stretch, setStretch] = useStretches(`galaxy/${quantity}`);
   const n = shown?.size ?? size;
-  // (a zoom of a render of another size, scaled to this one)
-  const window = zoom && shown ? scaleWindow(zoom.window, zoom.size, n) : null;
   // (face-on, the velocity on the line of sight is none: the speed in the
   // plane, under its arrows)
   const arrows = orientation === 'face-on' && quantity === 'velocity';
   const what: Shown = arrows ? 'speed' : quantity;
   const map = useMemo(() => (shown ? mapOf(shown, what, isolated, scale) : null), [shown, what, isolated, scale]);
-  const [x0, x1, y0, y1] = window ?? [0, n - 1, 0, n - 1];
-  const zoomAt = (x: number, y: number, factor: number) => {
-    const w = Math.min(n, Math.max(8, Math.round((x1 - x0 + 1) / factor)));
-    if (w >= n) return setZoom(null);
-    const left = Math.min(n - w, Math.max(0, Math.round(x - ((x - x0) * w) / (x1 - x0 + 1))));
-    const bottom = Math.min(n - w, Math.max(0, Math.round(y - ((y - y0) * w) / (y1 - y0 + 1))));
-    setZoom({ window: [left, left + w - 1, bottom, bottom + w - 1], size: n });
-  };
-  const panBy = (dx: number, dy: number) => {
-    if (window === null) return;
-    const mx = Math.min(n - 1 - x1, Math.max(-x0, dx));
-    const my = Math.min(n - 1 - y1, Math.max(-y0, dy));
-    setZoom({ window: [x0 + mx, x1 + mx, y0 + my, y1 + my], size: n });
-  };
   const unit = quantity === 'light' ? '' : 'km/s';
-  const readout = hover && shown && map ? readAt(shown, map, hover) : null;
-  // (the regions of the sky of the project, on the render: its pixels from
-  // its middle, where the model measures positions from; not of the galaxy
-  // turned face-on or edge-on, where a drag pans)
-  const sky = orientation === 'sky';
-  const frame = useMemo(() => (sky && shown ? { step: [shown.step, shown.step] as [number, number], rpix: [(n - 1) / 2, (n - 1) / 2] as [number, number] } : null), [sky, shown, n]);
-  const regions = useSkyRegions(sky ? project : null, frame, [n, n]);
-  const region = sky ? (regions.active?.pixels ?? null) : null;
+  // (its pixels on the sky: arcsec from its centre, where the model
+  // measures positions from)
+  const frame = useMemo(() => (shown ? { step: [shown.step, shown.step] as [number, number], rpix: [(n - 1) / 2, (n - 1) / 2] as [number, number] } : null), [shown, n]);
   return (
     <div className="gx-render" ref={column}>
-    <div className="gx-map-pane" style={{ ['--side' as string]: `${side}px` }}>
-      <div className="gx-map">
-        {shown && map ? (
+      <MapPanel
+        values={map?.shown ?? null}
+        read={map?.values}
+        shape={[n, n]}
+        range={map?.range ?? [0, 1]}
+        bar={map?.bar}
+        diverging={what === 'velocity'}
+        unit={unit}
+        stretchKey={`galaxy/${quantity}`}
+        frame={frame}
+        pixels={false}
+        smooth
+        label={`The ${quantity} of the galaxy`}
+        note={render.error ? <p className="gx-error">{render.error.message}</p> : <div className="gx-map-wait" />}
+        tags={
           <>
-            <MapView
-              values={map.shown}
-              shape={[n, n]}
-              range={map.range}
-              diverging={what === 'velocity'}
-              window={window}
-              stretch={stretch}
-              onStretch={setStretch}
-              onZoom={zoomAt}
-              onPan={panBy}
-              onWhole={() => setZoom(null)}
-              region={region}
-              regions={sky ? regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!) : []}
-              onRegion={sky ? regions.add : undefined}
-              onHover={setHover}
-              label={`The ${quantity} of the galaxy`}
-            />
-            {arrows && <Arrows render={shown} component={isolated} window={[x0, x1, y0, y1]} />}
-            {sky && (
-              <div className="map-regions-over">
-                <RegionsBar regions={regions} values={map.values} nx={n} unit={unit} />
-              </div>
-            )}
-            <div className="gx-map-corner">
-              {render.isFetching && <span className="gx-busy" title="Rendering" />}
-              {window !== null && (
-                <IconButton label="See all of it" onClick={() => setZoom(null)}>
-                  <svg className="icon" viewBox="0 0 24 24">
-                    <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-                  </svg>
-                </IconButton>
-              )}
-            </div>
-            <div className="gx-readout" aria-live="off" title={GESTURES}>
-              {readout ? (
-                <>
-                  <span>x {signed(readout.x)}″</span>
-                  <span>y {signed(readout.y)}″</span>
-                  <b>{readout.value === null ? '—' : `${significant(readout.value, 4)}${unit ? ` ${unit}` : ''}`}</b>
-                </>
-              ) : (
-                <span className="gx-readout-hint">{scaleBar(shown, x1 - x0 + 1)}</span>
-              )}
-            </div>
-            {!map.any && <p className="gx-map-note">{quantity === 'light' ? 'No light here' : `No ${quantity} here: it needs motions, and light to weigh them`}</p>}
-            {arrows && map.any && <span className="gx-map-tag">speed in the plane</span>}
+            {render.isFetching && <span className="gx-busy" title="Rendering" />}
+            {arrows && map?.any && <span className="map-source">speed in the plane</span>}
           </>
-        ) : render.error ? null : (
-          <div className="gx-map-wait" />
+        }
+        over={(_, window) => (
+          <>
+            {arrows && shown && <Arrows render={shown} component={isolated} window={window} />}
+            {map && !map.any && <p className="gx-map-note">{quantity === 'light' ? 'No light here' : `No ${quantity} here: it needs motions, and light to weigh them`}</p>}
+            {render.error && shown && <p className="gx-error">{render.error.message}</p>}
+          </>
         )}
-      </div>
-      <div className="map-side" style={{ height: 'var(--side)' }}>
-        {map && map.any && <ColourBar range={map.bar} diverging={what === 'velocity'} unit={unit} stretch={stretch} onReset={() => setStretch({ middle: 0.5, width: 1 })} />}
-        {quantity === 'light' && (
-          <div className="gx-scale" role="group" aria-label="The scale of the light">
-            {(['linear', 'sqrt', 'log'] as Scale[]).map((s) => (
-              <button key={s} data-on={scale === s || undefined} onClick={() => setScale(s)} title={{ linear: 'Linear', sqrt: 'Square root', log: 'Logarithmic' }[s]}>
-                {{ linear: 'lin', sqrt: '√', log: 'log' }[s]}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      {render.error && <p className="gx-error">{render.error.message}</p>}
-    </div>
-    {shown && <Curves render={shown} focus={curves} components={components} height={curvesHeight} />}
+        side={
+          quantity === 'light' && (
+            <div className="gx-scale" role="group" aria-label="The scale of the light">
+              {(['linear', 'sqrt', 'log'] as Scale[]).map((s) => (
+                <button key={s} data-on={scale === s || undefined} onClick={() => setScale(s)} title={{ linear: 'Linear', sqrt: 'Square root', log: 'Logarithmic' }[s]}>
+                  {{ linear: 'lin', sqrt: '√', log: 'log' }[s]}
+                </button>
+              ))}
+            </div>
+          )
+        }
+      />
+      {shown && <Curves render={shown} focus={curves} components={components} height={curvesHeight} />}
     </div>
   );
-}
-
-// A window of pixels of a render of one size, in those of another
-function scaleWindow(window: Region, from: number, to: number): Region {
-  if (from === to) return window;
-  const f = to / from;
-  const [x0, x1, y0] = window;
-  const w = Math.max(8, Math.round((x1 - x0 + 1) * f));
-  const left = Math.min(to - w, Math.max(0, Math.round(x0 * f)));
-  const bottom = Math.min(to - w, Math.max(0, Math.round(y0 * f)));
-  return [left, left + w - 1, bottom, bottom + w - 1];
 }
 
 // What a map shows: a quantity, or (face-on) the speed in the plane
@@ -414,25 +343,6 @@ function finiteRange(values: Float32Array): [number, number] | null {
     }
   }
   return low <= high ? [low, high] : null;
-}
-
-// The place on the sky (arcsec from the centre of the render) and the value
-// of a pixel
-function readAt(render: GalaxyRender, map: ShownMap, [x, y]: [number, number]) {
-  const middle = (render.size - 1) / 2;
-  const value = map.values[y * render.size + x];
-  return { x: (x - middle) * render.step, y: (y - middle) * render.step, value: Number.isFinite(value) ? value : null };
-}
-
-function signed(value: number): string {
-  const text = significant(Math.abs(value), 3);
-  return value < -1e-9 ? `−${text}` : text;
-}
-
-// The width of the window, as a hint where the pointer is not
-function scaleBar(render: GalaxyRender | undefined, pixels: number): string {
-  if (!render) return '';
-  return `${significant(pixels * render.step, 3)}″ across`;
 }
 
 // The motions in the plane of the sky (vx, vy) as arrows over the map,

@@ -822,23 +822,6 @@ def test_a_galaxy_is_observed_by_an_observation_of_its_project(client):
     ).status_code in (400, 404)
 
 
-def test_the_regions_of_a_project_are_kept(client, root):
-    assert client.get('/api/v1/regions/study').json() == []
-    regions = [dict(id='a', name='R1', box=[-10, 10, -5, 5]),
-               dict(id='b', name='core', box=[0, 2, 0, 2])]
-    assert client.put(
-        '/api/v1/regions/study', json=regions).status_code == 204
-    assert client.get('/api/v1/regions/study').json() == [
-        dict(region, box=[float(v) for v in region['box']])
-        for region in regions]
-    # (in the hidden folder of the Studio, which is not a project)
-    assert pathlib.Path(root, 'study', '.studio', 'regions.json').is_file()
-    assert client.get('/api/v1/projects').json() == ['study']
-    assert client.put('/api/v1/regions/study', json=[
-        dict(id='c', name='bad', box=[1, 2])]).status_code == 422
-    assert client.get('/api/v1/regions/none').status_code == 404
-
-
 def test_the_cube_of_a_galaxy_is_rendered_and_viewed(client):
     info = client.post('/api/v1/views/galaxy-cube', json=dict(
         project='study', galaxy=RENDERED,
