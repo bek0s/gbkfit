@@ -214,11 +214,11 @@ def _corrected(text: str) -> str:
     a run of letters and underscores, as 'M_sun'; digits are not part of
     it, so 'cm2' is the name 'cm' squared.
     """
-    def valid(match: re.Match) -> str:
+    def corrected_name(match: re.Match) -> str:
         name = match.group(0)
         correction = _NAME_CORRECTIONS.get(name.upper())
         return name if correction is None or _is_valid(name) else correction
-    return re.sub(r'[A-Za-z_]+', valid, text)
+    return re.sub(r'[A-Za-z_]+', corrected_name, text)
 
 
 def _is_valid(name: str) -> bool:
