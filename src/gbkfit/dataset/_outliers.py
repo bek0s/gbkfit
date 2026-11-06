@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import scipy.spatial
 
+from gbkfit.utils.numutils import MAD_TO_STD
 
 if TYPE_CHECKING:
     from .base import Dataset
@@ -19,9 +20,6 @@ if TYPE_CHECKING:
 # The fewest neighbours with values that a value is judged by: one with
 # fewer is kept
 _MIN_NEIGHBOURS = 3
-
-# The standard deviation of a Gaussian, in its median absolute deviations
-_MAD_TO_STD = 1.4826
 
 # The most values of the windows of a grid copied at once
 _CHUNK = 2 ** 22
@@ -48,7 +46,7 @@ def neighbour_stats(
         # (the values with no neighbours, which are kept)
         warnings.simplefilter('ignore', RuntimeWarning)
         median = np.nanmedian(neighbours, axis=1)
-        scatter = _MAD_TO_STD * np.nanmedian(
+        scatter = MAD_TO_STD * np.nanmedian(
             np.abs(neighbours - median[:, None]), axis=1)
     return median, scatter, np.count_nonzero(np.isfinite(neighbours), axis=1)
 
@@ -73,7 +71,7 @@ def outliers(
     if not judged.any():
         return judged
     deviation = np.abs(values - median)
-    overall = _MAD_TO_STD * np.median(deviation[judged])
+    overall = MAD_TO_STD * np.median(deviation[judged])
     return judged & (deviation > nsigma * np.maximum(scatter, overall))
 
 

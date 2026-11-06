@@ -41,10 +41,10 @@ def _tiles(
     broadcast to the shape).
     """
     pixels = np.ix_(*(np.arange(n) for n in shape))
-    counts = [-(-n // b) for n, b in zip(shape, size)]
+    counts = [-(-n // b) for n, b in zip(shape, size, strict=True)]
     blocks = np.ravel_multi_index(
-        [p // b for p, b in zip(pixels, size)], counts)
-    positions = tuple(p % b for p, b in zip(pixels, size))
+        [p // b for p, b in zip(pixels, size, strict=True)], counts)
+    positions = tuple(p % b for p, b in zip(pixels, size, strict=True))
     return blocks, int(np.prod(counts)), positions
 
 

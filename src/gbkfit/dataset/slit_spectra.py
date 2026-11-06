@@ -103,7 +103,7 @@ class DatasetSlitSpectra(Dataset):
             The world coordinates of the axes on the sky (see
             Coords); by default, those of the header. Either rpix
             or rval can be given, and the other comes from the header (see
-            read_data).
+            coords_from_wcs).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.
@@ -111,7 +111,7 @@ class DatasetSlitSpectra(Dataset):
             The world coordinates of the spectral axis, the convention of
             its velocities, its rest and its medium, given instead of
             those of the header (as those of the axes on the sky; the
-            medium of the header, see read_data); not its size,
+            medium of the header, see coords_from_header); not its size,
             which the data give.
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma

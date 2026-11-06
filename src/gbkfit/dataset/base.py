@@ -182,9 +182,9 @@ class Dataset(TypedSerializable, Mapping[str, Data], abc.ABC):
         values, which keeps those whose few neighbours agree by chance.
         The neighbours are those with values, the value itself not among
         them; a value with fewer than 3 is kept. Each item is screened by
-        itself. The kinds of data
-        that offer it say what the neighbours of a value are (e.g. the
-        other pixels of a window about it); the others raise ValueError.
+        itself. The kinds of data that offer it say what the neighbours of
+        a value are (e.g. the other pixels of a window about it); the
+        others raise ValueError.
 
         It is for values that no sky can give: e.g. failed fits of moment
         maps, hot pixels, cosmic rays, spikes of interference. Of data

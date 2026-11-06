@@ -9,10 +9,16 @@ import numpy as np
 
 
 __all__ = [
+    'MAD_TO_STD',
     'all_positive',
     'cumsum_from',
     'nativify'
 ]
+
+
+# The standard deviation of a Gaussian, in its median absolute deviations
+# (1 over the quantile of the normal at 3/4, to 5 digits)
+MAD_TO_STD = 1.4826
 
 
 def cumsum_from(
