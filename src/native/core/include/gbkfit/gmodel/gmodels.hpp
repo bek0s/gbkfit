@@ -401,14 +401,15 @@ gmodel_ptraits_sum(
 // component), passed to visit(i, value) one at a time (no array of their
 // values, see traits_each). project(i, value) transforms the value of
 // polar trait i first (e.g. the speed of a velocity trait onto the line
-// of sight; see vp_disk_project).
+// of sight; see vp_disk_project). Further arguments (hargs) go to the
+// height traits, after the height (e.g. the half width of rh_trait_mean).
 template<auto PTraitFunT, auto HTraitFunT, typename T, typename VisitT,
-         typename ProjectT>
+         typename ProjectT, typename ...HArgs>
 constexpr void
 gmodel_traits_each(
         VisitT visit, const TraitSet<T>& pt, const TraitSet<T>& ht,
         int rnidx, const T* rnodes, int nrnodes,
-        T x, T y, T r, T theta, T h, ProjectT project)
+        T x, T y, T r, T theta, T h, ProjectT project, HArgs ...hargs)
 {
     const T* pcvalues = pt.cvalues;
     const T* ppvalues = pt.pvalues;
@@ -426,7 +427,7 @@ gmodel_traits_each(
             T hvalue = 0;
             HTraitFunT(
                     hvalue, ht.uids[i], hcvalues, hpvalues, rnidx, rnodes,
-                    nrnodes, r, std::abs(h));
+                    nrnodes, r, std::abs(h), hargs...);
             value *= hvalue;
             hcvalues += ht.ccounts[i];
             hpvalues += ht.pcounts[i];
@@ -438,17 +439,19 @@ gmodel_traits_each(
 }
 
 // The sum of the traits of gmodel_traits_each
-template<auto PTraitFunT, auto HTraitFunT, typename T, typename ProjectT>
+template<auto PTraitFunT, auto HTraitFunT, typename T, typename ProjectT,
+         typename ...HArgs>
 constexpr T
 gmodel_traits_sum(
         const TraitSet<T>& pt, const TraitSet<T>& ht,
         int rnidx, const T* rnodes, int nrnodes,
-        T x, T y, T r, T theta, T h, ProjectT project)
+        T x, T y, T r, T theta, T h, ProjectT project, HArgs ...hargs)
 {
     T sum = 0;
     gmodel_traits_each<PTraitFunT, HTraitFunT>(
             [&](int, T value) { sum += value; },
-            pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h, project);
+            pt, ht, rnidx, rnodes, nrnodes, x, y, r, theta, h, project,
+            hargs...);
     return sum;
 }
 
@@ -1123,6 +1126,101 @@ gmodel_mcdisk_fields_moments(
     *v = gmodel_fields_vref(a) + dv;
 }
 
+// The derivatives with the radius of the position angle and the inclination
+// (radians per unit of length) of a tilted disk, and of the centre of a
+// loose one, at the radius rn of the ring of the node rnidx: linear in it,
+// and 0 beyond the last node, where the disk keeps its geometry (see
+// nodewise); 0 for a disk that is not tilted or loose
+template<typename T> constexpr void
+gmodel_disk_geometry_slopes(
+        const DiskArgs<T>& a, int rnidx, T rn,
+        T& dposa, T& dincl, T& dxpos, T& dypos)
+{
+    dposa = dincl = dxpos = dypos = 0;
+    if (!(rn < a.rnodes[rnidx]))
+        return;
+    const T dr = a.rnodes[rnidx] - a.rnodes[rnidx - 1];
+    if (a.tilted)
+    {
+        dposa = (a.posa[rnidx] - a.posa[rnidx - 1]) / dr * DEG_TO_RAD<T>;
+        dincl = (a.incl[rnidx] - a.incl[rnidx - 1]) / dr * DEG_TO_RAD<T>;
+    }
+    if (a.loose)
+    {
+        dxpos = (a.xpos[rnidx] - a.xpos[rnidx - 1]) / dr;
+        dypos = (a.ypos[rnidx] - a.ypos[rnidx - 1]) / dr;
+    }
+}
+
+// The volume of the sky that a unit of volume of a thick loose disk takes
+// at the azimuth of the position (xn, yn) in its plane (at the radius rn,
+// in the ring of the node rnidx, at the position angle posai and the
+// inclination incli, radians): the Jacobian |d(x, y, z of the sky) /
+// d(x, y, z of the disk)| of a frame whose centre moves with the radius,
+// c(r), which is
+//
+//   |1 + (R c') . (cos theta, sin theta, 0)|
+//
+// with R c' the move of the centre in the frame of the disk (R: the turn
+// of the sky into it, see transform_cpos_posa_incl) and theta the azimuth
+// in its plane; 1 for a disk whose centre stays. (The turns of a tilted
+// disk change it only in proportion to the height above its plane.)
+template<typename T> constexpr T
+gmodel_smdisk_sky_volume(
+        const DiskArgs<T>& a, int rnidx, T rn, T xn, T yn, T posai, T incli)
+{
+    const T rho = std::sqrt(xn * xn + yn * yn);
+    const T cos_theta = rho > 0 ? xn / rho : T(1);
+    const T sin_theta = rho > 0 ? yn / rho : T(0);
+    T dposa, dincl, dxpos, dypos;
+    gmodel_disk_geometry_slopes(a, rnidx, rn, dposa, dincl, dxpos, dypos);
+    // (the move of the centre, a vector, turned into the frame of the
+    // disk as its points are)
+    T cx = dxpos, cy = dypos, cz = 0;
+    transform_posa(cx, cy, posai);
+    transform_incl(cy, cz, incli);
+    return std::abs(1 + cx * cos_theta + cy * sin_theta);
+}
+
+// The area of the sky that a unit of area of a thin tilted or loose disk
+// covers at the radius rn and the position (xn, yn) of its plane (in the
+// frame of its ring, at the position angle posai and the inclination
+// incli, radians; see transform_cpos_posa_incl): the Jacobian of its
+// rings, |d(x, y of the sky) / d(r, theta)| / r, of rings whose position
+// angle, inclination and centre change with the radius (linearly within
+// the ring of the node rnidx, and not beyond the last node: see
+// nodewise). Of the azimuth theta in the plane and the derivatives of
+// the geometry with the radius, it is
+//
+//   |cos i - r i' sin i sin^2 theta + r posa' sin^2 i sin theta cos theta
+//    + u cos i cos theta + w sin theta|
+//
+// with (u, w) the move of the centre in the frame of the ring; |cos i|
+// for a flat disk. It is 0 where the rings fold on the sky, where the
+// model of a smooth disk breaks down (see ring_info): its light is then
+// unbounded.
+template<typename T> constexpr T
+gmodel_smdisk_sky_area(
+        const DiskArgs<T>& a, int rnidx, T rn, T xn, T yn, T posai, T incli)
+{
+    const T rho = std::sqrt(xn * xn + yn * yn);
+    const T cos_theta = rho > 0 ? xn / rho : T(1);
+    const T sin_theta = rho > 0 ? yn / rho : T(0);
+    T dposa, dincl, dxpos, dypos;
+    gmodel_disk_geometry_slopes(a, rnidx, rn, dposa, dincl, dxpos, dypos);
+    const T sin_posa = std::sin(posai), cos_posa = std::cos(posai);
+    const T sin_incl = std::sin(incli), cos_incl = std::cos(incli);
+    // (the move of the centre in the frame of the ring, as rnode_radius
+    // turns the sky into it)
+    const T u = - dxpos * sin_posa + dypos * cos_posa;
+    const T w = - dxpos * cos_posa - dypos * sin_posa;
+    return std::abs(
+            cos_incl
+            - rn * dincl * sin_incl * sin_theta * sin_theta
+            + rn * dposa * sin_incl * sin_incl * sin_theta * cos_theta
+            + u * cos_incl * cos_theta + w * sin_theta);
+}
+
 // The number of evaluations of a smooth disk along each spaxel: one for
 // each voxel of a thick disk, and one for a thin disk (see
 // gmodel_smdisk_evaluate_spaxel)
@@ -1230,26 +1328,42 @@ gmodel_smdisk_evaluate_spaxel(
         zn -= zvalue;
     }
 
-    // Density traits
-    rvalue = gmodel_traits_sum<rp_trait<T>, rh_trait<T>>(
+    // Density traits: of a thick disk, the mean of their height traits
+    // over the heights that the voxel spans along the line of sight (half
+    // its depth times |cos incl| on either side of its centre), so that a
+    // layer thinner than a voxel keeps its light (see rh_trait_mean)
+    const T half_depth = is_thin
+            ? T(0) : std::abs(g.spat_step[2] * std::cos(incli)) / 2;
+    rvalue = gmodel_traits_sum<rp_trait<T>, rh_trait_mean<T>>(
             a.rpt, a.rht, rnidx, a.rnodes, a.nrnodes,
-            xn, yn, rn, theta, zn, Unprojected{});
+            xn, yn, rn, theta, zn, Unprojected{}, half_depth);
 
     // Discard pixels with zero density
     if (!rvalue) {
         return;
     }
 
-    // Thin disk requires density correction for inclination (seen from
-    // either side: above 90 degrees, and at 90 in float, the cosine is
-    // negative)
+    // A thin disk is seen at a slant: its light is its surface density
+    // over the area of the sky that a unit of its area covers, that is
+    // |cos incl| for a flat disk (seen from either side: above 90 degrees,
+    // and at 90 in float, the cosine is negative), and more or less than
+    // that for a tilted or loose one, whose rings change their geometry
+    // with the radius (see gmodel_smdisk_sky_area)
     if (is_thin) {
-        rvalue /= std::abs(std::cos(incli));
+        rvalue /= (a.loose || a.tilted)
+                ? gmodel_smdisk_sky_area(a, rnidx, rn, xn, yn, posai, incli)
+                : std::abs(std::cos(incli));
     }
 
-    // Thick disk requires integration along the spatial z axis
+    // A thick disk is integrated along the line of sight: the light of the
+    // voxel is its density times its volume as a volume of the disk, which
+    // is its own for a disk whose centre stays, and more or less than that
+    // for a loose one (see gmodel_smdisk_sky_volume)
     if (!is_thin) {
         rvalue *= g.spat_step[2];
+        if (a.loose)
+            rvalue /= gmodel_smdisk_sky_volume(
+                    a, rnidx, rn, xn, yn, posai, incli);
     }
 
     // Velocity traits: their speeds, projected on the line of sight

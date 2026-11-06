@@ -134,6 +134,23 @@ _trunc_1d_pdf(T xmin, T xmax, T x, Ts ...args)
             : 0;
 }
 
+// The mean of a distribution truncated to [xmin, xmax] (see _trunc_1d_pdf)
+// over the interval [x - w, x + w]: its probability there over the width
+// of the interval, from its CDF, exact whatever the width (e.g. of a
+// profile far narrower than the interval); its pdf at x for w = 0
+template<auto PDF, auto CDF, typename T, typename ...Ts> constexpr T
+_trunc_1d_mean(T xmin, T xmax, T x, T w, Ts ...args)
+{
+    if (!(w > 0))
+        return _trunc_1d_pdf<PDF, CDF>(xmin, xmax, x, args...);
+    const T mass = CDF(xmax, args...) - CDF(xmin, args...);
+    const T lo = std::max(x - w, xmin);
+    const T hi = std::min(x + w, xmax);
+    return mass >= TRUNC_MASS_MIN<T> && hi > lo
+            ? (CDF(hi, args...) - CDF(lo, args...)) / mass / (2 * w)
+            : 0;
+}
+
 template<auto FUN, auto CDF, typename T, typename ...Ts> constexpr T
 _trunc_1d_rnd(T xmin, T xmax, RNG<T>& rng, Ts ...args)
 {

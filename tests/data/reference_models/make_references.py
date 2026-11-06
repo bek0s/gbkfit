@@ -37,6 +37,12 @@ of the last ring. Within the last ring the disks are the same (the
 kernels were checked to change only beyond it); the PSF spreads the
 light of the tails into the pixels near the last ring.
 
+They were made again (2026-11-07) when thick smooth disks took the mean
+of their height profiles over the heights that each voxel spans along the
+line of sight, instead of their value at its centre (so that a layer
+thinner than a voxel keeps its light, see rh_trait_mean). The thick disk
+changed by at most 9.7e-4 of its peak; the thin ones not at all.
+
 Usage:
 
     python make_references.py PYTHON

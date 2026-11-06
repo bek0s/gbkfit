@@ -215,8 +215,10 @@ def test_thin_disk_seen_from_below(driver, evaluate_cases, incl):
 def test_loose_disk_centres_its_rings(driver, evaluate_cases):
     # A face-on loose thin disk whose centre moves with radius, xpos =
     # 0.2 r: the ring of radius r is centred at 0.2 r, so the point at x
-    # on the x axis is on the ring x / 1.2 (x > 0) or -x / 0.8 (x < 0),
-    # where the image has the brightness of that radius
+    # on the x axis is on the ring x / 1.2 (x > 0) or -x / 0.8 (x < 0).
+    # There, the rings are 1.2 (or 0.8) times as far apart as their radii:
+    # the light of a unit of the disk covers that much of the sky, so the
+    # brightness is that of the radius over 1.2 (or 0.8)
     rnodes = list(range(0, 13))
     case = image_case(
         driver,
@@ -229,9 +231,102 @@ def test_loose_disk_centres_its_rings(driver, evaluate_cases):
     row = data[0]['brightness']['d'][20]
     x = (np.arange(41) - 20) * 0.5
     radius = np.where(x > 0, x / 1.2, -x / 0.8)
-    inside = radius < 11
+    spread = np.where(x > 0, 1.2, 0.8)
+    inside = (radius < 11) & (x != 0)
     np.testing.assert_allclose(
-        row[inside], np.exp(-radius[inside] / 4), rtol=1e-3)
+        row[inside], np.exp(-radius[inside] / 4) / spread[inside], rtol=1e-3)
+
+
+@pytest.mark.parametrize('profile', ['sech2', 'exponential', 'gauss'])
+@pytest.mark.parametrize('incl', [0, 45])
+def test_a_layer_thinner_than_a_voxel_keeps_its_light(
+        driver, evaluate_cases, profile, incl):
+    # A thick disk of a layer of scale 0.25 seen through depth steps of 1
+    # (the pixel size, the default): each voxel takes the mean of the
+    # profile over the heights it spans, so that the image is that of the
+    # same disk through fine steps, and face-on, its surface density
+    def image(depth):
+        case = image_case(
+            driver,
+            dict(type='pixel_brightness', size=[41, 41], step=[1, 1]),
+            rnodes=list(range(0, 31)))
+        disk = case['galaxy']['components'][0]
+        disk['type'] = 'thick_disk'
+        disk['density'] = dict(
+            ptraits=EXPONENTIAL, htraits=dict(type=profile, zmax=5))
+        case['line_of_sight'] = dict(type='grid', depth=dict(step=depth))
+        data, _ = evaluate_cases([case], dict(
+            xpos=0, ypos=0, posa=30, incl=incl, pt_a=1, pt_s=6, ht_s=0.25))
+        return data[0]['brightness']['d']
+    coarse, fine = image(1.0), image(0.02)
+    # (but at the cusp of the exponential at the centre, where a voxel of
+    # an inclined disk spans radii as well as heights)
+    bright = fine > 0.05 * fine.max()
+    bright[19:22, 19:22] = False
+    np.testing.assert_allclose(coarse[bright], fine[bright], rtol=1e-2)
+    if incl == 0:
+        x = (np.arange(41) - 20) * 1.0
+        np.testing.assert_allclose(
+            coarse[20, 25:35], np.exp(-np.abs(x[25:35]) / 6), rtol=1e-3)
+
+
+def test_a_loose_thick_disk_centres_its_rings(driver, evaluate_cases):
+    # The face-on disk of test_loose_disk_centres_its_rings, thick: its
+    # light along the line of sight is that of the thin one (its height is
+    # sampled finely: an exponential of 1 in depths of 0.05)
+    rnodes = list(range(0, 13))
+    case = image_case(
+        driver,
+        dict(type='pixel_brightness', size=[41, 41], step=[0.5, 0.5]),
+        loose=True, tilted=False, rnodes=rnodes)
+    disk = case['galaxy']['components'][0]
+    disk['type'] = 'thick_disk'
+    disk['density'] = dict(
+        ptraits=EXPONENTIAL, htraits=dict(type='exponential', zmax=12))
+    case['line_of_sight'] = dict(type='grid', depth=dict(step=0.05))
+    properties = dict(
+        xpos=[0.2 * r for r in rnodes], ypos=[0] * len(rnodes),
+        posa=0, incl=0, pt_a=1, pt_s=4, ht_s=1)
+    data, _ = evaluate_cases([case], properties)
+    row = data[0]['brightness']['d'][20]
+    x = (np.arange(41) - 20) * 0.5
+    radius = np.where(x > 0, x / 1.2, -x / 0.8)
+    spread = np.where(x > 0, 1.2, 0.8)
+    inside = (radius < 11) & (x != 0)
+    np.testing.assert_allclose(
+        row[inside], np.exp(-radius[inside] / 4) / spread[inside], rtol=2e-3)
+
+
+@pytest.mark.parametrize('posa, incl', [
+    ((40, 70), (60, 60)), ((40, 40), (60, 75)), ((40, 40), (60, 45)),
+    ((40, 70), (60, 75))])
+def test_a_warped_disk_keeps_the_flux_of_its_rings(
+        driver, evaluate_cases, posa, incl):
+    # A thin disk whose position angle and inclination change with radius
+    # (up to 40, and as they are beyond) has the flux of its rings, as one
+    # without a warp: 2 pi h^2 of an exponential disk (the light of each
+    # point is its surface density over the area of the sky that a unit of
+    # the disk covers there, which a warp changes; a disk of clouds places
+    # its rings forward, and has it too). A fold of the rings would break
+    # it; these do not fold.
+    rnodes = [float(r) for r in range(0, 62, 2)]
+    case = image_case(
+        driver,
+        dict(type='pixel_brightness', size=[200, 200], step=[0.5, 0.5]),
+        tilted=True, rnodes=rnodes)
+    ramp = np.minimum(np.array(rnodes), 40) / 40
+    properties = dict(
+        xpos=0, ypos=0, pt_a=1, pt_s=4,
+        posa=list(posa[0] + (posa[1] - posa[0]) * ramp),
+        incl=list(incl[0] + (incl[1] - incl[0]) * ramp))
+    flat = properties | dict(posa=posa[0], incl=incl[0])
+    data, _ = evaluate_cases([case], properties)
+    flux = data[0]['brightness']['d'].sum() * 0.5 ** 2
+    # (the flat disk: the same field and sampling, to compare with)
+    data, _ = evaluate_cases([case], flat)
+    flux_flat = data[0]['brightness']['d'].sum() * 0.5 ** 2
+    assert flux_flat == pytest.approx(2 * np.pi * 4 ** 2, rel=2e-3)
+    assert flux == pytest.approx(flux_flat, rel=2e-3)
 
 
 @pytest.mark.parametrize('loose', [False, True])

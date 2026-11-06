@@ -944,6 +944,53 @@ rh_trait_pdf_2p(
     out = FunTrunc(z, 0, p1, p2, -zmax, zmax);
 }
 
+// The half width of the heights over which rh_trait_mean_1p takes the
+// mean of a profile of the scale p: 0 (its pdf at the height) for one
+// under 1% of the scale, where the pdf is the mean (to about 1e-5), and
+// the difference of the CDF at its ends would lose the precision of
+// floats (e.g. edge-on, where the cosine of 90 degrees is 6e-17)
+template<typename T> constexpr T
+rh_trait_mean_width(T w, T p)
+{
+    return w < T(1e-2) * std::abs(p) ? T(0) : w;
+}
+
+// The mean of a density height trait (see rh_trait_pdf_1p) over the
+// heights [z - w, z + w]: of its truncated profile, from its CDF (see
+// _trunc_1d_mean); its pdf at z for w = 0
+template<auto PDF, auto CDF, typename T> constexpr void
+rh_trait_mean_1p(
+        T& out,
+        int rnidx, const T* rnodes, T r, T z, T w,
+        const T* consts, const T* params)
+{
+    T zmax = consts[0];
+    bool use_rnodes = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    out = _trunc_1d_mean<PDF, CDF>(
+            -zmax, zmax, z, rh_trait_mean_width(w, p1), T(0), p1);
+}
+
+template<auto PDF, auto CDF, typename T> constexpr void
+rh_trait_mean_2p(
+        T& out,
+        int rnidx, const T* rnodes, int nrnodes, T r, T z, T w,
+        const T* consts, const T* params)
+{
+    T zmax = consts[0];
+    bool use_rnodes = consts[1];
+    T p1 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, 0, 1)
+            : params[0];
+    T p2 = use_rnodes
+            ? nodewise(r, rnidx, rnodes, params, nrnodes, 1)
+            : params[1];
+    out = _trunc_1d_mean<PDF, CDF>(
+            -zmax, zmax, z, rh_trait_mean_width(w, p1), T(0), p1, p2);
+}
+
 // A random height above the midplane of the density height traits (see
 // rh_trait_pdf_1p): of the truncated profile, NaN if it is none
 template<auto FunTrunc, typename T> constexpr void
@@ -1972,6 +2019,54 @@ rh_trait(
     case RHT_UID_SECH2:
         rh_trait_sech2_pdf(
                 out, rnidx, rnodes, r, z, consts, params);
+        break;
+    default:
+        out = NAN;
+        assert(false);
+        break;
+    }
+}
+
+// The mean of a density height trait (see rh_trait) over the heights
+// [z - w, z + w]: what a voxel that spans them takes of a profile, exact
+// for a profile thinner than the voxel (see rh_trait_mean_1p); its pdf at
+// z for w = 0
+template<typename T> constexpr void
+rh_trait_mean(
+        T& out,
+        int uid, const T* consts, const T* params,
+        int rnidx, const T* rnodes, int nrnodes,
+        T r, T z, T w)
+{
+    switch (uid)
+    {
+    case RHT_UID_UNIFORM:
+        rh_trait_mean_1p<uniform_wm_1d_pdf<T>, uniform_wm_1d_cdf<T>>(
+                out, rnidx, rnodes, r, z, w, consts, params);
+        break;
+    case RHT_UID_EXP:
+        rh_trait_mean_1p<exponential_1d_pdf<T>, exponential_1d_cdf<T>>(
+                out, rnidx, rnodes, r, z, w, consts, params);
+        break;
+    case RHT_UID_GAUSS:
+        rh_trait_mean_1p<gauss_1d_pdf<T>, gauss_1d_cdf<T>>(
+                out, rnidx, rnodes, r, z, w, consts, params);
+        break;
+    case RHT_UID_GGAUSS:
+        rh_trait_mean_2p<ggauss_1d_pdf<T>, ggauss_1d_cdf<T>>(
+                out, rnidx, rnodes, nrnodes, r, z, w, consts, params);
+        break;
+    case RHT_UID_LORENTZ:
+        rh_trait_mean_1p<lorentz_1d_pdf<T>, lorentz_1d_cdf<T>>(
+                out, rnidx, rnodes, r, z, w, consts, params);
+        break;
+    case RHT_UID_MOFFAT:
+        rh_trait_mean_2p<moffat_1d_pdf<T>, moffat_1d_cdf<T>>(
+                out, rnidx, rnodes, nrnodes, r, z, w, consts, params);
+        break;
+    case RHT_UID_SECH2:
+        rh_trait_mean_1p<sech2_1d_pdf<T>, sech2_1d_cdf<T>>(
+                out, rnidx, rnodes, r, z, w, consts, params);
         break;
     default:
         out = NAN;
