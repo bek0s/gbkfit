@@ -28,6 +28,9 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     # The spellings of AIPS (e.g. the moments of THINGS): B is the beam
     ('JY/B*M/S', u.Jy * u.m / u.s / u.beam),
     ('JY/B', u.Jy / u.beam),
+    # (not the byte, which no data are in, in any case)
+    ('Jy/B', u.Jy / u.beam),
+    ('B', u.beam),
     ('METR/SEC', u.m / u.s),
     # The spellings of SDSS (e.g. MaNGA): ang is the angstrom, a spaxel a
     # pixel
@@ -39,6 +42,12 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('1.5e-17 erg/s/cm2/arcsec2',
      1.5e-17 * u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
     ('Msun/pc2', u.Msun / u.pc ** 2),
+    # The spellings of HST and of CCD software
+    ('ELECTRONS/S', u.electron / u.s),
+    ('counts/s', u.ct / u.s),
+    ('ADU', u.adu),
+    # (as format_unit writes a dimensionless unit)
+    ('', u.dimensionless_unscaled),
     # astropy's own forms, whose spaces are not between terms
     ('Jy / beam', u.Jy / u.beam),
     ('Jy km / (beam s)', u.Jy * u.km / u.s / u.beam),
@@ -54,9 +63,20 @@ def test_units_are_read_as_they_are_meant(text, unit):
 def test_what_is_not_a_unit_is_an_error():
     with pytest.raises(ValueError, match="is not a unit"):
         parse_unit('banana')
-    # A is the ampere, not the angstrom
-    with pytest.raises(ValueError, match="write Angstrom"):
-        parse_unit('1E-20 erg/s/cm2/A')
+    # A is the ampere, not the angstrom; and no data are in units of
+    # magnetism (G, the gauss) or of information (bit)
+    for text in ('1E-20 erg/s/cm2/A', 'G', 'bit'):
+        with pytest.raises(ValueError, match="which no data are in"):
+            parse_unit(text)
+
+
+def test_a_unit_that_is_refused_raises_no_warnings():
+    # (astropy warns of several '/' when it reads the text as a whole)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        with pytest.raises(ValueError, match="write Angstrom"):
+            parse_unit('erg/s/cm2/A')
+    assert not caught
 
 
 def test_units_of_several_slashes_are_read_without_warnings():

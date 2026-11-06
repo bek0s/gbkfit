@@ -30,13 +30,25 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 # Invalid names come from software that ignores the standard:
 # - radio software, in capitals: 'JY/BEAM';
 # - AIPS, with names of its own: 'JY/B*M/S', 'METR/SEC';
-# - SDSS (MaNGA): 'ang' for the angstrom, 'spaxel' for a pixel.
+# - SDSS (MaNGA): 'ang' for the angstrom, 'spaxel' for a pixel;
+# - HST and CCD software: 'ELECTRONS/S', 'COUNTS/S', 'ADU'.
 _STANDARD_NAMES = {
     'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'B': 'beam', 'KM': 'km',
     'M': 'm', 'METR': 'm', 'S': 's', 'SEC': 's', 'HZ': 'Hz', 'KHZ': 'kHz',
     'MHZ': 'MHz', 'GHZ': 'GHz', 'SR': 'sr', 'ERG': 'erg', 'CM': 'cm',
     'ANGSTROM': 'Angstrom', 'ANG': 'Angstrom', 'ARCSEC': 'arcsec',
-    'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix', 'SPAXEL': 'pix'}
+    'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix', 'SPAXEL': 'pix',
+    'ELECTRON': 'electron', 'ELECTRONS': 'electron', 'COUNT': 'ct',
+    'COUNTS': 'ct', 'ADU': 'adu'}
+
+# Units that no data are in: the ampere and the bit. If a reading of a
+# unit contains either, a name in it was misread, and the next reading is
+# tried. For example:
+# - 'A' is the ampere, but is meant as the angstrom;
+# - 'S' is the siemens, which contains the ampere (A2 s3 / (kg m2)), but
+#   is meant as the second;
+# - 'B' is the byte, which is 8 bits, but is meant as the beam.
+_MISREAD_UNITS = frozenset({astropy.units.A, astropy.units.bit})
 
 
 def parse_unit(text: str) -> astropy.units.UnitBase:
@@ -44,18 +56,20 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Return the unit that a text states (e.g. 'Jy/beam', 'MJy/sr',
     '1e-17 erg/s/cm2/arcsec2', or the BUNIT of a FITS header).
 
-    The text is read in two ways, in this order:
+    The text as it is is read, then the text with its invalid names made
+    valid (e.g. 'JY/BEAM.KM/S' as 'Jy/beam.km/s'; see _STANDARD_NAMES),
+    until a reading gives a unit that data can be in (see _MISREAD_UNITS).
+    Each is read in two ways, the first that works:
 
     1. As terms that multiply each other, separated by spaces, '*' or '.',
-       each read on its own. astropy alone reads 'Jy/beam km/s' as
-       Jy / (beam km s), but the unit of a map of moment 0 means
-       (Jy/beam) (km/s).
+       each read on its own. The FITS standard (4.0, 4.3.1) reads a unit
+       by the normal precedence of operations, from the left:
+       'Jy/beam km/s' is (Jy/beam) (km/s), as maps of moment 0 mean it.
+       astropy reads everything after a '/' as dividing: Jy / (beam km s).
     2. As a whole, by astropy: e.g. astropy's own 'Jy / beam' and
        'Jy km / (beam s)', whose spaces do not separate terms.
 
-    Each way is tried on the text as it is, then with its invalid names
-    made valid (e.g. 'JY/BEAM.KM/S' as 'Jy/beam.km/s'; see
-    _STANDARD_NAMES).
+    An empty text is dimensionless, as format_unit writes it.
 
     Parameters
     ----------
@@ -70,29 +84,23 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Raises
     ------
     ValueError
-        If the text is not a unit, or is a unit of electricity, which no
-        data are in (e.g. 'erg/s/cm2/A', where A is the ampere; the
-        angstrom is Angstrom).
+        If the text is not a unit, or every reading of it is a unit that
+        no data are in (see _MISREAD_UNITS). For example, in
+        'erg/s/cm2/A', A is the ampere: the angstrom is written Angstrom.
     """
-    # A reading that gives a unit of electricity is set aside, not refused
-    # at once: a later reading may be the one meant (e.g. 'S' is the
-    # siemens, but in capitals it is the second)
-    electric = False
-    for parse in (_product, astropy.units.Unit):
-        for candidate in (text, _standardised(text)):
-            try:
-                unit = parse(candidate)
-            except ValueError:
-                continue
-            if astropy.units.A in unit.decompose().bases:
-                electric = True
-                continue
+    refused = None
+    for candidate in dict.fromkeys((text, _standardised(text))):
+        unit = _reading(candidate)
+        if unit is None:
+            continue
+        if _MISREAD_UNITS.isdisjoint(unit.decompose().bases):
             return unit
-    if electric:
+        refused = unit
+    if refused is not None:
         raise ValueError(
-            f"{text!r} is a unit of electricity, which no data are in: if A "
-            f"is meant as the angstrom, write Angstrom (e.g. "
-            f"'erg/s/cm2/Angstrom')")
+            f"{text!r} reads as {refused.to_string()!r}, which no data are "
+            f"in (a unit of the ampere or of the bit: if A is meant as the "
+            f"angstrom, write Angstrom; if B as the beam, beam)")
     raise ValueError(
         f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
         f"'1e-17 erg/s/cm2/arcsec2')")
@@ -149,6 +157,19 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
             f"{format_unit(unit)!r} is per an angle that is not a solid "
             f"angle (e.g. per arcsec, not per arcsec2)")
     return astropy.units.dimensionless_unscaled
+
+
+def _reading(text: str) -> astropy.units.UnitBase | None:
+    """
+    Return the unit of a text read as terms that multiply each other (see
+    _product), or else as a whole by astropy, or None if neither reads it.
+    """
+    for parse in (_product, astropy.units.Unit):
+        try:
+            return parse(text)
+        except ValueError:
+            continue
+    return None
 
 
 def _product(text: str) -> astropy.units.UnitBase:
