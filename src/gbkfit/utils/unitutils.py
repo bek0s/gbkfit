@@ -168,8 +168,11 @@ def _unit_of(text: str) -> astropy.units.UnitBase | None:
     """
     Return the unit of a text, or None if it is not a unit.
 
-    The text is read as terms that multiply each other (see _product), or
-    else as a whole, by astropy.
+    The text is read first by _product, as terms that multiply each other,
+    because astropy reads such terms wrongly: 'Jy/beam km/s' as
+    Jy / (beam km s). But _product cannot read brackets that span terms,
+    as astropy writes them (e.g. 'Jy km / (beam s)'), so if it fails,
+    astropy reads the text as a whole.
     """
     for parse in (_product, astropy.units.Unit):
         try:
