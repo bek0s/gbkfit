@@ -219,6 +219,29 @@ def test_region_spectra_data_round_trip(tmp_path):
         loaded['spectra'].data(), dataset['spectra'].data())
 
 
+def test_the_spectra_of_one_region_are_read_and_dumped(tmp_path):
+    # e.g. a global HI profile: the axis of the one region, of length 1,
+    # is the data's own (an axis of Stokes I is not), in a file and in a
+    # dump read back
+    from gbkfit.dataset import dataset_parser
+    regions = dict(type='apertures', apertures=APERTURES[:1])
+    spectrum = np.exp(-0.5 * ((np.arange(20) - 10) / 3) ** 2)
+    fits.writeto(tmp_path / 'global.fits', spectrum.reshape(1, 20, 1),
+                 fits.Header(dict(
+                     CTYPE2='VRAD', CUNIT2='km/s', CDELT2=10.0, CRPIX2=1.0,
+                     CRVAL2=500.0, CTYPE3='STOKES', CRVAL3=1.0)))
+    dataset = dataset_parser.load(dict(
+        type='region_spectra', data=str(tmp_path / 'global.fits'),
+        error=0.01, regions=regions))
+    assert dataset['spectra'].shape() == (20, 1)
+    np.testing.assert_allclose(dataset['spectra'].data()[:, 0], spectrum)
+    np.testing.assert_allclose(dataset.spectral_grid().coords.rval, [500])
+    loaded = dataset_parser.load(
+        dataset_parser.dump(dataset, prefix=str(tmp_path / 'dump_')))
+    np.testing.assert_array_equal(
+        loaded['spectra'].data(), dataset['spectra'].data())
+
+
 def test_the_correlations_of_region_spectra_are_dumped_by_name(tmp_path):
     # The file of the correlation of the noise of the spectra (e.g. of an
     # image PSF) is named after the dataset, next to it

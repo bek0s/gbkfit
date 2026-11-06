@@ -320,6 +320,25 @@ def test_spectral_axis_is_read_last():
     np.testing.assert_array_equal(result, data.T)
 
 
+@pytest.mark.parametrize('stokes_axis', [1, 3])
+def test_axes_of_length_1_of_the_data_are_kept(stokes_axis):
+    # Spectra of one region: the spectral axis is the axis 2, so the axis
+    # of the region (of length 1) is the data's own, and the axis of
+    # Stokes I (of length 1 too, wherever it is) is not
+    axes = [dict(CTYPE='LINEAR', CDELT=1.0),
+            dict(CTYPE='VRAD', CUNIT='km/s', CDELT=10.0, CRPIX=1.0)]
+    axes.insert(stokes_axis - 1, dict(CTYPE='STOKES', CRVAL=1.0))
+    # (8 channels along the axis of VRAD; numpy order)
+    vrad = [axis['CTYPE'] for axis in axes].index('VRAD')
+    shape = [1, 1, 1]
+    shape[2 - vrad] = 8
+    data = np.arange(8, dtype=np.float32).reshape(shape)
+    fits.writeto('data.fits', data, fits.Header(axes_header(*axes)))
+    result, coords = read_data('data.fits', spectral_axis=1)
+    np.testing.assert_array_equal(result, np.arange(8).reshape(8, 1))
+    assert coords.step == (1.0, 10.0)
+
+
 def test_a_position_axis_in_degrees_is_in_arcsec():
     # e.g. the OFFSET of a PV slice in degrees (pvextractor): the model
     # takes positions in arcsec (an axis without a unit keeps its values)

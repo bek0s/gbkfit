@@ -39,21 +39,18 @@ __all__ = [
 class Orientation(NamedTuple):
     """
     How an array of a file is put in the orientation of the model (see
-    model_header): its world axes beyond those of the array (e.g. the
-    spectral axis that a moment map keeps in its header) are axes of
-    length 1, all its axes of length 1 are dropped, and the others are
-    reordered and reversed.
+    model_header): its axes of length 1 that are not its own are dropped
+    (see _own_axes), and the others are reordered and reversed.
 
     Attributes
     ----------
     file_shape : tuple of int
         The shape of the array in the file (numpy order).
     shape : tuple of int
-        Its shape with an axis of length 1 for each world axis beyond
-        those of the array (numpy order: before them).
+        Its shape without the axes of length 1 dropped (numpy order).
     order : tuple of int
-        The axes without those of length 1 (FITS order, from 0) in the
-        order of the model (see reorder_data).
+        Those axes (FITS order, from 0) in the order of the model (see
+        reorder_data).
     flips : tuple of int
         The axes then reversed (FITS order, from 0; see flip_data).
     """
@@ -75,7 +72,7 @@ class Orientation(NamedTuple):
         if array.shape != self.file_shape:
             raise ValueError(
                 f"the array is of shape {array.shape}, not {self.file_shape}")
-        array = array.reshape(squeezed_shape(self.shape))
+        array = array.reshape(self.shape)
         if self.order != tuple(range(array.ndim)):
             array = reorder_data(array, self.order)
         for axis in self.flips:
@@ -97,7 +94,7 @@ class Orientation(NamedTuple):
         if len(self.order) < 2:
             raise ValueError("the array has no sky of two axes")
         sky = sorted(self.order[:2])
-        sizes = squeezed_shape(self.shape)[::-1]
+        sizes = self.shape[::-1]
         shape = (sizes[sky[1]], sizes[sky[0]])
         return Orientation(
             shape, shape, tuple(sky.index(axis) for axis in self.order[:2]),
@@ -111,7 +108,8 @@ def model_header(
         rest: Rest = None,
         velocity: str | None = None,
         spectral_type: str | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        ndim: int | None = None
 ) -> tuple[astropy.io.fits.Header, Orientation]:
     """
     Return the header of an array of a file in the orientation of the
@@ -125,11 +123,12 @@ def model_header(
     (e.g. RA) then latitude, and the spectral axis last (see
     model_axis_order); east to the left of north, and velocities (or
     logarithmic wavelengths, see coords_from_header) increasing along the
-    spectral axis (see model_axis_flips). Axes of length 1 are dropped,
-    and world axes beyond those of the array (e.g. the spectral axis of a
-    moment map written with the header of its cube) are taken as axes of
-    length 1. A missing reference pixel of an axis without a world
-    position is at the centre of its axis (see centre_missing_crpix).
+    spectral axis (see model_axis_flips). Axes of length 1 that are not
+    the array's own are dropped (see _own_axes); world axes beyond those
+    of the array (e.g. the spectral axis of a moment map written with the
+    header of its cube) are taken as axes of length 1. A missing
+    reference pixel of an axis without a world position is at the centre
+    of its axis (see centre_missing_crpix).
     Distortions of the world coordinates (e.g. SIP) are left out, with a
     warning: the model reads them as linear.
 
@@ -171,6 +170,9 @@ def model_header(
         The medium of the wavelengths of an axis of optical velocities and
         of their rest, if AIRORVAC does not state it: 'vacuum' (by
         default) or 'air'.
+    ndim : int, optional
+        The number of axes of the array, if known (e.g. 2 of the spectra
+        of regions, of which there may be one; see _own_axes).
 
     Returns
     -------
@@ -194,7 +196,7 @@ def model_header(
     check_header_medium(source, header)
     header = with_velocity_convention(
         header, velocity if velocity_is_ambiguous(header) else None, source)
-    return oriented_header(source, header, shape, rest, medium)
+    return oriented_header(source, header, shape, rest, medium, ndim)
 
 
 def oriented_header(
@@ -202,7 +204,8 @@ def oriented_header(
         header: astropy.io.fits.Header,
         shape: tuple[int, ...],
         rest: Rest = None,
-        medium: str | None = None
+        medium: str | None = None,
+        ndim: int | None = None
 ) -> tuple[astropy.io.fits.Header, Orientation]:
     """
     Return a header in the orientation of the model, with the spectral
@@ -213,10 +216,10 @@ def oriented_header(
     """
     shape = tuple(shape)
     if not has_wcs(header):
-        kept = squeezed_shape(shape)
+        kept = tuple(shape[axis] for axis in _own_axes(shape, ndim))
         return (
             with_shape(header, kept),
-            Orientation(shape, shape, tuple(range(len(kept))), ()))
+            Orientation(shape, kept, tuple(range(len(kept))), ()))
     wcs, full = _file_wcs(source, header, shape)
     if wcs.has_distortion:
         warn(
@@ -230,8 +233,12 @@ def oriented_header(
         flat = full[len(full) - 1 - wcs.wcs.spec] == 1
         wcs, wavelengths = with_flat_axis_rest(wcs, rest, stated) if flat \
             else velocity_axis(source, wcs, rest, stated)
-    kept = squeezed_shape(full)
-    wcs = _squeezed_wcs(wcs, full)
+    stokes = [
+        len(full) - 1 - axis for axis, ctype in enumerate(wcs.wcs.ctype)
+        if ctype.strip().upper() == 'STOKES']
+    own = _own_axes(full, ndim, stokes)
+    kept = tuple(full[axis] for axis in own)
+    wcs = _squeezed_wcs(wcs, [len(full) - 1 - axis for axis in own])
     order = model_axis_order(wcs)
     wcs = reorder_wcs(wcs, order)
     sizes = [kept[len(kept) - 1 - axis] for axis in order]
@@ -241,7 +248,7 @@ def oriented_header(
     header = with_shape(with_wcs(header, wcs), tuple(sizes[::-1]))
     if wavelengths is not None:
         set_header_medium(header, wavelengths)
-    return header, Orientation(shape, full, order, flips)
+    return header, Orientation(shape, kept, order, flips)
 
 
 def model_axis_order(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
@@ -445,16 +452,39 @@ def squeezed_shape(shape: tuple[int, ...]) -> tuple[int, ...]:
     Return the shape of data (numpy order) without its axes of length 1,
     or as it is if all are.
     """
-    return tuple(size for size in shape if size > 1) or shape
+    return tuple(shape[axis] for axis in _own_axes(shape))
+
+
+def _own_axes(
+        shape: tuple[int, ...],
+        ndim: int | None = None,
+        others: Sequence[int] = ()
+) -> list[int]:
+    """
+    Return the axes (numpy order) of data of a shape that are their own:
+    those not of length 1, or all if all are; and, if the data have more
+    (ndim, if given), the first of length 1 in FITS order (e.g. the axis
+    of the one region of spectra of regions), but for the axes given as
+    others (e.g. one of Stokes parameters, which may come before).
+    """
+    own = [axis for axis, size in enumerate(shape) if size > 1]
+    if not own:
+        return list(range(len(shape)))
+    # (from the first in FITS order: the last in numpy order)
+    flat = [
+        axis for axis in reversed(range(len(shape)))
+        if axis not in own and axis not in others]
+    missing = 0 if ndim is None else max(ndim - len(own), 0)
+    return sorted(own + flat[:missing])
 
 
 def _squeezed_wcs(
-        wcs: astropy.wcs.WCS, shape: tuple[int, ...]
+        wcs: astropy.wcs.WCS, kept: Sequence[int]
 ) -> astropy.wcs.WCS:
     """
-    Return world coordinates without the axes of length 1 of the data of
-    the given shape (numpy order), as squeezed_shape leaves them: those of
-    the axes kept, at the one pixel of each axis left out.
+    Return world coordinates of only the given axes (FITS order, from 0)
+    of data whose other axes are of length 1: at the one pixel of each
+    axis left out.
 
     Raises
     ------
@@ -462,9 +492,8 @@ def _squeezed_wcs(
         If an axis left out is coupled to the axes kept in a way that they
         alone cannot represent.
     """
-    kept = [
-        axis for axis in range(wcs.naxis) if shape[wcs.naxis - 1 - axis] > 1]
-    if not kept or len(kept) == wcs.naxis:
+    kept = sorted(kept)
+    if len(kept) == wcs.naxis:
         return wcs
     # The world coordinates of the axes kept alone are at the reference
     # pixel of those left out; the data are at their one pixel (0): an

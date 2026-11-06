@@ -100,7 +100,8 @@ def read_arrays(
         velocity: str | None = None,
         footprint: DataFile | None = None,
         spectral_type: str | None = None,
-        medium: str | None = None
+        medium: str | None = None,
+        ndim: int | None = None
 ) -> Arrays:
     """
     Read data, and their errors, mask and footprint, from files in the
@@ -158,6 +159,9 @@ def read_arrays(
     medium : str, optional
         The medium of the wavelengths of an axis of optical velocities and
         of the rest, if the headers do not state it (see model_header).
+    ndim : int, optional
+        The number of axes of the values, if known, which axes of length
+        1 make up (e.g. 2 of spectra of one region; see model_header).
 
     Returns
     -------
@@ -179,7 +183,7 @@ def read_arrays(
             f"it is {error_kind!r}")
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
-        medium=medium)
+        medium=medium, ndim=ndim)
     values, header, orientation, beam = _read(data, **read)
     if isinstance(unit, str):
         unit = unitutils.parse_unit(unit)
@@ -258,7 +262,7 @@ def read_sky_map(
         header = with_wcs(header, wcs.sub(2))
     return _read_companion(
         file, header, orientation, rest=None, velocity=None,
-        spectral_type=None, medium=None)
+        spectral_type=None, medium=None, ndim=None)
 
 
 def _read(
@@ -266,7 +270,8 @@ def _read(
         rest: Rest,
         velocity: str | None,
         spectral_type: str | None,
-        medium: str | None
+        medium: str | None,
+        ndim: int | None
 ) -> tuple[
         np.ndarray, astropy.io.fits.Header, Orientation,
         dict[str, Any] | None]:
@@ -279,7 +284,7 @@ def _read(
     values, header = read_image(filename, key)
     model, orientation = model_header(
         filename, header, values.shape, rest, velocity, spectral_type,
-        medium)
+        medium, ndim)
     return (_floats(orientation.apply(values)), model, orientation,
             _beam(filename, header, model, orientation))
 
@@ -332,7 +337,8 @@ def _read_companion(
         rest: Rest,
         velocity: str | None,
         spectral_type: str | None,
-        medium: str | None
+        medium: str | None,
+        ndim: int | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
     Return the values of a file on the pixels of data (their errors, mask
@@ -344,7 +350,7 @@ def _read_companion(
     if has_wcs(header) and has_wcs(data_header):
         header, orientation = model_header(
             filename, header, values.shape, rest, velocity, spectral_type,
-            medium)
+            medium, ndim)
         values = orientation.apply(values)
         _check_same_pixels(filename, header, values.shape, data_header)
         return _floats(values), header

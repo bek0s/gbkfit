@@ -63,7 +63,9 @@ def read_data(
         The rest of the spectral axis (see model_header).
     spectral_axis : int, optional
         The index (FITS order, from 0) that the spectral axis of the data
-        (if any) must have in the orientation of the model.
+        (if any) must have in the orientation of the model: the data have
+        an axis of their own before it for each, of length 1 too (see
+        model_header).
     medium : str, optional
         The medium of the wavelengths of the spectral axis and of the
         rest, if the header does not state it (see model_header and
@@ -90,8 +92,12 @@ def read_data(
         and coords_from_header).
     """
     data, header = read_image(filename, hdu)
+    # (the axes before the spectral axis are the data's own, also those of
+    # length 1: e.g. of one region)
+    ndim = None if spectral_axis is None else spectral_axis + 1
     header, orientation = model_header(
-        filename, header, data.shape, rest, velocity, spectral_type, medium)
+        filename, header, data.shape, rest, velocity, spectral_type, medium,
+        ndim)
     coords = coords_from_header(
         filename, header, rpix, rval, spectral_axis, medium, rest)
     return orientation.apply(data), coords
