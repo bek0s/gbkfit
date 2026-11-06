@@ -115,6 +115,29 @@ def test_prior_predictive_checks_tell_priors_that_reach_the_data(driver):
     assert np.median(bad.chi2) > 100 * np.median(good.chi2)
 
 
+def test_a_prior_predictive_check_leaves_out_draws_whose_model_fails(
+        driver, monkeypatch):
+    # (as a fit leaves out the points where the model or a solve fails)
+    from gbkfit.analysis import prior_predictive
+    from gbkfit.params import ModelEvaluationError
+    data = Data(np.ones((24, 32)), error=np.full((24, 32), 0.1))
+    objective, _ = make_objective(driver, data)
+    space = ParamSpace.from_properties(objective.pdescs(), PROPERTIES | dict(
+        pt_a=dict(min=0.5, max=1.5)))
+    evaluate = objective.evaluate
+    calls = []
+
+    def failing(values):
+        calls.append(None)
+        if len(calls) % 2:
+            raise ModelEvaluationError("the model failed")
+        return evaluate(values)
+    monkeypatch.setattr(objective, 'evaluate', failing)
+    check = prior_predictive(objective, space, ndraws=10, seed=1)
+    assert np.isinf(check.chi2[::2]).all()
+    assert np.isfinite(check.chi2[1::2]).all()
+
+
 def test_residuals_are_a_new_array_on_every_call(driver):
     # (scipy's least_squares keeps the arrays of earlier calls)
     data = Data(np.ones((24, 32)))

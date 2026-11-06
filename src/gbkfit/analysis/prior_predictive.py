@@ -8,7 +8,7 @@ import dataclasses
 import numpy as np
 
 from gbkfit.objective import Objective
-from gbkfit.params import ParamEvaluationError, ParamSpace
+from gbkfit.params import EvaluationError, ParamSpace
 
 
 __all__ = [
@@ -26,7 +26,8 @@ class PriorPredictive:
     ----------
     chi2 : np.ndarray
         The chi-square of the models at each draw (inf where the
-        parameters cannot be evaluated).
+        parameters cannot be evaluated, or the model or a solve fails, as
+        a fit takes such a point: see EvaluationError).
     bands : list of dict of str to np.ndarray
         Of each observation, by data item: the 5th, 50th and 95th
         percentiles of the data the draws predict at each value (3, *the
@@ -52,11 +53,14 @@ def prior_predictive(
     samplers read them: see FreeElement.proper_prior), each with
     noise of the errors of the data (none without errors), as data they
     predict; their percentiles at each value of the data, and the share of
-    the data within them. The solved elements (see Solve) are solved at
-    each draw, as the fit solves them (the models and the chi-square are
-    of those values): the check is of the priors of the free elements,
-    which a nuisance value drawn far from the data (e.g. a flux scale)
-    must not condemn.
+    the data within them. The noise is independent and Gaussian, of the
+    errors alone: the fitted noise, the correlation and the upper limits
+    of the likelihood are not drawn. A draw where the parameters or the
+    model fail is left out (its chi-square is inf). The solved elements
+    (see Solve) are solved at each draw, as the fit solves them (the
+    models and the chi-square are of those values): the check is of the
+    priors of the free elements, which a nuisance value drawn far from
+    the data (e.g. a flux scale) must not condemn.
 
     Parameters
     ----------
@@ -80,7 +84,7 @@ def prior_predictive(
     ConfigError
         If a free element has no prior, and a bound is missing.
     ValueError
-        If no draw can be evaluated.
+        If no draw can be evaluated (see EvaluationError).
     """
     priors = [element.proper_prior()
               for element in params.free_elements().values()]
@@ -91,14 +95,13 @@ def prior_predictive(
     for k in range(ndraws):
         x = np.array([float(p.ppf(rng.uniform())) for p in priors])
         try:
-            values = params.evaluate(x)
-        except ParamEvaluationError:
+            # (the models at the solved values that the chi-square takes)
+            evaluation = objective.evaluate(params.evaluate(x))
+            models = objective.group_plan().model_h(
+                params.evaluate(x, evaluation.solved))
+        except EvaluationError:
             continue
-        # (the models at the solved values that the chi-square takes)
-        evaluation = objective.evaluate(values)
         chi2[k] = evaluation.merits.chi2
-        models = objective.group_plan().model_h(
-            params.evaluate(x, evaluation.solved))
         for i, (dataset, model) in enumerate(zip(datasets, models)):
             for key, item in model.items():
                 error = dataset[key].error()
