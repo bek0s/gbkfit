@@ -62,11 +62,14 @@ def noise_errors(data: np.ndarray, mask: np.ndarray) -> np.ndarray:
     """
     Return the errors of the values of a cube from its noise: for each
     channel, the robust dispersion of its negative values (of those the
-    mask keeps), 1.4826 times the median of their absolute values, which
-    emission (positive) does not bias, unlike the dispersion of all the
-    values, even sigma-clipped (its faint wings stay); NaN for channels
-    with fewer than 5 negative values. The noise must be of mean 0 (e.g.
-    of a cube without continuum, as the models are).
+    mask keeps), 1.4826 times the median of their absolute values; NaN
+    for channels with fewer than 5 negative values. The noise must be of
+    mean 0 (e.g. of a cube without continuum, as the models are).
+    Emission (positive) biases it less than it does the dispersion of all
+    the values, even sigma-clipped (its faint wings stay), but faint
+    emission over much of a channel biases it low, as it makes values of
+    noise less negative: to 0.95 of the noise where 30% of the channel
+    holds emission at 1 sigma, 0.85 where 60% does.
 
     Parameters
     ----------

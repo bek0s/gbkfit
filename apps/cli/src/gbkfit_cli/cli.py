@@ -462,7 +462,8 @@ def _make_parser() -> argparse.ArgumentParser:
         '--noise-error', action='store_true',
         help="estimate the errors from the noise of each channel, from its "
              "negative values (instead of an errors file; the noise must be "
-             "of mean 0, e.g. without continuum)")
+             "of mean 0, e.g. without continuum; faint emission over much "
+             "of a channel makes it too low)")
     parser_prep_gauss_hermite_moments = parsers_prep.add_parser(
         'gauss_hermite_moments', parents=[parser_common_output, parser_common],
         help="the mean and the dispersion of the Gauss-Hermite series of a "
