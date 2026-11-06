@@ -37,7 +37,7 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 # - some optical spectra: 'A' for the angstrom, as in 'erg/s/cm2/A';
 # - the pipelines of HST: 'ELECTRONS/S', 'COUNTS/S';
 # - some CCD software: 'ADU'.
-_STANDARD_NAMES = {
+_NAME_CORRECTIONS = {
     'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'B': 'beam', 'KM': 'km',
     'M': 'm', 'METR': 'm', 'S': 's', 'SEC': 's', 'HZ': 'Hz', 'KHZ': 'kHz',
     'MHZ': 'MHz', 'GHZ': 'GHz', 'SR': 'sr', 'ERG': 'erg', 'CM': 'cm',
@@ -51,7 +51,7 @@ _STANDARD_NAMES = {
 # mole, the candela and the bit. A unit made of one of them (e.g. the
 # siemens, of the ampere; the byte, of bits) makes no sense for data:
 # - a name that astropy reads as one most likely means another unit,
-#   from _STANDARD_NAMES: 'A' (the ampere) the angstrom, 'S' (the
+#   from _NAME_CORRECTIONS: 'A' (the ampere) the angstrom, 'S' (the
 #   siemens) the second, 'B' (the byte) the beam;
 # - a text that still reads as one is refused (e.g. 'G', the gauss).
 _MISREAD_UNITS = frozenset({
@@ -64,7 +64,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     '1e-17 erg/s/cm2/arcsec2'.
 
     First, the invalid names of the text are made valid: those of
-    _STANDARD_NAMES, in any case, that astropy does not read as a unit
+    _NAME_CORRECTIONS, in any case, that astropy does not read as a unit
     that makes sense for astronomical data (see _MISREAD_UNITS). For
     example, 'JY/BEAM' becomes 'Jy/beam' and 'erg/s/cm2/A' becomes
     'erg/s/cm2/Angstrom', but 'mJy' stays (the table would make it 'MJy').
@@ -96,7 +96,7 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
         If the text is not a unit, or is one that makes no sense for
         astronomical data (see _MISREAD_UNITS; e.g. 'G', the gauss).
     """
-    unit = _reading(_standardised(text))
+    unit = _reading(_corrected(text))
     if unit is None:
         raise ValueError(
             f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
@@ -208,16 +208,16 @@ def _divided(term: str) -> astropy.units.UnitBase:
     return unit
 
 
-def _standardised(text: str) -> str:
+def _corrected(text: str) -> str:
     """
-    Return the text of a unit with its invalid names made valid (see
-    parse_unit). A name is of letters and underscores (e.g. 'M_sun'), not
-    digits, which give powers (e.g. 'cm2').
+    Return the text of a unit with its invalid names corrected. A name is
+    a run of letters and underscores, as 'M_sun'; digits are not part of
+    it, so 'cm2' is the name 'cm' squared.
     """
     def valid(match: re.Match) -> str:
         name = match.group(0)
-        standard = _STANDARD_NAMES.get(name.upper())
-        return name if standard is None or _is_valid(name) else standard
+        correction = _NAME_CORRECTIONS.get(name.upper())
+        return name if correction is None or _is_valid(name) else correction
     return re.sub(r'[A-Za-z_]+', valid, text)
 
 
