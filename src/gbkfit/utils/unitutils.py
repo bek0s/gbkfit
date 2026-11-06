@@ -22,7 +22,7 @@ __all__ = [
 # - a '*', as in 'Jy/beam*km/s' ('**' is a power, as in 'm**2');
 # - a '.', as in 'Jy/beam.km/s' (a '.' between digits is a decimal
 #   point, as in '1.5').
-_TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
+_TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
 
 # A map from invalid unit names to the valid names of the FITS standard.
 # astropy reads only valid names, which are case-sensitive: to it, 'JY'
@@ -181,15 +181,13 @@ def _unit_of(text: str) -> astropy.units.UnitBase | None:
 
 def _product(text: str) -> astropy.units.UnitBase:
     """
-    Return the unit of a text as terms that multiply each other (see
-    parse_unit). Raise ValueError if a term is not a unit.
+    Return the unit of a text as terms that multiply each other. Raise
+    ValueError if a term is not a unit.
     """
-    terms = [term for term in _TERM_SEPARATOR.split(text.strip()) if term]
-    if not terms:
-        raise ValueError("no unit")
     unit = astropy.units.dimensionless_unscaled
-    for term in terms:
-        unit = unit * _quotient(term)
+    for term in _TERM_SEPARATOR.split(text):
+        if term:
+            unit = unit * _quotient(term)
     return unit
 
 
