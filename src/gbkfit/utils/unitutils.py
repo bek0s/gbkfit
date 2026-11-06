@@ -271,24 +271,24 @@ def _bracketed(operand: str) -> astropy.units.UnitBase:
     inner, power = operand[1:close], operand[close + 1:]
     if not inner.strip():
         raise ValueError(f"{operand!r} has nothing in its brackets")
-    return _expression(inner) ** _power(power)
+    unit = _expression(inner)
+    if not power:
+        return unit
+    # The power may follow '**' or '^', or nothing, as in '(km/s)2'
+    if power.startswith('**'):
+        power = power[2:]
+    elif power.startswith('^'):
+        power = power[1:]
+    return unit ** _power(power)
 
 
 def _power(text: str) -> Fraction:
     """
-    Return the power after the brackets of an operand, or 1 if there is
-    none. The power is a number, alone or after '**' or '^', and in
-    brackets or braces or not.
-    For example, '2', '**2', '^(1/2)' or '^{-2}' (as MaNGA writes it).
+    Return the number of a power, in brackets or braces or not.
+    For example, '2', '(1/2)' or '{-2}' (as MaNGA writes it).
 
     Raise ValueError if it is not a number.
     """
-    if not text:
-        return Fraction(1)
-    if text.startswith('**'):
-        text = text[2:]
-    elif text.startswith('^'):
-        text = text[1:]
     if text.startswith('(') and text.endswith(')'):
         text = text[1:-1]
     if text.startswith('{') and text.endswith('}'):
