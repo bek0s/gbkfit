@@ -10,11 +10,11 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
-from gbkfit.config import config_path, parse_options, warn
+from gbkfit.config import DataFile, config_path, parse_options, warn
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis,
     pixels_on, rest_of_convention)
-from gbkfit.io import read_column, write_data
+from gbkfit.io import read_column, read_unit, write_data
 from gbkfit.utils import unitutils
 from .data import Data, DataColumns, DataFiles, dump_data
 
@@ -138,9 +138,10 @@ def _in_kms(data: Data, order: int) -> Data:
     Return the data of a moment of an order of 1 and above in km/s: the
     mean velocity (1) and the dispersion (2) in km/s, the central moments
     of an order k above 2 in (km/s)^k; converted from their unit (e.g.
-    m/s), if they have one, or taken to be in km/s. Raise ValueError if
-    their unit is not one of velocity (to the power k; a dimensionless one
-    is of h_k of a Gauss-Hermite series, an item of its own).
+    m/s), if they have one, or taken to be in km/s (their file states
+    none, see read_moments). Raise ValueError if their unit is not one of
+    velocity (to the power k; a dimensionless one is of h_k of a
+    Gauss-Hermite series, an item of its own).
     """
     unit = data.unit()
     if unit is None:
@@ -248,6 +249,8 @@ def read_moments(
             beam=item.beam, spatial_correlation=item.spatial_correlation,
             spectral_correlation=item.spectral_correlation,
             error_kind=item.error_kind, footprint=item.footprint)
+        if name in MOMENTS[1:] and items[name].unit() is None:
+            _refuse_unread_unit(name, item.data)
     if not coords:
         raise ValueError("a dataset needs at least one moment")
     (first, first_coords), *others = coords.items()
@@ -260,6 +263,19 @@ def read_moments(
                 f"{first}: their world coordinates are {value} and "
                 f"{first_coords}")
     return items, first_coords
+
+
+def _refuse_unread_unit(name: str, file: DataFile) -> None:
+    """
+    Raise ValueError if the file of a moment of an order of 1 and above,
+    read without a unit, states one that could not be read: such a moment
+    is taken to be in km/s (see _in_kms), which that unit may not be.
+    """
+    filename, key = (file, None) if isinstance(file, str) else file
+    if (text := read_unit(filename, key)) is not None:
+        raise ValueError(
+            f"{filename}: the unit of {name}, BUNIT = {text!r}, cannot be "
+            f"read; give it (unit, e.g. 'km/s')")
 
 
 def _on_the_same_pixels(

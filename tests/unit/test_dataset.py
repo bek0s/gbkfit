@@ -568,6 +568,26 @@ def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
     assert loaded['moment0'].beam().bpa == pytest.approx(-66.5)
 
 
+def test_a_moment_of_velocity_of_a_unit_that_cannot_be_read_is_refused(
+        tmp_path):
+    # (without its unit, it would be taken to be in km/s, which that unit
+    # may not be); a moment 0 is read without it, and a unit given
+    # replaces it
+    header = fits.Header(dict(BUNIT='counts per banana'))
+    for name in ('moment0', 'moment1'):
+        fits.writeto(tmp_path / f'{name}.fits', np.ones((8, 20)), header)
+    with pytest.raises(ValueError, match="moment1, BUNIT = 'counts per"):
+        dataset_parser.load(dict(
+            type='pixel_moments',
+            moment1=dict(data=str(tmp_path / 'moment1.fits'))))
+    dataset = dataset_parser.load(dict(
+        type='pixel_moments',
+        moment0=dict(data=str(tmp_path / 'moment0.fits')),
+        moment1=dict(data=str(tmp_path / 'moment1.fits'), unit='m/s')))
+    assert dataset['moment0'].unit() is None
+    np.testing.assert_allclose(dataset['moment1'].data(), 1e-3)
+
+
 def test_moments_of_velocity_are_in_km_s():
     # (e.g. maps of BUNIT m/s): the velocity and the dispersion in km/s,
     # the central moment of order 3 in (km/s)^3, or h3 of a Gauss-Hermite
