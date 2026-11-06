@@ -2,14 +2,14 @@
 // section of the dock), the sky as it sees it (the map of its data, or its
 // grid, with its PSF and the beam of the data drawn to scale at a corner),
 // its spectral resolution (the LSF against the channels), and its checks.
-import { useEffect, useState } from 'react';
 import type { ArrayInfo } from '../../api/client';
 import { useChannel, useMoments } from '../../api/queries';
 import { robustRange, useFitted } from '../../components/CubeViewer';
 import { useStretches } from '../../components/colours';
-import { MapView, useZoom, type Region } from '../../components/MapView';
-import { regionStats, statsText } from '../../components/regions';
-import { Close } from '../../components/ui/basics';
+import { MapView, useZoom } from '../../components/MapView';
+import { RegionsBar, useSkyRegions } from '../../components/RegionsBar';
+import { frameOf } from '../../components/sky';
+import { useStudio } from '../../studio';
 import { showSection } from '../../components/ui/dock';
 import type { Options } from '../../components/SchemaForm';
 import { glanceOf, STAGES, type Check, type Ellipse } from './model';
@@ -80,13 +80,10 @@ function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam
   // (as every map: zoomed, panned, and a region drawn on it, with the
   // statistics of the map in it; Esc clears it)
   const { zoom, setZoom, zoomAt, panBy, shown } = useZoom(nx, ny);
-  const [region, setRegion] = useState<Region | null>(null);
+  const { project } = useStudio();
+  const regions = useSkyRegions(project, frameOf(data.array.step, data.array.rpix), [nx, ny]);
+  const region = regions.active?.pixels ?? null;
   const [stretch, setStretch] = useStretches('observation/data');
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setRegion(null);
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
   const across = shown[1] - shown[0] + 1;
   const fitted = useFitted(across, shown[3] - shown[2] + 1, 0);
   const step = data.array.step ? Math.abs(data.array.step[0]) : null;
@@ -103,7 +100,8 @@ function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam
             range={robustRange(map.values, 'sequential')}
             window={zoom}
             region={region}
-            onRegion={setRegion}
+            regions={regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!)}
+            onRegion={regions.add}
             onZoom={zoomAt}
             onPan={panBy}
             onWhole={() => setZoom(null)}
@@ -112,12 +110,9 @@ function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam
             label="The data"
           />
           {step && <Ellipses width={fitted.size[0]} height={fitted.size[1]} scale={fitted.size[0] / (across * step)} psf={psf} beam={beam} />}
-          {region && (
-            <div className="map-region-tag" title="The region drawn, and the statistics of the map in it (Esc clears it)">
-              <span>{statsText(regionStats(map.values, nx, region), '')}</span>
-              <Close label="Clear the region" onClick={() => setRegion(null)} />
-            </div>
-          )}
+          <div className="map-regions-over">
+            <RegionsBar regions={regions} values={map.values} nx={nx} unit="" />
+          </div>
         </div>
       )}
     </div>

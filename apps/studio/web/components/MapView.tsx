@@ -101,6 +101,7 @@ export function MapView({
   window = null,
   mark,
   region = null,
+  regions = [],
   outline = null,
   contour = null,
   stretch = UNSTRETCHED,
@@ -126,6 +127,9 @@ export function MapView({
   window?: Region | null;
   mark?: [number, number];
   region?: Region | null;
+  // (other regions, outlined: e.g. those of the sky of the project not the
+  // selection)
+  regions?: Region[];
   outline?: Region | null;
   // (a path in its pixels, as of contourPath)
   contour?: string | null;
@@ -314,6 +318,9 @@ export function MapView({
             />
           </>
         )}
+        {regions.map((box, i) => (
+          <rect key={i} className="map-other-region" x={box[0]} y={ny - 1 - box[3]} width={box[1] - box[0] + 1} height={box[3] - box[2] + 1} />
+        ))}
         {outline && (
           <rect
             className="map-outline"

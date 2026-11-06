@@ -27,7 +27,8 @@ import { MapView, type Region } from './MapView';
 import { SpectrumPlot, valueRange } from './SpectrumPlot';
 import { ZoomSelectionIcon, ZoomWholeIcon } from './icons';
 import { MapTools } from './MapTools';
-import { regionStats, statsText } from './regions';
+import { RegionsBar, useSkyRegions } from './RegionsBar';
+import type { SkyFrame } from './sky';
 import { Chip, IconButton } from './ui/basics';
 import { Check, NumberField, Segments } from './ui/inputs';
 import { DropMenu } from './ui/overlays';
@@ -95,6 +96,8 @@ export function CubeViewer({
   onSelection,
   onBand,
   actions,
+  project = null,
+  frame = null,
   noiseless = false,
   moments: which = 'all',
 }: {
@@ -114,6 +117,10 @@ export function CubeViewer({
   kept?: [number | null, number | null] | null;
   // What the head of the viewer has at its right (e.g. a toggle)
   actions?: ReactNode;
+  // The project, whose regions of the sky (see RegionsBar) are on the map,
+  // and the pixels of the map on the sky (none: a selection of its own)
+  project?: string | null;
+  frame?: SkyFrame | null;
   // Whether it is a model without noise (e.g. a render of a galaxy): its
   // moments are of all its voxels at first, and are not of a dataset
   noiseless?: boolean;
@@ -123,6 +130,14 @@ export function CubeViewer({
   moments?: 'all' | 'higher' | 'none';
 }) {
   const [nx, ny, nchannels] = shape;
+  // (the regions of the sky on it; the one chosen is the selection)
+  const regions = useSkyRegions(project, frame, [nx, ny]);
+  const activePixels = regions.active?.pixels ?? null;
+  const activeKey = activePixels ? activePixels.join() : '';
+  useEffect(() => {
+    // (as the selection, or its pixels, change)
+    onSelection(activePixels);
+  }, [activeKey]);
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
   const [view, setView] = useState<View>('channel');
   // (within the cube: one made again can have fewer channels, e.g. a render)
@@ -312,12 +327,7 @@ export function CubeViewer({
             own button; Esc clears them all): a place (a region, or a pixel:
             one at a time) and a band of channels */}
         <div className="selection-chips" aria-label="The selection">
-          {selection !== null && (
-            <Chip title="The region selected on the map, and the statistics of the map in it" removeLabel="Clear the region" onRemove={() => onSelection(null)}>
-              x {selection[0]}–{selection[1]} · y {selection[2]}–{selection[3]}
-              {map && ` · ${statsText(regionStats(map.values, nx, selection), mapUnit(shown, layer.unit))}`}
-            </Chip>
-          )}
+          <RegionsBar regions={regions} values={map?.values} nx={nx} unit={mapUnit(shown, layer.unit)} />
           {pixel !== null && (
             <Chip title="The pixel picked on the map" removeLabel="Clear the pixel" onRemove={() => setPixel(null)}>
               Pixel {pixel[0]}, {pixel[1]}
@@ -348,6 +358,7 @@ export function CubeViewer({
                     window={zoom}
                     mark={pixel ?? undefined}
                     region={selection}
+                    regions={regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!)}
                     outline={crop}
                     onPick={(x, y) => {
                       // (one place is selected at a time: a pixel, or a region)
@@ -356,6 +367,7 @@ export function CubeViewer({
                     }}
                     onRegion={(region) => {
                       setPixel(null);
+                      regions.add(region);
                       onSelection(region);
                     }}
                     onHover={hoverAt}

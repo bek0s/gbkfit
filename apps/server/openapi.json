@@ -1727,6 +1727,95 @@
         }
       }
     },
+    "/api/v1/regions/{path}": {
+      "get": {
+        "summary": "Regions",
+        "description": "Return the regions of the sky of a project (see set_regions); those of\nits file that are not valid (e.g. edited by hand) are passed over.",
+        "operationId": "regions_api_v1_regions__path__get",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RegionInfo"
+                  },
+                  "title": "Response Regions Api V1 Regions  Path  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Set Regions",
+        "description": "Keep the regions of the sky of a project, all of them (those not\ngiven are gone), for every map of it.",
+        "operationId": "set_regions_api_v1_regions__path__put",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/RegionInfo"
+                },
+                "title": "Regions"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/preferences": {
       "get": {
         "summary": "Preferences",
@@ -2000,6 +2089,20 @@
             ],
             "title": "Step"
           },
+          "rpix": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rpix"
+          },
           "beam": {
             "anyOf": [
               {
@@ -2061,7 +2164,7 @@
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), its beam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), and what a dataset of it refuses or needs given."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), and what a dataset of it refuses or needs given."
       },
       "CheckRequest": {
         "properties": {
@@ -2614,6 +2717,20 @@
           "unit": {
             "type": "string",
             "title": "Unit"
+          },
+          "step": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Step"
+          },
+          "rpix": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Rpix"
           }
         },
         "type": "object",
@@ -2622,10 +2739,12 @@
           "item",
           "path",
           "shape",
-          "unit"
+          "unit",
+          "step",
+          "rpix"
         ],
         "title": "ObservedArrayInfo",
-        "description": "An array of a galaxy observed: its kind ('model', 'data' or 'error'),\nits item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of\ncubes take it at (its array 0; a map, a cube of one channel; kept for a\nwhile, see Views.put), its shape in the order of the model (nx, ny,\nnchannels: 1 for a map), and the unit of its values ('' if unknown)."
+        "description": "An array of a galaxy observed: its kind ('model', 'data' or 'error'),\nits item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of\ncubes take it at (its array 0; a map, a cube of one channel; kept for a\nwhile, see Views.put), its shape in the order of the model (nx, ny,\nnchannels: 1 for a map), the unit of its values ('' if unknown), and\nits pixels on the sky: their size (x, y; arcsec) and the pixel (x, y;\n0-based) that the model measures positions from."
       },
       "ObservedInfo": {
         "properties": {
@@ -3019,6 +3138,35 @@
         ],
         "title": "ProjectRequest",
         "description": "A project to create: its folder (its path)."
+      },
+      "RegionInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "box": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "maxItems": 4,
+            "minItems": 4,
+            "title": "Box"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "box"
+        ],
+        "title": "RegionInfo",
+        "description": "A region of the sky of a project, to look at and measure on every map\nof it: its id, its name, and its box (x0, x1, y0, y1, x0 < x1 and\ny0 < y1), in arcsec on the sky as the model measures positions (from\nthe reference pixel of the data, as xpos and ypos)."
       },
       "RunInfo": {
         "properties": {

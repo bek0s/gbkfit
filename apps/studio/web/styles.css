@@ -168,6 +168,11 @@ h2 { margin: 0; font: var(--text-heading); }
 /* (the pixels out of a crop, dimmed alike in both schemes) */
 .map-out { fill: var(--dim); }
 .map-region { fill: none; stroke: var(--fg); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.map-other-region { fill: none; stroke: var(--fg2); stroke-width: 1px; stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.regions-bar { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.region-chip { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.region-chip b { font-weight: 600; margin-right: 4px; }
+.ui-chip:has(.region-chip[data-active]) { border-color: var(--accent); background: var(--sel); }
 /* (the crop of the dataset: dashed, in the accent) */
 .map-outline { fill: none; stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; vector-effect: non-scaling-stroke; }
 .map-mark { fill: none; stroke: var(--accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
@@ -675,8 +680,9 @@ h2 { margin: 0; font: var(--text-heading); }
 @media (max-width: 1280px) {
   .gx-body { grid-template-columns: 220px minmax(0, 1fr) 320px; }
 }
-.map-region-tag { position: absolute; left: 8px; top: 8px; z-index: 2; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 90px); padding: 2px 2px 2px 8px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); }
-.map-region-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-regions-over { position: absolute; left: 8px; top: 8px; right: 96px; z-index: 2; pointer-events: none; }
+.map-regions-over .regions-bar { pointer-events: auto; }
+.map-regions-over .ui-chip { background: var(--hint-bg); color: var(--hint-fg); border-color: transparent; }
 .gx-map-tag { position: absolute; top: 8px; left: 8px; padding: 3px 8px; border-radius: 6px; background: var(--hint-bg); color: var(--hint-fg); font: var(--text-data-small); pointer-events: none; }
 /* (the options of a family nested in the options of an item: under their
    name, a rule at their left) */

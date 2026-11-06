@@ -3,9 +3,9 @@ The models of the requests and responses of the API (their schemas are
 in its contract, openapi.json).
 """
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from gbkfit_server.services.jobs import TASKS
 
@@ -38,6 +38,7 @@ __all__ = [
     'ProjectInfo',
     'ProjectRename',
     'ProjectRequest',
+    'RegionInfo',
     'RunInfo',
     'ServerInfo',
     'SessionInfo',
@@ -148,13 +149,17 @@ class ObservedArrayInfo(BaseModel):
     its item (e.g. 'spectra', 'brightness', 'moment1'), the path the views of
     cubes take it at (its array 0; a map, a cube of one channel; kept for a
     while, see Views.put), its shape in the order of the model (nx, ny,
-    nchannels: 1 for a map), and the unit of its values ('' if unknown).
+    nchannels: 1 for a map), the unit of its values ('' if unknown), and
+    its pixels on the sky: their size (x, y; arcsec) and the pixel (x, y;
+    0-based) that the model measures positions from.
     """
     kind: str
     item: str
     path: str
     shape: list[int]
     unit: str
+    step: list[float]
+    rpix: list[float]
 
 
 class ObservedInfo(BaseModel):
@@ -256,7 +261,9 @@ class ArrayInfo(BaseModel):
     and km/s along a velocity axis; the spatial ones alone while its
     spectral axis cannot be read, e.g. velocities of no convention or
     wavelengths without a rest; none if its header has no coordinates on
-    the sky), its beam (bmaj and bmin in arcsec, bpa in degrees; lists
+    the sky), the pixel (x, y; 0-based) that the model measures positions
+    on the sky from (its reference pixel; none without coordinates), its
+    beam (bmaj and bmin in arcsec, bpa in degrees; lists
     for a beam of each channel), the noise of its values that its header
     states (keyword RMS or NOISE), whether its header leaves it open
     whether its velocities are radio or optical (a dataset of it gives
@@ -268,6 +275,7 @@ class ArrayInfo(BaseModel):
     axes: list[str]
     unit: str | None
     step: list[float] | None
+    rpix: list[float] | None = None
     beam: dict[str, float | list[float]] | None
     rms: float | None
     ambiguous_velocity: bool
@@ -363,6 +371,18 @@ class PreferencesInfo(BaseModel):
     """
     file: str
     values: dict[str, Any]
+
+
+class RegionInfo(BaseModel):
+    """
+    A region of the sky of a project, to look at and measure on every map
+    of it: its id, its name, and its box (x0, x1, y0, y1, x0 < x1 and
+    y0 < y1), in arcsec on the sky as the model measures positions (from
+    the reference pixel of the data, as xpos and ypos).
+    """
+    id: str
+    name: str
+    box: Annotated[list[float], Field(min_length=4, max_length=4)]
 
 
 class SessionRequest(BaseModel):

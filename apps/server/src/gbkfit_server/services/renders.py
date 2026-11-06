@@ -122,12 +122,16 @@ class Observed:
     the observable of the observation, its arrays (the model of each item,
     and the data and errors of the data, if it has them), the velocities of
     its channels (km/s; None without a spectral axis), and the warnings of
-    the library as it set them up (e.g. a PSF narrower than the pixels).
+    the library as it set them up (e.g. a PSF narrower than the pixels),
+    and its pixels on the sky: their size (x, y; arcsec) and the pixel (x,
+    y; 0-based) that the model measures positions from.
     """
     observable: str
     arrays: list[ObservedArray]
     velocities: np.ndarray | None
     notes: list[str]
+    step: tuple[float, float]
+    rpix: tuple[float, float]
 
 
 class Renders:
@@ -300,7 +304,10 @@ class Renders:
                 f"the model has no light in the observation: the galaxy "
                 f"may be out of its field, or too small for its pixels"
                 f"{where}")
-        return Observed(observable.type(), arrays, velocities, notes)
+        step, rpix = observable.step(), observable.rpix()
+        return Observed(
+            observable.type(), arrays, velocities, notes,
+            (float(step[0]), float(step[1])), (float(rpix[0]), float(rpix[1])))
 
     def _load(
             self, project: str, options: Mapping[str, Any], view: View,

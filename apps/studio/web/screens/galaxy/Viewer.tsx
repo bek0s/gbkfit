@@ -8,15 +8,15 @@
 // sky, in arcsec from the centre, and its value). Light can be shown on a
 // linear, square-root or logarithmic scale.
 import { useDebouncedValue, useElementSize } from '@mantine/hooks';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useGalaxyRender, type GalaxyRender } from '../../api/queries';
 import { ColourBar } from '../../components/ColourBar';
 import { useStretches } from '../../components/colours';
 import { significant } from '../../components/format';
 import { GESTURES } from '../../components/MapTools';
 import { MapView, type Region } from '../../components/MapView';
-import { regionStats, statsText } from '../../components/regions';
-import { Close, IconButton } from '../../components/ui/basics';
+import { RegionsBar, useSkyRegions } from '../../components/RegionsBar';
+import { IconButton } from '../../components/ui/basics';
 import { Choice, Segments } from '../../components/ui/inputs';
 import { Curves, type CurvesFocus } from './Curves';
 import { SeenView } from './Seen';
@@ -209,14 +209,6 @@ function RenderPane({
   const [scale, setScale] = useState<Scale>('sqrt');
   const [zoom, setZoom] = useState<{ window: Region; size: number } | null>(null);
   const [hover, setHover] = useState<[number, number] | null>(null);
-  // (a region drawn on the sky, in the pixels of a render of a size; Esc
-  // clears it)
-  const [selected, setSelected] = useState<{ region: Region; size: number } | null>(null);
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && setSelected(null);
-    globalThis.addEventListener('keydown', onKey);
-    return () => globalThis.removeEventListener('keydown', onKey);
-  }, []);
   const [stretch, setStretch] = useStretches(`galaxy/${quantity}`);
   const n = shown?.size ?? size;
   // (a zoom of a render of another size, scaled to this one)
@@ -242,10 +234,13 @@ function RenderPane({
   };
   const unit = quantity === 'light' ? '' : 'km/s';
   const readout = hover && shown && map ? readAt(shown, map, hover) : null;
-  // (regions are of the sky: not of the galaxy turned face-on or edge-on,
-  // where a drag pans)
+  // (the regions of the sky of the project, on the render: its pixels from
+  // its middle, where the model measures positions from; not of the galaxy
+  // turned face-on or edge-on, where a drag pans)
   const sky = orientation === 'sky';
-  const region = sky && selected && shown ? scaleRegion(selected.region, selected.size, n) : null;
+  const frame = useMemo(() => (sky && shown ? { step: [shown.step, shown.step] as [number, number], rpix: [(n - 1) / 2, (n - 1) / 2] as [number, number] } : null), [sky, shown, n]);
+  const regions = useSkyRegions(sky ? project : null, frame, [n, n]);
+  const region = sky ? (regions.active?.pixels ?? null) : null;
   return (
     <div className="gx-render" ref={column}>
     <div className="gx-map-pane" style={{ ['--side' as string]: `${side}px` }}>
@@ -264,15 +259,15 @@ function RenderPane({
               onPan={panBy}
               onWhole={() => setZoom(null)}
               region={region}
-              onRegion={sky ? (drawn) => setSelected({ region: drawn, size: n }) : undefined}
+              regions={sky ? regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!) : []}
+              onRegion={sky ? regions.add : undefined}
               onHover={setHover}
               label={`The ${quantity} of the galaxy`}
             />
             {arrows && <Arrows render={shown} component={isolated} window={[x0, x1, y0, y1]} />}
-            {region && (
-              <div className="map-region-tag" title="The region drawn, and the statistics of the map in it (Esc clears it)">
-                <span>{statsText(regionStats(map.values, n, region), unit)}</span>
-                <Close label="Clear the region" onClick={() => setSelected(null)} />
+            {sky && (
+              <div className="map-regions-over">
+                <RegionsBar regions={regions} values={map.values} nx={n} unit={unit} />
               </div>
             )}
             <div className="gx-map-corner">
@@ -320,13 +315,6 @@ function RenderPane({
     {shown && <Curves render={shown} focus={curves} components={components} height={curvesHeight} />}
     </div>
   );
-}
-
-// A region of pixels of a render of one size, in those of another
-function scaleRegion(region: Region, from: number, to: number): Region {
-  if (from === to) return region;
-  const at = (pixel: number) => Math.min(to - 1, Math.max(0, Math.round(((pixel + 0.5) * to) / from - 0.5)));
-  return region.map(at) as Region;
 }
 
 // A window of pixels of a render of one size, in those of another

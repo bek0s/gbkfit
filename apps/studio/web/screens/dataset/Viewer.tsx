@@ -8,6 +8,8 @@ import { useMaps } from '../../api/queries';
 import { CubeViewer, type Layer } from '../../components/CubeViewer';
 import type { Region } from '../../components/MapView';
 import { MapsViewer, type MapItem } from '../../components/MapsViewer';
+import { frameOf } from '../../components/sky';
+import { useStudio } from '../../studio';
 import {
   cropRegion,
   hasEdits,
@@ -45,6 +47,7 @@ export function DatasetViewer({
   actions?: ReactNode;
 }) {
   const { kind, draft, arrays } = resolved;
+  const { project } = useStudio();
   const info = KINDS[kind];
   const slots = presentSlots(kind, draft);
   const shown = slots.filter((slot) => {
@@ -64,6 +67,8 @@ export function DatasetViewer({
       <CubeViewer
         key={`${draft.items[key].files.data!.file}:${arrays[key].found.data!.index}`}
         layers={layersOf(draft.items[key], arrays[key])}
+        project={project}
+        frame={frameOf(arrays[key].found.data?.step, arrays[key].found.data?.rpix)}
         shape={shape}
         selection={selection.region}
         band={selection.band}
@@ -84,6 +89,8 @@ export function DatasetViewer({
   }));
   return (
     <MapsViewer
+      project={project}
+      frame={frameOf(arrays[fitting[0].key]?.found.data?.step, arrays[fitting[0].key]?.found.data?.rpix)}
       key={maps.map((map) => `${map.key}:${map.layers[0].path}`).join()}
       maps={maps}
       shape={shape as [number, number]}

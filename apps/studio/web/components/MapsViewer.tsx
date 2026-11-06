@@ -8,16 +8,16 @@
 // with the wheel) and back; a crop (an edit) is outlined, and the pixels
 // the edits leave out are blank on the data. Over its corner, its file;
 // under it, the value of the pixel under the pointer.
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useChannel } from '../api/queries';
 import { ColourBar } from './ColourBar';
 import { UNSTRETCHED, useStretches } from './colours';
 import { robustRange, useFitted, type Layer } from './CubeViewer';
 import { significant } from './format';
 import { MapTools } from './MapTools';
-import { regionStats, statsText } from './regions';
+import { RegionsBar, useSkyRegions } from './RegionsBar';
+import type { SkyFrame } from './sky';
 import { MapView, type Region } from './MapView';
-import { Chip } from './ui/basics';
 import { Choice, Segments } from './ui/inputs';
 
 // A map: its key, its title, how its colours run (sequential, diverging
@@ -40,6 +40,8 @@ export function MapsViewer({
   crop = null,
   out = null,
   actions,
+  project = null,
+  frame = null,
 }: {
   maps: MapItem[];
   // The shape of the maps (x, y)
@@ -50,8 +52,19 @@ export function MapsViewer({
   // The pixels the edits leave out (1; null: none), of every map
   out?: Uint8Array | null;
   actions?: ReactNode;
+  // The project, whose regions of the sky (see RegionsBar) are on the map,
+  // and the pixels of the map on the sky (none: a selection of its own)
+  project?: string | null;
+  frame?: SkyFrame | null;
 }) {
   const [nx, ny] = shape;
+  // (the regions of the sky on it; the one chosen is the selection)
+  const regions = useSkyRegions(project, frame, [nx, ny]);
+  const activePixels = regions.active?.pixels ?? null;
+  const activeKey = activePixels ? activePixels.join() : '';
+  useEffect(() => {
+    onSelection(activePixels);
+  }, [activeKey]);
   const [mapKey, setMapKey] = useState(maps[0]?.key);
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
   const [zoom, setZoom] = useState<Region | null>(null);
@@ -103,12 +116,7 @@ export function MapsViewer({
           <Segments items={map.layers.map((l) => ({ value: l.key, label: l.title }))} value={layer.key} onChange={setLayerKey} label="The layer of the map shown" />
         )}
         <div className="selection-chips" aria-label="The selection">
-          {selection !== null && (
-            <Chip title="The region selected on the map, and the statistics of the map in it" removeLabel="Clear the region" onRemove={() => onSelection(null)}>
-              x {selection[0]}–{selection[1]} · y {selection[2]}–{selection[3]}
-              {values && ` · ${statsText(regionStats(values.values, nx, selection), layer.unit ?? '')}`}
-            </Chip>
-          )}
+          <RegionsBar regions={regions} values={values?.values} nx={nx} unit={layer.unit ?? ''} />
         </div>
         {actions}
       </div>
@@ -127,8 +135,12 @@ export function MapsViewer({
                     out={layer.key === 'data' ? out : null}
                     window={zoom}
                     region={selection}
+                    regions={regions.placed.filter((r) => r.pixels && r.id !== regions.active?.id).map((r) => r.pixels!)}
                     outline={crop}
-                    onRegion={onSelection}
+                    onRegion={(region) => {
+                      regions.add(region);
+                      onSelection(region);
+                    }}
                     onZoom={zoomAt}
                     onPan={panBy}
                     onWhole={() => setZoom(null)}

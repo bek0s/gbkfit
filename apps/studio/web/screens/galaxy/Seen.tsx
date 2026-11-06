@@ -15,6 +15,7 @@ import { CubeViewer } from '../../components/CubeViewer';
 import { joinPath } from '../../components/FilePicker';
 import { MapsViewer, type MapItem } from '../../components/MapsViewer';
 import type { Region } from '../../components/MapView';
+import { frameOf } from '../../components/sky';
 import { Curves, type CurvesFocus } from './Curves';
 import type { Options } from './options';
 
@@ -69,7 +70,7 @@ export function SeenView({
           </div>
         )}
         {!observed.error && !observed.data && <div className="gx-map-wait gx-seen-wait" />}
-        {!observed.error && observed.data && <Shown key={observation} observed={observed.data} />}
+        {!observed.error && observed.data && <Shown key={observation} observed={observed.data} project={project} />}
       </div>
       {render.data && <Curves render={render.data} focus={curves} components={components} height={CURVES_HEIGHT} />}
     </div>
@@ -79,7 +80,7 @@ export function SeenView({
 type Observed = NonNullable<ReturnType<typeof useObserved>['data']>;
 
 // The model as observed, in the viewer of its kind
-function Shown({ observed }: { observed: Observed }) {
+function Shown({ observed, project }: { observed: Observed; project: string }) {
   const [selection, setSelection] = useState<Region | null>(null);
   const [band, setBand] = useState<[number, number] | null>(null);
   const models = observed.arrays.filter((array) => array.kind === 'model');
@@ -98,6 +99,8 @@ function Shown({ observed }: { observed: Observed }) {
         onSelection={setSelection}
         onBand={setBand}
         noiseless
+        project={project}
+        frame={frameOf(model.step, model.rpix)}
       />
     );
   }
@@ -108,7 +111,17 @@ function Shown({ observed }: { observed: Observed }) {
     layers: [{ key: 'data', title: 'Model', path: model.path, hdu: 0, unit: model.unit || null }],
   }));
   const [nx, ny] = models[0].shape;
-  return <MapsViewer key={maps.map((map) => map.layers[0].path).join()} maps={maps} shape={[nx, ny]} selection={selection} onSelection={setSelection} />;
+  return (
+    <MapsViewer
+      key={maps.map((map) => map.layers[0].path).join()}
+      maps={maps}
+      shape={[nx, ny]}
+      selection={selection}
+      onSelection={setSelection}
+      project={project}
+      frame={frameOf(models[0].step, models[0].rpix)}
+    />
+  );
 }
 
 // (what an item of an observation is, to people)

@@ -9,6 +9,7 @@ export const keys = {
   projects: ['projects'],
   project: (path: string) => ['project', path],
   piece: (path: string) => ['piece', path],
+  regions: (project: string) => ['regions', project],
   folder: (path: string) => ['folder', path],
   description: (path: string, velocity: string | null, rest: string | null = null) => ['description', path, velocity, rest],
   preparation: (path: string) => ['preparation', path],
@@ -481,5 +482,30 @@ export function useObserved(
     // (its arrays are kept by the server for a while only)
     gcTime: 0,
     queryFn: () => data(api.POST('/api/v1/views/observed', { body: { project, galaxy: galaxy ?? {}, properties, observation: observation ?? '' } })),
+  });
+}
+
+// The regions of the sky of a project (see the server's /regions), shared
+// by every map of it; set all at once, as they are shown at once (the
+// change shown before the server keeps it)
+export type SkyRegion = components['schemas']['RegionInfo'];
+
+export function useRegions(project: string | null) {
+  return useQuery({
+    queryKey: keys.regions(project ?? ''),
+    enabled: project !== null,
+    queryFn: () => data(api.GET('/api/v1/regions/{path}', { params: { path: { path: project ?? '' } } })),
+  });
+}
+
+export function useSetRegions(project: string | null) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (regions: SkyRegion[]) => {
+      const { error, response } = await api.PUT('/api/v1/regions/{path}', { params: { path: { path: project ?? '' } }, body: regions });
+      if (error !== undefined) throw new Error(`${response.status} ${response.statusText}`);
+    },
+    onMutate: (regions) => client.setQueryData(keys.regions(project ?? ''), regions),
+    onSettled: () => client.invalidateQueries({ queryKey: keys.regions(project ?? '') }),
   });
 }
