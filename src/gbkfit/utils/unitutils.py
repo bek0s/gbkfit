@@ -263,6 +263,10 @@ def _bracketed(operand: str) -> astropy.units.UnitBase:
     if any.
     For example, '(km/s)', '(km/s)2', '(km/s)**2' or '(km/s)^(-1/2)'.
 
+    Such an operand is read here, not by astropy as any other operand is,
+    because the brackets hold a whole expression, which astropy would read
+    by its own precedence: '(Jy/beam km/s)' as Jy / (beam km s).
+
     Raise ValueError if the expression is empty or not a unit, or if the
     power is not a number.
     """
