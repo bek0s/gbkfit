@@ -25,6 +25,14 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     # Capitals that are units of their own too (S, the siemens)
     ('S', u.s),
     ('M/S', u.m / u.s),
+    # The spellings of AIPS (e.g. the moments of THINGS): B is the beam
+    ('JY/B*M/S', u.Jy * u.m / u.s / u.beam),
+    ('JY/B', u.Jy / u.beam),
+    ('METR/SEC', u.m / u.s),
+    # The spellings of SDSS (e.g. MaNGA): ang is the angstrom, a spaxel a
+    # pixel
+    ('1E-17 erg/s/cm^2/ang/spaxel',
+     1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom / u.pix),
     ('MJy/sr', u.MJy / u.sr),
     ('10**(-20)*erg/s/cm**2/Angstrom',
      1e-20 * u.erg / u.s / u.cm ** 2 / u.Angstrom),
@@ -61,7 +69,9 @@ def test_units_of_several_slashes_are_read_without_warnings():
 
 @pytest.mark.parametrize('text, spatial', [
     ('Jy/beam', u.beam),
+    ('JY/B*M/S', u.beam),
     ('Jy/pixel', u.pix),
+    ('1E-17 erg/s/cm^2/Angstrom/spaxel', u.pix),
     ('MJy/sr', u.sr),
     ('1e-17 erg/s/cm2/arcsec2', u.sr),
     ('Jy deg-2', u.sr),

@@ -21,12 +21,16 @@ __all__ = [
 # number)
 _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.(?![0-9])')
 
-# The units of FITS headers that are written in capitals (e.g. 'JY/BEAM')
+# The units of FITS headers that are written in capitals (e.g. 'JY/BEAM'),
+# with the spellings of AIPS (e.g. 'JY/B*M/S', 'METR/SEC': B is the beam
+# there, not the byte) and of SDSS (e.g. MaNGA's
+# '1E-17 erg/s/cm^2/ang/spaxel': ang is the angstrom, and a spaxel a pixel)
 _CAPITALS = {
-    'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'KM': 'km', 'M': 'm',
-    'S': 's', 'HZ': 'Hz', 'KHZ': 'kHz', 'MHZ': 'MHz', 'GHZ': 'GHz',
-    'SR': 'sr', 'ERG': 'erg', 'CM': 'cm', 'ANGSTROM': 'Angstrom',
-    'ARCSEC': 'arcsec', 'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix'}
+    'JY': 'Jy', 'MJY': 'MJy', 'BEAM': 'beam', 'B': 'beam', 'KM': 'km',
+    'M': 'm', 'METR': 'm', 'S': 's', 'SEC': 's', 'HZ': 'Hz', 'KHZ': 'kHz',
+    'MHZ': 'MHz', 'GHZ': 'GHz', 'SR': 'sr', 'ERG': 'erg', 'CM': 'cm',
+    'ANGSTROM': 'Angstrom', 'ANG': 'Angstrom', 'ARCSEC': 'arcsec',
+    'DEG': 'deg', 'PIXEL': 'pix', 'PIX': 'pix', 'SPAXEL': 'pix'}
 
 
 def parse_unit(text: str) -> astropy.units.UnitBase:
