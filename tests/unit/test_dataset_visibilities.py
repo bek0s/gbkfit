@@ -40,6 +40,22 @@ def test_the_file_of_a_dataset_is_the_dataset():
     assert loaded.coverage() == dataset.coverage()
 
 
+def test_the_parts_keep_their_own_errors_and_masks_in_the_file():
+    # (e.g. errors estimated from the scatter of each part)
+    dataset = visibilities()
+    error = 2 * dataset['re'].error()
+    error[1, 2] = np.nan
+    dataset = DatasetVisibilities(
+        dataset['re'], Data(dataset['im'].data(), error=error, unit='Jy'),
+        dataset.coverage())
+    loaded = dataset_parser.load(dataset_parser.dump(dataset))
+    for key in ('re', 'im'):
+        np.testing.assert_array_equal(
+            loaded[key].error(), dataset[key].error())
+        np.testing.assert_array_equal(loaded[key].mask(), dataset[key].mask())
+    assert loaded['re'].mask()[1, 2] == 1 and loaded['im'].mask()[1, 2] == 0
+
+
 @pytest.mark.parametrize('options, error, message', [
     (dict(frame='TOPO'), ValueError, "'frame' must be one of"),
     (dict(frequencies=[1.42e9, 1.4201e9, 1.4203e9]), ValueError,

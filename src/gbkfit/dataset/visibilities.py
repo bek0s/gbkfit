@@ -18,6 +18,7 @@ from gbkfit.config import (
     Choices, FilePath, Serializable, Unit, check_options)
 from gbkfit.grid import make_rest
 from gbkfit.utils import unitutils
+from gbkfit.utils.numutils import MAD_TO_STD
 from .base import Dataset
 from .data import Data
 
@@ -192,7 +193,8 @@ class UVCoverage(Serializable):
     def __eq__(self, other: object) -> bool:
         return isinstance(other, UVCoverage) and all(
             np.array_equal(a, b) for a, b in zip(
-                self.arrays().values(), other.arrays().values()))
+                self.arrays().values(), other.arrays().values(),
+                strict=True))
 
     def arrays(self) -> dict[str, np.ndarray]:
         """
@@ -280,7 +282,10 @@ class DatasetVisibilities(Dataset):
         complex visibilities (nchannels, nrows); error, the error of each
         of their parts (nchannels, nrows); optionally mask (0 for the
         visibilities left out) and unit (e.g. 'Jy'); and those of its
-        coverage (see UVCoverage.arrays).
+        coverage (see UVCoverage.arrays). The imaginary parts may have
+        errors and a mask of their own (error_im and mask_im; e.g. errors
+        estimated from the scatter of each part, see from_ms), and then
+        error and mask are those of the real parts.
 
         Parameters
         ----------
@@ -305,11 +310,12 @@ class DatasetVisibilities(Dataset):
             raise ValueError(
                 f"the file of visibilities {file} has no arrays "
                 f"{sorted(missing)}")
-        data, mask = arrays['data'], arrays.get('mask')
+        data, error, mask = arrays['data'], arrays['error'], arrays.get('mask')
         unit = str(arrays['unit']) if 'unit' in arrays else None
         return cls(
-            Data(data.real, mask, arrays['error'], unit),
-            Data(data.imag, mask, arrays['error'], unit),
+            Data(data.real, mask, error, unit),
+            Data(data.imag, arrays.get('mask_im', mask),
+                 arrays.get('error_im', error), unit),
             UVCoverage.from_arrays(arrays))
 
     @classmethod
@@ -457,9 +463,18 @@ class DatasetVisibilities(Dataset):
     ) -> dict[str, Any]:
         filename = f'{prefix}visibilities.npz'
         re, im = self['re'], self['im']
+        # (each part set apart: re + 1j im is NaN in both where either is)
+        data = re.data().astype(complex)
+        data.imag = im.data()
         arrays = dict(
-            data=re.data() + 1j * im.data(), error=re.error(), mask=re.mask(),
+            data=data, error=re.error(), mask=re.mask(),
             **self._coverage.arrays())
+        # (those of the imaginary parts, if they are not those of the real
+        # ones; see from_file)
+        if not np.array_equal(im.error(), re.error(), equal_nan=True):
+            arrays['error_im'] = im.error()
+        if not np.array_equal(im.mask(), re.mask()):
+            arrays['mask_im'] = im.mask()
         if re.unit() is not None:
             arrays['unit'] = unitutils.format_unit(re.unit())
         _savez(filename, arrays, overwrite)
@@ -645,7 +660,7 @@ def _scatter_errors(
             values = values[np.isfinite(values)]
             if values.size >= 5:
                 deviation = np.median(np.abs(values - np.median(values)))
-                errors[part][rows] = 1.4826 * deviation / np.sqrt(6)
+                errors[part][rows] = MAD_TO_STD * deviation / np.sqrt(6)
     return errors[0], errors[1]
 
 
