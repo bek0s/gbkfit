@@ -1,6 +1,7 @@
 
 import logging
 
+import astropy.units as u
 import numpy as np
 import pytest
 from astropy.io import fits
@@ -98,11 +99,43 @@ def test_dataset_items_must_have_the_same_world_coordinates(tmp_path):
     fits.writeto(tmp_path / 'moment0.fits', np.ones((8, 20)))
     fits.writeto(
         tmp_path / 'moment1.fits', np.ones((8, 20)), fits.Header(dict(CRPIX1=3)))
-    with pytest.raises(Exception, match="different world coordinates"):
+    with pytest.raises(Exception, match="is not on the pixels of"):
         dataset_parser.load(dict(
             type='pixel_moments',
             moment0=dict(data=str(tmp_path / 'moment0.fits')),
             moment1=dict(data=str(tmp_path / 'moment1.fits'))))
+
+
+@pytest.mark.parametrize('moment1, same', [
+    # (a step written to 8 digits: 8e-10 of it apart)
+    (dict(CDELT1=float(f'{-1 / 3600:.8E}')), True),
+    # (the spectral axis of one channel of a cube, of another frame)
+    (dict(NAXIS=3, CTYPE3='VRAD', CUNIT3='km/s', CDELT3=5.0, CRPIX3=1,
+          CRVAL3=0.0, RESTFRQ=1.420405752e9, SPECSYS='BARYCENT'), True),
+    # (half a pixel away)
+    (dict(CRPIX1=3.5), False)])
+def test_maps_of_moments_on_the_same_pixels_are_one_grid(
+        tmp_path, moment1, same):
+    sky = dict(
+        CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=-1 / 3600, CRPIX1=3,
+        CRVAL1=10.0, CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=1 / 3600,
+        CRPIX2=2, CRVAL2=20.0)
+    fits.writeto(tmp_path / 'moment0.fits', np.ones((4, 6)), fits.Header(sky))
+    shape = (1, 4, 6) if 'NAXIS' in moment1 else (4, 6)
+    fits.writeto(
+        tmp_path / 'moment1.fits', np.ones(shape),
+        fits.Header(sky | moment1))
+    info = dict(
+        type='pixel_moments',
+        moment0=dict(data=str(tmp_path / 'moment0.fits'), error=1.0),
+        moment1=dict(data=str(tmp_path / 'moment1.fits'), error=1.0))
+    if not same:
+        with pytest.raises(Exception, match="is not on the pixels of"):
+            dataset_parser.load(info)
+        return
+    grid = dataset_parser.load(info).grid()
+    assert grid.size == (6, 4)
+    np.testing.assert_allclose(grid.coords.rval, (10, 20))
 
 
 def test_dataset_items_must_have_the_same_shape():
@@ -343,6 +376,39 @@ def test_a_convention_other_than_that_of_the_data_warns(tmp_path, caplog):
             info | dict(spectral=dict(convention='optical')))
     assert dataset.grid().coords.convention == 'optical'
     assert "states velocities of the convention 'radio'" in caplog.text
+
+
+@pytest.mark.parametrize('rest, convention, relabelled', [
+    # (the same line: its wavelength in vacuum, c / f0, and its frequency)
+    (dict(RESTFRQ=1.420405752e9), 'optical', (0.21106114 * u.m, 'vacuum')),
+    (dict(RESTWAV=0.21106114), 'radio', (1.420405752e9 * u.Hz, None)),
+    # (velocities of a wavelength in air: that in vacuum gives the frequency)
+    (dict(RESTWAV=6564.614e-10, AIRORVAC='air'), 'radio',
+     (4.566795e14 * u.Hz, None)),
+    (dict(RESTFRQ=1.420405752e9), 'relativistic', (None, None))])
+def test_relabelled_velocities_keep_the_line_of_their_rest(
+        tmp_path, rest, convention, relabelled):
+    # A convention given for files of another relabels their velocities,
+    # with the rest of the same line for it
+    stated = 'radio' if 'RESTFRQ' in rest else 'optical'
+    header = fits.Header(dict(
+        CTYPE1='RA---SIN', CDELT1=-1 / 3600, CTYPE2='DEC--SIN',
+        CDELT2=1 / 3600, CTYPE3=dict(radio='VRAD', optical='VOPT')[stated],
+        CRVAL3=5e6, CDELT3=1e4, CRPIX3=1, CUNIT3='m/s') | rest)
+    fits.writeto(
+        tmp_path / 'cube.fits', np.ones((5, 6, 7), np.float32), header)
+    coords = dataset_parser.load(dict(
+        type='pixel_spectra', data=str(tmp_path / 'cube.fits'),
+        spectral=dict(convention=convention))).grid().coords
+    assert coords.convention == convention
+    np.testing.assert_allclose(coords.rval[2], 5000)
+    expected, medium = relabelled
+    assert coords.medium == medium
+    if expected is None:
+        assert coords.rest is None
+    else:
+        assert coords.rest.unit == expected.unit
+        assert coords.rest.value == pytest.approx(expected.value, rel=1e-5)
 
 
 def test_observable_grid_comes_from_the_data(tmp_path):

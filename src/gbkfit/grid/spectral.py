@@ -34,6 +34,7 @@ __all__ = [
     'make_convention',
     'make_medium',
     'make_rest',
+    'rest_of_convention',
     'spectral_axis_parser',
     'vacuum_wavelength'
 ]
@@ -259,6 +260,52 @@ def vacuum_wavelength(air: float) -> float:
     for _ in range(3):
         vacuum = air * air_refractive_index(vacuum)
     return vacuum
+
+
+def rest_of_convention(
+        rest: astropy.units.Quantity | None,
+        medium: str | None,
+        convention: str
+) -> tuple[astropy.units.Quantity | None, str | None]:
+    """
+    Return the rest of a line for velocities of a convention (see
+    make_convention), and the medium of its wavelength: a rest wavelength
+    for optical or log velocities (c / f0 in vacuum, of a rest frequency
+    f0), a rest frequency for radio ones (c over the rest wavelength in
+    vacuum), and none for relativistic ones, which have no rest.
+
+    Parameters
+    ----------
+    rest : Quantity or None
+        The rest (see make_rest).
+    medium : str or None
+        The medium of the wavelength of a rest wavelength (see
+        make_medium).
+    convention : str
+        The convention.
+
+    Returns
+    -------
+    Quantity or None
+        The rest, in m or Hz.
+    str or None
+        The medium of its wavelength ('vacuum' or 'air'), or None for a
+        frequency or no rest.
+    """
+    if rest is None or convention == 'relativistic':
+        return None, None
+    is_wavelength = rest.unit.is_equivalent(astropy.units.m)
+    if convention == 'radio':
+        if not is_wavelength:
+            return rest, None
+        wavelength = rest.to_value(astropy.units.m)
+        if medium == 'air':
+            wavelength = vacuum_wavelength(wavelength)
+        return (wavelength * astropy.units.m).to(
+            astropy.units.Hz, astropy.units.spectral()), None
+    if is_wavelength:
+        return rest, medium
+    return rest.to(astropy.units.m, astropy.units.spectral()), 'vacuum'
 
 
 class VelocityConvention:

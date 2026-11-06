@@ -12,7 +12,8 @@ from astropy.table import Table
 
 from gbkfit.config import config_path, parse_options, warn
 from gbkfit.grid import (
-    Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis)
+    Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis,
+    pixels_on, rest_of_convention)
 from gbkfit.io import read_column, write_data
 from gbkfit.utils import unitutils
 from .data import Data, DataColumns, DataFiles, dump_data
@@ -33,6 +34,11 @@ _HERMITE_ORDERS = (3, 4)
 MOMENTS = tuple(f'moment{order}' for order in _ORDERS)
 HERMITE = tuple(f'h{order}' for order in _HERMITE_ORDERS)
 MOMENT_ITEMS = MOMENTS + HERMITE
+
+# How far (in pixels) the world coordinates of the maps of moments may put
+# their pixels from those of the first (as those of the errors and masks of
+# data, see read_arrays)
+_GRID_TOLERANCE = 1e-3
 
 
 def cleaned(
@@ -226,7 +232,11 @@ def read_moments(
     """
     Read the moments of the given names from their files (see
     MOMENT_ITEMS and Data.from_files), and return them with the world
-    coordinates of their files, which must agree.
+    coordinates of the file of the first. Maps of moments must be on the
+    pixels of the first on the sky, to within _GRID_TOLERANCE (e.g. their
+    headers may round the steps differently; what else their world
+    coordinates state, e.g. the frame of velocities of a moment 1, is not
+    of the grid); moments of regions have no pixels on the sky.
     """
     items, coords = {}, {}
     for name, item in files.items():
@@ -237,12 +247,37 @@ def read_moments(
             error_kind=item.error_kind, footprint=item.footprint)
     if not coords:
         raise ValueError("a dataset needs at least one moment")
-    first = next(iter(coords.values()))
-    if any(value != first for value in coords.values()):
-        raise ValueError(
-            f"the files of the moments have different world coordinates: "
-            f"{coords}")
-    return items, first
+    (first, first_coords), *others = coords.items()
+    for name, value in others:
+        if items[name].ndim() == 2 and not _on_the_same_pixels(
+                items[name].shape(), value,
+                items[first].shape(), first_coords):
+            raise ValueError(
+                f"the file of {name} is not on the pixels of that of "
+                f"{first}: their world coordinates are {value} and "
+                f"{first_coords}")
+    return items, first_coords
+
+
+def _on_the_same_pixels(
+        shape: tuple[int, ...],
+        coords: Coords,
+        other_shape: tuple[int, ...],
+        other_coords: Coords
+) -> bool:
+    """
+    Return whether a map of a shape (numpy order) and world coordinates is
+    on the pixels of another on the sky (see _GRID_TOLERANCE).
+    """
+    if shape != other_shape:
+        return False
+    def sky_grid(c: Coords) -> Grid:
+        return make_grid(shape[::-1], c.step, c.rpix, c.rval, c.rota)
+    x, y = pixels_on(sky_grid(coords), sky_grid(other_coords))
+    j, i = np.indices(shape)
+    return bool(
+        np.allclose(x, i, rtol=0, atol=_GRID_TOLERANCE)
+        and np.allclose(y, j, rtol=0, atol=_GRID_TOLERANCE))
 
 
 def grid_coords(
@@ -274,8 +309,8 @@ def file_references(
     Data.from_files): the reference pixels and values given, for each
     axis (None where not given), and the rest, the medium and the
     convention of the spectral axis (velocity: how an ambiguous header is
-    read, see read_data), and its type (spectral_type: how an axis whose
-    header gives a type FITS does not define is read, see read_data).
+    read, see model_header), and its type (spectral_type: how an axis whose
+    header gives a type FITS does not define is read, see model_header).
 
     Raises
     ------
@@ -321,7 +356,9 @@ def cube_coords(
     without converting them: for a header that states the wrong one; a
     warning says so (see warn), as a convention copied by
     mistake puts the lines off (by 3.4% at 5000 km/s), and a frame the
-    velocities (by up to some 30 km/s).
+    velocities (by up to some 30 km/s). The rest of the files is then
+    that of the same line for the convention given (see
+    rest_of_convention; e.g. the wavelength of a rest frequency).
     """
     spectral = spectral or SpectralAxis()
     given, stated = spectral.convention(), coords.convention
@@ -337,6 +374,9 @@ def cube_coords(
             f"the spectral axis of the data states velocities in the frame "
             f"{coords.frame!r}; they are taken as given, in the frame "
             f"{frame!r}, without converting them")
+    rest, medium = coords.rest, coords.medium
+    if given is not None:
+        rest, medium = rest_of_convention(rest, medium, given)
     nspatial = len(coords.step) - 1
     return dict(
         step=coords.step[:nspatial] if step is None else step,
@@ -346,8 +386,7 @@ def cube_coords(
         spectral=SpectralAxis(
             step=spectral.step() or coords.step[nspatial],
             rpix=coords.rpix[nspatial], rval=coords.rval[nspatial],
-            convention=given or stated,
-            rest=coords.rest, medium=coords.medium,
+            convention=given or stated, rest=rest, medium=medium,
             frame=frame or coords.frame))
 
 
