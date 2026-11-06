@@ -4,8 +4,10 @@ configurations and of FITS headers (BUNIT), and writing them back as text.
 """
 
 import re
+from fractions import Fraction
 
 import astropy.units
+import pyparsing as pp
 
 
 __all__ = [
@@ -15,14 +17,18 @@ __all__ = [
 ]
 
 
-# A regular expression for the separators between the terms of a unit.
-# Terms multiply each other: 'Jy/beam km/s' is 'Jy/beam' times 'km/s'.
-# A separator is one of:
-# - a space, as in 'Jy/beam km/s';
-# - a '*', as in 'Jy/beam*km/s' ('**' is a power, as in 'm**2');
-# - a '.', as in 'Jy/beam.km/s' (a '.' between digits is a decimal
-#   point, as in '1.5').
-_TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
+# Regular expressions for the parts of the text of a unit (see _GRAMMAR):
+# - a name, of any characters but digits, signs, spaces, operators and
+#   brackets, as in 'km', 'M_sun' or '%';
+# - a number, as in '2', '1.5' or '1e-17';
+# - a power, after a name, a number or brackets: a number, alone or after
+#   '**' or '^', in brackets or not, as in 'cm2', 's-1', 'm**2',
+#   '10**(-20)' or 'Hz(1/2)'.
+_NAME = r'[^\s*./()^+\-0-9]+'
+_NUMBER = r'[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?'
+_EXPONENT = (
+    r'[+-]?[0-9]+(?:\.[0-9]+)?|\([+-]?[0-9]+(?:\.[0-9]+)?(?:/[0-9]+)?\)')
+_POWER = rf'\s*(?:\*\*|\^)\s*(?:{_EXPONENT})|(?:{_EXPONENT})'
 
 # A map from invalid unit names to the valid names of the FITS standard.
 # astropy reads only valid names, which are case-sensitive: to it, 'JY'
@@ -72,14 +78,12 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     example, 'JY/BEAM' becomes 'Jy/beam' and 'erg/s/cm2/A' becomes
     'erg/s/cm2/Angstrom', but 'mJy' stays (the table would make it 'MJy').
 
-    Then the text is read as terms that multiply each other, separated by
-    spaces, '*' or '.', each read on its own; or else as a whole, by
-    astropy (e.g. astropy's own 'Jy / beam' and 'Jy km / (beam s)', whose
-    spaces do not separate terms). The terms are read on their own because
-    the FITS standard (4.0, 4.3.1) reads a unit by the normal precedence
-    of operations, from the left: 'Jy/beam km/s' is (Jy/beam) (km/s), as
-    maps of moment 0 mean it; astropy reads everything after a '/' as
-    dividing: Jy / (beam km s).
+    Then the text is read by the precedence of the FITS standard
+    (4.0, 4.3.1): from the left, each '/' divides by what follows it, and
+    each space, '*' or '.' multiplies by it; brackets are read first, at
+    any depth (see _GRAMMAR). For example, 'Jy/beam km/s' is
+    (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone reads it
+    as Jy / (beam km s).
 
     An empty text is dimensionless, as format_unit writes it.
 
@@ -166,54 +170,84 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
 
 def _unit_of(text: str) -> astropy.units.UnitBase | None:
     """
-    Return the unit of a text, or None if it is not a unit.
-
-    The text is read first by _product, as terms that multiply each other,
-    because astropy reads such terms wrongly: 'Jy/beam km/s' as
-    Jy / (beam km s). But _product cannot read brackets that span terms,
-    as astropy writes them (e.g. 'Jy km / (beam s)'), so if it fails,
-    astropy reads the text as a whole.
+    Return the unit of a text (see _GRAMMAR), or None if it is not a unit.
+    An empty text is dimensionless.
     """
-    for parse in (_product, astropy.units.Unit):
-        try:
-            return parse(text)
-        except ValueError:
-            continue
-    return None
+    if not text.strip():
+        return astropy.units.dimensionless_unscaled
+    try:
+        return _GRAMMAR.parse_string(text, parse_all=True)[0]
+    except (pp.ParseBaseException, ValueError):
+        return None
 
 
-def _product(text: str) -> astropy.units.UnitBase:
+def _power(text: str) -> Fraction:
     """
-    Return the unit of a text as terms that multiply each other. Raise
-    ValueError if a term is not a unit.
+    Return the number of a power (see _POWER), e.g. 2 of '**2' and 1/2 of
+    '^(1/2)'. Raise ValueError if it divides by 0.
     """
-    # Remove the spaces around each '/', as they do not separate terms.
-    # For example, 'Jy/beam km / s' becomes 'Jy/beam km/s'.
-    text = '/'.join(part.strip() for part in text.split('/'))
+    number = text.strip().removeprefix('**').removeprefix('^').strip()
+    try:
+        return Fraction(number.removeprefix('(').removesuffix(')'))
+    except ZeroDivisionError:
+        raise ValueError(f"{text!r} divides by 0") from None
+
+
+def _product(tokens: pp.ParseResults) -> astropy.units.UnitBase:
+    """
+    Return the unit of the operands of an expression, each after its
+    operator: '/' divides by it, and anything else multiplies by it.
+    """
+    items = tokens.as_list()
     unit = astropy.units.dimensionless_unscaled
-    for term in _TERM_SEPARATOR.split(text):
-        if term:
-            unit = unit * _quotient(term)
+    for operator, operand in zip(items[::2], items[1::2]):
+        unit = unit / operand if operator == '/' else unit * operand
     return unit
 
 
-def _quotient(term: str) -> astropy.units.UnitBase:
+def _grammar() -> pp.ParserElement:
     """
-    Return the unit of a term of parts separated by '/': the first divided
-    by each of the others (e.g. 'erg/s/cm2' is erg / (s cm2)). Raise
-    ValueError if a part is not a unit, or if nothing follows a '/'.
+    Return the grammar of the text of a unit, by the precedence of the FITS
+    standard (4.0, 4.3.1): from the left, a '/' divides by the operand after
+    it, and a space, '*' or '.' multiplies by it.
+    For example, 'Jy/beam km/s' is Jy km / (beam s).
 
-    The parts are read one at a time because astropy warns of a text with
-    several '/' (the FITS standard discourages them), and silencing that
-    warning here would silence it in every other thread too.
+    An operand is one of:
+    - a name or a number, with its power, if any, which astropy reads (e.g.
+      'km', 'cm2', 's-1', '1e-17' or '10**(-20)');
+    - an expression in brackets, at any depth, with its power, if any (e.g.
+      '(km/s)' or '(km/s)2');
+    - the square root of an expression in brackets (e.g. 'sqrt(Hz)').
+
+    A text may start with a '/': '/s' is 1/s.
+
+    astropy never reads a '/' between operands, so it never warns of a
+    text with several '/' (the FITS standard discourages them); silencing
+    that warning here would silence it in every other thread too.
     """
-    first, *divisors = term.split('/')
-    if '' in divisors:
-        raise ValueError(f"{term!r} has nothing after a '/'")
-    unit = astropy.units.Unit(first)
-    for divisor in divisors:
-        unit = unit / astropy.units.Unit(divisor)
-    return unit
+    expression = pp.Forward()
+    # (a power after brackets, with no space before it unless it has '**' or
+    # '^': '(km/s) 2' is 2 km/s)
+    power = pp.Regex(_POWER).leave_whitespace()
+    atom = pp.Regex(rf'(?:{_NAME}|{_NUMBER})(?:{_POWER})?')
+    atom.set_parse_action(lambda tokens: astropy.units.Unit(tokens[0]))
+    group = (
+        pp.Suppress('(') + expression + pp.Suppress(')')
+        + pp.Opt(power, default='1'))
+    group.set_parse_action(lambda tokens: tokens[0] ** _power(tokens[1]))
+    root = (
+        pp.Suppress(pp.Keyword('sqrt') + '(') + expression
+        + pp.Suppress(')'))
+    root.set_parse_action(lambda tokens: tokens[0] ** Fraction(1, 2))
+    operand = root | group | atom
+    first = pp.Opt('/', default='') + operand
+    rest = pp.Opt(pp.one_of('* . /'), default='') + operand
+    expression <<= first + rest[...]
+    expression.set_parse_action(_product)
+    return expression
+
+
+_GRAMMAR = _grammar()
 
 
 def _corrected(text: str) -> str:

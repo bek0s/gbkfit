@@ -63,10 +63,19 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('ADU', u.adu),
     # (as format_unit writes a dimensionless unit)
     ('', u.dimensionless_unscaled),
-    # astropy's own forms, whose spaces are not between terms
+    # astropy's own forms, with spaces around a '/' and brackets
     ('Jy / beam', u.Jy / u.beam),
     ('Jy km / (beam s)', u.Jy * u.km / u.s / u.beam),
-    ('MJy / sr', u.MJy / u.sr)])
+    ('MJy / sr', u.MJy / u.sr),
+    # Brackets, at any depth, with a power or not (astropy alone reads the
+    # first as Jy / (beam km pix s), and refuses the second)
+    ('Jy/(beam pix) km/s', u.Jy * u.km / (u.beam * u.pix * u.s)),
+    ('(Jy/beam) (km/s)', u.Jy * u.km / (u.beam * u.s)),
+    ('erg/(s (cm (arcsec)2))', u.erg / (u.s * u.cm * u.arcsec ** 2)),
+    ('(km/s)2', u.km ** 2 / u.s ** 2),
+    ('(km/s)**2', u.km ** 2 / u.s ** 2),
+    ('(km/s)^(-2)', u.s ** 2 / u.km ** 2),
+    ('(m2)^(1/2)', u.m)])
 def test_units_are_read_as_they_are_meant(text, unit):
     parsed = parse_unit(text)
     assert parsed.is_equivalent(unit)
@@ -76,8 +85,12 @@ def test_units_are_read_as_they_are_meant(text, unit):
 
 
 def test_what_is_not_a_unit_is_an_error():
-    with pytest.raises(ValueError, match="is not a unit"):
-        parse_unit('banana')
+    for text in (
+            'banana', 'Jy/', 'Jy//beam', 'Jy..km', 'Jy *', '.', '*',
+            '(Jy', 'Jy)', ')Jy(', '()', '(km/s)**', '(km/s)x',
+            '(km/s)^(1/0)'):
+        with pytest.raises(ValueError, match="is not a unit"):
+            parse_unit(text)
     # No data are in units of the ampere (e.g. G, the gauss), the mole,
     # the candela or the bit
     for text in ('G', 'mA', 'mol', 'cd', 'bit'):
