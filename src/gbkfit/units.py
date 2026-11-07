@@ -1,11 +1,10 @@
 """
-Physical units: reading them from text and writing them as text, and
-telling what a unit of light is per on the sky.
+Physical units: reading, writing and interpreting them.
 
-All text is read and written by the rules of the FITS standard (4.0,
-section 4.3): that of the headers of FITS files, of configurations and
-of outputs. The names of units are those that astropy reads, which
-include those of the standard. Nothing is corrected.
+The text of a unit, in FITS files, configurations and outputs alike, is
+read by the rules of the FITS standard (4.0, section 4.3) for its
+operators and brackets, and by astropy for what they join: names of
+units, numbers, powers and functions of astropy. Nothing is corrected.
 """
 
 import re
@@ -40,12 +39,16 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     """
     Return the unit that a text states.
 
-    The text is read by the rules of the FITS standard (4.0, section
-    4.3.1): from the left, each '/' divides by what follows it, and each
-    space, '*' or '.' multiplies by it; brackets are read first, at any
-    depth. For example, 'Jy/beam km/s' is (Jy/beam) (km/s); astropy
-    alone reads it as Jy / (beam km s). The names of units are those
-    that astropy reads, which include those of the standard.
+    Its operators and brackets are read by the rules of the FITS
+    standard (4.0, section 4.3.1): from the left, each '/' divides by
+    what follows it, and each space, '*' or '.' multiplies by it;
+    brackets are read first, at any depth. For example, 'Jy/beam km/s'
+    is (Jy/beam) (km/s); astropy alone reads it as Jy / (beam km s).
+
+    What they join is read by astropy: names of units (those of the
+    standard and more, e.g. 'Msun'), powers (e.g. 'm2' or 'm**(-2)'),
+    functions of astropy (e.g. 'dex(solMass)'), and a number, which
+    only comes first, as a scale (e.g. '1e-17 erg/s').
 
     Names are case-sensitive, and nothing is corrected: 'JY/BEAM' is not
     a unit, and 'S' is the siemens. An empty text is dimensionless.
@@ -98,9 +101,9 @@ def parse_quantity(text: str) -> astropy.units.Quantity:
         value = float(number)
     except ValueError:
         raise ValueError(
-            f"{text!r} is not a number and a unit (e.g. "
-            f"'6562.8 Angstrom')") from None
-    return value * parse_unit(unit.strip())
+            f"{text!r} is not a number and a unit "
+            f"(e.g. '6562.8 Angstrom')") from None
+    return value * parse_unit(unit)
 
 
 def format_unit(unit: astropy.units.UnitBase) -> str:
@@ -124,10 +127,14 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
     """
     if isinstance(unit, astropy.units.FunctionUnitBase):
         # A unit of a function, e.g. a logarithm, is always the whole
-        # unit (astropy combines it with no other): astropy writes it,
-        # and parse_unit gives it to astropy to read
-        return unit.to_string()
-    # repr: the shortest text that reads back as the same scale
+        # unit (astropy combines it with no other): the name of the
+        # function, and its unit in brackets, e.g. 'dex(solMass kpc-2)'
+        name = unit.function_unit.name
+        return f'{name}({format_unit(unit.physical_unit)})'
+    # astropy holds a unit as a scale and bases to powers, e.g.
+    # 1e-17 erg / (s cm2) as 1e-17, [erg, s, cm] and [1, -1, -2], which
+    # are written in turn: '1e-17 erg s-1 cm-2'. The scale is written by
+    # repr, the shortest text that reads back as the same number.
     terms = [] if unit.scale == 1 else [repr(float(unit.scale))]
     for base, power in zip(unit.bases, unit.powers):
         name = base.to_string()
@@ -144,9 +151,10 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
 
 def format_quantity(quantity: astropy.units.Quantity) -> str:
     """
-    Return a quantity as text: its number, a space and its unit, as
-    format_unit writes it, which parse_quantity reads back as the same
-    quantity.
+    Return a quantity as text.
+
+    Its number and its unit, as format_unit writes it, which
+    parse_quantity reads back as the same quantity.
     For example, '6562.8 Angstrom'.
 
     Parameters
@@ -159,7 +167,10 @@ def format_quantity(quantity: astropy.units.Quantity) -> str:
     str
         The text of the quantity.
     """
-    return f'{float(quantity.value)!r} {format_unit(quantity.unit)}'.rstrip()
+    number = repr(float(quantity.value))
+    unit = format_unit(quantity.unit)
+    # A dimensionless quantity has no unit to write
+    return f'{number} {unit}' if unit else number
 
 
 def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
@@ -200,7 +211,7 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
             angles += 2 * power
         elif base.physical_type == 'angle':
             angles += power
-    # What a unit is per, by those powers: one of each, or none
+    # What the unit is per, by those powers (any others are an error)
     per = {
         (-1, 0, 0): astropy.units.beam,
         (0, 0, -2): astropy.units.sr,
@@ -223,25 +234,30 @@ def _expression(text: str) -> astropy.units.UnitBase:
     For example, 'Jy/beam km/s' is Jy km / (beam s).
 
     An operand is either an expression in brackets (see _bracketed), or
-    else a unit that astropy reads, e.g. 'km', 'cm2' or '10**(-17)'.
-    astropy only ever reads operands, never a '/', so it never warns of
-    a text with several '/', which the FITS standard allows.
+    else what astropy reads: a name of a unit, a power, a function of
+    astropy or a number, e.g. 'km', 'm**(-2)', 'dex(solMass)' or
+    '1e-17'. So astropy reads no operator between operands, and never
+    warns of a text with several '/', which the FITS standard allows.
+    A number scales the whole unit, so it may only be the first operand:
+    '1e-17 erg/s', not 'erg/s 1e-17'.
 
     An empty text is dimensionless, and so is the operand before a '/'
     that starts the text: '/s' is 1/s.
 
     Raise ValueError if an operand is not a unit or is missing
-    (e.g. 'Jy/' or 'Jy..km'), or if the brackets do not match, and
-    astropy.units.UnitsError if astropy cannot combine the operands,
-    e.g. a logarithm with any other unit.
+    (e.g. 'Jy/' or 'Jy..km'), if a number is not the first operand, or
+    if the brackets do not match; and astropy.units.UnitsError if
+    astropy cannot combine two operands, e.g. a logarithm and a unit.
     """
     # Remove the spaces around each '/', '*' and '.', and at the ends of
     # the text, as they do not separate terms.
     # For example, 'Jy/beam km / s' becomes 'Jy/beam km/s'.
-    for operator in '/*.':
-        text = operator.join(part.strip() for part in text.split(operator))
+    for symbol in '/*.':
+        text = symbol.join(part.strip() for part in text.split(symbol))
     unit = None
     for index, (operator, operand) in enumerate(_split(text)):
+        # An operand is empty only in an empty text, or before a '/'
+        # that starts the text ('/s'); anywhere else, it is missing
         if not operand:
             if text and not (index == 0 and text.startswith('/')):
                 raise ValueError(
@@ -251,6 +267,8 @@ def _expression(text: str) -> astropy.units.UnitBase:
             value = _bracketed(operand)
         else:
             value = astropy.units.Unit(operand)
+        if unit is not None and _is_number(value):
+            raise ValueError(f"{text!r} has a number after its start")
         # The first operand starts the unit: astropy multiplies no unit
         # of a function (e.g. a logarithm), even by dimensionless
         if unit is None:
@@ -299,10 +317,9 @@ def _bracketed(operand: str) -> astropy.units.UnitBase:
     them, if any.
     For example, '(km/s)', '(km/s)2', '(km/s)**2' or '(km/s)^(-1/2)'.
 
-    Such an operand is read here, not by astropy as any other operand
-    is, because the brackets hold a whole expression, which astropy
-    would read by its own precedence: '(Jy/beam km/s)' as
-    Jy / (beam km s).
+    Such an operand is read here, not by astropy, because the brackets
+    hold a whole expression, which astropy would read by its own
+    precedence: '(Jy/beam km/s)' as Jy / (beam km s).
 
     Raise ValueError if the expression is empty or not a unit, or if
     the power is not a number.
@@ -329,6 +346,15 @@ def _bracketed(operand: str) -> astropy.units.UnitBase:
     elif power.startswith('^'):
         power = power[1:]
     return unit ** _power(power)
+
+
+def _is_number(unit: astropy.units.UnitBase) -> bool:
+    """
+    Return whether a unit, as astropy reads it, is a number: a scale
+    without bases, e.g. that of '1e-17'. A unit of a function, e.g. a
+    logarithm, has no bases at all, and is not a number.
+    """
+    return isinstance(unit, astropy.units.UnitBase) and not unit.bases
 
 
 def _power(text: str) -> Fraction:

@@ -58,7 +58,12 @@ from gbkfit.units import (
     ('(km/s)**2', u.km ** 2 / u.s ** 2),
     ('(km/s)^(-2)', u.s ** 2 / u.km ** 2),
     ('(m2)^(1/2)', u.m),
-    ('m(3/2)', u.m ** 1.5)])
+    # Names followed by brackets (powers, or a function), read by astropy
+    ('m(3/2)', u.m ** 1.5),
+    ('m**(-2)', u.m ** -2),
+    ('Hz^(1/2)', u.Hz ** 0.5),
+    ('10**(-17) erg/s', 1e-17 * u.erg / u.s),
+    ('sqrt(Hz)', u.Hz ** 0.5)])
 def test_units_of_fits_are_read_as_they_are_meant(text, unit):
     parsed = parse_unit(text)
     assert parsed.is_equivalent(unit)
@@ -79,6 +84,27 @@ def test_what_is_not_a_unit_is_an_error():
     for text in (
             'JY/BEAM', 'Jy/Beam', 'KM/S', 'METR/SEC', 'JY/B*M/S',
             'ELECTRONS/S', '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}'):
+        with pytest.raises(ValueError, match="is not a valid unit"):
+            parse_unit(text)
+
+
+def test_names_followed_by_brackets_are_read_by_astropy():
+    # (the functions of astropy, which format_unit writes without a '/',
+    # but not those of the FITS standard that astropy refuses)
+    assert parse_unit('dex(solMass)') == u.dex(u.Msun)
+    assert parse_unit('mag(ct/s)') == u.mag(u.ct / u.s)
+    unit = u.dex(u.Msun / u.kpc ** 2)
+    assert format_unit(unit) == 'dex(solMass kpc-2)'
+    assert parse_unit(format_unit(unit)) == unit
+    with pytest.raises(ValueError, match="is not a valid unit"):
+        parse_unit('log(Hz)')
+
+
+def test_a_number_only_comes_first():
+    # (it scales the whole unit)
+    assert parse_unit('30 Jy') == u.Unit(30 * u.Jy)
+    assert parse_unit('1e-17 erg/s') == u.Unit(1e-17 * u.erg / u.s)
+    for text in ('Jy 30', 'erg/s 1e-17', 'Jy (30)'):
         with pytest.raises(ValueError, match="is not a valid unit"):
             parse_unit(text)
 
