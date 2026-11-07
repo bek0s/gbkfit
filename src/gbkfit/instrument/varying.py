@@ -40,7 +40,7 @@ from gbkfit.config import (
     FilePath, Serializable, check_options, config_path,
     option_types, parse_options_for_callable, unit_of, varying_options)
 from gbkfit.grid import VelocityConvention
-from gbkfit.io import read_table
+from gbkfit.io import read_column, read_table
 
 
 __all__ = [
@@ -334,9 +334,7 @@ class SpectralTable(Serializable):
         """
         check_options(SpectralTable.from_file, locals())
         table = read_table(file, hdu=hdu)
-        units = {
-            name: gbkfit.units.parse_unit(unit) if isinstance(unit, str)
-            else unit for name, unit in (units or {}).items()}
+        units = units or {}
         axes = [axis for axis in _AXES if axis in table.colnames]
         if len(axes) != 1:
             raise ValueError(
@@ -346,18 +344,19 @@ class SpectralTable(Serializable):
             raise ValueError(
                 f"{file}: there is no column '{column}'; the columns "
                 f"are {table.colnames}")
-
-        def unit(name: str) -> str | u.UnitBase | None:
-            return units.get(name, table[name].unit)
+        # Masked values are NaN, which the table refuses
         axis = axes[0]
-        points_unit = unit(axis) or (_KMS if axis == 'velocity' else None)
-        if points_unit is None:
-            raise ValueError(
-                f"{file}: the column '{axis}' has no unit; give it in "
-                f"units")
-        return cls(
-            np.asarray(table[axis], dtype=float) * u.Unit(points_unit),
-            np.asarray(table[column], dtype=float), unit(column))
+        points = read_column(table, axis, units.get(axis))
+        if points.unit == u.dimensionless_unscaled:
+            if axis != 'velocity':
+                raise ValueError(
+                    f"{file}: the column '{axis}' has no unit; give it in "
+                    f"units")
+            points = points.value * _KMS
+        values = read_column(table, column, units.get(column))
+        unit = None if values.unit == u.dimensionless_unscaled \
+            else values.unit
+        return cls(points, values.value, unit)
 
     def dump(self) -> dict[str, Any]:
         """

@@ -11,6 +11,7 @@ import numpy as np
 from astropy.io.fits.connect import is_fits
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
+from astropy.table.meta import get_header_from_yaml
 from astropy.utils.data import get_readable_fileobj
 
 import gbkfit.units
@@ -31,8 +32,11 @@ def read_table(
 
     The file is of any format that astropy reads, e.g. ECSV, FITS, CSV
     or text (see astropy.table.Table.read). The columns of a text file
-    without a header are named col1, col2, etc. The units of a FITS
-    file (TUNITn) are read by gbkfit.units.parse_unit.
+    without a header are named col1, col2, etc.
+
+    The units of the columns of a FITS or an ECSV file are read by
+    gbkfit.units.parse_unit: astropy reads them by its own precedence,
+    e.g. 'Jy/beam km/s' as Jy / (beam km s).
 
     Parameters
     ----------
@@ -55,36 +59,46 @@ def read_table(
     OSError
         If the file cannot be read (e.g. it is missing).
     ValueError
-        If astropy cannot tell its format, or cannot read it as a table
-        of that format, or if the HDU is not that of a table in a FITS
-        file.
+        If astropy cannot tell its format or read it as a table of that
+        format, if the HDU holds no table of a FITS file, or if the unit
+        of a column is not a unit.
     """
-    # Whether the file is FITS: as the format says, or else as astropy
-    # tells from its first bytes
-    if format_ is None:
+    # Whether the file is FITS, as astropy tells from its first bytes
+    fits = False
+    if format_ in (None, 'fits'):
         with get_readable_fileobj(filename, encoding='binary') as file:
             fits = is_fits('read', filename, file)
-    else:
-        fits = format_ == 'fits'
+        if format_ == 'fits' and not fits:
+            raise ValueError(f"{filename}: not a FITS file")
+    # The units of the columns, in place of those that astropy reads:
+    # those of an ECSV file are read first, so that astropy need not
+    # warn of one that is not a unit before the error
+    units = {}
     options = {}
     if fits:
-        # The units are read below, so astropy does not warn of those
-        # that it cannot read
         hdu = _table_hdu(filename, hdu)
         options.update(hdu=hdu, unit_parse_strict='silent')
     elif hdu is not None:
         raise ValueError(
             f"{filename}: an HDU is given, but the file is not FITS")
+    elif format_ in (None, 'ascii.ecsv'):
+        units = _ecsv_units(filename)
     try:
         table = Table.read(filename, format=format_, **options)
     except IORegistryError:
+        if format_ is None:
+            raise ValueError(
+                f"cannot tell the format of the table {filename}: give it "
+                f"(format, e.g. ascii.csv)") from None
         raise ValueError(
-            f"cannot tell the format of the table {filename}: give it "
-            f"(format, e.g. ascii.csv)") from None
+            f"astropy reads no tables of the format {format_!r} "
+            f"(e.g. 'fits', 'ascii.ecsv' or 'ascii.csv')") from None
     except ValueError as e:
         raise ValueError(f"cannot read the table {filename}: {e}") from e
     if fits:
-        _read_fits_units(table, filename, hdu)
+        units = _fits_units(filename, hdu)
+    for name, unit in units.items():
+        table[name].unit = unit
     return table
 
 
@@ -117,31 +131,63 @@ def _table_hdu(filename: str, hdu: int | str | None) -> int:
     return index
 
 
-def _read_fits_units(table: Table, filename: str, hdu: int) -> None:
+def _fits_units(filename: str, hdu: int) -> dict[str, u.UnitBase]:
     """
-    Set the units of the columns of a table read from the HDU of a FITS
-    file (by index) to their TUNITn, as gbkfit.units.parse_unit reads
-    them: astropy reads them by its own precedence, e.g. 'Jy/beam km/s'
-    as Jy / (beam km s).
+    Return the units of the columns of the table of an HDU of a FITS
+    file (by index), by name: their TUNITn, as read by _unit.
 
     Raise ValueError if a TUNITn is not a unit.
     """
     with astropy.io.fits.open(filename) as hdus:
-        for column in hdus[hdu].columns:
-            if not column.unit:
-                continue
-            try:
-                unit = gbkfit.units.parse_unit(column.unit)
-            except ValueError:
-                raise ValueError(
-                    f"{filename}: the unit of the column {column.name!r}, "
-                    f"{column.unit!r}, is not a valid unit "
-                    f"(see the FITS standard, section 4.3); correct it in "
-                    f"a copy of the file") from None
-            table[column.name].unit = unit
+        return {
+            column.name: _unit(filename, column.name, column.unit)
+            for column in hdus[hdu].columns if column.unit}
 
 
-def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
+def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
+    """
+    Return the units of the columns of an ECSV file, by name: those of
+    its header, as read by _unit; none if the file is not ECSV.
+
+    Raise ValueError if a unit is not one.
+    """
+    with get_readable_fileobj(filename, encoding='binary') as file:
+        if not file.readline().startswith(b'# %ECSV'):
+            return {}
+        file.seek(0)
+        # The lines of the header, without their '#', as astropy reads
+        # them (see astropy.io.ascii.ecsv)
+        lines = []
+        for line in file:
+            line = line.decode().strip()
+            if not line.startswith('#'):
+                break
+            lines.append(line[1:])
+    columns = get_header_from_yaml(lines).get('datatype', [])
+    return {
+        column['name']: _unit(filename, column['name'], column['unit'])
+        for column in columns if column.get('unit')}
+
+
+def _unit(filename: str, column: str, text: str) -> u.UnitBase:
+    """
+    Return the unit of a column of a table file, as
+    gbkfit.units.parse_unit reads its text.
+
+    Raise ValueError if the text is not a unit.
+    """
+    try:
+        return gbkfit.units.parse_unit(text)
+    except ValueError:
+        raise ValueError(
+            f"{filename}: the unit of the column {column!r}, {text!r}, is "
+            f"not a valid unit (see the FITS standard, section 4.3); "
+            f"correct it in a copy of the file") from None
+
+
+def read_column(
+        table: Table, name: Any, unit: str | u.UnitBase | None
+) -> u.Quantity:
     """
     Return a column of a table as floats with a unit.
 
@@ -153,8 +199,9 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
         The table.
     name : Any
         The name of the column.
-    unit : str or None
-        The unit of the values. If the column has a unit of its own, its
+    unit : str, Unit or None
+        The unit of the values (a text, as gbkfit.units.parse_unit
+        reads it). If the column has a unit of its own, its
         values are converted to this one; if it has none, its values are
         taken to be in it. If None, the unit of the column, or
         dimensionless if it has none.
@@ -181,7 +228,8 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
         raise ValueError(f"the column {name!r} is not of numbers") from None
     if unit is None:
         return values * (column.unit or u.dimensionless_unscaled)
-    given = gbkfit.units.parse_unit(unit)
+    given = gbkfit.units.parse_unit(unit) if isinstance(unit, str) \
+        else u.Unit(unit)
     if column.unit is None:
         return values * given
     try:

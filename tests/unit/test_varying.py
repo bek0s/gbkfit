@@ -257,6 +257,17 @@ def test_spectral_tables_from_files(tmp_path):
     assert table.unit() == u.arcsec
 
 
+def test_a_masked_value_of_a_table_file_is_refused(tmp_path):
+    # (it was read as 0)
+    from gbkfit.instrument import SpectralTable
+    table = astropy.table.Table(dict(wavelength=WAVELENGTHS * u.AA))
+    table['alpha'] = astropy.table.MaskedColumn(
+        ALPHAS, mask=[i == 1 for i in range(len(ALPHAS))])
+    table.write(str(tmp_path / 'psf.ecsv'))
+    with pytest.raises(ValueError, match="must be finite"):
+        SpectralTable.from_file(str(tmp_path / 'psf.ecsv'), 'alpha')
+
+
 def test_table_files_are_relative_to_the_configuration(tmp_path):
     # A relative table file is in the folder of the configuration (see
     # paths_relative_to), not in the current one

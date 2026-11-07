@@ -78,3 +78,25 @@ def test_the_hdu_of_a_fits_table_must_hold_a_table(tmp_path):
     for hdu in (0, 1, 5, 'NOPE'):
         with pytest.raises(ValueError, match="no table in HDU"):
             read_table(path, hdu=hdu)
+
+
+def test_the_units_of_an_ecsv_file_are_read_by_the_fits_standard(tmp_path):
+    # (astropy alone reads 'Jy/beam km/s' as Jy / (beam km s))
+    path = tmp_path / 'table.ecsv'
+    header = ('# %ECSV 1.0\n# ---\n# datatype:\n'
+              '# - {name: m0, unit: Jy/beam km/s, datatype: float64}\n')
+    path.write_text(header + 'm0\n1.0\n')
+    table = read_table(str(path))
+    assert read_column(table, 'm0', None).unit == u.Jy * u.km / u.beam / u.s
+    path.write_text(header.replace('Jy/beam km/s', 'banana') + 'm0\n1.0\n')
+    with pytest.raises(ValueError, match="column 'm0', 'banana', is not a"):
+        read_table(str(path))
+
+
+def test_the_format_of_a_table_must_be_one_astropy_reads(tmp_path):
+    path = str(tmp_path / 'table.ecsv')
+    Table(dict(v=[1.0])).write(path)
+    with pytest.raises(ValueError, match="no tables of the format 'FITS'"):
+        read_table(path, 'FITS')
+    with pytest.raises(ValueError, match="table.ecsv: not a FITS file"):
+        read_table(path, 'fits')
