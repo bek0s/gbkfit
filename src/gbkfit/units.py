@@ -23,14 +23,12 @@ __all__ = [
 ]
 
 
-# A regular expression for the separators between the terms of a unit,
-# in the convention of FITS.
+# A regular expression for the separators between the terms of a unit.
 # Terms multiply each other: 'Jy/beam km/s' is 'Jy/beam' times 'km/s'.
 # A separator is one of:
 # - a space, as in 'Jy/beam km/s';
 # - a '*', as in 'Jy/beam*km/s' ('**' is a power, as in 'm**2');
-# - a '.', as in 'Jy/beam.km/s' (a '.' between digits is a decimal
-#   point, as in '1.5').
+# - a '.', as in 'Jy/beam.km/s', but not one between digits ('1.5').
 _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
 
 # A regular expression for what splits the text of a unit into operands
@@ -42,15 +40,25 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     """
     Return the unit that a text states.
 
-    The text is read by the precedence of the FITS standard (4.0,
+    The text is read by the rules of the FITS standard (4.0, section
     4.3.1): from the left, each '/' divides by what follows it, and each
     space, '*' or '.' multiplies by it; brackets are read first, at any
-    depth (see _expression). For example, 'Jy/beam km/s' is
-    (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone reads
-    it as Jy / (beam km s).
+    depth. For example, 'Jy/beam km/s' is (Jy/beam) (km/s); astropy
+    alone reads it as Jy / (beam km s). The names of units are those
+    that astropy reads, which include those of the standard.
 
     Names are case-sensitive, and nothing is corrected: 'JY/BEAM' is not
     a unit, and 'S' is the siemens. An empty text is dimensionless.
+
+    Parameters
+    ----------
+    text : str
+        The text of the unit.
+
+    Returns
+    -------
+    astropy.units.UnitBase
+        The unit.
 
     Raises
     ------
@@ -61,15 +69,24 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
         return _expression(text)
     except (ValueError, astropy.units.UnitsError):
         raise ValueError(
-            f"{text!r} is not a valid unit (see the FITS standard, section "
-            f"4.3)") from None
+            f"{text!r} is not a valid unit "
+            f"(see the FITS standard, section 4.3)") from None
 
 
 def parse_quantity(text: str) -> astropy.units.Quantity:
     """
-    Return the quantity that a text states: a number, a space, and a
-    unit (see parse_unit).
+    Return the quantity that a text states: a number and a unit.
     For example, '6562.8 Angstrom'.
+
+    Parameters
+    ----------
+    text : str
+        The text of the quantity.
+
+    Returns
+    -------
+    astropy.units.Quantity
+        The quantity.
 
     Raises
     ------
@@ -88,16 +105,29 @@ def parse_quantity(text: str) -> astropy.units.Quantity:
 
 def format_unit(unit: astropy.units.UnitBase) -> str:
     """
-    Return a unit as text, which parse_unit reads back as the same unit,
-    and so does astropy: each term with its power, and no '/'.
+    Return a unit as text.
+
+    Each term is written with its power, and there is no '/', which
+    astropy reads by its own precedence: both parse_unit and astropy
+    read the text back as the same unit.
     For example, 'Jy km beam-1 s-1'.
+
+    Parameters
+    ----------
+    unit : astropy.units.UnitBase
+        The unit.
+
+    Returns
+    -------
+    str
+        The text of the unit.
     """
     if isinstance(unit, astropy.units.FunctionUnitBase):
-        # (e.g. dex(solMass): a name of astropy, which parse_unit gives
-        # astropy to read)
+        # A unit of a function, e.g. a logarithm, is always the whole
+        # unit (astropy combines it with no other): astropy writes it,
+        # and parse_unit gives it to astropy to read
         return unit.to_string()
-    # (repr gives the shortest text of the scale that reads back as the
-    # same number)
+    # repr: the shortest text that reads back as the same scale
     terms = [] if unit.scale == 1 else [repr(float(unit.scale))]
     for base, power in zip(unit.bases, unit.powers):
         name = base.to_string()
@@ -114,9 +144,20 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
 
 def format_quantity(quantity: astropy.units.Quantity) -> str:
     """
-    Return a quantity as text, which parse_quantity reads back as the
-    same quantity: a number, a space, and its unit (see format_unit).
+    Return a quantity as text: its number, a space and its unit, as
+    format_unit writes it, which parse_quantity reads back as the same
+    quantity.
     For example, '6562.8 Angstrom'.
+
+    Parameters
+    ----------
+    quantity : astropy.units.Quantity
+        The quantity, of a single number.
+
+    Returns
+    -------
+    str
+        The text of the quantity.
     """
     return f'{float(quantity.value)!r} {format_unit(quantity.unit)}'.rstrip()
 
@@ -125,60 +166,74 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     """
     Return what a unit of light is per, on the sky:
 
-    - a beam (beam), e.g. Jy/beam;
-    - a solid angle (sr), e.g. MJy/sr or erg/s/cm2/arcsec2;
-    - a pixel, if the unit names it (pix), e.g. Jy/pixel;
-    - nothing else (dimensionless): the light is that of a whole pixel
-      or region, e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel.
+    - beam, for a unit per beam, e.g. Jy/beam;
+    - sr, for a unit per solid angle, e.g. MJy/sr or erg/s/cm2/arcsec2;
+    - pix, for a unit per pixel, e.g. Jy/pixel;
+    - dimensionless, for a unit per nothing, e.g. erg/s/cm2/Angstrom.
+
+    Light per nothing is that of a whole pixel or region, e.g. a spaxel.
+
+    Parameters
+    ----------
+    unit : astropy.units.UnitBase
+        The unit of the light.
+
+    Returns
+    -------
+    astropy.units.UnitBase
+        What it is per: beam, pix, sr or dimensionless_unscaled.
 
     Raises
     ------
     ValueError
-        If the unit is per an angle that is not a solid angle (e.g.
-        Jy/arcsec).
+        If the unit is none of these (e.g. Jy/arcsec or Jy/beam/pix).
     """
-    if astropy.units.beam in unit.bases:
-        return astropy.units.beam
-    if astropy.units.pix in unit.bases:
-        return astropy.units.pix
-    # The sum of the powers of the angles of the unit, a solid angle
-    # (e.g. sr) counting as an angle squared: -2 for a unit per solid
-    # angle (per sr, or per arcsec2)
-    power = 0
-    for base, base_power in zip(unit.bases, unit.powers):
-        if base.physical_type == 'solid angle':
-            power += 2 * base_power
+    # The powers of the beams, pixels and angles of the unit, a solid
+    # angle (e.g. sr) counting as an angle squared
+    beams = pixels = angles = 0
+    for base, power in zip(unit.bases, unit.powers):
+        if base == astropy.units.beam:
+            beams += power
+        elif base == astropy.units.pix:
+            pixels += power
+        elif base.physical_type == 'solid angle':
+            angles += 2 * power
         elif base.physical_type == 'angle':
-            power += base_power
-    if power == -2:
-        return astropy.units.sr
-    if power != 0:
+            angles += power
+    # What a unit is per, by those powers: one of each, or none
+    per = {
+        (-1, 0, 0): astropy.units.beam,
+        (0, 0, -2): astropy.units.sr,
+        (0, -1, 0): astropy.units.pix,
+        (0, 0, 0): astropy.units.dimensionless_unscaled}
+    try:
+        return per[beams, pixels, angles]
+    except KeyError:
         raise ValueError(
-            f"{format_unit(unit)!r} is per an angle that is not a solid "
-            f"angle (e.g. per arcsec, not per arcsec2)")
-    return astropy.units.dimensionless_unscaled
+            f"{format_unit(unit)!r} is not light per beam, per solid "
+            f"angle, per pixel or per nothing") from None
 
 
 def _expression(text: str) -> astropy.units.UnitBase:
     """
     Return the unit of a text of operands and operators, read from the
-    left by the precedence of the FITS standard (4.0, 4.3.1): a '/'
-    divides by the operand after it, and a separator of terms
+    left by the precedence of the FITS standard (4.0, section 4.3.1):
+    a '/' divides by the operand after it, and a separator of terms
     (see _TERM_SEPARATOR) multiplies by it.
     For example, 'Jy/beam km/s' is Jy km / (beam s).
 
     An operand is either an expression in brackets (see _bracketed), or
     else a unit that astropy reads, e.g. 'km', 'cm2' or '10**(-17)'.
-    astropy never reads a '/' between operands, so it never warns of a
-    text with several '/' (the FITS standard discourages them);
-    silencing that warning here would silence it in every other thread
-    too.
+    astropy only ever reads operands, never a '/', so it never warns of
+    a text with several '/', which the FITS standard allows.
 
     An empty text is dimensionless, and so is the operand before a '/'
     that starts the text: '/s' is 1/s.
 
     Raise ValueError if an operand is not a unit or is missing
-    (e.g. 'Jy/' or 'Jy..km'), or if the brackets do not match.
+    (e.g. 'Jy/' or 'Jy..km'), or if the brackets do not match, and
+    astropy.units.UnitsError if astropy cannot combine the operands,
+    e.g. a logarithm with any other unit.
     """
     # Remove the spaces around each '/', '*' and '.', and at the ends of
     # the text, as they do not separate terms.
@@ -196,8 +251,8 @@ def _expression(text: str) -> astropy.units.UnitBase:
             value = _bracketed(operand)
         else:
             value = astropy.units.Unit(operand)
-        # The first operand is the unit so far, not dimensionless times
-        # it: astropy multiplies no unit of a function (e.g. a logarithm)
+        # The first operand starts the unit: astropy multiplies no unit
+        # of a function (e.g. a logarithm), even by dimensionless
         if unit is None:
             unit = value if operator == '*' else value ** -1
         elif operator == '/':

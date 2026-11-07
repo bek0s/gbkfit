@@ -148,9 +148,13 @@ def test_what_light_is_per(text, spatial):
     assert spatial_unit(parse_unit(text)) == spatial
 
 
-def test_light_per_an_angle_is_not_per_a_solid_angle():
-    with pytest.raises(ValueError, match="not a solid angle"):
-        spatial_unit(parse_unit('Jy/arcsec'))
+def test_light_per_anything_else_is_an_error():
+    # (per an angle, not a solid angle; times a beam, a pixel or an
+    # area; per a beam squared; per two things)
+    for text in ('Jy/arcsec', 'Jy beam', 'Jy pix', 'Jy arcsec2', 'Jy/beam2',
+                 'Jy/beam/arcsec2', 'Jy/beam/pix'):
+        with pytest.raises(ValueError, match="is not light per beam"):
+            spatial_unit(parse_unit(text))
 
 
 def emission(info):
