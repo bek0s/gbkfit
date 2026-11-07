@@ -71,10 +71,9 @@ def read_table(
             fits = is_fits('read', filename, file)
         if format_ == 'fits' and not fits:
             raise ValueError(f"{filename}: not a FITS file")
-    # The units of the columns, in place of those that astropy reads:
-    # those of an ECSV file are read before it reads the file, so that
-    # a header it fails on obscurely (e.g. one without columns) is said
-    # plainly
+    # The units of the columns replace those astropy reads. Those of an
+    # ECSV file are read first, so that a header astropy fails on
+    # obscurely (e.g. one without columns) gets a clear error instead.
     units = {}
     options = {}
     if fits:
