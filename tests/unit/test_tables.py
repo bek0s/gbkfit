@@ -86,8 +86,10 @@ def test_the_units_of_an_ecsv_file_are_read_by_the_fits_standard(tmp_path):
     header = ('# %ECSV 1.0\n# ---\n# datatype:\n'
               '# - {name: m0, unit: Jy/beam km/s, datatype: float64}\n')
     path.write_text(header + 'm0\n1.0\n')
-    table = read_table(str(path))
-    assert read_column(table, 'm0', None).unit == u.Jy * u.km / u.beam / u.s
+    for format_ in (None, 'ascii.ecsv', 'ecsv', 'ascii'):
+        table = read_table(str(path), format_)
+        assert read_column(table, 'm0', None).unit \
+            == u.Jy * u.km / u.beam / u.s
     path.write_text(header.replace('Jy/beam km/s', 'banana') + 'm0\n1.0\n')
     with pytest.raises(ValueError, match="column 'm0', 'banana', is not a"):
         read_table(str(path))
@@ -114,3 +116,9 @@ def test_an_ecsv_header_is_read_as_astropy_reads_it(tmp_path):
     path.write_text('# %ECSV 1.0\n# ---\n# datatype:\nm0\n1.0\n')
     with pytest.raises(ValueError, match="cannot read the table"):
         read_table(str(path))
+
+
+def test_a_column_of_complex_numbers_is_refused():
+    # (its imaginary part was dropped)
+    with pytest.raises(ValueError, match="of complex numbers"):
+        read_column(Table(dict(c=[1 + 2j])), 'c', None)

@@ -80,7 +80,8 @@ def read_table(
     elif hdu is not None:
         raise ValueError(
             f"{filename}: an HDU is given, but the file is not FITS")
-    elif format_ in (None, 'ascii.ecsv'):
+    else:
+        # Those of an ECSV file, whatever format reads it, e.g. 'ascii'
         units = _ecsv_units(filename)
     try:
         table = Table.read(filename, format=format_, **options)
@@ -100,7 +101,8 @@ def read_table(
     if fits:
         units = _fits_units(filename, hdu)
     for name, unit in units.items():
-        table[name].unit = unit
+        if name in table.colnames:
+            table[name].unit = unit
     return table
 
 
@@ -155,7 +157,7 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
     Raise ValueError if a unit is not one.
     """
     with get_readable_fileobj(filename, encoding='binary') as file:
-        if not file.readline().startswith(b'# %ECSV'):
+        if file.read(7) != b'# %ECSV':
             return {}
         file.seek(0)
         # The lines of the header, without their '#', as astropy reads
@@ -231,14 +233,17 @@ def read_column(
     Raises
     ------
     ValueError
-        If the table has no such column, its values are not numbers, the
-        unit is not a unit, or the column is in a unit of another kind.
+        If the table has no such column, its values are not real
+        numbers, the unit is not a unit, or the column is in a unit of
+        another kind.
     """
     if name not in table.colnames:
         raise ValueError(
             f"the table has no column {name!r}; its columns are "
             f"{table.colnames}")
     column = table[name]
+    if np.iscomplexobj(column):
+        raise ValueError(f"the column {name!r} is of complex numbers")
     try:
         values = np.ma.filled(np.ma.asarray(column, dtype=float), np.nan)
     except (TypeError, ValueError):
