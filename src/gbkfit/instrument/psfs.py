@@ -26,7 +26,8 @@ from gbkfit.config import (
     FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
 from gbkfit.grid import Coords, VelocityConvention
-from gbkfit.io import has_wcs, read_data, to_model_axes, write_data
+from gbkfit.io import (
+    has_wcs, parse_wcs, read_data, to_model_axes, write_data)
 import gbkfit.math
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
@@ -1018,7 +1019,7 @@ def _read_images(
     """
     with astropy.io.fits.open(file) as hdul:
         data = np.asarray(hdul[hdu].data, dtype=float)
-        wcs = astropy.wcs.WCS(hdul[hdu].header)
+        wcs = parse_wcs(file, hdul[hdu].header)
     if data.ndim != 3:
         raise ValueError(
             f"{file}: PSF images must be a cube (nz, ny, nx); it has "

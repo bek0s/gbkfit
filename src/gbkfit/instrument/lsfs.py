@@ -33,7 +33,7 @@ from gbkfit.config import (
     FitsFile, TypedParser, TypedSerializable, Unit, Varying,
     check_options, split_fits_file)
 from gbkfit.grid import Coords, VelocityConvention
-from gbkfit.io import has_wcs, read_data, write_data
+from gbkfit.io import has_wcs, parse_wcs, read_data, write_data
 import gbkfit.math
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
@@ -899,7 +899,7 @@ def _read_images(
     """
     with astropy.io.fits.open(file) as hdul:
         data = np.asarray(hdul[hdu].data, dtype=float)
-        wcs = astropy.wcs.WCS(hdul[hdu].header)
+        wcs = parse_wcs(file, hdul[hdu].header)
     if data.ndim != 2:
         raise ValueError(
             f"{file}: LSF profiles must be an image, with one profile per "

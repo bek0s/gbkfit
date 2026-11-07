@@ -12,6 +12,8 @@ import astropy.io.fits
 import astropy.wcs
 import numpy as np
 
+from gbkfit.utils import unitutils
+
 
 __all__ = [
     'centre_missing_crpix',
@@ -19,6 +21,7 @@ __all__ = [
     'header_shape',
     'header_unit',
     'ignoring_wcs_fixes',
+    'parse_wcs',
     'with_wcs'
 ]
 
@@ -46,6 +49,9 @@ _REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
 
 # The keywords of the length of each axis
 _NAXIS_KEYWORDS = re.compile(r'NAXIS\d+')
+
+# The keywords of the unit of each world axis
+_CUNIT_KEYWORDS = re.compile(r'CUNIT\d+')
 
 
 def has_wcs(header: astropy.io.fits.Header) -> bool:
@@ -136,7 +142,24 @@ def with_shape(
 
 
 def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
-    """Return the world coordinates of a header, or raise ValueError."""
+    """
+    Return the world coordinates of a header, or raise ValueError.
+
+    The unit of each axis (CUNITn) must be valid (see
+    unitutils.parse_unit): astropy would correct some, e.g. 'HZ' to Hz,
+    and no unit is corrected.
+    """
+    for key in header:
+        text = str(header[key]).strip()
+        if not _CUNIT_KEYWORDS.fullmatch(key) or not text:
+            continue
+        try:
+            unitutils.parse_unit(text)
+        except ValueError:
+            raise ValueError(
+                f"{source}: {key} = {text!r} is not a valid unit (see the "
+                f"FITS standard, section 4.3); correct it in a copy of the "
+                f"file") from None
     try:
         return astropy.wcs.WCS(header)
     except Exception as e:
