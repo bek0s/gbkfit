@@ -11,6 +11,7 @@ import numpy as np
 from astropy.io.fits.connect import is_fits
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
+from astropy.utils.data import get_readable_fileobj
 
 import gbkfit.units
 
@@ -56,8 +57,13 @@ def read_table(
         If astropy cannot tell its format, or cannot read it as a table
         of that format.
     """
-    fits = format_ == 'fits' or (
-        format_ is None and is_fits('read', filename, None))
+    # Whether the file is FITS: as the format says, or else as astropy
+    # tells from its first bytes
+    if format_ is None:
+        with get_readable_fileobj(filename, encoding='binary') as file:
+            fits = is_fits('read', filename, file)
+    else:
+        fits = format_ == 'fits'
     options = {} if hdu is None else dict(hdu=hdu)
     if fits:
         # The units are read below, so astropy does not warn of those
