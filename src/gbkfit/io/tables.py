@@ -72,8 +72,9 @@ def read_table(
         if format_ == 'fits' and not fits:
             raise ValueError(f"{filename}: not a FITS file")
     # The units of the columns, in place of those that astropy reads:
-    # those of an ECSV file are read first, so that astropy need not
-    # warn of one that is not a unit before the error
+    # those of an ECSV file are read before it reads the file, so that
+    # a header it fails on obscurely (e.g. one without columns) is said
+    # plainly
     units = {}
     options = {}
     if fits:
@@ -251,9 +252,10 @@ def read_column(
     column = table[name]
     if np.iscomplexobj(column):
         raise ValueError(f"the column {name!r} is of complex numbers")
-    # The values, NaN where masked, and the unit of the column: a column
-    # of a QTable is a Quantity (masked by astropy, if masked), and one
-    # of a Table holds its values (masked by numpy) and its unit apart
+    # The values (NaN where masked) and the unit of the column. In a
+    # QTable, a column with a unit is a Quantity, masked the astropy
+    # way; in a Table, a column holds plain values, masked the numpy
+    # way, and its unit apart.
     if isinstance(column, u.Quantity):
         if isinstance(column, Masked):
             column = column.filled(np.nan)
