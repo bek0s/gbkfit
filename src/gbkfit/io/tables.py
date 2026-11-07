@@ -3,8 +3,6 @@ Tables (e.g. of rotation curves): reading them from files, and their
 columns with their units.
 """
 
-from typing import Any
-
 import astropy.io.fits
 import astropy.units as u
 import numpy as np
@@ -60,8 +58,9 @@ def read_table(
         If the file cannot be read (e.g. it is missing).
     ValueError
         If astropy cannot tell its format or read it as a table of that
-        format, if the HDU holds no table of a FITS file, or if the unit
-        of a column is not a unit.
+        format, if the file is not FITS but the format or an HDU says it
+        is, if the HDU holds no table, or if the unit of a column is not
+        a unit.
     """
     # Whether the file is FITS, as astropy tells from its first bytes
     fits = False
@@ -191,7 +190,7 @@ def _unit(filename: str, column: str, text: str) -> u.UnitBase:
 
 
 def read_column(
-        table: Table, name: Any, unit: str | u.UnitBase | None
+        table: Table, name: str, unit: str | u.UnitBase | None
 ) -> u.Quantity:
     """
     Return a column of a table as floats with a unit.
@@ -202,14 +201,14 @@ def read_column(
     ----------
     table : Table
         The table.
-    name : Any
+    name : str
         The name of the column.
     unit : str, Unit or None
-        The unit of the values (a text, as gbkfit.units.parse_unit
-        reads it). If the column has a unit of its own, its
-        values are converted to this one; if it has none, its values are
-        taken to be in it. If None, the unit of the column, or
-        dimensionless if it has none.
+        The unit of the values (a text, as gbkfit.units.parse_unit reads
+        it). If the column has a unit of its own, its values are
+        converted to this one; if it has none, its values are taken to
+        be in it. If None, the unit of the column, or dimensionless if
+        it has none.
 
     Returns
     -------
@@ -243,4 +242,4 @@ def read_column(
         raise ValueError(
             f"the column {name!r} is in "
             f"{gbkfit.units.format_unit(column.unit)!r}, which cannot be "
-            f"converted to {unit!r}") from None
+            f"converted to {gbkfit.units.format_unit(given)!r}") from None
