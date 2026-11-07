@@ -11,7 +11,7 @@ import numpy as np
 from astropy.io.fits.connect import is_fits
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
-from astropy.table.meta import get_header_from_yaml
+from astropy.table.meta import YamlParseError, get_header_from_yaml
 from astropy.utils.data import get_readable_fileobj
 
 import gbkfit.units
@@ -147,7 +147,8 @@ def _fits_units(filename: str, hdu: int) -> dict[str, u.UnitBase]:
 def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
     """
     Return the units of the columns of an ECSV file, by name: those of
-    its header, as read by _unit; none if the file is not ECSV.
+    its header, as read by _unit. There are none if the file is not
+    ECSV, or if its header is not valid, as astropy then says.
 
     Raise ValueError if a unit is not one.
     """
@@ -159,14 +160,18 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
         # them (see astropy.io.ascii.ecsv)
         lines = []
         for line in file:
-            line = line.decode().strip()
-            if not line.startswith('#'):
+            line = line.strip()
+            if not line.startswith(b'#'):
                 break
             lines.append(line[1:])
-    columns = get_header_from_yaml(lines).get('datatype', [])
+    try:
+        header = get_header_from_yaml([line.decode() for line in lines])
+    except (UnicodeDecodeError, YamlParseError):
+        return {}
     return {
-        column['name']: _unit(filename, column['name'], column['unit'])
-        for column in columns if column.get('unit')}
+        column['name']: _unit(filename, column['name'], str(column['unit']))
+        for column in header.get('datatype', [])
+        if column.get('unit') is not None}
 
 
 def _unit(filename: str, column: str, text: str) -> u.UnitBase:
