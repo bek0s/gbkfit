@@ -1,6 +1,6 @@
 """
-Tables of configurations (e.g. rotation curves): reading them, by
-astropy, and their columns, with units.
+Tables (e.g. of rotation curves): reading them from files, and their
+columns with their units.
 """
 
 from typing import Any
@@ -26,9 +26,12 @@ def read_table(
         file: Any, format_: str | None = None, hdu: int | str | None = None
 ) -> Table:
     """
-    Read a table from a file: any format that astropy reads (see
-    Table.read), e.g. ECSV, FITS, CSV or text. The columns of a text file
-    without a header are named col1, col2, etc.
+    Read a table from a file.
+
+    The file is of any format that astropy reads, e.g. ECSV, FITS, CSV
+    or text (see astropy.table.Table.read). The columns of a text file
+    without a header are named col1, col2, etc. The units of a FITS
+    file (TUNITn) are read by gbkfit.units.parse_unit.
 
     Parameters
     ----------
@@ -54,7 +57,13 @@ def read_table(
         of that format.
     """
     filename = parse_file(file)[0]
+    fits = format_ == 'fits' or (
+        format_ is None and is_fits('read', filename, None))
     options = {} if hdu is None else dict(hdu=hdu)
+    if fits:
+        # The units are read below, so astropy does not warn of those
+        # that it cannot read
+        options.update(unit_parse_strict='silent')
     try:
         table = Table.read(filename, format=format_, **options)
     except IORegistryError:
@@ -63,8 +72,7 @@ def read_table(
             f"(format, e.g. ascii.csv)") from None
     except ValueError as e:
         raise ValueError(f"cannot read the table {filename}: {e}") from e
-    if format_ == 'fits' or format_ is None and is_fits(
-            'read', filename, None):
+    if fits:
         _read_fits_units(table, filename, hdu)
     return table
 
@@ -73,10 +81,11 @@ def _read_fits_units(
         table: Table, filename: str, hdu: int | str | None
 ) -> None:
     """
-    Give the columns of a table of a FITS file (of the HDU, or else of its
-    first HDU of a table, as astropy reads it) the units of their TUNITn
-    as gbkfit.units.parse_unit reads them: astropy reads them by its own
-    precedence, e.g. 'Jy/beam km/s' as Jy / (beam km s).
+    Set the units of the columns of a table read from a FITS file to
+    their TUNITn, as gbkfit.units.parse_unit reads them: astropy reads
+    them by its own precedence, e.g. 'Jy/beam km/s' as Jy / (beam km s).
+    The table is that of the HDU, or else of the first HDU of a table,
+    as astropy reads it.
 
     Raise ValueError if a TUNITn is not a unit.
     """
@@ -89,21 +98,21 @@ def _read_fits_units(
             if not column.unit:
                 continue
             try:
-                table[column.name].unit = gbkfit.units.parse_unit(
-                    column.unit)
+                unit = gbkfit.units.parse_unit(column.unit)
             except ValueError:
                 raise ValueError(
                     f"{filename}: the unit of the column {column.name!r}, "
-                    f"{column.unit!r}, is not a valid unit (see the FITS "
-                    f"standard, section 4.3); correct it in a copy of the "
-                    f"file"
-                ) from None
+                    f"{column.unit!r}, is not a valid unit "
+                    f"(see the FITS standard, section 4.3); correct it in "
+                    f"a copy of the file") from None
+            table[column.name].unit = unit
 
 
 def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
     """
-    Return a column of a table, by name, as floats with a unit, and NaN
-    where it is masked.
+    Return a column of a table as floats with a unit.
+
+    The values that the column masks are NaN.
 
     Parameters
     ----------
@@ -126,8 +135,7 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
     ------
     ValueError
         If the table has no such column, its values are not numbers, the
-        unit is not a unit, or the unit of the column cannot be converted
-        to it.
+        unit is not a unit, or the column is in a unit of another kind.
     """
     if name not in table.colnames:
         raise ValueError(
