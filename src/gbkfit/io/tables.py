@@ -79,7 +79,8 @@ def read_table(
         options.update(hdu=hdu, unit_parse_strict='silent')
     elif hdu is not None:
         raise ValueError(
-            f"{filename}: an HDU is given, but the file is not FITS")
+            f"{filename}: an HDU is given, but the table is not read as "
+            f"FITS")
     else:
         # Those of an ECSV file, whatever format reads it, e.g. 'ascii'
         units = _ecsv_units(filename)
