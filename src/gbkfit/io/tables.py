@@ -22,7 +22,9 @@ __all__ = [
 ]
 
 
-def read_table(file: Any, format_: str | None = None) -> Table:
+def read_table(
+        file: Any, format_: str | None = None, hdu: int | str | None = None
+) -> Table:
     """
     Read a table from a file: any format that astropy reads (see
     Table.read), e.g. ECSV, FITS, CSV or text. The columns of a text file
@@ -35,6 +37,8 @@ def read_table(file: Any, format_: str | None = None) -> Table:
     format_ : str, optional
         The format of the file (e.g. 'ascii.csv'); by default, the one
         astropy tells from the file.
+    hdu : int or str, optional
+        The HDU of a FITS file; by default, its first HDU of a table.
 
     Returns
     -------
@@ -50,8 +54,9 @@ def read_table(file: Any, format_: str | None = None) -> Table:
         of that format.
     """
     filename = parse_file(file)[0]
+    options = {} if hdu is None else dict(hdu=hdu)
     try:
-        table = Table.read(filename, format=format_)
+        table = Table.read(filename, format=format_, **options)
     except IORegistryError:
         raise ValueError(
             f"cannot tell the format of the table {filename}: give it "
@@ -60,28 +65,31 @@ def read_table(file: Any, format_: str | None = None) -> Table:
         raise ValueError(f"cannot read the table {filename}: {e}") from e
     if format_ == 'fits' or format_ is None and is_fits(
             'read', filename, None):
-        _read_fits_units(table, filename)
+        _read_fits_units(table, filename, hdu)
     return table
 
 
-def _read_fits_units(table: Table, filename: str) -> None:
+def _read_fits_units(
+        table: Table, filename: str, hdu: int | str | None
+) -> None:
     """
-    Give the columns of a table of a FITS file (its first HDU of a table,
-    which astropy reads) the units of their TUNITn as parse_unit reads
-    them: astropy reads them by its own precedence, e.g. 'Jy/beam km/s'
-    as Jy / (beam km s) (see gbkfit.units.fits.parse_unit).
+    Give the columns of a table of a FITS file (of the HDU, or else of its
+    first HDU of a table, as astropy reads it) the units of their TUNITn
+    as gbkfit.units.parse_unit reads them: astropy reads them by its own
+    precedence, e.g. 'Jy/beam km/s' as Jy / (beam km s).
 
     Raise ValueError if a TUNITn is not a unit.
     """
     with astropy.io.fits.open(filename) as hdus:
-        hdu = next(
-            hdu for hdu in hdus if isinstance(
-                hdu, (astropy.io.fits.BinTableHDU, astropy.io.fits.TableHDU)))
-        for column in hdu.columns:
+        if hdu is None:
+            hdu = next(
+                i for i, item in enumerate(hdus) if isinstance(item, (
+                    astropy.io.fits.BinTableHDU, astropy.io.fits.TableHDU)))
+        for column in hdus[hdu].columns:
             if not column.unit:
                 continue
             try:
-                table[column.name].unit = gbkfit.units.fits.parse_unit(
+                table[column.name].unit = gbkfit.units.parse_unit(
                     column.unit)
             except ValueError:
                 raise ValueError(

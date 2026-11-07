@@ -25,6 +25,7 @@ import numpy as np
 
 import gbkfit.outputs
 import gbkfit.project
+import gbkfit.units
 from gbkfit.config import ConfigError, error_message, paths_relative_to
 from gbkfit.driver.drivers.host import DriverHost
 from gbkfit.model import (
@@ -436,7 +437,9 @@ def _rest(components: list[Any]) -> dict[str, Any] | None:
     for component in components:
         if lines := component.emission().lines().lines():
             rest = lines[0].rest()
-            return dict(value=float(rest.value), unit=rest.unit.to_string())
+            return dict(
+                value=float(rest.value),
+                unit=gbkfit.units.format_unit(rest.unit))
     return None
 
 

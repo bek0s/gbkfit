@@ -473,7 +473,7 @@ def _parsed_unit(
     Return the unit of the values of a header (BUNIT), if it has one.
 
     Raise ValueError if it is not a unit (see
-    gbkfit.units.fits.parse_unit), unless the unit of the data is given:
+    gbkfit.units.parse_unit), unless the unit of the data is given:
     then return None, and the values are taken to be in that unit, as for
     a header without BUNIT.
     """
@@ -481,7 +481,7 @@ def _parsed_unit(
     if text is None:
         return None
     try:
-        return gbkfit.units.fits.parse_unit(text)
+        return gbkfit.units.parse_unit(text)
     except ValueError:
         if given:
             return None

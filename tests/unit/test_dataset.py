@@ -565,7 +565,7 @@ def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
         str(tmp_path / 'odd.fits'), unit='ct')[0].unit() == u.ct
     dataset = DatasetPixelMoments({0: data})
     info = dataset.dump(str(tmp_path / 'dump_'))
-    assert info['moment0']['unit'] == 'Jy.km.beam**-1.s**-1'
+    assert info['moment0']['unit'] == 'Jy km beam-1 s-1'
     loaded = dataset_parser.load(info)
     assert loaded['moment0'].unit() == data.unit()
     assert loaded['moment0'].beam().bpa == pytest.approx(-66.5)
@@ -606,14 +606,14 @@ def test_moments_of_velocity_are_in_km_s():
     np.testing.assert_allclose(dataset['moment2'].data(), 30)
     np.testing.assert_allclose(dataset['moment3'].data(), 2)
     hermite = DatasetPixelMoments(
-        {}, {3: Data(np.full((4, 4), 5.0), unit='1e-2')})
+        {}, {3: Data(np.full((4, 4), 5.0), unit='%')})
     np.testing.assert_allclose(hermite['h3'].data(), 0.05)
     assert hermite['h3'].unit() == u.dimensionless_unscaled
     with pytest.raises(ValueError, match="not a unit of velocity"):
         DatasetPixelMoments({1: Data(np.ones((4, 4)), unit='Jy')})
     # (h3 has no unit, and the central moment of order 3 one of velocity)
     with pytest.raises(ValueError, match="is the item h3"):
-        DatasetPixelMoments({3: Data(np.ones((4, 4)), unit='1e-2')})
+        DatasetPixelMoments({3: Data(np.ones((4, 4)), unit='%')})
     with pytest.raises(ValueError, match="it is dimensionless"):
         DatasetPixelMoments({}, {3: Data(np.ones((4, 4)), unit='Jy')})
 

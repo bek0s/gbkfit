@@ -628,8 +628,8 @@ def test_parameters_and_derived_values_have_units():
         == ['km / s', 'km / s', None, None, 'km / s']
     assert params.derived_values(params.evaluate())['z'] == 100
     assert params.dump()['derived'] == dict(
-        w='2 * v', z=dict(expr='v / 2', unit='km / s'))
-    with pytest.raises(ValueError, match="must be an astropy unit"):
+        w='2 * v', z=dict(expr='v / 2', unit='km s-1'))
+    with pytest.raises(ValueError, match="must be a unit"):
         ParamScalarDesc(unit='km per s')
 
 

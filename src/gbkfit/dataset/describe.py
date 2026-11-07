@@ -198,7 +198,7 @@ def _describe(
     if unit is not None:
         try:
             per_beam = gbkfit.units.spatial_unit(
-                gbkfit.units.fits.parse_unit(unit)) == astropy.units.beam
+                gbkfit.units.parse_unit(unit)) == astropy.units.beam
         except ValueError as e:
             problems.append(f"{e}: give the unit (option unit of the data)")
         else:

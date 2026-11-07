@@ -87,8 +87,8 @@ def test_one_hi_disk_in_any_unit_of_data(driver):
     # 1 - vsys / c km/s of the radio axis; K to Jy/beam by Rayleigh-Jeans
     # at the frequency of the line at the systemic velocity, in the beam
     plain = model(driver, disk(), 'K')
-    kelvin = model(driver, disk('solMass/pc2'), 'K')
-    jansky = model(driver, disk('solMass/pc2'), 'Jy/beam')
+    kelvin = model(driver, disk('Msun/pc2'), 'K')
+    jansky = model(driver, disk('Msun/pc2'), 'Jy/beam')
     column = (1 * u.Msun / u.pc ** 2 / (1.00794 * u.u)).to_value(u.cm ** -2)
     assert_same(
         kelvin, plain * column / 1.823e18 * (1 - 470 / 299792.458) ** 2)
@@ -130,7 +130,7 @@ def assert_same(actual, desired):
 def test_the_units_of_model_and_data_must_go_together(
         driver, data_unit, beam, message):
     components = [
-        disk('solMass/pc2') | dict(name='hi'),
+        disk('Msun/pc2') | dict(name='hi'),
         disk('K km/s', ['co10']) | dict(name='co')]
     if data_unit is not None:
         components = components[:1]

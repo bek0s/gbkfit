@@ -17,6 +17,7 @@ import numpy.polynomial.polynomial as npp
 import numpy.typing as npt
 import scipy.interpolate
 
+import gbkfit.units
 from gbkfit.config import (
     FilePath, TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.grid import make_rest
@@ -93,7 +94,8 @@ class TracePolynomial(Trace):
         return 'Polynomial'
 
     def dump(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        return dict(type=self.type(), wave=str(self._wave),
+        return dict(type=self.type(),
+                    wave=gbkfit.units.format_quantity(self._wave),
                     dx=list(self._dx), dy=list(self._dy))
 
     def __init__(

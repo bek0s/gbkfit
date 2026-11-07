@@ -571,7 +571,8 @@ class SpectralAxis(Serializable):
         options = dict(
             size=self._size, step=self._step, rpix=self._rpix,
             rval=self._rval, convention=self._convention,
-            rest=None if self._rest is None else str(self._rest),
+            rest=None if self._rest is None
+            else gbkfit.units.format_quantity(self._rest),
             medium=self._medium, frame=self._frame, type=self._type)
         return {k: v for k, v in options.items() if v is not None}
 

@@ -15,6 +15,7 @@ from typing import (
 
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import (
     Choices, TypedParser, TypedSerializable, check_options, config_path)
 from gbkfit.control import StopControl, Stopped
@@ -514,7 +515,7 @@ class Fitter(TypedSerializable, abc.ABC):
             message=run.message,
             diagnostics=diagnostics,
             units={
-                name: unit.to_string()
+                name: gbkfit.units.format_unit(unit)
                 for name in [*params.pdescs(), *params.derived()]
                 if (unit := params.unit(name)) is not None},
             periods=params.periods(),

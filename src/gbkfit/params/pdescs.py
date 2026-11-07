@@ -20,6 +20,7 @@ import astropy.units
 import numpy as np
 from annotated_types import Ge
 
+import gbkfit.units
 from gbkfit.config import (
     TypedParser, TypedSerializable, check_options, load_option)
 
@@ -175,7 +176,7 @@ class ParamDesc(TypedSerializable, abc.ABC):
         if self._desc is not None:
             info.update(desc=self._desc)
         if self._unit is not None:
-            info.update(unit=self._unit.to_string())
+            info.update(unit=gbkfit.units.format_unit(self._unit))
         valid = self._valid
         if np.isfinite(valid.min):
             info.update(min=valid.min)
@@ -567,8 +568,10 @@ def make_param_unit(
     if unit is None:
         return None
     try:
+        if isinstance(unit, str):
+            return gbkfit.units.parse_unit(unit)
         return astropy.units.Unit(unit)
     except (TypeError, ValueError) as e:
         raise ValueError(
-            f"the unit of a parameter must be an astropy unit (e.g. "
-            f"'km/s'); it is {unit!r}") from e
+            f"the unit of a parameter must be a unit (e.g. 'km/s'); it is "
+            f"{unit!r}") from e

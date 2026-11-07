@@ -146,7 +146,7 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
     Return the world coordinates of a header, or raise ValueError.
 
     The unit of each axis (CUNITn) must be valid (see
-    gbkfit.units.fits.parse_unit): astropy would correct some, e.g. 'HZ'
+    gbkfit.units.parse_unit): astropy would correct some, e.g. 'HZ'
     to Hz, and no unit is corrected.
     """
     for key in header:
@@ -154,7 +154,7 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
         if not _CUNIT_KEYWORDS.fullmatch(key) or not text:
             continue
         try:
-            gbkfit.units.fits.parse_unit(text)
+            gbkfit.units.parse_unit(text)
         except ValueError:
             raise ValueError(
                 f"{source}: {key} = {text!r} is not a valid unit (see the "

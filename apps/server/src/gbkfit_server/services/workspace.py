@@ -875,12 +875,12 @@ def _write_records(folder: Path, records: dict[str, Any]) -> None:
 def _readable_unit(text: str | None) -> str | None:
     """
     Return the unit of the values of an array (BUNIT, as its header writes
-    it, e.g. Jy/beam.km/s) as astropy writes it, to read (e.g.
-    Jy km / (beam s)), or as written if it is not a unit.
+    it, e.g. Jy/beam.km/s) as gbkfit writes it (e.g. Jy km beam-1 s-1),
+    or as written if it is not a unit.
     """
     if text is None:
         return None
     try:
-        return gbkfit.units.fits.parse_unit(text).to_string()
+        return gbkfit.units.format_unit(gbkfit.units.parse_unit(text))
     except ValueError:
         return text

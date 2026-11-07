@@ -19,6 +19,7 @@ from typing import Any, TypeAlias
 import numpy as np
 import numpy.typing as npt
 
+import gbkfit.units
 from gbkfit.config import (
     BasicParser, ConfigError, Serializable, config_path, describe_unknown,
     load_option, parse_options, parse_options_for_callable, resolve_path)
@@ -359,7 +360,7 @@ class ParamSpace(Serializable):
         if self._derived:
             info['derived'] = {
                 name: expr if (unit := self._derived_units.get(name)) is None
-                else dict(expr=expr, unit=unit.to_string())
+                else dict(expr=expr, unit=gbkfit.units.format_unit(unit))
                 for name, expr in self._derived.items()}
         return info
 

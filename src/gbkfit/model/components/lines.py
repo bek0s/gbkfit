@@ -12,6 +12,7 @@ from collections.abc import Generator, Mapping, Sequence
 import astropy.units
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import (
     BasicParser, ConfigError, Serializable, check_name, check_options)
 from gbkfit.grid import (
@@ -91,7 +92,8 @@ class Line(Serializable):
     """
 
     def dump(self) -> dict[str, str]:
-        return dict(name=self._name, rest=str(self._rest))
+        return dict(
+            name=self._name, rest=gbkfit.units.format_quantity(self._rest))
 
     def __init__(self, name: str, rest: str | astropy.units.Quantity):
         check_options(Line.__init__, locals())
@@ -130,7 +132,9 @@ class Band(Serializable):
     """
 
     def dump(self) -> dict[str, str]:
-        return dict(name=self._name, wavelength=str(self._wavelength))
+        return dict(
+            name=self._name,
+            wavelength=gbkfit.units.format_quantity(self._wavelength))
 
     def __init__(self, name: str, wavelength: str | astropy.units.Quantity):
         check_options(Band.__init__, locals())
@@ -139,7 +143,9 @@ class Band(Serializable):
             f"the wavelength of a band must be a positive length with units "
             f"(e.g. '6166 Angstrom'); it is {wavelength!r}")
         try:
-            wavelength = astropy.units.Quantity(wavelength)
+            wavelength = gbkfit.units.parse_quantity(wavelength) \
+                if isinstance(wavelength, str) \
+                else astropy.units.Quantity(wavelength)
         except (TypeError, ValueError) as e:
             raise error from e
         if not (wavelength.unit.is_equivalent(astropy.units.m)

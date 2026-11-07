@@ -32,14 +32,15 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
 import astropy.constants
-import astropy.table
 import astropy.units as u
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import (
     FilePath, Serializable, check_options, config_path,
     option_types, parse_options_for_callable, unit_of, varying_options)
 from gbkfit.grid import VelocityConvention
+from gbkfit.io import read_table
 
 
 __all__ = [
@@ -290,6 +291,8 @@ class SpectralTable(Serializable):
             raise ValueError("the points of a table must be distinct")
         self._points = points
         self._values = values
+        if isinstance(unit, str):
+            unit = gbkfit.units.parse_unit(unit)
         self._unit = None if unit is None else u.Unit(unit)
 
     @classmethod
@@ -330,9 +333,10 @@ class SpectralTable(Serializable):
             have no unit.
         """
         check_options(SpectralTable.from_file, locals())
-        options = {} if hdu is None else dict(hdu=hdu)
-        table = astropy.table.Table.read(file, **options)
-        units = units or {}
+        table = read_table(file, hdu=hdu)
+        units = {
+            name: gbkfit.units.parse_unit(unit) if isinstance(unit, str)
+            else unit for name, unit in (units or {}).items()}
         axes = [axis for axis in _AXES if axis in table.colnames]
         if len(axes) != 1:
             raise ValueError(
@@ -365,8 +369,10 @@ class SpectralTable(Serializable):
             The configuration.
         """
         points = dict(
-            value=self._points.value.tolist(), unit=str(self._points.unit))
-        unit = {} if self._unit is None else dict(unit=str(self._unit))
+            value=self._points.value.tolist(),
+            unit=gbkfit.units.format_unit(self._points.unit))
+        unit = {} if self._unit is None \
+            else dict(unit=gbkfit.units.format_unit(self._unit))
         return dict(points=points, values=self._values.tolist()) | unit
 
     def points(self) -> u.Quantity:

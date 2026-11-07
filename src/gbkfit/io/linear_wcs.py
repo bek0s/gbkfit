@@ -13,6 +13,8 @@ import astropy.wcs.utils
 import numpy as np
 from astropy.wcs.wcsapi import BaseHighLevelWCS, BaseLowLevelWCS
 
+import gbkfit.units
+
 from .spectral import SPECTRAL_UNITS
 
 
@@ -226,4 +228,4 @@ def _linear_spectral_axis(
         # w = S exp(x / S), with S at the reference pixel
         middle = np.exp(middle)
         step *= middle
-    return kind, unit.to_string('fits'), float(middle), float(step)
+    return kind, gbkfit.units.format_unit(unit), float(middle), float(step)
