@@ -92,7 +92,10 @@ def read_table(
         raise ValueError(
             f"astropy reads no tables of the format {format_!r} "
             f"(e.g. 'fits', 'ascii.ecsv' or 'ascii.csv')") from None
-    except ValueError as e:
+    except (ValueError, TypeError, KeyError, IndexError) as e:
+        # astropy's readers fail on some files they cannot read with
+        # other errors than ValueError, e.g. a TypeError for an ECSV
+        # header that lists no columns
         raise ValueError(f"cannot read the table {filename}: {e}") from e
     if fits:
         units = _fits_units(filename, hdu)
@@ -147,7 +150,7 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
     """
     Return the units of the columns of an ECSV file, by name: those of
     its header, as read by _unit. There are none if the file is not
-    ECSV, or if its header is not valid, as astropy then says.
+    ECSV, or if its header is not valid (astropy then says how).
 
     Raise ValueError if a unit is not one.
     """
@@ -156,21 +159,31 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
             return {}
         file.seek(0)
         # The lines of the header, without their '#', as astropy reads
-        # them (see astropy.io.ascii.ecsv)
+        # them (see EcsvHeader.process_lines): blank lines are skipped,
+        # and the header ends at the first line that is not a comment
         lines = []
         for line in file:
             line = line.strip()
+            if not line:
+                continue
             if not line.startswith(b'#'):
                 break
-            lines.append(line[1:])
+            if line[1:]:
+                lines.append(line[1:])
     try:
         header = get_header_from_yaml([line.decode() for line in lines])
     except (UnicodeDecodeError, YamlParseError):
         return {}
-    return {
-        column['name']: _unit(filename, column['name'], str(column['unit']))
-        for column in header.get('datatype', [])
-        if column.get('unit') is not None}
+    columns = header.get('datatype') if isinstance(header, dict) else None
+    if not isinstance(columns, list):
+        return {}
+    units = {}
+    for column in columns:
+        if isinstance(column, dict) and 'name' in column \
+                and column.get('unit') is not None:
+            units[column['name']] = _unit(
+                filename, column['name'], str(column['unit']))
+    return units
 
 
 def _unit(filename: str, column: str, text: str) -> u.UnitBase:

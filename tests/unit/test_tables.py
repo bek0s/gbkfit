@@ -100,3 +100,17 @@ def test_the_format_of_a_table_must_be_one_astropy_reads(tmp_path):
         read_table(path, 'FITS')
     with pytest.raises(ValueError, match="table.ecsv: not a FITS file"):
         read_table(path, 'fits')
+
+
+def test_an_ecsv_header_is_read_as_astropy_reads_it(tmp_path):
+    # (a blank line in it is skipped; one that lists no columns is an
+    # error of the file, which astropy fails on with a TypeError)
+    path = tmp_path / 'table.ecsv'
+    path.write_text(
+        '# %ECSV 1.0\n# ---\n# datatype:\n\n'
+        '# - {name: m0, unit: Jy/beam km/s, datatype: float64}\nm0\n1.0\n')
+    table = read_table(str(path))
+    assert read_column(table, 'm0', None).unit == u.Jy * u.km / u.beam / u.s
+    path.write_text('# %ECSV 1.0\n# ---\n# datatype:\nm0\n1.0\n')
+    with pytest.raises(ValueError, match="cannot read the table"):
+        read_table(str(path))
