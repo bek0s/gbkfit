@@ -10,6 +10,7 @@ import astropy.units
 import numpy as np
 from annotated_types import Ge
 
+import gbkfit.units
 from gbkfit.config import (
     ConfigError, Unit, make_typed_desc, parse_options_for_callable, warn)
 from gbkfit.dataset import Dataset
@@ -19,7 +20,6 @@ from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit
 from gbkfit.params import ParamValues
 from gbkfit.region import Regions
-from gbkfit.utils import unitutils
 from ..weights import plan_weights
 from ._dcube import DCube, cube_extra
 from .base import HostModelData, ModelData, Observable, ObservablePlan
@@ -274,11 +274,11 @@ def flux_per_area(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     erg/s/cm2/Angstrom, Jy km/s). Raise ValueError if the unit is per
     beam or per solid angle (the light of a pixel, not of a region).
     """
-    if unitutils.spatial_unit(unit) != astropy.units.dimensionless_unscaled:
+    if gbkfit.units.spatial_unit(unit) != astropy.units.dimensionless_unscaled:
         raise ValueError(
             f"the data of regions are fluxes, sums over their pixels: their "
             f"unit is one of flux (e.g. 'Jy', '1e-20 erg/s/cm2/Angstrom', "
-            f"'Jy km/s'); {unitutils.format_unit(unit)!r} is not")
+            f"'Jy km/s'); {gbkfit.units.format_unit(unit)!r} is not")
     return unit / astropy.units.arcsec ** 2
 
 
@@ -322,7 +322,7 @@ class DCubePlanBase(ObservablePlan):
         data_unit = scene.data_unit()
         unit = None if data_unit is None else data_unit.cube_unit()
         self._light_unit = None if unit is None \
-            else unitutils.format_unit(unit)
+            else gbkfit.units.format_unit(unit)
         self._dcube_plan = dcube.plan(
             driver, has_weights=pixel_weights is not None)
         grid = self._model_grid()

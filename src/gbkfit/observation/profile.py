@@ -11,6 +11,7 @@ import numpy as np
 from annotated_types import Gt, Le
 from astropy.table import Table
 
+import gbkfit.units
 from gbkfit.config import Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetProfile, check_profile_radii
 from gbkfit.driver import Driver
@@ -18,7 +19,6 @@ from gbkfit.grid import make_grid
 from gbkfit.model import (
     DataUnit, Extras, GalaxyFunctions, GalaxyState)
 from gbkfit.params import ParamDesc, ParamScalarDesc, ParamValues
-from gbkfit.utils import unitutils
 from ._scene import SeenGalaxies
 from .likelihood import Likelihood, likelihood_parser
 from .observables import HostModelData, ModelData, ObservablePlan
@@ -154,7 +154,7 @@ class ObservationProfile(Observation):
             functions=list(self.keys()),
             radii=dict(
                 value=self._radii.value.tolist(),
-                unit=unitutils.format_unit(self._radii.unit)))
+                unit=gbkfit.units.format_unit(self._radii.unit)))
         if self._distance is not None:
             info['distance'] = float(self._distance.to_value(u.Mpc))
         return info

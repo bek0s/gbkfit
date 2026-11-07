@@ -14,9 +14,9 @@ import numpy as np
 import numpy.typing as npt
 from annotated_types import Gt
 
+import gbkfit.units
 from gbkfit.config import (
     BasicParser, Choices, Serializable, check_options)
-from gbkfit.utils import unitutils
 
 if typing.TYPE_CHECKING:
     from .coords import Coords, Grid
@@ -138,7 +138,7 @@ def make_rest(value: Rest) -> astropy.units.Quantity | None:
         f"the rest of a spectral axis must be a positive wavelength or "
         f"frequency with units (e.g. '6562.8 Angstrom'); it is {value!r}")
     try:
-        rest = unitutils.parse_quantity(value) if isinstance(value, str) \
+        rest = gbkfit.units.parse_quantity(value) if isinstance(value, str) \
             else astropy.units.Quantity(value)
     except (TypeError, ValueError) as e:
         raise error from e

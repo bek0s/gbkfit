@@ -14,10 +14,10 @@ import numpy.typing as npt
 import scipy.spatial
 from annotated_types import Ge
 
+import gbkfit.units
 from gbkfit.config import (
     Choices, FilePath, Serializable, Unit, check_options)
 from gbkfit.grid import make_rest
-from gbkfit.utils import unitutils
 from gbkfit.utils.numutils import MAD_TO_STD
 from .base import Dataset
 from .data import Data
@@ -476,7 +476,7 @@ class DatasetVisibilities(Dataset):
         if not np.array_equal(im.mask(), re.mask()):
             arrays['mask_im'] = im.mask()
         if re.unit() is not None:
-            arrays['unit'] = unitutils.format_unit(re.unit())
+            arrays['unit'] = gbkfit.units.format_unit(re.unit())
         _savez(filename, arrays, overwrite)
         return dict(
             type=self.type(),

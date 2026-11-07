@@ -7,12 +7,12 @@ sight (make_scene; see gbkfit.model.Scene).
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, NamedTuple
 
+import gbkfit.units
 from gbkfit.config import check_name
 from gbkfit.model import (
     STARS, Band, BandEmission, Component, DataUnit, DepthUnit, Emission,
     Galaxy, LineEmission, Scene, StarsEmission,
     named_components)
-from gbkfit.utils import unitutils
 
 if TYPE_CHECKING:
     from .line_of_sight import LineOfSight
@@ -203,7 +203,7 @@ def _check_one_unit(
     of the components it sees (and of none, if they have none).
     """
     units = {
-        unitutils.format_unit(unit): _label(galaxy, i)
+        gbkfit.units.format_unit(unit): _label(galaxy, i)
         for galaxy, indices in zip(galaxies, emitters) for i in indices
         if (unit := galaxy.components()[i].emission().unit()) is not None}
     if len(units) > 1:

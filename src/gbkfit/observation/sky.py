@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal, Self, TypeAlias
 import astropy.units
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import (
     Choices, check_name, check_options, config_path,
     load_option_and_update_info, make_typed_desc, warn)
@@ -23,7 +24,6 @@ from gbkfit.model import (
 from gbkfit.model.components.lines import catalogue_in_use
 from gbkfit.params import (
     ParamDesc, ParamScalarDesc, ParamValues, ParamVectorDesc)
-from gbkfit.utils import unitutils
 from ._scene import SeenGalaxies, check_component_names, make_scene
 from .foreground import Foreground, foreground_parser
 from .likelihood import Likelihood, likelihood_parser
@@ -188,9 +188,9 @@ class ObservationSky(Observation):
         position (see ObservationGroup.observation_label).
     unit : str, optional
         The unit of the light of its model without data (e.g. 'Jy/beam',
-        see unitutils.parse_unit): data give theirs. A unit per beam takes
-        the beam of the PSF of the instrument (see PSF.beam_area), of each
-        point of the spectral axis for a PSF that varies.
+        see gbkfit.units.parse_unit): data give theirs. A unit per beam
+        takes the beam of the PSF of the instrument (see PSF.beam_area),
+        of each point of the spectral axis for a PSF that varies.
 
     Raises
     ------
@@ -293,7 +293,7 @@ class ObservationSky(Observation):
         offsets = {} if not self._offsets else dict(offsets=dict(
             self._offsets))
         unit = {} if self._light is None else dict(
-            unit=unitutils.format_unit(self._light.unit))
+            unit=gbkfit.units.format_unit(self._light.unit))
         data = {} if self._data is None else dict(
             data=dataset_parser.dump(self._data, **kwargs),
             likelihood=likelihood_parser.dump(self._likelihood))
@@ -545,7 +545,7 @@ class ObservationSky(Observation):
         if unit is None or not isinstance(
                 output, (GridData, SpectraData)):
             return output
-        return output._replace(unit=unitutils.format_unit(unit))
+        return output._replace(unit=gbkfit.units.format_unit(unit))
 
     def images(
             self,
@@ -690,14 +690,14 @@ def _light_unit(
             "the data of an observation give the unit of its model; remove "
             "its unit")
     with config_path('unit'):
-        unit = unitutils.parse_unit(unit)
-    if unitutils.spatial_unit(unit) != astropy.units.beam:
+        unit = gbkfit.units.parse_unit(unit)
+    if gbkfit.units.spatial_unit(unit) != astropy.units.beam:
         return LightUnit(unit)
     psf = instrument.psf()
     if psf is None:
         raise ValueError(
-            f"a unit per beam ({unitutils.format_unit(unit)}) takes the beam "
-            f"of the PSF of the instrument, which has none")
+            f"a unit per beam ({gbkfit.units.format_unit(unit)}) takes the "
+            f"beam of the PSF of the instrument, which has none")
     if not psf.varies():
         return LightUnit(unit, psf.beam_area())
     spectral = observable.spectral()

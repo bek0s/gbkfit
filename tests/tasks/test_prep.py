@@ -870,7 +870,7 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
 def test_the_flux_of_a_pixel(unit, factor, flux):
     # (in an extension after an empty primary HDU, as in MUSE and JWST)
     from gbkfit.prep import FitsArrays, pixel_fluxes
-    from gbkfit.utils.unitutils import parse_unit
+    from gbkfit.units import fits as fits_units
     header = HEADER | dict(CDELT1=-2 / 3600, CDELT2=2 / 3600, BUNIT=unit)
     write_cube('one.fits', header)
     fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU(
@@ -880,7 +880,7 @@ def test_the_flux_of_a_pixel(unit, factor, flux):
     scale, flux_unit = pixel_fluxes(cube.header, cube.beam, 'cube.fits')
     assert scale == pytest.approx(factor, rel=1e-9)
     # (the units of headers, as the FITS standard writes them)
-    assert (1 * flux_unit).to_value(parse_unit(flux, 'fits')) \
+    assert (1 * flux_unit).to_value(fits_units.parse_unit(flux)) \
         == pytest.approx(1)
 
 

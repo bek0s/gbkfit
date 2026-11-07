@@ -28,7 +28,7 @@ from astropy.io import fits
 import gbkfit.dataset
 import gbkfit.outputs
 import gbkfit.project
-from gbkfit.utils import unitutils
+import gbkfit.units
 
 from .errors import Invalid, NotFound
 
@@ -881,6 +881,6 @@ def _readable_unit(text: str | None) -> str | None:
     if text is None:
         return None
     try:
-        return unitutils.parse_unit(text, 'fits').to_string()
+        return gbkfit.units.fits.parse_unit(text).to_string()
     except ValueError:
         return text

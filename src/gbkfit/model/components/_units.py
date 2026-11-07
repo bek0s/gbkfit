@@ -17,8 +17,8 @@ import astropy.constants as const
 import astropy.units as u
 import numpy as np
 
+import gbkfit.units
 from gbkfit.grid import Grid, VelocityConvention, doppler
-from gbkfit.utils import unitutils
 from .lines import Band, LinePlacement
 
 if TYPE_CHECKING:
@@ -107,8 +107,9 @@ def check_line_unit(unit: u.UnitBase, lines: Sequence[str] | None) -> None:
     if is_hi_unit(unit):
         if not lines or lines[0] != HI_LINE:
             raise ValueError(
-                f"the unit {unitutils.format_unit(unit)!r} is one of HI only: "
-                f"its first line must be {HI_LINE!r} (lines: [{HI_LINE}]); "
+                f"the unit {gbkfit.units.format_unit(unit)!r} is one of HI "
+                f"only: its first line must be {HI_LINE!r} (lines: "
+                f"[{HI_LINE}]); "
                 f"the lines are {lines}")
         return
     if not any(unit.is_equivalent(kind) for kind in _LINE_UNITS):
@@ -116,7 +117,7 @@ def check_line_unit(unit: u.UnitBase, lines: Sequence[str] | None) -> None:
             f"the unit of emission lines is that of their light integrated "
             f"over the line, per solid angle (e.g. 'erg/s/cm2/arcsec2', "
             f"'Jy km/s/arcsec2', 'K km/s'), or of HI only ('Msun/pc2', "
-            f"'cm-2'); {unitutils.format_unit(unit)!r} is not (a unit per "
+            f"'cm-2'); {gbkfit.units.format_unit(unit)!r} is not (a unit per "
             f"beam is one of data, not of a galaxy)")
 
 
@@ -131,8 +132,8 @@ def check_band_unit(unit: u.UnitBase) -> None:
             f"the unit of light in bands is a flux density per solid angle "
             f"(e.g. 'Jy/arcsec2', 'MJy/sr', 'erg/s/cm2/Angstrom/arcsec2') or "
             f"a brightness temperature ('K'); "
-            f"{unitutils.format_unit(unit)!r} is not (a unit per beam is one "
-            f"of data, not of a galaxy)")
+            f"{gbkfit.units.format_unit(unit)!r} is not (a unit per beam is "
+            f"one of data, not of a galaxy)")
 
 
 def check_line_units_agree(components: Sequence['Component']) -> None:
@@ -155,7 +156,7 @@ def check_line_units_agree(components: Sequence['Component']) -> None:
         for line in emission.lines().names():
             if line in seen and seen[line][0] != unit:
                 first, other = (
-                    unitutils.format_unit(x) for x in (seen[line][0], unit))
+                    gbkfit.units.format_unit(x) for x in (seen[line][0], unit))
                 raise ValueError(
                     f"the line {line!r} has the unit {first!r} in component "
                     f"{seen[line][1]!r} and {other!r} in component "
@@ -364,8 +365,9 @@ def line_factor(
         return _channel(light / (u.km / u.s), channel, frame, beam, pixel)
     except u.UnitConversionError as e:
         raise ValueError(
-            f"the light of a line in {unitutils.format_unit(source)!r} "
-            f"cannot be data in {unitutils.format_unit(target)!r}: {e}") from e
+            f"the light of a line in {gbkfit.units.format_unit(source)!r} "
+            f"cannot be data in {gbkfit.units.format_unit(target)!r}: "
+            f"{e}") from e
 
 
 def line_factors(
@@ -392,9 +394,9 @@ def line_factors(
     if target.unit is None:
         raise ValueError(
             f"the light of the component is in "
-            f"{unitutils.format_unit(source)!r}, but the data have no unit: "
-            f"give them one (BUNIT in the header, or the option unit of the "
-            f"data)")
+            f"{gbkfit.units.format_unit(source)!r}, but the data have no "
+            f"unit: give them one (BUNIT in the header, or the option unit "
+            f"of the data)")
     return LineFactors(source, target, redshifts, spectral, frequencies)
 
 
@@ -437,9 +439,9 @@ class LineFactors:
         if coords.rest is None:
             raise ValueError(
                 f"the light of the component in "
-                f"{unitutils.format_unit(source)!r} is that of the galaxy as "
-                f"it emits it, which the data see dimmed by the redshift of "
-                f"each line: the spectral axis needs its rest (RESTFRQ or "
+                f"{gbkfit.units.format_unit(source)!r} is that of the galaxy "
+                f"as it emits it, which the data see dimmed by the redshift "
+                f"of each line: the spectral axis needs its rest (RESTFRQ or "
                 f"RESTWAV in the header of the data, or spectral: {{rest: "
                 f"...}})")
         self._convention = VelocityConvention.of(coords)
@@ -571,9 +573,9 @@ def band_factors(
     if target.unit is None:
         raise ValueError(
             f"the light of the component is in "
-            f"{unitutils.format_unit(source)!r}, but the data have no unit: "
-            f"give them one (BUNIT in the header, or the option unit of the "
-            f"data)")
+            f"{gbkfit.units.format_unit(source)!r}, but the data have no "
+            f"unit: give them one (BUNIT in the header, or the option unit "
+            f"of the data)")
     return BandFactors(source, target, band, redshift)
 
 
@@ -619,9 +621,10 @@ class BandFactors:
                     _band_factor(source, target, other, one_plus_z),
                     rtol=1e-9, atol=0):
                 raise ValueError(
-                    f"light in a band in {unitutils.format_unit(source)!r} "
-                    f"becomes data in {unitutils.format_unit(target.unit)!r} "
-                    f"at the wavelength of the band: the image needs its band")
+                    f"light in a band in {gbkfit.units.format_unit(source)!r} "
+                    f"becomes data in "
+                    f"{gbkfit.units.format_unit(target.unit)!r} at the "
+                    f"wavelength of the band: the image needs its band")
         self._factor = _band_factor(source, target, frequency, one_plus_z)
         self._power = float(np.log2(
             _band_factor(source, target, frequency, 2 * one_plus_z)
@@ -661,14 +664,15 @@ def _band_factor(
         if target.unit.is_equivalent(u.K):
             return intensity.to_value(
                 target.unit, u.brightness_temperature(frequency))
-        spatial = unitutils.spatial_unit(target.unit)
+        spatial = gbkfit.units.spatial_unit(target.unit)
         beam = None if target.beam is None else float(target.beam)
         return _element(intensity, spatial, beam, target.pixel).to_value(
             target.unit * spatial, u.spectral_density(frequency))
     except u.UnitConversionError as e:
         raise ValueError(
-            f"light in a band in {unitutils.format_unit(source)!r} cannot be "
-            f"data in {unitutils.format_unit(target.unit)!r}: {e}") from e
+            f"light in a band in {gbkfit.units.format_unit(source)!r} cannot "
+            f"be data in {gbkfit.units.format_unit(target.unit)!r}: "
+            f"{e}") from e
 
 
 def _frame(
@@ -769,7 +773,7 @@ def _channel(
     if target.is_equivalent(u.K):
         return intensity.to_value(
             target, u.brightness_temperature(frame.frequency))
-    spatial = unitutils.spatial_unit(target)
+    spatial = gbkfit.units.spatial_unit(target)
     if (target * spatial).is_equivalent(u.W / u.m ** 3):
         intensity = (intensity * frame.hz_per_kms / frame.m_per_kms).to(
             u.W / u.m ** 3 / u.sr)
@@ -787,7 +791,7 @@ def _per_element(
     Return light per solid angle (with no other conversion) in the target
     unit, per solid angle, beam or pixel.
     """
-    spatial = unitutils.spatial_unit(target)
+    spatial = gbkfit.units.spatial_unit(target)
     return _element(light, spatial, beam, pixel).to_value(target * spatial)
 
 
@@ -799,7 +803,7 @@ def _element(
 ) -> u.Quantity:
     """
     Return light per solid angle as the light of one element (see
-    unitutils.spatial_unit): of a beam or a pixel (of the given solid
+    gbkfit.units.spatial_unit): of a beam or a pixel (of the given solid
     angles, arcsec^2; a pixel named so, pix, or not), or of a solid angle
     of 1 sr.
     """
@@ -819,4 +823,5 @@ def _is_energy(target: u.UnitBase) -> bool:
     Check whether a unit is of energy flux (per solid angle, beam or
     pixel): of light integrated over frequency (e.g. erg/s/cm2/arcsec2).
     """
-    return (target * unitutils.spatial_unit(target)).is_equivalent(u.W / u.m ** 2)
+    return (target * gbkfit.units.spatial_unit(target)).is_equivalent(
+        u.W / u.m ** 2)

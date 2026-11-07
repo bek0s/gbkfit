@@ -23,13 +23,13 @@ import numpy as np
 import numpy.typing as npt
 from astropy.io import fits
 
+import gbkfit.units
 from gbkfit.config import DataFile
 from gbkfit.io import (
     ErrorKind, casa_beam_table, header_unit, read_column, read_table)
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
-from gbkfit.utils import unitutils
 
 
 __all__ = [
@@ -578,7 +578,7 @@ def prep_region_spectra(
         factor = np.reshape(fluxes[0], (-1, 1))
         spectra = spectra * factor
         errors = None if errors is None else errors * factor
-        header['BUNIT'] = unitutils.format_unit(fluxes[1], 'fits')
+        header['BUNIT'] = gbkfit.units.fits.format_unit(fluxes[1])
     _write_bins(bins_header, index, file_bins, output_dir)
     FitsArrays(
         spectra, errors, np.isfinite(spectra).astype(float),

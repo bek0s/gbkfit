@@ -11,6 +11,7 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
+import gbkfit.units
 from gbkfit.config import Choices, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
@@ -18,7 +19,6 @@ from gbkfit.grid import Grid, GridData, SpectralAxis, make_grid
 from gbkfit.instrument import Instrument
 from gbkfit.model import DataUnit, Extras, GalaxyState, LightUnit, LineEmission
 from gbkfit.params import ParamValues
-from gbkfit.utils import unitutils
 from . import _dcube, _detail
 from ._detail import Rota, Rpix, Rval
 from ._uv_transforms import UVTransform, uv_transforms
@@ -358,7 +358,7 @@ class Visibilities(Observable):
         unit = None if units is None else units['re']
         if unit is not None:
             image = image._replace(
-                unit=unitutils.format_unit(unit / astropy.units.beam))
+                unit=gbkfit.units.format_unit(unit / astropy.units.beam))
         return dict(dirty=image)
 
     def psf_images(

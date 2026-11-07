@@ -1,9 +1,7 @@
 """
-Physical units: reading them from text and writing them as text, and
-telling what a unit of light is per on the sky. The text of a unit is
-in VOUnits, the recommendation of the IVOA, as in configurations and
-outputs, or in the convention of the FITS standard, as in the headers
-of FITS files.
+Units as text in the convention of the FITS standard (4.0, section
+4.3), as in the headers of FITS files (BUNIT, CUNITn and TUNITn):
+reading them by the precedence of the standard, and writing them.
 """
 
 import re
@@ -14,15 +12,9 @@ import astropy.units
 
 __all__ = [
     'format_unit',
-    'parse_quantity',
-    'parse_unit',
-    'spatial_unit'
+    'parse_unit'
 ]
 
-
-# The conventions of units as text: VOUnits, the recommendation of the
-# IVOA (1.0), and that of the FITS standard (4.0, section 4.3)
-_CONVENTIONS = ('vounits', 'fits')
 
 # A regular expression for the separators between the terms of a unit,
 # in the convention of FITS.
@@ -39,110 +31,40 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
 _SPLITTER = re.compile(rf'{_TERM_SEPARATOR.pattern}|[/()]')
 
 
-def parse_unit(
-        text: str, convention: str = 'vounits'
-) -> astropy.units.UnitBase:
+def parse_unit(text: str) -> astropy.units.UnitBase:
     """
-    Return the unit that a text states, in a convention: 'vounits' (by
-    default), as in configurations, or 'fits', as in the headers of FITS
-    files.
+    Return the unit that a text of the FITS standard states.
 
-    In 'vounits', astropy reads the text (its format 'vounit'). It has
-    at most one '/': 'erg/s/cm2/Angstrom' is not a unit, but
-    'erg.s-1.cm-2.Angstrom-1' and 'erg/(s.cm2.Angstrom)' are; and
-    percent is the scale 0.01 ('1e-2').
+    The text is read by the precedence of the standard (4.0, 4.3.1):
+    from the left, each '/' divides by what follows it, and each space,
+    '*' or '.' multiplies by it; brackets are read first, at any depth
+    (see _expression). For example, 'Jy/beam km/s' is (Jy/beam) (km/s),
+    as maps of moment 0 mean it; astropy alone reads it as
+    Jy / (beam km s). The names of units are those that astropy reads,
+    which include those of the standard.
 
-    In 'fits', the text is read by the precedence of the FITS standard
-    (4.0, 4.3.1): from the left, each '/' divides by what follows it,
-    and each space, '*' or '.' multiplies by it; brackets are read
-    first, at any depth (see _expression). For example, 'Jy/beam km/s'
-    is (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone
-    reads it as Jy / (beam km s). The names of units are those that
-    astropy reads, which include those of the FITS standard.
-
-    In both, names are case-sensitive, and nothing is corrected:
-    'JY/BEAM' is not a unit, and 'S' is the siemens. An empty text is
-    dimensionless.
-
-    Parameters
-    ----------
-    text : str
-        The text of the unit.
-    convention : str, optional
-        The convention of the text.
-
-    Returns
-    -------
-    astropy.units.UnitBase
-        The unit.
+    Names are case-sensitive, and nothing is corrected: 'JY/BEAM' is not
+    a unit, and 'S' is the siemens. An empty text is dimensionless.
 
     Raises
     ------
     ValueError
-        If the text is not a unit in the convention.
+        If the text is not a unit.
     """
-    _check_convention(convention)
-    if convention == 'fits':
-        unit = _unit_of(text)
-        if unit is None:
-            raise ValueError(
-                f"{text!r} is not a valid unit (see the FITS standard, "
-                f"section 4.3)")
-        return unit
     try:
-        return astropy.units.Unit(text, format='vounit')
+        return _expression(text)
     except ValueError:
         raise ValueError(
-            f"{text!r} is not a valid unit of VOUnits, the recommendation "
-            f"of the IVOA") from None
+            f"{text!r} is not a valid unit (see the FITS standard, section "
+            f"4.3)") from None
 
 
-def parse_quantity(text: str) -> astropy.units.Quantity:
+def format_unit(unit: astropy.units.UnitBase) -> str:
     """
-    Return the quantity that a text states: a number, a space, and a
-    unit of VOUnits (see parse_unit).
-    For example, '6562.8 Angstrom'.
-
-    Raises
-    ------
-    ValueError
-        If the text is not a number and a unit.
+    Return a unit as text of the FITS standard, which parse_unit reads
+    back as the same unit.
+    For example, 'Jy km beam-1 s-1'.
     """
-    number, _, unit = text.strip().partition(' ')
-    try:
-        value = float(number)
-    except ValueError:
-        raise ValueError(
-            f"{text!r} is not a number and a unit (e.g. "
-            f"'6562.8 Angstrom')") from None
-    return value * parse_unit(unit.strip())
-
-
-def format_unit(
-        unit: astropy.units.UnitBase, convention: str = 'vounits'
-) -> str:
-    """
-    Return a unit as text in a convention: 'vounits' or 'fits', which
-    parse_unit reads back as the same unit.
-    For example, 'Jy.km.beam**-1.s**-1' in 'vounits', and
-    'Jy km beam-1 s-1' in 'fits'.
-
-    The text in 'vounits' reads back as the same unit in 'fits' too. A
-    unit that VOUnits has no name for (e.g. the electron) is written in
-    'fits', which only that convention reads.
-    """
-    _check_convention(convention)
-    if convention == 'vounits':
-        if unit.is_equivalent(astropy.units.dimensionless_unscaled):
-            # (a scale, e.g. 0.01 for percent: astropy writes none)
-            scale = unit.to(astropy.units.dimensionless_unscaled)
-            return '' if scale == 1 else repr(float(scale))
-        try:
-            # (VOUnits deprecates the units of CGS, e.g. erg and
-            # Angstrom, which astropy would warn of, or convert to SI)
-            return unit.to_string('vounit', deprecations='silent')
-        except ValueError:
-            pass
     # (repr gives the shortest text of the scale that reads back as the
     # same number)
     terms = [] if unit.scale == 1 else [repr(float(unit.scale))]
@@ -157,55 +79,6 @@ def format_unit(
             # only in brackets: 'Hz(0.5)', not 'Hz0.5'
             terms.append(f'{name}({power})')
     return ' '.join(terms)
-
-
-def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
-    """
-    Return what a unit of light is per, on the sky:
-
-    - a beam (beam), e.g. Jy/beam;
-    - a solid angle (sr), e.g. MJy/sr or erg/s/cm2/arcsec2;
-    - a pixel, if the unit names it (pix), e.g. Jy/pixel;
-    - nothing else (dimensionless): the light is that of a whole pixel
-      or region, e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel.
-
-    Raises
-    ------
-    ValueError
-        If the unit is per an angle that is not a solid angle (e.g.
-        Jy/arcsec).
-    """
-    if astropy.units.beam in unit.bases:
-        return astropy.units.beam
-    if astropy.units.pix in unit.bases:
-        return astropy.units.pix
-    # The sum of the powers of the angles of the unit, a solid angle
-    # (e.g. sr) counting as an angle squared: -2 for a unit per solid
-    # angle (per sr, or per arcsec2)
-    power = 0
-    for base, base_power in zip(unit.bases, unit.powers):
-        if base.physical_type == 'solid angle':
-            power += 2 * base_power
-        elif base.physical_type == 'angle':
-            power += base_power
-    if power == -2:
-        return astropy.units.sr
-    if power != 0:
-        raise ValueError(
-            f"{format_unit(unit)!r} is per an angle that is not a solid "
-            f"angle (e.g. per arcsec, not per arcsec2)")
-    return astropy.units.dimensionless_unscaled
-
-
-def _unit_of(text: str) -> astropy.units.UnitBase | None:
-    """
-    Return the unit of a text (see _expression), or None if it is not a
-    unit.
-    """
-    try:
-        return _expression(text)
-    except ValueError:
-        return None
 
 
 def _expression(text: str) -> astropy.units.UnitBase:
@@ -331,11 +204,3 @@ def _power(text: str) -> Fraction:
         return Fraction(text)
     except ZeroDivisionError:
         raise ValueError(f"{text!r} divides by 0") from None
-
-
-def _check_convention(convention: str) -> None:
-    """Raise ValueError unless a convention is 'vounits' or 'fits'."""
-    if convention not in _CONVENTIONS:
-        raise ValueError(
-            f"the convention of units must be one of {list(_CONVENTIONS)}; "
-            f"it is {convention!r}")

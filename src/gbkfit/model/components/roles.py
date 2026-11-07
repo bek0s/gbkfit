@@ -9,9 +9,10 @@ from typing import Any
 
 import astropy.units
 
+import gbkfit.units
 from gbkfit.config import (
     TypedParser, TypedSerializable, check_options, config_path)
-from gbkfit.utils import iterutils, unitutils
+from gbkfit.utils import iterutils
 from . import _units
 from .extinction import ExtinctionLaw, extinction_law_parser
 from .lines import (
@@ -295,12 +296,12 @@ def _parse_unit(
         unit: str | astropy.units.UnitBase | None
 ) -> astropy.units.UnitBase | None:
     """Return a unit, read from its text if given as text."""
-    return unitutils.parse_unit(unit) if isinstance(unit, str) else unit
+    return gbkfit.units.parse_unit(unit) if isinstance(unit, str) else unit
 
 
 def _dump_unit(unit: astropy.units.UnitBase | None) -> dict[str, str]:
     """Return the option unit of a configuration, if there is a unit."""
-    return {} if unit is None else dict(unit=unitutils.format_unit(unit))
+    return {} if unit is None else dict(unit=gbkfit.units.format_unit(unit))
 
 
 class Opacity(TypedSerializable, abc.ABC):

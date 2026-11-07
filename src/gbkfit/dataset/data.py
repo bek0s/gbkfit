@@ -10,11 +10,11 @@ from typing import Any, NamedTuple
 import astropy.units
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import DataFile, parse_options, warn
 from gbkfit.grid import Coords
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.io import ErrorKind, coords_from_header, read_arrays
-from gbkfit.utils import unitutils
 
 
 __all__ = [
@@ -166,7 +166,8 @@ class Data:
     error : ndarray, optional
         The error of each value (its standard deviation).
     unit : str or astropy.units.UnitBase, optional
-        The unit of the values and the errors (see unitutils.parse_unit).
+        The unit of the values and the errors (see
+        gbkfit.units.parse_unit).
     beam : Beam or Mapping, optional
         Their beam, for units per beam (e.g. Jy/beam): a Beam, or its
         options bmaj, bmin and bpa.
@@ -242,7 +243,7 @@ class Data:
         self._data = data
         self._mask = total_mask.astype(data.dtype)
         self._error = error
-        self._unit = unitutils.parse_unit(unit) if isinstance(unit, str) \
+        self._unit = gbkfit.units.parse_unit(unit) if isinstance(unit, str) \
             else unit
         self._beam = _make_beam(beam)
         for kind, correlation in (
@@ -537,7 +538,7 @@ def dump_data(
             write(filename, arrays[key])
             info[key] = filename if dump_path else os.path.basename(filename)
     if data.unit() is not None:
-        info['unit'] = unitutils.format_unit(data.unit())
+        info['unit'] = gbkfit.units.format_unit(data.unit())
     beam = data.beam()
     if beam is not None and beam.spectral is None:
         info['beam'] = dict(

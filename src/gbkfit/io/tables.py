@@ -12,8 +12,8 @@ from astropy.io.fits.connect import is_fits
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
 
+import gbkfit.units
 from gbkfit.config import parse_file
-from gbkfit.utils import unitutils
 
 
 __all__ = [
@@ -69,7 +69,7 @@ def _read_fits_units(table: Table, filename: str) -> None:
     Give the columns of a table of a FITS file (its first HDU of a table,
     which astropy reads) the units of their TUNITn as parse_unit reads
     them: astropy reads them by its own precedence, e.g. 'Jy/beam km/s'
-    as Jy / (beam km s) (see unitutils.parse_unit).
+    as Jy / (beam km s) (see gbkfit.units.fits.parse_unit).
 
     Raise ValueError if a TUNITn is not a unit.
     """
@@ -81,8 +81,8 @@ def _read_fits_units(table: Table, filename: str) -> None:
             if not column.unit:
                 continue
             try:
-                table[column.name].unit = unitutils.parse_unit(
-                    column.unit, 'fits')
+                table[column.name].unit = gbkfit.units.fits.parse_unit(
+                    column.unit)
             except ValueError:
                 raise ValueError(
                     f"{filename}: the unit of the column {column.name!r}, "
@@ -132,7 +132,7 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
         raise ValueError(f"the column {name!r} is not of numbers") from None
     if unit is None:
         return values * (column.unit or u.dimensionless_unscaled)
-    given = unitutils.parse_unit(unit)
+    given = gbkfit.units.parse_unit(unit)
     if column.unit is None:
         return values * given
     try:
@@ -140,5 +140,5 @@ def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:
     except u.UnitConversionError:
         raise ValueError(
             f"the column {name!r} is in "
-            f"{unitutils.format_unit(column.unit)!r}, which cannot be "
+            f"{gbkfit.units.format_unit(column.unit)!r}, which cannot be "
             f"converted to {unit!r}") from None

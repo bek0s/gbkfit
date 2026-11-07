@@ -12,12 +12,12 @@ import astropy.io.fits
 import astropy.units
 import astropy.wcs
 
+import gbkfit.units
 from gbkfit.grid import Coords
 from gbkfit.io import (
     centre_missing_crpix, coords_from_header, header_beam, header_shape,
     header_unit, ignoring_wcs_fixes, model_axis_order, model_header,
     nonstandard_spectral_axis, velocity_is_ambiguous)
-from gbkfit.utils import unitutils
 from .data import Beam
 
 
@@ -197,8 +197,8 @@ def _describe(
         problems.append(str(e))
     if unit is not None:
         try:
-            per_beam = unitutils.spatial_unit(
-                unitutils.parse_unit(unit, 'fits')) == astropy.units.beam
+            per_beam = gbkfit.units.spatial_unit(
+                gbkfit.units.fits.parse_unit(unit)) == astropy.units.beam
         except ValueError as e:
             problems.append(f"{e}: give the unit (option unit of the data)")
         else:

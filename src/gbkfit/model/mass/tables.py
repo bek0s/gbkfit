@@ -13,11 +13,11 @@ import numpy.typing as npt
 import scipy.interpolate
 from annotated_types import Gt
 
+import gbkfit.units
 from gbkfit.config import Column, FilePath, Unit, check_options
 from gbkfit.io import read_column, read_table
 from gbkfit.params import ParamDesc, ParamValues
 from gbkfit.params.pdescs import ParamScalarDesc
-from gbkfit.utils import unitutils
 from .base import MassComponent, MassContext
 
 
@@ -137,7 +137,7 @@ class MassTable(MassComponent):
         info = super().dump() | dict(
             radii=dict(
                 value=self._radii.value.tolist(),
-                unit=unitutils.format_unit(self._radii.unit)),
+                unit=gbkfit.units.format_unit(self._radii.unit)),
             velocities=self._velocities.to_value(u.km / u.s).tolist())
         if self._distance is not None:
             info['distance'] = self._distance

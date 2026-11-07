@@ -11,10 +11,10 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
+import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Grid
 from gbkfit.params import ModelEvaluationError, ParamValues
-from gbkfit.utils import unitutils
 from ..extras import Extras
 from ._component_plans import ComponentPlans
 from ._units import DataUnit
@@ -239,7 +239,7 @@ class TransferPlan:
         # (that of the model of the observation, if known)
         unit = None if data_unit is None else data_unit.cube_unit()
         self._light_unit = None if unit is None \
-            else unitutils.format_unit(unit)
+            else gbkfit.units.format_unit(unit)
         self._subchannels = subchannels
         self._smoothing = smoothing
         # (that of every galaxy: the cubes hold the dust of the scene)

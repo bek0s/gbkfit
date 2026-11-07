@@ -1,4 +1,4 @@
-"""Tests for the physical units of data and models (unitutils)."""
+"""Tests for the physical units of data and models (gbkfit.units)."""
 
 import warnings
 
@@ -11,8 +11,8 @@ from gbkfit.model.components._units import (
     BandFactors, DataUnit, LineFactors, line_factors, mass_per_unit)
 from gbkfit.model.components.lines import Band
 from gbkfit.observation.observables._detail import flux_per_area
-from gbkfit.utils.unitutils import (
-    format_unit, parse_quantity, parse_unit, spatial_unit)
+from gbkfit.units import (
+    fits, format_unit, parse_quantity, parse_unit, spatial_unit)
 
 
 @pytest.mark.parametrize('text, unit', [
@@ -60,11 +60,11 @@ from gbkfit.utils.unitutils import (
     ('(m2)^(1/2)', u.m),
     ('m(3/2)', u.m ** 1.5)])
 def test_units_of_fits_are_read_as_they_are_meant(text, unit):
-    parsed = parse_unit(text, 'fits')
+    parsed = fits.parse_unit(text)
     assert parsed.is_equivalent(unit)
     assert (1 * parsed).to_value(unit) == pytest.approx(1, rel=1e-12)
     # A unit written by format_unit reads back as itself
-    assert parse_unit(format_unit(parsed), 'fits') == parsed
+    assert fits.parse_unit(format_unit(parsed)) == parsed
 
 
 def test_what_is_not_a_unit_is_an_error():
@@ -73,21 +73,21 @@ def test_what_is_not_a_unit_is_an_error():
             '(Jy', 'Jy)', ')Jy(', '()', '(km/s)**', '(km/s)x',
             '(km/s)^(1/0)'):
         with pytest.raises(ValueError, match="is not a valid unit"):
-            parse_unit(text, 'fits')
+            fits.parse_unit(text)
     # Names are not corrected: these are not the names of units, in the
     # case that the FITS standard gives them
     for text in (
             'JY/BEAM', 'Jy/Beam', 'KM/S', 'METR/SEC', 'JY/B*M/S',
             'ELECTRONS/S', '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}'):
         with pytest.raises(ValueError, match="is not a valid unit"):
-            parse_unit(text, 'fits')
+            fits.parse_unit(text)
 
 
 def test_names_are_read_as_the_units_they_name():
     # Nothing is corrected: S is the siemens, A the ampere and B the byte
-    assert parse_unit('S', 'fits') == u.S
-    assert parse_unit('erg/s/cm2/A', 'fits') == u.erg / u.s / u.cm ** 2 / u.A
-    assert parse_unit('B', 'fits') == u.byte
+    assert fits.parse_unit('S') == u.S
+    assert fits.parse_unit('erg/s/cm2/A') == u.erg / u.s / u.cm ** 2 / u.A
+    assert fits.parse_unit('B') == u.byte
 
 
 def test_a_unit_that_is_refused_raises_no_warnings():
@@ -95,7 +95,7 @@ def test_a_unit_that_is_refused_raises_no_warnings():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         with pytest.raises(ValueError, match="is not a valid unit"):
-            parse_unit('erg/s/cm2/banana', 'fits')
+            fits.parse_unit('erg/s/cm2/banana')
     assert not caught
 
 
@@ -103,15 +103,15 @@ def test_units_of_several_slashes_are_read_without_warnings():
     # Silencing astropy's warning would change the warnings of every thread
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        assert parse_unit('erg/s/cm2/arcsec2', 'fits') == (
+        assert fits.parse_unit('erg/s/cm2/arcsec2') == (
             u.erg / u.s / u.cm ** 2 / u.arcsec ** 2)
 
 
 def test_a_power_that_is_not_an_integer_is_written_in_brackets():
     # The FITS standard does not allow 'Hz0.5'
     unit = u.Hz ** 0.5 / u.m ** (1 / 3)
-    assert format_unit(unit, 'fits') == 'Hz(0.5) m(-1/3)'
-    assert parse_unit(format_unit(unit, 'fits'), 'fits') == unit
+    assert fits.format_unit(unit) == 'Hz(0.5) m(-1/3)'
+    assert fits.parse_unit(fits.format_unit(unit)) == unit
 
 
 @pytest.mark.parametrize('text, unit', [
@@ -127,7 +127,7 @@ def test_a_power_that_is_not_an_integer_is_written_in_brackets():
     ('1e-2', u.percent),
     ('', u.dimensionless_unscaled)])
 def test_units_of_vounits(text, unit):
-    parsed = parse_unit(text, 'vounits')
+    parsed = parse_unit(text)
     assert parsed.is_equivalent(unit)
     assert (1 * parsed).to_value(unit) == pytest.approx(1, rel=1e-12)
 
@@ -136,7 +136,7 @@ def test_texts_that_are_not_units_of_vounits_are_errors():
     # (several '/', the names of astropy, and the forms of FITS)
     for text in ('erg/s/cm2', 'Msun/pc2', 'Jy/beam km/s', '%', 'JY/BEAM'):
         with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
-            parse_unit(text, 'vounits')
+            parse_unit(text)
 
 
 def test_units_are_written_in_vounits_and_read_back_in_both():
@@ -147,17 +147,8 @@ def test_units_are_written_in_vounits_and_read_back_in_both():
     for unit in units:
         unit = u.Unit(unit)
         text = format_unit(unit)
-        for convention in ('vounits', 'fits'):
-            assert parse_unit(text, convention) == unit, (text, convention)
-
-
-def test_units_are_of_vounits_unless_said_otherwise():
-    assert parse_unit('erg/(s.cm2)') == u.erg / u.s / u.cm ** 2
-    with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
-        parse_unit('erg/s/cm2')
-    assert parse_unit('erg/s/cm2', 'fits') == u.erg / u.s / u.cm ** 2
-    with pytest.raises(ValueError, match="must be one of"):
-        parse_unit('km/s', 'iau')
+        assert parse_unit(text) == unit, text
+        assert fits.parse_unit(text) == unit, text
 
 
 def test_a_quantity_is_a_number_and_a_unit():
@@ -176,7 +167,7 @@ def test_a_quantity_is_a_number_and_a_unit():
     ('Jy deg-2', u.sr),
     ('Jy km/s', u.dimensionless_unscaled)])
 def test_what_light_is_per(text, spatial):
-    assert spatial_unit(parse_unit(text, 'fits')) == spatial
+    assert spatial_unit(fits.parse_unit(text)) == spatial
 
 
 def test_light_per_an_angle_is_not_per_a_solid_angle():
@@ -263,7 +254,7 @@ def factors(
     if rest is not None:
         frequencies = rest.to_value(u.Hz, u.spectral()) / lines \
             * (1 + redshift)
-    data = DataUnit(parse_unit(target, 'fits'), PIXEL, **options)
+    data = DataUnit(fits.parse_unit(target), PIXEL, **options)
     return LineFactors(parse_unit(source), data, lines, spectral, frequencies)
 
 

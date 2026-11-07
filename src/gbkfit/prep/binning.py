@@ -14,7 +14,7 @@ import astropy.wcs.utils
 import numpy as np
 import scipy.spatial
 
-from gbkfit.utils import unitutils
+import gbkfit.units
 from .arrays import FitsArrays
 
 
@@ -383,13 +383,13 @@ def pixel_fluxes(
     text = str(header.get('BUNIT', '')).strip()
     if not text:
         return None
-    unit = unitutils.parse_unit(text, 'fits')
+    unit = gbkfit.units.fits.parse_unit(text)
     if unit.is_equivalent(u.K):
         raise ValueError(
             f"{filename}: the data are a brightness temperature ({text!r}), "
             f"whose sums over pixels are not fluxes: convert them to flux "
             f"density (e.g. Jy/beam) first")
-    spatial = unitutils.spatial_unit(unit)
+    spatial = gbkfit.units.spatial_unit(unit)
     if spatial in (u.dimensionless_unscaled, u.pix):
         return 1.0, unit * spatial
     wcs = astropy.wcs.WCS(header).celestial

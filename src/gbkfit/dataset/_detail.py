@@ -10,12 +10,12 @@ import astropy.units
 import numpy as np
 from astropy.table import Table
 
+import gbkfit.units
 from gbkfit.config import config_path, parse_options, warn
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis,
     pixels_on, rest_of_convention)
 from gbkfit.io import read_column, write_data
-from gbkfit.utils import unitutils
 from .data import Data, DataColumns, DataFiles, dump_data
 
 if TYPE_CHECKING:
@@ -153,9 +153,9 @@ def _in_kms(data: Data, order: int) -> Data:
             f"h{order})" if order in _HERMITE_ORDERS and unit.is_equivalent(
                 astropy.units.dimensionless_unscaled) else ""
         raise ValueError(
-            f"moment {order} is in {unitutils.format_unit(unit)!r}, which is "
-            f"not a unit of velocity^{power} (e.g. "
-            f"{unitutils.format_unit(kms)!r}){hermite}")
+            f"moment {order} is in {gbkfit.units.format_unit(unit)!r}, "
+            f"which is not a unit of velocity^{power} (e.g. "
+            f"{gbkfit.units.format_unit(kms)!r}){hermite}")
     return data if unit.to(kms) == 1 else data.to_unit(kms)
 
 
@@ -170,7 +170,7 @@ def _dimensionless(data: Data, order: int) -> Data:
         return data
     if not unit.is_equivalent(astropy.units.dimensionless_unscaled):
         raise ValueError(
-            f"h{order} is in {unitutils.format_unit(unit)!r}; it is "
+            f"h{order} is in {gbkfit.units.format_unit(unit)!r}; it is "
             f"dimensionless (a central moment is the item moment{order})")
     dimensionless = astropy.units.dimensionless_unscaled
     return data if unit.to(dimensionless) == 1 \

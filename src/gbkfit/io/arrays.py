@@ -15,9 +15,9 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import Choices, DataFile
 from gbkfit.grid import Rest
-from gbkfit.utils import unitutils
 from .formats import read_image, split_file
 from .headers import (
     has_wcs, header_shape, header_unit, parse_wcs, with_shape, with_wcs)
@@ -187,7 +187,7 @@ def read_arrays(
     values, header, orientation, beam = _read(data, **read)
     given = unit is not None
     if isinstance(unit, str):
-        unit = unitutils.parse_unit(unit)
+        unit = gbkfit.units.parse_unit(unit)
     if unit is None:
         unit = _parsed_unit(split_file(data)[0], header)
     errors = None
@@ -449,8 +449,8 @@ def _standard_deviations(
                 if kinds else ""
             raise ValueError(
                 f"{source}: the unit of the errors "
-                f"({unitutils.format_unit(unit)}) is not that of {kind} of "
-                f"the data ({unitutils.format_unit(expected)}){hint}")
+                f"({gbkfit.units.format_unit(unit)}) is not that of {kind} of "
+                f"the data ({gbkfit.units.format_unit(expected)}){hint}")
         errors = errors * unit.to(expected)
     with np.errstate(invalid='ignore'):
         negative = errors < 0
@@ -472,15 +472,16 @@ def _parsed_unit(
     """
     Return the unit of the values of a header (BUNIT), if it has one.
 
-    Raise ValueError if it is not a unit (see unitutils.parse_unit),
-    unless the unit of the data is given: then return None, and the values
-    are taken to be in that unit, as for a header without BUNIT.
+    Raise ValueError if it is not a unit (see
+    gbkfit.units.fits.parse_unit), unless the unit of the data is given:
+    then return None, and the values are taken to be in that unit, as for
+    a header without BUNIT.
     """
     text = header_unit(header)
     if text is None:
         return None
     try:
-        return unitutils.parse_unit(text, 'fits')
+        return gbkfit.units.fits.parse_unit(text)
     except ValueError:
         if given:
             return None
