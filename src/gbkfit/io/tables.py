@@ -153,9 +153,10 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
     """
     Return the units of the columns of an ECSV file, by name: those of
     its header, as read by _unit. There are none if the file is not
-    ECSV, or if its header is not valid (astropy then says how).
+    ECSV, or if its header is not YAML (astropy then says so).
 
-    Raise ValueError if a unit is not one.
+    Raise ValueError if the header does not list the columns, or if a
+    unit is not one.
     """
     with get_readable_fileobj(filename, encoding='binary') as file:
         if file.read(7) != b'# %ECSV':
@@ -177,16 +178,18 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
         header = get_header_from_yaml([line.decode() for line in lines])
     except (UnicodeDecodeError, YamlParseError):
         return {}
+    # The columns, which astropy reads with no check (it fails with a
+    # TypeError where they are missing)
     columns = header.get('datatype') if isinstance(header, dict) else None
-    if not isinstance(columns, list):
-        return {}
-    units = {}
-    for column in columns:
-        if isinstance(column, dict) and 'name' in column \
-                and column.get('unit') is not None:
-            units[column['name']] = _unit(
-                filename, column['name'], str(column['unit']))
-    return units
+    if not isinstance(columns, list) or not all(
+            isinstance(column, dict) and 'name' in column
+            for column in columns):
+        raise ValueError(
+            f"{filename}: the ECSV header does not list its columns "
+            f"(datatype)")
+    return {
+        column['name']: _unit(filename, column['name'], str(column['unit']))
+        for column in columns if column.get('unit') is not None}
 
 
 def _unit(filename: str, column: str, text: str) -> u.UnitBase:
@@ -261,4 +264,6 @@ def read_column(
         raise ValueError(
             f"the column {name!r} is in "
             f"{gbkfit.units.format_unit(column.unit)!r}, which cannot be "
-            f"converted to {gbkfit.units.format_unit(given)!r}") from None
+            f"converted to "
+            f"{gbkfit.units.format_unit(given) or 'dimensionless'!r}"
+        ) from None
