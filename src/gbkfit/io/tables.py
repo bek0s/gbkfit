@@ -81,7 +81,8 @@ def _read_fits_units(table: Table, filename: str) -> None:
             if not column.unit:
                 continue
             try:
-                table[column.name].unit = unitutils.parse_unit(column.unit)
+                table[column.name].unit = unitutils.parse_unit(
+                    column.unit, 'fits')
             except ValueError:
                 raise ValueError(
                     f"{filename}: the unit of the column {column.name!r}, "

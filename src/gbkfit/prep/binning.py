@@ -383,7 +383,7 @@ def pixel_fluxes(
     text = str(header.get('BUNIT', '')).strip()
     if not text:
         return None
-    unit = unitutils.parse_unit(text)
+    unit = unitutils.parse_unit(text, 'fits')
     if unit.is_equivalent(u.K):
         raise ValueError(
             f"{filename}: the data are a brightness temperature ({text!r}), "

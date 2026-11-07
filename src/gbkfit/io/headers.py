@@ -154,7 +154,7 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
         if not _CUNIT_KEYWORDS.fullmatch(key) or not text:
             continue
         try:
-            unitutils.parse_unit(text)
+            unitutils.parse_unit(text, 'fits')
         except ValueError:
             raise ValueError(
                 f"{source}: {key} = {text!r} is not a valid unit (see the "

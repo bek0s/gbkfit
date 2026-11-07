@@ -879,7 +879,9 @@ def test_the_flux_of_a_pixel(unit, factor, flux):
     cube = FitsArrays.read('cube.fits')
     scale, flux_unit = pixel_fluxes(cube.header, cube.beam, 'cube.fits')
     assert scale == pytest.approx(factor, rel=1e-9)
-    assert (1 * flux_unit).to_value(parse_unit(flux)) == pytest.approx(1)
+    # (the units of headers, as the FITS standard writes them)
+    assert (1 * flux_unit).to_value(parse_unit(flux, 'fits')) \
+        == pytest.approx(1)
 
 
 def test_the_noise_of_a_cube_is_that_of_its_negative_values():

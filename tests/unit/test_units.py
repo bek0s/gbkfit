@@ -11,7 +11,17 @@ from gbkfit.model.components._units import (
     BandFactors, DataUnit, LineFactors, line_factors, mass_per_unit)
 from gbkfit.model.components.lines import Band
 from gbkfit.observation.observables._detail import flux_per_area
-from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
+from gbkfit.utils.unitutils import (
+    format_unit, parse_quantity, parse_unit, spatial_unit, unit_convention)
+
+
+@pytest.fixture(autouse=True)
+def fits_units():
+    # (the units of these tests are written as the FITS standard writes
+    # them, e.g. 'Jy/beam km/s'; those of VOUnits, the default, are
+    # tested with their convention given)
+    with unit_convention('fits'):
+        yield
 
 
 @pytest.mark.parametrize('text, unit', [
@@ -109,8 +119,62 @@ def test_units_of_several_slashes_are_read_without_warnings():
 def test_a_power_that_is_not_an_integer_is_written_in_brackets():
     # The FITS standard does not allow 'Hz0.5'
     unit = u.Hz ** 0.5 / u.m ** (1 / 3)
-    assert format_unit(unit) == 'Hz(0.5) m(-1/3)'
-    assert parse_unit(format_unit(unit)) == unit
+    assert format_unit(unit, 'fits') == 'Hz(0.5) m(-1/3)'
+    assert parse_unit(format_unit(unit, 'fits')) == unit
+
+
+@pytest.mark.parametrize('text, unit', [
+    ('km/s', u.km / u.s),
+    ('Jy/beam', u.Jy / u.beam),
+    ('Jy.km/(beam.s)', u.Jy * u.km / (u.beam * u.s)),
+    ('erg.s-1.cm-2.Angstrom-1', u.erg / u.s / u.cm ** 2 / u.Angstrom),
+    ('erg/(s.cm2.Angstrom)', u.erg / u.s / u.cm ** 2 / u.Angstrom),
+    ('solMass/pc2', u.Msun / u.pc ** 2),
+    ('K km/s', u.K * u.km / u.s),
+    ('1e-17erg.s-1', 1e-17 * u.erg / u.s),
+    # Percent is a scale
+    ('1e-2', u.percent),
+    ('', u.dimensionless_unscaled)])
+def test_units_of_vounits(text, unit):
+    parsed = parse_unit(text, 'vounits')
+    assert parsed.is_equivalent(unit)
+    assert (1 * parsed).to_value(unit) == pytest.approx(1, rel=1e-12)
+
+
+def test_texts_that_are_not_units_of_vounits_are_errors():
+    # (several '/', the names of astropy, and the forms of FITS: give
+    # unit_convention: fits for them)
+    for text in ('erg/s/cm2', 'Msun/pc2', 'Jy/beam km/s', '%', 'JY/BEAM'):
+        with pytest.raises(ValueError, match="unit_convention: fits"):
+            parse_unit(text, 'vounits')
+
+
+def test_units_are_written_in_vounits_and_read_back_in_both():
+    units = (
+        u.Jy * u.km / u.beam / u.s, u.Hz ** 0.5 / u.m ** (1 / 3),
+        u.Msun / u.pc ** 2, u.percent, u.dimensionless_unscaled,
+        1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom)
+    for unit in units:
+        unit = u.Unit(unit)
+        text = format_unit(unit)
+        for convention in ('vounits', 'fits'):
+            assert parse_unit(text, convention) == unit, (text, convention)
+
+
+def test_the_convention_of_a_block_is_that_of_parse_unit():
+    # (by default, VOUnits; in a block of FITS, as this module is)
+    with unit_convention('vounits'):
+        with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
+            parse_unit('erg/s/cm2')
+    assert parse_unit('erg/s/cm2') == u.erg / u.s / u.cm ** 2
+    with pytest.raises(ValueError, match="must be one of"):
+        parse_unit('km/s', 'iau')
+
+
+def test_a_quantity_is_a_number_and_a_unit():
+    assert parse_quantity('6562.8 Angstrom', 'vounits') == 6562.8 * u.AA
+    with pytest.raises(ValueError, match="not a number and a unit"):
+        parse_quantity('Angstrom', 'vounits')
 
 
 @pytest.mark.parametrize('text, spatial', [

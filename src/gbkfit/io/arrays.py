@@ -480,7 +480,7 @@ def _parsed_unit(
     if text is None:
         return None
     try:
-        return unitutils.parse_unit(text)
+        return unitutils.parse_unit(text, 'fits')
     except ValueError:
         if given:
             return None

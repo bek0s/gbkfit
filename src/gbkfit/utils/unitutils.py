@@ -1,23 +1,40 @@
 """
-Physical units: reading them from text as the FITS standard writes them
-(e.g. BUNIT), writing them as text, and telling what a unit of light is
-per on the sky.
+Physical units: reading them from text and writing them as text, in the
+convention of VOUnits (the IVOA) or of the FITS standard, and telling
+what a unit of light is per on the sky.
 """
 
+import contextlib
 import re
+from collections.abc import Iterator
+from contextvars import ContextVar
 from fractions import Fraction
 
 import astropy.units
 
 
 __all__ = [
+    'UNIT_CONVENTIONS',
     'format_unit',
+    'parse_quantity',
     'parse_unit',
-    'spatial_unit'
+    'spatial_unit',
+    'unit_convention'
 ]
 
 
-# A regular expression for the separators between the terms of a unit.
+# The conventions of units as text: VOUnits, the recommendation of the
+# IVOA (1.0), and that of the FITS standard (4.0, section 4.3)
+UNIT_CONVENTIONS = ('vounits', 'fits')
+
+# The convention that parse_unit reads in when given none (see
+# unit_convention); a context variable, so that each thread and task
+# has its own
+_CONVENTION: ContextVar[str] = ContextVar(
+    'unit_convention', default='vounits')
+
+# A regular expression for the separators between the terms of a unit,
+# in the convention of FITS.
 # Terms multiply each other: 'Jy/beam km/s' is 'Jy/beam' times 'km/s'.
 # A separator is one of:
 # - a space, as in 'Jy/beam km/s';
@@ -31,28 +48,57 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
 _SPLITTER = re.compile(rf'{_TERM_SEPARATOR.pattern}|[/()]')
 
 
-def parse_unit(text: str) -> astropy.units.UnitBase:
+@contextlib.contextmanager
+def unit_convention(convention: str) -> Iterator[None]:
     """
-    Return the unit that a text states, e.g. 'Jy/beam', 'MJy/sr' or
-    '1e-17 erg/s/cm2/arcsec2'.
+    Read units in a convention (see UNIT_CONVENTIONS) within the block,
+    where parse_unit is given none (e.g. the units of a configuration,
+    see gbkfit.setup.load).
 
-    The text is read by the precedence of the FITS standard
+    Raises
+    ------
+    ValueError
+        If the convention is not one of UNIT_CONVENTIONS.
+    """
+    _check_convention(convention)
+    token = _CONVENTION.set(convention)
+    try:
+        yield
+    finally:
+        _CONVENTION.reset(token)
+
+
+def parse_unit(
+        text: str, convention: str | None = None
+) -> astropy.units.UnitBase:
+    """
+    Return the unit that a text states, in a convention: 'vounits' or
+    'fits' (see UNIT_CONVENTIONS); by default, that of the block (see
+    unit_convention), or else 'vounits'.
+
+    In 'vounits', astropy reads the text (its format 'vounit'). It has
+    at most one '/': 'erg/s/cm2/Angstrom' is not a unit, but
+    'erg.s-1.cm-2.Angstrom-1' and 'erg/(s.cm2.Angstrom)' are; and
+    percent is the scale 0.01 ('1e-2').
+
+    In 'fits', the text is read by the precedence of the FITS standard
     (4.0, 4.3.1): from the left, each '/' divides by what follows it,
     and each space, '*' or '.' multiplies by it; brackets are read
     first, at any depth (see _expression). For example, 'Jy/beam km/s'
     is (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone
-    reads it as Jy / (beam km s).
+    reads it as Jy / (beam km s). The names of units are those that
+    astropy reads, which include those of the FITS standard.
 
-    The names of units are those that astropy reads, which include those
-    of the FITS standard; they are case-sensitive, and nothing is
-    corrected: 'JY/BEAM' is not a unit, and 'S' is the siemens.
-
-    An empty text is dimensionless, as format_unit writes it.
+    In both, names are case-sensitive, and nothing is corrected:
+    'JY/BEAM' is not a unit, and 'S' is the siemens. An empty text is
+    dimensionless.
 
     Parameters
     ----------
     text : str
         The text of the unit.
+    convention : str, optional
+        The convention of the text.
 
     Returns
     -------
@@ -62,22 +108,74 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     Raises
     ------
     ValueError
-        If the text is not a unit.
+        If the text is not a unit in the convention.
     """
-    unit = _unit_of(text)
-    if unit is None:
+    convention = convention or _CONVENTION.get()
+    _check_convention(convention)
+    if convention == 'fits':
+        unit = _unit_of(text)
+        if unit is None:
+            raise ValueError(
+                f"{text!r} is not a valid unit (see the FITS standard, "
+                f"section 4.3)")
+        return unit
+    try:
+        return astropy.units.Unit(text, format='vounit')
+    except ValueError:
         raise ValueError(
-            f"{text!r} is not a valid unit (see the FITS standard, "
-            f"section 4.3)")
-    return unit
+            f"{text!r} is not a valid unit of VOUnits, the recommendation "
+            f"of the IVOA (for units as the FITS standard writes them, "
+            f"give unit_convention: fits)") from None
 
 
-def format_unit(unit: astropy.units.UnitBase) -> str:
+def parse_quantity(
+        text: str, convention: str | None = None
+) -> astropy.units.Quantity:
     """
-    Return a unit as text that parse_unit reads back as the same unit:
-    its scale, then each of its units with its power.
-    For example, 'Jy km beam-1 s-1'.
+    Return the quantity that a text states: a number, a space, and a
+    unit in a convention (see parse_unit).
+    For example, '6562.8 Angstrom'.
+
+    Raises
+    ------
+    ValueError
+        If the text is not a number and a unit.
     """
+    number, _, unit = text.strip().partition(' ')
+    try:
+        value = float(number)
+    except ValueError:
+        raise ValueError(
+            f"{text!r} is not a number and a unit (e.g. "
+            f"'6562.8 Angstrom')") from None
+    return value * parse_unit(unit.strip(), convention)
+
+
+def format_unit(
+        unit: astropy.units.UnitBase, convention: str = 'vounits'
+) -> str:
+    """
+    Return a unit as text in a convention (see UNIT_CONVENTIONS), which
+    parse_unit reads back as the same unit.
+    For example, 'Jy.km.beam**-1.s**-1' in 'vounits', and
+    'Jy km beam-1 s-1' in 'fits'.
+
+    The text in 'vounits' reads back as the same unit in 'fits' too. A
+    unit that VOUnits has no name for (e.g. the electron) is written in
+    'fits', which only that convention reads.
+    """
+    _check_convention(convention)
+    if convention == 'vounits':
+        if unit.is_equivalent(astropy.units.dimensionless_unscaled):
+            # (a scale, e.g. 0.01 for percent: astropy writes none)
+            scale = unit.to(astropy.units.dimensionless_unscaled)
+            return '' if scale == 1 else repr(float(scale))
+        try:
+            # (VOUnits deprecates the units of CGS, e.g. erg and
+            # Angstrom, which astropy would warn of, or convert to SI)
+            return unit.to_string('vounit', deprecations='silent')
+        except ValueError:
+            pass
     # (repr gives the shortest text of the scale that reads back as the
     # same number)
     terms = [] if unit.scale == 1 else [repr(float(unit.scale))]
@@ -266,3 +364,11 @@ def _power(text: str) -> Fraction:
         return Fraction(text)
     except ZeroDivisionError:
         raise ValueError(f"{text!r} divides by 0") from None
+
+
+def _check_convention(convention: str) -> None:
+    """Raise ValueError unless a convention is of UNIT_CONVENTIONS."""
+    if convention not in UNIT_CONVENTIONS:
+        raise ValueError(
+            f"the convention of units must be one of {list(UNIT_CONVENTIONS)}"
+            f"; it is {convention!r}")

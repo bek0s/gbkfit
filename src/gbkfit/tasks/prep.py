@@ -578,7 +578,7 @@ def prep_region_spectra(
         factor = np.reshape(fluxes[0], (-1, 1))
         spectra = spectra * factor
         errors = None if errors is None else errors * factor
-        header['BUNIT'] = unitutils.format_unit(fluxes[1])
+        header['BUNIT'] = unitutils.format_unit(fluxes[1], 'fits')
     _write_bins(bins_header, index, file_bins, output_dir)
     FitsArrays(
         spectra, errors, np.isfinite(spectra).astype(float),

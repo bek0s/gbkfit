@@ -52,7 +52,7 @@ def read_image(
         wcss = list(_instances(file.tree, gwcs.WCS))
     header = astropy.io.fits.Header()
     if unit is not None:
-        header['BUNIT'] = unitutils.format_unit(unit)
+        header['BUNIT'] = unitutils.format_unit(unit, 'fits')
     if len(wcss) > 1:
         raise ValueError(
             f"{filename}: its tree has {len(wcss)} WCSs; files of one are "
