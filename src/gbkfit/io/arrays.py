@@ -15,7 +15,7 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
-from gbkfit.config import Choices, DataFile, warn
+from gbkfit.config import Choices, DataFile
 from gbkfit.grid import Rest
 from gbkfit.utils import unitutils
 from .formats import read_image, split_file
@@ -185,16 +185,18 @@ def read_arrays(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         medium=medium, ndim=ndim)
     values, header, orientation, beam = _read(data, **read)
+    given = unit is not None
     if isinstance(unit, str):
         unit = unitutils.parse_unit(unit)
-    unit = unit or _parsed_unit(split_file(data)[0], header)
+    if unit is None:
+        unit = _parsed_unit(split_file(data)[0], header)
     errors = None
     if error is not None:
         errors, error_header = _read_companion(
             error, header, orientation, **read)
         errors = _standard_deviations(
             split_file(error)[0], errors, error_kind,
-            _parsed_unit(split_file(error)[0], error_header), unit)
+            _parsed_unit(split_file(error)[0], error_header, given), unit)
     masks = None
     if mask is not None:
         masks, _ = _read_companion(mask, header, orientation, **read)
@@ -465,21 +467,27 @@ def _standard_deviations(
 
 
 def _parsed_unit(
-        source: str, header: astropy.io.fits.Header
+        source: str, header: astropy.io.fits.Header, given: bool = False
 ) -> u.UnitBase | None:
     """
-    Return the unit of the values of a header (BUNIT), if it has one that
-    is a unit (see unitutils.parse_unit); one that is not is left out,
-    with a warning (see warn).
+    Return the unit of the values of a header (BUNIT), if it has one.
+
+    Raise ValueError if it is not a unit (see unitutils.parse_unit),
+    unless the unit of the data is given: then return None, and the values
+    are taken to be in that unit, as for a header without BUNIT.
     """
     text = header_unit(header)
     if text is None:
         return None
     try:
         return unitutils.parse_unit(text)
-    except ValueError as e:
-        warn(f"{source}: BUNIT is left out: {e}")
-        return None
+    except ValueError:
+        if given:
+            return None
+        raise ValueError(
+            f"{source}: BUNIT = {text!r} is not a unit as the FITS standard "
+            f"writes units; give the unit of the data (option unit), or "
+            f"correct BUNIT in a copy of the file") from None
 
 
 def _floats(values: np.ndarray) -> np.ndarray:

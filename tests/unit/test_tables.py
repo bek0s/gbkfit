@@ -1,6 +1,7 @@
 import astropy.units as u
 import numpy as np
 import pytest
+from astropy.io import fits
 from astropy.table import Table
 
 from gbkfit.io import read_column, read_table
@@ -46,3 +47,19 @@ def test_a_table_of_a_format_astropy_cannot_tell_needs_its_format(tmp_path):
         read_table(str(path))
     table = read_table(str(path), 'ascii.csv')
     assert table.colnames == ['v']
+
+
+def test_the_units_of_a_fits_table_are_read_by_the_fits_standard(tmp_path):
+    # (astropy alone reads 'Jy/beam km/s' as Jy / (beam km s)); a unit
+    # that is not one is an error
+    path = str(tmp_path / 'table.fits')
+    columns = [fits.Column('m0', 'D', unit='Jy/beam km/s', array=[1.0]),
+               fits.Column('v', 'D', unit='km/s', array=[2.0])]
+    fits.BinTableHDU.from_columns(columns).writeto(path)
+    table = read_table(path)
+    assert read_column(table, 'm0', None).unit == u.Jy * u.km / u.beam / u.s
+    assert read_column(table, 'v', None).unit == u.km / u.s
+    columns[1] = fits.Column('v', 'D', unit='KM/S', array=[2.0])
+    fits.BinTableHDU.from_columns(columns).writeto(path, overwrite=True)
+    with pytest.raises(ValueError, match="column 'v', 'KM/S', is not a"):
+        read_table(path)

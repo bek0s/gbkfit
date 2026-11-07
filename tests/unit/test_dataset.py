@@ -543,12 +543,12 @@ def test_moments_of_datasets_are_checked(call, message):
 
 
 def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
-    # BUNIT in capitals, as radio headers write it, and the beam in
-    # degrees; the options of the configuration replace them, a BUNIT
-    # that is not a unit is left out, and a dump keeps them
+    # The BUNIT and the beam (in degrees) of the header; the options of
+    # the configuration replace them, a BUNIT that is not a unit is an
+    # error unless a unit is given, and a dump keeps them
     import astropy.units as u
     header = fits.Header(dict(
-        BUNIT='JY/BEAM.KM/S', BMAJ=66 / 3600, BMIN=53.7 / 3600, BPA=-66.5))
+        BUNIT='Jy/beam.km/s', BMAJ=66 / 3600, BMIN=53.7 / 3600, BPA=-66.5))
     fits.writeto(tmp_path / 'm0.fits', np.ones((8, 20)), header)
     data, _ = Data.from_files(str(tmp_path / 'm0.fits'))
     assert data.unit() == u.Jy * u.km / u.s / u.beam
@@ -559,7 +559,10 @@ def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
     assert given.unit() == u.K * u.km / u.s and given.beam().bmin == 8
     fits.writeto(tmp_path / 'odd.fits', np.ones((8, 20)),
                  fits.Header(dict(BUNIT='counts per banana')))
-    assert Data.from_files(str(tmp_path / 'odd.fits'))[0].unit() is None
+    with pytest.raises(ValueError, match="'counts per banana' is not a"):
+        Data.from_files(str(tmp_path / 'odd.fits'))
+    assert Data.from_files(
+        str(tmp_path / 'odd.fits'), unit='ct')[0].unit() == u.ct
     dataset = DatasetPixelMoments({0: data})
     info = dataset.dump(str(tmp_path / 'dump_'))
     assert info['moment0']['unit'] == 'Jy km beam-1 s-1'
@@ -568,23 +571,21 @@ def test_data_have_the_unit_and_beam_of_their_header(tmp_path):
     assert loaded['moment0'].beam().bpa == pytest.approx(-66.5)
 
 
-def test_a_moment_of_velocity_of_a_unit_that_cannot_be_read_is_refused(
-        tmp_path):
-    # (without its unit, it would be taken to be in km/s, which that unit
-    # may not be); a moment 0 is read without it, and a unit given
-    # replaces it
+def test_data_of_a_bunit_that_is_not_a_unit_need_a_unit(tmp_path):
+    # (any data, not only velocities, which would be taken to be in km/s);
+    # a unit given replaces it
     header = fits.Header(dict(BUNIT='counts per banana'))
     for name in ('moment0', 'moment1'):
         fits.writeto(tmp_path / f'{name}.fits', np.ones((8, 20)), header)
-    with pytest.raises(ValueError, match="moment1, BUNIT = 'counts per"):
-        dataset_parser.load(dict(
-            type='pixel_moments',
-            moment1=dict(data=str(tmp_path / 'moment1.fits'))))
+        with pytest.raises(ValueError, match="'counts per banana' is not a"):
+            dataset_parser.load(dict(
+                type='pixel_moments',
+                **{name: dict(data=str(tmp_path / f'{name}.fits'))}))
     dataset = dataset_parser.load(dict(
         type='pixel_moments',
-        moment0=dict(data=str(tmp_path / 'moment0.fits')),
+        moment0=dict(data=str(tmp_path / 'moment0.fits'), unit='ct'),
         moment1=dict(data=str(tmp_path / 'moment1.fits'), unit='m/s')))
-    assert dataset['moment0'].unit() is None
+    assert dataset['moment0'].unit() == u.ct
     np.testing.assert_allclose(dataset['moment1'].data(), 1e-3)
 
 

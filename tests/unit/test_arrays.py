@@ -2,6 +2,7 @@
 Tests for the reading of data with their errors and mask.
 """
 
+import astropy.units
 import astropy.wcs
 import numpy as np
 import pytest
@@ -176,12 +177,18 @@ def test_the_beams_follow_the_channels_past_an_axis_of_stokes(tmp_path):
     np.testing.assert_allclose(arrays.beam['bmaj'], [4, 3, 2, 1])
 
 
-def test_a_bunit_that_is_not_a_unit_is_left_out_with_a_warning(
-        tmp_path, caplog):
-    write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE | dict(BUNIT='Jy/bm'))
-    arrays = read_arrays(str(tmp_path / 'data.fits'))
-    assert arrays.unit is None
-    assert "BUNIT is left out" in caplog.text
+def test_a_bunit_that_is_not_a_unit_is_an_error_unless_a_unit_is_given(
+        tmp_path):
+    # (the errors are then in the unit given, as without BUNIT)
+    for name in ('data', 'error'):
+        write(tmp_path / f'{name}.fits', np.ones(SHAPE),
+              CUBE | dict(BUNIT='Jy/bm'))
+    data, error = str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits')
+    with pytest.raises(ValueError, match="BUNIT = 'Jy/bm' is not a unit"):
+        read_arrays(data)
+    arrays = read_arrays(data, error, unit='Jy/beam')
+    assert arrays.unit == astropy.units.Jy / astropy.units.beam
+    np.testing.assert_allclose(arrays.error, 1)
 
 
 def test_world_axes_beyond_the_array_are_flat(tmp_path):

@@ -5,8 +5,10 @@ astropy, and their columns, with units.
 
 from typing import Any
 
+import astropy.io.fits
 import astropy.units as u
 import numpy as np
+from astropy.io.fits.connect import is_fits
 from astropy.io.registry import IORegistryError
 from astropy.table import Table
 
@@ -49,13 +51,43 @@ def read_table(file: Any, format_: str | None = None) -> Table:
     """
     filename = parse_file(file)[0]
     try:
-        return Table.read(filename, format=format_)
+        table = Table.read(filename, format=format_)
     except IORegistryError:
         raise ValueError(
             f"cannot tell the format of the table {filename}: give it "
             f"(format, e.g. ascii.csv)") from None
     except ValueError as e:
         raise ValueError(f"cannot read the table {filename}: {e}") from e
+    if format_ == 'fits' or format_ is None and is_fits(
+            'read', filename, None):
+        _read_fits_units(table, filename)
+    return table
+
+
+def _read_fits_units(table: Table, filename: str) -> None:
+    """
+    Give the columns of a table of a FITS file (its first HDU of a table,
+    which astropy reads) the units of their TUNITn as parse_unit reads
+    them: astropy reads them by its own precedence, e.g. 'Jy/beam km/s'
+    as Jy / (beam km s) (see unitutils.parse_unit).
+
+    Raise ValueError if a TUNITn is not a unit.
+    """
+    with astropy.io.fits.open(filename) as hdus:
+        hdu = next(
+            hdu for hdu in hdus if isinstance(
+                hdu, (astropy.io.fits.BinTableHDU, astropy.io.fits.TableHDU)))
+        for column in hdu.columns:
+            if not column.unit:
+                continue
+            try:
+                table[column.name].unit = unitutils.parse_unit(column.unit)
+            except ValueError:
+                raise ValueError(
+                    f"{filename}: the unit of the column {column.name!r}, "
+                    f"{column.unit!r}, is not a unit as the FITS standard "
+                    f"writes units; correct it in a copy of the file"
+                ) from None
 
 
 def read_column(table: Table, name: Any, unit: str | None) -> u.Quantity:

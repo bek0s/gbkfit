@@ -16,10 +16,10 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
 
 @pytest.mark.parametrize('text, unit', [
     ('Jy/beam', u.Jy / u.beam),
-    ('JY/BEAM', u.Jy / u.beam),
     # astropy alone reads these as Jy / (beam km s)
     ('Jy/beam km/s', u.Jy * u.km / u.s / u.beam),
-    ('JY/BEAM.KM/S', u.Jy * u.km / u.s / u.beam),
+    ('Jy/beam.km/s', u.Jy * u.km / u.s / u.beam),
+    ('Jy/beam*km/s', u.Jy * u.km / u.s / u.beam),
     # (a '.' after a digit separates terms too, as one after a letter)
     ('W/m2.Hz', u.W * u.Hz / u.m ** 2),
     # (spaces around a '/' do not separate terms)
@@ -27,40 +27,21 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('Jy / beam km/s', u.Jy * u.km / u.s / u.beam),
     ('Jy beam-1 km s-1', u.Jy * u.km / u.s / u.beam),
     ('K km/s', u.K * u.km / u.s),
-    # Capitals that are units of their own too (S, the siemens)
-    ('S', u.s),
-    ('M/S', u.m / u.s),
-    # The spellings of AIPS (e.g. the moments of THINGS): B is the beam
-    ('JY/B*M/S', u.Jy * u.m / u.s / u.beam),
-    ('JY/B', u.Jy / u.beam),
-    # (not the byte, which no data are in, in any case)
-    ('Jy/B', u.Jy / u.beam),
-    ('B', u.beam),
-    # (only the names that need it: mJy is not MJy)
-    ('mJy/B', u.mJy / u.beam),
-    ('mHz/S', u.mHz / u.s),
-    # (invalid names in any case)
-    ('Jy/Beam', u.Jy / u.beam),
-    ('Km/s', u.km / u.s),
-    ('METR/SEC', u.m / u.s),
-    # The spellings of SDSS (e.g. MaNGA): ang is the angstrom, a spaxel a
-    # pixel
-    ('1E-17 erg/s/cm^2/ang/spaxel',
-     1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom / u.pix),
+    ('K.km.s-1', u.K * u.km / u.s),
     ('MJy/sr', u.MJy / u.sr),
     ('10**(-20)*erg/s/cm**2/Angstrom',
      1e-20 * u.erg / u.s / u.cm ** 2 / u.Angstrom),
-    # A is the angstrom (no data are in amperes)
-    ('1E-20 erg/s/cm2/A', 1e-20 * u.erg / u.s / u.cm ** 2 / u.Angstrom),
+    ('1E-17 erg/s/cm^2/Angstrom/pix',
+     1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom / u.pix),
     ('1.5e-17 erg/s/cm2/arcsec2',
      1.5e-17 * u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
     ('Msun/pc2', u.Msun / u.pc ** 2),
-    # (M_sun is a name: not M, which would be the metre)
     ('M_sun/pc2', u.Msun / u.pc ** 2),
-    # The spellings of HST and of CCD software
-    ('ELECTRONS/S', u.electron / u.s),
-    ('counts/s', u.ct / u.s),
-    ('ADU', u.adu),
+    ('electron/s', u.electron / u.s),
+    ('ct/s', u.ct / u.s),
+    ('adu', u.adu),
+    # A text that starts with a '/', as the FITS standard allows ('/m3')
+    ('/s', 1 / u.s),
     # (as format_unit writes a dimensionless unit)
     ('', u.dimensionless_unscaled),
     # astropy's own forms, with spaces around a '/' and brackets
@@ -76,10 +57,7 @@ from gbkfit.utils.unitutils import format_unit, parse_unit, spatial_unit
     ('(km/s)**2', u.km ** 2 / u.s ** 2),
     ('(km/s)^(-2)', u.s ** 2 / u.km ** 2),
     ('(m2)^(1/2)', u.m),
-    # (a power in braces, as MaNGA writes inverse variances)
-    ('(km/s)^{-2}', u.s ** 2 / u.km ** 2),
-    ('(1E-17 erg/s/cm^2/ang/spaxel)^{-2}',
-     (1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom / u.pix) ** -2)])
+    ('m(3/2)', u.m ** 1.5)])
 def test_units_are_read_as_they_are_meant(text, unit):
     parsed = parse_unit(text)
     assert parsed.is_equivalent(unit)
@@ -95,19 +73,28 @@ def test_what_is_not_a_unit_is_an_error():
             '(km/s)^(1/0)'):
         with pytest.raises(ValueError, match="is not a unit"):
             parse_unit(text)
-    # No data are in units of the ampere (e.g. G, the gauss), the mole,
-    # the candela or the bit
-    for text in ('G', 'mA', 'mol', 'cd', 'bit'):
-        with pytest.raises(ValueError, match="which no data are in"):
+    # Names are not corrected: these are not the names of units, in the
+    # case that the FITS standard gives them
+    for text in (
+            'JY/BEAM', 'Jy/Beam', 'KM/S', 'METR/SEC', 'JY/B*M/S',
+            'ELECTRONS/S', '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}'):
+        with pytest.raises(ValueError, match="is not a unit"):
             parse_unit(text)
+
+
+def test_names_are_read_as_the_units_they_name():
+    # Nothing is corrected: S is the siemens, A the ampere and B the byte
+    assert parse_unit('S') == u.S
+    assert parse_unit('erg/s/cm2/A') == u.erg / u.s / u.cm ** 2 / u.A
+    assert parse_unit('B') == u.byte
 
 
 def test_a_unit_that_is_refused_raises_no_warnings():
     # (astropy warns of several '/' when it reads the text as a whole)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        with pytest.raises(ValueError, match="which no data are in"):
-            parse_unit('erg/s/cm2/G')
+        with pytest.raises(ValueError, match="is not a unit"):
+            parse_unit('erg/s/cm2/banana')
     assert not caught
 
 
@@ -128,9 +115,9 @@ def test_a_power_that_is_not_whole_is_written_in_brackets():
 
 @pytest.mark.parametrize('text, spatial', [
     ('Jy/beam', u.beam),
-    ('JY/B*M/S', u.beam),
+    ('Jy.m/(beam.s)', u.beam),
     ('Jy/pixel', u.pix),
-    ('1E-17 erg/s/cm^2/Angstrom/spaxel', u.pix),
+    ('1E-17 erg/s/cm^2/Angstrom/pix', u.pix),
     ('MJy/sr', u.sr),
     ('1e-17 erg/s/cm2/arcsec2', u.sr),
     ('Jy deg-2', u.sr),
@@ -384,6 +371,6 @@ def test_the_mass_of_a_unit_of_light(info, expected):
 
 
 def test_data_per_pixel_named_so():
-    # (e.g. BUNIT JY/PIXEL): the light of a pixel, as without the name
-    assert factors('Jy km/s/arcsec2', 'JY/PIXEL')(470) \
+    # (e.g. BUNIT Jy/pixel): the light of a pixel, as without the name
+    assert factors('Jy km/s/arcsec2', 'Jy/pixel')(470) \
         == pytest.approx(PIXEL * doppler(470) ** -4, rel=1e-12)

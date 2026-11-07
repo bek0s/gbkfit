@@ -591,17 +591,27 @@ def test_binned_maps_to_one_value_per_bin():
     assert coords.rpix == (11.5, 9.5)
 
 
+def test_prep_refuses_data_of_a_bunit_that_is_not_a_unit():
+    # (prep reads data as they are: it corrects no unit)
+    fits.writeto('bins.fits', np.zeros((2, 2), np.int32))
+    fits.writeto('vel.fits', np.ones((2, 2)),
+                 fits.Header(dict(BUNIT='METR/SEC')))
+    with pytest.raises(ValueError, match="BUNIT = 'METR/SEC' is not a unit"):
+        prep.prep_region_moments(
+            'bins.fits', ['vel.fits'], [None], None, 'float32')
+
+
 def test_binned_maps_keep_their_unit():
     # (a moment 1 in m/s: without its unit, it would be read in km/s)
     bins = np.array([[0, 0], [1, 1]])
     fits.writeto('bins.fits', bins.astype(np.int32))
     fits.writeto('vel.fits', np.array([[1e5, 1e5], [2e5, 2e5]]),
-                 fits.Header(dict(BUNIT='METR/SEC')))
+                 fits.Header(dict(BUNIT='m/s')))
     fits.writeto('evel.fits', np.full((2, 2), 5e3))
     prep.prep_region_moments(
         'bins.fits', ['vel.fits'], ['evel.fits'], None, 'float32')
-    assert fits.getheader('prep_vel.fits')['BUNIT'] == 'METR/SEC'
-    assert fits.getheader('prep_vel_error.fits')['BUNIT'] == 'METR/SEC'
+    assert fits.getheader('prep_vel.fits')['BUNIT'] == 'm/s'
+    assert fits.getheader('prep_vel_error.fits')['BUNIT'] == 'm/s'
     from gbkfit.dataset import dataset_parser
     dataset = dataset_parser.load(dict(
         type='region_moments',
@@ -854,7 +864,7 @@ def test_region_spectra_are_the_sums_of_the_spectra_of_their_bins():
 @pytest.mark.parametrize('unit, factor, flux', [
     # (pixels of 2 arcsec: 4 arcsec^2)
     ('1e-20 erg/s/cm2/Angstrom', 1, '1e-20 erg/s/cm2/Angstrom'),
-    ('JY/PIXEL', 1, 'Jy'),
+    ('Jy/pixel', 1, 'Jy'),
     ('1e-17 erg/s/cm2/Angstrom/arcsec2', 4, '1e-17 erg/s/cm2/Angstrom'),
     ('MJy/sr', 4 / 206264.806 ** 2, 'MJy')])
 def test_the_flux_of_a_pixel(unit, factor, flux):

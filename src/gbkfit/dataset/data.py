@@ -278,7 +278,7 @@ class Data:
         """
         Read a data item from files, with the unit and the beam of the
         header of the file of its values unless given (a unit of the
-        header that is not a unit is left out), and the correlation of its
+        header that is not a unit is an error), and the correlation of its
         noise, if any.
 
         The values, their mask, errors and footprint are read in the
