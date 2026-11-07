@@ -485,9 +485,9 @@ def _parsed_unit(
         if given:
             return None
         raise ValueError(
-            f"{source}: BUNIT = {text!r} is not a unit as the FITS standard "
-            f"writes units; give the unit of the data (option unit), or "
-            f"correct BUNIT in a copy of the file") from None
+            f"{source}: BUNIT = {text!r} is not a valid unit (see the FITS "
+            f"standard, section 4.3); give the unit of the data (option "
+            f"unit), or correct BUNIT in a copy of the file") from None
 
 
 def _floats(values: np.ndarray) -> np.ndarray:

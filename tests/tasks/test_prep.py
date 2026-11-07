@@ -596,7 +596,7 @@ def test_prep_refuses_data_of_a_bunit_that_is_not_a_unit():
     fits.writeto('bins.fits', np.zeros((2, 2), np.int32))
     fits.writeto('vel.fits', np.ones((2, 2)),
                  fits.Header(dict(BUNIT='METR/SEC')))
-    with pytest.raises(ValueError, match="BUNIT = 'METR/SEC' is not a unit"):
+    with pytest.raises(ValueError, match="BUNIT = 'METR/SEC' is not a"):
         prep.prep_region_moments(
             'bins.fits', ['vel.fits'], [None], None, 'float32')
 

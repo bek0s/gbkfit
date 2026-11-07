@@ -85,8 +85,9 @@ def _read_fits_units(table: Table, filename: str) -> None:
             except ValueError:
                 raise ValueError(
                     f"{filename}: the unit of the column {column.name!r}, "
-                    f"{column.unit!r}, is not a unit as the FITS standard "
-                    f"writes units; correct it in a copy of the file"
+                    f"{column.unit!r}, is not a valid unit (see the FITS "
+                    f"standard, section 4.3); correct it in a copy of the "
+                    f"file"
                 ) from None
 
 

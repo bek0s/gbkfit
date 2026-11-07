@@ -71,14 +71,14 @@ def test_what_is_not_a_unit_is_an_error():
             'banana', 'Jy/', 'Jy//beam', 'Jy..km', 'Jy *', '.', '*',
             '(Jy', 'Jy)', ')Jy(', '()', '(km/s)**', '(km/s)x',
             '(km/s)^(1/0)'):
-        with pytest.raises(ValueError, match="is not a unit"):
+        with pytest.raises(ValueError, match="is not a valid unit"):
             parse_unit(text)
     # Names are not corrected: these are not the names of units, in the
     # case that the FITS standard gives them
     for text in (
             'JY/BEAM', 'Jy/Beam', 'KM/S', 'METR/SEC', 'JY/B*M/S',
             'ELECTRONS/S', '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}'):
-        with pytest.raises(ValueError, match="is not a unit"):
+        with pytest.raises(ValueError, match="is not a valid unit"):
             parse_unit(text)
 
 
@@ -93,7 +93,7 @@ def test_a_unit_that_is_refused_raises_no_warnings():
     # (astropy warns of several '/' when it reads the text as a whole)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
-        with pytest.raises(ValueError, match="is not a unit"):
+        with pytest.raises(ValueError, match="is not a valid unit"):
             parse_unit('erg/s/cm2/banana')
     assert not caught
 

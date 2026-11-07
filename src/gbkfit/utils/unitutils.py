@@ -66,8 +66,8 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     unit = _unit_of(text)
     if unit is None:
         raise ValueError(
-            f"{text!r} is not a unit (e.g. 'Jy/beam', 'K', 'MJy/sr', "
-            f"'1e-17 erg/s/cm2/arcsec2')")
+            f"{text!r} is not a valid unit (see the FITS standard, "
+            f"section 4.3)")
     return unit
 
 

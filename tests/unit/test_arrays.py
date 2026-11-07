@@ -184,7 +184,7 @@ def test_a_bunit_that_is_not_a_unit_is_an_error_unless_a_unit_is_given(
         write(tmp_path / f'{name}.fits', np.ones(SHAPE),
               CUBE | dict(BUNIT='Jy/bm'))
     data, error = str(tmp_path / 'data.fits'), str(tmp_path / 'error.fits')
-    with pytest.raises(ValueError, match="BUNIT = 'Jy/bm' is not a unit"):
+    with pytest.raises(ValueError, match="BUNIT = 'Jy/bm' is not a valid"):
         read_arrays(data)
     arrays = read_arrays(data, error, unit='Jy/beam')
     assert arrays.unit == astropy.units.Jy / astropy.units.beam
