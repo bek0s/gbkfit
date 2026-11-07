@@ -1,6 +1,7 @@
 """
 Physical units of data and models: reading them from the text of
-configurations and of FITS headers (BUNIT), and writing them back as text.
+configurations and of FITS headers (BUNIT), and writing them back as
+text.
 """
 
 import re
@@ -36,11 +37,11 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
     '1e-17 erg/s/cm2/arcsec2'.
 
     The text is read by the precedence of the FITS standard
-    (4.0, 4.3.1): from the left, each '/' divides by what follows it, and
-    each space, '*' or '.' multiplies by it; brackets are read first, at
-    any depth (see _expression). For example, 'Jy/beam km/s' is
-    (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone reads it
-    as Jy / (beam km s).
+    (4.0, 4.3.1): from the left, each '/' divides by what follows it,
+    and each space, '*' or '.' multiplies by it; brackets are read
+    first, at any depth (see _expression). For example, 'Jy/beam km/s'
+    is (Jy/beam) (km/s), as maps of moment 0 mean it; astropy alone
+    reads it as Jy / (beam km s).
 
     The names of units are those that astropy reads, which include those
     of the FITS standard; they are case-sensitive, and nothing is
@@ -73,8 +74,8 @@ def parse_unit(text: str) -> astropy.units.UnitBase:
 
 def format_unit(unit: astropy.units.UnitBase) -> str:
     """
-    Return a unit as text that parse_unit reads back as the same unit: its
-    scale, then each of its units with its power.
+    Return a unit as text that parse_unit reads back as the same unit:
+    its scale, then each of its units with its power.
     For example, 'Jy km beam-1 s-1'.
     """
     # (repr gives the shortest text of the scale that reads back as the
@@ -87,8 +88,8 @@ def format_unit(unit: astropy.units.UnitBase) -> str:
         elif power == int(power):
             terms.append(f'{name}{int(power)}')
         else:
-            # The FITS standard allows a power that is not an integer only
-            # in brackets: 'Hz(0.5)', not 'Hz0.5'
+            # The FITS standard allows a power that is not an integer
+            # only in brackets: 'Hz(0.5)', not 'Hz0.5'
             terms.append(f'{name}({power})')
     return ' '.join(terms)
 
@@ -100,8 +101,8 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
     - a beam (beam), e.g. Jy/beam;
     - a solid angle (sr), e.g. MJy/sr or erg/s/cm2/arcsec2;
     - a pixel, if the unit names it (pix), e.g. Jy/pixel;
-    - nothing else (dimensionless): the light is that of a whole pixel or
-      region, e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel.
+    - nothing else (dimensionless): the light is that of a whole pixel
+      or region, e.g. 1e-20 erg/s/cm2/Angstrom of a spaxel.
 
     Raises
     ------
@@ -113,9 +114,9 @@ def spatial_unit(unit: astropy.units.UnitBase) -> astropy.units.UnitBase:
         return astropy.units.beam
     if astropy.units.pix in unit.bases:
         return astropy.units.pix
-    # The sum of the powers of the angles of the unit, a solid angle (e.g.
-    # sr) counting as an angle squared: -2 for a unit per solid angle (per
-    # sr, or per arcsec2)
+    # The sum of the powers of the angles of the unit, a solid angle
+    # (e.g. sr) counting as an angle squared: -2 for a unit per solid
+    # angle (per sr, or per arcsec2)
     power = 0
     for base, base_power in zip(unit.bases, unit.powers):
         if base.physical_type == 'solid angle':
@@ -144,26 +145,27 @@ def _unit_of(text: str) -> astropy.units.UnitBase | None:
 
 def _expression(text: str) -> astropy.units.UnitBase:
     """
-    Return the unit of a text of operands and operators, read from the left
-    by the precedence of the FITS standard (4.0, 4.3.1): a '/' divides by
-    the operand after it, and a separator of terms (see _TERM_SEPARATOR)
-    multiplies by it.
+    Return the unit of a text of operands and operators, read from the
+    left by the precedence of the FITS standard (4.0, 4.3.1): a '/'
+    divides by the operand after it, and a separator of terms
+    (see _TERM_SEPARATOR) multiplies by it.
     For example, 'Jy/beam km/s' is Jy km / (beam s).
 
     An operand is either an expression in brackets (see _bracketed), or
     else a unit that astropy reads, e.g. 'km', 'cm2' or '10**(-17)'.
-    astropy never reads a '/' between operands, so it never warns of a text
-    with several '/' (the FITS standard discourages them); silencing that
-    warning here would silence it in every other thread too.
+    astropy never reads a '/' between operands, so it never warns of a
+    text with several '/' (the FITS standard discourages them);
+    silencing that warning here would silence it in every other thread
+    too.
 
-    An empty text is dimensionless, and so is the operand before a '/' that
-    starts the text: '/s' is 1/s.
+    An empty text is dimensionless, and so is the operand before a '/'
+    that starts the text: '/s' is 1/s.
 
-    Raise ValueError if an operand is not a unit or is missing (e.g. 'Jy/'
-    or 'Jy..km'), or if the brackets do not match.
+    Raise ValueError if an operand is not a unit or is missing
+    (e.g. 'Jy/' or 'Jy..km'), or if the brackets do not match.
     """
-    # Remove the spaces around each '/', '*' and '.', and at the ends of the
-    # text, as they do not separate terms.
+    # Remove the spaces around each '/', '*' and '.', and at the ends of
+    # the text, as they do not separate terms.
     # For example, 'Jy/beam km / s' becomes 'Jy/beam km/s'.
     for operator in '/*.':
         text = operator.join(part.strip() for part in text.split(operator))
@@ -184,9 +186,9 @@ def _expression(text: str) -> astropy.units.UnitBase:
 
 def _split(text: str) -> list[tuple[str, str]]:
     """
-    Return the operands of a text, split at the operators outside brackets,
-    each with the operator before it: '/', or '*' for a separator of terms
-    and for the first operand.
+    Return the operands of a text, split at the operators outside
+    brackets, each with the operator before it: '/', or '*' for a
+    separator of terms and for the first operand.
     For example, 'Jy/(beam pix) km' gives
     [('*', 'Jy'), ('/', '(beam pix)'), ('*', 'km')].
 
@@ -215,19 +217,20 @@ def _split(text: str) -> list[tuple[str, str]]:
 def _bracketed(operand: str) -> astropy.units.UnitBase:
     """
     Return the unit of an operand that starts with a bracket: the
-    expression in the brackets (see _expression), to the power after them,
-    if any.
+    expression in the brackets (see _expression), to the power after
+    them, if any.
     For example, '(km/s)', '(km/s)2', '(km/s)**2' or '(km/s)^(-1/2)'.
 
-    Such an operand is read here, not by astropy as any other operand is,
-    because the brackets hold a whole expression, which astropy would read
-    by its own precedence: '(Jy/beam km/s)' as Jy / (beam km s).
+    Such an operand is read here, not by astropy as any other operand
+    is, because the brackets hold a whole expression, which astropy
+    would read by its own precedence: '(Jy/beam km/s)' as
+    Jy / (beam km s).
 
-    Raise ValueError if the expression is empty or not a unit, or if the
-    power is not a number.
+    Raise ValueError if the expression is empty or not a unit, or if
+    the power is not a number.
     """
-    # The index of the bracket that closes the first one (the brackets of
-    # an operand match, see _split)
+    # The index of the bracket that closes the first one (the brackets
+    # of an operand match, see _split)
     depth = 0
     for close, char in enumerate(operand):
         if char == '(':
