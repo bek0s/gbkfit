@@ -261,9 +261,8 @@ def read_column(
     try:
         return (values * column.unit).to(given)
     except u.UnitConversionError:
+        target = gbkfit.units.format_unit(given) or 'dimensionless'
         raise ValueError(
             f"the column {name!r} is in "
             f"{gbkfit.units.format_unit(column.unit)!r}, which cannot be "
-            f"converted to "
-            f"{gbkfit.units.format_unit(given) or 'dimensionless'!r}"
-        ) from None
+            f"converted to {target!r}") from None
