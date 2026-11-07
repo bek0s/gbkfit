@@ -1,7 +1,7 @@
 """
-Physical units of data and models: reading them from the text of
-configurations and of FITS headers (BUNIT), and writing them back as
-text.
+Physical units: reading them from text as the FITS standard writes them
+(e.g. BUNIT), writing them as text, and telling what a unit of light is
+per on the sky.
 """
 
 import re
