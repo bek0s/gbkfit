@@ -2,7 +2,7 @@ import astropy.units as u
 import numpy as np
 import pytest
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import QTable, Table
 
 from gbkfit.io import read_column, read_table
 
@@ -122,3 +122,12 @@ def test_a_column_of_complex_numbers_is_refused():
     # (its imaginary part was dropped)
     with pytest.raises(ValueError, match="of complex numbers"):
         read_column(Table(dict(c=[1 + 2j])), 'c', None)
+
+
+def test_the_columns_of_a_qtable_are_read_in_their_units():
+    # (Quantities, masked or not, whose unit was applied twice)
+    table = QTable(dict(v=[1.0, 2.0] * u.km / u.s), masked=True)
+    table['v'].mask = [False, True]
+    values = read_column(table, 'v', 'm/s')
+    assert values.unit == u.m / u.s and values[0].value == 1000
+    assert np.isnan(values[1])

@@ -11,6 +11,7 @@ from astropy.io.registry import IORegistryError
 from astropy.table import Table
 from astropy.table.meta import YamlParseError, get_header_from_yaml
 from astropy.utils.data import get_readable_fileobj
+from astropy.utils.masked import Masked
 
 import gbkfit.units
 
@@ -57,10 +58,11 @@ def read_table(
     OSError
         If the file cannot be read (e.g. it is missing).
     ValueError
-        If astropy cannot tell its format or read it as a table of that
-        format, if the file is not FITS but the format or an HDU says it
-        is, if the HDU holds no table, or if the unit of a column is not
-        a unit.
+        If the format is not one that astropy reads, or cannot be told;
+        if the file is not a table of its format (e.g. an ECSV header
+        that lists no columns); if an HDU is given for a table not read
+        as FITS, or holds no table; or if the unit of a column is not a
+        unit.
     """
     # Whether the file is FITS, as astropy tells from its first bytes
     fits = False
@@ -214,7 +216,8 @@ def read_column(
     """
     Return a column of a table as floats with a unit.
 
-    The values that the column masks are NaN.
+    The values that the column masks are NaN. The table may also be a
+    QTable, whose columns with units are Quantities.
 
     Parameters
     ----------
@@ -248,21 +251,32 @@ def read_column(
     column = table[name]
     if np.iscomplexobj(column):
         raise ValueError(f"the column {name!r} is of complex numbers")
-    try:
-        values = np.ma.filled(np.ma.asarray(column, dtype=float), np.nan)
-    except (TypeError, ValueError):
-        raise ValueError(f"the column {name!r} is not of numbers") from None
+    # The values, NaN where masked, and the unit of the column: a column
+    # of a QTable is a Quantity (masked by astropy, if masked), and one
+    # of a Table holds its values (masked by numpy) and its unit apart
+    if isinstance(column, u.Quantity):
+        if isinstance(column, Masked):
+            column = column.filled(np.nan)
+        values, column_unit = column.value.astype(float), column.unit
+    else:
+        try:
+            values = np.ma.filled(
+                np.ma.asarray(column, dtype=float), np.nan)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"the column {name!r} is not of numbers") from None
+        column_unit = column.unit
     if unit is None:
-        return values * (column.unit or u.dimensionless_unscaled)
+        return values * (column_unit or u.dimensionless_unscaled)
     given = gbkfit.units.parse_unit(unit) if isinstance(unit, str) \
         else u.Unit(unit)
-    if column.unit is None:
+    if column_unit is None:
         return values * given
     try:
-        return (values * column.unit).to(given)
+        return (values * column_unit).to(given)
     except u.UnitConversionError:
         target = gbkfit.units.format_unit(given) or 'dimensionless'
         raise ValueError(
             f"the column {name!r} is in "
-            f"{gbkfit.units.format_unit(column.unit)!r}, which cannot be "
+            f"{gbkfit.units.format_unit(column_unit)!r}, which cannot be "
             f"converted to {target!r}") from None
