@@ -63,3 +63,18 @@ def test_the_units_of_a_fits_table_are_read_by_the_fits_standard(tmp_path):
     fits.BinTableHDU.from_columns(columns).writeto(path, overwrite=True)
     with pytest.raises(ValueError, match="column 'v', 'KM/S', is not a"):
         read_table(path)
+
+
+def test_the_hdu_of_a_fits_table_must_hold_a_table(tmp_path):
+    # (astropy reads the first table in place of an HDU that holds none)
+    path = str(tmp_path / 'table.fits')
+    table = fits.BinTableHDU.from_columns(
+        [fits.Column('v', 'D', unit='km/s', array=[2.0])], name='KIN')
+    fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU([1.0]), table]).writeto(
+        path)
+    for hdu in (None, 2, 'KIN'):
+        assert read_column(read_table(path, hdu=hdu), 'v', None).unit \
+            == u.km / u.s
+    for hdu in (0, 1, 5, 'NOPE'):
+        with pytest.raises(ValueError, match="no table in HDU"):
+            read_table(path, hdu=hdu)

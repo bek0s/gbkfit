@@ -42,7 +42,8 @@ def read_table(
         The format of the file (e.g. 'ascii.csv'); by default, the one
         astropy tells from the file.
     hdu : int or str, optional
-        The HDU of a FITS file; by default, its first HDU of a table.
+        The HDU of a FITS file, by index or by name; by default, its
+        first HDU of a table.
 
     Returns
     -------
@@ -55,7 +56,8 @@ def read_table(
         If the file cannot be read (e.g. it is missing).
     ValueError
         If astropy cannot tell its format, or cannot read it as a table
-        of that format.
+        of that format, or if the HDU is not that of a table in a FITS
+        file.
     """
     # Whether the file is FITS: as the format says, or else as astropy
     # tells from its first bytes
@@ -64,11 +66,15 @@ def read_table(
             fits = is_fits('read', filename, file)
     else:
         fits = format_ == 'fits'
-    options = {} if hdu is None else dict(hdu=hdu)
+    options = {}
     if fits:
         # The units are read below, so astropy does not warn of those
         # that it cannot read
-        options.update(unit_parse_strict='silent')
+        hdu = _table_hdu(filename, hdu)
+        options.update(hdu=hdu, unit_parse_strict='silent')
+    elif hdu is not None:
+        raise ValueError(
+            f"{filename}: an HDU is given, but the file is not FITS")
     try:
         table = Table.read(filename, format=format_, **options)
     except IORegistryError:
@@ -82,23 +88,45 @@ def read_table(
     return table
 
 
-def _read_fits_units(
-        table: Table, filename: str, hdu: int | str | None
-) -> None:
+def _table_hdu(filename: str, hdu: int | str | None) -> int:
     """
-    Set the units of the columns of a table read from a FITS file to
-    their TUNITn, as gbkfit.units.parse_unit reads them: astropy reads
-    them by its own precedence, e.g. 'Jy/beam km/s' as Jy / (beam km s).
-    The table is that of the HDU, or else of the first HDU of a table,
-    as astropy reads it.
+    Return the index of the HDU of a table in a FITS file: the HDU
+    given (by index or by name), or else the first HDU of a table.
+
+    Raise ValueError if there is no table in the HDU given (also if it
+    is missing), or none in the file.
+    """
+    with astropy.io.fits.open(filename) as hdus:
+        tables = [
+            i for i, item in enumerate(hdus) if isinstance(
+                item, (astropy.io.fits.BinTableHDU, astropy.io.fits.TableHDU))]
+        if hdu is None:
+            if not tables:
+                raise ValueError(f"{filename}: there is no table in the file")
+            return tables[0]
+        # astropy finds an HDU by name, and returns an index unchecked:
+        # one out of range is not one of the tables, below
+        try:
+            index = hdus.index_of(hdu)
+        except KeyError:
+            index = None
+    if index not in tables:
+        raise ValueError(
+            f"{filename}: there is no table in HDU {hdu!r}; the tables are "
+            f"in the HDUs {tables}")
+    return index
+
+
+def _read_fits_units(table: Table, filename: str, hdu: int) -> None:
+    """
+    Set the units of the columns of a table read from the HDU of a FITS
+    file (by index) to their TUNITn, as gbkfit.units.parse_unit reads
+    them: astropy reads them by its own precedence, e.g. 'Jy/beam km/s'
+    as Jy / (beam km s).
 
     Raise ValueError if a TUNITn is not a unit.
     """
     with astropy.io.fits.open(filename) as hdus:
-        if hdu is None:
-            hdu = next(
-                i for i, item in enumerate(hdus) if isinstance(item, (
-                    astropy.io.fits.BinTableHDU, astropy.io.fits.TableHDU)))
         for column in hdus[hdu].columns:
             if not column.unit:
                 continue
