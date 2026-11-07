@@ -683,8 +683,8 @@ def prep_psf_muse(
         prep.muse_psf_table(fits.getheader(file, 0)), output_dir, 'psf')
     _log.info(
         f"the PSF is in {filename}; use it as psf: {{type: moffat, "
-        f"alpha: {{file: {filename}, column: alpha}}, "
-        f"beta: {{file: {filename}, column: beta}}}}")
+        f"alpha: {{file: {filename}, points: wavelength, column: alpha}}, "
+        f"beta: {{file: {filename}, points: wavelength, column: beta}}}}")
 
 
 def prep_lsf_muse(
@@ -699,7 +699,8 @@ def prep_lsf_muse(
     filename = _write_table(prep.muse_lsf_table(), output_dir, 'lsf')
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, "
-        f"sigma: {{file: {filename}, column: sigma}}}}")
+        f"sigma: {{file: {filename}, points: wavelength, column: "
+        f"sigma}}}}")
 
 
 def prep_psf_casa_beams(
@@ -712,8 +713,11 @@ def prep_psf_casa_beams(
     options of a Gaussian beam PSF (see casa_beam_table).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
-    filename = _write_table(casa_beam_table(file), output_dir, 'psf')
+    table = casa_beam_table(file)
+    filename = _write_table(table, output_dir, 'psf')
+    # The first column of the table is that of the points
+    points = table.colnames[0]
     _log.info(
         f"the beams are in {filename}; use them as psf: {{type: "
-        f"gauss_beam, bmaj: {{file: {filename}, column: bmaj}}, ...}} "
-        f"(and bmin and bpa)")
+        f"gauss_beam, bmaj: {{file: {filename}, points: {points}, column: "
+        f"bmaj}}, ...}} (and bmin and bpa)")

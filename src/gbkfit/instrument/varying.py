@@ -17,11 +17,10 @@ In a configuration, a table is given inline (see SpectralTable), e.g.
       points: {value: [4800, 7000, 9300], unit: Angstrom}
       values: [0.75, 0.65, 0.58]
 
-or as a column of a table file (FITS, ECSV or CSV), which has a column of
-the points named wavelength, frequency or velocity (see
-SpectralTable.from_file), e.g.
+or as two columns of a table file (FITS, ECSV or CSV), those of the
+points and of the values (see SpectralTable.from_file), e.g.
 
-    alpha: {file: psf.ecsv, column: alpha}
+    alpha: {file: psf.ecsv, points: wavelength, column: alpha}
 
 Values without units are in the units of the option. Velocities are in
 the convention of the spectral axis (see VelocityConvention):
@@ -48,9 +47,7 @@ __all__ = [
 ]
 
 
-# The kinds of points of the spectral axis, and the velocity unit of the
-# model
-_AXES = ('wavelength', 'frequency', 'velocity')
+# The velocity unit of the model
 _KMS = u.km / u.s
 _C = astropy.constants.c.to_value(_KMS)
 
@@ -299,20 +296,24 @@ class SpectralTable(Serializable):
     def from_file(
             cls,
             file: FilePath,
+            points: str,
             column: str,
             hdu: int | str | None = None,
             units: Mapping[str, str] | None = None
     ) -> 'SpectralTable':
         """
-        Read a table from a column of a table file (FITS, ECSV or CSV).
+        Read a table from two columns of a table file (FITS, ECSV or
+        CSV): those of its points and of its values.
 
-        The file has a column of the points, named wavelength, frequency
-        or velocity.
+        The unit of the points says whether they are wavelengths,
+        frequencies or velocities.
 
         Parameters
         ----------
         file : str
             The file.
+        points : str
+            The column of the points.
         column : str
             The column of the values.
         hdu : int or str, optional
@@ -329,34 +330,26 @@ class SpectralTable(Serializable):
         Raises
         ------
         ValueError
-            If the file has no column of points or values, or its points
-            have no unit.
+            If the file has no such columns, or the points have no unit.
         """
         check_options(SpectralTable.from_file, locals())
         table = read_table(file, hdu=hdu)
         units = units or {}
-        axes = [axis for axis in _AXES if axis in table.colnames]
-        if len(axes) != 1:
-            raise ValueError(
-                f"{file}: a table needs a column of its points, named "
-                f"one of {list(_AXES)}; its columns are {table.colnames}")
-        if column not in table.colnames:
-            raise ValueError(
-                f"{file}: there is no column '{column}'; the columns "
-                f"are {table.colnames}")
-        # Masked values are NaN, which the table refuses
-        axis = axes[0]
-        points = read_column(table, axis, units.get(axis))
-        if points.unit == u.dimensionless_unscaled:
-            if axis != 'velocity':
+        for name in (points, column):
+            if name not in table.colnames:
                 raise ValueError(
-                    f"{file}: the column '{axis}' has no unit; give it in "
-                    f"units")
-            points = points.value * _KMS
+                    f"{file}: there is no column {name!r}; the columns "
+                    f"are {table.colnames}")
+        # Masked values are NaN, which the table refuses
+        point_values = read_column(table, points, units.get(points))
+        if point_values.unit == u.dimensionless_unscaled:
+            raise ValueError(
+                f"{file}: the column of the points, {points!r}, has no "
+                f"unit; give it in units")
         values = read_column(table, column, units.get(column))
         unit = None if values.unit == u.dimensionless_unscaled \
             else values.unit
-        return cls(points, values.value, unit)
+        return cls(point_values, values.value, unit)
 
     def dump(self) -> dict[str, Any]:
         """

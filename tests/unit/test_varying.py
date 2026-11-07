@@ -29,11 +29,12 @@ def alpha_table(tmp_path, source):
         path.write_text('wavelength,alpha\n' + ''.join(
             f'{w},{a}\n' for w, a in zip(WAVELENGTHS, ALPHAS)))
         return dict(
-            file=str(path), column='alpha', units=dict(wavelength='Angstrom'))
+            file=str(path), points='wavelength', column='alpha',
+            units=dict(wavelength='Angstrom'))
     path = tmp_path / f'psf.{source}'
     astropy.table.QTable(dict(
         wavelength=WAVELENGTHS * u.AA, alpha=ALPHAS * u.arcsec)).write(path)
-    return dict(file=str(path), column='alpha')
+    return dict(file=str(path), points='wavelength', column='alpha')
 
 
 @pytest.mark.parametrize('source', ['inline', 'csv', 'ecsv', 'fits'])
@@ -251,7 +252,7 @@ def test_varying_psfs_in_python(tmp_path):
 def test_spectral_tables_from_files(tmp_path):
     from gbkfit.instrument import SpectralTable
     table = SpectralTable.from_file(
-        alpha_table(tmp_path, 'ecsv')['file'], 'alpha')
+        alpha_table(tmp_path, 'ecsv')['file'], 'wavelength', 'alpha')
     np.testing.assert_allclose(table.points().to_value(u.AA), WAVELENGTHS)
     np.testing.assert_allclose(table.values(), ALPHAS)
     assert table.unit() == u.arcsec
@@ -265,7 +266,26 @@ def test_a_masked_value_of_a_table_file_is_refused(tmp_path):
         ALPHAS, mask=[i == 1 for i in range(len(ALPHAS))])
     table.write(str(tmp_path / 'psf.ecsv'))
     with pytest.raises(ValueError, match="must be finite"):
-        SpectralTable.from_file(str(tmp_path / 'psf.ecsv'), 'alpha')
+        SpectralTable.from_file(
+            str(tmp_path / 'psf.ecsv'), 'wavelength', 'alpha')
+
+
+def test_the_columns_of_a_table_file_are_named_by_the_configuration(
+        tmp_path):
+    # (any name, e.g. of FITS in capitals; the unit says what the points
+    # are, and they need one)
+    from gbkfit.instrument import SpectralTable
+    path = str(tmp_path / 'psf.fits')
+    astropy.table.QTable(dict(
+        WAVE=WAVELENGTHS * u.AA, ALPHA=ALPHAS * u.arcsec)).write(path)
+    table = SpectralTable.from_file(path, 'WAVE', 'ALPHA')
+    np.testing.assert_allclose(table.points().to_value(u.AA), WAVELENGTHS)
+    with pytest.raises(ValueError, match="no column 'wavelength'"):
+        SpectralTable.from_file(path, 'wavelength', 'ALPHA')
+    astropy.table.Table(dict(WAVE=WAVELENGTHS, ALPHA=ALPHAS)).write(
+        path, overwrite=True)
+    with pytest.raises(ValueError, match="'WAVE', has no unit"):
+        SpectralTable.from_file(path, 'WAVE', 'ALPHA')
 
 
 def test_table_files_are_relative_to_the_configuration(tmp_path):
