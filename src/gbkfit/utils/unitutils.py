@@ -1,37 +1,28 @@
 """
-Physical units: reading them from text and writing them as text, in the
-convention of VOUnits (the IVOA) or of the FITS standard, and telling
-what a unit of light is per on the sky.
+Physical units: reading them from text and writing them as text, and
+telling what a unit of light is per on the sky. The text of a unit is
+in VOUnits, the recommendation of the IVOA, as in configurations and
+outputs, or in the convention of the FITS standard, as in the headers
+of FITS files.
 """
 
-import contextlib
 import re
-from collections.abc import Iterator
-from contextvars import ContextVar
 from fractions import Fraction
 
 import astropy.units
 
 
 __all__ = [
-    'UNIT_CONVENTIONS',
     'format_unit',
     'parse_quantity',
     'parse_unit',
-    'spatial_unit',
-    'unit_convention'
+    'spatial_unit'
 ]
 
 
 # The conventions of units as text: VOUnits, the recommendation of the
 # IVOA (1.0), and that of the FITS standard (4.0, section 4.3)
-UNIT_CONVENTIONS = ('vounits', 'fits')
-
-# The convention that parse_unit reads in when given none (see
-# unit_convention); a context variable, so that each thread and task
-# has its own
-_CONVENTION: ContextVar[str] = ContextVar(
-    'unit_convention', default='vounits')
+_CONVENTIONS = ('vounits', 'fits')
 
 # A regular expression for the separators between the terms of a unit,
 # in the convention of FITS.
@@ -48,33 +39,13 @@ _TERM_SEPARATOR = re.compile(r'\s+|(?<!\*)\*(?!\*)|(?<![0-9])\.|\.(?![0-9])')
 _SPLITTER = re.compile(rf'{_TERM_SEPARATOR.pattern}|[/()]')
 
 
-@contextlib.contextmanager
-def unit_convention(convention: str) -> Iterator[None]:
-    """
-    Read units in a convention (see UNIT_CONVENTIONS) within the block,
-    where parse_unit is given none (e.g. the units of a configuration,
-    see gbkfit.setup.load).
-
-    Raises
-    ------
-    ValueError
-        If the convention is not one of UNIT_CONVENTIONS.
-    """
-    _check_convention(convention)
-    token = _CONVENTION.set(convention)
-    try:
-        yield
-    finally:
-        _CONVENTION.reset(token)
-
-
 def parse_unit(
-        text: str, convention: str | None = None
+        text: str, convention: str = 'vounits'
 ) -> astropy.units.UnitBase:
     """
-    Return the unit that a text states, in a convention: 'vounits' or
-    'fits' (see UNIT_CONVENTIONS); by default, that of the block (see
-    unit_convention), or else 'vounits'.
+    Return the unit that a text states, in a convention: 'vounits' (by
+    default), as in configurations, or 'fits', as in the headers of FITS
+    files.
 
     In 'vounits', astropy reads the text (its format 'vounit'). It has
     at most one '/': 'erg/s/cm2/Angstrom' is not a unit, but
@@ -110,7 +81,6 @@ def parse_unit(
     ValueError
         If the text is not a unit in the convention.
     """
-    convention = convention or _CONVENTION.get()
     _check_convention(convention)
     if convention == 'fits':
         unit = _unit_of(text)
@@ -124,16 +94,13 @@ def parse_unit(
     except ValueError:
         raise ValueError(
             f"{text!r} is not a valid unit of VOUnits, the recommendation "
-            f"of the IVOA (for units as the FITS standard writes them, "
-            f"give unit_convention: fits)") from None
+            f"of the IVOA") from None
 
 
-def parse_quantity(
-        text: str, convention: str | None = None
-) -> astropy.units.Quantity:
+def parse_quantity(text: str) -> astropy.units.Quantity:
     """
     Return the quantity that a text states: a number, a space, and a
-    unit in a convention (see parse_unit).
+    unit of VOUnits (see parse_unit).
     For example, '6562.8 Angstrom'.
 
     Raises
@@ -148,14 +115,14 @@ def parse_quantity(
         raise ValueError(
             f"{text!r} is not a number and a unit (e.g. "
             f"'6562.8 Angstrom')") from None
-    return value * parse_unit(unit.strip(), convention)
+    return value * parse_unit(unit.strip())
 
 
 def format_unit(
         unit: astropy.units.UnitBase, convention: str = 'vounits'
 ) -> str:
     """
-    Return a unit as text in a convention (see UNIT_CONVENTIONS), which
+    Return a unit as text in a convention: 'vounits' or 'fits', which
     parse_unit reads back as the same unit.
     For example, 'Jy.km.beam**-1.s**-1' in 'vounits', and
     'Jy km beam-1 s-1' in 'fits'.
@@ -367,8 +334,8 @@ def _power(text: str) -> Fraction:
 
 
 def _check_convention(convention: str) -> None:
-    """Raise ValueError unless a convention is of UNIT_CONVENTIONS."""
-    if convention not in UNIT_CONVENTIONS:
+    """Raise ValueError unless a convention is 'vounits' or 'fits'."""
+    if convention not in _CONVENTIONS:
         raise ValueError(
-            f"the convention of units must be one of {list(UNIT_CONVENTIONS)}"
-            f"; it is {convention!r}")
+            f"the convention of units must be one of {list(_CONVENTIONS)}; "
+            f"it is {convention!r}")

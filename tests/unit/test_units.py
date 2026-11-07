@@ -12,16 +12,7 @@ from gbkfit.model.components._units import (
 from gbkfit.model.components.lines import Band
 from gbkfit.observation.observables._detail import flux_per_area
 from gbkfit.utils.unitutils import (
-    format_unit, parse_quantity, parse_unit, spatial_unit, unit_convention)
-
-
-@pytest.fixture(autouse=True)
-def fits_units():
-    # (the units of these tests are written as the FITS standard writes
-    # them, e.g. 'Jy/beam km/s'; those of VOUnits, the default, are
-    # tested with their convention given)
-    with unit_convention('fits'):
-        yield
+    format_unit, parse_quantity, parse_unit, spatial_unit)
 
 
 @pytest.mark.parametrize('text, unit', [
@@ -68,12 +59,12 @@ def fits_units():
     ('(km/s)^(-2)', u.s ** 2 / u.km ** 2),
     ('(m2)^(1/2)', u.m),
     ('m(3/2)', u.m ** 1.5)])
-def test_units_are_read_as_they_are_meant(text, unit):
-    parsed = parse_unit(text)
+def test_units_of_fits_are_read_as_they_are_meant(text, unit):
+    parsed = parse_unit(text, 'fits')
     assert parsed.is_equivalent(unit)
     assert (1 * parsed).to_value(unit) == pytest.approx(1, rel=1e-12)
     # A unit written by format_unit reads back as itself
-    assert parse_unit(format_unit(parsed)) == parsed
+    assert parse_unit(format_unit(parsed), 'fits') == parsed
 
 
 def test_what_is_not_a_unit_is_an_error():
@@ -82,21 +73,21 @@ def test_what_is_not_a_unit_is_an_error():
             '(Jy', 'Jy)', ')Jy(', '()', '(km/s)**', '(km/s)x',
             '(km/s)^(1/0)'):
         with pytest.raises(ValueError, match="is not a valid unit"):
-            parse_unit(text)
+            parse_unit(text, 'fits')
     # Names are not corrected: these are not the names of units, in the
     # case that the FITS standard gives them
     for text in (
             'JY/BEAM', 'Jy/Beam', 'KM/S', 'METR/SEC', 'JY/B*M/S',
             'ELECTRONS/S', '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}'):
         with pytest.raises(ValueError, match="is not a valid unit"):
-            parse_unit(text)
+            parse_unit(text, 'fits')
 
 
 def test_names_are_read_as_the_units_they_name():
     # Nothing is corrected: S is the siemens, A the ampere and B the byte
-    assert parse_unit('S') == u.S
-    assert parse_unit('erg/s/cm2/A') == u.erg / u.s / u.cm ** 2 / u.A
-    assert parse_unit('B') == u.byte
+    assert parse_unit('S', 'fits') == u.S
+    assert parse_unit('erg/s/cm2/A', 'fits') == u.erg / u.s / u.cm ** 2 / u.A
+    assert parse_unit('B', 'fits') == u.byte
 
 
 def test_a_unit_that_is_refused_raises_no_warnings():
@@ -104,7 +95,7 @@ def test_a_unit_that_is_refused_raises_no_warnings():
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         with pytest.raises(ValueError, match="is not a valid unit"):
-            parse_unit('erg/s/cm2/banana')
+            parse_unit('erg/s/cm2/banana', 'fits')
     assert not caught
 
 
@@ -112,7 +103,7 @@ def test_units_of_several_slashes_are_read_without_warnings():
     # Silencing astropy's warning would change the warnings of every thread
     with warnings.catch_warnings():
         warnings.simplefilter('error')
-        assert parse_unit('erg/s/cm2/arcsec2') == (
+        assert parse_unit('erg/s/cm2/arcsec2', 'fits') == (
             u.erg / u.s / u.cm ** 2 / u.arcsec ** 2)
 
 
@@ -120,7 +111,7 @@ def test_a_power_that_is_not_an_integer_is_written_in_brackets():
     # The FITS standard does not allow 'Hz0.5'
     unit = u.Hz ** 0.5 / u.m ** (1 / 3)
     assert format_unit(unit, 'fits') == 'Hz(0.5) m(-1/3)'
-    assert parse_unit(format_unit(unit, 'fits')) == unit
+    assert parse_unit(format_unit(unit, 'fits'), 'fits') == unit
 
 
 @pytest.mark.parametrize('text, unit', [
@@ -142,10 +133,9 @@ def test_units_of_vounits(text, unit):
 
 
 def test_texts_that_are_not_units_of_vounits_are_errors():
-    # (several '/', the names of astropy, and the forms of FITS: give
-    # unit_convention: fits for them)
+    # (several '/', the names of astropy, and the forms of FITS)
     for text in ('erg/s/cm2', 'Msun/pc2', 'Jy/beam km/s', '%', 'JY/BEAM'):
-        with pytest.raises(ValueError, match="unit_convention: fits"):
+        with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
             parse_unit(text, 'vounits')
 
 
@@ -161,20 +151,19 @@ def test_units_are_written_in_vounits_and_read_back_in_both():
             assert parse_unit(text, convention) == unit, (text, convention)
 
 
-def test_the_convention_of_a_block_is_that_of_parse_unit():
-    # (by default, VOUnits; in a block of FITS, as this module is)
-    with unit_convention('vounits'):
-        with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
-            parse_unit('erg/s/cm2')
-    assert parse_unit('erg/s/cm2') == u.erg / u.s / u.cm ** 2
+def test_units_are_of_vounits_unless_said_otherwise():
+    assert parse_unit('erg/(s.cm2)') == u.erg / u.s / u.cm ** 2
+    with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
+        parse_unit('erg/s/cm2')
+    assert parse_unit('erg/s/cm2', 'fits') == u.erg / u.s / u.cm ** 2
     with pytest.raises(ValueError, match="must be one of"):
         parse_unit('km/s', 'iau')
 
 
 def test_a_quantity_is_a_number_and_a_unit():
-    assert parse_quantity('6562.8 Angstrom', 'vounits') == 6562.8 * u.AA
+    assert parse_quantity('6562.8 Angstrom') == 6562.8 * u.AA
     with pytest.raises(ValueError, match="not a number and a unit"):
-        parse_quantity('Angstrom', 'vounits')
+        parse_quantity('Angstrom')
 
 
 @pytest.mark.parametrize('text, spatial', [
@@ -187,7 +176,7 @@ def test_a_quantity_is_a_number_and_a_unit():
     ('Jy deg-2', u.sr),
     ('Jy km/s', u.dimensionless_unscaled)])
 def test_what_light_is_per(text, spatial):
-    assert spatial_unit(parse_unit(text)) == spatial
+    assert spatial_unit(parse_unit(text, 'fits')) == spatial
 
 
 def test_light_per_an_angle_is_not_per_a_solid_angle():
@@ -201,12 +190,12 @@ def emission(info):
 
 
 @pytest.mark.parametrize('info', [
-    dict(type='lines', unit='1e-17 erg/s/cm2/arcsec2'),
-    dict(type='lines', lines=['halpha', 'nii6583'], unit='Jy km/s/arcsec2'),
-    dict(type='lines', unit='K km/s'),
-    dict(type='lines', lines=['hi21'], unit='Msun/pc2'),
+    dict(type='lines', unit='1e-17erg/(s.cm2.arcsec2)'),
+    dict(type='lines', lines=['halpha', 'nii6583'], unit='Jy.km/(s.arcsec2)'),
+    dict(type='lines', unit='K.km/s'),
+    dict(type='lines', lines=['hi21'], unit='solMass/pc2'),
     dict(type='band', unit='MJy/sr'),
-    dict(type='band', unit='1e-20 erg/s/cm2/Angstrom/arcsec2')])
+    dict(type='band', unit='1e-20erg/(s.cm2.Angstrom.arcsec2)')])
 def test_emission_takes_the_units_of_its_kind(info):
     loaded = emission(dict(info))
     assert loaded.unit() == parse_unit(info['unit'])
@@ -214,11 +203,11 @@ def test_emission_takes_the_units_of_its_kind(info):
 
 
 @pytest.mark.parametrize('info, message', [
-    (dict(type='lines', unit='Jy/beam km/s'), "not \\(a unit per beam"),
+    (dict(type='lines', unit='Jy.km/(beam.s)'), "not \\(a unit per beam"),
     (dict(type='lines', unit='km/s'), "is not"),
-    (dict(type='lines', unit='Msun/pc2'), "one of HI only"),
+    (dict(type='lines', unit='solMass/pc2'), "one of HI only"),
     (dict(type='lines', lines=['halpha'], unit='cm-2'), "one of HI only"),
-    (dict(type='band', unit='K km/s'), "is not")])
+    (dict(type='band', unit='K.km/s'), "is not")])
 def test_emission_refuses_units_of_other_kinds(info, message):
     with pytest.raises(ValueError, match=message):
         emission(info)
@@ -235,9 +224,9 @@ def test_a_line_has_one_unit_in_a_galaxy():
     with pytest.raises(ValueError, match="the line 'hi21' has the unit"):
         galaxy_parser.load(dict(components=[
             disk | dict(name='hi', emission=dict(
-                type='lines', lines=['hi21'], unit='Msun/pc2')),
+                type='lines', lines=['hi21'], unit='solMass/pc2')),
             disk | dict(name='ionised', emission=dict(
-                type='lines', lines=['halpha', 'hi21'], unit='K km/s'))]))
+                type='lines', lines=['halpha', 'hi21'], unit='K.km/s'))]))
 
 
 # The beam of the HI data of NGC 1313 (LVHIS) and pixels of 0.2 arcsec
@@ -259,8 +248,9 @@ def factors(
         **options):
     """
     Return the factors of the lines of the given 1 + z on the axis (see
-    Lines.factors) of a component of the source unit, of a galaxy at the
-    redshift, in data of the target unit, on an axis of the rest and the
+    Lines.factors) of a component of the source unit (of VOUnits, as in
+    a configuration), of a galaxy at the redshift, in data of the target
+    unit (of FITS, as in a header), on an axis of the rest and the
     convention.
     """
     spectral = Grid((11,), Coords(
@@ -273,9 +263,8 @@ def factors(
     if rest is not None:
         frequencies = rest.to_value(u.Hz, u.spectral()) / lines \
             * (1 + redshift)
-    return LineFactors(
-        parse_unit(source), DataUnit(parse_unit(target), PIXEL, **options),
-        lines, spectral, frequencies)
+    data = DataUnit(parse_unit(target, 'fits'), PIXEL, **options)
+    return LineFactors(parse_unit(source), data, lines, spectral, frequencies)
 
 
 def test_hi_mass_is_its_moment_0_by_the_textbook():
@@ -288,7 +277,7 @@ def test_hi_mass_is_its_moment_0_by_the_textbook():
     # vsys), its km/s spanning 1 - u / c = 1 / (1 + z) km/s of the radio
     # axis (u the radio velocity of the line): (1 + z)^-4 in all (as M_HI
     # = 2.356e5 D_L^2 int S du, u of the axis)
-    hi = factors('Msun/pc2', 'Jy/beam km/s', beam=BEAM, integrated=True)
+    hi = factors('solMass/pc2', 'Jy/beam km/s', beam=BEAM, integrated=True)
     for vsys in (0, 470, 5000):
         assert hi(vsys) == pytest.approx(
             1.249e20 * 66 * 53.7 / 1.105e24 * doppler(vsys) ** -4, rel=1e-3)
@@ -301,8 +290,8 @@ def test_light_per_frequency_or_wavelength_is_per_km_s_of_the_axis():
     # axis of radio velocities, nu_rest / c Hz per km/s; the energy is
     # dimmed by (1 + z)^-4, 1 + z that of vsys on both axes
     halpha = factors(
-        '1e-17 erg/s/cm2/arcsec2', '1e-20 erg/s/cm2/Angstrom', HALPHA)
-    hi = factors('1e-17 erg/s/cm2/arcsec2', 'Jy/arcsec2')
+        '1e-17erg/(s.cm2.arcsec2)', '1e-20 erg/s/cm2/Angstrom', HALPHA)
+    hi = factors('1e-17erg/(s.cm2.arcsec2)', 'Jy/arcsec2')
     for vsys in (0, 50000):
         assert halpha(vsys) == pytest.approx(
             1e-17 * PIXEL / 1e-20 * C / 6564.61 / doppler(vsys) ** 4,
@@ -318,11 +307,11 @@ def test_the_temperature_of_a_line_at_its_frequency():
     # the line (1 - u / c = 1 / (1 + z)), also for a line of another rest
     # (k = 1.02, which spans k / (1 + z)); in Jy/beam, the intensity at the
     # rest frequency dimmed by (1 + z)^-3
-    assert factors('K km/s', 'K')(470) == pytest.approx(
+    assert factors('K.km/s', 'K')(470) == pytest.approx(
         doppler(470) ** -2, rel=1e-12)
-    assert factors('K km/s', 'K', lines=[1 / 1.02])(470) \
+    assert factors('K.km/s', 'K', lines=[1 / 1.02])(470) \
         == pytest.approx(1.02 * doppler(470) ** -2, rel=1e-12)
-    jansky = factors('K km/s', 'Jy/beam', beam=BEAM)
+    jansky = factors('K.km/s', 'Jy/beam', beam=BEAM)
     for vsys in (0, 3000):
         expected = (1 * u.K).to(u.Jy / u.sr, u.brightness_temperature(HI)) \
             * BEAM * u.arcsec ** 2 * doppler(vsys) ** -4
@@ -338,7 +327,7 @@ def test_lines_at_a_redshift_by_the_textbook():
     # (to 0.2%: 3.25e7 rounds c^2 / 2k); and Halpha of energy on an axis
     # at its rest (k = 1 + z) is dimmed by (1 + z)^-4
     co = factors(
-        'K km/s', 'Jy/beam km/s', 230.538 / 2.5 * u.GHz, redshift=1.5,
+        'K.km/s', 'Jy/beam km/s', 230.538 / 2.5 * u.GHz, redshift=1.5,
         beam=BEAM, integrated=True)
     omega = (BEAM * u.arcsec ** 2).to_value(u.sr)
     assert co(0) == pytest.approx(
@@ -348,7 +337,7 @@ def test_lines_at_a_redshift_by_the_textbook():
     # 1 / 2.5 the light per km/s, the same per Angstrom)
     for convention, stretch in (('optical', 2.5), ('log', 1)):
         halpha = factors(
-            '1e-17 erg/s/cm2/arcsec2', '1e-20 erg/s/cm2/Angstrom', HALPHA,
+            '1e-17erg/(s.cm2.arcsec2)', '1e-20 erg/s/cm2/Angstrom', HALPHA,
             [2.5], redshift=1.5, convention=convention)
         assert halpha(0) == pytest.approx(
             1e-17 * PIXEL / 1e-20 * C / 6564.61 / 2.5 ** 4 * stretch / 2.5,
@@ -357,7 +346,7 @@ def test_lines_at_a_redshift_by_the_textbook():
 
 def test_the_beam_of_each_channel_at_the_line():
     channels = factors(
-        'Jy km/s/arcsec2', 'Jy/beam', beam=np.array([100.0, 200.0]),
+        'Jy.km/(s.arcsec2)', 'Jy/beam', beam=np.array([100.0, 200.0]),
         beam_spectral=[0, 100] * u.km / u.s)
     # (the beam at the line, at the radio velocity of vsys)
     centre = C * (1 - 1 / doppler(50))
@@ -368,7 +357,7 @@ def test_the_beam_of_each_channel_at_the_line():
 def test_light_with_a_unit_needs_the_rest_of_the_axis():
     # (the data see it dimmed by the redshift of each line)
     with pytest.raises(ValueError, match="needs its rest"):
-        factors('Jy km/s/arcsec2', 'Jy/beam', None, beam=BEAM)
+        factors('Jy.km/(s.arcsec2)', 'Jy/beam', None, beam=BEAM)
 
 
 def test_bands_per_beam_and_per_pixel():
@@ -388,7 +377,7 @@ def test_bands_dimmed_by_the_redshift():
     # at (1 + z) times the frequency of the band), 1 + z = (1 + redshift)
     # times that of vsys
     jy, per_a = (parse_unit(unit) for unit in (
-        'Jy/arcsec2', '1e-20 erg/s/cm2/Angstrom/arcsec2'))
+        'Jy/arcsec2', '1e-20erg/(s.cm2.Angstrom.arcsec2)'))
     band = Band('h', '1.65 um')
     one_plus_z = 2.5 * doppler(3000)
     assert BandFactors(jy, DataUnit(u.Jy, PIXEL), band, 1.5)(3000) \
@@ -404,7 +393,7 @@ def test_bands_dimmed_by_the_redshift():
 def test_data_must_tell_their_unit_and_beam(target, message):
     with pytest.raises(ValueError, match=message):
         line_factors(
-            parse_unit('K km/s'), target, np.ones(1),
+            parse_unit('K.km/s'), target, np.ones(1),
             Grid((11,), Coords(
                 (10,), (5,), (0,), 0, HI), 0),
             np.array([HI.to_value(u.Hz)]))
@@ -419,10 +408,10 @@ def test_regions_are_fluxes():
 @pytest.mark.parametrize('info, expected', [
     # (HI: its own mass, 1.249e20 H atoms per cm^2 in 1 Msun/pc^2, so
     # 1.823e18 / 1.249e20 Msun/pc^2 per K km/s; others: 1 Msun/pc^2)
-    (dict(type='lines', lines=['hi21'], unit='Msun/pc2'), 1e6),
-    (dict(type='lines', lines=['hi21'], unit='K km/s'),
+    (dict(type='lines', lines=['hi21'], unit='solMass/pc2'), 1e6),
+    (dict(type='lines', lines=['hi21'], unit='K.km/s'),
      1.823e18 / 1.249e20 * 1e6),
-    (dict(type='lines', lines=['co10'], unit='K km/s'), 1e6),
+    (dict(type='lines', lines=['co10'], unit='K.km/s'), 1e6),
     (dict(type='band', unit='Jy/arcsec2'), 1e6),
     (dict(type='lines'), None)])
 def test_the_mass_of_a_unit_of_light(info, expected):
@@ -436,5 +425,5 @@ def test_the_mass_of_a_unit_of_light(info, expected):
 
 def test_data_per_pixel_named_so():
     # (e.g. BUNIT Jy/pixel): the light of a pixel, as without the name
-    assert factors('Jy km/s/arcsec2', 'Jy/pixel')(470) \
+    assert factors('Jy.km/(s.arcsec2)', 'Jy/pixel')(470) \
         == pytest.approx(PIXEL * doppler(470) ** -4, rel=1e-12)

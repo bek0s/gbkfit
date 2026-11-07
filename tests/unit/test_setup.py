@@ -335,20 +335,18 @@ def test_describe_checks_the_rules_of_a_fit():
     assert len(errors) == 1 and "needs option 'value'" in errors[0].message
 
 
-def test_the_units_of_a_configuration_are_of_its_convention(tmp_path):
-    # VOUnits by default, in which 'erg/s/cm2/Angstrom' is not a unit, or
-    # the FITS standard (unit_convention: fits), in which it is
+def test_the_units_of_a_configuration_are_of_vounits(tmp_path):
+    # (in which 'erg/s/cm2/Angstrom', a unit of FITS, is not a unit)
     import astropy.units as u
     data = image(tmp_path / 'image.fits')
-    data['data']['unit'] = 'erg/s/cm2/Angstrom'
     config = dict(
         version=VERSION, root=str(tmp_path), galaxies=[GALAXY],
         observations=[data], params=PARAMS)
-    with pytest.raises(ValueError, match="unit_convention: fits"):
+    data['data']['unit'] = 'erg/s/cm2/Angstrom'
+    with pytest.raises(ValueError, match="not a valid unit of VOUnits"):
         gbkfit.load(config)
-    with gbkfit.load(config | dict(unit_convention='fits')) as loaded:
+    data['data']['unit'] = 'erg/(s.cm2.Angstrom)'
+    with gbkfit.load(config) as loaded:
         dataset = loaded.group_plan.group().observations()[0].data()
         assert next(iter(dataset.values())).unit() == (
             u.erg / u.s / u.cm ** 2 / u.Angstrom)
-    with pytest.raises(ConfigError, match="must be one of"):
-        gbkfit.load(config | dict(unit_convention='iau'))

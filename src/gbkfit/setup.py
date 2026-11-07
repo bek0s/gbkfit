@@ -7,11 +7,9 @@ A configuration (a YAML or JSON file, or a dictionary) has the section
 'version', the version of its format (see gbkfit.project.FORMAT_VERSION;
 a setup of a project has that of its project), the sections 'galaxies',
 'observations' and 'params', and can have the sections
-'unit_convention' (the convention of its units: VOUnits by default, or
-that of the FITS standard; see gbkfit.utils.unitutils), 'driver' or
-'drivers', 'lines', 'bands', 'pdescs', 'depth_order', 'fitter' and
-'workers', and those of the tasks ('mock' and 'bootstrap'; see
-gbkfit.tasks), which load leaves to them.
+'driver' or 'drivers', 'lines', 'bands', 'pdescs', 'depth_order',
+'fitter' and 'workers', and those of the tasks ('mock' and 'bootstrap';
+see gbkfit.tasks), which load leaves to them.
 """
 
 import dataclasses
@@ -19,14 +17,14 @@ import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal, NamedTuple, Self, TypeVar
+from typing import Annotated, Any, NamedTuple, Self, TypeVar
 
 import astropy.units
 import ruamel.yaml
 from annotated_types import Ge
 
 from gbkfit.config import (
-    Choices, ConfigError, FilePath, Problem, collect_problems, config_path,
+    ConfigError, FilePath, Problem, collect_problems, config_path,
     name_problem, paths_relative_to, report_unknown, strict_mode, warn)
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.control import StopControl
@@ -45,7 +43,7 @@ from gbkfit.observation import (
 from gbkfit.params import (
     JointPrior, ParamDesc, ParamMode, ParamSpace, ParamValues, Property,
     load_pdescs_dict, param_space_parser)
-from gbkfit.utils import iterutils, unitutils
+from gbkfit.utils import iterutils
 
 
 __all__ = [
@@ -130,13 +128,6 @@ _SECTIONS = dict(
     version=_Section(
         Annotated[int, Ge(1)],
         "The version of the format (see gbkfit.project.FORMAT_VERSION)."),
-    unit_convention=_Section(
-        Annotated[Literal[unitutils.UNIT_CONVENTIONS], Choices(
-            vounits='VOUnits, the recommendation of the IVOA',
-            fits='The FITS standard (4.0, section 4.3)')],
-        "The convention of the units of the configuration: VOUnits (by "
-        "default), in which 'erg/s/cm2' is not a unit (but "
-        "'erg/(s.cm2)' is), or that of the FITS standard."),
     galaxies=_Section(
         gbkfit.model.Galaxy, "The galaxies.", True, True,
         dict(driver=str)),
@@ -701,9 +692,7 @@ def load(
     elif not isinstance(config, ConfigFile):
         config = _config_file(config)
     cfg = config.config
-    convention = cfg.get('unit_convention', 'vounits')
-    with paths_relative_to(config.root), \
-            unitutils.unit_convention(convention):
+    with paths_relative_to(config.root):
         _log.info("setting up galaxies and observations...")
         if drivers is None:
             drivers = _load_drivers(cfg)
@@ -813,15 +802,6 @@ def _prepare_config(
     if missing := [s for s in required if s not in config]:
         raise ConfigError(
             f"the configuration needs the sections {missing}")
-    # (a null convention of units is the default one)
-    if config.get('unit_convention', '') is None:
-        del config['unit_convention']
-    if config.get('unit_convention', 'vounits') not in \
-            unitutils.UNIT_CONVENTIONS:
-        raise ConfigError(
-            f"section 'unit_convention' must be one of "
-            f"{list(unitutils.UNIT_CONVENTIONS)}; it is "
-            f"{config['unit_convention']!r}")
     # (empty sections are loaded as such, for clearer messages)
     config = {s: {} if v is None else v for s, v in config.items()}
     for s in ('driver', 'drivers', 'lines', 'bands', 'pdescs', 'params',
