@@ -13,7 +13,6 @@ from astropy.io.registry import IORegistryError
 from astropy.table import Table
 
 import gbkfit.units
-from gbkfit.config import parse_file
 
 
 __all__ = [
@@ -23,7 +22,8 @@ __all__ = [
 
 
 def read_table(
-        file: Any, format_: str | None = None, hdu: int | str | None = None
+        filename: str, format_: str | None = None,
+        hdu: int | str | None = None
 ) -> Table:
     """
     Read a table from a file.
@@ -35,8 +35,8 @@ def read_table(
 
     Parameters
     ----------
-    file : Any
-        The file, as a file option (see parse_file).
+    filename : str
+        The path of the file.
     format_ : str, optional
         The format of the file (e.g. 'ascii.csv'); by default, the one
         astropy tells from the file.
@@ -56,7 +56,6 @@ def read_table(
         If astropy cannot tell its format, or cannot read it as a table
         of that format.
     """
-    filename = parse_file(file)[0]
     fits = format_ == 'fits' or (
         format_ is None and is_fits('read', filename, None))
     options = {} if hdu is None else dict(hdu=hdu)
