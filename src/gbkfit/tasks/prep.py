@@ -26,8 +26,8 @@ from astropy.io import fits
 import gbkfit.units
 from gbkfit.config import DataFile, split_data_file
 from gbkfit.io import (
-    ErrorKind, casa_beam_table, read_column, read_header, read_table,
-    spectra_header, write_image)
+    ErrorKind, MaskKind, casa_beam_table, read_column, read_header,
+    read_table, spectra_header, write_image)
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
@@ -189,17 +189,19 @@ def prep_pixel_brightness(
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid'
 ) -> None:
     """
     Prepare an image (pixel_brightness): crop it to a region (roi_spat:
     x from, x to, y from, y to), clip it, crop it to its valid pixels
     (minify), and pad it with invalid pixels (nanpad). error_kind is what
-    the file of the errors holds (see read_arrays); the
-    prepared errors are standard deviations.
+    the file of the errors holds, and mask_kind what the mask marks (see
+    read_arrays); the prepared errors are standard deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
-    arrays = FitsArrays.read(file_d, file_e, file_m, error_kind=error_kind)
+    arrays = FitsArrays.read(
+        file_d, file_e, file_m, error_kind=error_kind, mask_kind=mask_kind)
     if roi_spat is not None:
         x0, x1, y0, y1 = roi_spat
         arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))
@@ -231,7 +233,8 @@ def prep_slit_spectra(
         spectral_type: str | None = None,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid'
 ) -> None:
     """
     Prepare the spectra along a slit (slit_spectra: positions along x,
@@ -241,15 +244,15 @@ def prep_slit_spectra(
     crop them to their valid pixels (minify), and pad them (nanpad).
     velocity is the convention of the velocities of an axis that does not
     state it, spectral_type the type of an axis whose header gives one
-    that FITS does not define, and error_kind what the file of the errors
-    holds (see FitsArrays.read); the prepared errors are standard
-    deviations.
+    that FITS does not define, error_kind what the file of the errors
+    holds, and mask_kind what the mask marks (see FitsArrays.read); the
+    prepared errors are standard deviations.
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type,
-        error_kind=error_kind)
+        error_kind=error_kind, mask_kind=mask_kind)
     rows, columns = slice(None), slice(None)
     if roi_spec is not None:
         rows = slice(*roi_spec)
@@ -284,7 +287,8 @@ def prep_pixel_spectra(
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         noise_error: bool = False,
-        error_kind: ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid'
 ) -> None:
     """
     Prepare a cube (pixel_spectra), with its spectral axis in velocities
@@ -293,9 +297,9 @@ def prep_pixel_spectra(
     velocities, increasing), clip it, crop it to its valid pixels
     (minify), and pad it (nanpad). velocity is the convention of the
     velocities of an axis that does not state it, spectral_type the type
-    of an axis whose header gives one that FITS does not define, and
-    error_kind what the file of the errors holds (see FitsArrays.read);
-    the prepared errors are standard deviations. With noise_error, the errors are the noise
+    of an axis whose header gives one that FITS does not define,
+    error_kind what the file of the errors holds, and mask_kind what the
+    mask marks (see FitsArrays.read); the prepared errors are standard deviations. With noise_error, the errors are the noise
     of each channel of the cropped cube, from its negative values (see
     prep.noise_errors; see output_files for the names of the prepared
     files).
@@ -313,7 +317,7 @@ def prep_pixel_spectra(
     arrays = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type,
-        error_kind=error_kind)
+        error_kind=error_kind, mask_kind=mask_kind)
     channels, ys, xs = slice(None), slice(None), slice(None)
     if roi_spat is not None:
         xs, ys = slice(*roi_spat[0:2]), slice(*roi_spat[2:4])
@@ -349,7 +353,8 @@ def prep_pixel_moments(
         dtype: npt.DTypeLike,
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
-        error_kind: ErrorKind = 'sigma'
+        error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid'
 ) -> None:
     """
     Prepare moment maps (pixel_moments), as image (see
@@ -357,7 +362,8 @@ def prep_pixel_moments(
     one map is invalid in all. The options of the clipping (clip_min,
     clip_max, sclip_sigma and sclip_iters) have one value for each map
     (None: none for that map); sclip_iters can also be one value for all
-    maps. error_kind is what the files of the errors hold.
+    maps. error_kind is what the files of the errors hold, and mask_kind
+    what the masks mark (see read_arrays).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     nmaps = len(file_d)
@@ -372,7 +378,8 @@ def prep_pixel_moments(
     maps = []
     for i in range(nmaps):
         arrays = FitsArrays.read(
-            file_d[i], file_e[i], file_m[i], error_kind=error_kind)
+            file_d[i], file_e[i], file_m[i], error_kind=error_kind,
+            mask_kind=mask_kind)
         if roi_spat is not None:
             x0, x1, y0, y1 = roi_spat
             arrays = arrays.crop((slice(y0, y1), slice(x0, x1)))
@@ -435,6 +442,7 @@ def prep_region_moments(
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid',
         bins_plane: int | None = None
 ) -> None:
     """
@@ -443,10 +451,11 @@ def prep_region_moments(
     NaN for no bin, on the pixels of the maps as their errors and masks
     are, see FitsArrays.read_sky_map; of the plane bins_plane of a file of
     them, if given: e.g. 1, of the stellar continuum, of the BINID of the
-    MAPS of MaNGA's DAP), and moment maps (file_d, with
-    optional errors file_e, of the kind error_kind, see read_arrays, and
-    masks file_m) whose pixels hold the value of their bin. Write the
-    bins, numbered from 0 in the order of their numbers in the map
+    MAPS of MaNGA's DAP), and moment maps (file_d, with optional errors
+    file_e, of the kind error_kind, and masks file_m, of the kind
+    mask_kind, see read_arrays) whose pixels hold the value of their bin.
+    Write the bins, numbered from 0 in the order of their numbers in the
+    map
     (prep_<bins>.fits), and for each map a vector of the value of each bin
     (prep_<map>.fits), whose masked or empty bins are NaN, and of their
     errors, standard deviations (prep_<map>_error.fits), in the unit of
@@ -460,7 +469,9 @@ def prep_region_moments(
         [_output(output_dir, file_bins)]
         + [_output(output_dir, file) for file in file_d])
     maps = [
-        FitsArrays.read(file_d[i], file_e[i], file_m[i], error_kind=error_kind)
+        FitsArrays.read(
+            file_d[i], file_e[i], file_m[i], error_kind=error_kind,
+            mask_kind=mask_kind)
         for i in range(nmaps)]
     bins_header, index, nbins = _read_bins(file_bins, bins_plane, maps[0])
     _log.info(f"{nbins} bins")
@@ -500,6 +511,7 @@ def prep_region_spectra(
         output_dir: str = '.',
         output_dir_mode: _Exists = 'overwrite',
         error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid',
         bins_plane: int | None = None
 ) -> None:
     """
@@ -513,8 +525,8 @@ def prep_region_spectra(
     (roi_spec, of the axis in velocities, increasing). velocity is the
     convention of the velocities of an axis that does not state it,
     spectral_type the type of an axis whose header gives one that FITS
-    does not define, and error_kind what the file of the errors holds
-    (see FitsArrays.read).
+    does not define, error_kind what the file of the errors holds, and
+    mask_kind what the mask marks (see FitsArrays.read).
     Write the bins, numbered from 0 in the order of their numbers in the
     map (prep_<bins>.fits), the sum of the valid spectra of the pixels of
     each bin (prep_<cube>.fits: the bins along x, the channels along y),
@@ -532,7 +544,7 @@ def prep_region_spectra(
     cube = FitsArrays.read(
         file_d, file_e, file_m, velocity, rest=velocity_rest,
         spectral_type=spectral_type,
-        error_kind=error_kind)
+        error_kind=error_kind, mask_kind=mask_kind)
     bins_header, index, nbins = _read_bins(file_bins, bins_plane, cube)
     _log.info(f"{nbins} bins")
     fluxes = prep.pixel_fluxes(cube.header, cube.unit, cube.beam, file_d)

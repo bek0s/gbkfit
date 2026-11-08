@@ -70,6 +70,27 @@ def test_inverse_variances_of_zero_are_values_without_data(tmp_path):
     assert np.isnan(arrays.data[-1, 0, 0])
 
 
+@pytest.mark.parametrize('kind, marks, valid', [
+    ('valid', [1, 0], [True, False]),
+    ('invalid', [1, 0], [False, True]),
+    ('invalid', [4, 0], [False, True])])
+def test_a_mask_marks_the_valid_or_the_invalid_values(
+        tmp_path, kind, marks, valid):
+    # e.g. a mask of SoFiA (nonzero: valid), or of bad pixels or of bits
+    # of flags (nonzero: invalid; CALIFA's BADPIX, the masks of MaNGA)
+    write(tmp_path / 'data.fits', np.ones(SHAPE), CUBE)
+    mask = np.full(SHAPE, marks[1])
+    mask[0, 0, 0] = marks[0]
+    write(tmp_path / 'mask.fits', mask)
+    arrays = read_arrays(
+        str(tmp_path / 'data.fits'), mask=str(tmp_path / 'mask.fits'),
+        mask_kind=kind)
+    # (the first channel of the file is the last of the model)
+    assert bool(arrays.mask[-1, 0, 0]) == valid[0]
+    assert bool(arrays.mask[0, 0, 0]) == valid[1]
+    assert np.isnan(arrays.data[-1, 0, 0]) != valid[0]
+
+
 def test_errors_follow_their_own_world_coordinates(tmp_path):
     # The data decrease in velocity along their file, the errors (each
     # the velocity of its channel) increase along theirs: both read in

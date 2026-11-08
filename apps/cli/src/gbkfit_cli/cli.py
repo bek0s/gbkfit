@@ -246,6 +246,10 @@ def _make_parser() -> argparse.ArgumentParser:
         "what the uncertainties are: standard deviations (sigma, the "
         "default), variances or inverse variances; the prepared ones are "
         "standard deviations")
+    _MASK_KIND_HELP = (
+        "what the mask marks with values other than 0: the valid values "
+        "(valid, the default) or the invalid ones (invalid, e.g. a mask of "
+        "bad pixels or of flags)")
     _CLIP_MIN_HELP = "the values below MIN are set to NaN (invalid)"
     _CLIP_MAX_HELP = "the values above MAX are set to NaN (invalid)"
     _SCLIP_SIGMA_HELP = (
@@ -290,6 +294,10 @@ def _make_parser() -> argparse.ArgumentParser:
         '--error-kind', type=str, default='sigma',
         choices=['sigma', 'variance', 'inverse_variance'],
         help=_ERROR_KIND_HELP)
+    parser_prep_input_1.add_argument(
+        '--mask-kind', type=str, default='valid',
+        choices=['valid', 'invalid'],
+        help=_MASK_KIND_HELP)
     # ...
     parser_prep_input_n = argparse.ArgumentParser(add_help=False)
     parser_prep_input_n.add_argument(
@@ -308,6 +316,10 @@ def _make_parser() -> argparse.ArgumentParser:
         '--error-kind', type=str, default='sigma',
         choices=['sigma', 'variance', 'inverse_variance'],
         help=_ERROR_KIND_HELP)
+    parser_prep_input_n.add_argument(
+        '--mask-kind', type=str, default='valid',
+        choices=['valid', 'invalid'],
+        help=_MASK_KIND_HELP)
     # ...
     parser_prep_rest = argparse.ArgumentParser(add_help=False)
     parser_prep_rest.add_argument(
@@ -607,12 +619,13 @@ def _run_prep(args: argparse.Namespace) -> None:
             ccl_pcount=args.ccl_pcount, ccl_lratio=args.ccl_lratio,
             sclip_sigma=args.sclip_sigma, sclip_iters=args.sclip_iters,
             minify=args.minify, nanpad=args.nanpad, dtype=args.dtype,
-            error_kind=args.error_kind)
+            error_kind=args.error_kind, mask_kind=args.mask_kind)
     elif task in ('region_moments', 'region_spectra'):
         options = dict(
             file_bins=args.bins, bins_plane=args.bins_plane,
             file_d=args.data_d, file_e=args.data_e, file_m=args.data_m,
-            dtype=args.dtype, error_kind=args.error_kind)
+            dtype=args.dtype, error_kind=args.error_kind,
+            mask_kind=args.mask_kind)
     elif task == 'gauss_hermite_moments':
         options = dict(
             file=args.table, columns=args.columns, errors=args.errors,

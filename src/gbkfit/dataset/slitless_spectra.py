@@ -10,7 +10,7 @@ import numpy as np
 
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import Grid
-from gbkfit.io import ErrorKind
+from gbkfit.io import ErrorKind, MaskKind
 from . import _detail, _outliers, _resampling
 from .base import Dataset
 from .data import Data
@@ -79,6 +79,7 @@ class DatasetSlitlessSpectra(Dataset):
             rota: float | None = None,
             outliers: Mapping[str, Any] | None = None,
             error_kind: ErrorKind = 'sigma',
+            mask_kind: MaskKind = 'valid',
             footprint: DataFile | None = None
     ) -> 'DatasetSlitlessSpectra':
         """
@@ -113,6 +114,9 @@ class DatasetSlitlessSpectra(Dataset):
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
             read_arrays).
+        mask_kind : str, optional
+            What the file of the mask marks with values other than 0:
+            'valid' (by default) or 'invalid' values (see read_arrays).
         footprint : str or tuple, optional
             The file of where the instrument looked (see Data).
 
@@ -124,7 +128,7 @@ class DatasetSlitlessSpectra(Dataset):
         check_options(DatasetSlitlessSpectra.from_files, locals())
         item, coords = Data.from_files(
             data, mask, error, rpix, rval, unit=unit, beam=beam,
-            error_kind=error_kind, footprint=footprint)
+            error_kind=error_kind, mask_kind=mask_kind, footprint=footprint)
         dataset = cls(item, **_detail.grid_coords(coords, step, rota))
         return _detail.cleaned(dataset, outliers)
 

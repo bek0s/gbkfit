@@ -154,6 +154,18 @@ def test_dataset_reference_pixel_from_fits_header(tmp_path):
     assert dataset.grid().coords.rpix == (9, 3.5)
 
 
+def test_a_dataset_reads_a_mask_of_bad_pixels(tmp_path):
+    # (e.g. CALIFA's BADPIX: nonzero where the values are bad)
+    fits.writeto(tmp_path / 'data.fits', np.ones((8, 20)))
+    bad = np.zeros((8, 20))
+    bad[0, :5] = 1
+    fits.writeto(tmp_path / 'bad.fits', bad)
+    dataset = dataset_parser.load(dict(
+        type='pixel_brightness', data=str(tmp_path / 'data.fits'),
+        mask=str(tmp_path / 'bad.fits'), mask_kind='invalid'))
+    assert dataset['brightness'].mask().sum() == 8 * 20 - 5
+
+
 def test_dataset_reference_pixel_without_fits_header(tmp_path):
     fits.writeto(tmp_path / 'data.fits', np.zeros((8, 20)))
     dataset = dataset_parser.load(dict(

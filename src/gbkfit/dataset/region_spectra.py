@@ -10,7 +10,7 @@ import numpy as np
 
 from gbkfit.config import DataFile, check_options
 from gbkfit.grid import Grid, SpectralAxis, make_cube_grid
-from gbkfit.io import ErrorKind, write_spectra
+from gbkfit.io import ErrorKind, MaskKind, write_spectra
 from gbkfit.region import Regions, regions_parser
 from . import _detail, _outliers, _resampling
 from .base import Dataset
@@ -80,7 +80,8 @@ class DatasetRegionSpectra(Dataset):
             beam: Mapping[str, Any] | None = None,
             spectral: SpectralAxis | None = None,
             outliers: Mapping[str, Any] | None = None,
-            error_kind: ErrorKind = 'sigma'
+            error_kind: ErrorKind = 'sigma',
+            mask_kind: MaskKind = 'valid'
     ) -> 'DatasetRegionSpectra':
         """
         Read the dataset from FITS files (the regions along x, the velocity
@@ -116,6 +117,9 @@ class DatasetRegionSpectra(Dataset):
             What the file of the errors holds: 'sigma' (standard
             deviations), 'variance' or 'inverse_variance' (see
             read_arrays).
+        mask_kind : str, optional
+            What the file of the mask marks with values other than 0:
+            'valid' (by default) or 'invalid' values (see read_arrays).
 
         Returns
         -------
@@ -128,7 +132,8 @@ class DatasetRegionSpectra(Dataset):
             data, mask, error, references['rpix'], references['rval'],
             references['rest'], cls.spectral_axis, references['medium'],
             unit, beam, velocity=references['velocity'],
-            error_kind=error_kind, spectral_type=references['spectral_type'])
+            error_kind=error_kind, mask_kind=mask_kind,
+            spectral_type=references['spectral_type'])
         dataset = cls(
             spectra, regions,
             _detail.cube_coords(coords, None, None, spectral)['spectral'])

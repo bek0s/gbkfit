@@ -15,8 +15,8 @@ import numpy.typing as npt
 
 from gbkfit.config import DataFile
 from gbkfit.io import (
-    Arrays, Beam, ErrorKind, read_arrays, read_sky_map, shifted_header,
-    write_image)
+    Arrays, Beam, ErrorKind, MaskKind, read_arrays, read_sky_map,
+    shifted_header, write_image)
 from .masks import bounding_box
 
 
@@ -49,6 +49,7 @@ class FitsArrays(Arrays):
             *,
             rest: str | astropy.units.Quantity | None = None,
             error_kind: ErrorKind = 'sigma',
+            mask_kind: MaskKind = 'valid',
             spectral_type: str | None = None
     ) -> 'FitsArrays':
         """
@@ -72,6 +73,8 @@ class FitsArrays(Arrays):
             frequencies into velocities (see model_header).
         error_kind : str, optional
             What the file of the errors holds (see read_arrays).
+        mask_kind : str, optional
+            What the file of the mask marks (see read_arrays).
         spectral_type : str, optional
             The type of an axis whose header gives one that FITS does not
             define (see model_header).
@@ -89,7 +92,8 @@ class FitsArrays(Arrays):
             a spectral axis.
         """
         arrays = read_arrays(
-            data, error, mask, error_kind=error_kind, rest=rest,
+            data, error, mask, error_kind=error_kind, mask_kind=mask_kind,
+            rest=rest,
             velocity=velocity, spectral_type=spectral_type)
         header = arrays.header
         # (a header without world coordinates has no spectral axis)

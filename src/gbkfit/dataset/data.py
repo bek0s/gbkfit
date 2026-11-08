@@ -14,7 +14,8 @@ import gbkfit.units
 from gbkfit.config import DataFile, parse_options, split_data_file, warn
 from gbkfit.grid import Coords
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
-from gbkfit.io import Beam, ErrorKind, coords_from_header, read_arrays
+from gbkfit.io import (
+    Beam, ErrorKind, MaskKind, coords_from_header, read_arrays)
 
 
 __all__ = [
@@ -52,6 +53,9 @@ class DataFiles(NamedTuple):
         What the file of the errors holds: 'sigma' (standard
         deviations), 'variance' or 'inverse_variance' (see
         read_arrays).
+    mask_kind : str, optional
+        What the file of the mask marks with values other than 0:
+        'valid' (by default) or 'invalid' values (see read_arrays).
     footprint : str or tuple, optional
         The file of where the instrument looked (see Data).
     """
@@ -64,6 +68,7 @@ class DataFiles(NamedTuple):
     spatial_correlation: PSF | None = None
     spectral_correlation: LSF | None = None
     error_kind: ErrorKind = 'sigma'
+    mask_kind: MaskKind = 'valid'
     footprint: DataFile | None = None
 
 
@@ -254,7 +259,8 @@ class Data:
             velocity: str | None = None,
             error_kind: ErrorKind = 'sigma',
             footprint: DataFile | None = None,
-            spectral_type: str | None = None
+            spectral_type: str | None = None,
+            mask_kind: MaskKind = 'valid'
     ) -> tuple['Data', Coords]:
         """
         Read a data item from files, with the unit and the beam of the
@@ -309,6 +315,9 @@ class Data:
         error_kind : str, optional
             What the file of the errors holds (see
             read_arrays).
+        mask_kind : str, optional
+            What the file of the mask marks with values other than 0 (see
+            read_arrays).
         footprint : str or tuple, optional
             The file of where the instrument looked (see Data).
 
@@ -341,7 +350,8 @@ class Data:
         elif error is not None:
             error_file = error
         arrays = read_arrays(
-            data, error_file, mask, error_kind=error_kind, unit=unit,
+            data, error_file, mask, error_kind=error_kind,
+            mask_kind=mask_kind, unit=unit,
             rest=rest, velocity=velocity, footprint=footprint,
             spectral_type=spectral_type, medium=medium,
             spectral_axis=spectral_axis)

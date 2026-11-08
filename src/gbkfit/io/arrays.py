@@ -38,6 +38,7 @@ from .orientation import (
 __all__ = [
     'Arrays',
     'ErrorKind',
+    'MaskKind',
     'read_arrays',
     'read_data',
     'read_oriented',
@@ -53,6 +54,15 @@ ErrorKind: TypeAlias = Annotated[
         sigma='Standard deviations', variance='Variances',
         inverse_variance='Inverse variances')]
 _ERROR_POWERS = dict(sigma=1, variance=2, inverse_variance=-2)
+
+# What a mask file marks with values other than 0: the valid values (e.g.
+# the masks of SoFiA), or the invalid ones (e.g. a mask of bad pixels, or
+# of bits of flags, as CALIFA's BADPIX or the masks of MaNGA's DAP)
+_MASK_KINDS = ('valid', 'invalid')
+MaskKind: TypeAlias = Annotated[
+    Literal[_MASK_KINDS], Choices(
+        valid='Nonzero where valid',
+        invalid='Nonzero where invalid (e.g. flags)')]
 
 # How far (in pixels) the world coordinates of an error or mask file may
 # put the pixels from those of the data
@@ -223,6 +233,7 @@ def read_arrays(
         *,
         footprint: DataFile | None = None,
         error_kind: ErrorKind = 'sigma',
+        mask_kind: MaskKind = 'valid',
         unit: str | None = None,
         rest: Rest = None,
         velocity: str | None = None,
@@ -249,8 +260,9 @@ def read_arrays(
     data for variances).
 
     Values that are not finite, errors that are not finite or are 0
-    (inverse variances of 0: no data), and values that the mask marks
-    with 0 are invalid: NaN, with the mask 0.
+    (inverse variances of 0: no data), and values that the mask marks as
+    invalid (with 0, or of mask_kind 'invalid', with other values) are
+    invalid: NaN, with the mask 0.
 
     The beam of the values is that of the header of their file, or of
     each channel of a cube of CASA (see header_beam), in the order of the
@@ -268,6 +280,9 @@ def read_arrays(
     error_kind : str, optional
         What the errors are: 'sigma' (standard deviations), 'variance'
         or 'inverse_variance'.
+    mask_kind : str, optional
+        What the mask marks with values other than 0: 'valid' (by
+        default) or 'invalid' values (see _MASK_KINDS).
     unit : str, optional
         The unit of the values, as gbkfit.units.parse_unit reads it; by
         default, that of their header (BUNIT), if it is a unit.
@@ -284,16 +299,19 @@ def read_arrays(
     ------
     ValueError
         If a file cannot be read, or has world coordinates the model
-        cannot take (see model_header); error_kind is not 'sigma',
-        'variance' or 'inverse_variance', the errors are negative, or
-        their unit is not that of their kind; the errors or the mask are
-        not on the pixels of the data; or the beams of a cube are not one
-        for each channel.
+        cannot take (see model_header); error_kind or mask_kind is not
+        one of its kinds; the errors are negative, or their unit is not
+        that of their kind; the errors or the mask are not on the pixels
+        of the data; or the beams of a cube are not one for each channel.
     """
     if error_kind not in _ERROR_KINDS:
         raise ValueError(
             f"the kind of the errors must be one of {list(_ERROR_KINDS)}; "
             f"it is {error_kind!r}")
+    if mask_kind not in _MASK_KINDS:
+        raise ValueError(
+            f"the kind of the mask must be one of {list(_MASK_KINDS)}; it "
+            f"is {mask_kind!r}")
     read = dict(
         rest=rest, velocity=velocity, spectral_type=spectral_type,
         medium=medium, spectral_axis=spectral_axis)
@@ -318,7 +336,9 @@ def read_arrays(
     if errors is not None:
         valid &= np.isfinite(errors) & (errors > 0)
     if masks is not None:
-        valid &= np.isfinite(masks) & (masks != 0)
+        marked = masks != 0
+        valid &= np.isfinite(masks) & (
+            marked if mask_kind == 'valid' else ~marked)
     footprints = None
     if footprint is not None:
         footprints, _ = _read_companion(
