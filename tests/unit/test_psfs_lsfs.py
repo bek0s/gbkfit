@@ -525,6 +525,28 @@ def test_psfs_from_files_in_python(tmp_path):
         PSFImage.from_file(str(tmp_path / 'psf.fits'))._step, (0.5, 0.5))
 
 
+def test_a_beam_psf_is_read_from_a_file_as_datasets_read_it(tmp_path):
+    # The beam of a cube of THINGS is in its history (of AIPS) only, and
+    # one of a header without BPA is at 0 degrees
+    from astropy.io import fits
+    from gbkfit.instrument import PSFGaussBeam
+    header = fits.Header()
+    header['HISTORY'] = (
+        'AIPS   CLEAN BMAJ=  2.7778E-03 BMIN=  1.3889E-03 BPA=  30.00')
+    fits.writeto(tmp_path / 'things.fits', np.zeros((2, 2)), header)
+    fits.writeto(tmp_path / 'nobpa.fits', np.zeros((2, 2)), fits.Header(
+        dict(BMAJ=3 / 3600, BMIN=1.5 / 3600)))
+    psf = PSFGaussBeam.from_file(str(tmp_path / 'things.fits'))
+    assert (psf.bmaj(), psf.bmin(), psf.bpa()) == pytest.approx(
+        (10.0, 5.0, 30.0), rel=1e-4)
+    psf = PSFGaussBeam.from_file(str(tmp_path / 'nobpa.fits'))
+    assert (psf.bmaj(), psf.bmin(), psf.bpa()) == pytest.approx(
+        (3.0, 1.5, 0.0))
+    fits.writeto(tmp_path / 'none.fits', np.zeros((2, 2)))
+    with pytest.raises(ValueError, match="the header has no beam"):
+        PSFGaussBeam.from_file(str(tmp_path / 'none.fits'))
+
+
 def test_a_psf_image_after_an_empty_primary_hdu_is_read(tmp_path):
     # A file given alone is read at its first HDU with an image, as the
     # data of datasets are (HDU 0, here empty, was read)

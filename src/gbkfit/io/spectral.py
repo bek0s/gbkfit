@@ -3,7 +3,7 @@ The spectral axes of FITS headers: their types and the conventions of
 their velocities (FITS WCS Paper III, and those of AIPS and MIRIAD),
 their rests and the medium of their wavelengths, and their reading as
 velocities of a rest. An axis of a type that FITS does not define is
-read as the type given (see with_spectral_type).
+read as the type given (see _with_spectral_type).
 
 A rest wavelength is in the medium of the wavelengths of its axis, as
 the model takes it (see VelocityConvention), and in vacuum in headers
@@ -27,8 +27,7 @@ from .headers import has_wcs, ignoring_wcs_fixes
 
 __all__ = [
     'nonstandard_spectral_axis',
-    'velocity_is_ambiguous',
-    'with_spectral_type'
+    'velocity_is_ambiguous'
 ]
 
 
@@ -127,11 +126,11 @@ def nonstandard_spectral_axis(
     return None
 
 
-def with_spectral_type(
+def _with_spectral_type(
+        source: str,
         header: astropy.io.fits.Header,
         shape: tuple[int, ...] | None,
-        spectral_type: str | None,
-        source: str
+        spectral_type: str | None
 ) -> astropy.io.fits.Header:
     """
     Return the header with the type of its spectral axis whose type is not
@@ -145,6 +144,8 @@ def with_spectral_type(
 
     Parameters
     ----------
+    source : str
+        The name of the file of the header, for messages.
     header : Header
         The header.
     shape : tuple of int, optional
@@ -153,8 +154,6 @@ def with_spectral_type(
     spectral_type : str, optional
         The type the axis is read as: one of SPECTRAL_TYPES (e.g. 'AWAV'
         for linear wavelengths in air).
-    source : str
-        The name of the file of the header, for messages.
 
     Raises
     ------
@@ -184,9 +183,9 @@ def with_spectral_type(
 
 
 def _with_velocity_convention(
+        source: str,
         header: astropy.io.fits.Header,
-        velocity: str | None,
-        source: str
+        velocity: str | None
 ) -> astropy.io.fits.Header:
     """
     Return the header with the convention of the velocities of its
@@ -204,48 +203,43 @@ def _with_velocity_convention(
 
     Parameters
     ----------
+    source : str
+        The name of the file of the header, for messages.
     header : Header
         The header.
     velocity : str, optional
-        The convention of the velocities: 'radio' or 'optical'; only for
-        an axis of the AIPS convention without VELREF.
-    source : str
-        The name of the file of the header, for the errors.
+        The convention of the velocities of an axis of the AIPS convention
+        without VELREF: 'radio' or 'optical'; ignored for other axes.
 
     Returns
     -------
     Header
-        The header (a copy, with VELREF, if the convention is given).
+        The header (a copy, with VELREF, if its axis is of the AIPS
+        convention without it).
 
     Raises
     ------
     ValueError
-        If the convention is ambiguous and not given, or it is given and
-        the header states it, or it is not 'radio' or 'optical'.
+        If the axis is of the AIPS convention without VELREF, and the
+        convention is not given, or is not 'radio' or 'optical'.
     """
-    if velocity is not None and velocity not in _VELOCITY_CONVENTIONS:
+    if not velocity_is_ambiguous(header):
+        return header
+    frame = _aips_frame(header)
+    if velocity is None:
+        raise ValueError(
+            f"{source}: the velocities of the spectral axis (VELO-{frame}"
+            f", without VELREF) may be radio or optical: AIPS reads them "
+            f"as optical, but MIRIAD writes radio ones (e.g. LVHIS). Say "
+            f"which, where the data are read (the spectral convention of "
+            f"a dataset, spectral: {{convention: radio}}; the velocity "
+            f"of prep), or add VELREF to the header "
+            f"({_AIPS_FRAMES[frame]} for optical, "
+            f"{_AIPS_FRAMES[frame] + 256} for radio)")
+    if velocity not in _VELOCITY_CONVENTIONS:
         raise ValueError(
             f"the convention of velocities must be one of "
             f"{list(_VELOCITY_CONVENTIONS)}; it is {velocity!r}")
-    frame = _aips_frame(header)
-    ambiguous = velocity_is_ambiguous(header)
-    if velocity is None:
-        if ambiguous:
-            raise ValueError(
-                f"{source}: the velocities of the spectral axis (VELO-{frame}"
-                f", without VELREF) may be radio or optical: AIPS reads them "
-                f"as optical, but MIRIAD writes radio ones (e.g. LVHIS). Say "
-                f"which, where the data are read (the spectral convention of "
-                f"a dataset, spectral: {{convention: radio}}; the velocity "
-                f"of prep), or add VELREF to the header "
-                f"({_AIPS_FRAMES[frame]} for optical, "
-                f"{_AIPS_FRAMES[frame] + 256} for radio)")
-        return header
-    if not ambiguous:
-        raise ValueError(
-            f"{source}: the convention of velocities is for a spectral axis "
-            f"of the AIPS convention without VELREF (e.g. VELO-HEL); this "
-            f"header states its own")
     header = header.copy()
     radio = 256 if velocity == 'radio' else 0
     header['VELREF'] = _AIPS_FRAMES[frame] + radio
@@ -272,15 +266,14 @@ def _stated_header(
     """
     Return a header (of an array of the given shape, numpy order) whose
     spectral axis states what its values are: of the type given, if its
-    own is not one FITS defines (see with_spectral_type), and of the
+    own is not one FITS defines (see _with_spectral_type), and of the
     convention of velocities given, if the header leaves it ambiguous
     (see _with_velocity_convention); with a warning if AIRORVAC
     contradicts its type (see _check_header_medium).
     """
-    header = with_spectral_type(header, shape, spectral_type, source)
+    header = _with_spectral_type(source, header, shape, spectral_type)
     _check_header_medium(source, header)
-    return _with_velocity_convention(
-        header, velocity if velocity_is_ambiguous(header) else None, source)
+    return _with_velocity_convention(source, header, velocity)
 
 
 def _aips_frame(header: astropy.io.fits.Header) -> str | None:
@@ -455,10 +448,11 @@ def _with_flat_axis_rest(
     Return world coordinates with the rest of a spectral axis of one pixel
     (e.g. that of a moment map, which reading leaves out, see
     model_header), as _velocity_axis gives it to other axes, and the medium
-    of its wavelengths, if it is of wavelengths: an axis of one pixel has
-    no velocities to read, so that it takes a rest whatever its type (e.g.
-    relativistic velocities, VELO, of one pixel). The medium of an axis of
-    optical velocities is that given (see _velocity_axis).
+    of its wavelengths, if it is of wavelengths. An axis of one pixel has
+    no velocities to read: a rest is no error whatever its type, and one
+    of a type that takes none (e.g. relativistic velocities, VELO) is left
+    as it is. The medium of an axis of optical velocities is that given
+    (see _velocity_axis).
     """
     rest = make_rest(rest)
     spec = wcs.wcs.spec
@@ -735,11 +729,17 @@ def _velocity_scale(source: str, wcs: astropy.wcs.WCS) -> float:
     """
     ctype = wcs.wcs.ctype[wcs.wcs.spec]
     if ctype[:4] not in _VELOCITY_TYPES:
+        # (the rest of the header, if any, which is not taken unless given)
+        stated = (
+            f" (its header states '{wcs.wcs.restfrq:.10g} Hz', RESTFRQ)"
+            if wcs.wcs.restfrq else
+            f" (its header states '{wcs.wcs.restwav:.10g} m', RESTWAV)"
+            if wcs.wcs.restwav else "")
         raise ValueError(
             f"{source}: the spectral axis is of type '{ctype}'; only "
             f"velocity axes ({', '.join(_VELOCITY_TYPES)}) are supported: "
             f"give the rest frequency or wavelength of its line (spectral: "
-            f"{{rest: ...}}), which turns it into velocities")
+            f"{{rest: ...}}), which turns it into velocities{stated}")
     if not _is_linear_type(ctype):
         raise ValueError(
             f"{source}: the spectral axis ({ctype}) is not linear in "

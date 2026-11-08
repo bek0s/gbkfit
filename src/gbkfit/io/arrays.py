@@ -29,8 +29,8 @@ from .beams import Beam, _oriented_beam
 from .coords import coords_from_header
 from .formats import read_image
 from .headers import (
-    _with_shape, has_wcs, header_shape, header_unit, ignoring_wcs_fixes,
-    parse_wcs, with_wcs)
+    _with_shape, _with_wcs, has_wcs, header_shape, header_unit,
+    ignoring_wcs_fixes, parse_wcs)
 from .orientation import (
     Orientation, _oriented_header, _squeezed_shape, model_header)
 
@@ -103,8 +103,8 @@ class Arrays:
 def read_data(
         file: DataFile,
         *,
-        rpix: Sequence[float] | None = None,
-        rval: Sequence[float] | None = None,
+        rpix: float | Sequence[float | None] | None = None,
+        rval: float | Sequence[float | None] | None = None,
         rest: Rest = None,
         velocity: str | None = None,
         spectral_type: str | None = None,
@@ -134,7 +134,7 @@ def read_data(
         header leaves ambiguous: 'radio' or 'optical' (see model_header).
     spectral_type : str, optional
         The type of an axis whose header gives one that FITS does not
-        define (see with_spectral_type).
+        define (see model_header).
     medium : str, optional
         The medium of the wavelengths of the spectral axis and of the
         rest, if the header does not state it (see model_header and
@@ -330,10 +330,7 @@ def read_arrays(
 
 
 def read_sky_map(
-        file: DataFile,
-        data_header: astropy.io.fits.Header,
-        data_orientation: Orientation,
-        plane: int | None = None
+        file: DataFile, data: Arrays, plane: int | None = None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
     Read an image of the sky of data read from a file (e.g. the bin of
@@ -347,12 +344,8 @@ def read_sky_map(
     ----------
     file : DataFile
         The file of the image.
-    data_header : astropy.io.fits.Header
-        The header of the data, in the orientation of the model (see
-        Arrays).
-    data_orientation : Orientation
-        How the file of the data was put in the orientation of the model
-        (see Arrays).
+    data : Arrays
+        The data, as read_arrays reads them (on the pixels of their file).
     plane : int, optional
         The plane to read of a file of images of the sky, along its last
         axis (FITS order; e.g. the BINID of the MAPS of MaNGA's DAP).
@@ -367,20 +360,25 @@ def read_sky_map(
     Raises
     ------
     ValueError
-        If the data have no sky of two axes, the image is not on the
-        pixels of their sky, or the file has no such plane.
+        If the data are not on the pixels of their file (e.g. cropped),
+        have no sky of two axes, the image is not on the pixels of their
+        sky, or the file has no such plane.
     """
-    orientation = data_orientation.sky()
-    shape = header_shape(data_header)[-2:]
-    header = _with_shape(data_header, shape)
-    if has_wcs(data_header):
+    if data.orientation is None:
+        raise ValueError(
+            "an image of the sky is read on the pixels of the file of the "
+            "data, before they are cropped or padded")
+    orientation = data.orientation.sky()
+    shape = header_shape(data.header)[-2:]
+    header = _with_shape(data.header, shape)
+    if has_wcs(data.header):
         filename = split_data_file(file)[0]
-        wcs = parse_wcs(filename, data_header)
+        wcs = parse_wcs(filename, data.header)
         if wcs.wcs.spec in (0, 1):
             raise ValueError(
                 f"{filename}: the data have no sky of two axes to put an "
                 f"image of the sky on")
-        header = with_wcs(header, wcs.sub(2))
+        header = _with_wcs(header, wcs.sub(2))
     return _read_companion(
         file, header, orientation, rest=None, velocity=None,
         spectral_type=None, medium=None, spectral_axis=None, plane=plane)
@@ -463,7 +461,7 @@ def _plane(
             f"{values.shape} (of planes along its first axis, numpy order)")
     header = _with_shape(header, values.shape[1:])
     if has_wcs(header):
-        header = with_wcs(header, parse_wcs(source, header).sub(2))
+        header = _with_wcs(header, parse_wcs(source, header).sub(2))
     return values[plane], header
 
 

@@ -3,8 +3,7 @@ The world coordinates of the model (see Coords) of headers and WCSs in
 its orientation (see model_header): steps in arcsec and km/s, the
 reference pixel and its world position in ICRS, the rotation of the
 pixel grid on the sky, and the rest, medium, convention and frame of the
-spectral axis; and the headers of world coordinates of the model, of
-data written to files (see write_data).
+spectral axis.
 """
 
 from collections.abc import Sequence
@@ -16,13 +15,10 @@ import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
 
-from gbkfit.grid import Coords, Rest
-from .headers import (
-    _linear_transform, centre_missing_crpix, header_shape, parse_wcs)
+from gbkfit.grid import Coords, Rest, per_axis
+from .headers import _centre_missing_crpix, header_shape, parse_wcs
 from .orientation import _model_axis_flips, model_axis_order
-from .spectral import (
-    _log_velocity_axis, _spectral_terms, _velocity_axis_keywords,
-    _velocity_scale)
+from .spectral import _log_velocity_axis, _spectral_terms, _velocity_scale
 
 
 __all__ = [
@@ -46,8 +42,8 @@ def coords_from_header(
         source: str,
         header: astropy.io.fits.Header,
         *,
-        rpix: Sequence[float] | None = None,
-        rval: Sequence[float] | None = None,
+        rpix: float | Sequence[float | None] | None = None,
+        rval: float | Sequence[float | None] | None = None,
         rest: Rest = None,
         medium: str | None = None,
         spectral_axis: int | None = None
@@ -83,7 +79,7 @@ def coords_from_header(
         The name of the file of the header, for messages.
     header : astropy.io.fits.Header
         The header.
-    rpix, rval : Sequence[float or None], optional
+    rpix, rval : float or Sequence[float or None], optional
         The reference pixel or its world position, in the units of the
         model (of the celestial axes, the RA and Dec of ICRS, in
         degrees): a value for each axis (None: not given) or one for all.
@@ -116,9 +112,9 @@ def coords_from_header(
         medium is not valid or not the one the header states.
     """
     # A header without world coordinates has its reference pixels at the
-    # centres (see centre_missing_crpix)
+    # centres (see _centre_missing_crpix)
     wcs = parse_wcs(
-        source, centre_missing_crpix(header, header_shape(header)))
+        source, _centre_missing_crpix(header, header_shape(header)))
     wcs, log = _log_velocity_axis(source, wcs)
     spec = wcs.wcs.spec
     if spectral_axis is not None and spec >= 0 and spec != spectral_axis:
@@ -135,8 +131,8 @@ def _grid_of_wcs(
         source: str,
         wcs: astropy.wcs.WCS,
         *,
-        rpix: Sequence[float] | None = None,
-        rval: Sequence[float] | None = None
+        rpix: float | Sequence[float | None] | None = None,
+        rval: float | Sequence[float | None] | None = None
 ) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...], float]:
     """
     Return the steps, the reference pixel, its world position and the
@@ -149,7 +145,9 @@ def _grid_of_wcs(
             f"{source}: the axes of the world coordinates are not in the "
             f"orientation of the model (see model_header)")
     lng, lat = wcs.wcs.lng, wcs.wcs.lat
-    linear = _linear_transform(wcs)
+    # The linear transformation from pixels to intermediate world
+    # coordinates: a row for each world axis, a column for each pixel axis
+    linear = wcs.pixel_scale_matrix
     # The factor from the world units of each axis to model units
     scale = [_axis_scale(source, wcs, axis) for axis in range(naxis)]
     if lng >= 0:
@@ -162,7 +160,7 @@ def _grid_of_wcs(
         for axis in range(naxis)]
     # NaN where not given: an axis takes the other one of the WCS, at the
     # values of the header on the other axes, which do not change it
-    rpix, rval = _per_axis(rpix, naxis), _per_axis(rval, naxis)
+    rpix, rval = _per_axis('rpix', rpix, naxis), _per_axis('rval', rval, naxis)
     given_rval = ~np.isnan(rval)
     native = rval.copy()
     if lng >= 0:
@@ -194,17 +192,19 @@ def _grid_of_wcs(
 
 
 def _per_axis(
-        value: Sequence[float | None] | float | None, naxis: int
+        option: str, value: float | Sequence[float | None] | None, naxis: int
 ) -> np.ndarray:
     """
     Return a value given for each of naxis axes, or one for all (see
     coords_from_header), as floats: NaN where it is not given.
+
+    Raise ValueError if it has neither one value nor one for each axis.
     """
     if value is None:
         return np.full(naxis, np.nan)
-    if np.ndim(value) == 0:
-        return np.full(naxis, float(value))
-    return np.array([np.nan if x is None else x for x in value], float)
+    return np.array(
+        [np.nan if x is None else x for x in per_axis(option, value, naxis)],
+        float)
 
 
 def _axis_scale(source: str, wcs: astropy.wcs.WCS, axis: int) -> float:
@@ -267,7 +267,7 @@ def _celestial_frame(
     except ValueError as e:
         raise ValueError(
             f"{source}: the celestial frame of the world coordinates is "
-            f"not known: {e}") from e
+            f"not known: {e}") from None
 
 
 def _from_icrs(
@@ -335,96 +335,3 @@ def _check_uncoupled(
             f"{source}: the world coordinates couple axes that the model "
             f"keeps independent (e.g. the velocity varies along a spatial "
             f"axis)")
-
-
-def _header_from_coords(
-        coords: Coords, ndim: int, spectral_axis: int | None
-) -> astropy.io.fits.Header:
-    """
-    Return the header of the world coordinates of the model (see Coords)
-    of data of ndim axes, of which the spectral axis is spectral_axis (see
-    write_data), with the frame of their velocities (SPECSYS).
-
-    Raises
-    ------
-    ValueError
-        For data of another layout.
-    """
-    header = astropy.io.fits.Header()
-    if spectral_axis == 0 and ndim == 1:
-        header.update(_velocity_axis_keywords(coords, 1))
-    elif spectral_axis is None and ndim == 2:
-        header.update(_sky_keywords(coords))
-    elif spectral_axis == 2 and ndim == 3:
-        header.update(_sky_keywords(coords))
-        header.update(_velocity_axis_keywords(coords, 3))
-    elif spectral_axis is None and ndim == 3:
-        header.update(_sky_keywords(coords))
-        header.update(_offset_keywords(
-            3, coords.step[2], coords.rpix[2], coords.rval[2]))
-    elif spectral_axis == 1 and ndim == 2:
-        # The position along the slit is an offset from its reference
-        header.update(_offset_keywords(
-            1, coords.step[0], coords.rpix[0], 0.0))
-        header.update(_velocity_axis_keywords(coords, 2))
-    else:
-        raise ValueError(
-            f"unsupported data: {ndim} axes, of which the spectral "
-            f"axis is {spectral_axis}")
-    return _with_frame(header, coords)
-
-
-def _spectra_header_from_coords(coords: Coords) -> astropy.io.fits.Header:
-    """
-    Return the header of spectra of regions (see write_spectra): of the
-    world coordinates of their spectral axis (of one axis), along y, with
-    the frame of their velocities (SPECSYS).
-    """
-    return _with_frame(
-        astropy.io.fits.Header(_velocity_axis_keywords(coords, 2, 0)), coords)
-
-
-def _with_frame(
-        header: astropy.io.fits.Header, coords: Coords
-) -> astropy.io.fits.Header:
-    """
-    Return a header with the frame of the velocities of world coordinates
-    (SPECSYS), if they have one.
-    """
-    if coords.frame is not None:
-        header['SPECSYS'] = coords.frame
-    return header
-
-
-def _sky_keywords(coords: Coords) -> dict[str, float | str]:
-    """Return the header keywords of the x and y axes on the sky."""
-    step_x, step_y = coords.step[:2]
-    rota = np.radians(coords.rota)
-    # The +y axis points to the position angle rota, and the +x axis to
-    # rota - 90 (east is to the left of north). Intermediate world x
-    # points east and y north. The rows of the PC matrix are scaled by
-    # CDELT, so PC is a rotation only for square pixels.
-    cd = np.array([
-        [-step_x * np.cos(rota), step_y * np.sin(rota)],
-        [step_x * np.sin(rota), step_y * np.cos(rota)]]) / 3600
-    cdelt = np.array([-step_x, step_y]) / 3600
-    pc = cd / cdelt[:, None]
-    return dict(
-        CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=cdelt[0],
-        CRPIX1=coords.rpix[0] + 1, CRVAL1=coords.rval[0],
-        CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=cdelt[1],
-        CRPIX2=coords.rpix[1] + 1, CRVAL2=coords.rval[1], RADESYS='ICRS',
-        PC1_1=pc[0, 0], PC1_2=pc[0, 1],
-        PC2_1=pc[1, 0], PC2_2=pc[1, 1])
-
-
-def _offset_keywords(
-        n: int,
-        step: float,
-        rpix: float,
-        rval: float
-) -> dict[str, float | str]:
-    """Return the header keywords of an offset in arcsec, FITS axis n."""
-    return {
-        f'CTYPE{n}': 'OFFSET', f'CUNIT{n}': 'arcsec', f'CDELT{n}': step,
-        f'CRPIX{n}': rpix + 1, f'CRVAL{n}': rval}

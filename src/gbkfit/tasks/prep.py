@@ -558,8 +558,7 @@ def prep_region_spectra(
             None if file_e is None else _output(output_dir, file_d, 'error'),
             dtype=dtype)
     valid = cube.header.copy()
-    for key in ('BUNIT', 'EXTNAME'):
-        valid.remove(key, ignore_missing=True)
+    valid.remove('EXTNAME', ignore_missing=True)
     write_image(
         _output(output_dir, file_d, 'valid'),
         (cube.mask != 0).astype(np.uint8), valid, overwrite=True)

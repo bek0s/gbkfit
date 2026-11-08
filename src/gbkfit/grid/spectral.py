@@ -63,7 +63,7 @@ FRAMES = (
 # The types (FITS 4.0, Table 25, and WCS Paper III) that the spectral
 # axis of data whose header gives it a type FITS does not define (e.g.
 # CTYPE3 = 'WAVELENGTH') is read as (see SpectralAxis, and
-# gbkfit.io.with_spectral_type): linear wavelengths in vacuum or in air,
+# gbkfit.io.model_header): linear wavelengths in vacuum or in air,
 # logarithmic wavelengths in vacuum or in air, frequencies, and radio or
 # optical velocities
 SPECTRAL_TYPES = (
@@ -547,7 +547,7 @@ class SpectralAxis(Serializable):
         type that FITS does not define (e.g. CTYPE3 = 'WAVELENGTH', as
         CALIFA writes): such a header does not say what its values are,
         and data of one are not read without it (see
-        gbkfit.io.with_spectral_type).
+        gbkfit.io.model_header).
 
     Raises
     ------

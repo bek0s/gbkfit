@@ -16,15 +16,12 @@ import gbkfit.units
 
 
 __all__ = [
-    'centre_missing_crpix',
     'has_wcs',
     'header_shape',
     'header_unit',
     'ignoring_wcs_fixes',
     'parse_wcs',
-    'shifted_header',
-    'spectra_header',
-    'with_wcs'
+    'shifted_header'
 ]
 
 
@@ -61,7 +58,7 @@ def has_wcs(header: astropy.io.fits.Header) -> bool:
     return any(_WCS_KEYWORDS.fullmatch(key) for key in header)
 
 
-def with_wcs(
+def _with_wcs(
         header: astropy.io.fits.Header, wcs: astropy.wcs.WCS
 ) -> astropy.io.fits.Header:
     """
@@ -98,7 +95,7 @@ def header_unit(header: astropy.io.fits.Header) -> str | None:
     return unit or None
 
 
-def centre_missing_crpix(
+def _centre_missing_crpix(
         header: astropy.io.fits.Header,
         shape: tuple[int, ...]
 ) -> astropy.io.fits.Header:
@@ -141,7 +138,7 @@ def shifted_header(
         return header
     wcs = astropy.wcs.WCS(header)
     wcs.wcs.crpix -= np.asarray(offset)[::-1]
-    return with_wcs(header, wcs)
+    return _with_wcs(header, wcs)
 
 
 def _with_shape(
@@ -163,14 +160,16 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
 
     The unit of each axis (CUNITn) must be valid (see
     gbkfit.units.parse_unit): astropy would correct some, e.g. 'HZ'
-    to Hz, and no unit is corrected.
+    to Hz, and no unit is corrected. A CUNITn that is not text (e.g. the
+    number 0, of the PSF images of KMOS3D) is no unit: astropy leaves it
+    out, with a warning, as an axis without a unit.
     """
     for key in filter(_CUNIT_KEYWORDS.fullmatch, header):
-        text = str(header[key]).strip()
-        if not text:
+        value = header[key]
+        if not isinstance(value, str) or not value.strip():
             continue
         try:
-            gbkfit.units.parse_unit(text)
+            gbkfit.units.parse_unit(value.strip())
         except ValueError as e:
             raise ValueError(
                 f"{source}: {key}: {e}; correct it in a copy of the "
@@ -179,48 +178,7 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
         return astropy.wcs.WCS(header)
     except ValueError as e:
         raise ValueError(
-            f"{source}: invalid world coordinates: {e}") from e
-
-
-def spectra_header(
-        source: str, header: astropy.io.fits.Header, nregions: int
-) -> astropy.io.fits.Header:
-    """
-    Return the header of the spectra of regions of the data of a header
-    (see write_spectra): the regions along x (by their index), and the
-    spectral axis of the data along y, as the header states it (e.g. of
-    logarithmic wavelengths, WAVE-LOG), with its rest, its frame and the
-    medium of its wavelengths.
-
-    Raise ValueError if the data have no spectral axis.
-    """
-    wcs = parse_wcs(source, header)
-    if wcs.wcs.spec < 0:
-        raise ValueError(f"{source}: the data have no spectral axis")
-    spectral = wcs.sub([wcs.wcs.spec + 1])
-    spectra = astropy.wcs.WCS(naxis=2)
-    spectra.wcs.ctype = ['LINEAR', spectral.wcs.ctype[0]]
-    spectra.wcs.cunit = ['', spectral.wcs.cunit[0]]
-    spectra.wcs.crpix = [1, spectral.wcs.crpix[0]]
-    spectra.wcs.crval = [0, spectral.wcs.crval[0]]
-    spectra.wcs.cdelt = [1, spectral.pixel_scale_matrix[0, 0]]
-    spectra.wcs.restfrq, spectra.wcs.restwav = (
-        spectral.wcs.restfrq, spectral.wcs.restwav)
-    spectra.wcs.specsys = spectral.wcs.specsys
-    result = spectra.to_header()
-    if 'AIRORVAC' in header:
-        result['AIRORVAC'] = header['AIRORVAC']
-    nchannels = int(header[f'NAXIS{wcs.wcs.spec + 1}'])
-    return _with_shape(result, (nchannels, nregions))
-
-
-def _linear_transform(wcs: astropy.wcs.WCS) -> np.ndarray:
-    """
-    Return the linear transformation from pixels to intermediate world
-    coordinates: one row for each world axis, one column for each pixel
-    axis.
-    """
-    return wcs.wcs.get_cdelt()[:, None] * wcs.wcs.get_pc()
+            f"{source}: invalid world coordinates: {e}") from None
 
 
 @contextlib.contextmanager

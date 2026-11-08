@@ -15,8 +15,8 @@ import numpy.typing as npt
 
 from gbkfit.config import DataFile
 from gbkfit.io import (
-    Arrays, Beam, ErrorKind, has_wcs, read_arrays, read_sky_map,
-    shifted_header, write_image)
+    Arrays, Beam, ErrorKind, read_arrays, read_sky_map, shifted_header,
+    write_image)
 from .masks import bounding_box
 
 
@@ -92,9 +92,8 @@ class FitsArrays(Arrays):
             data, error, mask, error_kind=error_kind, rest=rest,
             velocity=velocity, spectral_type=spectral_type)
         header = arrays.header
-        if rest is not None and not (
-                has_wcs(header)
-                and astropy.wcs.WCS(header).wcs.spec >= 0):
+        # (a header without world coordinates has no spectral axis)
+        if rest is not None and astropy.wcs.WCS(header).wcs.spec < 0:
             raise ValueError(
                 f"the data have no spectral axis to give the rest {rest}")
         return cls(**vars(arrays))
@@ -111,14 +110,9 @@ class FitsArrays(Arrays):
         Raises
         ------
         ValueError
-            If the arrays are no longer on the pixels of the file of the
-            data (cropped or padded), or as read_sky_map.
+            As read_sky_map (e.g. if the arrays were cropped or padded).
         """
-        if self.orientation is None:
-            raise ValueError(
-                "an image of the sky is read on the pixels of the file of "
-                "the data, before they are cropped or padded")
-        return read_sky_map(file, self.header, self.orientation, plane)
+        return read_sky_map(file, self, plane)
 
     def masked(self, mask: npt.ArrayLike) -> 'FitsArrays':
         """
@@ -211,10 +205,9 @@ class FitsArrays(Arrays):
             The type of the values.
         """
         # (each file is of one array, which an HDU name of the input, e.g.
-        # SCI, would misname; its unit is that of the arrays)
+        # SCI, would misname)
         header = self.header.copy()
-        for key in ('EXTNAME', 'BUNIT'):
-            header.remove(key, ignore_missing=True)
+        header.remove('EXTNAME', ignore_missing=True)
         for filename, array, unit in (
                 (data, self.data, self.unit),
                 (error, self.error, self.unit),

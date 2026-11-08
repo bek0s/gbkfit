@@ -13,8 +13,10 @@ import pytest
 from gbkfit.grid import (
     Coords, Grid, air_refractive_index, make_convention, make_grid, make_rest)
 from gbkfit.io import (
-    Beam, centre_missing_crpix, model_header, read_arrays, read_data,
-    read_image, read_oriented, read_sky_map, write_data)
+    Beam, casa_beam_table, model_header, read_arrays, read_data, read_image,
+    read_oriented, read_sky_map, spectra_header, write_data, write_image,
+    write_spectra)
+from gbkfit.io.headers import _centre_missing_crpix
 
 
 def position_angle(header, pixel_from, pixel_to):
@@ -179,6 +181,12 @@ def test_rpix_or_rval_can_be_given():
     np.testing.assert_allclose(coords.rpix, (5.0, 6.0), atol=1e-9)
 
 
+def test_rpix_or_rval_must_have_a_value_for_each_axis():
+    write(CELESTIAL | dict(CDELT1=-1 / 3600, CDELT2=1 / 3600))
+    with pytest.raises(ValueError, match="'rpix' must have one value"):
+        read_data('data.fits', rpix=(5.0, 6.0, 0.0))
+
+
 def test_hdu_can_be_chosen():
     # e.g. the SCI extension of JWST data
     header = fits.Header(CELESTIAL | dict(CDELT1=-1 / 3600, CDELT2=1 / 3600))
@@ -294,18 +302,18 @@ def test_an_image_of_the_sky_is_read_on_the_pixels_of_the_data(
     fits.writeto('cube.fits', data, fits.Header(header))
     fits.writeto('image.fits', sky(image))
     arrays = read_arrays('cube.fits')
-    result, _ = read_sky_map('image.fits', arrays.header, arrays.orientation)
+    result, _ = read_sky_map('image.fits', arrays)
     np.testing.assert_array_equal(result, image)
     # With world coordinates, it must be on the pixels of the sky of the
     # cube; with those of the cube, it is
     fits.writeto('wcs.fits', image, fits.Header(CELESTIAL | dict(
         CRPIX1=10.0, CDELT1=-1 / 3600, CDELT2=1 / 3600)))
-    result, _ = read_sky_map('wcs.fits', arrays.header, arrays.orientation)
+    result, _ = read_sky_map('wcs.fits', arrays)
     np.testing.assert_array_equal(result, image)
     fits.writeto('off.fits', image, fits.Header(CELESTIAL | dict(
         CRPIX1=12.0, CDELT1=-1 / 3600, CDELT2=1 / 3600)))
     with pytest.raises(ValueError, match="not put its pixels on"):
-        read_sky_map('off.fits', arrays.header, arrays.orientation)
+        read_sky_map('off.fits', arrays)
 
 
 def test_spectral_axis_is_read_last():
@@ -382,7 +390,7 @@ def test_a_missing_reference_pixel():
     # Of an axis without a world position (e.g. only the size of its
     # pixels), the centre (the convention of the model); of one with one,
     # 0 (that of FITS, as other tools read it)
-    header = centre_missing_crpix(
+    header = _centre_missing_crpix(
         fits.Header(dict(CTYPE1='RA---TAN', CRVAL1=150.0, CDELT2=1.0)),
         (20, 24))
     assert 'CRPIX1' not in header
@@ -722,6 +730,61 @@ def test_a_cube_of_one_channel_has_the_beam_of_its_table(tmp_path):
     arrays = read_arrays(path)
     assert arrays.data.shape == (20, 24)
     assert arrays.beam == Beam(10.0, 5.0, 30.0)
+
+
+def test_a_cunit_that_is_not_text_is_no_unit(tmp_path):
+    # e.g. CUNIT1 = 0, of the PSF images of KMOS3D: astropy leaves it out
+    # (with a warning), and the celestial axes are in degrees
+    path = write_map(tmp_path / 'psf.fits', SKY | dict(CUNIT1=0, CUNIT2=0))
+    with pytest.warns(astropy.wcs.FITSFixedWarning):
+        coords = read_data(path)[1]
+    assert coords.step == pytest.approx((10.0, 10.0))
+
+
+def test_the_header_of_a_frequency_axis_names_its_rest_if_not_given(
+        tmp_path):
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.42e9, CDELT3=1e5, CRPIX3=1,
+        RESTFRQ=1420405752.0), (3, 20, 24))
+    with pytest.raises(ValueError, match="states '1420405752 Hz', RESTFRQ"):
+        read_data(path)
+
+
+def test_an_image_is_written_in_the_unit_given_whatever_its_header(
+        tmp_path):
+    header = fits.Header(dict(BUNIT='Jy/beam'))
+    write_image(str(tmp_path / 'mask.fits'), np.ones((2, 2)), header)
+    assert 'BUNIT' not in fits.getheader(tmp_path / 'mask.fits')
+    write_image(
+        str(tmp_path / 'data.fits'), np.ones((2, 2)), header,
+        unit=u.Jy / u.beam)
+    assert fits.getheader(tmp_path / 'data.fits')['BUNIT'] == 'Jy beam-1'
+
+
+def test_a_cube_without_a_table_of_beams_has_no_casa_beam_table(tmp_path):
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='FREQ', CUNIT3='Hz', CRVAL3=1.42e9, CDELT3=1e5, CRPIX3=1),
+        (3, 20, 24))
+    with pytest.raises(ValueError, match="no table of the beams"):
+        casa_beam_table(path)
+
+
+def test_spectra_of_regions_of_the_model_and_of_data_have_one_layout(
+        tmp_path):
+    # The regions along x by their index, from 0, as prep writes the
+    # spectra of the bins of a cube
+    path = write_map(tmp_path / 'cube.fits', SKY | dict(
+        CTYPE3='VRAD', CUNIT3='km/s', CRVAL3=1000.0, CDELT3=10.0, CRPIX3=1),
+        (3, 20, 24))
+    of_data = spectra_header(path, fits.getheader(path), 5)
+    coords = read_data(path)[1]
+    write_spectra(
+        str(tmp_path / 'spectra.fits'), np.zeros((3, 5)), coords._replace(
+            step=coords.step[2:], rpix=coords.rpix[2:],
+            rval=coords.rval[2:], rota=0.0))
+    of_model = fits.getheader(tmp_path / 'spectra.fits')
+    for key in ('CTYPE1', 'CRPIX1', 'CDELT1', 'CRVAL1'):
+        assert of_model[key] == of_data[key]
 
 
 def test_a_nonstandard_type_of_an_axis_beyond_the_array_is_left_out(

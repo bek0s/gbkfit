@@ -4,10 +4,8 @@ The ASDF format: reading an array of the tree of an ASDF file (e.g.
 coordinates of the file (its gwcs, linearised, see linear_header).
 """
 
-from collections.abc import Iterator
-from typing import Any
-
 import asdf
+import asdf.treeutil
 import astropy.io.fits
 import astropy.table
 import gwcs
@@ -32,8 +30,8 @@ def read_image(
     Raises
     ------
     ValueError
-        If the path is not given or not in the tree, or the file has more
-        than one WCS.
+        If the path is not given, not in the tree or not of an array, or
+        the file has more than one WCS.
     """
     if path is None:
         raise ValueError(
@@ -44,12 +42,18 @@ def read_image(
         for key in str(path).split('/'):
             try:
                 node = node[key]
-            except (KeyError, IndexError, TypeError) as e:
+            except (KeyError, IndexError, TypeError):
                 raise ValueError(
-                    f"{filename}: its tree has no {path!r}") from e
+                    f"{filename}: its tree has no {path!r}") from None
+        if not hasattr(node, 'shape'):
+            raise ValueError(
+                f"{filename}: {path!r} of its tree is not an array; give "
+                f"the path of one (e.g. roman/data)")
         unit = getattr(node, 'unit', None)
         values = np.array(getattr(node, 'value', node))
-        wcss = list(_instances(file.tree, gwcs.WCS))
+        wcss = [
+            node for node in asdf.treeutil.iter_tree(file.tree)
+            if isinstance(node, gwcs.WCS)]
     header = astropy.io.fits.Header()
     if unit is not None:
         header['BUNIT'] = gbkfit.units.format_unit(unit)
@@ -75,15 +79,3 @@ def read_channel_beams(
 ) -> astropy.table.QTable | None:
     """Return None: ASDF files have no table of the beams of channels."""
     return None
-
-
-def _instances(node: Any, cls: type) -> Iterator[Any]:
-    """Return the objects of a class in a tree of dicts and lists."""
-    if isinstance(node, cls):
-        yield node
-    elif isinstance(node, dict):
-        for value in node.values():
-            yield from _instances(value, cls)
-    elif isinstance(node, list | tuple):
-        for value in node:
-            yield from _instances(value, cls)

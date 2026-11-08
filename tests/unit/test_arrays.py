@@ -296,6 +296,12 @@ def test_asdf_files_off_a_grid_are_refused(tmp_path):
         read_arrays((asdf_file, 'roman/data'))
 
 
+def test_an_asdf_path_must_be_that_of_an_array(tmp_path):
+    _, asdf_file = twin_files(tmp_path, 'WAVE')
+    with pytest.raises(ValueError, match="'roman' of its tree is not an"):
+        read_arrays((asdf_file, 'roman'))
+
+
 def test_datasets_read_asdf_files(tmp_path):
     from gbkfit.dataset import dataset_parser
     _, asdf_file = twin_files(tmp_path, 'WAVE')

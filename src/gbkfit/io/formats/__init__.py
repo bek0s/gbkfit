@@ -4,7 +4,7 @@ states what a file says of an array as a FITS header: its world
 coordinates, unit and beam in the keywords of FITS, whatever the format
 (see headers). gbkfit.io reads all formats alike through read_image,
 read_header and _read_channel_beams; it writes FITS files only (see
-fits: write_image, write_data and write_spectra).
+fits.write_image).
 
 A format is a module with the functions read_image, read_header and
 read_channel_beams (see fits and asdf). Within gbkfit.io, another one is
@@ -20,16 +20,13 @@ import numpy as np
 
 from gbkfit.config import DataFile, is_asdf_file, split_data_file
 from . import fits
-from .fits import casa_beam_table, write_data, write_image, write_spectra
+from .fits import write_image
 
 
 __all__ = [
-    'casa_beam_table',
     'read_header',
     'read_image',
-    'write_data',
-    'write_image',
-    'write_spectra'
+    'write_image'
 ]
 
 

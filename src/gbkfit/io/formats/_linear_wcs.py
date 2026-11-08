@@ -81,9 +81,8 @@ def linear_header(
     linear = astropy.wcs.WCS(naxis=n)
     ctype, cunit = [''] * n, [''] * n
     crval, cd = np.zeros(n), np.zeros((n, n))
-    # The world axis of each pixel axis, and the factor from its unit to
-    # that of the header
-    axes, factors = [-1] * n, [1.0] * n
+    # The world axis of each pixel axis
+    axes = [-1] * n
     sky = [
         j for j, (key, *_) in enumerate(components)
         if classes[key][0] is astropy.coordinates.SkyCoord]
@@ -144,9 +143,11 @@ def linear_header(
     linear.wcs.crpix = centre + 1
     linear.wcs.cd = cd
     linear.wcs.set()
-    for k in range(n):
-        factors[k] = u.Unit(low.world_axis_units[axes[k]]).to(
-            linear.world_axis_units[k])
+    # The factor from the unit of the world axis of each pixel axis to
+    # that of the header
+    factors = [
+        u.Unit(low.world_axis_units[axes[k]]).to(linear.world_axis_units[k])
+        for k in range(n)]
     # The pixels of the world coordinates at the corners, the centres of
     # the edges and the centre, by the header
     points = np.array(np.meshgrid(*[

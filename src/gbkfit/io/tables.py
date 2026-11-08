@@ -105,7 +105,8 @@ def read_table(file: DataFile, format_: str | None = None) -> Table:
         # astropy's readers fail on some files they cannot read with
         # other errors than ValueError, e.g. a TypeError for an ECSV
         # header that lists no columns
-        raise ValueError(f"{filename}: cannot read the table: {e}") from e
+        raise ValueError(
+            f"{filename}: cannot read the table: {e}") from None
     for name, unit in units.items():
         if name in table.colnames:
             table[name].unit = unit
@@ -274,8 +275,9 @@ def read_column(table: Table, name: str, unit: str | None) -> u.Quantity:
     try:
         return (values * column_unit).to(given)
     except u.UnitConversionError:
-        target = gbkfit.units.format_unit(given) or 'dimensionless'
+        source, target = (
+            gbkfit.units.format_unit(x) or 'dimensionless'
+            for x in (column_unit, given))
         raise ValueError(
-            f"the column {name!r} is in "
-            f"{gbkfit.units.format_unit(column_unit)!r}, which cannot be "
+            f"the column {name!r} is in {source!r}, which cannot be "
             f"converted to {target!r}") from None

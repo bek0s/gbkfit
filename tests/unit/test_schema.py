@@ -53,7 +53,7 @@ def test_members_of_families_have_their_options():
         if x['title'] == PSFGaussBeam.type_title())
     axes, file = beam['oneOf']
     assert 'description' not in axes
-    assert file['description'].startswith('Read a beam from the header')
+    assert file['description'].startswith('Read the beam of a file')
 
 
 def test_options_have_the_forms_of_configurations():

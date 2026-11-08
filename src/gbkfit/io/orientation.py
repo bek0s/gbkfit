@@ -15,8 +15,7 @@ import numpy as np
 from gbkfit.config import warn
 from gbkfit.grid import Rest
 from .headers import (
-    _linear_transform, _with_shape, centre_missing_crpix, has_wcs, parse_wcs,
-    with_wcs)
+    _centre_missing_crpix, _with_shape, _with_wcs, has_wcs, parse_wcs)
 from .spectral import _axis_of_rest, _read_as_velocities, _stated_header
 
 
@@ -39,7 +38,7 @@ class Orientation(NamedTuple):
     file_shape : tuple of int
         The shape of the array in the file (numpy order).
     shape : tuple of int
-        Its shape without the axes of length 1 dropped (numpy order).
+        Its shape once those axes of length 1 are dropped (numpy order).
     order : tuple of int
         Those axes (FITS order, from 0) in the order of the model (see
         _reorder_data).
@@ -108,7 +107,7 @@ def model_header(
     model, and how the array is put in it (see Orientation).
 
     An axis whose type FITS does not define (e.g. CTYPE3 = 'WAVELENGTH',
-    as CALIFA writes) is read as the type given (see with_spectral_type),
+    as CALIFA writes) is read as the type given (see _with_spectral_type),
     and is refused without one: nothing else says what its values are.
 
     The orientation of the model has the celestial axes first, longitude
@@ -120,7 +119,7 @@ def model_header(
     of the array (e.g. the spectral axis of a moment map written with the
     header of its cube) are taken as axes of length 1. A missing
     reference pixel of an axis without a world position is at the centre
-    of its axis (see centre_missing_crpix).
+    of its axis (see _centre_missing_crpix).
     Distortions of the world coordinates (e.g. SIP) are left out, with a
     warning: the model reads them as linear.
 
@@ -157,7 +156,7 @@ def model_header(
         _with_velocity_convention); it is not used for others.
     spectral_type : str, optional
         The type of an axis whose header gives one that FITS does not
-        define (see with_spectral_type); it is not used for others.
+        define (see _with_spectral_type); it is not used for others.
     medium : str, optional
         The medium of the wavelengths of an axis of optical velocities and
         of their rest, if AIRORVAC does not state it: 'vacuum' (by
@@ -226,7 +225,7 @@ def _oriented_header(
     wcs = _squeezed_wcs(wcs, [len(full) - 1 - axis for axis in own])
     wcs, order, flips = _model_wcs(wcs, kept[::-1])
     sizes = [kept[len(kept) - 1 - axis] for axis in order]
-    header = _with_shape(with_wcs(header, wcs), tuple(sizes[::-1]))
+    header = _with_shape(_with_wcs(header, wcs), tuple(sizes[::-1]))
     header.update(cards)
     return header, Orientation(shape, kept, order, flips)
 
@@ -265,7 +264,7 @@ def _model_axis_flips(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
     decrease along it.
     """
     lng, lat, spec = wcs.wcs.lng, wcs.wcs.lat, wcs.wcs.spec
-    linear = _linear_transform(wcs)
+    linear = wcs.pixel_scale_matrix
     flips = []
     if lng >= 0 and np.linalg.det(linear[np.ix_([lng, lat], [lng, lat])]) > 0:
         flips.append(lng)
@@ -312,8 +311,10 @@ def _flip_wcs(
     """
     wcs = wcs.deepcopy()
     # Reversing a pixel axis negates its column of the linear
-    # transformation (CD, or CDELT times the rows of PC). For PC, negating
-    # CDELT and the row of PC cancel out, leaving CDELT positive.
+    # transformation (CD, or CDELT times the rows of PC). For PC, the sign
+    # goes to CDELT, and the diagonal of PC stays (e.g. 1): CDELT and the
+    # row of PC are negated, which leaves the rest of the row as it was,
+    # and so is the column of PC, which negates the rest of the column.
     if wcs.wcs.has_cd():
         cd = wcs.wcs.cd.copy()
         cd[:, axis] *= -1
@@ -390,9 +391,10 @@ def _own_axes(
     """
     Return the axes (numpy order) of data of a shape that are their own:
     those not of length 1, or all if all are; and, if the data have more
-    (ndim, if given), the first of length 1 in FITS order (e.g. the axis
-    of the one region of spectra of regions), but for the axes given as
-    others (e.g. one of Stokes parameters, which may come before).
+    (ndim, if given), as many of length 1 as they lack, the first in FITS
+    order (e.g. the axis of the one region of spectra of regions), but
+    for the axes given as others (e.g. one of Stokes parameters, which
+    may come before).
     """
     own = [axis for axis, size in enumerate(shape) if size > 1]
     if not own:
@@ -427,15 +429,15 @@ def _squeezed_wcs(
     # axis left out that the linear transformation couples to the axes
     # kept moves them, by as much as a shift of their reference pixel
     flat = [axis for axis in range(wcs.naxis) if axis not in kept]
-    linear = _linear_transform(wcs)
+    linear = wcs.pixel_scale_matrix
     moved = linear[np.ix_(kept, flat)] @ (0 - (wcs.wcs.crpix[flat] - 1))
     if np.any(moved != 0):
         try:
             shift = np.linalg.solve(linear[np.ix_(kept, kept)], moved)
-        except np.linalg.LinAlgError as e:
+        except np.linalg.LinAlgError:
             raise ValueError(
                 "the world coordinates couple an axis of length 1 to the "
-                "others in a way that they alone cannot represent") from e
+                "others in a way that they alone cannot represent") from None
         wcs = wcs.deepcopy()
         crpix = wcs.wcs.crpix.copy()
         crpix[kept] -= shift
@@ -464,7 +466,7 @@ def _file_wcs(
     Return the world coordinates of the header of an array of the given
     shape (numpy order), in the axes of the file, with a missing reference
     pixel of an axis without a world position at its centre (see
-    centre_missing_crpix); and the shape of the array with an axis of
+    _centre_missing_crpix); and the shape of the array with an axis of
     length 1 for each world axis beyond its axes.
 
     Raises
@@ -477,6 +479,6 @@ def _file_wcs(
     if naxis < len(shape):
         raise ValueError(
             f"{source}: the header has world coordinates for {naxis} axes, "
-            f"but the data has {len(shape)}")
+            f"but the data have {len(shape)}")
     full = (1,) * (naxis - len(shape)) + tuple(shape)
-    return parse_wcs(source, centre_missing_crpix(header, full)), full
+    return parse_wcs(source, _centre_missing_crpix(header, full)), full

@@ -33,6 +33,12 @@ def test_a_column_is_not_converted_to_a_unit_of_another_kind(velocities):
         read_column(velocities, 'v', 'kpc')
 
 
+def test_a_dimensionless_column_is_named_so_when_not_converted():
+    table = Table({'ratio': [0.5, 0.7] * u.dimensionless_unscaled})
+    with pytest.raises(ValueError, match="'ratio' is in 'dimensionless'"):
+        read_column(table, 'ratio', 'km/s')
+
+
 def test_a_column_without_a_unit_is_in_the_unit_given(tmp_path):
     path = tmp_path / 'velocities.csv'
     path.write_text('v\n1\n2\n')

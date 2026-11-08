@@ -1,8 +1,8 @@
 """
 The FITS format: reading the arrays of FITS files, their headers and the
 tables of the beams of their channels (of cubes of CASA); and writing
-arrays as FITS files, with the world coordinates of the model or a
-header of their own (gbkfit writes FITS files only).
+arrays as FITS files, with their headers (gbkfit writes FITS files only;
+see writing, for the headers of the world coordinates of the model).
 """
 
 from collections.abc import Mapping
@@ -11,21 +11,14 @@ from typing import Any
 import astropy.io.fits
 import astropy.table
 import astropy.units as u
-import astropy.wcs
 import numpy as np
 
 import gbkfit.units
-from gbkfit.config import DataFile, split_data_file
-from gbkfit.grid import Coords
-from ..coords import _header_from_coords, _spectra_header_from_coords
 from ..headers import parse_wcs
 
 
 __all__ = [
-    'casa_beam_table',
-    'write_data',
-    'write_image',
-    'write_spectra'
+    'write_image'
 ]
 
 
@@ -93,8 +86,8 @@ def _image_hdu(
         return found
     try:
         found = hdus[key]
-    except (IndexError, KeyError) as e:
-        raise ValueError(f"{filename}: it has no HDU {key!r}") from e
+    except (IndexError, KeyError):
+        raise ValueError(f"{filename}: it has no HDU {key!r}") from None
     if not found.is_image:
         raise ValueError(
             f"{filename}: HDU {key!r} is not an image (e.g. a table); "
@@ -104,26 +97,6 @@ def _image_hdu(
             f"{filename}: HDU {key!r} has no data; choose the HDU with the "
             f"data (e.g. hdu: SCI)")
     return found
-
-
-def casa_beam_table(file: DataFile) -> astropy.table.QTable:
-    """
-    Return the beams of the channels of a cube of CASA (the table BEAMS
-    of its file) as a table of the options of a Gaussian beam PSF (bmaj,
-    bmin, bpa) against the points of its spectral axis (frequency,
-    wavelength or velocity), in the order of its channels. Only the first
-    polarisation is used.
-
-    Raises
-    ------
-    ValueError
-        If the file has no such cube (see read_image), or the cube has no
-        spectral axis.
-    """
-    filename, key = split_data_file(file)
-    return _channel_beams(
-        filename, astropy.table.Table.read(filename, hdu='BEAMS'),
-        read_header(filename, key))
 
 
 def _channel_beams(
@@ -178,7 +151,7 @@ def write_image(
     data : np.ndarray
         The array.
     header : astropy.io.fits.Header, optional
-        Its header; its BUNIT is replaced by the unit, if given.
+        Its header, but for its BUNIT: the unit is that given.
     unit : AnyUnit, optional
         The unit of its values, written as BUNIT (see
         gbkfit.units.format_unit).
@@ -191,85 +164,10 @@ def write_image(
         Whether to overwrite an existing file.
     """
     header = astropy.io.fits.Header() if header is None else header.copy()
+    header.remove('BUNIT', ignore_missing=True)
     if unit is not None:
         header['BUNIT'] = gbkfit.units.format_unit(unit)
     header.update(cards or {})
     astropy.io.fits.writeto(
         filename, data, header,
         output_verify='exception', overwrite=overwrite, checksum=checksum)
-
-
-def write_data(
-        filename: str,
-        data: np.ndarray,
-        coords: Coords,
-        spectral_axis: int | None = None,
-        *,
-        unit: gbkfit.units.AnyUnit | None = None,
-        cards: Mapping[str, Any] | None = None,
-        checksum: bool = False,
-        overwrite: bool = False
-) -> None:
-    """
-    Write data with the world coordinates of the model to a FITS file.
-
-    The axes of the data are the x and y axes of the sky (RA and Dec, TAN
-    projection, rotated with a PC matrix), followed by the spectral axis
-    (spectral_axis = 2, a velocity) or by a position along the line of
-    sight (spectral_axis = None, an offset in arcsec from its reference
-    pixel); or a position along a slit followed by the spectral axis
-    (spectral_axis = 1); or the spectral axis alone (spectral_axis = 0).
-
-    Parameters
-    ----------
-    filename : str
-        The name of the file.
-    data : np.ndarray
-        The data.
-    coords : Coords
-        Their world coordinates.
-    spectral_axis : int, optional
-        The index of their spectral axis (FITS order, from 0), if any.
-    unit, cards, checksum, overwrite : optional
-        As write_image.
-
-    Raises
-    ------
-    ValueError
-        For data of another layout.
-    """
-    write_image(
-        filename, data, _header_from_coords(coords, data.ndim, spectral_axis),
-        unit=unit, cards=cards, checksum=checksum, overwrite=overwrite)
-
-
-def write_spectra(
-        filename: str,
-        data: np.ndarray,
-        coords: Coords,
-        *,
-        unit: gbkfit.units.AnyUnit | None = None,
-        cards: Mapping[str, Any] | None = None,
-        checksum: bool = False,
-        overwrite: bool = False
-) -> None:
-    """
-    Write spectra of regions to a FITS file.
-
-    The regions are along x (an index, without world coordinates), and
-    the velocity along y (see SpectraData).
-
-    Parameters
-    ----------
-    filename : str
-        The name of the file.
-    data : np.ndarray
-        The spectra, of shape (nchannels, nregions).
-    coords : Coords
-        The world coordinates of their spectral axis (of one axis).
-    unit, cards, checksum, overwrite : optional
-        As write_image.
-    """
-    write_image(
-        filename, data, _spectra_header_from_coords(coords), unit=unit,
-        cards=cards, checksum=checksum, overwrite=overwrite)

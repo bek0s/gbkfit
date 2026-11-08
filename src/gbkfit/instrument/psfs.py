@@ -26,8 +26,8 @@ from gbkfit.config import (
     check_options, split_data_file)
 from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import (
-    has_wcs, parse_wcs, read_data, read_header, read_image, to_model_axes,
-    write_data, write_image)
+    has_wcs, header_beam, parse_wcs, read_data, read_header, read_image,
+    to_model_axes, write_data, write_image)
 import gbkfit.math
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
@@ -928,8 +928,9 @@ class PSFGaussBeam(PSF):
     @classmethod
     def from_file(cls, file: DataFile) -> 'PSFGaussBeam':
         """
-        Read a beam from the header of a FITS file (BMAJ, BMIN and BPA, in
-        degrees), e.g. of the data.
+        Read the beam of a file, e.g. of the data, as datasets read it (see
+        header_beam): that of its header (BMAJ, BMIN and BPA, in degrees),
+        or the last that AIPS wrote in its history.
 
         Parameters
         ----------
@@ -944,18 +945,22 @@ class PSFGaussBeam(PSF):
         Raises
         ------
         ValueError
-            If the header has no beam.
+            If the header has no beam, or the file has a beam for each
+            channel of its cube (a table BEAMS of CASA).
         """
         check_options(PSFGaussBeam.from_file, locals())
         filename = split_data_file(file)[0]
-        header = read_header(file)
-        missing = [
-            key for key in ('BMAJ', 'BMIN', 'BPA') if key not in header]
-        if missing:
-            raise ValueError(f"{filename}: the header has no {missing}")
-        return cls(
-            float(header['BMAJ']) * 3600, float(header['BMIN']) * 3600,
-            float(header['BPA']))
+        beam = header_beam(read_header(file), filename)
+        if beam is None:
+            raise ValueError(
+                f"{filename}: the header has no beam (BMAJ and BMIN, or one "
+                f"in the history of AIPS)")
+        if beam.spectral is not None:
+            raise ValueError(
+                f"{filename}: the cube has a beam for each channel (its "
+                f"table BEAMS): give them as a table of the options (prep "
+                f"psf_casa_beams)")
+        return cls(beam.bmaj, beam.bmin, beam.bpa)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,

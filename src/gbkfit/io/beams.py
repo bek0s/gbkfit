@@ -1,24 +1,29 @@
 """
 The beams of data: the Gaussian restoring beams of radio images, from
 their headers, the tables of the beams of the channels of their files,
-or their history (see header_beam); and those of the channels of a cube
-in their order in the orientation of the model (see _oriented_beam).
+or their history (see header_beam); those of the channels of a cube in
+their order in the orientation of the model (see _oriented_beam); and
+the table of the beams of the channels of a cube of CASA (see
+casa_beam_table).
 """
 
 import re
 from typing import NamedTuple
 
 import astropy.io.fits
+import astropy.table
 import astropy.units
 import astropy.wcs
 import numpy as np
 
-from .formats import _read_channel_beams
+from gbkfit.config import DataFile, split_data_file
+from .formats import _read_channel_beams, read_header
 from .orientation import Orientation
 
 
 __all__ = [
     'Beam',
+    'casa_beam_table',
     'header_beam'
 ]
 
@@ -75,6 +80,30 @@ def header_beam(
     return Beam(
         table['bmaj'].to_value('arcsec'), table['bmin'].to_value('arcsec'),
         table['bpa'].to_value('deg'), table.columns[0])
+
+
+def casa_beam_table(file: DataFile) -> astropy.table.QTable:
+    """
+    Return the beams of the channels of a cube of CASA (the table BEAMS
+    of its file) as a table of the options of a Gaussian beam PSF (bmaj,
+    bmin, bpa) against the points of its spectral axis (frequency,
+    wavelength or velocity), in the order of its channels. Only the first
+    polarisation is used.
+
+    Raises
+    ------
+    ValueError
+        If the file has no such cube (see read_image), the cube has no
+        spectral axis, or the file has no table of the beams of its
+        channels.
+    """
+    filename = split_data_file(file)[0]
+    table = _read_channel_beams(filename, read_header(file))
+    if table is None:
+        raise ValueError(
+            f"{filename}: the file has no table of the beams of the "
+            f"channels of its cube (BEAMS, of CASA)")
+    return table
 
 
 def _oriented_beam(

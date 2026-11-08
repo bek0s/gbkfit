@@ -10,14 +10,13 @@ from typing import Any
 
 import astropy.io.fits
 import astropy.units
-import astropy.wcs
 
 import gbkfit.units
 from gbkfit.grid import Coords
 from gbkfit.io import (
-    Beam, centre_missing_crpix, coords_from_header, header_beam,
-    header_shape, header_unit, ignoring_wcs_fixes, model_axis_order,
-    model_header, nonstandard_spectral_axis, velocity_is_ambiguous)
+    Beam, coords_from_header, header_beam, header_shape, header_unit,
+    ignoring_wcs_fixes, model_axis_order, model_header,
+    nonstandard_spectral_axis, parse_wcs, velocity_is_ambiguous)
 
 
 __all__ = [
@@ -49,8 +48,8 @@ class HDUDescription:
     name : str
         Its name (EXTNAME; 'PRIMARY' for the first).
     shape : tuple of int
-        The number of pixels along each axis, in the orientation of the
-        model (x, y, then the spectral axis; see to_model_axes),
+        The number of pixels along each axis, in the order of the axes of
+        the model (x, y, then the spectral axis; see model_axis_order),
         or in that of the file if its world coordinates are invalid; with
         its axes of length 1, which reading leaves out.
     axes : tuple of str
@@ -126,7 +125,7 @@ def describe_fits(
         dataset with that rest reads them (see read_data).
     spectral_type : str, optional
         What an axis whose header gives it a type FITS does not define
-        is (see HDUDescription.nonstandard_type, and with_spectral_type).
+        is (see HDUDescription.nonstandard_type, and model_header).
 
     Returns
     -------
@@ -170,7 +169,7 @@ def _describe(
     and beam as header_unit and header_beam do.
     """
     problems = []
-    order = _model_order(header)
+    order = _model_order(filename, header)
     # (world axes beyond those of the array are of length 1, see
     # model_header)
     sizes = header_shape(header)[::-1]
@@ -223,19 +222,17 @@ def _describe(
         nonstandard_type=None if nonstandard is None else nonstandard[1])
 
 
-def _model_order(header: astropy.io.fits.Header) -> tuple[int, ...]:
+def _model_order(
+        filename: str, header: astropy.io.fits.Header
+) -> tuple[int, ...]:
     """
     Return the axes of the header in the order of the model (see
     model_axis_order), or in their own if its world coordinates
-    are invalid.
+    are invalid (a problem reported with the coords).
     """
-    shape = header_shape(header)
     try:
-        # (the fixes of astropy to the header are for the coords)
+        # (the fixes of astropy to the header are reported with the coords)
         with ignoring_wcs_fixes():
-            wcs = astropy.wcs.WCS(
-                centre_missing_crpix(header, shape))
-    except Exception:
-        # (any error of astropy: the problem is reported with the coords)
-        return tuple(range(len(shape)))
-    return model_axis_order(wcs)
+            return model_axis_order(parse_wcs(filename, header))
+    except ValueError:
+        return tuple(range(len(header_shape(header))))
