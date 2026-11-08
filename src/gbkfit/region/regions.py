@@ -11,13 +11,11 @@ from typing import Annotated, Any, TypeAlias
 import numpy as np
 import numpy.typing as npt
 import scipy.sparse
-from astropy.io import fits
 
 from gbkfit.config import (
-    FitsFile, TypedParser, TypedSerializable, Unit, check_options,
-    split_fits_file)
+    DataFile, TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.grid import Grid, make_grid, sky_positions
-from gbkfit.io import read_data, write_data
+from gbkfit.io import read_data, write_data, write_image
 from .apertures import Aperture, aperture_parser
 
 
@@ -114,12 +112,12 @@ class RegionsBins(Regions):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             step: _PerAxis = None,
             rpix: _PerAxis = None,
             rval: _PerAxis = None,
             rota: _Angle | None = None,
-            valid: FitsFile | None = None
+            valid: DataFile | None = None
     ) -> 'RegionsBins':
         """
         Read the bins from a FITS file, with the world coordinates of its
@@ -149,9 +147,9 @@ class RegionsBins(Regions):
         """
         check_options(RegionsBins.from_file, locals())
         index, coords = read_data(
-            *split_fits_file(file), _per_axis(rpix), _per_axis(rval))
+            file, rpix=_per_axis(rpix), rval=_per_axis(rval))
         if valid is not None:
-            valid, _ = read_data(*split_fits_file(valid))
+            valid, _ = read_data(valid)
         return cls(
             index, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota, valid)
@@ -163,7 +161,8 @@ class RegionsBins(Regions):
         filename = f'{prefix}bins.fits'
         coords = self._grid.coords
         write_data(
-            filename, self._index.astype(np.int32), coords, None, overwrite)
+            filename, self._index.astype(np.int32), coords,
+            overwrite=overwrite)
         info = dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
@@ -175,7 +174,7 @@ class RegionsBins(Regions):
             # (an array without world coordinates, in the orientation of
             # the model: the bins give them)
             valid = f'{prefix}bins_valid.fits'
-            fits.writeto(valid, self._valid, overwrite=overwrite)
+            write_image(valid, self._valid, overwrite=overwrite)
             info['valid'] = valid if dump_path else os.path.basename(valid)
         return info
 

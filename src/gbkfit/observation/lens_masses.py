@@ -24,8 +24,8 @@ import scipy.ndimage
 from annotated_types import Ge
 
 from gbkfit.config import (
-    FitsFile, TypedParser, TypedSerializable, Unit, check_name,
-    check_options, split_fits_file)
+    DataFile, TypedParser, TypedSerializable, Unit, check_name,
+    check_options)
 from gbkfit.grid import (
     Grid, check_overlap, make_grid, pixels_on, sky_positions)
 from gbkfit.io import read_data, write_data
@@ -158,8 +158,8 @@ class LensDeflectionMap(LensMass):
     @classmethod
     def from_files(
             cls,
-            alpha_x: FitsFile,
-            alpha_y: FitsFile,
+            alpha_x: DataFile,
+            alpha_y: DataFile,
             step: float | Sequence[float] | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
@@ -202,7 +202,7 @@ class LensDeflectionMap(LensMass):
         """
         check_options(LensDeflectionMap.from_files, locals())
         maps = [
-            read_data(*split_fits_file(file), rpix, rval)
+            read_data(file, rpix=rpix, rval=rval)
             for file in (alpha_x, alpha_y)]
         (data_x, coords), (data_y, coords_y) = maps
         if coords_y != coords:
@@ -222,7 +222,7 @@ class LensDeflectionMap(LensMass):
                 ('alpha_x', self._alpha_x), ('alpha_y', self._alpha_y)):
             filename = f'{prefix}{key}.fits'
             write_data(
-                filename, data, self._grid.coords, None, overwrite)
+                filename, data, self._grid.coords, overwrite=overwrite)
             info[key] = filename if dump_path else os.path.basename(filename)
         if self._scaled:
             info['scaled'] = True

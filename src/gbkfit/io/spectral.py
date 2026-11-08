@@ -9,7 +9,7 @@ A rest wavelength is in the medium of the wavelengths of its axis, as
 the model takes it (see VelocityConvention), and in vacuum in headers
 (RESTWAV, as FITS defines it, whatever the medium of the axis): it is
 turned from the one to the other where headers are read and written
-(see _set_rest and rest_in_medium).
+(see _set_rest and _rest_in_medium).
 """
 
 import astropy.constants
@@ -20,22 +20,20 @@ import numpy as np
 
 from gbkfit.config import warn
 from gbkfit.grid import (
-    Coords, Rest, SPECTRAL_TYPES, air_refractive_index, make_convention,
-    make_medium, make_rest, vacuum_wavelength)
+    FRAMES, Coords, Rest, SPECTRAL_TYPES, air_refractive_index,
+    make_convention, make_medium, make_rest, vacuum_wavelength)
 from .headers import has_wcs, ignoring_wcs_fixes
 
 
 __all__ = [
-    'VELOCITY_TYPES',
     'nonstandard_spectral_axis',
     'velocity_is_ambiguous',
-    'with_spectral_type',
-    'with_velocity_convention'
+    'with_spectral_type'
 ]
 
 
 # The spectral axis types that are velocities (FITS WCS Paper III)
-VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
+_VELOCITY_TYPES = ('VRAD', 'VOPT', 'VELO')
 
 # The conventions of the velocities of each type of spectral axis, and
 # the types of the conventions (as written; log velocities are written as
@@ -61,7 +59,7 @@ _MEDIUMS_OF_HEADER = {
 # and their codes in VELREF, which adds 256 for radio velocities
 _AIPS_FRAMES = dict(LSR=1, HEL=2, OBS=3)
 
-# The conventions of velocities (see with_velocity_convention)
+# The conventions of velocities (see _with_velocity_convention)
 _VELOCITY_CONVENTIONS = ('radio', 'optical')
 
 # The speed of light (km/s), and the unit of velocities
@@ -69,7 +67,7 @@ _C = astropy.constants.c.to_value('km/s')
 _KM_S = u.km / u.s
 
 # The units of spectral axes: of wavelengths, frequencies and velocities
-SPECTRAL_UNITS = (u.m, u.Hz, _KM_S)
+_SPECTRAL_UNITS = (u.m, u.Hz, _KM_S)
 
 
 def nonstandard_spectral_axis(
@@ -112,9 +110,9 @@ def nonstandard_spectral_axis(
     try:
         with ignoring_wcs_fixes():
             wcs = astropy.wcs.WCS(header)
-    except Exception:
-        # (any error of astropy: the world coordinates are reported as
-        # invalid where they are read, see parse_wcs)
+    except ValueError:
+        # (the errors of astropy's WCS: the world coordinates are reported
+        # as invalid where they are read, see parse_wcs)
         return None
     for axis, kind in enumerate(wcs.wcs.axis_types):
         ctype = str(wcs.wcs.ctype[axis]).strip()
@@ -124,7 +122,7 @@ def nonstandard_spectral_axis(
                 axis >= len(shape) or shape[len(shape) - 1 - axis] == 1):
             continue
         unit = wcs.wcs.cunit[axis]
-        if any(unit.is_equivalent(of) for of in SPECTRAL_UNITS):
+        if any(unit.is_equivalent(of) for of in _SPECTRAL_UNITS):
             return axis, ctype
     return None
 
@@ -185,7 +183,7 @@ def with_spectral_type(
     return header
 
 
-def with_velocity_convention(
+def _with_velocity_convention(
         header: astropy.io.fits.Header,
         velocity: str | None,
         source: str
@@ -259,9 +257,30 @@ def velocity_is_ambiguous(header: astropy.io.fits.Header) -> bool:
     Return whether the velocities of the spectral axis of a header may be
     radio or optical: an axis of the AIPS convention (VELO-LSR, VELO-HEL
     or VELO-OBS) without the keyword VELREF that states which (see
-    with_velocity_convention).
+    _with_velocity_convention).
     """
     return _aips_frame(header) is not None and 'VELREF' not in header
+
+
+def _stated_header(
+        source: str,
+        header: astropy.io.fits.Header,
+        shape: tuple[int, ...],
+        spectral_type: str | None,
+        velocity: str | None
+) -> astropy.io.fits.Header:
+    """
+    Return a header (of an array of the given shape, numpy order) whose
+    spectral axis states what its values are: of the type given, if its
+    own is not one FITS defines (see with_spectral_type), and of the
+    convention of velocities given, if the header leaves it ambiguous
+    (see _with_velocity_convention); with a warning if AIRORVAC
+    contradicts its type (see _check_header_medium).
+    """
+    header = with_spectral_type(header, shape, spectral_type, source)
+    _check_header_medium(source, header)
+    return _with_velocity_convention(
+        header, velocity if velocity_is_ambiguous(header) else None, source)
 
 
 def _aips_frame(header: astropy.io.fits.Header) -> str | None:
@@ -280,7 +299,37 @@ def _aips_frame(header: astropy.io.fits.Header) -> str | None:
         if ctype[:5] == 'VELO-' and ctype[5:].strip() in _AIPS_FRAMES), None)
 
 
-def velocity_axis(
+def _axis_of_rest(
+        source: str,
+        header: astropy.io.fits.Header,
+        wcs: astropy.wcs.WCS,
+        shape: tuple[int, ...],
+        rest: Rest,
+        medium: str | None
+) -> tuple[astropy.wcs.WCS, dict[str, str]]:
+    """
+    Return the world coordinates of a header (of an array of the given
+    shape, numpy order, with an axis for each of theirs) with the
+    spectral axis in velocities of a rest, if given (see _velocity_axis;
+    an axis of one pixel takes the rest alone, see _with_flat_axis_rest),
+    and the cards that the header then takes: the medium of the
+    wavelengths of an axis of wavelengths (AIRORVAC). The medium of an
+    axis of optical velocities is that AIRORVAC states, or the given one
+    (see _stated_medium).
+    """
+    if rest is None or wcs.wcs.spec < 0:
+        return wcs, {}
+    stated = _stated_medium(source, header, medium)
+    if shape[len(shape) - 1 - wcs.wcs.spec] == 1:
+        wcs, wavelengths = _with_flat_axis_rest(wcs, rest, stated)
+    else:
+        wcs, wavelengths = _velocity_axis(source, wcs, rest, stated)
+    if wavelengths is None:
+        return wcs, {}
+    return wcs, {'AIRORVAC': _HEADER_MEDIUMS[wavelengths]}
+
+
+def _velocity_axis(
         source: str,
         wcs: astropy.wcs.WCS,
         rest: Rest,
@@ -315,7 +364,7 @@ def velocity_axis(
         _set_rest(wcs, wavelength=rest_wavelength, medium=log_medium)
         wcs.wcs.set()
         return wcs, log_medium
-    if not is_linear_type(ctype):
+    if not _is_linear_type(ctype):
         raise ValueError(
             f"{source}: the spectral axis ({ctype}) is not linear in its "
             f"coordinate")
@@ -339,7 +388,7 @@ def velocity_axis(
         kind = 'VRAD'
     else:
         # (the rest of the axis, if any, in the medium of its wavelengths)
-        current = rest_in_medium(spectral_rest(source, wcs, None), medium)
+        current = _rest_in_medium(_spectral_rest(source, wcs, None), medium)
         crval, scale = (None, None) if current is None else _velocities_of(
             kind, crval, unit, current.value / (
                 rest_wavelength if kind == 'VOPT' else rest_frequency))
@@ -399,24 +448,24 @@ def _velocities_of(
     return crval, ratio * unit.to(_KM_S)
 
 
-def with_flat_axis_rest(
+def _with_flat_axis_rest(
         wcs: astropy.wcs.WCS, rest: Rest, medium: str | None = None
 ) -> tuple[astropy.wcs.WCS, str | None]:
     """
     Return world coordinates with the rest of a spectral axis of one pixel
     (e.g. that of a moment map, which reading leaves out, see
-    model_header), as velocity_axis gives it to other axes, and the medium
+    model_header), as _velocity_axis gives it to other axes, and the medium
     of its wavelengths, if it is of wavelengths: an axis of one pixel has
     no velocities to read, so that it takes a rest whatever its type (e.g.
     relativistic velocities, VELO, of one pixel). The medium of an axis of
-    optical velocities is that given (see velocity_axis).
+    optical velocities is that given (see _velocity_axis).
     """
     rest = make_rest(rest)
     spec = wcs.wcs.spec
     wcs = wcs.deepcopy()
     ctype = wcs.wcs.ctype[spec]
     kind = ctype[:4]
-    wavelengths = type_medium(ctype)
+    wavelengths = _type_medium(ctype)
     if wavelengths is not None or kind == 'VOPT':
         _set_rest(
             wcs, wavelength=rest.to_value(u.m, u.spectral()),
@@ -427,7 +476,7 @@ def with_flat_axis_rest(
     return wcs, wavelengths
 
 
-def log_velocity_axis(
+def _log_velocity_axis(
         source: str, wcs: astropy.wcs.WCS
 ) -> tuple[astropy.wcs.WCS, str | None]:
     """
@@ -438,7 +487,7 @@ def log_velocity_axis(
     the rest), exactly, and the medium of its wavelengths if it was one
     ('vacuum' or 'air'), or else None; others unchanged. The rest is that
     of the WCS (RESTWAV, in vacuum: in the medium of the axis, see
-    rest_in_medium).
+    _rest_in_medium).
 
     Raises
     ------
@@ -455,7 +504,7 @@ def log_velocity_axis(
             f"({wcs.wcs.ctype[spec]}) needs a rest wavelength (RESTWAV, or "
             f"the rest)")
     vacuum = float(wcs.wcs.restwav)
-    rest = rest_in_medium(vacuum * u.m, log_medium)
+    rest = _rest_in_medium(vacuum * u.m, log_medium)
     wcs = wcs.deepcopy()
     unit = u.Unit(str(wcs.wcs.cunit[spec]) or 'm')
     crval = float(wcs.wcs.crval[spec])
@@ -468,7 +517,7 @@ def log_velocity_axis(
     return wcs, log_medium
 
 
-def spectral_convention(wcs: astropy.wcs.WCS) -> str | None:
+def _spectral_convention(wcs: astropy.wcs.WCS) -> str | None:
     """
     Return the convention of the velocities of the spectral axis (see
     Coords) of its type: radio (VRAD), optical (VOPT), relativistic (VELO)
@@ -482,7 +531,7 @@ def spectral_convention(wcs: astropy.wcs.WCS) -> str | None:
          if t in _CONVENTIONS_OF_TYPES), None)
 
 
-def spectral_rest(
+def _spectral_rest(
         source: str,
         wcs: astropy.wcs.WCS,
         rest: u.Quantity | None
@@ -515,7 +564,65 @@ def spectral_rest(
     return rest.to(unit, u.spectral())
 
 
-def header_medium(
+def _spectral_terms(
+        source: str,
+        header: astropy.io.fits.Header,
+        wcs: astropy.wcs.WCS,
+        rest: Rest,
+        medium: str | None,
+        log: str | None
+) -> tuple[u.Quantity | None, str | None, str | None, str | None]:
+    """
+    Return the rest, the medium of the wavelengths, the convention of the
+    velocities and the frame of rest of the spectral axis of the world
+    coordinates of a header in the orientation of the model (see Coords,
+    and coords_from_header): the rest given, or that of the header
+    (RESTWAV, in vacuum, in the medium of the axis); the medium given, or
+    that the header states (log: that of the type of an axis of
+    logarithmic wavelengths, see _log_velocity_axis; or AIRORVAC), in
+    vacuum by default; the convention of the type of the axis, or 'log';
+    and the frame of SPECSYS (see _frame).
+
+    Raises
+    ------
+    ValueError
+        If a rest is given for relativistic velocities, or the medium is
+        not valid or not the one the header states.
+    """
+    given = make_rest(rest)
+    rest = _spectral_rest(source, wcs, given)
+    wavelengths = make_medium(medium, rest)
+    if wavelengths is not None:
+        # The medium the header states: that of the type of an axis of
+        # logarithmic wavelengths (FITS), or AIRORVAC (which model_header
+        # writes from the type of an axis of wavelengths)
+        stated = log or _header_medium(source, header)
+        if medium is None:
+            wavelengths = stated or wavelengths
+        elif stated is not None and wavelengths != stated:
+            raise _medium_contradiction(source, wavelengths, stated)
+    if given is None:
+        # (the rest of the header, RESTWAV, is in vacuum)
+        rest = _rest_in_medium(rest, wavelengths)
+    convention = 'log' if log else _spectral_convention(wcs)
+    return rest, wavelengths, convention, _frame(source, wcs)
+
+
+def _frame(source: str, wcs: astropy.wcs.WCS) -> str | None:
+    """
+    Return the frame of rest of the velocities of a WCS (SPECSYS, see
+    FRAMES), if it gives one of FITS; a warning says when it gives
+    another (see warn), which is left out.
+    """
+    frame = wcs.wcs.specsys.strip().upper()
+    if frame and frame not in FRAMES:
+        warn(
+            f"{source}: SPECSYS is {frame!r}, not a frame of FITS "
+            f"({', '.join(FRAMES)}); it is left out")
+    return frame if frame in FRAMES else None
+
+
+def _header_medium(
         source: str,
         header: astropy.io.fits.Header
 ) -> str | None:
@@ -534,7 +641,7 @@ def header_medium(
     return medium
 
 
-def stated_medium(
+def _stated_medium(
         source: str,
         header: astropy.io.fits.Header,
         medium: str | None = None
@@ -542,7 +649,7 @@ def stated_medium(
     """
     Return the medium of the wavelengths of optical velocities of a header
     and of their rest: that its keyword AIRORVAC states (see
-    header_medium), else the given one ('vacuum' or 'air'), if any.
+    _header_medium), else the given one ('vacuum' or 'air'), if any.
 
     Raises
     ------
@@ -550,18 +657,18 @@ def stated_medium(
         If the given medium is not one of those, or is not the one that
         AIRORVAC states.
     """
-    stated = header_medium(source, header)
+    stated = _header_medium(source, header)
     if medium is None or medium == stated:
         return stated
     if medium not in _HEADER_MEDIUMS:
         raise ValueError(
             f"the medium must be 'vacuum' or 'air'; it is {medium!r}")
     if stated is not None:
-        raise medium_contradiction(source, medium, stated)
+        raise _medium_contradiction(source, medium, stated)
     return medium
 
 
-def medium_contradiction(source: str, given: str, stated: str) -> ValueError:
+def _medium_contradiction(source: str, given: str, stated: str) -> ValueError:
     """
     Return the error of a medium of wavelengths given for a header that
     states another.
@@ -571,7 +678,7 @@ def medium_contradiction(source: str, given: str, stated: str) -> ValueError:
         f"the one the header states ({stated}); leave it out")
 
 
-def type_medium(ctype: str) -> str | None:
+def _type_medium(ctype: str) -> str | None:
     """
     Return the medium of the wavelengths of a spectral axis of a type
     (CTYPE), as FITS defines it: 'air' for AWAV (and AWAV-LOG), 'vacuum'
@@ -580,16 +687,16 @@ def type_medium(ctype: str) -> str | None:
     return dict(WAVE='vacuum', AWAV='air').get(ctype[:4])
 
 
-def check_header_medium(source: str, header: astropy.io.fits.Header) -> None:
+def _check_header_medium(source: str, header: astropy.io.fits.Header) -> None:
     """
     Warn if AIRORVAC contradicts the medium of the wavelengths that the
-    type of the spectral axis of a header states (see type_medium): the
+    type of the spectral axis of a header states (see _type_medium): the
     type is what FITS defines, so that it is the one read.
     """
-    stated = header_medium(source, header)
+    stated = _header_medium(source, header)
     for n in range(1, header.get('NAXIS', 0) + 1):
         ctype = str(header.get(f'CTYPE{n}', ''))
-        medium = type_medium(ctype)
+        medium = _type_medium(ctype)
         if stated is not None and medium is not None and medium != stated:
             warn(
                 f"{source}: AIRORVAC says its wavelengths are in {stated}, "
@@ -597,15 +704,7 @@ def check_header_medium(source: str, header: astropy.io.fits.Header) -> None:
                 f"(FITS): they are read as in {medium}")
 
 
-def set_header_medium(header: astropy.io.fits.Header, medium: str) -> None:
-    """
-    Set the medium of the wavelengths of a header ('vacuum' or 'air', see
-    make_medium) as its keyword AIRORVAC (see header_medium).
-    """
-    header['AIRORVAC'] = _HEADER_MEDIUMS[medium]
-
-
-def is_linear_type(ctype: str) -> bool:
+def _is_linear_type(ctype: str) -> bool:
     """
     Return whether a spectral axis type (CTYPE) is linear in its
     coordinate: it has no algorithm code (e.g. not WAVE-LOG or VRAD-F2V).
@@ -613,13 +712,39 @@ def is_linear_type(ctype: str) -> bool:
     return not ctype[4:].strip('-').strip()
 
 
-def read_as_velocities(ctype: str) -> bool:
+def _read_as_velocities(ctype: str) -> bool:
     """
     Return whether a spectral axis of a type (CTYPE) is read as
-    velocities: velocities (see VELOCITY_TYPES), and logarithmic
-    wavelengths, as log velocities (see log_velocity_axis).
+    velocities: velocities (see _VELOCITY_TYPES), and logarithmic
+    wavelengths, as log velocities (see _log_velocity_axis).
     """
-    return ctype[:4] in VELOCITY_TYPES or ctype in _MEDIUMS_OF_LOG_TYPES
+    return ctype[:4] in _VELOCITY_TYPES or ctype in _MEDIUMS_OF_LOG_TYPES
+
+
+def _velocity_scale(source: str, wcs: astropy.wcs.WCS) -> float:
+    """
+    Return the factor from the unit of the spectral axis of world
+    coordinates in the orientation of the model to km/s.
+
+    Raises
+    ------
+    ValueError
+        If the axis is not of velocities (a rest turns one of wavelengths
+        or frequencies into velocities, see model_header), or is not
+        linear in velocity.
+    """
+    ctype = wcs.wcs.ctype[wcs.wcs.spec]
+    if ctype[:4] not in _VELOCITY_TYPES:
+        raise ValueError(
+            f"{source}: the spectral axis is of type '{ctype}'; only "
+            f"velocity axes ({', '.join(_VELOCITY_TYPES)}) are supported: "
+            f"give the rest frequency or wavelength of its line (spectral: "
+            f"{{rest: ...}}), which turns it into velocities")
+    if not _is_linear_type(ctype):
+        raise ValueError(
+            f"{source}: the spectral axis ({ctype}) is not linear in "
+            f"velocity; only linear velocity axes are supported")
+    return u.Unit(wcs.wcs.cunit[wcs.wcs.spec]).to(_KM_S)
 
 
 def _scale_axis(wcs: astropy.wcs.WCS, axis: int, factor: float) -> None:
@@ -635,7 +760,7 @@ def _scale_axis(wcs: astropy.wcs.WCS, axis: int, factor: float) -> None:
         wcs.wcs.cdelt[axis] *= factor
 
 
-def rest_in_medium(
+def _rest_in_medium(
         rest: u.Quantity | None, medium: str | None
 ) -> u.Quantity | None:
     """
@@ -644,8 +769,8 @@ def rest_in_medium(
     wavelengths in air (see air_refractive_index), in m; others as they
     are.
     """
-    if rest is None or medium != 'air' or rest.unit.physical_type == \
-            'frequency':
+    if (rest is None or medium != 'air'
+            or rest.unit.physical_type == 'frequency'):
         return rest
     vacuum = rest.to_value(u.m)
     return vacuum / air_refractive_index(vacuum) * u.m
@@ -675,7 +800,7 @@ def _relativistic_rest_error(source: str) -> ValueError:
         f"velocities")
 
 
-def velocity_axis_keywords(
+def _velocity_axis_keywords(
         coords: Coords,
         n: int,
         index: int | None = None

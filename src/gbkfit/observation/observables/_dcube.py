@@ -10,6 +10,7 @@ from gbkfit.grid import (
     Coords, Grid, GridData, VelocityConvention, make_convention, make_medium,
     make_rest)
 import gbkfit.math
+import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
 from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
 from gbkfit.model import Extras
@@ -577,7 +578,7 @@ class DCubePlan:
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction,
             flux_scale: float | None = None,
-            unit: str | None = None
+            unit: gbkfit.units.AnyUnit | None = None
     ) -> None:
         """
         Record the high-res cube into the low-res one (see record) and
@@ -661,7 +662,7 @@ class DCubePlan:
             out_extra: Extras,
             extra_lo: ExtraFunction,
             extra_hi: ExtraFunction,
-            unit: str | None
+            unit: gbkfit.units.AnyUnit | None
     ) -> None:
         """Write the extra outputs (see evaluate and _CUBE_EXTRAS)."""
         dcube = self._dcube

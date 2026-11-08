@@ -121,9 +121,9 @@ def test_extras_carry_their_units(evaluate_cases):
     observable, galaxy, _, _ = CASES['pixel_spectra']
     case = flat_case(observable, galaxy) | dict(unit='mJy/arcsec2')
     _, extra = evaluate_cases([case], PROPERTIES)
-    assert u.Unit(extra.get('dcube_lo').unit) == u.mJy / u.arcsec ** 2
-    assert extra.get('vdata', component='component0').unit == 'km/s'
-    assert extra.get('ddata', component='component0').unit == 'km/s'
+    assert extra.get('dcube_lo').unit == u.mJy / u.arcsec ** 2
+    assert extra.get('vdata', component='component0').unit == u.km / u.s
+    assert extra.get('ddata', component='component0').unit == u.km / u.s
     assert extra.get('bdata', component='component0').unit is None
 
 

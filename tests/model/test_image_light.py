@@ -49,7 +49,7 @@ def write_truth(path, rval=None):
     coords = group.observations()[0].observable().grid().coords
     if rval is not None:
         coords = coords._replace(rval=tuple(rval))
-    write_data(str(path), truth, coords, None, True)
+    write_data(str(path), truth, coords, overwrite=True)
     return truth
 
 

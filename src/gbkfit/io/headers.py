@@ -6,7 +6,7 @@ any format states of an array (see formats), in the keywords of FITS.
 import contextlib
 import re
 import warnings
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 
 import astropy.io.fits
 import astropy.wcs
@@ -22,27 +22,29 @@ __all__ = [
     'header_unit',
     'ignoring_wcs_fixes',
     'parse_wcs',
+    'shifted_header',
+    'spectra_header',
     'with_wcs'
 ]
 
 
 # The keywords of the world coordinates of each axis, or pair of axes
 _WCS_KEYWORDS = re.compile(
-    r'(WCSAXES'
+    r'WCSAXES'
     r'|(CRPIX|CRVAL|CDELT|CUNIT|CTYPE|CROTA)\d+'
-    r'|(PC|CD|PV|PS)\d+_\d+)$')
+    r'|(PC|CD|PV|PS)\d+_\d+')
 
 # Further keywords of the axes of world coordinates, which another
 # orientation of them leaves stale: of each axis (its name, errors and
 # period), of the alternate descriptions of the world coordinates (e.g.
 # CTYPE1A), and of their distortions (SIP, and those of WCS Paper IV),
-# which the model leaves out (see oriented_header)
+# which the model leaves out (see _oriented_header)
 _AXIS_KEYWORDS = re.compile(
-    r'((CNAME|CRDER|CSYER|CPERI)\d+[A-Z]?'
+    r'(CNAME|CRDER|CSYER|CPERI)\d+[A-Z]?'
     r'|(WCSAXES|(CRPIX|CRVAL|CDELT|CUNIT|CTYPE|CROTA)\d+'
     r'|(PC|CD|PV|PS)\d+_\d+|WCSNAME)[A-Z]'
     r'|(A|B|AP|BP)_(ORDER|DMAX|\d+_\d+)'
-    r'|(CPDIS|CQDIS|DP|DQ|CPERR|CQERR|D2IMDIS|D2IMERR|D2IM)\d+(\..*)?)$')
+    r'|(CPDIS|CQDIS|DP|DQ|CPERR|CQERR|D2IMDIS|D2IMERR|D2IM)\d+(\..*)?')
 
 # The keywords of the rest of the spectral axis, also in their old forms
 _REST_KEYWORDS = ('RESTWAV', 'RESTFRQ', 'RESTWAVE', 'RESTFREQ')
@@ -56,7 +58,7 @@ _CUNIT_KEYWORDS = re.compile(r'CUNIT\d+')
 
 def has_wcs(header: astropy.io.fits.Header) -> bool:
     """Return whether a header has world coordinates."""
-    return any(_WCS_KEYWORDS.match(key) for key in header)
+    return any(_WCS_KEYWORDS.fullmatch(key) for key in header)
 
 
 def with_wcs(
@@ -70,7 +72,7 @@ def with_wcs(
     header = header.copy()
     for key in [
             key for key in header
-            if _WCS_KEYWORDS.match(key) or _AXIS_KEYWORDS.match(key)
+            if _WCS_KEYWORDS.fullmatch(key) or _AXIS_KEYWORDS.fullmatch(key)
             or key in _REST_KEYWORDS]:
         del header[key]
     header.update(wcs.to_header())
@@ -91,10 +93,9 @@ def header_unit(header: astropy.io.fits.Header) -> str | None:
     Return the unit of the data of a header, as it gives it (BUNIT), if
     it does.
     """
-    unit = header.get('BUNIT')
-    if unit is None or not str(unit).strip():
-        return None
-    return str(unit).strip()
+    # (a BUNIT without a value is None)
+    unit = str(header.get('BUNIT') or '').strip()
+    return unit or None
 
 
 def centre_missing_crpix(
@@ -128,7 +129,22 @@ def centre_missing_crpix(
     return header
 
 
-def with_shape(
+def shifted_header(
+        header: astropy.io.fits.Header, offset: Sequence[int]
+) -> astropy.io.fits.Header:
+    """
+    Return the header of data whose first pixel is the pixel at the given
+    offset (on each numpy axis) of the data of a header: positive where
+    the data are cropped, negative where they are padded.
+    """
+    if not has_wcs(header):
+        return header
+    wcs = astropy.wcs.WCS(header)
+    wcs.wcs.crpix -= np.asarray(offset)[::-1]
+    return with_wcs(header, wcs)
+
+
+def _with_shape(
         header: astropy.io.fits.Header, shape: tuple[int, ...]
 ) -> astropy.io.fits.Header:
     """Return a copy of a header of an array of another shape (NAXISn)."""
@@ -149,9 +165,9 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
     gbkfit.units.parse_unit): astropy would correct some, e.g. 'HZ'
     to Hz, and no unit is corrected.
     """
-    for key in header:
+    for key in filter(_CUNIT_KEYWORDS.fullmatch, header):
         text = str(header[key]).strip()
-        if not _CUNIT_KEYWORDS.fullmatch(key) or not text:
+        if not text:
             continue
         try:
             gbkfit.units.parse_unit(text)
@@ -161,12 +177,44 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
                 f"file") from None
     try:
         return astropy.wcs.WCS(header)
-    except Exception as e:
+    except ValueError as e:
         raise ValueError(
             f"{source}: invalid world coordinates: {e}") from e
 
 
-def linear_transform(wcs: astropy.wcs.WCS) -> np.ndarray:
+def spectra_header(
+        source: str, header: astropy.io.fits.Header, nregions: int
+) -> astropy.io.fits.Header:
+    """
+    Return the header of the spectra of regions of the data of a header
+    (see write_spectra): the regions along x (by their index), and the
+    spectral axis of the data along y, as the header states it (e.g. of
+    logarithmic wavelengths, WAVE-LOG), with its rest, its frame and the
+    medium of its wavelengths.
+
+    Raise ValueError if the data have no spectral axis.
+    """
+    wcs = parse_wcs(source, header)
+    if wcs.wcs.spec < 0:
+        raise ValueError(f"{source}: the data have no spectral axis")
+    spectral = wcs.sub([wcs.wcs.spec + 1])
+    spectra = astropy.wcs.WCS(naxis=2)
+    spectra.wcs.ctype = ['LINEAR', spectral.wcs.ctype[0]]
+    spectra.wcs.cunit = ['', spectral.wcs.cunit[0]]
+    spectra.wcs.crpix = [1, spectral.wcs.crpix[0]]
+    spectra.wcs.crval = [0, spectral.wcs.crval[0]]
+    spectra.wcs.cdelt = [1, spectral.pixel_scale_matrix[0, 0]]
+    spectra.wcs.restfrq, spectra.wcs.restwav = (
+        spectral.wcs.restfrq, spectral.wcs.restwav)
+    spectra.wcs.specsys = spectral.wcs.specsys
+    result = spectra.to_header()
+    if 'AIRORVAC' in header:
+        result['AIRORVAC'] = header['AIRORVAC']
+    nchannels = int(header[f'NAXIS{wcs.wcs.spec + 1}'])
+    return _with_shape(result, (nchannels, nregions))
+
+
+def _linear_transform(wcs: astropy.wcs.WCS) -> np.ndarray:
     """
     Return the linear transformation from pixels to intermediate world
     coordinates: one row for each world axis, one column for each pixel

@@ -3,6 +3,8 @@ Tables (e.g. of rotation curves): reading them from files, and their
 columns with their units.
 """
 
+import warnings
+
 import astropy.io.fits
 import astropy.units as u
 import numpy as np
@@ -14,6 +16,7 @@ from astropy.utils.data import get_readable_fileobj
 from astropy.utils.masked import Masked
 
 import gbkfit.units
+from gbkfit.config import DataFile, split_data_file
 
 
 __all__ = [
@@ -22,10 +25,7 @@ __all__ = [
 ]
 
 
-def read_table(
-        filename: str, format_: str | None = None,
-        hdu: int | str | None = None
-) -> Table:
+def read_table(file: DataFile, format_: str | None = None) -> Table:
     """
     Read a table from a file.
 
@@ -39,14 +39,12 @@ def read_table(
 
     Parameters
     ----------
-    filename : str
-        The path of the file.
+    file : DataFile
+        The file, and of a FITS file the HDU of the table, by index or by
+        name (by default, its first HDU of a table).
     format_ : str, optional
         The format of the file (e.g. 'ascii.csv'); by default, the one
         astropy tells from the file.
-    hdu : int or str, optional
-        The HDU of a FITS file, by index or by name; by default, its
-        first HDU of a table.
 
     Returns
     -------
@@ -64,6 +62,7 @@ def read_table(
         as FITS, or holds no table; or if the unit of a column is not a
         unit.
     """
+    filename, hdu = split_data_file(file)
     # Whether the file is FITS, as astropy tells from its first bytes
     fits = False
     if format_ in (None, 'fits'):
@@ -71,14 +70,17 @@ def read_table(
             fits = is_fits('read', filename, file)
         if format_ == 'fits' and not fits:
             raise ValueError(f"{filename}: not a FITS file")
-    # The units of the columns replace those astropy reads. Those of an
-    # ECSV file are read first, so that a header astropy fails on
-    # obscurely (e.g. one without columns) gets a clear error instead.
+    # The units of the columns of a FITS or an ECSV file replace those
+    # astropy reads, and its warnings about those (e.g. that 'erg/s/cm2'
+    # has two '/') are not shown. They are read before the table, so
+    # that an ECSV header astropy fails on obscurely (e.g. one without
+    # columns) gets a clear error instead.
     units = {}
     options = {}
     if fits:
         hdu = _table_hdu(filename, hdu)
-        options.update(hdu=hdu, unit_parse_strict='silent')
+        units = _fits_units(filename, hdu)
+        options['hdu'] = hdu
     elif hdu is not None:
         raise ValueError(
             f"{filename}: an HDU is given, but the table is not read as "
@@ -87,22 +89,23 @@ def read_table(
         # Those of an ECSV file, whatever format reads it, e.g. 'ascii'
         units = _ecsv_units(filename)
     try:
-        table = Table.read(filename, format=format_, **options)
+        with warnings.catch_warnings():
+            if units:
+                warnings.simplefilter('ignore', u.UnitsWarning)
+            table = Table.read(filename, format=format_, **options)
     except IORegistryError:
         if format_ is None:
             raise ValueError(
-                f"cannot tell the format of the table {filename}: give it "
+                f"{filename}: cannot tell the format of the table: give it "
                 f"(format, e.g. ascii.csv)") from None
         raise ValueError(
-            f"astropy reads no tables of the format {format_!r} "
+            f"{filename}: astropy reads no tables of the format {format_!r} "
             f"(e.g. 'fits', 'ascii.ecsv' or 'ascii.csv')") from None
     except (ValueError, TypeError, KeyError, IndexError) as e:
         # astropy's readers fail on some files they cannot read with
         # other errors than ValueError, e.g. a TypeError for an ECSV
         # header that lists no columns
-        raise ValueError(f"cannot read the table {filename}: {e}") from e
-    if fits:
-        units = _fits_units(filename, hdu)
+        raise ValueError(f"{filename}: cannot read the table: {e}") from e
     for name, unit in units.items():
         if name in table.colnames:
             table[name].unit = unit
@@ -138,7 +141,7 @@ def _table_hdu(filename: str, hdu: int | str | None) -> int:
     return index
 
 
-def _fits_units(filename: str, hdu: int) -> dict[str, u.UnitBase]:
+def _fits_units(filename: str, hdu: int) -> dict[str, gbkfit.units.AnyUnit]:
     """
     Return the units of the columns of the table of an HDU of a FITS
     file (by index), by name: their TUNITn, as read by _unit.
@@ -151,7 +154,7 @@ def _fits_units(filename: str, hdu: int) -> dict[str, u.UnitBase]:
             for column in hdus[hdu].columns if column.unit}
 
 
-def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
+def _ecsv_units(filename: str) -> dict[str, gbkfit.units.AnyUnit]:
     """
     Return the units of the columns of an ECSV file, by name: those of
     its header, as read by _unit. There are none if the file is not
@@ -194,7 +197,7 @@ def _ecsv_units(filename: str) -> dict[str, u.UnitBase]:
         for column in columns if column.get('unit') is not None}
 
 
-def _unit(filename: str, column: str, text: str) -> u.UnitBase:
+def _unit(filename: str, column: str, text: str) -> gbkfit.units.AnyUnit:
     """
     Return the unit of a column of a table file, as
     gbkfit.units.parse_unit reads its text.
@@ -209,9 +212,7 @@ def _unit(filename: str, column: str, text: str) -> u.UnitBase:
             f"it in a copy of the file") from None
 
 
-def read_column(
-        table: Table, name: str, unit: str | u.UnitBase | None
-) -> u.Quantity:
+def read_column(table: Table, name: str, unit: str | None) -> u.Quantity:
     """
     Return a column of a table as floats with a unit.
 
@@ -224,12 +225,11 @@ def read_column(
         The table.
     name : str
         The name of the column.
-    unit : str, Unit or None
-        The unit of the values (a text, as gbkfit.units.parse_unit reads
-        it). If the column has a unit of its own, its values are
-        converted to this one; if it has none, its values are taken to
-        be in it. If None, the unit of the column, or dimensionless if
-        it has none.
+    unit : str or None
+        The unit of the values, as gbkfit.units.parse_unit reads it. If
+        the column has a unit of its own, its values are converted to
+        this one; if it has none, its values are taken to be in it. If
+        None, the unit of the column, or dimensionless if it has none.
 
     Returns
     -------
@@ -268,8 +268,7 @@ def read_column(
         column_unit = column.unit
     if unit is None:
         return values * (column_unit or u.dimensionless_unscaled)
-    given = gbkfit.units.parse_unit(unit) if isinstance(unit, str) \
-        else u.Unit(unit)
+    given = gbkfit.units.parse_unit(unit)
     if column_unit is None:
         return values * given
     try:

@@ -525,6 +525,18 @@ def test_psfs_from_files_in_python(tmp_path):
         PSFImage.from_file(str(tmp_path / 'psf.fits'))._step, (0.5, 0.5))
 
 
+def test_a_psf_image_after_an_empty_primary_hdu_is_read(tmp_path):
+    # A file given alone is read at its first HDU with an image, as the
+    # data of datasets are (HDU 0, here empty, was read)
+    from astropy.io import fits
+    from gbkfit.instrument import PSFGauss, PSFImage
+    image = PSFGauss(1.5).asarray((0.5, 0.5))
+    fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU(image)]).writeto(
+        tmp_path / 'psf.fits')
+    psf = PSFImage.from_file(str(tmp_path / 'psf.fits'), step=(0.5, 0.5))
+    assert psf._data.shape == image.shape
+
+
 @pytest.mark.parametrize('psf', [
     PSFGauss(1.0, 0.5), PSFGGauss(1.0, 1.5, 0.5), PSFMoffat(1.0, 3.0, 0.5),
     PSFGaussBeam(2.0, 1.0, 30),

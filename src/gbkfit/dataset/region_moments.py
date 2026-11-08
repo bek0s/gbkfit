@@ -6,11 +6,10 @@ Voronoi bins, fibres).
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-import astropy.io.fits
 import numpy as np
 
 from gbkfit.config import FilePath, check_options, config_path
-from gbkfit.io import read_table
+from gbkfit.io import read_table, write_image
 from gbkfit.region import Regions, regions_parser
 from . import _detail, _outliers, _resampling
 from .base import Dataset
@@ -170,7 +169,7 @@ class DatasetRegionMoments(Dataset):
             overwrite: bool = False
     ) -> dict[str, Any]:
         def write(filename: str, array: np.ndarray) -> None:
-            astropy.io.fits.writeto(filename, array, overwrite=overwrite)
+            write_image(filename, array, overwrite=overwrite)
         info = dict(
             type=self.type(),
             regions=regions_parser.dump(

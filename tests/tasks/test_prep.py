@@ -95,8 +95,9 @@ def test_squeezed_axes_are_dropped_from_the_header():
     assert header['NAXIS'] == 3
     assert astropy.wcs.WCS(header).naxis == 3
     assert 'CTYPE4' not in header
-    # The keywords that are not about coordinates are kept
-    assert header['BUNIT'] == 'Jy/beam'
+    # The keywords that are not about coordinates are kept, and the unit
+    # is written as gbkfit writes units
+    assert header['BUNIT'] == 'Jy beam-1'
     assert_same_world(HEADER, header, offset=[0, 0, 0])
 
 
@@ -104,7 +105,7 @@ def test_headers_without_coordinates_get_none():
     write_cube('cube.fits', header={'BUNIT': 'Jy/beam'})
     _, header = prep_pixel_spectra('cube.fits', roi_spat=[4, 20, 3, 17])
     assert 'CRPIX1' not in header and 'CTYPE1' not in header
-    assert header['BUNIT'] == 'Jy/beam'
+    assert header['BUNIT'] == 'Jy beam-1'
 
 
 @pytest.mark.parametrize('nanpad', [None, 1])
@@ -428,7 +429,7 @@ def test_data_and_errors_can_be_hdus_of_one_file():
         './prep_cube_DATA.fits', './prep_cube_DATA_error.fits')
     np.testing.assert_array_equal(fits.getdata(data_out), 1)
     np.testing.assert_allclose(fits.getdata(error_out), np.sqrt(2))
-    assert fits.getheader(error_out)['BUNIT'] == 'Jy/beam'
+    assert fits.getheader(error_out)['BUNIT'] == 'Jy beam-1'
     with pytest.raises(ValueError, match="error_kind: variance"):
         prep.prep_pixel_spectra(*files, *options[0], *options[1:])
 
@@ -610,8 +611,8 @@ def test_binned_maps_keep_their_unit():
     fits.writeto('evel.fits', np.full((2, 2), 5e3))
     prep.prep_region_moments(
         'bins.fits', ['vel.fits'], ['evel.fits'], None, 'float32')
-    assert fits.getheader('prep_vel.fits')['BUNIT'] == 'm/s'
-    assert fits.getheader('prep_vel_error.fits')['BUNIT'] == 'm/s'
+    assert fits.getheader('prep_vel.fits')['BUNIT'] == 'm s-1'
+    assert fits.getheader('prep_vel_error.fits')['BUNIT'] == 'm s-1'
     from gbkfit.dataset import dataset_parser
     dataset = dataset_parser.load(dict(
         type='region_moments',
@@ -879,7 +880,8 @@ def test_the_flux_of_a_pixel(unit, factor, flux):
         fits.getdata('one.fits'), fits.getheader('one.fits'))]).writeto(
         'cube.fits')
     cube = FitsArrays.read('cube.fits')
-    scale, flux_unit = pixel_fluxes(cube.header, cube.beam, 'cube.fits')
+    scale, flux_unit = pixel_fluxes(
+        cube.header, cube.unit, cube.beam, 'cube.fits')
     assert scale == pytest.approx(factor, rel=1e-9)
     assert (1 * flux_unit).to_value(parse_unit(flux)) == pytest.approx(1)
 

@@ -14,7 +14,7 @@ import pytest
 from annotated_types import Gt, Le
 
 from gbkfit.config import (
-    ConfigError, FitsFile, Problem, Serializable, TypedParser,
+    ConfigError, DataFile, Problem, Serializable, TypedParser,
     TypedSerializable, Unit, UnknownNamesError, check_name, check_options,
     collect_problems, config_path, describe_type, describe_unknown,
     error_location, error_message, item_prefixes, matches_type,
@@ -279,7 +279,7 @@ class Beam(Serializable):
 
     @classmethod
     def from_file(
-            cls, file: FitsFile, scale: u.Quantity | None = None
+            cls, file: DataFile, scale: u.Quantity | None = None
     ) -> 'Beam':
         check_options(Beam.from_file, locals())
         beam = cls(1.0)

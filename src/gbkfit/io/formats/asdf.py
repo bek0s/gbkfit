@@ -14,7 +14,7 @@ import gwcs
 import numpy as np
 
 import gbkfit.units
-from ..linear_wcs import linear_header
+from ._linear_wcs import linear_header
 
 
 __all__ = []

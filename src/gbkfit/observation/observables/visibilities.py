@@ -11,7 +11,6 @@ import astropy.units
 import numpy as np
 from annotated_types import Gt
 
-import gbkfit.units
 from gbkfit.config import Choices, Unit, check_options
 from gbkfit.dataset import Data, Dataset, DatasetVisibilities, UVCoverage
 from gbkfit.driver import Driver
@@ -357,8 +356,7 @@ class Visibilities(Observable):
             driver, values['re'] + 1j * values['im'], weights)
         unit = None if units is None else units['re']
         if unit is not None:
-            image = image._replace(
-                unit=gbkfit.units.format_unit(unit / astropy.units.beam))
+            image = image._replace(unit=unit / astropy.units.beam)
         return dict(dirty=image)
 
     def psf_images(

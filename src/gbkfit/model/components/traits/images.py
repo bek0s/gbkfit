@@ -12,7 +12,7 @@ import scipy.ndimage
 import scipy.special
 
 from gbkfit.config import (
-    FitsFile, Unit, check_options, split_fits_file, warn)
+    DataFile, Unit, check_options, dump_data_file, warn)
 from gbkfit.grid import Coords, frame_to_pixels, make_grid
 from gbkfit.instrument import PSF, psf_parser
 from gbkfit.io import read_data
@@ -277,9 +277,8 @@ class RPTraitImage(RPTrait):
                 "the image trait was made from an image in Python, which has "
                 "no configuration; make it from a file (see "
                 "RPTraitImage.from_file)")
-        filename, hdu = split_fits_file(self._file)
         info = super().dump() | dict(
-            file=filename if hdu == 0 else dict(file=filename, hdu=hdu),
+            file=dump_data_file(self._file),
             size=list(self._size), step=self._step, offsets=self._offsets)
         if self._psf is not None:
             info['psf'] = psf_parser.dump(self._psf)
@@ -288,7 +287,7 @@ class RPTraitImage(RPTrait):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             size: Sequence[int],
             step: Annotated[float, Unit('arcsec')],
             psf: PSF | None = None,
@@ -316,7 +315,7 @@ class RPTraitImage(RPTrait):
             If an option is not valid, or the file is not of an image.
         """
         check_options(RPTraitImage.from_file, locals())
-        data, coords = read_data(*split_fits_file(file))
+        data, coords = read_data(file)
         trait = cls(data, coords, size, step, psf, offsets, name)
         trait._file = file
         return trait
@@ -351,7 +350,7 @@ class RPTraitImage(RPTrait):
                 f"light between them")
         # (the file of one made from a file: its configuration; see
         # from_file and dump)
-        self._file: FitsFile | None = None
+        self._file: DataFile | None = None
         self._psf = psf
         self._offsets = bool(offsets)
 

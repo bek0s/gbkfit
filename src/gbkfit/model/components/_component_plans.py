@@ -9,8 +9,10 @@ import logging
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+import astropy.units
 import numpy as np
 
+import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import Coords, Grid, GridData
 from gbkfit.params import ParamValues
@@ -62,10 +64,14 @@ _VECTOR_DESCRIPTION = (
     "systemic velocity, which vdata has: along the line of sight, vzdata "
     "is vdata less it).")
 
+# The units of the extra outputs: of velocities, and of none
+_KM_S = astropy.units.km / astropy.units.s
+_DIMENSIONLESS = astropy.units.dimensionless_unscaled
+
 # The titles, the descriptions and the units (None for the light, whose
-# unit the plans do not know; '' for none) of the extra outputs of each
-# component, by name, and of their totals over the components of a galaxy
-# (see ComponentPlans.add_extras)
+# unit the plans do not know) of the extra outputs of each component, by
+# name, and of their totals over the components of a galaxy (see
+# ComponentPlans.add_extras)
 _COMPONENT_EXTRAS = dict(
     bdata=(
         "Brightness",
@@ -74,22 +80,22 @@ _COMPONENT_EXTRAS = dict(
     odata=(
         "Optical depth of dust at V",
         "The optical depth at V of the dust of the component in each "
-        "voxel.", ''),
+        "voxel.", _DIMENSIONLESS),
     vdata=(
         "Velocity",
         "The line-of-sight velocity of the component in each voxel (km/s; "
-        "the mean weighted by its density there).", 'km/s'),
+        "the mean weighted by its density there).", _KM_S),
     ddata=(
         "Velocity dispersion",
         "The velocity dispersion of the component in each voxel (km/s; "
-        "the mean weighted by its density there).", 'km/s'),
+        "the mean weighted by its density there).", _KM_S),
     obdata=(
         "Dimmed brightness",
         "The light of the component in each voxel after the opacity that "
         "dims it there.", None)) | {
     f'v{axis}data': (
         f"Velocity along {axis}", _VECTOR_DESCRIPTION.format(
-            axis=desc, whose="the component", weight="its density"), 'km/s')
+            axis=desc, whose="the component", weight="its density"), _KM_S)
     for axis, desc in _VECTOR_AXES.items()}
 _TOTAL_EXTRAS = dict(
     total_bdata=(
@@ -103,11 +109,11 @@ _TOTAL_EXTRAS = dict(
     total_odata=(
         "Total optical depth of dust at V",
         "The optical depth at V of the dust of the components of the galaxy "
-        "in each voxel.", '')) | {
+        "in each voxel.", _DIMENSIONLESS)) | {
     f'total_v{axis}data': (
         f"Total velocity along {axis}", _VECTOR_DESCRIPTION.format(
             axis=desc, whose="the components of the galaxy",
-            weight="their brightness"), 'km/s')
+            weight="their brightness"), _KM_S)
     for axis, desc in _VECTOR_AXES.items()}
 
 
@@ -385,7 +391,7 @@ class ComponentPlans:
             self,
             data: np.ndarray,
             depth_zero: float | None = None,
-            unit: str | None = None
+            unit: gbkfit.units.AnyUnit | None = None
     ) -> GridData:
         """
         Return an extra output on the grid: an image without a depth axis,
@@ -407,7 +413,7 @@ class ComponentPlans:
         return GridData(data, coords, None, unit)
 
     def output_extra(
-            self, data: np.ndarray, unit: str | None = None
+            self, data: np.ndarray, unit: gbkfit.units.AnyUnit | None = None
     ) -> GridData:
         """
         Return an extra output of the shape of the output on the grid: an

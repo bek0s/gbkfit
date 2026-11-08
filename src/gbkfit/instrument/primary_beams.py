@@ -15,8 +15,7 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    FitsFile, TypedParser, TypedSerializable, Unit, check_options,
-    split_fits_file)
+    DataFile, TypedParser, TypedSerializable, Unit, check_options)
 from gbkfit.grid import (
     Grid, VelocityConvention, check_overlap, make_grid, pixels_on,
     sky_positions)
@@ -262,7 +261,7 @@ class PrimaryBeamImage(PrimaryBeam):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             step: Annotated[
                 float | Sequence[float], Unit('arcsec')] | None = None,
             rpix: float | Sequence[float] | None = None,
@@ -293,7 +292,7 @@ class PrimaryBeamImage(PrimaryBeam):
             The primary beam.
         """
         check_options(PrimaryBeamImage.from_file, locals())
-        data, coords = read_data(*split_fits_file(file), rpix, rval)
+        data, coords = read_data(file, rpix=rpix, rval=rval)
         return cls(
             data, coords.step if step is None else step, coords.rpix,
             coords.rval, coords.rota if rota is None else rota)
@@ -304,7 +303,7 @@ class PrimaryBeamImage(PrimaryBeam):
     ) -> dict[str, Any]:
         filename = f'{prefix}primary_beam.fits'
         coords = self._grid.coords
-        write_data(filename, self._data, coords, None, overwrite)
+        write_data(filename, self._data, coords, overwrite=overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename))

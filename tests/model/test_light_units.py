@@ -7,7 +7,8 @@ import astropy.units as u
 import numpy as np
 import pytest
 
-from gbkfit.dataset import Beam, Data, DatasetPixelSpectra
+from gbkfit.dataset import Data, DatasetPixelSpectra
+from gbkfit.io import Beam
 from gbkfit.grid import SpectralAxis
 from gbkfit.instrument import Instrument, PSFGaussBeam
 from gbkfit.model import galaxy_parser

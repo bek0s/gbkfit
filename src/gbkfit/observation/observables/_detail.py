@@ -320,9 +320,8 @@ class DCubePlanBase(ObservablePlan):
         self._flux_param = flux_scale
         # (the unit of the light of the model, if known)
         data_unit = scene.data_unit()
-        unit = None if data_unit is None else data_unit.cube_unit()
-        self._light_unit = None if unit is None \
-            else gbkfit.units.format_unit(unit)
+        self._light_unit = None if data_unit is None \
+            else data_unit.cube_unit()
         self._dcube_plan = dcube.plan(
             driver, has_weights=pixel_weights is not None)
         grid = self._model_grid()

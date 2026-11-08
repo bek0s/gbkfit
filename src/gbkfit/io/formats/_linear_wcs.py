@@ -14,8 +14,7 @@ import numpy as np
 from astropy.wcs.wcsapi import BaseHighLevelWCS, BaseLowLevelWCS
 
 import gbkfit.units
-
-from .spectral import SPECTRAL_UNITS
+from ..spectral import _SPECTRAL_UNITS
 
 
 __all__ = [
@@ -93,7 +92,7 @@ def linear_header(
             continue
         unit = u.Unit(low.world_axis_units[j])
         pixels = np.flatnonzero(correlation[j])
-        if not any(unit.is_equivalent(x) for x in SPECTRAL_UNITS):
+        if not any(unit.is_equivalent(x) for x in _SPECTRAL_UNITS):
             raise ValueError(
                 f"{source}: the world axis "
                 f"{low.world_axis_physical_types[j]!r} is neither celestial "
@@ -208,8 +207,9 @@ def _linear_spectral_axis(
         kinds = [('FREQ', values)]
     else:
         physical = low.world_axis_physical_types[axis] or ''
-        kind = 'VRAD' if physical.endswith('.radio') \
-            else 'VOPT' if physical.endswith('.opt') else 'VELO'
+        kind = (
+            'VRAD' if physical.endswith('.radio')
+            else 'VOPT' if physical.endswith('.opt') else 'VELO')
         kinds = [(kind, values)]
     x = np.arange(len(values)) - (len(values) - 1) / 2
     lines = []

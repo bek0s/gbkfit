@@ -83,7 +83,7 @@ Example
 
    # the version of the format of the configuration (gbkfit-cli migrate
    # rewrites those of older versions)
-   version: 5
+   version: 6
 
    # where the models are evaluated: host (the default) or cuda; several
    # drivers are declared by name in a section 'drivers', and then each

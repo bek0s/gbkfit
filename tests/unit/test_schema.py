@@ -12,7 +12,7 @@ import pytest
 import ruamel.yaml
 
 import gbkfit
-from gbkfit.config import Column, FitsFile, TypedParser, TypedSerializable
+from gbkfit.config import Column, DataFile, TypedParser, TypedSerializable
 from gbkfit.config.catalogue import Family, Member
 from gbkfit.config.schema import SchemaWriter
 from gbkfit.instrument import PSF, PSFGauss, PSFGaussBeam
@@ -58,7 +58,7 @@ def test_members_of_families_have_their_options():
 
 def test_options_have_the_forms_of_configurations():
     writer = SchemaWriter()
-    fits = writer.option(FitsFile)
+    fits = writer.option(DataFile)
     assert fits['anyOf'][0] == {'type': 'string', 'format': 'path'}
     assert fits['anyOf'][1]['required'] == ['file']
     assert writer.option(astropy.units.Quantity)['required'] == [

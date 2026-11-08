@@ -7,7 +7,6 @@ import abc
 import os
 from typing import Annotated, Any, Literal, TypeAlias
 
-import astropy.io.fits
 import astropy.units as u
 import numpy as np
 import numpy.typing as npt
@@ -15,11 +14,10 @@ import scipy.fft
 from annotated_types import Gt
 
 from gbkfit.config import (
-    Choices, FitsFile, TypedParser, TypedSerializable, check_options,
-    split_fits_file)
+    Choices, DataFile, TypedParser, TypedSerializable, check_options)
 from gbkfit.grid import Grid, VelocityConvention
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
-from gbkfit.io import read_data
+from gbkfit.io import read_data, write_image
 from gbkfit.math.correlation import periodic_correlation
 
 
@@ -213,7 +211,7 @@ class NoiseGauss(Noise):
     @classmethod
     def from_file(
             cls,
-            error: FitsFile,
+            error: DataFile,
             spatial_correlation: PSF | _Instrument | None = None,
             spectral_correlation: LSF | None = None
     ) -> 'NoiseGauss':
@@ -402,7 +400,7 @@ class NoiseStudentT(Noise):
     def from_file(
             cls,
             dof: Annotated[float, Gt(2)],
-            error: FitsFile
+            error: DataFile
     ) -> 'NoiseStudentT':
         """
         Make a noise of an error map read from a FITS file.
@@ -505,9 +503,9 @@ class NoisePoisson(Noise):
         return counts / self._gain - signal
 
 
-def _read_error(file: FitsFile) -> np.ndarray:
+def _read_error(file: DataFile) -> np.ndarray:
     """Return the error map of a noise, read from its FITS file."""
-    return read_data(*split_fits_file(file))[0]
+    return read_data(file)[0]
 
 
 def _dump_dispersion(
@@ -524,7 +522,7 @@ def _dump_dispersion(
     if rms is not None:
         return dict(rms=rms)
     filename = f'{prefix}noise_error.fits'
-    astropy.io.fits.writeto(filename, error, overwrite=overwrite)
+    write_image(filename, error, overwrite=overwrite)
     return dict(error=filename if dump_path else os.path.basename(filename))
 
 

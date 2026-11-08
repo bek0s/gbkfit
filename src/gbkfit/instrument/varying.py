@@ -36,8 +36,8 @@ import numpy as np
 
 import gbkfit.units
 from gbkfit.config import (
-    FilePath, Serializable, check_options, config_path,
-    option_types, parse_options_for_callable, unit_of, varying_options)
+    DataFile, Serializable, check_options, config_path, option_types,
+    parse_options_for_callable, split_data_file, unit_of, varying_options)
 from gbkfit.grid import VelocityConvention
 from gbkfit.io import read_column, read_table
 
@@ -295,10 +295,9 @@ class SpectralTable(Serializable):
     @classmethod
     def from_file(
             cls,
-            file: FilePath,
+            file: DataFile,
             points: str,
             column: str,
-            hdu: int | str | None = None,
             units: Mapping[str, str] | None = None
     ) -> 'SpectralTable':
         """
@@ -310,14 +309,13 @@ class SpectralTable(Serializable):
 
         Parameters
         ----------
-        file : str
-            The file.
+        file : DataFile
+            The file, and of a FITS file the HDU of the table (see
+            read_table).
         points : str
             The column of the points.
         column : str
             The column of the values.
-        hdu : int or str, optional
-            The HDU of a FITS file.
         units : Mapping, optional
             The units of the columns without units (e.g. those of a CSV
             file), by column.
@@ -333,18 +331,19 @@ class SpectralTable(Serializable):
             If the file has no such columns, or the points have no unit.
         """
         check_options(SpectralTable.from_file, locals())
-        table = read_table(file, hdu=hdu)
+        filename = split_data_file(file)[0]
+        table = read_table(file)
         units = units or {}
         for name in (points, column):
             if name not in table.colnames:
                 raise ValueError(
-                    f"{file}: there is no column {name!r}; the columns "
+                    f"{filename}: there is no column {name!r}; the columns "
                     f"are {table.colnames}")
         # Masked values are NaN, which the table refuses
         point_values = read_column(table, points, units.get(points))
         if point_values.unit == u.dimensionless_unscaled:
             raise ValueError(
-                f"{file}: the column of the points, {points!r}, has no "
+                f"{filename}: the column of the points, {points!r}, has no "
                 f"unit; give it in units")
         values = read_column(table, column, units.get(column))
         unit = None if values.unit == u.dimensionless_unscaled \

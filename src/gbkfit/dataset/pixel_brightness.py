@@ -96,7 +96,7 @@ class DatasetPixelBrightness(Dataset):
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the grid (see Coords); by
             default, those of the header. Either rpix or rval can be given,
-            and the other comes from the header (see coords_from_wcs).
+            and the other comes from the header (see coords_from_header).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.

@@ -17,7 +17,7 @@ import ruamel.yaml
 from gbkfit.config import ConfigError
 import gbkfit.project
 from gbkfit.project import FORMAT_VERSION
-from . import v2, v3, v4, v5
+from . import v2, v3, v4, v5, v6
 from .rules import Change, Rule, insert_first
 
 
@@ -62,7 +62,7 @@ def _yaml() -> ruamel.yaml.YAML:
 
 # The rules of all the versions, in order (see Rule)
 RULES: tuple[Rule, ...] = (
-    *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES)
+    *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES)
 
 
 def migrate(

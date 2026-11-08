@@ -13,8 +13,8 @@ import pytest
 from gbkfit.grid import (
     Coords, Grid, air_refractive_index, make_convention, make_grid, make_rest)
 from gbkfit.io import (
-    centre_missing_crpix, model_header, read_array, read_arrays,
-    read_coords, read_data, read_hdu, read_sky_map, read_unit, write_data)
+    Beam, centre_missing_crpix, model_header, read_arrays, read_data,
+    read_image, read_oriented, read_sky_map, write_data)
 
 
 def position_angle(header, pixel_from, pixel_to):
@@ -186,7 +186,7 @@ def test_hdu_can_be_chosen():
         fits.PrimaryHDU(),
         fits.ImageHDU(np.ones((20, 24), np.float32), header, name='SCI')
     ]).writeto('data.fits')
-    data, coords = read_data('data.fits', hdu='SCI')
+    data, coords = read_data(('data.fits', 'SCI'))
     assert data.shape == (20, 24)
     assert coords.rval == (150.0, 2.0)
 
@@ -224,10 +224,10 @@ def test_the_first_image_is_read_past_tables():
         fits.BinTableHDU.from_columns([fits.Column('a', 'K', array=[1, 2])]),
         fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
     ]).writeto('data.fits')
-    data, _ = read_hdu('data.fits')
+    data, _ = read_image('data.fits')
     assert data.shape == (20, 24)
     with pytest.raises(ValueError, match="HDU 1 is not an image"):
-        read_hdu('data.fits', 1)
+        read_image(('data.fits', 1))
 
 
 # A cube in the orientation of the model: RA, Dec and increasing velocity,
@@ -361,7 +361,7 @@ def test_hdu_without_data():
         fits.ImageHDU(np.ones((20, 24), np.float32), name='SCI')
     ]).writeto('data.fits')
     with pytest.raises(ValueError, match="HDU 0 has no data"):
-        read_data('data.fits', 0)
+        read_data(('data.fits', 0))
     assert read_data('data.fits')[0].shape == (20, 24)
 
 
@@ -535,15 +535,15 @@ def test_read_array_of_maps_cubes_and_stale_axes(tmp_path):
         CUNIT1='deg', CUNIT2='deg'))
     image = np.arange(12.0).reshape(3, 4)
     fits.writeto(tmp_path / 'map.fits', image, header)
-    data, wcs = read_array(str(tmp_path / 'map.fits'))
+    data, wcs = read_oriented(str(tmp_path / 'map.fits'))
     assert data.shape == (3, 4) and wcs.naxis == 2
     stale = header.copy()
     stale.update(CTYPE3='VRAD', CRVAL3=0.0, CRPIX3=1.0, CDELT3=1e3)
     fits.writeto(tmp_path / 'stale.fits', image, stale)
-    data, _ = read_array(str(tmp_path / 'stale.fits'))
+    data, _ = read_oriented(str(tmp_path / 'stale.fits'))
     assert data.shape == (3, 4)
     fits.writeto(tmp_path / 'cube.fits', np.ones((5, 3, 4)), stale)
-    data, wcs = read_array(str(tmp_path / 'cube.fits'))
+    data, wcs = read_oriented(str(tmp_path / 'cube.fits'))
     assert data.shape == (5, 3, 4) and wcs.naxis == 3
 
 
@@ -652,19 +652,14 @@ def test_a_rest_in_the_medium_given_is_the_line_of_the_header(tmp_path):
         read_data(stated, rest=air, medium='air')
 
 
-def test_the_first_image_is_that_of_the_header_alone(tmp_path):
-    # A file of an empty primary HDU and an image after it: its first
-    # image is the same for its data and for its header alone
+def test_the_first_image_is_read_by_default(tmp_path):
+    # A file of an empty primary HDU and an image after it
     path = str(tmp_path / 'data.fits')
     fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU(
-        np.zeros((20, 24), np.float32), fits.Header(SKY | dict(BUNIT='Jy')),
+        np.zeros((20, 24), np.float32), fits.Header(SKY),
         name='SCI')]).writeto(path)
-    assert read_coords(path, None) == read_data(path, None)[1]
-    assert read_unit(path, None) == 'Jy'
-    # (and the first is what the readers read by default)
-    assert read_coords(path) == read_data(path)[1] == read_data(path, 1)[1]
-    assert read_array(path)[0].shape == (20, 24)
-    assert read_unit(path) == 'Jy'
+    assert read_data(path)[1] == read_data((path, 1))[1]
+    assert read_oriented(path)[0].shape == (20, 24)
 
 
 def test_another_orientation_leaves_no_stale_keywords_of_axes():
@@ -705,9 +700,9 @@ def test_the_beam_of_aips_is_read_from_the_history(tmp_path):
     path = str(tmp_path / 'map.fits')
     fits.writeto(path, np.zeros((20, 24), np.float32), header)
     beam = read_arrays(path).beam
-    assert beam['bmaj'] == pytest.approx(11.43108)
-    assert beam['bmin'] == pytest.approx(9.36252)
-    assert beam['bpa'] == pytest.approx(-80.43)
+    assert beam.bmaj == pytest.approx(11.43108)
+    assert beam.bmin == pytest.approx(9.36252)
+    assert beam.bpa == pytest.approx(-80.43)
 
 
 def test_a_cube_of_one_channel_has_the_beam_of_its_table(tmp_path):
@@ -726,7 +721,7 @@ def test_a_cube_of_one_channel_has_the_beam_of_its_table(tmp_path):
             CRPIX3=1))), beams]).writeto(path)
     arrays = read_arrays(path)
     assert arrays.data.shape == (20, 24)
-    assert arrays.beam == dict(bmaj=10.0, bmin=5.0, bpa=30.0)
+    assert arrays.beam == Beam(10.0, 5.0, 30.0)
 
 
 def test_a_nonstandard_type_of_an_axis_beyond_the_array_is_left_out(
@@ -805,11 +800,10 @@ def test_logarithmic_wavelengths_in_air_of_a_rest_in_vacuum(tmp_path):
     assert coords.rval[2] == pytest.approx(0, abs=1e-3)
 
 
-def test_the_coordinates_of_a_map_alone_have_the_rest_given(tmp_path):
+def test_the_coordinates_of_a_map_have_the_rest_given(tmp_path):
     path = write_map(tmp_path / 'map.fits', SKY)
     rest = make_rest('6562.80 Angstrom')
-    assert read_coords(path, rest=rest).rest == read_data(
-        path, rest=rest)[1].rest == rest
+    assert read_data(path, rest=rest)[1].rest == rest
 
 
 def test_the_rest_of_the_kind_of_the_axis_comes_first(tmp_path):

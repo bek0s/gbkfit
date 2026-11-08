@@ -1,3 +1,5 @@
+import warnings
+
 import astropy.units as u
 import numpy as np
 import pytest
@@ -72,12 +74,11 @@ def test_the_hdu_of_a_fits_table_must_hold_a_table(tmp_path):
         [fits.Column('v', 'D', unit='km/s', array=[2.0])], name='KIN')
     fits.HDUList([fits.PrimaryHDU(), fits.ImageHDU([1.0]), table]).writeto(
         path)
-    for hdu in (None, 2, 'KIN'):
-        assert read_column(read_table(path, hdu=hdu), 'v', None).unit \
-            == u.km / u.s
+    for file in (path, (path, 2), (path, 'KIN')):
+        assert read_column(read_table(file), 'v', None).unit == u.km / u.s
     for hdu in (0, 1, 5, 'NOPE'):
         with pytest.raises(ValueError, match="no table in HDU"):
-            read_table(path, hdu=hdu)
+            read_table((path, hdu))
 
 
 def test_the_units_of_an_ecsv_file_are_read_by_the_fits_standard(tmp_path):
@@ -93,6 +94,26 @@ def test_the_units_of_an_ecsv_file_are_read_by_the_fits_standard(tmp_path):
     path.write_text(header.replace('Jy/beam km/s', 'banana') + 'm0\n1.0\n')
     with pytest.raises(ValueError, match="column 'm0': 'banana' is not a"):
         read_table(str(path))
+
+
+def test_astropy_does_not_warn_of_the_units_it_does_not_read(tmp_path):
+    # (astropy warns that 'erg/s/cm2' has two '/', and of a FITS unit it
+    # cannot read, e.g. '(Jy/beam) (km/s)'; the warnings are recorded,
+    # as astropy reads a unit another way where they are errors)
+    ecsv = tmp_path / 'table.ecsv'
+    ecsv.write_text(
+        '# %ECSV 1.0\n# ---\n# datatype:\n'
+        '# - {name: f, unit: erg/s/cm2, datatype: float64}\nf\n1.0\n')
+    column = fits.Column(
+        name='f', format='D', unit='(Jy/beam) (km/s)', array=[1.0])
+    fits.BinTableHDU.from_columns([column]).writeto(tmp_path / 'table.fits')
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always', u.UnitsWarning)
+        ecsv_unit = read_table(str(ecsv))['f'].unit
+        fits_unit = read_table(str(tmp_path / 'table.fits'))['f'].unit
+    assert not [w for w in caught if issubclass(w.category, u.UnitsWarning)]
+    assert ecsv_unit == u.erg / u.s / u.cm ** 2
+    assert fits_unit == u.Jy * u.km / u.beam / u.s
 
 
 def test_the_format_of_a_table_must_be_one_astropy_reads(tmp_path):

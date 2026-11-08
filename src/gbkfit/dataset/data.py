@@ -11,38 +11,18 @@ import astropy.units
 import numpy as np
 
 import gbkfit.units
-from gbkfit.config import DataFile, parse_options, warn
+from gbkfit.config import DataFile, parse_options, split_data_file, warn
 from gbkfit.grid import Coords
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
-from gbkfit.io import ErrorKind, coords_from_header, read_arrays
+from gbkfit.io import Beam, ErrorKind, coords_from_header, read_arrays
 
 
 __all__ = [
-    'Beam',
     'Data',
     'DataColumns',
     'DataFiles',
     'dump_data'
 ]
-
-
-class Beam(NamedTuple):
-    """
-    The beam of data in units per beam (e.g. Jy/beam): the Gaussian
-    restoring beam of a radio image, of the full widths at half maximum
-    bmaj and bmin (arcsec) and the position angle bpa (degrees). A cube
-    can have one for each channel (e.g. of CASA): its values are then
-    arrays, against the spectral points of the channels (spectral: a
-    Quantity of frequencies, wavelengths or velocities).
-    """
-    bmaj: float | np.ndarray
-    bmin: float | np.ndarray
-    bpa: float | np.ndarray = 0.0
-    spectral: astropy.units.Quantity | None = None
-
-    def area(self) -> float | np.ndarray:
-        """Return its solid angle (arcsec^2): pi / (4 ln 2) bmaj bmin."""
-        return np.pi / (4 * np.log(2)) * np.multiply(self.bmaj, self.bmin)
 
 
 class DataFiles(NamedTuple):
@@ -360,16 +340,14 @@ class Data:
                     f"that of a file of errors")
         elif error is not None:
             error_file = error
-        # (the axes before the spectral axis are the data's own, also those
-        # of length 1: e.g. of one region)
         arrays = read_arrays(
             data, error_file, mask, error_kind=error_kind, unit=unit,
             rest=rest, velocity=velocity, footprint=footprint,
             spectral_type=spectral_type, medium=medium,
-            ndim=None if spectral_axis is None else spectral_axis + 1)
-        filename = data if isinstance(data, str) else data[0]
+            spectral_axis=spectral_axis)
         coords = coords_from_header(
-            filename, arrays.header, rpix, rval, spectral_axis, medium, rest)
+            split_data_file(data)[0], arrays.header, rpix=rpix, rval=rval,
+            spectral_axis=spectral_axis, medium=medium, rest=rest)
         errors = arrays.error
         if isinstance(error, (int, float)):
             errors = np.full(arrays.data.shape, error, dtype=float)

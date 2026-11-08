@@ -19,10 +19,9 @@ import gbkfit.units
 from gbkfit.utils import funcutils, iterutils
 from .errors import ConfigError, config_path, quoted_names
 from .options import parse_options
-from .paths import parse_data_file, parse_file, resolve_path
+from .paths import parse_data_file, resolve_path
 from .types import (
-    DataFile, FilePath, FitsFile, option_types, type_problem,
-    union_members)
+    DataFile, FilePath, option_types, type_problem, union_members)
 
 if typing.TYPE_CHECKING:
     from .parsers import TypedParser
@@ -297,14 +296,15 @@ def parse_options_for_callable(
 
     Options of some types are given in a form of their own (see
     from_config): a FilePath is relative to the directory of the
-    configuration (see resolve_path), a FitsFile is a filename or a dict
-    with the filename (file) and the HDU (hdu), a record (a NamedTuple,
-    e.g. a Column) is a dict of its fields, a Quantity is a dict with its
-    value and unit (e.g. {value: [1, 2], unit: kpc}), an object of a
-    family (e.g. a PSF) is a dict of its options with its type, one of
-    another serializable class (e.g. an Instrument) is a dict of its
-    options, and the items of a sequence and the values of a Mapping are
-    in the forms of their type.
+    configuration (see resolve_path), a DataFile is a filename or a dict
+    with the filename (file) and the HDU (hdu) or the path of its array
+    (path), a record (a NamedTuple, e.g. a Column) is a dict of its
+    fields, a Quantity is a dict with its value and unit
+    (e.g. {value: [1, 2], unit: kpc}), an object of a family (e.g. a
+    PSF) is a dict of its options with its type, one of another
+    serializable class (e.g. an Instrument) is a dict of its options,
+    and the items of a sequence and the values of a Mapping are in the
+    forms of their type.
 
     Parameters
     ----------
@@ -403,7 +403,7 @@ def from_config(value: Any, type_: Any) -> Any:
 def _from_string(value: str, members: tuple[Any, ...]) -> Any:
     """Return the value of a string, of the members of a union annotation."""
     for member in members:
-        if member in (FilePath, FitsFile):
+        if member == FilePath:
             return resolve_path(value)
         if member == DataFile:
             return parse_data_file(value)
@@ -420,11 +420,6 @@ def _from_dict(value: Mapping[str, Any], members: tuple[Any, ...]) -> Any:
     if not others:
         return value
     member = others[0]
-    if member == FitsFile:
-        # (without an HDU, the file alone: its readers take their first
-        # HDU, or the first with data, see read_arrays)
-        file, hdu = parse_file(dict(value))
-        return (file, hdu) if 'hdu' in value else file
     if member == DataFile:
         return parse_data_file(value)
     if member is astropy.units.Quantity:
@@ -477,7 +472,7 @@ def _takes_dicts(type_: Any) -> bool:
     annotation as dicts (see from_config).
     """
     return (
-        type_ in (FitsFile, DataFile)
+        type_ == DataFile
         or type_ is astropy.units.Quantity
         or typing.get_origin(type_) in (dict, Mapping)
         or is_record(type_)

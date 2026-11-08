@@ -626,3 +626,18 @@ def test_the_options_of_a_thick_disk_on_a_thin_one_are_changed_by_hand():
     # (left as they were)
     assert disk['opacity'] == dict(type='dust')
     assert disk['kinematics']['equilibrium'] == dict(type='central')
+
+
+def test_the_hdu_of_the_file_of_a_table_is_in_the_file():
+    alpha = dict(file='psf.fits', hdu=1, points='wavelength', column='alpha')
+    beta = dict(file='psf.ecsv', points='wavelength', column='beta')
+    psf = dict(type='moffat', alpha=alpha, beta=beta)
+    config = dict(observations=[dict(instrument=dict(psf=psf))])
+    changes = migration.migrate(config, 5)
+    assert alpha == dict(
+        file=dict(file='psf.fits', hdu=1), points='wavelength',
+        column='alpha')
+    # (a table without an HDU, or with none, keeps its file as it is)
+    assert beta == dict(file='psf.ecsv', points='wavelength', column='beta')
+    assert [c.path for c in changes if c.path != ['version']] == [
+        ['observations', 0, 'instrument', 'psf', 'alpha']]

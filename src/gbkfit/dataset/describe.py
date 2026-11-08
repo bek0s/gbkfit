@@ -15,10 +15,9 @@ import astropy.wcs
 import gbkfit.units
 from gbkfit.grid import Coords
 from gbkfit.io import (
-    centre_missing_crpix, coords_from_header, header_beam, header_shape,
-    header_unit, ignoring_wcs_fixes, model_axis_order, model_header,
-    nonstandard_spectral_axis, velocity_is_ambiguous)
-from .data import Beam
+    Beam, centre_missing_crpix, coords_from_header, header_beam,
+    header_shape, header_unit, ignoring_wcs_fixes, model_axis_order,
+    model_header, nonstandard_spectral_axis, velocity_is_ambiguous)
 
 
 __all__ = [
@@ -60,10 +59,10 @@ class HDUDescription:
     unit : str or None
         The unit of its values, as the header writes it (BUNIT).
     beam : Beam or None
-        Its beam (see read_beam).
+        Its beam (see header_beam).
     coords : Coords or None
         The world coordinates of its data in the model (see
-        read_coords); None if they cannot be read, or if its
+        read_data); None if they cannot be read, or if its
         velocities are ambiguous and their convention is not given.
     rms : float or None
         The noise of its values that the header states (keyword RMS or
@@ -124,7 +123,7 @@ def describe_fits(
     rest : str or Quantity, optional
         The rest of their spectral axes (e.g. '6562.8 Angstrom'), which
         turns axes of wavelengths or frequencies into velocities, as a
-        dataset with that rest reads them (see read_coords).
+        dataset with that rest reads them (see read_data).
     spectral_type : str, optional
         What an axis whose header gives it a type FITS does not define
         is (see HDUDescription.nonstandard_type, and with_spectral_type).
@@ -167,7 +166,8 @@ def _describe(
     """
     Return the description of an HDU of a FITS file with an array, from
     its header (and the table of the beams of the file, if it has one:
-    beams), as read_coords, read_unit and read_beam read them.
+    beams): its world coordinates as read_data reads them, and its unit
+    and beam as header_unit and header_beam do.
     """
     problems = []
     order = _model_order(header)
@@ -191,8 +191,7 @@ def _describe(
     unit = header_unit(header)
     beam = None
     try:
-        options = header_beam(header, filename if beams else None)
-        beam = None if options is None else Beam(**options)
+        beam = header_beam(header, filename if beams else None)
     except ValueError as e:
         problems.append(str(e))
     if unit is not None:

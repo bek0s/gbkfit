@@ -545,7 +545,7 @@ class ObservationSky(Observation):
         if unit is None or not isinstance(
                 output, (GridData, SpectraData)):
             return output
-        return output._replace(unit=gbkfit.units.format_unit(unit))
+        return output._replace(unit=unit)
 
     def images(
             self,

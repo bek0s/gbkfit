@@ -23,11 +23,11 @@ def test_products_are_found_by_kind_and_ids_and_read_back():
     with outputs.create('run', 'eval', options=dict(mode='model')) as run:
         run.write(
             'observations/ngc1313/model/vlos.fits', 'model',
-            GridData(np.ones((20, 24)), COORDS, None, 'km/s'),
+            GridData(np.ones((20, 24)), COORDS, None, u.km / u.s),
             observation='ngc1313', item='vlos')
         run.write(
             'observations/ngc1313/model/mmap0.fits', 'model',
-            np.zeros((20, 24)), unit='Jy/beam',
+            np.zeros((20, 24)), unit=u.Jy / u.beam,
             observation='ngc1313', item='mmap0')
         run.write(
             'galaxies/main/components/disk/rotation.ecsv', 'rotation_curve',
@@ -40,14 +40,14 @@ def test_products_are_found_by_kind_and_ids_and_read_back():
     assert len(run.products('model', observation='ngc1313')) == 2
 
     vlos = run.read(run.product('model', item='vlos'))
-    assert vlos.header['BUNIT'] == 'km/s'
+    assert vlos.header['BUNIT'] == 'km s-1'
     assert vlos.header['GBKFKIND'] == 'model'
     assert vlos.header['GBKFVER'] == gbkfit.__version__
     _, coords = read_data(
         run.filename(run.product('model', item='vlos')))
     np.testing.assert_allclose(coords.rval, COORDS.rval)
     assert run.read(run.product('model', item='mmap0')).header['BUNIT'] == \
-        'Jy/beam'
+        'Jy beam-1'
 
     rotation = run.read(run.product('rotation_curve', component='disk'))
     assert rotation['v'].unit == u.km / u.s
@@ -111,7 +111,7 @@ def test_values_must_suit_the_format():
     with pytest.raises(TypeError, match='carries its own'):
         run.write(
             'out.fits', 'model',
-            GridData(np.ones((20, 24)), COORDS, None), unit='K')
+            GridData(np.ones((20, 24)), COORDS, None), unit=u.K)
 
 
 def test_lookups_of_one_product_need_exactly_one():

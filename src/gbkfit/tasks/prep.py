@@ -24,9 +24,10 @@ import numpy.typing as npt
 from astropy.io import fits
 
 import gbkfit.units
-from gbkfit.config import DataFile
+from gbkfit.config import DataFile, split_data_file
 from gbkfit.io import (
-    ErrorKind, casa_beam_table, header_unit, read_column, read_table)
+    ErrorKind, casa_beam_table, read_column, read_header, read_table,
+    spectra_header, write_image)
 import gbkfit.outputs
 from gbkfit import prep
 from gbkfit.prep import FitsArrays
@@ -410,8 +411,7 @@ def _read_bins(
     try:
         index, nbins = prep.bin_index(bins)
     except ValueError as e:
-        filename = file if isinstance(file, str) else file[0]
-        raise ValueError(f"{filename}: {e}") from e
+        raise ValueError(f"{split_data_file(file)[0]}: {e}") from e
     return header, index, nbins
 
 
@@ -473,9 +473,6 @@ def prep_region_moments(
     _write_bins(bins_header, index, file_bins, output_dir)
     for i, arrays in enumerate(maps):
         # (the errors are in the unit of the map, see read_arrays)
-        header = fits.Header()
-        if (unit := header_unit(arrays.header)) is not None:
-            header['BUNIT'] = unit
         for filename, data, role in (
                 (file_d[i], arrays.data, ''),
                 (file_e[i], arrays.error, 'error')):
@@ -485,36 +482,9 @@ def prep_region_moments(
                 values = prep.bin_values(index, nbins, data)
             except ValueError as e:
                 raise ValueError(f"{filename}: {e}") from e
-            fits.writeto(
+            write_image(
                 _output(output_dir, file_d[i], role), values.astype(dtype),
-                header, overwrite=True)
-
-
-def _spectral_header(cube: FitsArrays, nbins: int) -> fits.Header:
-    """
-    Return the header of the spectra of the bins of a cube: the bins along
-    x (in pixels), and the spectral axis of the cube along y, as the cube
-    states it (e.g. of logarithmic wavelengths, WAVE-LOG), with its rest
-    and its frame.
-    """
-    wcs = astropy.wcs.WCS(cube.header)
-    if wcs.wcs.spec < 0:
-        raise ValueError("the cube has no spectral axis")
-    spectral = wcs.sub([wcs.wcs.spec + 1])
-    out = astropy.wcs.WCS(naxis=2)
-    out.wcs.ctype = ['LINEAR', spectral.wcs.ctype[0]]
-    out.wcs.cunit = ['', spectral.wcs.cunit[0]]
-    out.wcs.crpix = [1, spectral.wcs.crpix[0]]
-    out.wcs.crval = [0, spectral.wcs.crval[0]]
-    out.wcs.cdelt = [1, spectral.pixel_scale_matrix[0, 0]]
-    out.wcs.restfrq, out.wcs.restwav = (
-        spectral.wcs.restfrq, spectral.wcs.restwav)
-    out.wcs.specsys = spectral.wcs.specsys
-    header = out.to_header()
-    if 'AIRORVAC' in cube.header:
-        header['AIRORVAC'] = cube.header['AIRORVAC']
-    return fits.PrimaryHDU(
-        np.zeros((cube.data.shape[0], nbins)), header).header
+                unit=arrays.unit, overwrite=True)
 
 
 def prep_region_spectra(
@@ -565,31 +535,32 @@ def prep_region_spectra(
         error_kind=error_kind)
     bins_header, index, nbins = _read_bins(file_bins, bins_plane, cube)
     _log.info(f"{nbins} bins")
-    fluxes = prep.pixel_fluxes(cube.header, cube.beam, file_d)
+    fluxes = prep.pixel_fluxes(cube.header, cube.unit, cube.beam, file_d)
     if roi_spec is not None:
         cube = cube.crop((slice(*roi_spec), slice(None), slice(None)))
         if fluxes is not None and np.ndim(fluxes[0]):
             fluxes = (fluxes[0][slice(*roi_spec)], fluxes[1])
     spectra, errors = prep.bin_spectra(index, nbins, cube)
-    header = _spectral_header(cube, nbins)
+    header = spectra_header(split_data_file(file_d)[0], cube.header, nbins)
     # (the sums of the fluxes of the pixels: the values of the pixels per
     # solid angle or per beam become theirs, see prep.pixel_fluxes)
+    unit = None
     if fluxes is not None:
         factor = np.reshape(fluxes[0], (-1, 1))
         spectra = spectra * factor
         errors = None if errors is None else errors * factor
-        header['BUNIT'] = gbkfit.units.format_unit(fluxes[1])
+        unit = fluxes[1]
     _write_bins(bins_header, index, file_bins, output_dir)
     FitsArrays(
-        spectra, errors, np.isfinite(spectra).astype(float),
-        header).write(
+        spectra, errors, np.isfinite(spectra).astype(float), header,
+        unit).write(
             _output(output_dir, file_d),
             None if file_e is None else _output(output_dir, file_d, 'error'),
             dtype=dtype)
     valid = cube.header.copy()
     for key in ('BUNIT', 'EXTNAME'):
         valid.remove(key, ignore_missing=True)
-    fits.writeto(
+    write_image(
         _output(output_dir, file_d, 'valid'),
         (cube.mask != 0).astype(np.uint8), valid, overwrite=True)
 
@@ -679,8 +650,9 @@ def prep_psf_muse(
     gbkfit.prep.muse_psf_table).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
+    # (MUSE writes its PSF in the primary header of its cubes)
     filename = _write_table(
-        prep.muse_psf_table(fits.getheader(file, 0)), output_dir, 'psf')
+        prep.muse_psf_table(read_header((file, 0))), output_dir, 'psf')
     _log.info(
         f"the PSF is in {filename}; use it as psf: {{type: moffat, "
         f"alpha: {{file: {filename}, points: wavelength, column: alpha}}, "

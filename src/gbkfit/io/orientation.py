@@ -15,23 +15,15 @@ import numpy as np
 from gbkfit.config import warn
 from gbkfit.grid import Rest
 from .headers import (
-    centre_missing_crpix, has_wcs, linear_transform, parse_wcs, with_shape,
+    _linear_transform, _with_shape, centre_missing_crpix, has_wcs, parse_wcs,
     with_wcs)
-from .spectral import (
-    check_header_medium, read_as_velocities, set_header_medium,
-    stated_medium, velocity_axis, velocity_is_ambiguous, with_flat_axis_rest,
-    with_spectral_type, with_velocity_convention)
+from .spectral import _axis_of_rest, _read_as_velocities, _stated_header
 
 
 __all__ = [
     'Orientation',
-    'flip_data',
-    'flip_wcs',
-    'model_axis_flips',
     'model_axis_order',
     'model_header',
-    'reorder_data',
-    'reorder_wcs',
     'to_model_axes'
 ]
 
@@ -50,9 +42,9 @@ class Orientation(NamedTuple):
         Its shape without the axes of length 1 dropped (numpy order).
     order : tuple of int
         Those axes (FITS order, from 0) in the order of the model (see
-        reorder_data).
+        _reorder_data).
     flips : tuple of int
-        The axes then reversed (FITS order, from 0; see flip_data).
+        The axes then reversed (FITS order, from 0; see _flip_data).
     """
     file_shape: tuple[int, ...]
     shape: tuple[int, ...]
@@ -74,9 +66,9 @@ class Orientation(NamedTuple):
                 f"the array is of shape {array.shape}, not {self.file_shape}")
         array = array.reshape(self.shape)
         if self.order != tuple(range(array.ndim)):
-            array = reorder_data(array, self.order)
+            array = _reorder_data(array, self.order)
         for axis in self.flips:
-            array = flip_data(array, axis)
+            array = _flip_data(array, axis)
         return np.ascontiguousarray(array)
 
     def sky(self) -> 'Orientation':
@@ -109,7 +101,7 @@ def model_header(
         velocity: str | None = None,
         spectral_type: str | None = None,
         medium: str | None = None,
-        ndim: int | None = None
+        spectral_axis: int | None = None
 ) -> tuple[astropy.io.fits.Header, Orientation]:
     """
     Return the header of an array of a file in the orientation of the
@@ -123,7 +115,7 @@ def model_header(
     (e.g. RA) then latitude, and the spectral axis last (see
     model_axis_order); east to the left of north, and velocities (or
     logarithmic wavelengths, see coords_from_header) increasing along the
-    spectral axis (see model_axis_flips). Axes of length 1 that are not
+    spectral axis (see _model_axis_flips). Axes of length 1 that are not
     the array's own are dropped (see _own_axes); world axes beyond those
     of the array (e.g. the spectral axis of a moment map written with the
     header of its cube) are taken as axes of length 1. A missing
@@ -141,7 +133,7 @@ def model_header(
     VRAD) of another rest into those of this one (an axis without a rest
     takes it). The rest is in the medium of the wavelengths of the axis
     (for optical velocities, that of AIRORVAC, or the given medium; see
-    stated_medium). The header gets the rest (RESTWAV, in vacuum, or
+    _stated_medium). The header gets the rest (RESTWAV, in vacuum, or
     RESTFRQ), and for wavelengths their medium (AIRORVAC). An axis of
     logarithmic wavelengths (WAVE-LOG) gets the rest only (see
     coords_from_header), and so does a spectral axis of one pixel, which
@@ -162,7 +154,7 @@ def model_header(
     velocity : str, optional
         The convention of the velocities of a spectral axis that the
         header leaves ambiguous: 'radio' or 'optical' (see
-        with_velocity_convention); it is not used for others.
+        _with_velocity_convention); it is not used for others.
     spectral_type : str, optional
         The type of an axis whose header gives one that FITS does not
         define (see with_spectral_type); it is not used for others.
@@ -170,9 +162,11 @@ def model_header(
         The medium of the wavelengths of an axis of optical velocities and
         of their rest, if AIRORVAC does not state it: 'vacuum' (by
         default) or 'air'.
-    ndim : int, optional
-        The number of axes of the array, if known (e.g. 2 of the spectra
-        of regions, of which there may be one; see _own_axes).
+    spectral_axis : int, optional
+        The index (FITS order, from 0) that the spectral axis of the array
+        (if any) has in the orientation of the model: the array has an
+        axis of its own before it for each, of length 1 too (e.g. the
+        region of spectra of one region; see _own_axes).
 
     Returns
     -------
@@ -192,14 +186,12 @@ def model_header(
         type that FITS does not define and spectral_type is not given; or
         the medium is not valid or not the one AIRORVAC states.
     """
-    header = with_spectral_type(header, shape, spectral_type, source)
-    check_header_medium(source, header)
-    header = with_velocity_convention(
-        header, velocity if velocity_is_ambiguous(header) else None, source)
-    return oriented_header(source, header, shape, rest, medium, ndim)
+    header = _stated_header(source, header, shape, spectral_type, velocity)
+    ndim = None if spectral_axis is None else spectral_axis + 1
+    return _oriented_header(source, header, shape, rest, medium, ndim)
 
 
-def oriented_header(
+def _oriented_header(
         source: str,
         header: astropy.io.fits.Header,
         shape: tuple[int, ...],
@@ -211,43 +203,31 @@ def oriented_header(
     Return a header in the orientation of the model, with the spectral
     axis in velocities of a rest, if given, and how its array is put in it:
     model_header once the header states the type of its spectral axis and
-    the convention of its velocities (see read_array, which looks at
+    the convention of its velocities (see read_oriented, which looks at
     arrays whose headers need not).
     """
     shape = tuple(shape)
     if not has_wcs(header):
         kept = tuple(shape[axis] for axis in _own_axes(shape, ndim))
         return (
-            with_shape(header, kept),
+            _with_shape(header, kept),
             Orientation(shape, kept, tuple(range(len(kept))), ()))
     wcs, full = _file_wcs(source, header, shape)
     if wcs.has_distortion:
         warn(
             f"{source}: its world coordinates have distortions (e.g. SIP), "
             f"which the model leaves out: it reads them as linear")
-    # (the medium of the wavelengths of an axis of wavelengths, if any)
-    wavelengths = None
-    if rest is not None and wcs.wcs.spec >= 0:
-        # (the medium of an axis of optical velocities, if any)
-        stated = stated_medium(source, header, medium)
-        flat = full[len(full) - 1 - wcs.wcs.spec] == 1
-        wcs, wavelengths = with_flat_axis_rest(wcs, rest, stated) if flat \
-            else velocity_axis(source, wcs, rest, stated)
+    wcs, cards = _axis_of_rest(source, header, wcs, full, rest, medium)
     stokes = [
         len(full) - 1 - axis for axis, ctype in enumerate(wcs.wcs.ctype)
         if ctype.strip().upper() == 'STOKES']
     own = _own_axes(full, ndim, stokes)
     kept = tuple(full[axis] for axis in own)
     wcs = _squeezed_wcs(wcs, [len(full) - 1 - axis for axis in own])
-    order = model_axis_order(wcs)
-    wcs = reorder_wcs(wcs, order)
+    wcs, order, flips = _model_wcs(wcs, kept[::-1])
     sizes = [kept[len(kept) - 1 - axis] for axis in order]
-    flips = model_axis_flips(wcs)
-    for axis in flips:
-        wcs = flip_wcs(wcs, axis, sizes[axis])
-    header = with_shape(with_wcs(header, wcs), tuple(sizes[::-1]))
-    if wavelengths is not None:
-        set_header_medium(header, wavelengths)
+    header = _with_shape(with_wcs(header, wcs), tuple(sizes[::-1]))
+    header.update(cards)
     return header, Orientation(shape, kept, order, flips)
 
 
@@ -275,123 +255,60 @@ def model_axis_order(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
     return first + middle + last
 
 
-def model_axis_flips(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
+def _model_axis_flips(wcs: astropy.wcs.WCS) -> tuple[int, ...]:
     """
-    Return the axes of a WCS that the model needs reversed.
-
-    Parameters
-    ----------
-    wcs : astropy.wcs.WCS
-        World coordinates, with the axes in the order of the model (see
-        model_axis_order).
-
-    Returns
-    -------
-    tuple[int, ...]
-        The axes to reverse (FITS order, from 0): the longitude axis of a
-        mirrored image (east to the right of north), and a spectral axis
-        of velocities, or of logarithmic wavelengths (read as log
-        velocities, see coords_from_header), that decrease along it.
+    Return the axes (FITS order, from 0) of a WCS with its axes in the
+    order of the model (see model_axis_order) that the model needs
+    reversed: the longitude axis of a mirrored image (east to the right
+    of north), and a spectral axis of velocities, or of logarithmic
+    wavelengths (read as log velocities, see coords_from_header), that
+    decrease along it.
     """
     lng, lat, spec = wcs.wcs.lng, wcs.wcs.lat, wcs.wcs.spec
-    linear = linear_transform(wcs)
+    linear = _linear_transform(wcs)
     flips = []
     if lng >= 0 and np.linalg.det(linear[np.ix_([lng, lat], [lng, lat])]) > 0:
         flips.append(lng)
-    is_velocity = spec >= 0 and read_as_velocities(wcs.wcs.ctype[spec])
+    is_velocity = spec >= 0 and _read_as_velocities(wcs.wcs.ctype[spec])
     if is_velocity and linear[spec, spec] < 0:
         flips.append(spec)
     return tuple(flips)
 
 
-def reorder_data(data: np.ndarray, order: Sequence[int]) -> np.ndarray:
+def _reorder_data(data: np.ndarray, order: Sequence[int]) -> np.ndarray:
     """
-    Return data with their axes in the given order.
-
-    Parameters
-    ----------
-    data : np.ndarray
-        The data.
-    order : Sequence[int]
-        Their axes (FITS order, from 0) in their new order (see
-        model_axis_order).
-
-    Returns
-    -------
-    np.ndarray
-        The data, as a view.
+    Return data, as a view, with their axes (FITS order, from 0) in the
+    given order (see model_axis_order).
     """
     n = data.ndim
     # numpy axes are in the reverse of the FITS order
     return np.transpose(data, [n - 1 - order[n - 1 - i] for i in range(n)])
 
 
-def reorder_wcs(
-        wcs: astropy.wcs.WCS,
-        order: Sequence[int]
+def _reorder_wcs(
+        wcs: astropy.wcs.WCS, order: Sequence[int]
 ) -> astropy.wcs.WCS:
     """
-    Return world coordinates with their axes in the given order.
-
-    Parameters
-    ----------
-    wcs : astropy.wcs.WCS
-        World coordinates.
-    order : Sequence[int]
-        Their axes (FITS order, from 0) in their new order (see
-        model_axis_order).
-
-    Returns
-    -------
-    astropy.wcs.WCS
-        The world coordinates of the reordered axes.
+    Return world coordinates with their axes (FITS order, from 0) in the
+    given order (see model_axis_order).
     """
     return wcs.sub([axis + 1 for axis in order])
 
 
-def flip_data(data: np.ndarray, axis: int) -> np.ndarray:
+def _flip_data(data: np.ndarray, axis: int) -> np.ndarray:
     """
-    Return data reversed along an axis.
-
-    Parameters
-    ----------
-    data : np.ndarray
-        The data.
-    axis : int
-        The axis (FITS order, from 0).
-
-    Returns
-    -------
-    np.ndarray
-        The data, as a view.
+    Return data, as a view, reversed along an axis (FITS order, from 0).
     """
     return np.flip(data, data.ndim - 1 - axis)
 
 
-def flip_wcs(
-        wcs: astropy.wcs.WCS,
-        axis: int,
-        size: int
+def _flip_wcs(
+        wcs: astropy.wcs.WCS, axis: int, size: int
 ) -> astropy.wcs.WCS:
     """
-    Return world coordinates with a pixel axis reversed.
-
-    Each pixel keeps its world coordinates when its data are reversed
-    along the axis (see flip_data).
-
-    Parameters
-    ----------
-    wcs : astropy.wcs.WCS
-        World coordinates.
-    axis : int
-        The axis (FITS order, from 0).
-    size : int
-        The number of pixels along the axis.
-
-    Returns
-    -------
-    astropy.wcs.WCS
-        The world coordinates of the reversed axis.
+    Return world coordinates with a pixel axis (FITS order, from 0; of
+    size pixels) reversed: each pixel keeps its world coordinates when
+    its data are reversed along the axis (see _flip_data).
     """
     wcs = wcs.deepcopy()
     # Reversing a pixel axis negates its column of the linear
@@ -421,7 +338,7 @@ def to_model_axes(
     model.
 
     The axes are reordered (see model_axis_order), and those that the
-    model needs reversed are reversed (see model_axis_flips).
+    model needs reversed are reversed (see _model_axis_flips).
 
     Parameters
     ----------
@@ -433,21 +350,31 @@ def to_model_axes(
     Returns
     -------
     np.ndarray
-        The data, as a view.
+        The data.
     astropy.wcs.WCS
         Their world coordinates.
     """
+    wcs, order, flips = _model_wcs(wcs, data.shape[::-1])
+    return Orientation(data.shape, data.shape, order, flips).apply(data), wcs
+
+
+def _model_wcs(
+        wcs: astropy.wcs.WCS, sizes: Sequence[int]
+) -> tuple[astropy.wcs.WCS, tuple[int, ...], tuple[int, ...]]:
+    """
+    Return world coordinates in the orientation of the model, the order
+    of their axes in it and the axes then reversed (see Orientation), of
+    an array of the given sizes of its axes (FITS order).
+    """
     order = model_axis_order(wcs)
-    if order != tuple(range(wcs.naxis)):
-        data = reorder_data(data, order)
-        wcs = reorder_wcs(wcs, order)
-    for axis in model_axis_flips(wcs):
-        data = flip_data(data, axis)
-        wcs = flip_wcs(wcs, axis, data.shape[data.ndim - 1 - axis])
-    return data, wcs
+    wcs = _reorder_wcs(wcs, order)
+    flips = _model_axis_flips(wcs)
+    for axis in flips:
+        wcs = _flip_wcs(wcs, axis, sizes[order[axis]])
+    return wcs, order, flips
 
 
-def squeezed_shape(shape: tuple[int, ...]) -> tuple[int, ...]:
+def _squeezed_shape(shape: tuple[int, ...]) -> tuple[int, ...]:
     """
     Return the shape of data (numpy order) without its axes of length 1,
     or as it is if all are.
@@ -500,7 +427,7 @@ def _squeezed_wcs(
     # axis left out that the linear transformation couples to the axes
     # kept moves them, by as much as a shift of their reference pixel
     flat = [axis for axis in range(wcs.naxis) if axis not in kept]
-    linear = linear_transform(wcs)
+    linear = _linear_transform(wcs)
     moved = linear[np.ix_(kept, flat)] @ (0 - (wcs.wcs.crpix[flat] - 1))
     if np.any(moved != 0):
         try:
@@ -515,8 +442,9 @@ def _squeezed_wcs(
         wcs.wcs.crpix = crpix
         # (the coupling, now in the reference pixel, left out: wcslib
         # takes no axes out of a matrix that couples them to others)
-        matrix = wcs.wcs.cd.copy() if wcs.wcs.has_cd() else \
-            wcs.wcs.get_pc().copy()
+        matrix = (
+            wcs.wcs.cd.copy() if wcs.wcs.has_cd()
+            else wcs.wcs.get_pc().copy())
         matrix[np.ix_(kept, flat)] = 0
         matrix[np.ix_(flat, kept)] = 0
         if wcs.wcs.has_cd():

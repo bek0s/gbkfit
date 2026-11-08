@@ -395,8 +395,8 @@ def _write_image(folder: pathlib.Path) -> None:
     image = group.plan(DriverHost()).model_h(params)[0]['brightness']['d']
     coords = group.observations()[0].observable().grid().coords
     write_data(
-        str(folder / 'image.fits'), image.astype(np.float32), coords, None,
-        True)
+        str(folder / 'image.fits'), image.astype(np.float32), coords,
+        overwrite=True)
 
 
 _IMAGE_LIGHT = dict(

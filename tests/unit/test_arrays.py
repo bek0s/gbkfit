@@ -10,7 +10,8 @@ from astropy.io import fits
 
 from gbkfit.config import ConfigError
 from gbkfit.dataset import describe_fits
-from gbkfit.io import coords_from_header, read_array, read_arrays, read_data
+from gbkfit.io import (
+    coords_from_header, read_arrays, read_data, read_oriented)
 
 
 # A cube of 5 channels of radio velocities that decrease along the file,
@@ -134,15 +135,15 @@ def test_the_beams_of_the_channels_follow_them(tmp_path):
         beams]).writeto(path)
     arrays = read_arrays(path)
     np.testing.assert_array_equal(arrays.data[:, 0, 0], [4, 3, 2, 1, 0])
-    np.testing.assert_allclose(arrays.beam['bmaj'], bmaj[::-1])
+    np.testing.assert_allclose(arrays.beam.bmaj, bmaj[::-1])
     np.testing.assert_allclose(
-        arrays.beam['spectral'].to_value('km/s'), [960, 970, 980, 990, 1000])
+        arrays.beam.spectral.to_value('km/s'), [960, 970, 980, 990, 1000])
     data, _ = Data.from_files(path)
     np.testing.assert_allclose(data.beam().bmaj, bmaj[::-1])
     cube = FitsArrays.read(path).crop(
         (slice(1, 4), slice(None), slice(None)))
-    np.testing.assert_allclose(cube.beam['bmaj'], [13, 12, 11])
-    factors, _ = pixel_fluxes(cube.header, cube.beam, path)
+    np.testing.assert_allclose(cube.beam.bmaj, [13, 12, 11])
+    factors, _ = pixel_fluxes(cube.header, cube.unit, cube.beam, path)
     np.testing.assert_allclose(
         factors, 1 / (np.pi / (4 * np.log(2)) * np.array([13, 12, 11]) * 5),
         rtol=1e-6)
@@ -174,7 +175,7 @@ def test_the_beams_follow_the_channels_past_an_axis_of_stokes(tmp_path):
     ]).writeto(path)
     arrays = read_arrays(path, rest='1.420405752 GHz')
     np.testing.assert_array_equal(arrays.data[:, 0, 0], [3, 2, 1, 0])
-    np.testing.assert_allclose(arrays.beam['bmaj'], [4, 3, 2, 1])
+    np.testing.assert_allclose(arrays.beam.bmaj, [4, 3, 2, 1])
 
 
 def test_a_bunit_that_is_not_a_unit_is_an_error_unless_a_unit_is_given(
@@ -198,7 +199,7 @@ def test_world_axes_beyond_the_array_are_flat(tmp_path):
     write(filename, np.ones(SHAPE[1:]), CUBE | dict(BMAJ=1e-3, BMIN=1e-3))
     data, coords = read_data(filename)
     assert data.shape == SHAPE[1:] and len(coords.step) == 2
-    assert read_array(filename)[0].shape == SHAPE[1:]
+    assert read_oriented(filename)[0].shape == SHAPE[1:]
     description, = describe_fits(filename)
     assert description.problems == ()
 

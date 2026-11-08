@@ -107,7 +107,7 @@ class DatasetRegionSpectra(Dataset):
             The world coordinates of the spectral axis, the convention of
             its velocities, its rest and its medium, given instead of
             those of the header (either rpix or rval can be given, and the
-            other comes from the header; see coords_from_wcs); not its
+            other comes from the header; see coords_from_header); not its
             size, which the data give.
         outliers : Mapping, optional
             Screen the data for outliers by the options size and nsigma
@@ -141,7 +141,7 @@ class DatasetRegionSpectra(Dataset):
         coords = self._spectral_grid.coords
 
         def write(filename: str, array: np.ndarray) -> None:
-            write_spectra(filename, array, coords, overwrite)
+            write_spectra(filename, array, coords, overwrite=overwrite)
         item = dump_data(
             self['spectra'], _detail.item_filenames(prefix, 'spectra'), write,
             dump_path, f'{prefix}spectra_', overwrite)

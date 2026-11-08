@@ -1,7 +1,8 @@
 """
 The FITS format: reading the arrays of FITS files, their headers and the
-tables of the beams of their channels (of cubes of CASA), and writing
-data with the world coordinates of the model as FITS files.
+tables of the beams of their channels (of cubes of CASA); and writing
+arrays as FITS files, with the world coordinates of the model or a
+header of their own (gbkfit writes FITS files only).
 """
 
 from collections.abc import Mapping
@@ -13,15 +14,17 @@ import astropy.units as u
 import astropy.wcs
 import numpy as np
 
+import gbkfit.units
+from gbkfit.config import DataFile, split_data_file
 from gbkfit.grid import Coords
+from ..coords import _header_from_coords, _spectra_header_from_coords
 from ..headers import parse_wcs
-from ..spectral import velocity_axis_keywords
 
 
 __all__ = [
     'casa_beam_table',
-    'read_hdu',
     'write_data',
+    'write_image',
     'write_spectra'
 ]
 
@@ -30,24 +33,23 @@ def read_image(
         filename: str, key: int | str | None
 ) -> tuple[np.ndarray, astropy.io.fits.Header]:
     """
-    Return the image and the header of an HDU of a FITS file (key: its
-    index or name, or None for the first with an image; see read_hdu).
+    Return the image of an HDU of a FITS file and its header (see
+    _image_hdu).
     """
-    return read_hdu(filename, key)
+    with astropy.io.fits.open(filename) as hdus:
+        found = _image_hdu(filename, hdus, key)
+        return np.array(found.data), found.header.copy()
 
 
 def read_header(
         filename: str, key: int | str | None
 ) -> astropy.io.fits.Header:
     """
-    Return the header of an HDU of a FITS file (key: its index or name, or
-    None for the first with an image, as read_hdu finds it), without its
-    data.
+    Return the header of the HDU of an image of a FITS file (see
+    _image_hdu), without its data.
     """
-    if key is not None:
-        return astropy.io.fits.getheader(filename, key)
     with astropy.io.fits.open(filename) as hdus:
-        return _first_image(filename, hdus).header.copy()
+        return _image_hdu(filename, hdus, key).header.copy()
 
 
 def read_channel_beams(
@@ -67,13 +69,13 @@ def read_channel_beams(
     return _channel_beams(filename, beams, header)
 
 
-def read_hdu(
-        filename: str, hdu: int | str | None = None
-) -> tuple[np.ndarray, astropy.io.fits.Header]:
+def _image_hdu(
+        filename: str, hdus: astropy.io.fits.HDUList, key: int | str | None
+) -> astropy.io.fits.PrimaryHDU | astropy.io.fits.ImageHDU:
     """
-    Return the image and the header of an HDU of a FITS file: the one
-    given, or else the first with an image (e.g. the extension after an
-    empty primary HDU), whatever tables come before it.
+    Return the HDU of an image of a FITS file: the one given (key: its
+    index or name), or else the first with an image (e.g. the extension
+    after an empty primary HDU), whatever tables come before it.
 
     Raises
     ------
@@ -81,62 +83,47 @@ def read_hdu(
         If the file has no such HDU, or it is not an image (e.g. a table),
         or it has no data.
     """
-    with astropy.io.fits.open(filename) as hdus:
-        if hdu is None:
-            found = _first_image(filename, hdus)
-        else:
-            try:
-                found = hdus[hdu]
-            except (IndexError, KeyError) as e:
-                raise ValueError(
-                    f"{filename}: it has no HDU {hdu!r}") from e
-            if not found.is_image:
-                raise ValueError(
-                    f"{filename}: HDU {hdu!r} is not an image (e.g. a "
-                    f"table); choose the HDU of the image (e.g. hdu: SCI)")
-            if found.data is None:
-                raise ValueError(
-                    f"{filename}: HDU {hdu!r} has no data; choose the HDU "
-                    f"with the data (e.g. hdu: SCI)")
-        return np.array(found.data), found.header.copy()
-
-
-def _first_image(
-        filename: str, hdus: astropy.io.fits.HDUList
-) -> astropy.io.fits.PrimaryHDU | astropy.io.fits.ImageHDU:
-    """
-    Return the first HDU of a FITS file with an image, whatever tables
-    come before it, or raise ValueError.
-    """
-    # (by the header, so that the data of the HDUs passed by are not read)
-    found = next((
-        hdu for hdu in hdus
-        if hdu.is_image and hdu.header.get('NAXIS', 0) > 0), None)
-    if found is None:
-        raise ValueError(f"{filename}: no HDU has an image")
+    # (by their headers, so that the data of the HDUs are not read)
+    if key is None:
+        found = next((
+            hdu for hdu in hdus
+            if hdu.is_image and hdu.header.get('NAXIS', 0) > 0), None)
+        if found is None:
+            raise ValueError(f"{filename}: no HDU has an image")
+        return found
+    try:
+        found = hdus[key]
+    except (IndexError, KeyError) as e:
+        raise ValueError(f"{filename}: it has no HDU {key!r}") from e
+    if not found.is_image:
+        raise ValueError(
+            f"{filename}: HDU {key!r} is not an image (e.g. a table); "
+            f"choose the HDU of the image (e.g. hdu: SCI)")
+    if found.header.get('NAXIS', 0) == 0:
+        raise ValueError(
+            f"{filename}: HDU {key!r} has no data; choose the HDU with the "
+            f"data (e.g. hdu: SCI)")
     return found
 
 
-def casa_beam_table(
-        filename: str, header: astropy.io.fits.Header | None = None
-) -> astropy.table.QTable:
+def casa_beam_table(file: DataFile) -> astropy.table.QTable:
     """
-    Return the beams of the channels of a cube of CASA (its table BEAMS)
-    as a table of the options of a Gaussian beam PSF (bmaj, bmin, bpa)
-    against the points of its spectral axis (frequency, wavelength or
-    velocity), in the order of its channels: of the world coordinates of
-    the header of the cube, if given, or else of its first HDU. Only the
-    first polarisation is used.
+    Return the beams of the channels of a cube of CASA (the table BEAMS
+    of its file) as a table of the options of a Gaussian beam PSF (bmaj,
+    bmin, bpa) against the points of its spectral axis (frequency,
+    wavelength or velocity), in the order of its channels. Only the first
+    polarisation is used.
 
     Raises
     ------
     ValueError
-        If the cube has no spectral axis.
+        If the file has no such cube (see read_image), or the cube has no
+        spectral axis.
     """
-    if header is None:
-        header = astropy.io.fits.getheader(filename, 0)
+    filename, key = split_data_file(file)
     return _channel_beams(
-        filename, astropy.table.Table.read(filename, hdu='BEAMS'), header)
+        filename, astropy.table.Table.read(filename, hdu='BEAMS'),
+        read_header(filename, key))
 
 
 def _channel_beams(
@@ -161,12 +148,55 @@ def _channel_beams(
             'wavelength' if unit.is_equivalent(u.m) else 'velocity')
 
     def column(name: str, to: str) -> u.Quantity:
-        values = beams[name].quantity if beams[name].unit \
-            else beams[name] * u.Unit(to)
+        values = (
+            beams[name].quantity if beams[name].unit
+            else beams[name] * u.Unit(to))
         return values.to(to)
     return astropy.table.QTable({
         axis: np.asarray(points) * unit, 'bmaj': column('BMAJ', 'arcsec'),
         'bmin': column('BMIN', 'arcsec'), 'bpa': column('BPA', 'deg')})
+
+
+def write_image(
+        filename: str,
+        data: np.ndarray,
+        header: astropy.io.fits.Header | None = None,
+        *,
+        unit: gbkfit.units.AnyUnit | None = None,
+        cards: Mapping[str, Any] | None = None,
+        checksum: bool = False,
+        overwrite: bool = False
+) -> None:
+    """
+    Write an array to a FITS file as it is, with a header (e.g. of its
+    world coordinates), its unit and further cards.
+
+    Parameters
+    ----------
+    filename : str
+        The name of the file.
+    data : np.ndarray
+        The array.
+    header : astropy.io.fits.Header, optional
+        Its header; its BUNIT is replaced by the unit, if given.
+    unit : AnyUnit, optional
+        The unit of its values, written as BUNIT (see
+        gbkfit.units.format_unit).
+    cards : Mapping, optional
+        Further header cards, by keyword (e.g. provenance).
+    checksum : bool, optional
+        Whether to add the checksums of FITS (CHECKSUM and DATASUM; the
+        file then has the time it was written, and differs each time).
+    overwrite : bool, optional
+        Whether to overwrite an existing file.
+    """
+    header = astropy.io.fits.Header() if header is None else header.copy()
+    if unit is not None:
+        header['BUNIT'] = gbkfit.units.format_unit(unit)
+    header.update(cards or {})
+    astropy.io.fits.writeto(
+        filename, data, header,
+        output_verify='exception', overwrite=overwrite, checksum=checksum)
 
 
 def write_data(
@@ -174,9 +204,11 @@ def write_data(
         data: np.ndarray,
         coords: Coords,
         spectral_axis: int | None = None,
-        overwrite: bool = False,
-        unit: str | None = None,
-        cards: Mapping[str, Any] | None = None
+        *,
+        unit: gbkfit.units.AnyUnit | None = None,
+        cards: Mapping[str, Any] | None = None,
+        checksum: bool = False,
+        overwrite: bool = False
 ) -> None:
     """
     Write data with the world coordinates of the model to a FITS file.
@@ -198,49 +230,28 @@ def write_data(
         Their world coordinates.
     spectral_axis : int, optional
         The index of their spectral axis (FITS order, from 0), if any.
-    overwrite : bool
-        Whether to overwrite an existing file.
-    unit : str, optional
-        The unit of the data (BUNIT), if known.
-    cards : Mapping, optional
-        Further header cards, by keyword (e.g. provenance).
+    unit, cards, checksum, overwrite : optional
+        As write_image.
 
     Raises
     ------
     ValueError
         For data of another layout.
     """
-    header = astropy.io.fits.Header()
-    if spectral_axis == 0 and data.ndim == 1:
-        header.update(velocity_axis_keywords(coords, 1))
-    elif spectral_axis is None and data.ndim == 2:
-        header.update(_sky_keywords(coords))
-    elif spectral_axis == 2 and data.ndim == 3:
-        header.update(_sky_keywords(coords))
-        header.update(velocity_axis_keywords(coords, 3))
-    elif spectral_axis is None and data.ndim == 3:
-        header.update(_sky_keywords(coords))
-        header.update(_offset_keywords(
-            3, coords.step[2], coords.rpix[2], coords.rval[2]))
-    elif spectral_axis == 1 and data.ndim == 2:
-        # The position along the slit is an offset from its reference
-        header.update(_offset_keywords(
-            1, coords.step[0], coords.rpix[0], 0.0))
-        header.update(velocity_axis_keywords(coords, 2))
-    else:
-        raise ValueError(
-            f"unsupported data: {data.ndim} axes, of which the spectral "
-            f"axis is {spectral_axis}")
-    _write(filename, data, header, coords, overwrite, unit, cards)
+    write_image(
+        filename, data, _header_from_coords(coords, data.ndim, spectral_axis),
+        unit=unit, cards=cards, checksum=checksum, overwrite=overwrite)
 
 
 def write_spectra(
         filename: str,
         data: np.ndarray,
         coords: Coords,
-        overwrite: bool = False,
-        unit: str | None = None,
-        cards: Mapping[str, Any] | None = None
+        *,
+        unit: gbkfit.units.AnyUnit | None = None,
+        cards: Mapping[str, Any] | None = None,
+        checksum: bool = False,
+        overwrite: bool = False
 ) -> None:
     """
     Write spectra of regions to a FITS file.
@@ -256,70 +267,9 @@ def write_spectra(
         The spectra, of shape (nchannels, nregions).
     coords : Coords
         The world coordinates of their spectral axis (of one axis).
-    overwrite : bool
-        Whether to overwrite an existing file.
-    unit : str, optional
-        The unit of the spectra (BUNIT), if known.
-    cards : Mapping, optional
-        Further header cards, by keyword (e.g. provenance).
+    unit, cards, checksum, overwrite : optional
+        As write_image.
     """
-    header = astropy.io.fits.Header(velocity_axis_keywords(coords, 2, 0))
-    _write(filename, data, header, coords, overwrite, unit, cards)
-
-
-def _sky_keywords(coords: Coords) -> dict[str, float | str]:
-    """Return the header keywords of the x and y axes on the sky."""
-    step_x, step_y = coords.step[:2]
-    rota = np.radians(coords.rota)
-    # The +y axis points to the position angle rota, and the +x axis to
-    # rota - 90 (east is to the left of north). Intermediate world x
-    # points east and y north. The rows of the PC matrix are scaled by
-    # CDELT, so PC is a rotation only for square pixels.
-    cd = np.array([
-        [-step_x * np.cos(rota), step_y * np.sin(rota)],
-        [step_x * np.sin(rota), step_y * np.cos(rota)]]) / 3600
-    cdelt = np.array([-step_x, step_y]) / 3600
-    pc = cd / cdelt[:, None]
-    return dict(
-        CTYPE1='RA---TAN', CUNIT1='deg', CDELT1=cdelt[0],
-        CRPIX1=coords.rpix[0] + 1, CRVAL1=coords.rval[0],
-        CTYPE2='DEC--TAN', CUNIT2='deg', CDELT2=cdelt[1],
-        CRPIX2=coords.rpix[1] + 1, CRVAL2=coords.rval[1], RADESYS='ICRS',
-        PC1_1=pc[0, 0], PC1_2=pc[0, 1],
-        PC2_1=pc[1, 0], PC2_2=pc[1, 1])
-
-
-def _offset_keywords(
-        n: int,
-        step: float,
-        rpix: float,
-        rval: float
-) -> dict[str, float | str]:
-    """Return the header keywords of an offset in arcsec, FITS axis n."""
-    return {
-        f'CTYPE{n}': 'OFFSET', f'CUNIT{n}': 'arcsec', f'CDELT{n}': step,
-        f'CRPIX{n}': rpix + 1, f'CRVAL{n}': rval}
-
-
-def _write(
-        filename: str,
-        data: np.ndarray,
-        header: astropy.io.fits.Header,
-        coords: Coords,
-        overwrite: bool,
-        unit: str | None,
-        cards: Mapping[str, Any] | None
-) -> None:
-    """
-    Write data to a FITS file with a header of their axes, and the frame
-    of their velocities (SPECSYS), their unit (BUNIT) and further cards
-    (see write_data).
-    """
-    if coords.frame is not None:
-        header['SPECSYS'] = coords.frame
-    if unit is not None:
-        header['BUNIT'] = unit
-    header.update(cards or {})
-    astropy.io.fits.writeto(
-        filename, data, header,
-        output_verify='exception', overwrite=overwrite, checksum=True)
+    write_image(
+        filename, data, _spectra_header_from_coords(coords), unit=unit,
+        cards=cards, checksum=checksum, overwrite=overwrite)

@@ -34,8 +34,8 @@ import numpy.typing as npt
 from .catalogue import Family, family_of
 from .serializable import Serializable, is_record
 from .types import (
-    Choices, DataFile, FilePath, FitsFile, describe_type, is_varying,
-    option_types, unit_of)
+    Choices, DataFile, FilePath, describe_type, is_varying, option_types,
+    unit_of)
 
 
 __all__ = [
@@ -131,12 +131,6 @@ class SchemaWriter:
             return dict(_PLAIN[type_])
         if type_ == FilePath:
             return {'type': 'string', 'format': 'path'}
-        if type_ == FitsFile:
-            return {'anyOf': [
-                {'type': 'string', 'format': 'path'},
-                _object(
-                    {'file': {'type': 'string', 'format': 'path'},
-                     'hdu': {'type': ['integer', 'string']}}, ['file'])]}
         if type_ == DataFile:
             return {'anyOf': [
                 {'type': 'string', 'format': 'path'},

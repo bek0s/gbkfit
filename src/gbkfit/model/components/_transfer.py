@@ -237,9 +237,8 @@ class TransferPlan:
         self._driver = driver
         self._dtype = dtype
         # (that of the model of the observation, if known)
-        unit = None if data_unit is None else data_unit.cube_unit()
-        self._light_unit = None if unit is None \
-            else gbkfit.units.format_unit(unit)
+        self._light_unit = None if data_unit is None \
+            else data_unit.cube_unit()
         self._subchannels = subchannels
         self._smoothing = smoothing
         # (that of every galaxy: the cubes hold the dust of the scene)
@@ -446,7 +445,9 @@ class TransferPlan:
                     values[m], extras[m], self._smoothing))
         plans = self._plans[0]
 
-        def add(name: str, data: np.ndarray, unit: str | None) -> None:
+        def add(
+                name: str, data: np.ndarray, unit: gbkfit.units.AnyUnit | None
+        ) -> None:
             march_extra.add(
                 name, plans.output_extra(data, unit), *_MARCH_EXTRAS[name])
         add('total_unabsorbed', driver.mem_copy_d2h(unabsorbed),

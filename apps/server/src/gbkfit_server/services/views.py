@@ -1,7 +1,7 @@
 """
 Views of the cubes of files of data of the workspace, to look at them: a
 channel, the spectrum of a pixel, and their quick moment maps, by the
-tools of the library (read_array, prep.signal_mask,
+tools of the library (read_oriented, prep.signal_mask,
 analysis.moment_maps). A cube is read once, in the orientation of the
 model, and kept for the next views (the latest few cubes). Its spectral
 axis is that of its header, in a unit to read (km/s, GHz or micron),
@@ -24,7 +24,7 @@ import numpy as np
 import gbkfit.analysis
 from gbkfit import prep
 from gbkfit.config import ConfigError
-from gbkfit.io import read_array
+from gbkfit.io import read_oriented
 
 from .errors import Invalid
 from .workspace import Workspace
@@ -278,7 +278,7 @@ class Views:
 
 def _read(filename: str, hdu: int) -> Cube:
     """
-    Read a cube: an array of a FITS file, as read_array reads
+    Read a cube: an array of a FITS file, as read_oriented reads
     it, with the coordinates of its channels if its header gives them; a
     map (e.g. a moment map) is read as a cube of one channel, without them.
 
@@ -289,7 +289,7 @@ def _read(filename: str, hdu: int) -> Cube:
         map.
     """
     try:
-        values, wcs = read_array(filename, hdu)
+        values, wcs = read_oriented((filename, hdu))
     except (OSError, IndexError, ConfigError) as e:
         raise Invalid(f"cannot read the array {hdu} of {filename}: {e}") \
             from e

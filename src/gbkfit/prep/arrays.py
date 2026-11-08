@@ -6,7 +6,6 @@ and clipped.
 
 import dataclasses
 from collections.abc import Callable, Sequence
-from typing import Any
 
 import astropy.io.fits as fits
 import astropy.units
@@ -16,7 +15,8 @@ import numpy.typing as npt
 
 from gbkfit.config import DataFile
 from gbkfit.io import (
-    ErrorKind, Orientation, has_wcs, read_arrays, read_sky_map, with_wcs)
+    Arrays, Beam, ErrorKind, has_wcs, read_arrays, read_sky_map,
+    shifted_header, write_image)
 from .masks import bounding_box
 
 
@@ -25,56 +25,19 @@ __all__ = [
 ]
 
 
-def _shift_axes(header: fits.Header, offset: npt.ArrayLike) -> fits.Header:
-    """
-    Return the header of the data whose first pixel is the pixel at the
-    given offset (on each numpy axis) of the original data: positive where
-    the data were cropped, negative where they were padded.
-    """
-    if not has_wcs(header):
-        return header
-    wcs = astropy.wcs.WCS(header)
-    wcs.wcs.crpix -= np.asarray(offset)[::-1]
-    return with_wcs(header, wcs)
-
-
 @dataclasses.dataclass(frozen=True)
-class FitsArrays:
+class FitsArrays(Arrays):
     """
-    Data read from files, being prepared for a dataset: the data, their
-    errors (if any: standard deviations) and mask (1 where valid), with
-    the header of the data (their world coordinates, if any), in the
-    orientation of the model (see read_arrays; e.g. RA before
-    Dec, and velocities increasing). The data and errors are NaN where the
-    mask is 0.
+    Data read from files (see Arrays), being prepared for a dataset: in
+    the orientation of the model (see read_arrays; e.g. RA before Dec,
+    and velocities increasing), the data and errors NaN where the mask is
+    0.
 
     The methods return new arrays; those that move the first pixel
-    (crop, minified, padded) keep the world coordinates of the pixels.
-
-    Attributes
-    ----------
-    data : np.ndarray
-        The data.
-    error : np.ndarray or None
-        The errors.
-    mask : np.ndarray
-        The mask: 1 where valid, 0 elsewhere.
-    header : fits.Header
-        The header of the data.
-    beam : dict or None
-        The beam of the data, if any (see Arrays): of a cube of
-        CASA, that of each of its channels, in their order.
-    orientation : Orientation or None
-        How the file of the data was put in the orientation of the model,
-        while the arrays are on the pixels of the file (see read_sky_map;
-        None once cropped or padded).
+    (crop, minified, padded) keep the world coordinates of the pixels,
+    and have no orientation (they are no longer on the pixels of the
+    file, see read_sky_map).
     """
-    data: np.ndarray
-    error: np.ndarray | None
-    mask: np.ndarray
-    header: fits.Header
-    beam: dict[str, Any] | None = None
-    orientation: Orientation | None = None
 
     @classmethod
     def read(
@@ -134,9 +97,7 @@ class FitsArrays:
                 and astropy.wcs.WCS(header).wcs.spec >= 0):
             raise ValueError(
                 f"the data have no spectral axis to give the rest {rest}")
-        return cls(
-            arrays.data, arrays.error, arrays.mask, header, arrays.beam,
-            arrays.orientation)
+        return cls(**vars(arrays))
 
     def read_sky_map(
             self, file: DataFile, plane: int | None = None
@@ -178,11 +139,14 @@ class FitsArrays:
         """
         slices = tuple(slices)
         offset = [s.indices(n)[0] for s, n in zip(slices, self.data.shape)]
-        return FitsArrays(
-            self.data[slices],
-            None if self.error is None else self.error[slices],
-            self.mask[slices], _shift_axes(self.header, offset),
-            self._channels(lambda values: values[slices[0]]))
+        return dataclasses.replace(
+            self, data=self.data[slices],
+            error=None if self.error is None else self.error[slices],
+            mask=self.mask[slices], header=shifted_header(self.header, offset),
+            beam=self._channels(lambda values: values[slices[0]]),
+            footprint=None if self.footprint is None
+            else self.footprint[slices],
+            orientation=None)
 
     def minified(self) -> 'FitsArrays':
         """
@@ -202,25 +166,28 @@ class FitsArrays:
             return np.pad(array, size, 'constant', constant_values=value)
         # (the beams of the channels padded with those of the end channels,
         # of the invalid pixels)
-        return FitsArrays(
-            pad(self.data, np.nan),
-            None if self.error is None else pad(self.error, np.nan),
-            pad(self.mask, 0),
-            _shift_axes(self.header, [-size] * self.data.ndim),
-            self._channels(lambda values: np.pad(values, size, 'edge')))
+        return dataclasses.replace(
+            self, data=pad(self.data, np.nan),
+            error=None if self.error is None else pad(self.error, np.nan),
+            mask=pad(self.mask, 0),
+            header=shifted_header(self.header, [-size] * self.data.ndim),
+            beam=self._channels(lambda values: np.pad(values, size, 'edge')),
+            footprint=None if self.footprint is None
+            else pad(self.footprint, 0),
+            orientation=None)
 
     def _channels(
             self, change: Callable[[np.ndarray], np.ndarray]
-    ) -> dict[str, Any] | None:
+    ) -> Beam | None:
         """
         Return its beam, its beams of the channels of a cube (if it has
         those) changed as its channels (by change, of an array along the
         channels, its first axis).
         """
-        if self.beam is None or 'spectral' not in self.beam \
+        if self.beam is None or self.beam.spectral is None \
                 or self.data.ndim != 3:
             return self.beam
-        return {key: change(value) for key, value in self.beam.items()}
+        return Beam(*(change(value) for value in self.beam))
 
     def write(
             self,
@@ -231,7 +198,8 @@ class FitsArrays:
     ) -> None:
         """
         Write the data, errors and mask (if given filenames) as FITS
-        files, with the header of the data (the mask without its unit).
+        files, with the header of the data and their unit (the mask
+        without one).
 
         Parameters
         ----------
@@ -243,16 +211,15 @@ class FitsArrays:
             The type of the values.
         """
         # (each file is of one array, which an HDU name of the input, e.g.
-        # SCI, would misname)
+        # SCI, would misname; its unit is that of the arrays)
         header = self.header.copy()
-        header.remove('EXTNAME', ignore_missing=True)
-        mask_header = header.copy()
-        mask_header.remove('BUNIT', ignore_missing=True)
-        for filename, array, array_header in (
-                (data, self.data, header),
-                (error, self.error, header),
-                (mask, self.mask, mask_header)):
+        for key in ('EXTNAME', 'BUNIT'):
+            header.remove(key, ignore_missing=True)
+        for filename, array, unit in (
+                (data, self.data, self.unit),
+                (error, self.error, self.unit),
+                (mask, self.mask, None)):
             if filename is not None and array is not None:
-                fits.writeto(
-                    filename, array.astype(dtype), array_header,
+                write_image(
+                    filename, array.astype(dtype), header, unit=unit,
                     overwrite=True)

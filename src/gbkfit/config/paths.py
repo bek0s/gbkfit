@@ -12,11 +12,11 @@ from typing import Any
 
 from .errors import ConfigError
 from .options import parse_options
-from .types import is_asdf_file
+from .types import DataFile, is_asdf_file, split_data_file
 
 
 __all__ = [
-    'parse_file',
+    'dump_data_file',
     'paths_relative_to',
     'resolve_path'
 ]
@@ -85,27 +85,14 @@ def parse_data_file(x: str | Mapping[str, Any]) -> str | tuple[str, int | str]:
     return (file, options[key]) if key in options else file
 
 
-def parse_file(x: str | dict[str, Any]) -> tuple[str, int | str]:
+def dump_data_file(file: DataFile) -> str | dict[str, Any]:
     """
-    Parse a file option (a relative filename is resolved by resolve_path).
-
-    Parameters
-    ----------
-    x : str or dict
-        A filename, or a dict with the filename ('file') and, optionally,
-        the HDU ('hdu', e.g. 'SCI').
-
-    Returns
-    -------
-    tuple of str and (int or str)
-        The filename and the HDU (by default the first, 0).
-
-    Raises
-    ------
-    ConfigError
-        If the dict has no filename.
+    Return the configuration of a file of an array (see DataFile), as
+    parse_data_file reads it: its filename, or a dict with the filename
+    and the HDU of a FITS file or the path of the array in the tree of an
+    ASDF file.
     """
-    if isinstance(x, str):
-        x = dict(file=x)
-    options = parse_options(x, required={'file'}, optional={'hdu'})
-    return resolve_path(options['file']), options.get('hdu', 0)
+    filename, key = split_data_file(file)
+    if key is None:
+        return filename
+    return {'file': filename, 'path' if is_asdf_file(filename) else 'hdu': key}

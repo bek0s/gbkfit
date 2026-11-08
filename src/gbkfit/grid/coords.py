@@ -16,6 +16,7 @@ import astropy.units
 import numpy as np
 import numpy.typing as npt
 
+import gbkfit.units
 from .spectral import SpectralAxis, make_convention, make_medium, make_rest
 
 
@@ -519,13 +520,13 @@ class GridData(NamedTuple):
         The world coordinates of its axes, in FITS order.
     spectral_axis : int or None
         The index of its spectral axis (FITS order), if any.
-    unit : str or None
-        The unit of its values (FITS BUNIT), if known.
+    unit : AnyUnit or None
+        The unit of its values, if known.
     """
     data: np.ndarray
     coords: Coords
     spectral_axis: int | None
-    unit: str | None = None
+    unit: gbkfit.units.AnyUnit | None = None
 
 
 class SpectraData(NamedTuple):
@@ -540,9 +541,9 @@ class SpectraData(NamedTuple):
         along x and the velocity along y.
     coords : Coords
         The world coordinates of the spectral axis (one axis).
-    unit : str or None
-        The unit of the spectra (FITS BUNIT), if known.
+    unit : AnyUnit or None
+        The unit of the spectra, if known.
     """
     data: np.ndarray
     coords: Coords
-    unit: str | None = None
+    unit: gbkfit.units.AnyUnit | None = None

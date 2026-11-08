@@ -11,7 +11,7 @@ import pytest
 from gbkfit.grid import (
     CONVENTIONS, Grid, VelocityConvention, check_overlap, make_convention,
     make_grid, make_rest, pixels_on)
-from gbkfit.io import coords_from_wcs, read_data, write_data
+from gbkfit.io import coords_from_header, read_data, write_data
 
 
 def celestial_wcs(crval, crpix, rota):
@@ -33,9 +33,9 @@ def test_grids_are_placed_by_their_sky_positions():
     wcs_a = celestial_wcs([150.0, 50.0], [20, 15], 30)
     wcs_b = celestial_wcs([150.004, 50.002], [5, 8], -10)
     grid_a = Grid(
-        (40, 30), coords_from_wcs('a', wcs_a), None)
+        (40, 30), coords_from_header('a', wcs_a.to_header()), None)
     grid_b = Grid(
-        (25, 20), coords_from_wcs('b', wcs_b), None)
+        (25, 20), coords_from_header('b', wcs_b.to_header()), None)
     j, i = np.mgrid[0:30, 0:40]
     expected = wcs_b.world_to_pixel(wcs_a.pixel_to_world(i, j))
     np.testing.assert_allclose(

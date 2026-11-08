@@ -104,7 +104,7 @@ class DatasetPixelSpectra(Dataset):
             The world coordinates of the axes on the sky (see
             Coords); by default, those of the header. Either rpix
             or rval can be given, and the other comes from the header (see
-            coords_from_wcs).
+            coords_from_header).
         rota : float, optional
             The rotation of the grid on the sky; by default, that of the
             header.

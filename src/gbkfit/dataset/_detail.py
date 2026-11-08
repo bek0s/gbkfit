@@ -470,7 +470,8 @@ def dump_grid_dataset(
 
     def write(filename: str, array: np.ndarray) -> None:
         write_data(
-            filename, array, grid.coords, grid.spectral_axis, overwrite)
+            filename, array, grid.coords, grid.spectral_axis,
+            overwrite=overwrite)
     for key, item in dataset.items():
         info[key] = dump_data(
             item, item_filenames(prefix, key), write, dump_path,

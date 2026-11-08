@@ -21,7 +21,6 @@ import os
 from collections.abc import Sequence
 from typing import Annotated, Any
 
-import astropy.io.fits
 import astropy.units as u
 import astropy.wcs
 import numpy as np
@@ -30,10 +29,12 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    FitsFile, TypedParser, TypedSerializable, Unit, Varying,
-    check_options, split_fits_file)
+    DataFile, TypedParser, TypedSerializable, Unit, Varying,
+    check_options, split_data_file)
 from gbkfit.grid import Coords, VelocityConvention
-from gbkfit.io import has_wcs, parse_wcs, read_data, write_data
+from gbkfit.io import (
+    has_wcs, parse_wcs, read_data, read_header, read_image, write_data,
+    write_image)
 import gbkfit.math
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
@@ -604,7 +605,7 @@ class LSFImage(LSF):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             step: Annotated[float, Gt(0), Unit('km/s')] | None = None
     ) -> 'LSFImage':
         """
@@ -629,10 +630,10 @@ class LSFImage(LSF):
             If step is not given and the header has no spectral axis.
         """
         check_options(LSFImage.from_file, locals())
-        filename, hdu = split_fits_file(file)
-        data, coords = read_data(filename, hdu)
+        filename = split_data_file(file)[0]
+        data, coords = read_data(file)
         if step is None:
-            header = astropy.io.fits.getheader(filename, hdu)
+            header = read_header(file)
             if not (has_wcs(header)
                     and astropy.wcs.WCS(header).wcs.spec >= 0):
                 raise ValueError(
@@ -648,7 +649,7 @@ class LSFImage(LSF):
         filename = f'{prefix}lsf.fits'
         rpix = self._data.size / 2 - 0.5
         coords = Coords((self._step,), (rpix,), (0.0,), 0.0)
-        write_data(filename, self._data, coords, 0, overwrite)
+        write_data(filename, self._data, coords, 0, overwrite=overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
@@ -889,7 +890,7 @@ class LSFHanning(LSF):
 
 
 def _read_images(
-        file: str, hdu: int | str
+        file: DataFile
 ) -> tuple[np.ndarray, u.Quantity | None, float | None]:
     """
     The LSF profiles of a 2D FITS image (one per row: nz, nk), the point
@@ -897,12 +898,13 @@ def _read_images(
     is spectral, or None), and the width of their channels in km/s (from
     the axis of the columns, if it is in a velocity unit, or None).
     """
-    with astropy.io.fits.open(file) as hdul:
-        data = np.asarray(hdul[hdu].data, dtype=float)
-        wcs = parse_wcs(file, hdul[hdu].header)
+    filename = split_data_file(file)[0]
+    data, header = read_image(file)
+    data = np.asarray(data, dtype=float)
+    wcs = parse_wcs(filename, header)
     if data.ndim != 2:
         raise ValueError(
-            f"{file}: LSF profiles must be an image, with one profile per "
+            f"{filename}: LSF profiles must be an image, with one profile per "
             f"row; it has {data.ndim} axes")
     points = None
     if wcs.wcs.spec == 1:
@@ -949,7 +951,7 @@ class LSFImages(LSF):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             points: u.Quantity | None = None,
             step: Annotated[float, Gt(0), Unit('km/s')] | None = None
     ) -> 'LSFImages':
@@ -980,8 +982,8 @@ class LSFImages(LSF):
             nor in its header.
         """
         check_options(LSFImages.from_file, locals())
-        filename, hdu = split_fits_file(file)
-        data, file_points, file_step = _read_images(filename, hdu)
+        filename = split_data_file(file)[0]
+        data, file_points, file_step = _read_images(file)
         if points is None:
             if file_points is None:
                 raise ValueError(
@@ -1001,7 +1003,7 @@ class LSFImages(LSF):
             overwrite: bool = False
     ) -> dict[str, Any]:
         filename = f'{prefix}lsf_images.fits'
-        astropy.io.fits.writeto(filename, self._data, overwrite=overwrite)
+        write_image(filename, self._data, overwrite=overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),

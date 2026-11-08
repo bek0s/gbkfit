@@ -30,7 +30,6 @@ __all__ = [
     'Column',
     'DataFile',
     'FilePath',
-    'FitsFile',
     'Unit',
     'Varying',
     'describe_type',
@@ -38,7 +37,7 @@ __all__ = [
     'is_varying',
     'matches_type',
     'option_types',
-    'split_fits_file',
+    'split_data_file',
     'type_error',
     'type_problem',
     'union_members',
@@ -119,17 +118,12 @@ class _ConfigForm:
 # the configuration (see resolve_path)
 FilePath: TypeAlias = Annotated[str, _ConfigForm('path')]
 
-# A FITS file: its filename, or its filename and the HDU to read (by
-# default the first); in a configuration, a filename, or a dict with the
-# filename (file) and the HDU (hdu)
-FitsFile: TypeAlias = Annotated[
-    str | tuple[str, int | str], _ConfigForm('fits_file')]
-
-# A file of data (see read_arrays): a FITS file, as FitsFile
-# (by default its first HDU with data), or an ASDF file and the path of
-# its array in its tree (e.g. 'roman/data'); in a configuration, a
-# filename, or a dict with the filename (file) and the HDU (hdu) or the
-# path (path)
+# A file of data, an array or a table (see gbkfit.io): its filename (of
+# a FITS file, its first HDU with data), or its filename and where the
+# data are in it: the HDU of a FITS file (e.g. 'SCI'), or the path of an
+# array in the tree of an ASDF file (e.g. 'roman/data'); in a
+# configuration, a filename, or a dict with the filename (file) and the
+# HDU (hdu) or the path (path)
 DataFile: TypeAlias = Annotated[
     str | tuple[str, int | str], _ConfigForm('data_file')]
 
@@ -158,9 +152,12 @@ def is_asdf_file(filename: str) -> bool:
     return filename.lower().endswith('.asdf')
 
 
-def split_fits_file(file: FitsFile) -> tuple[str, int | str]:
-    """Return the filename and the HDU of a FITS file (by default 0)."""
-    return (file, 0) if isinstance(file, str) else file
+def split_data_file(file: DataFile) -> tuple[str, int | str | None]:
+    """
+    Return the filename of a file of data (see DataFile) and where the
+    data are in it, None if not given (the first of the format).
+    """
+    return (file, None) if isinstance(file, str) else (file[0], file[1])
 
 
 # The bounds of the ranges of options, and finiteness (e.g. of

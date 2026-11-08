@@ -12,7 +12,6 @@ import os
 from collections.abc import Sequence
 from typing import Annotated, Any
 
-import astropy.io.fits
 import astropy.units as u
 import astropy.wcs
 import astropy.wcs.utils
@@ -23,11 +22,12 @@ import scipy.special
 from annotated_types import Gt, Le
 
 from gbkfit.config import (
-    FitsFile, TypedParser, TypedSerializable, Unit, Varying,
-    check_options, split_fits_file)
+    DataFile, TypedParser, TypedSerializable, Unit, Varying,
+    check_options, split_data_file)
 from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import (
-    has_wcs, parse_wcs, read_data, to_model_axes, write_data)
+    has_wcs, parse_wcs, read_data, read_header, read_image, to_model_axes,
+    write_data, write_image)
 import gbkfit.math
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
@@ -639,7 +639,7 @@ class PSFImage(PSF):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             step: Annotated[Sequence[float], Unit('arcsec')] | None = None
     ) -> 'PSFImage':
         """
@@ -664,10 +664,10 @@ class PSFImage(PSF):
             If step is not given and the header has no celestial axes.
         """
         check_options(PSFImage.from_file, locals())
-        filename, hdu = split_fits_file(file)
-        data, coords = read_data(filename, hdu)
+        filename = split_data_file(file)[0]
+        data, coords = read_data(file)
         if step is None:
-            header = astropy.io.fits.getheader(filename, hdu)
+            header = read_header(file)
             if not (has_wcs(header)
                     and astropy.wcs.WCS(header).has_celestial):
                 raise ValueError(
@@ -683,7 +683,7 @@ class PSFImage(PSF):
         filename = f'{prefix}psf.fits'
         rpix = tuple(np.array(self._data.shape[::-1]) / 2 - 0.5)
         coords = Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
-        write_data(filename, self._data, coords, None, overwrite)
+        write_data(filename, self._data, coords, overwrite=overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
@@ -926,7 +926,7 @@ class PSFGaussBeam(PSF):
         return 'Gaussian, by FWHM (radio beam)'
 
     @classmethod
-    def from_file(cls, file: FitsFile) -> 'PSFGaussBeam':
+    def from_file(cls, file: DataFile) -> 'PSFGaussBeam':
         """
         Read a beam from the header of a FITS file (BMAJ, BMIN and BPA, in
         degrees), e.g. of the data.
@@ -947,8 +947,8 @@ class PSFGaussBeam(PSF):
             If the header has no beam.
         """
         check_options(PSFGaussBeam.from_file, locals())
-        filename, hdu = split_fits_file(file)
-        header = astropy.io.fits.getheader(filename, hdu)
+        filename = split_data_file(file)[0]
+        header = read_header(file)
         missing = [
             key for key in ('BMAJ', 'BMIN', 'BPA') if key not in header]
         if missing:
@@ -1009,7 +1009,7 @@ class PSFGaussBeam(PSF):
 
 
 def _read_images(
-        file: str, hdu: int | str
+        file: DataFile
 ) -> tuple[np.ndarray, u.Quantity | None, tuple[float, float] | None]:
     """
     The PSF images of a FITS cube (nz, ny, nx; in the orientation of the
@@ -1017,12 +1017,13 @@ def _read_images(
     file has no spectral axis), and the size of their pixels in arcsec
     (or None if the file has no celestial axes).
     """
-    with astropy.io.fits.open(file) as hdul:
-        data = np.asarray(hdul[hdu].data, dtype=float)
-        wcs = parse_wcs(file, hdul[hdu].header)
+    filename = split_data_file(file)[0]
+    data, header = read_image(file)
+    data = np.asarray(data, dtype=float)
+    wcs = parse_wcs(filename, header)
     if data.ndim != 3:
         raise ValueError(
-            f"{file}: PSF images must be a cube (nz, ny, nx); it has "
+            f"{filename}: PSF images must be a cube (nz, ny, nx); it has "
             f"{data.ndim} axes")
     data, wcs = to_model_axes(data, wcs)
     points = _detail.spectral_points(wcs, data.shape[0])
@@ -1069,7 +1070,7 @@ class PSFImages(PSF):
     @classmethod
     def from_file(
             cls,
-            file: FitsFile,
+            file: DataFile,
             points: u.Quantity | None = None,
             step: Annotated[Sequence[float], Unit('arcsec')] | None = None
     ) -> 'PSFImages':
@@ -1100,8 +1101,8 @@ class PSFImages(PSF):
             nor in its header.
         """
         check_options(PSFImages.from_file, locals())
-        filename, hdu = split_fits_file(file)
-        data, file_points, file_step = _read_images(filename, hdu)
+        filename = split_data_file(file)[0]
+        data, file_points, file_step = _read_images(file)
         if points is None:
             if file_points is None:
                 raise ValueError(
@@ -1121,7 +1122,7 @@ class PSFImages(PSF):
             overwrite: bool = False
     ) -> dict[str, Any]:
         filename = f'{prefix}psf_images.fits'
-        astropy.io.fits.writeto(filename, self._data, overwrite=overwrite)
+        write_image(filename, self._data, overwrite=overwrite)
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),

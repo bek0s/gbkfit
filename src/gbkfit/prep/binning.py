@@ -5,7 +5,7 @@ and the values, the fluxes and the spectra of the bins.
 """
 
 import logging
-from typing import Any, Literal
+from typing import Literal
 
 import astropy.io.fits as fits
 import astropy.units
@@ -15,6 +15,7 @@ import numpy as np
 import scipy.spatial
 
 import gbkfit.units
+from gbkfit.io import Beam
 from .arrays import FitsArrays
 
 
@@ -345,12 +346,15 @@ def bin_values(index: np.ndarray, nbins: int, data: np.ndarray) -> np.ndarray:
 
 
 def pixel_fluxes(
-        header: fits.Header, beam: dict[str, Any] | None, filename: str
-) -> tuple[float | np.ndarray, astropy.units.UnitBase] | None:
+        header: fits.Header,
+        unit: gbkfit.units.AnyUnit | None,
+        beam: Beam | None,
+        filename: str
+) -> tuple[float | np.ndarray, gbkfit.units.AnyUnit] | None:
     """
-    Return how the values of the pixels of data of a header (e.g. that of
-    FitsArrays; in its unit, BUNIT) become their fluxes: a factor, and
-    the unit of the fluxes. Values per pixel (e.g. of a spaxel, or per
+    Return how the values of the pixels of data of a header and a unit
+    (e.g. those of FitsArrays) become their fluxes: a factor, and the
+    unit of the fluxes. Values per pixel (e.g. of a spaxel, or per
     pix) are fluxes (factor 1); per solid angle, they are times that of a
     pixel; per beam (e.g. Jy/beam), times that of a pixel over that of
     the Gaussian beam of the data, pi / (4 ln 2) bmaj bmin: of their
@@ -360,9 +364,11 @@ def pixel_fluxes(
     Parameters
     ----------
     header : fits.Header
-        The header of the data.
-    beam : dict or None
-        The beam of the data, if any (e.g. that of FitsArrays).
+        The header of the data (their world coordinates).
+    unit : AnyUnit or None
+        The unit of the data, if any.
+    beam : Beam or None
+        The beam of the data, if any.
     filename : str
         The file of the data (for messages).
 
@@ -370,25 +376,25 @@ def pixel_fluxes(
     -------
     tuple of float or np.ndarray and astropy.units.UnitBase, or None
         The factor (one, or one for each channel) and the unit of the
-        fluxes; None if the header has no unit.
+        fluxes; None if the data have no unit.
 
     Raises
     ------
     ValueError
-        If the unit is not a unit, is a brightness temperature (whose
-        sums over pixels are not fluxes), or is per beam and the data
-        have no beam.
+        If the unit is a brightness temperature (whose sums over pixels
+        are not fluxes), or neither light per pixel, solid angle or beam
+        (see gbkfit.units.spatial_unit), or is per beam and the data have
+        no beam.
     """
     u = astropy.units
-    text = str(header.get('BUNIT', '')).strip()
-    if not text:
+    if unit is None:
         return None
-    unit = gbkfit.units.parse_unit(text)
     if unit.is_equivalent(u.K):
         raise ValueError(
-            f"{filename}: the data are a brightness temperature ({text!r}), "
-            f"whose sums over pixels are not fluxes: convert them to flux "
-            f"density (e.g. Jy/beam) first")
+            f"{filename}: the data are a brightness temperature "
+            f"({gbkfit.units.format_unit(unit)!r}), whose sums over pixels "
+            f"are not fluxes: convert them to flux density (e.g. Jy/beam) "
+            f"first")
     spatial = gbkfit.units.spatial_unit(unit)
     if spatial in (u.dimensionless_unscaled, u.pix):
         return 1.0, unit * spatial
@@ -405,8 +411,7 @@ def pixel_fluxes(
         raise ValueError(
             f"{filename}: the data are per beam, but have no beam (BMAJ and "
             f"BMIN in the header, or a table BEAMS)")
-    area = np.pi / (4 * np.log(2)) * np.multiply(beam['bmaj'], beam['bmin'])
-    return pixel.to_value(u.arcsec ** 2) / area, unit * u.beam
+    return pixel.to_value(u.arcsec ** 2) / beam.area(), unit * u.beam
 
 
 def bin_spectra(

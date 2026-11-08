@@ -33,8 +33,9 @@ import ruamel.yaml
 from astropy.table import Table
 
 import gbkfit
+import gbkfit.units
 from gbkfit.grid import GridData, SpectraData
-from gbkfit.io import write_data, write_spectra
+from gbkfit.io import read_image, write_data, write_image, write_spectra
 from gbkfit.utils import numutils, pathutils
 
 if TYPE_CHECKING:
@@ -240,8 +241,7 @@ class Run:
         filename = self.filename(product)
         match product.format:
             case 'fits':
-                data, header = fits.getdata(filename, header=True)
-                return fits.PrimaryHDU(data, header)
+                return fits.PrimaryHDU(*read_image(filename))
             case 'ecsv':
                 return Table.read(filename, format='ascii.ecsv')
             case 'json':
@@ -336,7 +336,7 @@ class RunWriter:
             kind: str,
             value: Any,
             *,
-            unit: str | None = None,
+            unit: gbkfit.units.AnyUnit | None = None,
             title: str | None = None,
             description: str | None = None,
             sources: Iterable[str] | None = None,
@@ -369,7 +369,7 @@ class RunWriter:
             What it is (e.g. 'model', 'residual', 'samples').
         value : Any
             What to write.
-        unit : str, optional
+        unit : AnyUnit, optional
             The unit of an array (data on a grid and spectra carry their
             own).
         title : str, optional
@@ -449,7 +449,7 @@ class RunWriter:
             format_: str,
             kind: str,
             value: Any,
-            unit: str | None
+            unit: gbkfit.units.AnyUnit | None
     ) -> tuple[Callable[[str], None], str | None, tuple[int, ...] | None]:
         """
         Return how to write a value to a file of a format, its unit and
@@ -465,19 +465,18 @@ class RunWriter:
         if format_ == 'fits' and isinstance(value, GridData):
             return (lambda f: write_data(
                 f, value.data, value.coords, value.spectral_axis,
-                overwrite=True, unit=value.unit, cards=cards),
-                value.unit, value.data.shape)
+                unit=value.unit, cards=cards, checksum=True, overwrite=True),
+                _unit_text(value.unit), value.data.shape)
         if format_ == 'fits' and isinstance(value, SpectraData):
             return (lambda f: write_spectra(
-                f, value.data, value.coords, overwrite=True, unit=value.unit,
-                cards=cards), value.unit, value.data.shape)
+                f, value.data, value.coords, unit=value.unit, cards=cards,
+                checksum=True, overwrite=True),
+                _unit_text(value.unit), value.data.shape)
         if format_ == 'fits' and isinstance(value, np.ndarray):
-            header = fits.Header(cards)
-            if unit is not None:
-                header['BUNIT'] = unit
-            return (lambda f: fits.writeto(
-                f, value, header, output_verify='exception', overwrite=True,
-                checksum=True), unit, value.shape)
+            return (lambda f: write_image(
+                f, value, unit=unit, cards=cards, checksum=True,
+                overwrite=True),
+                _unit_text(unit), value.shape)
         if format_ == 'ecsv' and isinstance(value, Table):
             table = value.copy(copy_data=False)
             table.meta.update({key.lower(): v for key, v in cards.items()})
@@ -991,3 +990,8 @@ def _now() -> str:
     """Return the time now (ISO 8601, UTC, in seconds)."""
     return datetime.datetime.now(datetime.timezone.utc).isoformat(
         timespec='seconds')
+
+
+def _unit_text(unit: gbkfit.units.AnyUnit | None) -> str | None:
+    """Return a unit as the manifest of a run writes it (see Product)."""
+    return None if unit is None else gbkfit.units.format_unit(unit)
