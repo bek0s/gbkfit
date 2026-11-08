@@ -61,7 +61,7 @@ def test_the_units_of_a_fits_table_are_read_by_the_fits_standard(tmp_path):
     assert read_column(table, 'v', None).unit == u.km / u.s
     columns[1] = fits.Column('v', 'D', unit='KM/S', array=[2.0])
     fits.BinTableHDU.from_columns(columns).writeto(path, overwrite=True)
-    with pytest.raises(ValueError, match="column 'v', 'KM/S', is not a"):
+    with pytest.raises(ValueError, match="column 'v': 'KM/S' is not a"):
         read_table(path)
 
 
@@ -91,7 +91,7 @@ def test_the_units_of_an_ecsv_file_are_read_by_the_fits_standard(tmp_path):
         assert read_column(table, 'm0', None).unit \
             == u.Jy * u.km / u.beam / u.s
     path.write_text(header.replace('Jy/beam km/s', 'banana') + 'm0\n1.0\n')
-    with pytest.raises(ValueError, match="column 'm0', 'banana', is not a"):
+    with pytest.raises(ValueError, match="column 'm0': 'banana' is not a"):
         read_table(str(path))
 
 

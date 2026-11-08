@@ -203,11 +203,10 @@ def _unit(filename: str, column: str, text: str) -> u.UnitBase:
     """
     try:
         return gbkfit.units.parse_unit(text)
-    except ValueError:
+    except ValueError as e:
         raise ValueError(
-            f"{filename}: the unit of the column {column!r}, {text!r}, is "
-            f"not a valid unit (see the FITS standard, section 4.3); "
-            f"correct it in a copy of the file") from None
+            f"{filename}: the unit of the column {column!r}: {e}; correct "
+            f"it in a copy of the file") from None
 
 
 def read_column(

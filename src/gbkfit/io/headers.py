@@ -155,10 +155,9 @@ def parse_wcs(source: str, header: astropy.io.fits.Header) -> astropy.wcs.WCS:
             continue
         try:
             gbkfit.units.parse_unit(text)
-        except ValueError:
+        except ValueError as e:
             raise ValueError(
-                f"{source}: {key} = {text!r} is not a valid unit (see the "
-                f"FITS standard, section 4.3); correct it in a copy of the "
+                f"{source}: {key}: {e}; correct it in a copy of the "
                 f"file") from None
     try:
         return astropy.wcs.WCS(header)

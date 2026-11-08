@@ -482,12 +482,11 @@ def _parsed_unit(
         return None
     try:
         return gbkfit.units.parse_unit(text)
-    except ValueError:
+    except ValueError as e:
         if given:
             return None
         raise ValueError(
-            f"{source}: BUNIT = {text!r} is not a valid unit (see the FITS "
-            f"standard, section 4.3); give the unit of the data (option "
+            f"{source}: BUNIT: {e}; give the unit of the data (option "
             f"unit), or correct BUNIT in a copy of the file") from None
 
 

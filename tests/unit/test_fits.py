@@ -203,7 +203,7 @@ def test_hdu_can_be_chosen():
         CRVAL3=1.4e9, CDELT3=1e4), (6, 20, 24), "type 'FREQ'"),
     (CELESTIAL | dict(
         CDELT1=-1 / 3600, CDELT2=1 / 3600, CTYPE3='VRAD', CUNIT3='KM/S',
-        CRVAL3=1.0, CDELT3=1.0), (6, 20, 24), "CUNIT3 = 'KM/S' is not a valid"),
+        CRVAL3=1.0, CDELT3=1.0), (6, 20, 24), "CUNIT3: 'KM/S' is not a valid"),
     (dict(CDELT1=1.0, CDELT2=1.0, CDELT3=1.0, PC3_1=0.5), (6, 20, 24),
      "couple axes")])
 def test_coordinates_the_model_cannot_represent(header, shape, message):

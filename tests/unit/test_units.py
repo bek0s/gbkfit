@@ -15,6 +15,106 @@ from gbkfit.units import (
     format_quantity, format_unit, parse_quantity, parse_unit, spatial_unit)
 
 
+# Real units, which must read as these: the BUNIT of the survey data
+# that gbkfit is tested on, the units of its configurations and tests,
+# and the examples of the FITS standard (4.0, section 4.3.1)
+REAL_UNITS = [
+    # Survey data (KMOS3D, LVHIS, MUSE, PHANGS, WALLABY, MaNGA)
+    ('1e-17 W/m^2/um', 1e-17 * u.W / u.m ** 2 / u.um),
+    ('km/s', u.km / u.s),
+    ('km.s-1', u.km / u.s),
+    ('K', u.K),
+    ('K.km.s-1', u.K * u.km / u.s),
+    ('Hz', u.Hz),
+    ('Jy/beam', u.Jy / u.beam),
+    ('Jy/beam*Hz', u.Jy * u.Hz / u.beam),
+    ('arcsec', u.arcsec),
+    ('arcsec^2', u.arcsec ** 2),
+    ('10**(-20)*erg/s/cm**2/Angstrom',
+     1e-20 * u.erg / u.s / u.cm ** 2 / u.AA),
+    ('(10**(-20)*erg/s/cm**2/Angstrom)**2',
+     (1e-20 * u.erg / u.s / u.cm ** 2 / u.AA) ** 2),
+    # Configurations and tests of gbkfit
+    ('deg', u.deg), ('kpc', u.kpc), ('Mpc', u.Mpc), ('Gyr', u.Gyr),
+    ('rad', u.rad), ('millisecond', u.ms), ('MHz', u.MHz),
+    ('Jy', u.Jy), ('', u.dimensionless_unscaled), ('%', u.percent),
+    ('Angstrom', u.AA), ('m/s', u.m / u.s), ('km / s', u.km / u.s),
+    ('km s-1', u.km / u.s), ('K km/s', u.K * u.km / u.s),
+    ('Jy/beam km/s', u.Jy * u.km / u.beam / u.s),
+    ('MJy/sr', u.MJy / u.sr), ('Jy/arcsec2', u.Jy / u.arcsec ** 2),
+    ('uJy/arcsec2', u.uJy / u.arcsec ** 2),
+    ('mJy/arcsec2', u.mJy / u.arcsec ** 2),
+    ('Jy km/s/arcsec2', u.Jy * u.km / u.s / u.arcsec ** 2),
+    ('Msun/pc2', u.Msun / u.pc ** 2), ('kpc2', u.kpc ** 2),
+    ('m3/s3', u.m ** 3 / u.s ** 3), ('cm-2', u.cm ** -2),
+    ('cm2 / g', u.cm ** 2 / u.g), ('km / (s arcsec)', u.km / u.s / u.arcsec),
+    ('1 / arcsec', 1 / u.arcsec), ('ct', u.ct),
+    ('erg/s/cm2/arcsec2', u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
+    ('1e-17 erg/s', 1e-17 * u.erg / u.s),
+    ('1e-17 erg/s/cm2/arcsec2',
+     1e-17 * u.erg / u.s / u.cm ** 2 / u.arcsec ** 2),
+    ('1e-20 erg/s/cm2/Angstrom/arcsec2',
+     1e-20 * u.erg / u.s / u.cm ** 2 / u.AA / u.arcsec ** 2),
+    ('1e-10 m / s2', 1e-10 * u.m / u.s ** 2), ('30 Jy', 30 * u.Jy),
+    ('dex', u.dex), ('dex(solMass)', u.dex(u.Msun)),
+    ('dex(solMass / kpc2)', u.dex(u.Msun / u.kpc ** 2)),
+    ('dex(solMass / kpc3)', u.dex(u.Msun / u.kpc ** 3)),
+    ('mag(ct/s)', u.mag(u.ct / u.s)),
+    # Nothing is corrected: S is the siemens, A the ampere, B the byte
+    ('S', u.S), ('erg/s/cm2/A', u.erg / u.s / u.cm ** 2 / u.A),
+    ('B', u.byte),
+    # The FITS standard: powers, and multipliers
+    ('m**(2)', u.m ** 2), ('m**+2', u.m ** 2), ('m+2', u.m ** 2),
+    ('m2', u.m ** 2), ('m^2', u.m ** 2), ('m^(+2)', u.m ** 2),
+    ('m**-3', u.m ** -3), ('m-3', u.m ** -3), ('m^(-3)', u.m ** -3),
+    ('/m3', u.m ** -3), ('m(1.5)', u.m ** 1.5), ('m^(1.5)', u.m ** 1.5),
+    ('m**(1.5)', u.m ** 1.5), ('m(3/2)', u.m ** 1.5),
+    ('m**(3/2)', u.m ** 1.5), ('m^(3/2)', u.m ** 1.5),
+    ('10**(-17) erg', 1e-17 * u.erg), ('10^-17 erg', 1e-17 * u.erg),
+    ('10-17 erg', 1e-17 * u.erg), ('10+3 m', 1e3 * u.m),
+]
+
+# Real units that are not units, which must be refused: the survey data
+# that need the option unit, and mistakes that are easy to make
+NOT_UNITS = [
+    'JY/BEAM', 'JY/BEAM.KM/S', 'JY/BEAM.km/s', 'KM/S', 'METR/SEC',
+    'JY/B*M/S', 'Jy/Beam', '1E-17 erg/s/cm^2/Angstrom/spaxel',
+    '1E-17 erg/s/cm^2/ang/spaxel', '(km/s)^{-2}', 'ang',
+    'nanomaggies/pixel', 'Num. exposures', 'Relative flux',
+    'km per s', 'erg/s/cm2/banana', 'log(Hz)', 'm1.5',
+    'Jy/beam, km/s', 'km,s',
+]
+
+
+def test_a_number_with_a_decimal_point_is_read_as_astropy_reads_it():
+    assert parse_unit('1.E-17 erg/s') == u.Unit(1e-17 * u.erg / u.s)
+    assert parse_unit('.5 Jy') == u.Unit(0.5 * u.Jy)
+    # A '.' after a power still multiplies
+    assert parse_unit('W/m**2.Hz') == u.W * u.Hz / u.m ** 2
+    assert parse_unit('erg/s-1.cm-2') == u.erg * u.s / u.cm ** 2
+    assert parse_unit('10. (km/s)2') == u.Unit(10 * u.km ** 2 / u.s ** 2)
+
+
+def test_a_power_after_brackets_is_one_of_the_fits_standard():
+    assert parse_unit('(km/s)(1.5)') == (u.km / u.s) ** 1.5
+    assert parse_unit('(km/s)**-2') == (u.km / u.s) ** -2
+    # A decimal power only in brackets
+    for text in ('(km/s)1.5', '(km/s)**.5', '(km/s)1e3'):
+        with pytest.raises(ValueError, match="is not a valid unit"):
+            parse_unit(text)
+
+
+@pytest.mark.parametrize('text, unit', REAL_UNITS)
+def test_real_units_are_read(text, unit):
+    assert parse_unit(text) == u.Unit(unit)
+
+
+@pytest.mark.parametrize('text', NOT_UNITS)
+def test_real_texts_that_are_not_units_are_refused(text):
+    with pytest.raises(ValueError, match="is not a valid unit"):
+        parse_unit(text)
+
+
 @pytest.mark.parametrize('text, unit', [
     ('Jy/beam', u.Jy / u.beam),
     # astropy alone reads these as Jy / (beam km s)
@@ -134,10 +234,12 @@ def test_units_of_several_slashes_are_read_without_warnings():
 
 
 def test_a_power_that_is_not_an_integer_is_written_in_brackets():
-    # The FITS standard does not allow 'Hz0.5'
+    # The FITS standard does not allow 'Hz0.5', and 'mag(0.5)' would be
+    # read as a function
     unit = u.Hz ** 0.5 / u.m ** (1 / 3)
-    assert format_unit(unit) == 'Hz(0.5) m(-1/3)'
+    assert format_unit(unit) == 'Hz**(0.5) m**(-1/3)'
     assert parse_unit(format_unit(unit)) == unit
+    assert parse_unit(format_unit(u.mag ** 0.5)) == u.mag ** 0.5
 
 
 def test_units_are_written_as_both_parse_unit_and_astropy_read_them():
@@ -146,7 +248,7 @@ def test_units_are_written_as_both_parse_unit_and_astropy_read_them():
         u.Jy * u.km / u.beam / u.s, u.Hz ** 0.5 / u.m ** (1 / 3),
         u.Msun / u.pc ** 2, u.percent, u.dimensionless_unscaled,
         1e-17 * u.erg / u.s / u.cm ** 2 / u.Angstrom,
-        u.dex(u.Msun / u.kpc ** 2))
+        u.dex(u.Msun / u.kpc ** 2), u.dex(u.one), u.mag(u.one))
     for unit in units:
         unit = u.Unit(unit)
         text = format_unit(unit)
@@ -156,6 +258,7 @@ def test_units_are_written_as_both_parse_unit_and_astropy_read_them():
 
 def test_a_quantity_is_a_number_and_a_unit():
     assert parse_quantity('6562.8 Angstrom') == 6562.8 * u.AA
+    assert parse_quantity('6562.8\tAngstrom') == 6562.8 * u.AA
     assert parse_quantity(format_quantity(1.2 * u.um)) == 1.2 * u.um
     with pytest.raises(ValueError, match="not a number and a unit"):
         parse_quantity('Angstrom')
@@ -169,6 +272,7 @@ def test_a_quantity_is_a_number_and_a_unit():
     ('MJy/sr', u.sr),
     ('1e-17 erg/s/cm2/arcsec2', u.sr),
     ('Jy deg-2', u.sr),
+    ('R', u.sr),
     ('Jy km/s', u.dimensionless_unscaled)])
 def test_what_light_is_per(text, spatial):
     assert spatial_unit(parse_unit(text)) == spatial
@@ -181,6 +285,32 @@ def test_light_per_anything_else_is_an_error():
                  'Jy/beam/arcsec2', 'Jy/beam/pix'):
         with pytest.raises(ValueError, match="is not light per beam"):
             spatial_unit(parse_unit(text))
+    for text in ('mag(AB)', 'mag', 'mag/arcsec2', 'dB(mW)', 'dex'):
+        with pytest.raises(ValueError, match="is a logarithm"):
+            spatial_unit(parse_unit(text))
+
+
+def test_the_argument_of_a_function_is_read_by_the_fits_standard():
+    assert parse_unit('mag(Jy/beam km/s)') == u.mag(
+        u.Jy * u.km / u.beam / u.s)
+    assert parse_unit('sqrt(Jy/beam km/s)') == (
+        u.Jy * u.km / u.beam / u.s) ** 0.5
+    # A name and brackets that are not a function: a unit and its power
+    assert parse_unit('m(3/2)') == u.m ** 1.5
+
+
+def test_an_invalid_unit_says_why():
+    for text, reason in (
+            ('(Jy', "a '\\(' has no '\\)'"), ('Jy/', 'has no operand'),
+            ('Jy 30', "the number in '30' is not first"),
+            ('Jy/beam 2km', "the number in '2km' is not first"),
+            ('Jy/Beam', "astropy reads no unit 'Beam'"),
+            ('km,s', 'as a structure of units'),
+            ('mag(AB)/arcsec2', 'can only be the whole unit'),
+            ('(dex(1))2', 'takes no power'),
+            ('(km/s)1.5', "the power '1.5' is neither an integer")):
+        with pytest.raises(ValueError, match=reason):
+            parse_unit(text)
 
 
 def emission(info):
