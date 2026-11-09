@@ -19,7 +19,7 @@
 // data.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { FrameArray } from '../api/frames';
-import { useChannel, useMoments, useSpectrum } from '../api/queries';
+import { useChannel, useMoments, useSpectrum, type Reading } from '../api/queries';
 import { significant } from './format';
 import { ClearIcon, ZoomSelectionIcon, ZoomWholeIcon } from './icons';
 import { MapPanel, robustRange } from './MapPanel';
@@ -92,6 +92,7 @@ export function CubeViewer({
   frame = null,
   noiseless = false,
   moments: which = 'all',
+  reading = null,
 }: {
   layers: Layer[];
   // Its shape in the order of the model (x, y, then its channels)
@@ -118,6 +119,9 @@ export function CubeViewer({
   // dispersion alone (where the others are shown another way, e.g. the
   // maps of a galaxy), or none
   moments?: 'all' | 'higher' | 'none';
+  // How its channels are read, for its moments (e.g. as velocities of the
+  // rest of its dataset; none: as its file gives them)
+  reading?: Reading | null;
 }) {
   const [nx, ny, nchannels] = shape;
   const [layerKey, setLayerKey] = useState<Layer['key']>('data');
@@ -166,7 +170,7 @@ export function CubeViewer({
   const more = MORE_MOMENTS.find((m) => m.view === shown);
   const plane = useChannel(layer.path, layer.hdu, channel);
   const method = MOMENTS.find((m) => m.view === shown)?.method ?? 'moments';
-  const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel', method);
+  const moments = useMoments(data.path, data.hdu, snr, shown !== 'channel', method, reading);
   const spectrum = useSpectrum(layer.path, layer.hdu, shownPixel, selection);
   // (a model without noise starts at the brightest channel of its total
   // spectrum, as its middle one may hold none of its light, e.g. between

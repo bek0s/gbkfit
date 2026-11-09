@@ -435,9 +435,9 @@ h2 { margin: 0; font: var(--text-heading); }
    its label, its size (x and y, and the link that keeps them one, of a
    PSF), its unit, where it comes from and the button of its menu: its
    words and numbers on one baseline, as their fonts differ, the row of
-   them centred by its padding (a baseline row sits at the top); its
-   buttons centred) */
-.response-pixels { display: flex; align-items: baseline; gap: 6px; height: 30px; padding: 4px 4px 0 10px; box-sizing: border-box; border: 1px solid var(--line2); border-radius: 4px; background: var(--raise); }
+   them centred in it (as a line of a wrapping row, which a baseline row
+   is not: it sits at the top); its buttons centred) */
+.response-pixels { display: flex; flex-wrap: wrap; align-content: center; align-items: baseline; gap: 6px; height: 30px; padding: 0 4px 0 10px; box-sizing: border-box; border: 1px solid var(--line2); border-radius: 4px; background: var(--raise); }
 .response-pixels[data-family='psf'] { width: 330px; }
 .response-pixels[data-family='lsf'] { width: 290px; }
 .response-pixels-label { font: var(--text-label); color: var(--faint); white-space: nowrap; }

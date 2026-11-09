@@ -58,7 +58,7 @@ export function ObservationScreen({ name }: { name: string }) {
   const withData = options?.data != null;
   const lsfWidth = instrument.lsf == null ? null : (lsfView.data?.fwhm ?? null);
   const channel = array?.step?.length === 3 ? Math.abs(array.step[2]) : typeof objectAt(observable, 'spectral').step === 'number' ? (objectAt(observable, 'spectral').step as number) : null;
-  const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3 } : null;
+  const skyData: SkyData | null = first && array ? { path: first.file, array, cube: kept(array).length === 3, reading: { rest: given, velocity, type: textAt(axis, 'type') as SpectralTypeOption | null } } : null;
   const grid = !withData && Array.isArray(observable.size) ? { size: pairOf(observable.size), step: pairOf(observable.step ?? [1, 1]) } : !withData && typeof observable.size === 'number' ? { size: pairOf(observable.size), step: pairOf(observable.step ?? 1) } : null;
   const checks = options
     ? checksOf({ options, datasets: edited.blocks.datasets ?? [], datasetType: dataset?.type as string | undefined, data: array, psf, lsfWidth, titleOf: title })

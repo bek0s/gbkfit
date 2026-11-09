@@ -22,6 +22,7 @@ import astropy.wcs
 import numpy as np
 
 import gbkfit.analysis
+import gbkfit.dataset
 from gbkfit import prep
 from gbkfit.config import ConfigError
 from gbkfit.io import read_oriented
@@ -214,7 +215,9 @@ class Views:
 
     def moments(
             self, path: str, hdu: int, snr: float,
-            method: Literal['moments', 'gauss_hermite'] = 'moments'
+            method: Literal['moments', 'gauss_hermite'] = 'moments',
+            rest: str | None = None, velocity: str | None = None,
+            spectral_type: str | None = None
     ) -> dict[str, np.ndarray]:
         """
         Return the quick moment maps of a cube, by name, of the voxels of
@@ -222,23 +225,33 @@ class Views:
         (see prep.signal_mask; 0: of all of them): measured as moments,
         its flux, velocity, dispersion, skewness and kurtosis; or of a
         Gauss-Hermite series fitted to each spectrum (slower), its h3 and
-        h4 (see gbkfit.analysis.moment_maps).
+        h4 (see gbkfit.analysis.moment_maps). Channels of wavelengths or
+        frequencies are of the velocities of a rest, as a dataset of the
+        cube with it, the convention of velocities its header leaves
+        ambiguous and the type of an axis FITS does not define reads them
+        (see Workspace.describe).
 
         Raises
         ------
         Invalid
-            If its channels are not of velocities (or as cube).
+            If its channels are not of velocities, of the rest given if any
+            (or as cube).
         """
         cube = self.cube(path, hdu)
         key = self._key(path, hdu)
-        kept = (snr, method)
+        kept = (snr, method, rest, velocity, spectral_type)
         with self._lock:
             if kept in self._moments.get(key, {}):
                 return self._moments[key][kept]
-        if (velocities := cube.velocities()) is None:
+        velocities = cube.velocities()
+        if velocities is None and not path.startswith(MADE_PREFIX):
+            velocities = self._velocities(
+                path, hdu, cube, rest, velocity, spectral_type)
+        if velocities is None:
             raise Invalid(
                 f"the channels of '{path}' are not of velocities: its "
-                f"moments need them")
+                f"moments need them (of wavelengths or frequencies, the "
+                f"rest of a line)")
         if snr == 0:
             values, blank = cube.values, None
         else:
@@ -263,6 +276,36 @@ class Views:
             if key in self._cubes:
                 self._moments.setdefault(key, {})[kept] = result
         return result
+
+    def _velocities(
+            self, path: str, hdu: int, cube: Cube, rest: str | None,
+            velocity: str | None, spectral_type: str | None
+    ) -> np.ndarray | None:
+        """
+        Return the velocities of the channels of a cube of a file as a
+        dataset of it reads them, with a rest, a convention and a type, if
+        given (see gbkfit.dataset.describe_fits; none if they are not read
+        so), in the order of the channels of the cube.
+        """
+        if cube.spectral is None:
+            return None
+        try:
+            hdus = gbkfit.dataset.describe_fits(
+                self._workspace.file(path), velocity, rest, spectral_type)
+        except OSError:
+            return None
+        coords = next((h.coords for h in hdus if h.index == hdu), None)
+        if coords is None or len(coords.step) < 3:
+            return None
+        channels = np.arange(cube.values.shape[0])
+        velocities = \
+            coords.rval[2] + (channels - coords.rpix[2]) * coords.step[2]
+        # (those of the dataset go to greater velocities, as the model's
+        # channels do; those of the cube, as its file has them, to longer
+        # wavelengths or lower frequencies, or the other way)
+        rising = cube.spectral[-1] > cube.spectral[0]
+        return velocities if rising == (cube.unit == 'micron') \
+            else velocities[::-1]
 
     def _key(self, path: str, hdu: int) -> tuple:
         """

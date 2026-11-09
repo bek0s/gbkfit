@@ -264,7 +264,9 @@ export interface paths {
          *     the mask of its signal grown from seeds of signal-to-noise ratio snr
          *     (0: of all of them; see Views.moments): measured as moments, its
          *     flux, velocity, dispersion, skewness and kurtosis; or of a
-         *     Gauss-Hermite series fitted to each spectrum, its h3 and h4.
+         *     Gauss-Hermite series fitted to each spectrum, its h3 and h4. Its
+         *     channels are read as a dataset of it reads them, of a rest, a
+         *     convention and a type, if given (see describe).
          */
         get: operations["view_moments_api_v1_views_moments__path__get"];
         put?: never;
@@ -2095,6 +2097,9 @@ export interface operations {
                 hdu: number;
                 snr?: number;
                 method?: "moments" | "gauss_hermite";
+                rest?: string | null;
+                velocity?: ("radio" | "optical") | null;
+                spectral_type?: ("WAVE" | "AWAV" | "WAVE-LOG" | "AWAV-LOG" | "FREQ" | "VRAD" | "VOPT") | null;
             };
             header?: never;
             path: {

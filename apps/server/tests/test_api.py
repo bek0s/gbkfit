@@ -699,6 +699,38 @@ def test_the_moments_of_a_cube_are_of_the_mask_of_its_signal(client, root):
     np.testing.assert_allclose(velocity[block], 50, atol=1)
 
 
+@pytest.mark.parametrize('ctype, cdelt, rest', [
+    ('AWAV', 1.0, '6562.8 Angstrom'), ('AWAV', -1.0, '6562.8 Angstrom'),
+    ('FREQ', 1e5, '1420.405752 MHz'), ('FREQ', -1e5, '1420.405752 MHz')])
+def test_the_moments_of_a_cube_of_wavelengths_are_of_a_rest(
+        client, root, ctype, cdelt, rest):
+    # A line in one channel of a cube of wavelengths or frequencies about
+    # its rest, increasing or decreasing: its velocity, of the rest (as a
+    # dataset of it reads it), wherever its channels go
+    unit = 'Angstrom' if ctype == 'AWAV' else 'Hz'
+    centre = 6562.8 if ctype == 'AWAV' else 1420.405752e6
+    values = np.zeros((9, 3, 3), np.float32)
+    values[6] = 1
+    header = fits.Header(dict(
+        CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',
+        CDELT2=1 / 3600, CTYPE3=ctype, CRVAL3=centre, CDELT3=cdelt,
+        CRPIX3=5, CUNIT3=unit))
+    fits.writeto(pathlib.Path(root, 'study/data/waves.fits'), values, header)
+    path = '/api/v1/views/moments/study/data/waves.fits'
+    response = client.get(path, params=dict(hdu=0, snr=0))
+    assert response.status_code == 400
+    assert "rest of a line" in response.json()['detail']
+    header, data = frames.decode(client.get(
+        path, params=dict(hdu=0, snr=0, rest=rest)).content)
+    velocity = frames.arrays(header, data)[1]
+    # (channel 6 is 2 channels from the rest: of a wavelength 2 Angstrom
+    # above, of a frequency 2e5 Hz above, as the step goes)
+    light = 299792.458
+    expected = light * 2 * cdelt / centre if ctype == 'AWAV' \
+        else -light * 2 * cdelt / centre
+    np.testing.assert_allclose(velocity, expected, rtol=1e-3)
+
+
 def test_a_job_prepares_a_cube_into_the_project(client, root):
     header = fits.Header(dict(
         CTYPE1='RA---TAN', CDELT1=-1 / 3600, CTYPE2='DEC--TAN',

@@ -3,7 +3,7 @@
 // grid, with its PSF and the beam of the data drawn to scale at a corner),
 // its spectral resolution (the LSF against the channels), and its checks.
 import type { ArrayInfo } from '../../api/client';
-import { useChannel, useMoments } from '../../api/queries';
+import { useChannel, useMoments, type Reading } from '../../api/queries';
 import { MapPanel, robustRange, useFitted } from '../../components/MapPanel';
 import { frameOf } from '../../components/sky';
 import { showSection } from '../../components/ui/dock';
@@ -31,6 +31,8 @@ export interface SkyData {
   path: string;
   array: ArrayInfo;
   cube: boolean;
+  // (how its channels are read, as its dataset reads them)
+  reading: Reading;
 }
 
 export function Sky({ data, grid, psf, beam }: { data: SkyData | null; grid: { size: [number, number]; step: [number, number] } | null; psf: Ellipse | null; beam: Ellipse | null }) {
@@ -70,7 +72,7 @@ function size(ellipse: Ellipse): string {
 // The map of the data, in a map panel (see MapPanel: as every map of the
 // Studio), with the ellipses at its lower left corner
 function DataSky({ data, psf, beam }: { data: SkyData; psf: Ellipse | null; beam: Ellipse | null }) {
-  const moments = useMoments(data.path, data.array.index, 3, data.cube);
+  const moments = useMoments(data.path, data.array.index, 3, data.cube, 'moments', data.reading);
   const plane = useChannel(data.cube ? null : data.path, data.array.index, 0);
   const map = data.cube ? moments.data?.find((array) => array.info.name === 'flux') : plane.data?.plane;
   const [ny, nx] = map?.shape ?? [1, 1];

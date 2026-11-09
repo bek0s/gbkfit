@@ -259,7 +259,10 @@ def view_spectrum(
     '/views/moments/{path:path}', response_class=Response, responses=_FRAME)
 def view_moments(
         server: ServerDep, path: str, hdu: int, snr: float = 5,
-        method: Literal['moments', 'gauss_hermite'] = 'moments'
+        method: Literal['moments', 'gauss_hermite'] = 'moments',
+        rest: str | None = None,
+        velocity: Literal['radio', 'optical'] | None = None,
+        spectral_type: Literal[SPECTRAL_TYPES] | None = None
 ) -> Response:
     """
     Return the quick moment maps of a cube (NaN where they are not
@@ -267,9 +270,12 @@ def view_moments(
     the mask of its signal grown from seeds of signal-to-noise ratio snr
     (0: of all of them; see Views.moments): measured as moments, its
     flux, velocity, dispersion, skewness and kurtosis; or of a
-    Gauss-Hermite series fitted to each spectrum, its h3 and h4.
+    Gauss-Hermite series fitted to each spectrum, its h3 and h4. Its
+    channels are read as a dataset of it reads them, of a rest, a
+    convention and a type, if given (see describe).
     """
-    maps = server.views.moments(path, hdu, snr, method)
+    maps = server.views.moments(
+        path, hdu, snr, method, rest, velocity, spectral_type)
     arrays = [(dict(name=name), data) for name, data in maps.items()]
     return Response(
         frames.array_frame(dict(path=path, hdu=hdu), arrays),

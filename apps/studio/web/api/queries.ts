@@ -187,20 +187,31 @@ export function useSpectrum(
   });
 }
 
+// How the channels of a cube are read, as a dataset of it reads them: as
+// velocities of a rest (of wavelengths or frequencies), of a convention
+// its header leaves ambiguous, and of a type an axis FITS does not define
+// is (see the server's describe; null: none given)
+export type Reading = { rest: string | null; velocity: Velocity | null; type: SpectralTypeOption | null };
+
 // The quick moment maps of a cube, by name, of the voxels where the cube,
 // smoothed, is above a signal-to-noise ratio (0: all of them): measured as
 // moments, its flux, velocity, dispersion, skewness and kurtosis; or of a
-// Gauss-Hermite series fitted to each spectrum, its h3 and h4
-export function useMoments(path: string, hdu: number, snr: number, enabled: boolean, method: 'moments' | 'gauss_hermite' = 'moments') {
+// Gauss-Hermite series fitted to each spectrum, its h3 and h4; its
+// channels read as given, if they are (e.g. as of a dataset of the cube)
+export function useMoments(path: string, hdu: number, snr: number, enabled: boolean, method: 'moments' | 'gauss_hermite' = 'moments', reading: Reading | null = null) {
+  const query: { hdu: number; snr: number; method: typeof method; rest?: string; velocity?: Velocity; spectral_type?: SpectralTypeOption } = { hdu, snr, method };
+  if (reading?.rest) query.rest = reading.rest;
+  if (reading?.velocity) query.velocity = reading.velocity;
+  if (reading?.type) query.spectral_type = reading.type;
   return useQuery({
-    queryKey: keys.view('moments', path, hdu, snr, method),
+    queryKey: keys.view('moments', path, hdu, snr, method, reading?.rest ?? '', reading?.velocity ?? '', reading?.type ?? ''),
     enabled,
     placeholderData: keepPreviousData,
     queryFn: async () =>
       decodeFrame(
         await data(
           api.GET('/api/v1/views/moments/{path}', {
-            params: { path: { path }, query: { hdu, snr, method } },
+            params: { path: { path }, query },
             parseAs: 'arrayBuffer',
           }),
         ),

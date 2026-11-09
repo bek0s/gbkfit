@@ -830,7 +830,7 @@
     "/api/v1/views/moments/{path}": {
       "get": {
         "summary": "View Moments",
-        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of arrays (ny, nx), named so, of the voxels of\nthe mask of its signal grown from seeds of signal-to-noise ratio snr\n(0: of all of them; see Views.moments): measured as moments, its\nflux, velocity, dispersion, skewness and kurtosis; or of a\nGauss-Hermite series fitted to each spectrum, its h3 and h4.",
+        "description": "Return the quick moment maps of a cube (NaN where they are not\ndefined) as a frame of arrays (ny, nx), named so, of the voxels of\nthe mask of its signal grown from seeds of signal-to-noise ratio snr\n(0: of all of them; see Views.moments): measured as moments, its\nflux, velocity, dispersion, skewness and kurtosis; or of a\nGauss-Hermite series fitted to each spectrum, its h3 and h4. Its\nchannels are read as a dataset of it reads them, of a rest, a\nconvention and a type, if given (see describe).",
         "operationId": "view_moments_api_v1_views_moments__path__get",
         "parameters": [
           {
@@ -873,6 +873,67 @@
               "type": "string",
               "default": "moments",
               "title": "Method"
+            }
+          },
+          {
+            "name": "rest",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest"
+            }
+          },
+          {
+            "name": "velocity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "radio",
+                    "optical"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Velocity"
+            }
+          },
+          {
+            "name": "spectral_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "WAVE",
+                    "AWAV",
+                    "WAVE-LOG",
+                    "AWAV-LOG",
+                    "FREQ",
+                    "VRAD",
+                    "VOPT"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Spectral Type"
             }
           }
         ],
