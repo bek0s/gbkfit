@@ -510,8 +510,14 @@ def grid_noise_correlation(
     if spectral is not None:
         # (drawn at the middle channel, of the widths of the light there)
         channel = Channel.middle(grid)
-        spectral = _centred(spectral.on(channel).asarray(
-            channel.width, 2 * grid.size[grid.spectral_axis] - 1), key)
+        try:
+            spectral = spectral.asarray(
+                channel.width, channel, 2 * grid.size[grid.spectral_axis] - 1)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"the spectral correlation of the noise of '{key}' is drawn "
+                f"on the channels of the data, as they are: {e}") from None
+        spectral = _centred(spectral, key)
     return NoiseCorrelation(spatial, spectral)
 
 

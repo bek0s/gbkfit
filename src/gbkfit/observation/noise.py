@@ -352,7 +352,12 @@ class NoiseGauss(Noise):
                 "the noise has a spectral correlation, but the data have no "
                 "spectral axis")
         channel = Channel.middle(grid)
-        return spectral.on(channel).asarray(channel.width)
+        try:
+            return spectral.asarray(channel.width, channel)
+        except RuntimeError as e:
+            raise RuntimeError(
+                f"the spectral correlation of the noise is drawn on the "
+                f"channels of the data, as they are: {e}") from None
 
 
 class NoiseStudentT(Noise):

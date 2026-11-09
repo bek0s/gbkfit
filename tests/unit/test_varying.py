@@ -160,7 +160,7 @@ def test_an_lsf_that_varies_is_drawn_as_it_is_at_each_channel():
     lsf = lsf_parser.load(dict(type='gauss', sigma=dict(
         points=kms([0, 100]), values=[10, 20], unit='km/s')))
     with pytest.raises(RuntimeError, match="as it is at each point"):
-        lsf.on(Channel())
+        lsf.on(Channel()).asarray(1.0)
     lsf.at([50] * KMS)[0].on(Channel()).asarray(1.0)
 
 
@@ -269,6 +269,18 @@ def test_varying_psfs_in_python(tmp_path):
     assert not hasattr(PSFImage, 'varying')
     with pytest.raises(ValueError, match="none of the options of PSFMoffat"):
         PSFMoffat.varying(alpha=0.7, beta=2.5)
+
+
+def test_widths_of_a_table_file_need_the_unit_of_its_column(tmp_path):
+    # (in units, by the column: the option unit is of inline tables)
+    path = tmp_path / 'lsf.csv'
+    path.write_text('wavelength,sigma\n6000,1.0\n7000,2.0\n')
+    table = dict(file=str(path), points='wavelength', column='sigma')
+    with pytest.raises(ValueError, match="units: {<column>: Angstrom}"):
+        lsf_parser.load(dict(type='gauss', sigma=table | dict(
+            units=dict(wavelength='Angstrom'))))
+    assert lsf_parser.load(dict(type='gauss', sigma=table | dict(
+        units=dict(wavelength='Angstrom', sigma='Angstrom')))).varies()
 
 
 def test_tables_of_quantities_keep_their_unit():

@@ -20,7 +20,7 @@ _MUSE_WAVELENGTHS = np.arange(4600.0, 9401.0, 50.0)
 
 # The names of the modes of the PSFs of MUSE (FSFMODE) that MPDAF writes as
 # numbers
-_MOFFAT_MODES = {2: 'MOFFAT2', '2': 'MOFFAT2'}
+_MODE_NAMES = {2: 'MOFFAT2', '2': 'MOFFAT2'}
 
 
 def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
@@ -37,7 +37,7 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
     """
     wavelengths = _MUSE_WAVELENGTHS
     mode = header.get('FSFMODE')
-    mode = _MOFFAT_MODES.get(mode, mode)
+    mode = _MODE_NAMES.get(mode, mode)
     fields = [f for f in (*range(10), 99) if f'FSF{f:02d}BET' in header
               or f'FSF{f:02d}FNC' in header]
     if mode not in ('MOFFAT1', 'MOFFAT2') or not fields:

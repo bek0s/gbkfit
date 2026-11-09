@@ -69,7 +69,7 @@ class PrimaryBeam(_detail.Response):
             If the beam varies along the spectral axis (it is that at each
             channel; see at).
         """
-        self._check_drawn()
+        self._check_not_varying()
         return self._response_impl(grid)
 
     @abc.abstractmethod

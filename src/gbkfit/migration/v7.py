@@ -132,10 +132,14 @@ class LSFWidths(_LSFRule):
             elif isinstance(value, MutableMapping) and 'points' in value \
                     and 'unit' not in value:
                 if 'file' in value:
-                    changes.append(Change(
-                        path + [name],
-                        "the column of the widths must have a unit in its "
-                        "file; if it has none, give it in units"))
+                    # (of a column with a unit in the file, or in units)
+                    column = value.get('column')
+                    if column not in (value.get('units') or {}):
+                        changes.append(Change(
+                            path + [name],
+                            f"the column of the widths must have a unit in "
+                            f"its file; if it has none, give it in units "
+                            f"(units: {{{column}: km/s}})"))
                 else:
                     value['unit'] = 'km/s'
                     changes.append(Change(

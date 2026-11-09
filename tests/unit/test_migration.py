@@ -662,8 +662,13 @@ def test_the_widths_of_lsfs_get_their_unit():
     assert table['unit'] == 'km/s'
     hanning, gauss = noise['spectral_correlation']['lsfs']
     assert hanning == dict(type='hanning')
-    # (the unit of the column of a file is not known: by hand, if none)
+    # (the unit of the column of a file is not known: by hand, if none;
+    # one given in units is that of the column)
     assert gauss['sigma'] == filed and 'unit' not in filed
+    with_units = dict(type='gauss', sigma=filed | dict(units=dict(
+        sigma='km/s')))
+    assert migration.migrate(dict(observations=[dict(instrument=dict(
+        lsf=with_units))]), 6) == migration.migrate(dict(), 6)
     assert [c.path[-1] for c in changes if c.path != ['version']] == [
         'sigma', 'alpha', 'width', 'sigma']
 

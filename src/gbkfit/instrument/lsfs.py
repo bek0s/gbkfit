@@ -73,6 +73,11 @@ _Width: TypeAlias = Annotated[ScalarQuantity, Gt(0), UnitKinds(
     wavelength=('Angstrom', 'nm', 'um'), frequency=('Hz', 'kHz', 'MHz', 'GHz'),
     velocity=('m/s', 'km/s'), pixels=('pix',))]
 
+# The shapes of the generalised Gaussian and of the Moffat (for a finite
+# flux, beta > 1/2)
+_GGaussBeta: TypeAlias = Annotated[float, Gt(0), Varying()]
+_MoffatBeta: TypeAlias = Annotated[float, Gt(0.5), Varying()]
+
 
 @dataclasses.dataclass(frozen=True)
 class Channel:
@@ -200,27 +205,8 @@ class ChannelLSF:
     channel: Channel
 
     def size(self, step: float) -> int:
-        """
-        Return the size of the array that holds the LSF.
-
-        Parameters
-        ----------
-        step : float
-            The width of the channels of the array (in the unit of the
-            axis, e.g. km/s).
-
-        Returns
-        -------
-        int
-            The number of channels, odd.
-
-        Raises
-        ------
-        RuntimeError
-            If the wings of the LSF are too heavy for a finite array.
-        """
-        return _detail.odd_size(
-            self.lsf, self.lsf._size_impl(step, self.channel))[0]
+        """Return the size of the array that holds it (see LSF.size)."""
+        return self.lsf.size(step, self.channel)
 
     def asarray(
             self,
@@ -228,40 +214,14 @@ class ChannelLSF:
             size: int | None = None,
             offset: int = 0
     ) -> np.ndarray:
-        """
-        Return the LSF on an array of channels, normalised to sum to 1.
-
-        Parameters
-        ----------
-        step : float
-            The width of the channels of the array (in the unit of the
-            axis, e.g. km/s).
-        size : int, optional
-            The number of channels; by default, size(step).
-        offset : int, optional
-            The offset of the centre of the LSF from the channel
-            size // 2. size + offset must be odd.
-
-        Returns
-        -------
-        ndarray
-            The LSF.
-
-        Raises
-        ------
-        RuntimeError
-            If size + offset is even.
-        """
-        if size is None:
-            size = self.size(step)
-        _detail.check_odd_centre((size,), (offset,), "LSF")
-        return self.lsf._asarray_impl(step, size, offset, self.channel)
+        """Return it on an array of channels (see LSF.asarray)."""
+        return self.lsf.asarray(step, self.channel, size, offset)
 
 
 class LSF(_detail.SpreadFunction):
     """
     A line spread function, drawn at the channels of the spectral axis of
-    data (see on).
+    data (see size and asarray, or on).
     """
 
     _TERMS_OPTION = 'lsfs'
@@ -280,34 +240,94 @@ class LSF(_detail.SpreadFunction):
         -------
         ChannelLSF
             The LSF at the channel.
+        """
+        return ChannelLSF(self, channel)
+
+    def size(self, step: float, channel: Channel) -> int:
+        """
+        Return the size of the array that holds the LSF at a channel.
+
+        Parameters
+        ----------
+        step : float
+            The width of the channels of the array (in the unit of the
+            axis, e.g. km/s).
+        channel : Channel
+            The channel.
+
+        Returns
+        -------
+        int
+            The number of channels, odd.
 
         Raises
         ------
         RuntimeError
-            If the LSF varies along the spectral axis (it is drawn as it is
-            at each channel; see at).
+            If the LSF varies along the spectral axis (see at), or its
+            wings are too heavy for a finite array.
         """
-        self._check_drawn()
-        return ChannelLSF(self, channel)
+        self._check_not_varying()
+        return _detail.odd_size(self, self._size_impl(step, channel))[0]
+
+    def asarray(
+            self,
+            step: float,
+            channel: Channel,
+            size: int | None = None,
+            offset: int = 0
+    ) -> np.ndarray:
+        """
+        Return the LSF at a channel on an array of channels, normalised to
+        sum to 1.
+
+        Parameters
+        ----------
+        step : float
+            The width of the channels of the array (in the unit of the
+            axis, e.g. km/s).
+        channel : Channel
+            The channel.
+        size : int, optional
+            The number of channels; by default, size(step, channel).
+        offset : int, optional
+            The offset of the centre of the LSF from the channel
+            size // 2. size + offset must be odd.
+
+        Returns
+        -------
+        ndarray
+            The LSF.
+
+        Raises
+        ------
+        RuntimeError
+            If the LSF varies along the spectral axis (see at), or size +
+            offset is even.
+        """
+        self._check_not_varying()
+        if size is None:
+            size = self.size(step, channel)
+        _detail.check_odd_centre((size,), (offset,), "LSF")
+        return self._asarray_impl(step, size, offset, channel)
 
     @abc.abstractmethod
     def _size_impl(self, step: float, channel: Channel) -> float:
         """
         The size of the array that holds the LSF at a channel, before
-        rounding (see ChannelLSF.size).
+        rounding (see size).
         """
 
     @abc.abstractmethod
     def _asarray_impl(
             self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
-        """The LSF on an array at a channel (see ChannelLSF.asarray)."""
+        """The LSF on an array at a channel (see asarray)."""
 
 
 def _offsets(size: int, step: float, offset: int) -> np.ndarray:
     """
     The offsets (in the unit of the axis, e.g. km/s) of the channels of an
-    array from its centre (see ChannelLSF.asarray).
+    array from its centre (see LSF.asarray).
     """
     center = size // 2 + offset
     return (np.arange(size) - center) * step
@@ -452,7 +472,7 @@ class LSFGGauss(_AnalyticLSF):
     def __init__(
             self,
             alpha: Annotated[_Width, Varying()],
-            beta: Annotated[float, Gt(0), Varying()]
+            beta: _GGaussBeta
     ):
         check_options(LSFGGauss.__init__, locals())
         super().__init__(alpha)
@@ -463,7 +483,7 @@ class LSFGGauss(_AnalyticLSF):
     def from_fwhm(
             cls,
             fwhm: Annotated[_Width, Varying()],
-            beta: Annotated[float, Gt(0), Varying()]
+            beta: _GGaussBeta
     ) -> 'LSFGGauss':
         """
         Make the generalised Gaussian of a full width at half maximum: of
@@ -581,7 +601,7 @@ class LSFMoffat(_AnalyticLSF):
     def __init__(
             self,
             alpha: Annotated[_Width, Varying()],
-            beta: Annotated[float, Gt(0.5), Varying()]
+            beta: _MoffatBeta
     ):
         check_options(LSFMoffat.__init__, locals())
         super().__init__(alpha)
@@ -592,7 +612,7 @@ class LSFMoffat(_AnalyticLSF):
     def from_fwhm(
             cls,
             fwhm: Annotated[_Width, Varying()],
-            beta: Annotated[float, Gt(0.5), Varying()]
+            beta: _MoffatBeta
     ) -> 'LSFMoffat':
         """
         Make the Moffat of a full width at half maximum: of alpha =
@@ -683,7 +703,7 @@ class LSFProfile(LSF):
         ValueError
             If the file has no 1D image, its header has invalid world
             coordinates, or step is not given and the axis has no unit of
-            velocity, wavelength or frequency.
+            velocity, wavelength, frequency or pixels.
         """
         check_options(LSFProfile.from_file, locals())
         filename, data, _, step = _read_profiles(file, step)
@@ -749,14 +769,14 @@ class LSFSum(_detail.SpreadFunctionSum, LSF):
         super().__init__(lsfs, weights, "a sum of LSFs")
 
     def _size_impl(self, step: float, channel: Channel) -> float:
-        return max(lsf.on(channel).size(step) for lsf in self._terms)
+        return max(lsf.size(step, channel) for lsf in self._terms)
 
     def _asarray_impl(
             self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
         # Each term holds its fraction of the light on the same grid
         return sum(
-            weight * lsf.on(channel).asarray(step, size, offset)
+            weight * lsf.asarray(step, channel, size, offset)
             for weight, lsf in zip(self._weights, self._terms))
 
 
@@ -778,7 +798,7 @@ class LSFConvolution(_detail.SpreadFunctionConvolution, LSF):
     def _size_impl(self, step: float, channel: Channel) -> float:
         # The sum of the (odd) sizes of the terms, less one for each
         # convolution
-        sizes = [lsf.on(channel).size(step) for lsf in self._terms]
+        sizes = [lsf.size(step, channel) for lsf in self._terms]
         return sum(sizes) - len(sizes) + 1
 
     def _asarray_impl(
@@ -786,7 +806,7 @@ class LSFConvolution(_detail.SpreadFunctionConvolution, LSF):
     ) -> np.ndarray:
         data = np.ones(1)
         for lsf in self._terms:
-            data = np.convolve(data, lsf.on(channel).asarray(step))
+            data = np.convolve(data, lsf.asarray(step, channel))
         return _detail.embed(data / data.sum(), (size,), (offset,))
 
 
@@ -842,9 +862,10 @@ class LSFHanning(LSF):
                 f"a Hanning smoothing of {self._channels:g} x "
                 f"{channel.width:g} {unit} (channels of the data) spans "
                 f"{spacing:g} of the channels it is drawn on ({step:g} "
-                f"{unit}), not a whole number of them: it is drawn on "
-                f"channels of the data divided by a multiple of {factor} (in "
-                f"a model, by an oversampling of the spectral axis)")
+                f"{unit}), not a whole number of them: draw it on channels "
+                f"of the data divided by a multiple of {factor} (in a model, "
+                f"of an oversampling of the spectral axis by a multiple of "
+                f"{factor})")
         return round(spacing)
 
     def _size_impl(self, step: float, channel: Channel) -> float:
@@ -879,21 +900,22 @@ def _read_profiles(
     data, header = read_image(file)
     data = np.asarray(data, dtype=float)
     wcs = parse_wcs(filename, header)
-    axis = float(wcs.pixel_scale_matrix[0, 0]) * u.Unit(wcs.wcs.cunit[0])
-    if axis.unit.is_equivalent(_KMS) or axis.unit.is_equivalent(u.m):
-        against = axis.value < 0
+    axis_step = (
+        float(wcs.pixel_scale_matrix[0, 0]) * u.Unit(wcs.wcs.cunit[0]))
+    unit = axis_step.unit
+    if unit.is_equivalent(_KMS) or unit.is_equivalent(u.m):
+        against = axis_step.value < 0
     else:
         # (frequencies, energies and wave numbers fall as velocities rise)
-        against = axis.value > 0 and axis.unit.is_equivalent(
+        against = axis_step.value > 0 and unit.is_equivalent(
             u.Hz, u.spectral())
     if step is None:
-        if not any(axis.unit.is_equivalent(x)
-                   for x in (_KMS, u.m, u.Hz, u.pix)):
+        if not any(unit.is_equivalent(x) for x in (_KMS, u.m, u.Hz, u.pix)):
             raise ValueError(
                 f"{filename}: the axis of the profiles has no unit of "
                 f"velocity, wavelength, frequency or pixels; give the width "
                 f"of their channels (step)")
-        step = abs(axis)
+        step = abs(axis_step)
     return filename, (data[..., ::-1] if against else data), wcs, step
 
 

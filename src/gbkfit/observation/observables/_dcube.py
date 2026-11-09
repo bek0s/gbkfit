@@ -122,7 +122,7 @@ def _varying_padding(
     whose PSF or LSF varies along the spectral axis, for the largest PSF
     and LSF of the channels of the data, and the size of the LSF arrays.
     Along z there is no FFT, so the padding is that of the LSF only. Raise
-    ConfigError if a channel of the data is beyond the velocities where
+    ValueError if a channel of the data is beyond the velocities where
     the PSF or the LSF is known.
     """
     psf, lsf = dcube.psf(), dcube.lsf()

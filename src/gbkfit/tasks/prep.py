@@ -666,11 +666,11 @@ def prep_psf_muse(
     options fwhm and beta of a Moffat PSF against wavelength (see
     gbkfit.prep.muse_psf_table).
     """
-    output_dir = _output_dir(output_dir, output_dir_mode)
     # (MUSE writes its PSF in the primary header of its cubes, of no
     # array: a header of keywords, not that of data)
-    filename = _write_table(
-        prep.muse_psf_table(fits.getheader(file, 0)), output_dir, 'psf')
+    table = prep.muse_psf_table(fits.getheader(file, 0))
+    output_dir = _output_dir(output_dir, output_dir_mode)
+    filename = _write_table(table, output_dir, 'psf')
     _log.info(
         f"the PSF is in {filename}; use it as psf: {{type: moffat, "
         f"fwhm: {{file: {filename}, points: wavelength, column: fwhm}}, "
@@ -741,11 +741,11 @@ def prep_lsf_kmos3d(
     primary header) as a table of its FWHM against wavelength (see
     gbkfit.prep.kmos3d_lsf_table).
     """
-    output_dir = _output_dir(output_dir, output_dir_mode)
     # (KMOS3D writes its resolving power in the primary header, of no
     # array, and its cube of the flux in the HDU after it)
     table = prep.kmos3d_lsf_table(
         fits.getheader(file, 0), read_header((file, 1)))
+    output_dir = _output_dir(output_dir, output_dir_mode)
     filename = _write_table(table, output_dir, 'lsf')
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, fwhm: "

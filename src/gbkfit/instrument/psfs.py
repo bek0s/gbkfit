@@ -50,6 +50,11 @@ _Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec'), Varying()]
 _Ratio: TypeAlias = Annotated[float, Gt(0), Le(1), Varying()]
 _Angle: TypeAlias = Annotated[float, Unit('deg'), Varying()]
 
+# The shapes of the generalised Gaussian and of the Moffat (for a finite
+# flux, beta > 1)
+_GGaussBeta: TypeAlias = Annotated[float, Gt(0), Varying()]
+_MoffatBeta: TypeAlias = Annotated[float, Gt(1), Varying()]
+
 
 class PSF(_detail.SpreadFunction):
     """
@@ -78,7 +83,7 @@ class PSF(_detail.SpreadFunction):
             If the PSF varies along the spectral axis (see at), or its
             wings are too heavy for a finite array.
         """
-        self._check_drawn()
+        self._check_not_varying()
         return _detail.odd_size(self, *self._size_impl(step))
 
     def asarray(
@@ -116,7 +121,7 @@ class PSF(_detail.SpreadFunction):
             If the PSF varies along the spectral axis (see at), or a size
             + offset is even.
         """
-        self._check_drawn()
+        self._check_not_varying()
         if size is None:
             size = self.size(step)
         _detail.check_odd_centre(size, offset, "PSF")
@@ -148,8 +153,9 @@ class PSF(_detail.SpreadFunction):
     def _beam_area_impl(self) -> float:
         """
         Return the solid angle of its beam (see beam_area): here, of the
-        PSF drawn on pixels of about 1/400 of its width, as the area of a
-        pixel over the peak (the PSF sums to 1).
+        PSF drawn on pixels of 1/400 of the width of its array of pixels of
+        1 arcsec (0.0025 arcsec, for a PSF narrower than that), as the area
+        of a pixel over the peak (the PSF sums to 1).
         """
         width = max(self.size((1.0, 1.0)))
         step = (width / 400, width / 400)
@@ -476,7 +482,7 @@ class PSFGGauss(_AnalyticPSF):
     def __init__(
             self,
             alpha: _Width,
-            beta: Annotated[float, Gt(0), Varying()],
+            beta: _GGaussBeta,
             ratio: _Ratio = 1.0,
             posa: _Angle = 0.0
     ):
@@ -489,7 +495,7 @@ class PSFGGauss(_AnalyticPSF):
     def from_fwhm(
             cls,
             fwhm: _Width,
-            beta: Annotated[float, Gt(0), Varying()],
+            beta: _GGaussBeta,
             ratio: _Ratio = 1.0,
             posa: _Angle = 0.0
     ) -> 'PSFGGauss':
@@ -565,7 +571,7 @@ class PSFMoffat(_AnalyticPSF):
     def __init__(
             self,
             alpha: _Width,
-            beta: Annotated[float, Gt(1), Varying()],
+            beta: _MoffatBeta,
             ratio: _Ratio = 1.0,
             posa: _Angle = 0.0
     ):
@@ -578,7 +584,7 @@ class PSFMoffat(_AnalyticPSF):
     def from_fwhm(
             cls,
             fwhm: _Width,
-            beta: Annotated[float, Gt(1), Varying()],
+            beta: _MoffatBeta,
             ratio: _Ratio = 1.0,
             posa: _Angle = 0.0
     ) -> 'PSFMoffat':

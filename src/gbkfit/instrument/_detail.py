@@ -254,7 +254,7 @@ class Response(TypedSerializable, abc.ABC):
         """
         raise NotImplementedError(f"{type(self).__name__}._at_impl")
 
-    def _check_drawn(self) -> None:
+    def _check_not_varying(self) -> None:
         """
         Raise RuntimeError if it varies along the spectral axis: then it is
         drawn (or applied) as it is at each point of it (see at), not
@@ -628,7 +628,7 @@ class SpreadFunctionTables(VaryingSpreadFunction):
             name: table.dump() for name, table in self._tables.items()}
 
     def __init__(self, cls: type, options: dict[str, Any]):
-        signature, self._make = constructor_of(cls, options)
+        func, self._make = constructor_of(cls, options)
         tables = {
             name: value for name, value in options.items()
             if isinstance(value, SpectralTable)}
@@ -636,12 +636,14 @@ class SpreadFunctionTables(VaryingSpreadFunction):
             raise ValueError(
                 f"none of the options of {cls.__qualname__} is a table of "
                 f"values along the spectral axis")
-        types = option_types(signature)
-        # The unit of the values of each option: of its annotation, or of
-        # its table for a Quantity (None)
+        types = option_types(func)
+        # The options that are Quantities, whose values are in the units
+        # of their tables, and the unit of the values of the others (that
+        # of their annotations)
+        self._quantities = set()
         self._units = {}
         for name, table in tables.items():
-            if name not in varying_options(signature):
+            if name not in varying_options(func):
                 raise ValueError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
@@ -650,8 +652,10 @@ class SpreadFunctionTables(VaryingSpreadFunction):
                 if given is None:
                     raise ValueError(
                         f"option '{name}' of {cls.__qualname__} has a unit: "
-                        f"give that of the values of its table (unit)")
-                self._units[name] = None
+                        f"give that of the values of its table (unit, of an "
+                        f"inline table; of a table file, its column in "
+                        f"units, e.g. units: {{<column>: Angstrom}})")
+                self._quantities.add(name)
                 continue
             unit = u.Unit(unit_of(types[name]) or '')
             if given is not None and not given.is_equivalent(unit):
@@ -664,7 +668,7 @@ class SpreadFunctionTables(VaryingSpreadFunction):
         self._constants = parse_options_for_callable(
             {name: value for name, value in options.items()
              if name not in tables},
-            signature, ignore_params=set(tables))
+            func, ignore_params=set(tables))
         self._tables = tables
         self._check()
 
@@ -715,11 +719,10 @@ class SpreadFunctionTables(VaryingSpreadFunction):
         the unit of the table, or floats in the unit of the option.
         """
         values = self._tables[name].at(points, convention)
-        unit = self._units[name]
-        if unit is None:
+        if name in self._quantities:
             return values
         if isinstance(values, u.Quantity):
-            values = values.to_value(unit)
+            values = values.to_value(self._units[name])
         return [float(x) for x in values]
 
     def velocity_range(

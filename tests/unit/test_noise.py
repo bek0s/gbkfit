@@ -128,6 +128,15 @@ def test_what_the_noise_refuses(options, psf, message):
             np.random.default_rng(), GRID, psf, SIGNAL)
 
 
+def test_a_spectral_correlation_is_drawn_on_the_channels_of_the_data():
+    # (a Hanning smoothing of half a channel is not: it needs channels of
+    # the data divided by 2, as of a model)
+    with pytest.raises(RuntimeError, match="the spectral correlation of the "
+                                           "noise is drawn on the channels"):
+        NoiseGauss(rms=1, spectral_correlation=LSFHanning(0.5)).draw(
+            np.random.default_rng(), GRID, None, SIGNAL)
+
+
 def test_a_varying_correlation_covers_the_channels():
     # Beyond the points of its table it would be that of the nearest, as
     # the PSF of a model may not be

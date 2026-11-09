@@ -52,14 +52,6 @@ __all__ = [
 _KMS = u.km / u.s
 
 
-class _NoConvention(ValueError):
-    """
-    The error of a conversion between velocities and wavelengths or
-    frequencies without the convention of the velocities of the spectral
-    axis (see _equivalency).
-    """
-
-
 def _convert(
         points: u.Quantity,
         unit: u.UnitBase,
@@ -72,27 +64,12 @@ def _convert(
     """
     if points.unit.is_equivalent(unit, u.spectral()):
         return points.to_value(unit, u.spectral())
-    return points.to_value(unit, _equivalency(convention))
-
-
-def _equivalency(
-        convention: VelocityConvention | None
-) -> u.Equivalency:
-    """
-    Return the equivalency of the velocities of the spectral axis of a
-    convention and its wavelengths or frequencies.
-
-    Raises
-    ------
-    ValueError
-        If there is no convention, or it has no rest.
-    """
     if convention is None:
-        raise _NoConvention(
+        raise ValueError(
             "velocities and wavelengths or frequencies are converted with "
             "the convention of the velocities of the spectral axis, which "
             "is not given")
-    return convention.equivalency()
+    return points.to_value(unit, convention.equivalency())
 
 
 def as_points(points: u.Quantity) -> u.Quantity:
@@ -197,11 +174,10 @@ def merged_points(points: Sequence[u.Quantity]) -> u.Quantity | None:
         The points.
     """
     unit = points[0].unit
-    try:
-        values = [_convert(x, unit, None) for x in points]
-    except _NoConvention:
+    if not all(x.unit.is_equivalent(unit, u.spectral()) for x in points):
         return None
-    return np.unique(np.concatenate(values)) * unit
+    return np.unique(np.concatenate([
+        x.to_value(unit, u.spectral()) for x in points])) * unit
 
 
 class SpectralPoints:
@@ -238,7 +214,9 @@ class SpectralPoints:
         if np.unique(points).size != points.size:
             raise ValueError(f"the points of {desc} must be distinct")
         self._points = points
+        # (the order of the points along their axis, and they in it)
         self._order = np.argsort(points.value)
+        self._sorted = points.value[self._order]
 
     def __len__(self) -> int:
         return self._points.size
@@ -283,10 +261,9 @@ class SpectralPoints:
         ValueError
             If the convention is needed but not given, or has no rest.
         """
-        order = self._order
         return np.interp(
-            self._of(at, convention), self._points.value[order],
-            values[order])
+            self._converted(at, convention), self._sorted,
+            values[self._order])
 
     def blend(
             self,
@@ -320,7 +297,7 @@ class SpectralPoints:
         """
         order = self._order
         positions = np.interp(
-            self._of(at, convention), self._points.value[order],
+            self._converted(at, convention), self._sorted,
             np.arange(len(order)))
         result = []
         for position in positions:
@@ -350,7 +327,7 @@ class SpectralPoints:
         velocities = to_velocities(self._points, convention)
         return float(velocities.min()), float(velocities.max())
 
-    def _of(
+    def _converted(
             self, at: u.Quantity, convention: VelocityConvention | None
     ) -> np.ndarray:
         """Other points, in the unit of the points."""

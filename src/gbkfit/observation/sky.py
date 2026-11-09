@@ -876,8 +876,8 @@ def _check_beams(
         # A beam for each channel, against the PSF at the point of each
         beams = [
             Beam(*values) for values in zip(beam.bmaj, beam.bmin, beam.bpa)]
-        psfs = [psf] * len(beams)
-        if psf is not None and psf.varies():
+        psfs = [None] * len(beams)
+        if psf is not None:
             try:
                 psfs = psf.at(
                     beam.spectral,
