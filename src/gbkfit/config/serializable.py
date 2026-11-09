@@ -11,17 +11,17 @@ import importlib.util
 import inspect
 import typing
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from typing import Any, ClassVar, Self
+from typing import Annotated, Any, ClassVar, Self
 
 import astropy.units
+import numpy as np
 
 import gbkfit.units
 from gbkfit.utils import funcutils, iterutils
 from .errors import ConfigError, config_path, quoted_names
 from .options import parse_options
 from .paths import parse_data_file, resolve_path
-from .types import (
-    DataFile, FilePath, option_types, type_problem, union_members)
+from .types import config_form, option_types, type_problem, union_members
 
 if typing.TYPE_CHECKING:
     from .parsers import TypedParser
@@ -31,6 +31,7 @@ __all__ = [
     'Serializable',
     'TypedSerializable',
     'config_constructor',
+    'dump_quantity',
     'from_config',
     'is_record',
     'make_typed_desc',
@@ -296,11 +297,12 @@ def parse_options_for_callable(
 
     Options of some types are given in a form of their own (see
     from_config): a FilePath is relative to the directory of the
-    configuration (see resolve_path), a DataFile is a filename or a dict
-    with the filename (file) and the HDU (hdu) or the path of its array
-    (path), a record (a NamedTuple, e.g. a Column) is a dict of its
-    fields, a Quantity is a dict with its value and unit
-    (e.g. {value: [1, 2], unit: kpc}), an object of a family (e.g. a
+    configuration (see resolve_path), a ScalarQuantity is its text (e.g.
+    '2.5 Angstrom'; see gbkfit.units.parse_quantity), a DataFile is a
+    filename or a dict with the filename (file) and the HDU (hdu) or the
+    path of its array (path), a record (a NamedTuple, e.g. a Column) is a
+    dict of its fields, another Quantity is a dict with its value and
+    unit (e.g. {value: [1, 2], unit: kpc}), an object of a family (e.g. a
     PSF) is a dict of its options with its type, one of another
     serializable class (e.g. an Instrument) is a dict of its options,
     and the items of a sequence and the values of a Mapping are in the
@@ -390,7 +392,9 @@ def from_config(value: Any, type_: Any) -> Any:
     # (an object given in Python, which may be a mapping, e.g. a Dataset)
     if isinstance(value, Serializable):
         return value
-    members = union_members(type_)
+    members = tuple(
+        member for x in union_members(type_)
+        for member in union_members(_bare(x)))
     if isinstance(value, str):
         return _from_string(value, members)
     if isinstance(value, Mapping):
@@ -400,13 +404,30 @@ def from_config(value: Any, type_: Any) -> Any:
     return value
 
 
+def _bare(type_: Any) -> Any:
+    """
+    Return an annotation without its metadata (e.g. its Unit), whose form
+    in configurations is that of its type; but for the types of a form of
+    their own (e.g. FilePath), which are annotations.
+    """
+    if typing.get_origin(type_) is Annotated and config_form(type_) is None:
+        return typing.get_args(type_)[0]
+    return type_
+
+
 def _from_string(value: str, members: tuple[Any, ...]) -> Any:
     """Return the value of a string, of the members of a union annotation."""
     for member in members:
-        if member == FilePath:
+        form = config_form(member)
+        if form == 'path':
             return resolve_path(value)
-        if member == DataFile:
+        if form == 'data_file':
             return parse_data_file(value)
+        if form == 'quantity':
+            try:
+                return gbkfit.units.parse_quantity(value)
+            except ValueError as e:
+                raise ConfigError(str(e)) from None
     return value
 
 
@@ -420,7 +441,7 @@ def _from_dict(value: Mapping[str, Any], members: tuple[Any, ...]) -> Any:
     if not others:
         return value
     member = others[0]
-    if member == DataFile:
+    if config_form(member) == 'data_file':
         return parse_data_file(value)
     if member is astropy.units.Quantity:
         return _quantity(value)
@@ -472,7 +493,7 @@ def _takes_dicts(type_: Any) -> bool:
     annotation as dicts (see from_config).
     """
     return (
-        type_ == DataFile
+        config_form(type_) == 'data_file'
         or type_ is astropy.units.Quantity
         or typing.get_origin(type_) in (dict, Mapping)
         or is_record(type_)
@@ -515,6 +536,28 @@ def is_record(type_: Any) -> bool:
     """
     return isinstance(type_, type) and issubclass(type_, tuple) \
         and hasattr(type_, '_fields')
+
+
+def dump_quantity(quantity: astropy.units.Quantity) -> dict[str, Any]:
+    """
+    Return the configuration of a Quantity: a dict with its value and its
+    unit (as gbkfit.units.format_unit writes it), which configurations
+    read back (see from_config).
+
+    Parameters
+    ----------
+    quantity : astropy.units.Quantity
+        The quantity: a number, or an array.
+
+    Returns
+    -------
+    dict
+        The configuration.
+    """
+    value = quantity.value
+    return dict(
+        value=value.tolist() if np.ndim(value) else float(value),
+        unit=gbkfit.units.format_unit(quantity.unit))
 
 
 def _quantity(info: Mapping[str, Any]) -> astropy.units.Quantity:

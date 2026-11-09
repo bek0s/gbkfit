@@ -25,7 +25,7 @@ from gbkfit.config import (
     DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
 from gbkfit.grid import Coords, VelocityConvention
 from gbkfit.io import (
-    header_beam, model_header, parse_wcs, read_header, read_image,
+    Beam, header_beam, model_header, parse_wcs, read_header, read_image,
     write_data, write_image)
 import gbkfit.math
 from . import _detail, varying
@@ -37,7 +37,6 @@ __all__ = [
     'PSFConvolution',
     'PSFGGauss',
     'PSFGauss',
-    'PSFGaussBeam',
     'PSFImage',
     'PSFImages',
     'PSFMoffat',
@@ -196,11 +195,13 @@ def _create_grid_2d(
     return np.sqrt(x * x + y * y / (ratio * ratio))
 
 
-class _AnalyticPSF(PSF):
+class _AnalyticPSF(_detail.GivenOptions, PSF):
     """
     A PSF of a profile of the elliptical radius r, round or elliptical by
     its axis ratio and the position angle of its major axis, drawn out to
-    its extent (see MIN_EXTENT).
+    its extent (see MIN_EXTENT). Configurations give its scale, or its
+    full width at half maximum along its major axis (see from_fwhm), and
+    dumps write the one given.
 
     Parameters
     ----------
@@ -209,6 +210,8 @@ class _AnalyticPSF(PSF):
     posa : float
         The position angle of the major axis.
     """
+
+    config_constructors = ('__init__', 'from_fwhm')
 
     def __init__(self, ratio: float, posa: float):
         self._ratio = ratio
@@ -282,9 +285,14 @@ class PSFPoint(PSF):
 
 class PSFGauss(_AnalyticPSF):
     """
-    A Gaussian, round or elliptical, by its sigma, axis ratio and angle.
+    A Gaussian, round or elliptical: by its sigma, its full width at half
+    maximum, or those of its axes, as of radio beams (also of the header
+    of a file).
 
-    Its profile is exp(-r^2 / 2 sigma^2).
+    Its profile is exp(-r^2 / 2 sigma^2). Configurations give its sigma,
+    its FWHM (see from_fwhm), its beam (see from_beam), or a file whose
+    header has its beam (see from_file: e.g. {type: gauss, file:
+    cube.fits}).
 
     Parameters
     ----------
@@ -296,6 +304,8 @@ class PSFGauss(_AnalyticPSF):
         The position angle of the major axis.
     """
 
+    config_constructors = ('__init__', 'from_fwhm', 'from_beam', 'from_file')
+
     @staticmethod
     def type() -> str:
         return 'gauss'
@@ -303,16 +313,6 @@ class PSFGauss(_AnalyticPSF):
     @staticmethod
     def type_title() -> str:
         return 'Gaussian'
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            sigma=self._sigma,
-            ratio=self._ratio,
-            posa=self._posa)
 
     def __init__(
             self,
@@ -323,6 +323,124 @@ class PSFGauss(_AnalyticPSF):
         check_options(PSFGauss.__init__, locals())
         super().__init__(ratio, posa)
         self._sigma = sigma
+        self._given_as(sigma=sigma, ratio=ratio, posa=posa)
+
+    @classmethod
+    def from_fwhm(
+            cls,
+            fwhm: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
+            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+    ) -> 'PSFGauss':
+        """
+        Make the Gaussian of a full width at half maximum along its major
+        axis: of sigma = FWHM / (2 sqrt(2 ln 2)).
+
+        Parameters
+        ----------
+        fwhm : float
+            The full width at half maximum along the major axis (arcsec).
+        ratio : float, optional
+            The axis ratio (minor over major), in (0, 1].
+        posa : float, optional
+            The position angle of the major axis.
+
+        Returns
+        -------
+        PSFGauss
+            The PSF.
+        """
+        check_options(PSFGauss.from_fwhm, locals())
+        return cls(gbkfit.math.gauss_fwhm_to_sigma(fwhm), ratio, posa) \
+            ._given_as(fwhm=fwhm, ratio=ratio, posa=posa)
+
+    @classmethod
+    def from_beam(
+            cls,
+            bmaj: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            bmin: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            bpa: Annotated[float, Unit('deg'), Varying()] = 0.0
+    ) -> 'PSFGauss':
+        """
+        Make the Gaussian of a radio beam: by the full widths at half
+        maximum of its axes and the angle of its major axis, as in the
+        headers of radio FITS files (BMAJ, BMIN and BPA).
+
+        Parameters
+        ----------
+        bmaj, bmin : float
+            The full widths at half maximum of the major and the minor
+            axes (arcsec).
+        bpa : float, optional
+            The position angle of the major axis.
+
+        Returns
+        -------
+        PSFGauss
+            The PSF.
+
+        Raises
+        ------
+        ValueError
+            If bmin is above bmaj.
+        """
+        check_options(PSFGauss.from_beam, locals())
+        if bmin > bmaj:
+            raise ValueError(
+                f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
+        return cls(gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa) \
+            ._given_as(bmaj=bmaj, bmin=bmin, bpa=bpa)
+
+    @classmethod
+    def from_file(cls, file: DataFile) -> 'PSFGauss':
+        """
+        Read the beam of a file, e.g. of the data, as datasets read it (see
+        header_beam): that of its header (BMAJ, BMIN and BPA, in degrees),
+        or the last that AIPS wrote in its history.
+
+        Parameters
+        ----------
+        file : DataFile
+            The file of the header, and where it is in it (see
+            read_header).
+
+        Returns
+        -------
+        PSFGauss
+            The PSF (see from_beam).
+
+        Raises
+        ------
+        ValueError
+            If the header has no beam, or the file has a beam for each
+            channel of its cube (a table BEAMS of CASA).
+        """
+        check_options(PSFGauss.from_file, locals())
+        filename = split_data_file(file)[0]
+        beam = header_beam(read_header(file), filename)
+        if beam is None:
+            raise ValueError(
+                f"{filename}: the header has no beam (BMAJ and BMIN, or one "
+                f"in the history of AIPS)")
+        if beam.spectral is not None:
+            raise ValueError(
+                f"{filename}: the cube has a beam for each channel (its "
+                f"table BEAMS): give them as a table of the options (prep "
+                f"psf_casa_beams)")
+        return cls.from_beam(beam.bmaj, beam.bmin, beam.bpa)
+
+    def beam(self) -> Beam:
+        """
+        Return it as a radio beam: the full widths at half maximum of its
+        axes (arcsec) and the position angle of its major axis.
+
+        Returns
+        -------
+        Beam
+            The beam.
+        """
+        fwhm = float(self._sigma * np.sqrt(8 * np.log(2)))
+        return Beam(fwhm, fwhm * self._ratio, self._posa)
 
     def _beam_area_impl(self) -> float:
         # (2 pi sigma^2 times the axis ratio)
@@ -344,9 +462,11 @@ class PSFGauss(_AnalyticPSF):
 class PSFGGauss(_AnalyticPSF):
     """
     A Gaussian with a shape parameter beta: flat-topped above 2, peaked
-    below 2, exponential at 1.
+    below 2, exponential at 1; by its scale or its full width at half
+    maximum.
 
     Its profile is exp(-(r / alpha)^beta), round or elliptical.
+    Configurations give its scale, or its FWHM (see from_fwhm).
 
     Parameters
     ----------
@@ -368,17 +488,6 @@ class PSFGGauss(_AnalyticPSF):
     def type_title() -> str:
         return 'Generalised Gaussian'
 
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            alpha=self._alpha,
-            beta=self._beta,
-            ratio=self._ratio,
-            posa=self._posa)
-
     def __init__(
             self,
             alpha: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
@@ -390,6 +499,40 @@ class PSFGGauss(_AnalyticPSF):
         super().__init__(ratio, posa)
         self._alpha = alpha
         self._beta = beta
+        self._given_as(alpha=alpha, beta=beta, ratio=ratio, posa=posa)
+
+    @classmethod
+    def from_fwhm(
+            cls,
+            fwhm: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            beta: Annotated[float, Gt(0), Varying()],
+            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
+            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+    ) -> 'PSFGGauss':
+        """
+        Make the generalised Gaussian of a full width at half maximum
+        along its major axis: of alpha = FWHM / (2 (ln 2)^(1 / beta)).
+
+        Parameters
+        ----------
+        fwhm : float
+            The full width at half maximum along the major axis (arcsec).
+        beta : float
+            The shape, > 0.
+        ratio : float, optional
+            The axis ratio (minor over major), in (0, 1].
+        posa : float, optional
+            The position angle of the major axis.
+
+        Returns
+        -------
+        PSFGGauss
+            The PSF.
+        """
+        check_options(PSFGGauss.from_fwhm, locals())
+        alpha = fwhm / (2 * np.log(2) ** (1 / beta))
+        return cls(alpha, beta, ratio, posa)._given_as(
+            fwhm=fwhm, beta=beta, ratio=ratio, posa=posa)
 
     def _beam_area_impl(self) -> float:
         # (2 pi alpha^2 Gamma(2 / beta) / beta times the axis ratio)
@@ -414,9 +557,11 @@ class PSFGGauss(_AnalyticPSF):
 
 class PSFMoffat(_AnalyticPSF):
     """
-    The usual model of atmospheric seeing: a core with power-law wings.
+    The usual model of atmospheric seeing: a core with power-law wings; by
+    its scale or its full width at half maximum.
 
     Its profile is (1 + (r / alpha)^2)^(-beta), round or elliptical.
+    Configurations give its scale, or its FWHM (see from_fwhm).
 
     Parameters
     ----------
@@ -438,17 +583,6 @@ class PSFMoffat(_AnalyticPSF):
     def type_title() -> str:
         return 'Moffat'
 
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            alpha=self._alpha,
-            beta=self._beta,
-            ratio=self._ratio,
-            posa=self._posa)
-
     def __init__(
             self,
             alpha: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
@@ -460,6 +594,41 @@ class PSFMoffat(_AnalyticPSF):
         super().__init__(ratio, posa)
         self._alpha = alpha
         self._beta = beta
+        self._given_as(alpha=alpha, beta=beta, ratio=ratio, posa=posa)
+
+    @classmethod
+    def from_fwhm(
+            cls,
+            fwhm: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            beta: Annotated[float, Gt(1), Varying()],
+            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
+            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+    ) -> 'PSFMoffat':
+        """
+        Make the Moffat of a full width at half maximum along its major
+        axis (e.g. of the seeing): of alpha = FWHM / (2 sqrt(2^(1 / beta)
+        - 1)).
+
+        Parameters
+        ----------
+        fwhm : float
+            The full width at half maximum along the major axis (arcsec).
+        beta : float
+            The slope of the wings, > 1.
+        ratio : float, optional
+            The axis ratio (minor over major), in (0, 1].
+        posa : float, optional
+            The position angle of the major axis.
+
+        Returns
+        -------
+        PSFMoffat
+            The PSF.
+        """
+        check_options(PSFMoffat.from_fwhm, locals())
+        alpha = fwhm / (2 * np.sqrt(2 ** (1 / beta) - 1))
+        return cls(alpha, beta, ratio, posa)._given_as(
+            fwhm=fwhm, beta=beta, ratio=ratio, posa=posa)
 
     def _beam_area_impl(self) -> float:
         # (pi alpha^2 / (beta - 1) times the axis ratio)
@@ -767,121 +936,6 @@ class PSFConvolution(PSF):
         return _detail.embed(data / data.sum(), size, offset)
 
 
-class PSFGaussBeam(PSF):
-    """
-    A Gaussian by the FWHM of its axes and their angle, as in the header
-    of radio FITS files (BMAJ, BMIN, BPA).
-
-    Configurations give it by its axes, or by a FITS file whose header
-    has them (see from_file), e.g. {type: gauss_beam, file: cube.fits}.
-
-    Parameters
-    ----------
-    bmaj, bmin : float
-        The full widths at half maximum of the major and the minor axes
-        (arcsec).
-    bpa : float, optional
-        The position angle of the major axis.
-    """
-
-    config_constructors = ('__init__', 'from_file')
-
-    @staticmethod
-    def type() -> str:
-        return 'gauss_beam'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Gaussian, by FWHM (radio beam)'
-
-    @classmethod
-    def from_file(cls, file: DataFile) -> 'PSFGaussBeam':
-        """
-        Read the beam of a file, e.g. of the data, as datasets read it (see
-        header_beam): that of its header (BMAJ, BMIN and BPA, in degrees),
-        or the last that AIPS wrote in its history.
-
-        Parameters
-        ----------
-        file : str or tuple
-            The file: a filename, or a filename and the HDU of the header.
-
-        Returns
-        -------
-        PSFGaussBeam
-            The PSF.
-
-        Raises
-        ------
-        ValueError
-            If the header has no beam, or the file has a beam for each
-            channel of its cube (a table BEAMS of CASA).
-        """
-        check_options(PSFGaussBeam.from_file, locals())
-        filename = split_data_file(file)[0]
-        beam = header_beam(read_header(file), filename)
-        if beam is None:
-            raise ValueError(
-                f"{filename}: the header has no beam (BMAJ and BMIN, or one "
-                f"in the history of AIPS)")
-        if beam.spectral is not None:
-            raise ValueError(
-                f"{filename}: the cube has a beam for each channel (its "
-                f"table BEAMS): give them as a table of the options (prep "
-                f"psf_casa_beams)")
-        return cls(beam.bmaj, beam.bmin, beam.bpa)
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(), bmaj=self._bmaj, bmin=self._bmin, bpa=self._bpa)
-
-    def __init__(
-            self,
-            bmaj: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
-            bmin: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
-            bpa: Annotated[float, Unit('deg'), Varying()] = 0.0
-    ):
-        check_options(PSFGaussBeam.__init__, locals())
-        if bmin > bmaj:
-            raise ValueError(
-                f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
-        self._bmaj = bmaj
-        self._bmin = bmin
-        self._bpa = bpa
-        self._gauss = PSFGauss(
-            gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa)
-
-    def bmaj(self) -> float:
-        """Return the full width at half maximum of the major axis."""
-        return self._bmaj
-
-    def bmin(self) -> float:
-        """Return the full width at half maximum of the minor axis."""
-        return self._bmin
-
-    def bpa(self) -> float:
-        """Return the position angle of the major axis."""
-        return self._bpa
-
-    def _beam_area_impl(self) -> float:
-        return self._gauss.beam_area()
-
-    def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        return self._gauss._size_impl(step)
-
-    def _asarray_impl(
-            self,
-            step: tuple[float, float],
-            size: tuple[int, int],
-            offset: tuple[int, int],
-            rota: float
-    ) -> np.ndarray:
-        return self._gauss._asarray_impl(step, size, offset, rota)
-
-
 def _read_images(
         file: DataFile, spectral_axis: int | None = None
 ) -> tuple[np.ndarray, astropy.wcs.WCS]:
@@ -1047,5 +1101,4 @@ psf_parser = TypedParser(PSF, [
     PSFImage,
     PSFSum,
     PSFConvolution,
-    PSFGaussBeam,
     PSFImages])

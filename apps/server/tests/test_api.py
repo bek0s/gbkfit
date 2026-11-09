@@ -203,7 +203,7 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
     # (of an elliptical one, its widths along its axes, and its angle)
     beam = client.post('/api/v1/views/psf', json=dict(
         project='study', options=dict(
-            type='gauss_beam', bmaj=6, bmin=3, bpa=30))).json()
+            type='gauss', bmaj=6, bmin=3, bpa=30))).json()
     assert np.allclose(beam['axes'], [6, 3, 30], rtol=0.01)
     # (on the pixels of data)
     psf = client.post('/api/v1/views/psf', json=dict(
@@ -214,15 +214,22 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
         project='study', options=dict(type='point'))).json()
     assert point['values'] == [[1.0]] and point['fwhm'] is None
     assert point['axes'] is None
+    kms = '10 km/s'
     lsf = client.post('/api/v1/views/lsf', json=dict(
-        project='study', options=dict(type='gauss', sigma=10))).json()
+        project='study', options=dict(type='gauss', sigma=kms))).json()
     assert np.isclose(lsf['fwhm'], 10 * 2 * np.sqrt(2 * np.log(2)), rtol=1e-3)
-    # (a Hanning smoothing: on channels of which its width is a multiple)
+    # (a Hanning smoothing, of the channels it is drawn on: of the data)
     lsf = client.post('/api/v1/views/lsf', json=dict(
         project='study', options=dict(type='convolution', lsfs=[
-            dict(type='gauss', sigma=10), dict(type='hanning', width=10)]))
-    ).json()
-    assert (10 / lsf['step']) % 1 == 0, lsf['step']
+            dict(type='gauss', sigma=kms), dict(type='hanning')]),
+        step=10)).json()
+    assert lsf['step'] == 10
+    # (a width in Angstrom needs the rest of the data)
+    response = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(
+            type='gauss', fwhm='2.5 Angstrom')))
+    assert response.status_code == 400
+    assert "give the width in km/s" in response.json()['detail']
     # (of an image of the project, relative to it)
     os.makedirs(os.path.join(root, 'study/data'), exist_ok=True)
     y, x = np.mgrid[-10:11, -10:11]
@@ -240,9 +247,12 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
             project='study', options=options))
         assert response.status_code == 400
         assert message in response.json()['detail'], response.json()
-    assert client.post('/api/v1/views/lsf', json=dict(
-        project='study', options=dict(type='gauss', sigma=10),
-        step=0.001)).status_code == 400
+    response = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(
+            type='gauss', sigma='10 km/s'),
+        step=0.001))
+    assert response.status_code == 400
+    assert "channels of 0.001 km/s" in response.json()['detail']
 
 
 def test_the_traits_each_type_of_component_takes_are_given(client):

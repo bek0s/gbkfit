@@ -59,7 +59,7 @@ def test_psf_options_vary_with_wavelength(tmp_path, source):
 def test_beams_vary_with_frequency():
     # The velocities of an axis of a rest frequency are radio
     beam = psf_parser.load(dict(
-        type='gauss_beam', bmin=1.0,
+        type='gauss', bmin=1.0,
         bmaj=dict(points=dict(value=[1419.0, 1421.0], unit='MHz'),
                   values=[3.0, 2.0])))
     rest = 1420.405752 * u.MHz
@@ -71,24 +71,22 @@ def test_beams_vary_with_frequency():
         np.interp(frequencies, [1419.0, 1421.0], [3.0, 2.0]), rtol=1e-9)
 
 
-def test_lsf_widths_in_wavelength_are_converted_to_km_s_of_the_light():
-    # A width of dw at the wavelength w is c dw / w; on an axis of optical
-    # velocities, stretched by w / rest, it is c dw / rest
+def test_lsf_widths_keep_the_unit_of_their_table():
+    # Interpolated in Angstrom, a width that spans c dw / rest km/s of an
+    # axis of optical velocities at each channel (see Channel.span)
+    from gbkfit.instrument import Channel
     lsf = lsf_parser.load(dict(type='gauss', sigma=dict(
         points=dict(value=[-100, 100], unit='km/s'), values=[1.0, 2.0],
         unit='Angstrom')))
     convention = VelocityConvention(6562.8 * u.AA)
     velocities = np.array([0.0, 100.0])
-    wavelengths = 6562.8 * (1 + velocities / C)
     lsfs = lsf.at(velocities * KMS, convention)
-    widths = np.array([1.5, 2.0])
+    assert [x.dump()['sigma'] for x in lsfs] == [
+        '1.5 Angstrom', '2.0 Angstrom']
     np.testing.assert_allclose(
-        [x.dump()['sigma'] for x in lsfs], C * widths / wavelengths,
-        rtol=1e-6)
-    np.testing.assert_allclose(
-        [x.stretched(k).dump()['sigma']
-         for x, k in zip(lsfs, convention.stretch(velocities))],
-        C * widths / 6562.8, rtol=1e-6)
+        [Channel(v, None, convention).span(x._scale)
+         for x, v in zip(lsfs, velocities)],
+        C * np.array([1.5, 2.0]) / 6562.8, rtol=1e-12)
 
 
 def test_sums_of_varying_psfs_vary():
@@ -132,11 +130,14 @@ def kms(values):
 
 
 @pytest.mark.parametrize('info, error, message', [
-    (dict(type='hanning', width=dict(points=kms([0]), values=[1])),
-     ConfigError, "option 'width' must be of type float"),
+    (dict(type='hanning', channels=dict(points=kms([0]), values=[1])),
+     ConfigError, "option 'channels' must be of type float"),
     # Of the values and the points of tables, which the constructors check
-    (dict(type='gauss', sigma=dict(points=kms([0, 1]), values=[1, -1])),
-     ValueError, "option 'sigma' must be greater than 0"),
+    (dict(type='gauss', sigma=dict(
+        points=kms([0, 1]), values=[1, -1], unit='km/s')),
+     ValueError, "at 1.0 km s-1: option 'sigma' must be greater than 0"),
+    (dict(type='gauss', sigma=dict(points=kms([0, 1]), values=[1, 2])),
+     ValueError, "option 'sigma' of LSFGauss has a unit"),
     (dict(type='gauss', sigma=dict(points=[1, 2], values=[1, 1])),
      ConfigError, "sigma: option 'points' must be of type Quantity"),
     (dict(type='gauss', sigma=dict(points=kms([0, 0]), values=[1, 1])),
@@ -204,9 +205,10 @@ def test_lsf_images_from_files(tmp_path):
     # rows, and the width of the channels from the columns (km/s)
     import astropy.io.fits
     import astropy.wcs
-    from gbkfit.instrument import LSFGauss, LSFImage
+    from gbkfit.instrument import Channel, LSFGauss, LSFImage
     profiles = np.stack([
-        LSFGauss(sigma).asarray(5, 41) for sigma in (20, 40)])
+        LSFGauss(sigma * KMS).on(Channel()).asarray(5, 41)
+        for sigma in (20, 40)])
     wcs = astropy.wcs.WCS(naxis=2)
     wcs.wcs.ctype = ['', 'WAVE']
     wcs.wcs.cunit = ['km/s', 'Angstrom']
@@ -218,7 +220,7 @@ def test_lsf_images_from_files(tmp_path):
     lsf = lsf_parser.load(dict(type='images', file=str(path)))
     assert lsf.varies()
     dumped = lsf_parser.dump(lsf, prefix=str(tmp_path / 'd_'))
-    assert dumped['step'] == 5
+    assert dumped['step'] == '5.0 km s-1'
     points = dumped['points']
     np.testing.assert_allclose(
         u.Quantity(points['value'], points['unit']).to_value(u.AA),
@@ -226,8 +228,9 @@ def test_lsf_images_from_files(tmp_path):
     # Halfway between the points, half of each profile
     middle = lsf_parser.load(dict(dumped)).at(6000 * u.AA)
     np.testing.assert_allclose(
-        middle.asarray(5, 41),
-        LSFImage((profiles[0] + profiles[1]) / 2, 5).asarray(5, 41),
+        middle.on(Channel()).asarray(5, 41),
+        LSFImage((profiles[0] + profiles[1]) / 2, 5 * KMS).on(
+            Channel()).asarray(5, 41),
         atol=1e-12)
 
 
@@ -305,18 +308,37 @@ def test_tables_are_checked_together_at_their_points():
     # above the bmaj of another
     ghz = dict(value=[1.0, 1.1, 1.2], unit='GHz')
     psf = psf_parser.load(dict(
-        type='gauss_beam', bmaj=dict(points=ghz, values=[10.0, 9.9995, 9.999]),
+        type='gauss', bmaj=dict(points=ghz, values=[10.0, 9.9995, 9.999]),
         bmin=dict(points=ghz, values=[9.9994, 9.999, 9.998])))
     assert psf.at(1.2 * u.GHz).dump()['bmin'] == 9.998
     # Values are compared in the units of the options
     psf_parser.load(dict(
-        type='gauss_beam', bmaj=dict(points=ghz, values=[10.0, 10.0, 10.0]),
+        type='gauss', bmaj=dict(points=ghz, values=[10.0, 10.0, 10.0]),
         bmin=dict(points=ghz, values=[9000, 9500, 9900], unit='mas')))
     # Values invalid together are refused, at the point where they are
     with pytest.raises(
             ValueError, match="at 1.1 GHz: bmin must be at most bmaj"):
         psf_parser.load(dict(
-            type='gauss_beam',
+            type='gauss',
             bmaj=dict(points=ghz, values=[10.0, 10.0, 10.0]),
             bmin=dict(points=dict(value=[1.0, 1.15, 1.2], unit='GHz'),
                       values=[9.0, 11.0, 9.0])))
+
+
+def test_lsfs_vary_by_their_fwhm():
+    # A table of the FWHM, as specifications give it (e.g. that of MUSE),
+    # and of the shape: the profile of each at each channel
+    from gbkfit.instrument import LSFMoffat
+    lsf = lsf_parser.load(dict(
+        type='moffat',
+        fwhm=dict(points=dict(value=[5000, 9000], unit='Angstrom'),
+                  values=[2.8, 2.4], unit='Angstrom'),
+        beta=dict(points=dict(value=[5000, 9000], unit='Angstrom'),
+                  values=[2.0, 3.0])))
+    at = lsf.at(7000 * u.AA)
+    expected = LSFMoffat.from_fwhm(2.6 * u.AA, 2.5)
+    assert at.dump()['beta'] == 2.5
+    from gbkfit.units import parse_quantity
+    assert u.isclose(parse_quantity(at.dump()['fwhm']), 2.6 * u.AA)
+    assert u.isclose(at._scale, expected._scale)
+    assert lsf_parser.dump(lsf)['fwhm']['unit'] == 'Angstrom'

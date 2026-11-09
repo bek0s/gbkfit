@@ -1,6 +1,6 @@
 # thin_disk_cube: A thin disk in a cube, float64: the plain path from a configuration to the chi-square.
 # (written by make_golden.py; do not edit)
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - components:
@@ -32,7 +32,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20}
+    lsf: {type: gauss, sigma: 20 km/s}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float64

@@ -1,6 +1,6 @@
 # blobs_maps_selection: The moment maps of a disk whose density is an exponential, three blobs (a mixture) and a map of 4 x 4 cells, within a range of radii and of azimuths (selection traits).
 # (written by make_golden.py; do not edit)
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - components:
@@ -32,17 +32,15 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation0_moment0_d.fits, error: observation0_moment0_e.fits}
-    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits,
-      error: observation0_moment1_e.fits}
-    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits,
-      error: observation0_moment2_e.fits}
+    moment1: {data: observation0_moment1_d.fits, mask: observation0_moment1_m.fits, error: observation0_moment1_e.fits}
+    moment2: {data: observation0_moment2_d.fits, mask: observation0_moment2_m.fits, error: observation0_moment2_e.fits}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight: {type: flat}
   foreground: {lens: null}
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20}
+    lsf: {type: gauss, sigma: 20 km/s}
   observable:
     type: pixel_moments
     spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}
@@ -73,8 +71,7 @@ params:
     pt1_s: [0.6, 0.8, 0.6]
     pt1_q: [0.6, 0.8, 1]
     pt1_p: [0, 30, 0]
-    pt2_a: [0.05, 0.1, 0.1, 0.05, 0.1, 0.2, 0.2, 0.1, 0.1, 0.2, 0.35, 0.1, 0.05,
-      0.1, 0.1, 0.05]
+    pt2_a: [0.05, 0.1, 0.1, 0.05, 0.1, 0.2, 0.2, 0.1, 0.1, 0.2, 0.35, 0.1, 0.05, 0.1, 0.1, 0.05]
     spt_rmin: 0.5
     spt_rmax: 7.2
     spt1_p: 10

@@ -15,6 +15,7 @@ from gbkfit.config import config_path, parse_options, warn
 from gbkfit.grid import (
     Coords, Grid, SpectralAxis, make_cube_grid, make_grid, per_axis,
     pixels_on, rest_of_convention)
+from gbkfit.instrument import Channel
 from gbkfit.io import read_column, write_data
 from .data import Data, DataColumns, DataFiles, dump_data
 
@@ -507,9 +508,10 @@ def grid_noise_correlation(
             grid.coords.step[:2], (2 * nx - 1, 2 * ny - 1),
             rota=grid.coords.rota), key)
     if spectral is not None:
-        axis = grid.spectral_axis
-        spectral = _centred(spectral.asarray(
-            abs(grid.coords.step[axis]), 2 * grid.size[axis] - 1), key)
+        # (drawn at the middle channel, of the widths of the light there)
+        channel = Channel.middle(grid)
+        spectral = _centred(spectral.on(channel).asarray(
+            channel.width, 2 * grid.size[grid.spectral_axis] - 1), key)
     return NoiseCorrelation(spatial, spectral)
 
 

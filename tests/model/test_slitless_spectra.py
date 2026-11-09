@@ -163,7 +163,8 @@ def test_slitless_spectra_refuse_an_lsf_and_frequencies():
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
             line_of_sight=dict(type='flat'),
-            observable=SLITLESS | dict(lsf=dict(type='gauss', sigma=15)))])
+            observable=SLITLESS | dict(lsf=dict(
+                type='gauss', sigma='15 km/s')))])
     with pytest.raises(ValueError, match="rest wavelength"):
         observation_group([dict(
             driver=dict(type='host'), galaxy=GALAXY,
@@ -386,7 +387,7 @@ def test_an_aperture_lets_the_spectrograph_blur_the_spectra(driver):
     shutter = SLITLESS | dict(aperture=dict(type='shutters', size=[3, 6]))
     sharp = evaluate(driver, shutter)
     blurred = evaluate(driver, shutter | dict(
-        lsf=dict(type='gauss', sigma=40)))
+        lsf=dict(type='gauss', sigma='40 km/s')))
     assert blurred.sum() == pytest.approx(sharp.sum(), rel=1e-3)
     assert blurred.max() < 0.9 * sharp.max()
 

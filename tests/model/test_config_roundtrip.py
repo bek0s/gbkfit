@@ -9,7 +9,9 @@ import copy
 import io
 import json
 import pathlib
+import typing
 
+import astropy.units
 import jsonschema
 import numpy as np
 import pytest
@@ -25,6 +27,7 @@ import gbkfit.params
 import gbkfit.instrument
 from gbkfit.config.catalogue import family_of
 from gbkfit.model.components import traits
+from gbkfit.config import option_types
 from gbkfit.utils import funcutils
 from modelutils import config_group_plan
 
@@ -41,7 +44,8 @@ SAMPLE_OPTIONS = dict(
     nblobs=2, order=1, origin=0, alpha=1.5, beta=2, sigma=1, gamma=1,
     axis=0, angle=10, weight=2,
     psfs=[dict(type='gauss', sigma=1), dict(type='point')],
-    lsfs=[dict(type='gauss', sigma=1), dict(type='point')],
+    lsfs=[dict(type='gauss', sigma='1 km/s'),
+          dict(type='point')],
     weights=[1, 2], bmaj=3, bmin=2,
     fwhm=10, x=1, y=2, radius=3, a=2, b=1, length=4, width=1,
     vertices=[[0, 0], [1, 0], [0, 1]], coefficients=dict(type='uniform'),
@@ -59,10 +63,16 @@ def roundtrip(parser, info):
 
 
 def sample_info(cls):
-    """A configuration of a type, with its required options."""
+    """
+    A configuration of a type, with its required options: those of
+    Quantities (e.g. the widths of LSFs) in km/s.
+    """
     required = funcutils.parameter_names(cls.__init__).required
+    types = option_types(cls.__init__)
     return dict(type=cls.type()) | {
-        name: SAMPLE_OPTIONS[name] for name in required}
+        name: f'{SAMPLE_OPTIONS[name]} km/s'
+        if typing.get_args(types.get(name))[:1] == (astropy.units.Quantity,)
+        else SAMPLE_OPTIONS[name] for name in required}
 
 
 def registered_types(parsers):
@@ -147,6 +157,8 @@ def test_config_roundtrip(config):
 
 
 GAUSS = dict(type='gauss', sigma=1)
+# (in the form of its dump: km/s as gbkfit writes it)
+GAUSS_LSF = dict(type='gauss', sigma='1.0 km s-1')
 
 # Each type of observable, in an observation with every option set to a
 # value other than its default
@@ -160,14 +172,14 @@ OBSERVABLES = dict(
             size=11, step=10, rpix=5, rval=3, convention='log',
             rest='6.56461e-07 m', medium='air'),
         smooth_weights=True),
-        dict(psf=GAUSS, lsf=GAUSS), [2, 1, 1]),
+        dict(psf=GAUSS, lsf=GAUSS_LSF), [2, 1, 1]),
     slit_spectra=(dict(
         size=[20], step=[2], rpix=[3], rval=[1], rota=10,
         spectral=dict(
             size=11, step=10, rpix=5, rval=3, convention='log',
             rest='6.56461e-07 m', medium='air'),
         slit_width=3, smooth_weights=True),
-        dict(psf=GAUSS, lsf=GAUSS), [2, 1]),
+        dict(psf=GAUSS, lsf=GAUSS_LSF), [2, 1]),
     slitless_spectra=(dict(
         size=[20, 16], step=[2, 1], rpix=[3, 4], rval=[1, 2], rota=10,
         spectral=dict(
@@ -183,7 +195,7 @@ OBSERVABLES = dict(
         spectral=dict(
             size=201, step=2, rpix=99, rval=1500, convention='log',
             rest='6.56461e-07 m')),
-        dict(psf=GAUSS, lsf=GAUSS), [2, 1]))
+        dict(psf=GAUSS, lsf=GAUSS_LSF), [2, 1]))
 
 
 # A line of sight with a depth axis other than the default one

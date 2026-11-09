@@ -50,6 +50,7 @@ __all__ = [
     'find',
     'merge_params',
     'open',
+    'piece_folder',
     'resolve'
 ]
 
@@ -58,9 +59,9 @@ FORMAT = 'gbkfit-project'
 # The version of the format of configurations, which projects (their
 # marker) and configuration files (their section 'version') carry: 2, the
 # configurations of 2026-10-25 on, 3, of 2026-10-28 on, 4, of 2026-11-04
-# on, 5, of 2026-11-05 on, and 6, of 2026-11-08 on; gbkfit.migration
-# rewrites the older ones
-FORMAT_VERSION = 6
+# on, 5, of 2026-11-05 on, 6, of 2026-11-08 on, and 7, of 2026-11-09 on;
+# gbkfit.migration rewrites the older ones
+FORMAT_VERSION = 7
 MARKER = 'gbkfit-project.yaml'
 
 # The folders of the pieces, by the sections and options of the
@@ -69,6 +70,19 @@ _FOLDERS = dict(
     galaxies='galaxies', observations='observations', data='datasets',
     psf='psfs', lsf='lsfs', noise='noise', params='params',
     fitter='fitters')
+
+
+def piece_folder(section: str) -> str:
+    """
+    Return the folder of the pieces of a section or an option of the
+    configurations that name them (e.g. 'lsfs', of 'lsf'; see the module).
+
+    Raises
+    ------
+    KeyError
+        If no pieces are of the section.
+    """
+    return _FOLDERS[section]
 
 
 def _yaml() -> ruamel.yaml.YAML:
@@ -136,7 +150,7 @@ observable:
 line_of_sight: {type: flat}
 instrument:
   psf: {type: gauss, sigma: 1.5}
-  lsf: {type: gauss, sigma: 15.0}
+  lsf: {type: gauss, sigma: 15 km/s}
 """,
     'datasets': """\
 # A dataset: here a cube and its errors (FITS files; paths relative to the
@@ -153,10 +167,12 @@ type: gauss
 sigma: 1.5
 """,
     'lsfs': """\
-# An LSF: here a Gaussian of dispersion 15 km/s. Observations name it in
-# their instrument (lsf: <name>).
+# An LSF: here a Gaussian of dispersion 15 km/s (of the light; a width in
+# Angstrom, kHz or pixels of the data, or its fwhm instead of sigma, as
+# the instrument gives it). Observations name it in their instrument (lsf:
+# <name>).
 type: gauss
-sigma: 15.0
+sigma: 15 km/s
 """,
     'noise': """\
 # A noise, of mock data: here Gaussian, of dispersion 0.01 at every value.

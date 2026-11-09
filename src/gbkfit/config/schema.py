@@ -34,8 +34,8 @@ import numpy.typing as npt
 from .catalogue import Family, family_of
 from .serializable import Serializable, is_record
 from .types import (
-    Choices, DataFile, FilePath, describe_type, is_varying, option_types,
-    unit_of)
+    Choices, DataFile, FilePath, config_form, describe_type, is_varying,
+    option_types, unit_kinds_of, unit_of)
 
 
 __all__ = [
@@ -217,6 +217,14 @@ class SchemaWriter:
     def _annotated(self, type_: Any) -> dict[str, Any]:
         """Return the schema of an Annotated annotation."""
         inner, *metadata = typing.get_args(type_)
+        if config_form(type_) == 'quantity':
+            # (its text, with the units of its kinds, e.g. for the units a
+            # form suggests; its bounds are checked when it is read)
+            schema = {'type': 'string', 'format': 'quantity'}
+            if (kinds := unit_kinds_of(type_)) is not None:
+                schema['unit_kinds'] = {
+                    kind: list(units) for kind, units in kinds.kinds}
+            return schema
         schema = self.option(inner)
         for marker in metadata:
             if (bound := _BOUNDS.get(type(marker))) is not None:

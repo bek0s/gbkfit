@@ -7,7 +7,7 @@
 // forms. A file is one of the project (imported or uploaded), and its
 // array, if it has several. What the form cannot edit (e.g. a table along
 // the spectral axis) is shown as it is, and kept.
-import { NumberInput, Slider } from '@mantine/core';
+import { Autocomplete, NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
 import { FileSources } from './FileSources';
@@ -284,7 +284,7 @@ function MemberField({
 // The order of the types of the instruments in their menus: the common
 // ones first (others after them; their titles and what each is come from
 // the library)
-const TYPE_ORDER = ['point', 'gauss', 'gauss_beam', 'moffat', 'ggauss', 'lorentz', 'hanning', 'image', 'images', 'sum', 'convolution'];
+const TYPE_ORDER = ['point', 'gauss', 'moffat', 'ggauss', 'lorentz', 'hanning', 'image', 'images', 'sum', 'convolution'];
 
 // A form of a member, by its options (e.g. bmaj, bmin, bpa; file)
 function formLabel(form: Schema): string {
@@ -393,6 +393,11 @@ function AnyField({
   const field = (i: number) => <Field node={branches[i]} nullable={nullable} value={value} onChange={onChange} />;
   // (a file: a path, or a path and its HDU)
   if (resolved.some((b) => b.format === 'path')) return <FileField value={value} onChange={onChange} />;
+  // (a quantity, as its text: e.g. a width of the light, or a table of it)
+  const quantity = find((b) => b.format === 'quantity');
+  if (quantity !== undefined && (value === undefined || typeof value === 'string')) {
+    return <QuantityField node={resolved[quantity]} value={value} onChange={onChange} />;
+  }
   // (a name: of a block of the project, or a choice)
   if (typeof value === 'string' || value === undefined) {
     const family = kinds.map((i) => familyOf(branches[i])).find((f) => f && BLOCK_FOLDERS[f]);
@@ -468,6 +473,13 @@ function PlainField({
       />
     );
   }
+  if (node.type === 'string' && node.format === 'quantity') {
+    return typeof value === 'string' || value === undefined ? (
+      <QuantityField node={node} value={value} onChange={onChange} />
+    ) : (
+      <Kept value={value} onChange={onChange} />
+    );
+  }
   if (node.type === 'string') {
     return <TextField value={typeof value === 'string' ? value : ''} placeholder={node.default != null ? String(node.default) : undefined} label="text" onChange={(next) => onChange(next === '' ? undefined : next)} />;
   }
@@ -486,6 +498,40 @@ function PlainField({
     );
   }
   return <Kept value={value} onChange={onChange} />;
+}
+
+// A quantity of one value, as its text (e.g. '2.5 Angstrom'; the library
+// reads it): its number, and its unit, with the units of its kinds as
+// suggestions (any other can be typed)
+function QuantityField({ node, value, onChange }: { node: Schema; value: string | undefined; onChange: (value: unknown) => void }) {
+  const [number, unit] = splitQuantity(value ?? '');
+  const kinds = (node.unit_kinds as Record<string, string[]> | undefined) ?? {};
+  const units = Object.entries(kinds).map(([kind, items]) => ({ group: kind, items }));
+  const join = (n: string, u: string) => {
+    const text = `${n.trim()} ${u.trim()}`.trim();
+    return text === '' ? undefined : text;
+  };
+  return (
+    <div className="schema-quantity">
+      <TextField value={number} placeholder="value" label="value" onChange={(next) => onChange(join(next, unit))} mono />
+      <Autocomplete
+        className="schema-quantity-unit"
+        value={unit}
+        data={units}
+        placeholder="unit"
+        aria-label="unit"
+        size="xs"
+        onChange={(next) => onChange(join(number, next))}
+      />
+    </div>
+  );
+}
+
+// The number and the unit of the text of a quantity (e.g. '2.5 Angstrom');
+// a text that does not start with a number is all unit
+function splitQuantity(text: string): [string, string] {
+  const match = /^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(.*)$/.exec(text);
+  return match ? [match[1], match[2].trim()] : ['', text.trim()];
 }
 
 // The slider of a number: from min to max by step; or, logarithmic (of a

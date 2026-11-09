@@ -17,7 +17,7 @@ import ruamel.yaml
 from gbkfit.config import ConfigError
 import gbkfit.project
 from gbkfit.project import FORMAT_VERSION
-from . import v2, v3, v4, v5, v6
+from . import v2, v3, v4, v5, v6, v7
 from .rules import Change, Rule, insert_first
 
 
@@ -29,8 +29,11 @@ __all__ = [
 ]
 
 
-# The sections whose items are pieces of projects
-_SECTIONS = ('galaxies', 'observations', 'params', 'fitter')
+# The sections and options of configurations whose items are pieces of
+# projects (see gbkfit.project.piece_folder)
+_SECTIONS = (
+    'galaxies', 'observations', 'data', 'psf', 'lsf', 'noise', 'params',
+    'fitter')
 
 # The umask of the process, for the files it makes (see _replacing):
 # there is no way to read it but to set it, which is done once here
@@ -62,7 +65,7 @@ def _yaml() -> ruamel.yaml.YAML:
 
 # The rules of all the versions, in order (see Rule)
 RULES: tuple[Rule, ...] = (
-    *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES)
+    *v2.RULES, *v3.RULES, *v4.RULES, *v5.RULES, *v6.RULES, *v7.RULES)
 
 
 def migrate(
@@ -176,8 +179,9 @@ def migrate_project(path: str) -> dict[str, list[Change]]:
     if (version := project.version()) == FORMAT_VERSION:
         return {}
     files = {
-        section: [project.piece_file(section, name)
-                  for name in project.names(_folder(section))]
+        section: [
+            project.piece_file(section, name)
+            for name in project.names(gbkfit.project.piece_folder(section))]
         for section in _SECTIONS}
     pieces = {
         section: [_read(file) for file in section_files]
@@ -244,11 +248,6 @@ def _rewrite(
     return [
         change for rule in RULES if rule.version() > version
         for change in rule.rewrite(config)]
-
-
-def _folder(section: str) -> str:
-    """Return the folder of the pieces of a section of a project."""
-    return 'fitters' if section == 'fitter' else section
 
 
 def _read(path: str) -> Any:

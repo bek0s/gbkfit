@@ -240,8 +240,9 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
     # wavelengths, on an axis of optical velocities of the rest of Halpha
     # as observed (channels of 10 km/s) or in the frame of the galaxy
     # (where a km/s of the light spans 2.5 km/s, as the channels of 25
-    # km/s): its line is 2.5 times as wide on the second, whose LSF is
-    # stretched as the motions of the galaxy (see LSF.stretched)
+    # km/s): its line is 2.5 times as wide on the second, where the LSF
+    # spans 2.5 km/s per km/s of the light, as the motions of the galaxy
+    # (see Channel.span)
     def width(rest, step):
         k = step / 10
         centre = C * (k - 1)
@@ -252,7 +253,7 @@ def test_the_lsf_is_in_km_s_of_the_light(driver, evaluate_cases):
                 spectral=dict(
                     size=201, step=step, rval=centre,
                     rest=f'{rest} Angstrom', medium='vacuum'),
-                lsf=dict(type='gauss', sigma=32)),
+                lsf=dict(type='gauss', sigma='32 km/s')),
             line_of_sight=dict(type='flat'),
             galaxy=dict(redshift=1.5, components=[dict(
                 type='thin_disk', loose=False, tilted=False,

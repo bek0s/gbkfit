@@ -71,11 +71,10 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
 def muse_lsf_table() -> astropy.table.QTable:
     """
     Return the LSF of MUSE (a Gaussian whose FWHM is that of Bacon et al.
-    2017, eq. 8) as a table of its sigma against wavelength.
+    2017, eq. 8) as a table of its FWHM against wavelength.
     """
     w = _MUSE_WAVELENGTHS
     fwhm = 5.866e-8 * w ** 2 - 9.187e-4 * w + 6.040
     u = astropy.units
     return astropy.table.QTable(dict(
-        wavelength=w * u.Angstrom,
-        sigma=fwhm / np.sqrt(8 * np.log(2)) * u.Angstrom))
+        wavelength=w * u.Angstrom, fwhm=fwhm * u.Angstrom))

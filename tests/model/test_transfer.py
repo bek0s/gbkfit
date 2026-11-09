@@ -763,7 +763,8 @@ def test_a_coarse_depth_axis_warns_about_the_light(
     if depth_step is not None:
         case['line_of_sight']['depth'] = dict(step=depth_step)
     if lsf_sigma is not None:
-        case['observable'] |= dict(lsf=dict(type='gauss', sigma=lsf_sigma))
+        case['observable'] |= dict(lsf=dict(
+            type='gauss', sigma=f'{lsf_sigma} km/s'))
     caplog.set_level(logging.WARNING)
     evaluate_transfer(evaluate_cases, case, PROPERTIES | dict(
         gas_incl=incl, gas_dpt_a=5, gas_vpt_rt=0.5))

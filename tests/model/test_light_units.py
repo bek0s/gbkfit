@@ -10,7 +10,7 @@ import pytest
 from gbkfit.dataset import Data, DatasetPixelSpectra
 from gbkfit.io import Beam
 from gbkfit.grid import SpectralAxis
-from gbkfit.instrument import Instrument, PSFGaussBeam
+from gbkfit.instrument import Instrument, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import (
     ObservationGroup, ObservationSky, PixelSpectra, line_of_sight_parser)
@@ -167,7 +167,7 @@ def test_light_in_bands_with_a_unit_needs_the_redshift():
 def test_a_model_without_data_is_in_its_unit(driver):
     # Jy/beam of the beam of its PSF, as data of that unit and beam
     components = [disk('K km/s')]
-    psf = PSFGaussBeam(BEAM.bmaj, BEAM.bmin, BEAM.bpa)
+    psf = PSFGauss.from_beam(BEAM.bmaj, BEAM.bmin, BEAM.bpa)
     np.testing.assert_allclose(
         model(driver, components, psf=psf, unit='Jy/beam'),
         model(driver, components, 'Jy/beam', psf=psf), rtol=1e-12)

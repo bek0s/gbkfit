@@ -82,8 +82,9 @@ INSTRUMENT = dict(
     psf=dict(type='sum', psfs=[dict(type='gauss', sigma=1),
                                dict(type='moffat', alpha=2, beta=3)],
              weights=[0.6, 0.4]),
-    lsf=dict(type='convolution', lsfs=[dict(type='gauss', sigma=15),
-                                       dict(type='hanning', width=20)]))
+    lsf=dict(type='convolution', lsfs=[
+        dict(type='gauss', sigma='15 km/s'),
+        dict(type='hanning')]))
 
 
 @pytest.mark.parametrize('lens', [False, True], ids=['plain', 'lensed'])
@@ -94,7 +95,8 @@ def test_feature_combinations(driver, name, lens):
     moments = name in ('pixel_moments', 'pixel_moments_fit', 'region_moments')
     if moments:
         # Moments of a narrow spectral axis do not need the Hanning LSF
-        instrument['lsf'] = dict(type='gauss', sigma=15)
+        instrument['lsf'] = dict(
+            type='gauss', sigma='15 km/s')
     foreground = None
     if lens:
         # A constant deflection: the source moved by (1, -1) arcsec

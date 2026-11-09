@@ -3,6 +3,7 @@ Tests of correlated noise in cubes (see LikelihoodGaussian): the noise
 correlated on the sky and along the channels at once.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
 
@@ -54,7 +55,7 @@ def noisy_cube(rng, mask):
         rng.normal(0, 0.01, shape), mask=mask,
         error=rng.uniform(0.005, 0.02, shape),
         spatial_correlation=PSFGauss(1.5, 0.6, 30),
-        spectral_correlation=LSFGauss(25))
+        spectral_correlation=LSFGauss(25 * u.km / u.s))
 
 
 def test_cubes_have_the_chi2_of_the_product_of_their_correlations(driver):

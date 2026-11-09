@@ -7,9 +7,25 @@ import pytest
 import scipy.integrate
 import scipy.special
 
+import astropy.units as u
+
 from gbkfit.config import ConfigError
 import gbkfit.math
+import gbkfit.units
+from gbkfit.grid import VelocityConvention
 from gbkfit.instrument import *
+
+
+C = 299792.458
+KMS = u.km / u.s
+# A channel of an axis without a rest, at 0 km/s: an LSF of widths in km/s
+# spans as many km/s of the axis there
+AT = Channel()
+
+
+def kms(value):
+    """A width of the light of value km/s."""
+    return value * KMS
 
 
 @pytest.mark.parametrize(
@@ -51,21 +67,21 @@ def test_psf_analytic(psf_type, psf_class, psf_params):
     "lsf_type, lsf_class, lsf_params", [
         ('point', LSFPoint, dict()),
         ('gauss', LSFGauss, dict(
-            sigma=5.0)),
+            sigma=kms(5.0))),
         ('ggauss', LSFGGauss, dict(
-            alpha=5.0, beta=1.0)),
+            alpha=kms(5.0), beta=1.0)),
         ('lorentz', LSFLorentz, dict(
-            gamma=5.0)),
+            gamma=kms(5.0))),
         ('moffat', LSFMoffat, dict(
-            alpha=5.0, beta=1.0))
+            alpha=kms(5.0), beta=1.0))
     ]
 )
 def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     step = 0.5
     # Creation tests
     lsf = lsf_class(**lsf_params)
-    lsf_arr = lsf.asarray(step)
-    lsf_size = lsf.size(step)
+    lsf_arr = lsf.on(AT).asarray(step)
+    lsf_size = lsf.on(AT).size(step)
     arr_max_index = np.unravel_index(np.argmax(lsf_arr), lsf_arr.shape)
     arr_max_index = tuple(i.item() for i in arr_max_index)
     arr_max_index = arr_max_index[::-1][0]
@@ -75,9 +91,10 @@ def test_lsf_analytic(lsf_type, lsf_class, lsf_params):
     assert arr_max_index == lsf_size // 2
     # Dump tests
     dumped_lsf_info = lsf.dump()
-    lsf_info = dict(
-        type=lsf_type,
-        **lsf_params)
+    lsf_info = dict(type=lsf_type) | {
+        name: gbkfit.units.format_quantity(value)
+        if isinstance(value, u.Quantity) else value
+        for name, value in lsf_params.items()}
     assert dumped_lsf_info == lsf_info
     # Load tests
     loaded_lsf = lsf_parser.load(dumped_lsf_info)
@@ -97,13 +114,13 @@ def assert_profile(array, profile):
 
 
 @pytest.mark.parametrize('lsf, profile', [
-    (LSFGauss(3.0), lambda x: np.exp(-0.5 * (x / 3) ** 2)),
-    (LSFGGauss(3.0, 1.5), lambda x: np.exp(-(np.abs(x) / 3) ** 1.5)),
-    (LSFLorentz(3.0), lambda x: 1 / (1 + (x / 3) ** 2)),
-    (LSFMoffat(3.0, 2.5), lambda x: (1 + (x / 3) ** 2) ** -2.5)])
+    (LSFGauss(kms(3.0)), lambda x: np.exp(-0.5 * (x / 3) ** 2)),
+    (LSFGGauss(kms(3.0), 1.5), lambda x: np.exp(-(np.abs(x) / 3) ** 1.5)),
+    (LSFLorentz(kms(3.0)), lambda x: 1 / (1 + (x / 3) ** 2)),
+    (LSFMoffat(kms(3.0), 2.5), lambda x: (1 + (x / 3) ** 2) ** -2.5)])
 def test_lsf_profiles(lsf, profile):
     step = 0.7
-    array = lsf.asarray(step)
+    array = lsf.on(AT).asarray(step)
     x = (np.arange(array.size) - array.size // 2) * step
     assert_profile(array, profile(x))
 
@@ -145,8 +162,8 @@ def test_images_in_sums_and_convolutions_have_their_own_files():
     from gbkfit.instrument import PSFConvolution, PSFSum
     psf_a = PSFImage(np.outer([1, 2, 1], [1, 3, 1]))
     psf_b = PSFImage(np.outer([1, 1, 1], [1, 1, 1]))
-    lsf_a = LSFImage(np.array([1, 2, 1]), step=2)
-    lsf_b = LSFImage(np.array([1, 1, 1]), step=2)
+    lsf_a = LSFImage(np.array([1, 2, 1]), step=kms(2))
+    lsf_b = LSFImage(np.array([1, 1, 1]), step=kms(2))
     psf_sum = psf_parser.dump(
         PSFSum([psf_a, PSFConvolution([psf_b])], [1, 1]), prefix='out_')
     assert [psf_sum['psfs'][0]['file'],
@@ -168,7 +185,7 @@ def test_kernels_of_too_heavy_wings_are_an_error():
     # (its extent divides by 0)
     with (pytest.raises(RuntimeError, match="wings are too heavy"),
           np.errstate(divide='ignore')):
-        LSFMoffat(1, 0.6).size(1)
+        LSFMoffat(kms(1), 0.6).on(AT).size(1)
 
 def test_image_kernels_keep_their_edges():
     # Resampling an image samples it up to half a pixel beyond the
@@ -177,7 +194,7 @@ def test_image_kernels_keep_their_edges():
     # delta, and the width of a narrow kernel shrank)
     x = np.arange(6) - 2.5
     gauss = np.exp(-0.5 * x ** 2)
-    lsf = LSFImage(gauss, 1).asarray(1)
+    lsf = LSFImage(gauss, kms(1)).on(AT).asarray(1)
     centre = np.arange(lsf.size) - lsf.size // 2
     width = np.sqrt(np.sum(lsf * centre ** 2))
     assert width == pytest.approx(np.sqrt(np.sum(gauss * x ** 2) / gauss.sum()),
@@ -195,16 +212,18 @@ def test_psf_image_pixel_scale_is_in_arcsec():
     np.testing.assert_allclose(psf._step, (0.1, 0.1), rtol=1e-12)
 
 
-def test_lsf_image_round_trip_and_channel_width_in_km_s():
+def test_lsf_image_round_trip_and_channel_width_in_its_unit():
+    # The file of the dump has the width of its channels in its axis
     from astropy.io import fits
-    lsf = LSFImage(np.exp(-np.arange(-5, 6) ** 2 / 4), step=2.5)
-    loaded = lsf_parser.load(lsf_parser.dump(lsf))
-    np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
-    np.testing.assert_array_equal(loaded._data, lsf._data)
+    for step in (kms(2.5), 0.2 * u.AA):
+        lsf = LSFImage(np.exp(-np.arange(-5, 6) ** 2 / 4), step=step)
+        loaded = lsf_parser.load(lsf_parser.dump(lsf, overwrite=True))
+        assert u.isclose(loaded._step, step, rtol=1e-12)
+        np.testing.assert_array_equal(loaded._data, lsf._data)
     header = fits.Header(dict(CTYPE1='VRAD', CUNIT1='m/s', CDELT1=2500.0))
     fits.writeto('lsf_m_s.fits', np.ones(11), header)
     loaded = lsf_parser.load(dict(type='image', file='lsf_m_s.fits'))
-    np.testing.assert_allclose(loaded._step, 2.5, rtol=1e-12)
+    assert u.isclose(loaded._step, kms(2.5), rtol=1e-12)
 
 
 def test_images_without_their_pixel_size_need_it(tmp_path):
@@ -278,11 +297,11 @@ def test_image_psf_and_lsf_are_centred_like_the_analytic_ones(size, offset):
     for axis in (0, 1):
         np.testing.assert_allclose(
             centroid(actual, axis), centroid(expected, axis), atol=1e-6)
-    lsf = LSFGauss(2)
-    lsf_image = LSFImage(lsf.asarray(1, 21))
+    lsf = LSFGauss(kms(2))
+    lsf_image = LSFImage(lsf.on(AT).asarray(1, 21), kms(1))
     np.testing.assert_allclose(
-        centroid(lsf_image.asarray(1, size, offset), 0),
-        centroid(lsf.asarray(1, size, offset), 0), atol=1e-6)
+        centroid(lsf_image.on(AT).asarray(1, size, offset), 0),
+        centroid(lsf.on(AT).asarray(1, size, offset), 0), atol=1e-6)
 
 
 def test_image_psf_on_a_non_square_grid():
@@ -296,22 +315,25 @@ def test_image_psf_on_a_non_square_grid():
 
 
 @pytest.mark.parametrize('lsf', [
-    LSFGauss(10), LSFGGauss(10, 0.5), LSFLorentz(10), LSFMoffat(10, 1.5)])
+    LSFGauss(kms(10)), LSFGGauss(kms(10), 0.5), LSFLorentz(kms(10)), LSFMoffat(kms(10), 1.5)])
 def test_analytic_lsfs_are_symmetric(lsf):
     # Cut at the same distance on both sides, also when the array is much
     # wider than the cut (as in the FFT convolution)
-    data = lsf.asarray(5, 257)
+    data = lsf.on(AT).asarray(5, 257)
     np.testing.assert_allclose(data, data[::-1], rtol=1e-12)
-    np.testing.assert_allclose(centroid(lsf.asarray(5, 256, -1), 0), 127)
+    np.testing.assert_allclose(
+        centroid(lsf.on(AT).asarray(5, 256, -1), 0), 127)
 
 
 @pytest.mark.parametrize('profile, size', [
     (PSFGauss(2), (33, 33)), (PSFGGauss(2, 2), (33, 33)),
-    (PSFMoffat(2, 4.765), (33, 33)), (LSFGauss(2), 33)])
+    (PSFMoffat(2, 4.765), (33, 33)), (LSFGauss(kms(2)), 33)])
 def test_compact_profiles_extend_to_the_minimum_extent(profile, size):
     # 2 x MIN_EXTENT scale lengths of 2, made odd
-    step = (1, 1) if isinstance(profile, PSF) else 1
-    assert profile.size(step) == size
+    if isinstance(profile, PSF):
+        assert profile.size((1, 1)) == size
+    else:
+        assert profile.on(AT).size(1) == size
 
 
 def moffat_1d_flux(z1, z2, beta=0.75):
@@ -324,11 +346,11 @@ def moffat_1d_flux(z1, z2, beta=0.75):
      lambda r: scipy.special.gammaincc(4, np.sqrt(r))),
     (PSFMoffat(1, 1.5),
      lambda r: (1 + r * r) ** (1 - 1.5)),
-    (LSFGGauss(1, 0.5),
+    (LSFGGauss(kms(1), 0.5),
      lambda w: scipy.special.gammaincc(2, np.sqrt(w))),
-    (LSFLorentz(1),
+    (LSFLorentz(kms(1)),
      lambda w: 1 - 2 / np.pi * np.arctan(w)),
-    (LSFMoffat(1, 0.75),
+    (LSFMoffat(kms(1), 0.75),
      lambda w: moffat_1d_flux(w, np.inf) / moffat_1d_flux(0, np.inf))])
 def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
         profile, wing_flux):
@@ -336,7 +358,8 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     # their wings hold WING_FLUX of their flux (each wing_flux above is
     # the fraction of the flux beyond a radius, for scale lengths of 1)
     from gbkfit.instrument._detail import MIN_EXTENT, WING_FLUX
-    extent = profile._extent()
+    extent = profile._extent() if isinstance(profile, PSF) \
+        else profile._extent(1.0)
     assert extent > MIN_EXTENT
     np.testing.assert_allclose(wing_flux(extent), WING_FLUX, rtol=1e-6)
 
@@ -347,8 +370,8 @@ def test_wide_wings_are_drawn_until_they_hold_the_wing_flux(
     (lambda: PSFGGauss(1, 1, ratio=1.5), "and at most 1; it is 1.5"),
     (lambda: PSFGGauss(1, -1), "option 'beta' must be greater than 0"),
     (lambda: PSFMoffat(1, 1), "option 'beta' must be greater than 1"),
-    (lambda: LSFLorentz(-1), "option 'gamma' must be greater than 0"),
-    (lambda: LSFMoffat(1, 0.5), "option 'beta' must be greater than 0.5")])
+    (lambda: LSFLorentz(kms(-1)), "option 'gamma' must be greater than 0"),
+    (lambda: LSFMoffat(kms(1), 0.5), "option 'beta' must be greater than 0.5")])
 def test_invalid_profiles_are_rejected(make, message):
     with pytest.raises(ValueError, match=message):
         make()
@@ -360,7 +383,7 @@ def test_arrays_of_the_default_size_take_no_odd_offset():
     with pytest.raises(RuntimeError, match="must be odd"):
         PSFGauss(2).asarray((1, 1), None, (-1, 0))
     with pytest.raises(RuntimeError, match="must be odd"):
-        LSFGauss(2).asarray(1, None, -1)
+        LSFGauss(kms(2)).on(AT).asarray(1, None, -1)
 
 
 def test_psf_sum():
@@ -393,17 +416,19 @@ def test_psf_sum():
 def test_lsf_sum():
     from gbkfit.instrument import lsf_parser
     from gbkfit.instrument import LSFGauss, LSFSum
-    narrow, wide = LSFGauss(10.0), LSFGauss(30.0)
+    narrow, wide = LSFGauss(kms(10.0)), LSFGauss(kms(30.0))
     double = LSFSum([narrow, wide], [2, 2])
-    size = double.size(5.0)
-    assert size == wide.size(5.0)
+    size = double.on(AT).size(5.0)
+    assert size == wide.on(AT).size(5.0)
     np.testing.assert_allclose(
-        double.asarray(5.0),
-        0.5 * narrow.asarray(5.0, size) + 0.5 * wide.asarray(5.0, size),
+        double.on(AT).asarray(5.0),
+        0.5 * narrow.on(AT).asarray(5.0, size)
+        + 0.5 * wide.on(AT).asarray(5.0, size),
         rtol=1e-12)
     info = lsf_parser.dump(double)
     np.testing.assert_allclose(
-        lsf_parser.load(info).asarray(5.0), double.asarray(5.0), rtol=1e-12)
+        lsf_parser.load(info).on(AT).asarray(5.0),
+        double.on(AT).asarray(5.0), rtol=1e-12)
 
 
 @pytest.mark.parametrize('weights', [[1], [1, 0], [1, -1]])
@@ -415,41 +440,73 @@ def test_sum_weights_are_checked(weights):
 
 def test_lsf_hanning():
     from gbkfit.instrument import LSFHanning
-    # 1/4, 1/2 and 1/4 of the light, a channel width apart
+    # 1/4, 1/2 and 1/4 of the light, a channel of the data apart (of 10
+    # km/s), or a fraction of one
+    data = Channel(width=10.0)
     np.testing.assert_allclose(
-        LSFHanning(10).asarray(5.0), [0.25, 0, 0.5, 0, 0.25])
+        LSFHanning().on(data).asarray(5.0), [0.25, 0, 0.5, 0, 0.25])
     np.testing.assert_allclose(
-        LSFHanning(10).asarray(10.0, 5), [0, 0.25, 0.5, 0.25, 0])
-    with pytest.raises(RuntimeError, match="multiple of the step"):
-        LSFHanning(10).asarray(3.0)
+        LSFHanning().on(data).asarray(10.0, 5), [0, 0.25, 0.5, 0.25, 0])
+    np.testing.assert_allclose(
+        LSFHanning(0.5).on(data).asarray(5.0), [0.25, 0.5, 0.25])
+    with pytest.raises(RuntimeError, match="multiple of the channels"):
+        LSFHanning().on(data).asarray(3.0)
+    with pytest.raises(RuntimeError, match="whose width is not given"):
+        LSFHanning().on(AT).asarray(3.0)
 
 
 @pytest.mark.parametrize('lsf', [
-    LSFGauss(4.0), LSFGGauss(4.0, 1.5), LSFLorentz(4.0), LSFMoffat(4.0, 2.5),
-    LSFImage(np.array([1.0, 3.0, 4.0, 3.0, 1.0]), 2.0),
-    LSFSum([LSFGauss(4.0), LSFLorentz(6.0)], [1, 2]),
-    LSFConvolution([LSFGauss(4.0), LSFMoffat(3.0, 2.5)])])
-def test_stretched_lsfs_are_drawn_on_the_stretched_channels(lsf):
-    # Stretched by 2.5, an LSF on channels of 5 km/s is the LSF on those
-    # of 2 km/s
+    LSFGauss(kms(4.0)), LSFGGauss(kms(4.0), 1.5), LSFLorentz(kms(4.0)), LSFMoffat(kms(4.0), 2.5),
+    LSFImage(np.array([1.0, 3.0, 4.0, 3.0, 1.0]), kms(2.0)),
+    LSFSum([LSFGauss(kms(4.0)), LSFLorentz(kms(6.0))], [1, 2]),
+    LSFConvolution([LSFGauss(kms(4.0)), LSFMoffat(kms(3.0), 2.5)])])
+def test_widths_in_km_s_of_the_light_span_more_of_a_redshifted_axis(lsf):
+    # On an axis of optical velocities, a km/s of the light spans 1 + v / c
+    # km/s of the axis: 2.5 at v = 1.5 c, where an LSF on channels of 5
+    # km/s is the LSF on those of 2 km/s at 0 km/s
+    far = Channel(1.5 * C, None, VelocityConvention(6562.8 * u.AA))
     np.testing.assert_allclose(
-        lsf.stretched(2.5).asarray(5.0), lsf.asarray(2.0), atol=1e-12)
+        lsf.on(far).asarray(5.0), lsf.on(AT).asarray(2.0), atol=1e-12)
 
 
-def test_hanning_smoothing_is_not_stretched():
-    # Its width is of the channels of the axis
-    hanning = LSFHanning(10)
-    assert hanning.stretched(2.5) is hanning
+def test_widths_in_wavelength_span_the_same_km_s_of_an_optical_axis():
+    # A width of w Angstrom spans c w / rest km/s at every velocity of an
+    # axis of optical velocities, and a width in frequency at every
+    # velocity of one of radio velocities
+    optical = VelocityConvention(6562.8 * u.AA)
+    radio = VelocityConvention(1420.405752 * u.MHz)
+    expected = LSFGauss(kms(C * 1.5 / 6562.8)).on(AT).asarray(2.0)
+    lsf = LSFGauss(1.5 * u.AA)
+    for v in (-20000, 0, 30000):
+        np.testing.assert_allclose(
+            lsf.on(Channel(v, None, optical)).asarray(2.0), expected,
+            atol=1e-12)
+    expected = LSFGauss(kms(C * 18.5e-3 / 1420.405752)).on(AT).asarray(1.0)
+    lsf = LSFGauss(18.5 * u.kHz)
+    for v in (-2000, 0, 3000):
+        np.testing.assert_allclose(
+            lsf.on(Channel(v, None, radio)).asarray(1.0), expected,
+            atol=1e-12)
+    with pytest.raises(ValueError, match="give the width in km/s"):
+        lsf.on(AT).asarray(1.0)
+
+
+def test_hanning_smoothing_is_of_the_channels_of_the_data():
+    # At any velocity, of any axis
+    far = Channel(1.5 * C, 10.0, VelocityConvention(6562.8 * u.AA))
+    np.testing.assert_allclose(
+        LSFHanning().on(far).asarray(5.0), [0.25, 0, 0.5, 0, 0.25])
 
 
 def test_lsf_and_psf_convolutions_of_gaussians():
     from gbkfit.instrument import LSFConvolution, LSFGauss
     from gbkfit.instrument import PSFConvolution, PSFGauss
     # The convolution of Gaussians is a Gaussian of the summed variances
-    lsf = LSFConvolution([LSFGauss(6.0), LSFGauss(8.0)])
+    lsf = LSFConvolution([LSFGauss(kms(6.0)), LSFGauss(kms(8.0))]).on(AT)
     lsf_size = lsf.size(1.0)
     np.testing.assert_allclose(
-        lsf.asarray(1.0), LSFGauss(10.0).asarray(1.0, lsf_size), atol=1e-6)
+        lsf.asarray(1.0), LSFGauss(kms(10.0)).on(AT).asarray(1.0, lsf_size),
+        atol=1e-6)
     psf = PSFConvolution([PSFGauss(0.6), PSFGauss(0.8)])
     psf_size = psf.size((0.1, 0.1))
     np.testing.assert_allclose(
@@ -467,18 +524,19 @@ def test_psf_beam_from_a_header(tmp_path):
     # ratio bmin / bmaj, at that position angle
     from astropy.io import fits
     from gbkfit.instrument import psf_parser
-    from gbkfit.instrument import PSFGaussBeam, PSFGauss
+    from gbkfit.instrument import PSFGauss
     header = fits.Header(dict(BMAJ=3 / 3600, BMIN=1.5 / 3600, BPA=30.0))
     fits.writeto(tmp_path / 'cube.fits', np.zeros((2, 2)), header)
-    beam = psf_parser.load(dict(type='gauss_beam', file=str(tmp_path / 'cube.fits')))
-    assert isinstance(beam, PSFGaussBeam)
+    beam = psf_parser.load(dict(type='gauss', file=str(tmp_path / 'cube.fits')))
+    assert isinstance(beam, PSFGauss)
     gauss = PSFGauss(3 / np.sqrt(8 * np.log(2)), 0.5, 30)
     for rota in (0, 20):
         np.testing.assert_allclose(
             beam.asarray((0.2, 0.2), rota=rota),
             gauss.asarray((0.2, 0.2), rota=rota), rtol=1e-12)
+    # (dumped as its beam)
     dumped = psf_parser.dump(beam)
-    assert dumped['type'] == 'gauss_beam' and dumped['bpa'] == 30
+    assert dumped['type'] == 'gauss' and dumped['bpa'] == 30
     np.testing.assert_allclose([dumped['bmaj'], dumped['bmin']], [3, 1.5])
     assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
 
@@ -490,7 +548,7 @@ def test_psf_beam_from_a_header(tmp_path):
 def test_psf_beam_options_are_checked(info, message):
     from gbkfit.instrument import psf_parser
     with pytest.raises(Exception, match=message):
-        psf_parser.load(dict(type='gauss_beam') | info)
+        psf_parser.load(dict(type='gauss') | info)
 
 
 @pytest.mark.parametrize('parser', [psf_parser, lsf_parser])
@@ -504,7 +562,7 @@ def test_psfs_from_files_in_python(tmp_path):
     # Reading a file from Python gives what its configuration gives
     from astropy.io import fits
     from gbkfit.instrument import (
-        PSFGauss, PSFGaussBeam, PSFImage, psf_parser)
+        PSFGauss, PSFImage, psf_parser)
     from gbkfit.io import write_data
     from gbkfit.grid import make_grid
     header = fits.Header(dict(BMAJ=3 / 3600, BMIN=1.5 / 3600, BPA=30.0))
@@ -514,8 +572,8 @@ def test_psfs_from_files_in_python(tmp_path):
         str(tmp_path / 'psf.fits'), image,
         make_grid(image.shape[::-1], 0.5).coords)
     for psf, info in (
-            (PSFGaussBeam.from_file(str(tmp_path / 'cube.fits')),
-             dict(type='gauss_beam', file=str(tmp_path / 'cube.fits'))),
+            (PSFGauss.from_file(str(tmp_path / 'cube.fits')),
+             dict(type='gauss', file=str(tmp_path / 'cube.fits'))),
             (PSFImage.from_file(str(tmp_path / 'psf.fits')),
              dict(type='image', file=str(tmp_path / 'psf.fits')))):
         loaded = psf_parser.load(info)
@@ -529,22 +587,20 @@ def test_a_beam_psf_is_read_from_a_file_as_datasets_read_it(tmp_path):
     # The beam of a cube of THINGS is in its history (of AIPS) only, and
     # one of a header without BPA is at 0 degrees
     from astropy.io import fits
-    from gbkfit.instrument import PSFGaussBeam
+    from gbkfit.instrument import PSFGauss
     header = fits.Header()
     header['HISTORY'] = (
         'AIPS   CLEAN BMAJ=  2.7778E-03 BMIN=  1.3889E-03 BPA=  30.00')
     fits.writeto(tmp_path / 'things.fits', np.zeros((2, 2)), header)
     fits.writeto(tmp_path / 'nobpa.fits', np.zeros((2, 2)), fits.Header(
         dict(BMAJ=3 / 3600, BMIN=1.5 / 3600)))
-    psf = PSFGaussBeam.from_file(str(tmp_path / 'things.fits'))
-    assert (psf.bmaj(), psf.bmin(), psf.bpa()) == pytest.approx(
-        (10.0, 5.0, 30.0), rel=1e-4)
-    psf = PSFGaussBeam.from_file(str(tmp_path / 'nobpa.fits'))
-    assert (psf.bmaj(), psf.bmin(), psf.bpa()) == pytest.approx(
-        (3.0, 1.5, 0.0))
+    psf = PSFGauss.from_file(str(tmp_path / 'things.fits'))
+    assert tuple(psf.beam()[:3]) == pytest.approx((10.0, 5.0, 30.0), rel=1e-4)
+    psf = PSFGauss.from_file(str(tmp_path / 'nobpa.fits'))
+    assert tuple(psf.beam()[:3]) == pytest.approx((3.0, 1.5, 0.0))
     fits.writeto(tmp_path / 'none.fits', np.zeros((2, 2)))
     with pytest.raises(ValueError, match="the header has no beam"):
-        PSFGaussBeam.from_file(str(tmp_path / 'none.fits'))
+        PSFGauss.from_file(str(tmp_path / 'none.fits'))
 
 
 def test_a_psf_image_after_an_empty_primary_hdu_is_read(tmp_path):
@@ -561,7 +617,7 @@ def test_a_psf_image_after_an_empty_primary_hdu_is_read(tmp_path):
 
 @pytest.mark.parametrize('psf', [
     PSFGauss(1.0, 0.5), PSFGGauss(1.0, 1.5, 0.5), PSFMoffat(1.0, 3.0, 0.5),
-    PSFGaussBeam(2.0, 1.0, 30),
+    PSFGauss.from_beam(2.0, 1.0, 30), PSFMoffat.from_fwhm(1.0, 3.0, 0.5),
     PSFImage(PSFMoffat(1.0, 3.0).asarray((0.05, 0.05)), (0.05, 0.05)),
     PSFSum([PSFGauss(1.0), PSFGauss(2.0)], [0.3, 0.7]),
     PSFConvolution([PSFGauss(1.0), PSFMoffat(1.0, 3.0)])])
@@ -627,27 +683,48 @@ def test_lsf_profiles_run_along_the_velocities_of_the_light(tmp_path):
     fits.writeto(tmp_path / 'freq.fits', profile, fits.Header(dict(
         CTYPE1='FREQ', CUNIT1='Hz', CDELT1=1e4, CRPIX1=4, CRVAL1=1.4e9)))
     lsf = LSFImage.from_file(str(tmp_path / 'lsf.fits'))
-    assert lsf._step == 5
+    assert u.isclose(lsf._step, kms(5))
     np.testing.assert_array_equal(lsf._data, profile[::-1])
     lsfs = LSFImages.from_file(str(tmp_path / 'lsfs.fits'))
     np.testing.assert_allclose(lsfs._points.to_value(u.AA), [5000, 6000])
     np.testing.assert_allclose(
-        lsfs.at(5500 * u.AA).asarray(1.0, 41), lsf.asarray(1.0, 41),
-        atol=1e-15)
+        lsfs.at(5500 * u.AA).on(AT).asarray(1.0, 41),
+        lsf.on(AT).asarray(1.0, 41), atol=1e-15)
     np.testing.assert_array_equal(
-        LSFImage.from_file(str(tmp_path / 'freq.fits'), step=2)._data,
+        LSFImage.from_file(str(tmp_path / 'freq.fits'))._data,
         profile[::-1])
 
 
-def test_lsf_profiles_on_an_axis_of_wavelengths_take_their_width(tmp_path):
-    # e.g. measured from arc lines: the width of the channels, in km/s of
-    # the light, is given
+def test_lsf_profiles_on_an_axis_of_wavelengths_take_its_width(tmp_path):
+    # e.g. measured from arc lines: the width of their channels is that of
+    # the axis, in Angstrom, which spans km/s of the axis of the data by
+    # its rest
     from astropy.io import fits
-    profile = LSFGauss(30.0).asarray(10.0, 21)
-    fits.writeto(tmp_path / 'lsf.fits', profile, fits.Header(dict(
+    fits.writeto(tmp_path / 'lsf.fits', np.ones(21), fits.Header(dict(
         CTYPE1='WAVE', CUNIT1='Angstrom', CDELT1=0.2, CRPIX1=11,
         CRVAL1=6563.0)))
-    with pytest.raises(ValueError, match="not in a velocity unit"):
-        LSFImage.from_file(str(tmp_path / 'lsf.fits'))
-    lsf = LSFImage.from_file(str(tmp_path / 'lsf.fits'), step=10.0)
-    np.testing.assert_array_equal(lsf._data, profile)
+    lsf = LSFImage.from_file(str(tmp_path / 'lsf.fits'))
+    assert u.isclose(lsf._step, 0.2 * u.AA)
+    data = Channel(0.0, None, VelocityConvention(6563.0 * u.AA))
+    assert lsf.on(data).size(1.0) == 193
+    fits.writeto(tmp_path / 'none.fits', np.ones(21))
+    with pytest.raises(ValueError, match="give the width of their channels"):
+        LSFImage.from_file(str(tmp_path / 'none.fits'))
+
+
+def test_widths_in_pixels_are_channels_of_the_data():
+    # As many channels of the data at every velocity of any axis, e.g. a
+    # resolution element of 2.2 pixels of channels of 10 km/s
+    expected = LSFGauss.from_fwhm(kms(22.0)).on(AT).asarray(2.0)
+    lsf = LSFGauss.from_fwhm(2.2 * u.pix)
+    for channel in (
+            Channel(0.0, 10.0),
+            Channel(1.5 * C, 10.0, VelocityConvention(6562.8 * u.AA)),
+            Channel(3000.0, 10.0, VelocityConvention(1420.405752 * u.MHz))):
+        np.testing.assert_allclose(
+            lsf.on(channel).asarray(2.0), expected, atol=1e-12)
+    assert lsf_parser.load(dict(
+        type='gauss', fwhm='2.2 pix')).dump() == dict(
+            type='gauss', fwhm='2.2 pix')
+    with pytest.raises(RuntimeError, match="width is not given"):
+        lsf.on(AT).asarray(2.0)

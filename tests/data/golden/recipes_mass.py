@@ -45,7 +45,8 @@ def _thick(disk: dict[str, Any], **kinematics: Any) -> dict[str, Any]:
 
 
 _INSTRUMENT = dict(
-    psf=dict(type='gauss', sigma=0.6), lsf=dict(type='gauss', sigma=20))
+    psf=dict(type='gauss', sigma=0.6), lsf=dict(
+        type='gauss', sigma='20 km/s'))
 
 
 def _moments(

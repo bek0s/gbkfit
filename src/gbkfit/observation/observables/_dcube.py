@@ -12,14 +12,23 @@ from gbkfit.grid import (
 import gbkfit.math
 import gbkfit.units
 from gbkfit.driver import DeviceArray, Driver, DriverFFT
-from gbkfit.instrument import LSF, LSFPoint, PSF, PSFPoint, PrimaryBeam
+from gbkfit.instrument import (
+    LSF, Channel, ChannelLSF, LSFPoint, PSF, PSFPoint, PrimaryBeam)
 from gbkfit.model import Extras
 
 
-# The unit of the velocities of the spectral axis
 _log = logging.getLogger(__name__)
 
+# The unit of the velocities of the spectral axis
 _KMS = u.km / u.s
+
+# How much the LSF that does not vary may change across the channels of
+# the data (in the dispersion of the Gaussian of its FWHM, from that of
+# the middle channel) for one LSF to be drawn for all; it changes when a
+# width in a unit of its own spans other km/s of the axis from channel
+# to channel (e.g. one in km/s of the light across a wide band of
+# optical velocities, see Channel.span)
+_LSF_TOLERANCE = 0.01
 
 # The spread (rms along x or y, in pixels of the model) below which a PSF
 # sampled at the centres of the pixels of the model is too narrow for
@@ -151,7 +160,7 @@ def _varying_padding(
             lsf_size)
 
 
-def _equivalent_dispersion(lsf: LSF, step: float) -> float:
+def _equivalent_dispersion(lsf: ChannelLSF, step: float) -> float:
     """
     Return the dispersion of the Gaussian of the FWHM of an LSF (in the
     units of step), from its kernel sampled 16 times finer than step: 0 for
@@ -257,7 +266,7 @@ def _kernel_cube(dcube: 'DCube', grid_hi: Grid) -> np.ndarray:
     psf_image = DriverFFT.fft_convolution_shift(
         (psf or PSFPoint()).asarray(*psf_args))
     lsf_profile = DriverFFT.fft_convolution_shift(
-        (lsf or LSFPoint()).asarray(*lsf_args))
+        (lsf or LSFPoint().on(Channel())).asarray(*lsf_args))
     return psf_image * lsf_profile[:, None, None]
 
 
@@ -309,12 +318,21 @@ class DCube:
         self._dtype = dtype
         self._fft_dtype = fft_dtype
         self._median_size = median_size
-        # The LSF on the spectral axis, if it does not vary (see axis_lsf)
+        # The LSF of all the channels of the data, if it is the same at
+        # each (see axis_lsf), and the convention of their velocities
+        self._convention = VelocityConvention.of(coords)
         self._axis_lsf = None
         if lsf is not None and not lsf.varies():
-            middle = self.zero()[2] + step[2] * (size[2] - 1) / 2
-            self._axis_lsf = lsf.stretched(float(
-                VelocityConvention.of(coords).stretch(middle)))
+            ends = self.zero()[2] + step[2] * np.array(
+                [0, (size[2] - 1) / 2, size[2] - 1])
+            first, middle, last = (lsf.on(self._channel(v)) for v in ends)
+            dispersions = [
+                _equivalent_dispersion(x, step[2])
+                for x in (first, middle, last)]
+            if dispersions[1] == 0 or max(
+                    abs(x / dispersions[1] - 1)
+                    for x in dispersions) <= _LSF_TOLERANCE:
+                self._axis_lsf = middle
 
     def grid(self) -> Grid:
         return self._grid_lo
@@ -347,35 +365,43 @@ class DCube:
         return self._psf
 
     def lsf(self) -> LSF | None:
-        """Return the LSF, in km/s of the light (see axis_lsf)."""
+        """Return the LSF, of widths of the light (see axis_lsf)."""
         return self._lsf
 
-    def axis_lsf(self) -> LSF | None:
+    def lsf_varies(self) -> bool:
         """
-        Return the LSF on the spectral axis, if it does not vary: its
-        widths, in km/s of the light, stretched by the km/s of the axis per
-        km/s of the light at the middle channel of the data (see
-        VelocityConvention.stretch and LSF.stretched). E.g. on an axis of
-        optical velocities of the rest wavelength of a line of a galaxy at
-        redshift 1.5, an LSF of 32 km/s spans 80 km/s of the axis. An LSF
-        that changes across the channels is one that varies (see
-        varying). None without an LSF, or if it varies (see axis_lsfs).
+        Return whether the LSF is drawn at each channel of the data (see
+        axis_lsfs): it varies, or its widths span other km/s of the axis
+        from channel to channel (see _LSF_TOLERANCE).
+        """
+        return self._lsf is not None and self._axis_lsf is None
+
+    def axis_lsf(self) -> ChannelLSF | None:
+        """
+        Return the LSF of all the channels of the data, on the spectral
+        axis: at its middle channel, its widths in km/s of the axis there
+        (see Channel.span). E.g. on an axis of optical velocities of the
+        rest wavelength of a line of a galaxy at redshift 1.5, an LSF of
+        32 km/s of the light spans 80 km/s of the axis. None without an
+        LSF, or if it is drawn at each channel (see lsf_varies and
+        axis_lsfs).
         """
         return self._axis_lsf
 
-    def axis_lsfs(self, velocities: np.ndarray) -> list[LSF]:
+    def axis_lsfs(self, velocities: np.ndarray) -> list[ChannelLSF]:
         """
         Return the LSF on the spectral axis at velocities of the axis (km/s;
-        1D), one for each: that of axis_lsf, or, if it varies, the LSF at
-        each, stretched there. The LSF must be given.
+        1D), one for each: that of axis_lsf, or the LSF at each (see
+        LSF.at), drawn there. The LSF must be given.
         """
         if self._axis_lsf is not None:
             return [self._axis_lsf] * len(velocities)
-        convention = VelocityConvention.of(self._grid_lo.coords)
-        lsfs = self._lsf.at(velocities * _KMS, convention)
-        return [
-            x.stretched(float(k))
-            for x, k in zip(lsfs, convention.stretch(velocities))]
+        lsfs = self._lsf.at(velocities * _KMS, self._convention)
+        return [x.on(self._channel(v)) for x, v in zip(lsfs, velocities)]
+
+    def _channel(self, velocity: float) -> Channel:
+        """The channel of the data at a velocity of the axis (km/s)."""
+        return Channel(float(velocity), self.step()[2], self._convention)
 
     def smooth_weights(self) -> bool:
         return self._smooth_weights
@@ -444,7 +470,7 @@ class DCubePlan:
         # image for each channel, and the LSF along z (see _varying_padding
         # and _varying_kernels); so are constant ones on drivers whose FFT
         # does it faster (see DriverFFT.separable)
-        varies = bool(psf and psf.varies()) or bool(lsf and lsf.varies())
+        varies = bool(psf and psf.varies()) or dcube.lsf_varies()
         separable = varies or (backend_fft.separable and bool(psf or lsf))
         if separable:
             size_hi, edge_hi, lsf_size_hi = _varying_padding(

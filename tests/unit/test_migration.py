@@ -641,3 +641,62 @@ def test_the_hdu_of_the_file_of_a_table_is_in_the_file():
     assert beta == dict(file='psf.ecsv', points='wavelength', column='beta')
     assert [c.path for c in changes if c.path != ['version']] == [
         ['observations', 0, 'instrument', 'psf', 'alpha']]
+
+
+def test_the_widths_of_lsfs_get_their_unit():
+    # Numbers of km/s of the light, and inline tables without a unit; the
+    # Hanning smoothing is of the channels of the data, of every LSF of an
+    # instrument, a sum, and the noise
+    table = dict(points=dict(value=[0, 1], unit='km/s'), values=[10, 20])
+    filed = dict(file='lsf.ecsv', points='wavelength', column='sigma')
+    lsf = dict(type='sum', weights=[1, 1], lsfs=[
+        dict(type='gauss', sigma=20), dict(type='moffat', alpha=table,
+                                          beta=2.5)])
+    noise = dict(type='gauss', spectral_correlation=dict(
+        type='convolution', lsfs=[
+            dict(type='hanning', width=10), dict(type='gauss', sigma=filed)]))
+    config = dict(
+        observations=[dict(instrument=dict(lsf=lsf))], mock=dict(noise=noise))
+    changes = migration.migrate(config, 6)
+    assert lsf['lsfs'][0]['sigma'] == '20 km/s'
+    assert table['unit'] == 'km/s'
+    hanning, gauss = noise['spectral_correlation']['lsfs']
+    assert hanning == dict(type='hanning')
+    # (the unit of the column of a file is not known: by hand, if none)
+    assert gauss['sigma'] == filed and 'unit' not in filed
+    assert [c.path[-1] for c in changes if c.path != ['version']] == [
+        'sigma', 'alpha', 'width', 'sigma']
+
+
+def test_the_lsfs_of_a_project_are_migrated(tmp_path):
+    # (and so are its pieces of datasets, PSFs and noise, which earlier
+    # migrations left as they were)
+    study = project.create(str(tmp_path / 'study'))
+    yaml.dump(
+        dict(format=project.FORMAT, version=6),
+        tmp_path / 'study' / project.MARKER)
+    yaml.dump(
+        dict(type='gauss', sigma=30), tmp_path / 'study' / 'lsfs' / 'r.yaml')
+    changes = migration.migrate_project(study.path)
+    assert list(changes) == ['lsfs/r.yaml']
+    assert study.piece('lsf', 'r') == dict(
+        type='gauss', sigma='30 km/s')
+
+
+def test_gaussian_beams_are_gaussians():
+    # Of the same options, by their beam or a file; in instruments, sums,
+    # and the noise
+    beam = dict(type='gauss_beam', bmaj=6, bmin=3, bpa=30)
+    psf = dict(type='sum', weights=[1, 1], psfs=[
+        dict(type='gauss_beam', file='cube.fits'), dict(type='moffat',
+                                                       alpha=1, beta=2)])
+    config = dict(observations=[
+        dict(instrument=dict(psf=beam)), dict(instrument=dict(psf=psf))],
+        mock=dict(noise=dict(type='gauss', spatial_correlation=dict(
+            type='gauss_beam', bmaj=4, bmin=4))))
+    changes = migration.migrate(config, 6)
+    assert beam == dict(type='gauss', bmaj=6, bmin=3, bpa=30)
+    assert psf['psfs'][0] == dict(type='gauss', file='cube.fits')
+    assert config['mock']['noise']['spatial_correlation']['type'] == 'gauss'
+    assert len([c for c in changes if c.message == "gauss_beam -> gauss"]) \
+        == 3

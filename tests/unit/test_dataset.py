@@ -640,7 +640,7 @@ def test_noise_correlation_is_the_shape_on_the_pixel_separations(tmp_path):
         moment0=dict(data=str(tmp_path / 'moment0.fits')),
         moment1=dict(
             data=str(tmp_path / 'moment1.fits'),
-            spatial_correlation=dict(type='gauss_beam', bmaj=4, bmin=4)))
+            spatial_correlation=dict(type='gauss', bmaj=4, bmin=4)))
     dataset = dataset_parser.load(info)
     assert dataset.noise_correlation('moment0') is None
     correlation = dataset.noise_correlation('moment1')
@@ -659,7 +659,8 @@ def test_noise_correlation_is_the_shape_on_the_pixel_separations(tmp_path):
 def test_noise_correlation_along_the_channels():
     from gbkfit.instrument import LSFGauss
     # A Gaussian of sigma 10 km/s on channels of 10 km/s
-    data = Data(np.ones((5, 4, 3)), spectral_correlation=LSFGauss(10))
+    data = Data(
+        np.ones((5, 4, 3)), spectral_correlation=LSFGauss(10 * u.km / u.s))
     dataset = DatasetPixelSpectra(
         data, step=(1, 1), spectral=SpectralAxis(step=10))
     correlation = dataset.noise_correlation('spectra')
@@ -677,9 +678,11 @@ def test_noise_correlations_only_where_the_data_have_them(tmp_path):
             ConfigError, match="unknown options: 'spectral_correlation'"):
         dataset_parser.load(dict(
             type='pixel_brightness', data=str(tmp_path / 'data.fits'),
-            spectral_correlation=dict(type='gauss', sigma=10)))
+            spectral_correlation=dict(
+                type='gauss', sigma='10 km/s')))
     image = DatasetPixelBrightness(
-        Data(np.ones((8, 20)), spectral_correlation=LSFGauss(10)))
+        Data(np.ones((8, 20)),
+             spectral_correlation=LSFGauss(10 * u.km / u.s)))
     with pytest.raises(ValueError, match="no spectral axis"):
         image.noise_correlation('brightness')
     # Spectra along a slit are not on a grid of the sky

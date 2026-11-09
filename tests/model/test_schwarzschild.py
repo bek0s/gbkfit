@@ -9,6 +9,7 @@ model of the bins there.
 
 import copy
 
+import astropy.units as u
 import numpy as np
 import pytest
 
@@ -196,7 +197,8 @@ def test_orbits_are_seen_without_what_their_recording_ignores(driver):
     seen = observation(bins())
     with_lsf = ObservationSky(
         seen.observable(), seen.line_of_sight(),
-        instrument=Instrument(psf=PSFGauss(1.0), lsf=LSFGauss(20.0)),
+        instrument=Instrument(
+            psf=PSFGauss(1.0), lsf=LSFGauss(20.0 * u.km / u.s)),
         lines=['stars'], data=seen.data(), dtype='float64',
         likelihood=seen.likelihood())
     with pytest.raises(ValueError, match="without an LSF"):

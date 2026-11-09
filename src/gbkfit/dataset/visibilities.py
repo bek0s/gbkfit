@@ -17,7 +17,7 @@ from annotated_types import Ge
 import gbkfit.units
 from gbkfit.config import (
     Choices, FilePath, Serializable, Unit, check_options)
-from gbkfit.grid import make_rest
+from gbkfit.grid import RestValue, make_rest
 from gbkfit.utils.numutils import MAD_TO_STD
 from .base import Dataset
 from .data import Data
@@ -158,7 +158,7 @@ class UVCoverage(Serializable):
             frequencies: Sequence[float],
             phase_centre: Annotated[Sequence[float], Unit('deg')],
             frame: Literal[_FRAMES],
-            rest: str | astropy.units.Quantity
+            rest: RestValue
     ):
         check_options(UVCoverage.__init__, locals())
         uvw = np.array(uvw, float)

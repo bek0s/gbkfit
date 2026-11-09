@@ -192,7 +192,7 @@ export function InstrumentFields({
     const next = withKey(instrument, key, value);
     onChange(withKey(options, 'instrument', Object.keys(next).length ? next : undefined));
   };
-  const beamPsf = beam && { type: 'gauss_beam', bmaj: round(beam.major), bmin: round(beam.minor), bpa: round(beam.angle) };
+  const beamPsf = beam && { type: 'gauss', bmaj: round(beam.major), bmin: round(beam.minor), bpa: round(beam.angle) };
   // (a PSF within 5% of the beam is that of the beam)
   const psfIsBeam = beam !== null && psf !== null && Math.abs(psf.major / beam.major - 1) < 0.05 && Math.abs(psf.minor / beam.minor - 1) < 0.05;
   return (

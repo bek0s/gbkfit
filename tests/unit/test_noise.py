@@ -93,7 +93,7 @@ def test_the_noise_of_hanning_smoothed_spectra():
     # correlation of the kernel convolved by itself: (1, 4, 6, 4, 1) / 16,
     # 4/6 for neighbouring channels and 1/6 for channels two apart
     rng = np.random.default_rng(3)
-    hanning = LSFHanning(width=10)
+    hanning = LSFHanning()
     noise = NoiseGauss(
         rms=2, spectral_correlation=LSFConvolution([hanning, hanning])).draw(
             rng, GRID, None, SIGNAL)
@@ -107,7 +107,7 @@ def test_the_configuration_of_the_noise(tmp_path):
     error = np.tile(np.linspace(1, 3, 128), (128, 1))
     noise = NoiseGauss(
         error=error, spatial_correlation='instrument',
-        spectral_correlation=LSFHanning(width=10))
+        spectral_correlation=LSFHanning())
     info = noise_parser.dump(noise, prefix=f'{tmp_path}/')
     loaded = noise_parser.load(info)
     np.testing.assert_array_equal(loaded.error(), error)

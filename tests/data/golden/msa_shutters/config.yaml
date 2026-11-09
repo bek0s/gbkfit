@@ -1,6 +1,6 @@
 # msa_shutters: Slitless spectra behind a slitlet of three MSA shutters: two nods subtracted (A - B, B - A) and aligned on the sky (sky and image offsets, weights), blurred by the LSF behind the aperture.
 # (written by make_golden.py; do not edit)
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - components:
@@ -31,11 +31,10 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 40}
+    lsf: {type: gauss, sigma: 40 km/s}
   observable:
     type: slitless_spectra
-    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical,
-      rest: 4e-06 m}
+    spectral: {size: 21, step: 30.0, rpix: 10.0, rval: 0.0, convention: optical, rest: 4e-06 m}
     trace:
       type: polynomial
       wave: 4e-06 m

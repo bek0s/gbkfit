@@ -83,7 +83,7 @@ Example
 
    # the version of the format of the configuration (gbkfit-cli migrate
    # rewrites those of older versions)
-   version: 6
+   version: 7
 
    # where the models are evaluated: host (the default) or cuda; several
    # drivers are declared by name in a section 'drivers', and then each
@@ -126,7 +126,7 @@ Example
        spectral: {size: 101, step: 5, convention: relativistic}
      instrument:
        psf: {type: gauss, sigma: 2}
-       lsf: {type: gauss, sigma: 20}
+       lsf: {type: gauss, sigma: 20 km/s}
 
    # parameters
    params:

@@ -44,7 +44,7 @@ def _gauss(rms: float) -> dict[str, Any]:
 
 _PSF = dict(type='gauss', sigma=0.6)
 
-_LSF = dict(type='gauss', sigma=20)
+_LSF = dict(type='gauss', sigma='20 km/s')
 
 _DISK = [dict(components=[_thin_disk()])]
 
@@ -312,7 +312,7 @@ _IFU_HIGHZ = _sky(
             rest='6564.61 Angstrom')),
     line_of_sight=dict(type='grid'),
     instrument=dict(
-        psf=dict(type='gauss', sigma=0.2), lsf=dict(type='gauss', sigma=35)),
+        psf=dict(type='gauss', sigma=0.2), lsf=dict(type='gauss', sigma='35 km/s')),
     dtype='float32')
 
 
@@ -406,7 +406,8 @@ CASES: list[dict[str, Any]] = [
                      dict(sky_offset=[0, -2.5], image_offset=[0, 5]),
                      dict(sky_offset=[0, 2.5], image_offset=[0, 5],
                           weight=-1)]) | _GRISM,
-            instrument=dict(psf=_PSF, lsf=dict(type='gauss', sigma=40)))],
+            instrument=dict(psf=_PSF, lsf=dict(
+                type='gauss', sigma='40 km/s')))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.005)]),
     dict(
@@ -501,7 +502,7 @@ CASES: list[dict[str, Any]] = [
         observations=[_sky(
             dict(type='visibilities', coverage=dict(file='coverage.npz'),
                  fov=[32, 28], step=1, rval=[150, -30]),
-            instrument=dict(lsf=dict(type='hanning', width=20)))],
+            instrument=dict(lsf=dict(type='hanning')))],
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.01)],
         prepare=_write_uv_coverage),
@@ -542,7 +543,7 @@ CASES: list[dict[str, Any]] = [
                     values=[1.2, 0.9, 0.6])),
                 lsf=dict(type='gauss', sigma=dict(
                     points=dict(value=[-500, 500], unit='km/s'),
-                    values=[12, 30])),
+                    values=[12, 30], unit='km/s')),
                 primary_beam=dict(type='gauss', fwhm=8, x=1, y=-0.5)))],
         truth=_named('gas', _DISK_TRUTH),
         trial=_named('gas', _DISK_TRIAL),
@@ -582,10 +583,12 @@ CASES: list[dict[str, Any]] = [
         truth=_DISK_TRUTH, trial=_DISK_TRIAL,
         noises=[_gauss(0.0002) | dict(
             spatial_correlation='instrument',
-            spectral_correlation=dict(type='gauss', sigma=25))],
+            spectral_correlation=dict(
+                type='gauss', sigma='25 km/s'))],
         data_options=[dict(
             spatial_correlation=dict(type='gauss', sigma=1.2),
-            spectral_correlation=dict(type='gauss', sigma=25))]),
+            spectral_correlation=dict(
+                type='gauss', sigma='25 km/s'))]),
     dict(
         name='user_likelihoods',
         doc="Three observations of user likelihoods of parameters: a cube "

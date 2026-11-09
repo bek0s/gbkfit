@@ -33,7 +33,8 @@ PROPERTIES = dict(
     pt_a=1, pt_s=4, vpt_rt=2, vpt_vt=150, dpt_a=20)
 
 INSTRUMENT = dict(
-    psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
+    psf=dict(type='gauss', sigma=1.5),
+    lsf=dict(type='gauss', sigma='15 km/s'))
 
 
 def scube(rest, **options):
@@ -192,7 +193,7 @@ def test_line_parameters_and_options():
       dict(name='ha', rest='6563 Angstrom')], "different names"),
     ([dict(name='ha', rest='6562.8 Angstrom'),
       dict(name='vpt', rest='6563 Angstrom')], None),
-    ([dict(name='ha', rest='6562.8')], "positive wavelength or frequency")])
+    ([dict(name='ha', rest='6562.8')], "'rest' needs its unit")])
 def test_invalid_lines(lines, message):
     from gbkfit.model import galaxy_parser
     info = galaxy_of(with_lines(COMPONENT, lines))

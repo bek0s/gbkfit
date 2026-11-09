@@ -36,7 +36,8 @@ PROPERTIES = dict(
 FLAT = dict(type='flat')
 
 INSTRUMENT = dict(
-    psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
+    psf=dict(type='gauss', sigma=1.5),
+    lsf=dict(type='gauss', sigma='15 km/s'))
 
 SPECTRAL = dict(size=101, step=5, convention='relativistic')
 

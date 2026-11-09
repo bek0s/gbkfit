@@ -15,7 +15,7 @@ import gbkfit
 from gbkfit.config import Column, DataFile, TypedParser, TypedSerializable
 from gbkfit.config.catalogue import Family, Member
 from gbkfit.config.schema import SchemaWriter
-from gbkfit.instrument import PSF, PSFGauss, PSFGaussBeam
+from gbkfit.instrument import PSF, PSFGauss
 from gbkfit.model import Galaxy
 from gbkfit.observation import FittedNoise
 
@@ -28,32 +28,32 @@ def test_members_of_families_have_their_options():
     gauss = next(
         x for x in writer.defs()['psf']['oneOf']
         if x['title'] == PSFGauss.type_title())
-    assert gauss['required'] == ['type', 'sigma']
-    assert gauss['additionalProperties'] is False
-    assert gauss['properties']['type'] == {'const': 'gauss'}
+    # (a member is described by the first paragraph of the docstring of
+    # its class, in a line)
+    assert gauss['description'] == (
+        'A Gaussian, round or elliptical: by its sigma, its full width at '
+        'half maximum, or those of its axes, as of radio beams (also of '
+        'the header of a file).')
+    # (a member of several forms has one for each of its constructors,
+    # those named described by their docstrings: e.g. a beam by a file)
+    by_sigma, by_fwhm, by_beam, by_file = gauss['oneOf']
+    assert by_sigma['required'] == ['type', 'sigma']
+    assert by_sigma['additionalProperties'] is False
+    assert by_sigma['properties']['type'] == {'const': 'gauss'}
+    assert 'description' not in by_sigma
+    assert by_fwhm['required'] == ['type', 'fwhm']
+    assert by_beam['required'] == ['type', 'bmaj', 'bmin']
+    assert by_file['description'].startswith('Read the beam of a file')
     # (a number, or a table of the values along the spectral axis; see
     # PSF.varying)
-    sigma = gauss['properties']['sigma']
+    sigma = by_sigma['properties']['sigma']
     number, table = sigma['anyOf']
     assert (number, table) == (
         {'type': 'number', 'exclusiveMinimum': 0},
         {'$ref': '#/$defs/SpectralTable'})
     assert sigma['unit'] == 'arcsec'
     assert sigma['description'].startswith('The standard deviation')
-    assert gauss['properties']['ratio']['default'] == 1.0
-    # (a member is described by the first paragraph of the docstring of
-    # its class, in a line)
-    assert gauss['description'] == (
-        'A Gaussian, round or elliptical, by its sigma, axis ratio and '
-        'angle.')
-    # (and each form of a member of several by its named constructor:
-    # e.g. a beam by its axes, or by a file, from_file)
-    beam = next(
-        x for x in writer.defs()['psf']['oneOf']
-        if x['title'] == PSFGaussBeam.type_title())
-    axes, file = beam['oneOf']
-    assert 'description' not in axes
-    assert file['description'].startswith('Read the beam of a file')
+    assert by_sigma['properties']['ratio']['default'] == 1.0
 
 
 def test_options_have_the_forms_of_configurations():

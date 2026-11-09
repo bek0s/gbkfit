@@ -1,6 +1,6 @@
 # params_features: Two gas disks (cold and warm) of one warp (the geometric parameters of the warm one tied to those of the cold one) and a nucleus, in a cube: the position angles of the warp given as offsets (mode), ties, extra parameters of the section pdescs (the flux of the nucleus, exp(mu + sigma z)), derived values, and priors on several parameters (gauss on an expression, smooth over the warp).
 # (written by make_golden.py; do not edit)
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - components:
@@ -52,7 +52,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20}
+    lsf: {type: gauss, sigma: 20 km/s}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float64

@@ -1,6 +1,6 @@
 # two_galaxies: Two named galaxies (their parameters prefixed by their names): a cube of both through radiative transfer, the dust of the one in front (section depth_order) dimming the one behind; and moment maps of the one behind alone (option galaxies).
 # (written by make_golden.py; do not edit)
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - name: front
@@ -65,7 +65,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20}
+    lsf: {type: gauss, sigma: 20 km/s}
   observable: {type: pixel_spectra, smooth_weights: false, median_size: null}
   oversampling: [1, 1, 1]
   dtype: float64
@@ -79,10 +79,8 @@ observations:
     rval: [0, 0]
     rota: 0
     moment0: {data: observation1_moment0_d.fits, error: observation1_moment0_e.fits}
-    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits,
-      error: observation1_moment1_e.fits}
-    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits,
-      error: observation1_moment2_e.fits}
+    moment1: {data: observation1_moment1_d.fits, mask: observation1_moment1_m.fits, error: observation1_moment1_e.fits}
+    moment2: {data: observation1_moment2_d.fits, mask: observation1_moment2_m.fits, error: observation1_moment2_e.fits}
   likelihood: {type: gaussian, weights: 1.0, missing_residual: 3.0, white_floor: 0.01}
   line_of_sight:
     type: grid
@@ -91,7 +89,7 @@ observations:
   instrument:
     primary_beam: null
     psf: {type: gauss, sigma: 0.6, ratio: 1.0, posa: 0.0}
-    lsf: {type: gauss, sigma: 20}
+    lsf: {type: gauss, sigma: 20 km/s}
   observable:
     type: pixel_moments
     spectral: {size: 60, step: 10.0, rpix: 29.5, rval: 0.0, convention: relativistic}

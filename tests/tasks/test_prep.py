@@ -760,12 +760,16 @@ def test_lsf_of_muse(tmp_path):
     table = str(tmp_path / 'prep_lsf.ecsv')
     lsf = lsf_parser.load(dict(
         type='gauss',
-        sigma=dict(file=table, points='wavelength', column='sigma')))
-    # (a width in wavelength becomes a velocity with the rest)
-    gauss = lsf.at(7000 * u.AA, VelocityConvention(7000 * u.AA))
-    # A FWHM of 2.48 Angstrom at 7000 Angstrom, in km/s
+        fwhm=dict(file=table, points='wavelength', column='fwhm')))
+    # A FWHM of 2.48 Angstrom at 7000 Angstrom, which spans c FWHM / 7000
+    # km/s of an axis of optical velocities of a rest of 7000 Angstrom
+    from gbkfit.instrument import Channel
+    gauss = lsf.at(7000 * u.AA)
     fwhm = 5.866e-8 * 7000 ** 2 - 9.187e-4 * 7000 + 6.040
-    assert gauss.dump()['sigma'] == pytest.approx(
+    from gbkfit.units import parse_quantity
+    assert u.isclose(parse_quantity(gauss.dump()['fwhm']), fwhm * u.AA)
+    channel = Channel(0.0, None, VelocityConvention(7000 * u.AA))
+    assert channel.span(gauss._scale) == pytest.approx(
         299792.458 * fwhm / 7000 / np.sqrt(8 * np.log(2)))
 
 
@@ -791,13 +795,13 @@ def test_beams_of_casa(tmp_path):
         [fits.PrimaryHDU(np.zeros((3, 2, 2)), header), beams]).writeto(path)
     prep.prep_psf_casa_beams(str(path), str(tmp_path))
     table = str(tmp_path / 'prep_psf.ecsv')
-    psf = psf_parser.load(dict(type='gauss_beam', **{
+    psf = psf_parser.load(dict(type='gauss', **{
         name: dict(file=table, points='frequency', column=name)
         for name in ('bmaj', 'bmin', 'bpa')}))
     # (the frequency of the second channel)
     beam = psf.at(1.4201e9 * u.Hz)
     assert beam.dump() == pytest.approx(
-        dict(type='gauss_beam', bmaj=12, bmin=9, bpa=31))
+        dict(type='gauss', bmaj=12, bmin=9, bpa=31))
 
 
 def test_region_spectra_keep_the_spectral_axis_of_the_cube():

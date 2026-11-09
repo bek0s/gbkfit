@@ -16,7 +16,8 @@ import gbkfit.units
 from gbkfit.config import (
     BasicParser, ConfigError, Serializable, check_name, check_options)
 from gbkfit.grid import (
-    Grid, VelocityConvention, air_refractive_index, doppler, make_rest)
+    Grid, RestValue, VelocityConvention, air_refractive_index, doppler,
+    make_rest)
 from gbkfit.params.pdescs import ParamScalarDesc
 
 
@@ -95,7 +96,7 @@ class Line(Serializable):
         return dict(
             name=self._name, rest=gbkfit.units.format_quantity(self._rest))
 
-    def __init__(self, name: str, rest: str | astropy.units.Quantity):
+    def __init__(self, name: str, rest: RestValue):
         check_options(Line.__init__, locals())
         check_name(name)
         self._name = name

@@ -5,16 +5,17 @@ must always be cropped/downscaled to the low-res weight cube, and only
 smoothed if smooth_weights is set.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
 
 from gbkfit.observation.observables._dcube import DCube, cube_extra
-from gbkfit.instrument import LSFGauss
+from gbkfit.instrument import Channel, LSFGauss
 from gbkfit.instrument import PSFGauss
 
 
 @pytest.mark.parametrize('psf, lsf', [
-    (None, None), (PSFGauss(2), LSFGauss(5))])
+    (None, None), (PSFGauss(2), LSFGauss(5 * u.km / u.s))])
 def test_grids(driver, psf, lsf):
     # The high-res cube has oversampling times the pixels of the low-res cube,
     # and the padding (edge) of the convolution on both sides (along z,
@@ -39,7 +40,7 @@ def test_grids(driver, psf, lsf):
     size_hi = np.multiply(size, oversampling)
     edge_hi = np.zeros(3, int)
     if psf:
-        lsf_size = lsf.size(step_hi[2])
+        lsf_size = lsf.on(Channel(width=step[2])).size(step_hi[2])
         kernel_size = psf.size(tuple(step_hi[:2])) + (lsf_size,)
         fft = driver.fft(np.float64)
         size_z = size_hi[2] + lsf_size - 1
@@ -129,7 +130,7 @@ def test_lsf_only_keeps_the_image_on_a_non_square_cube(driver):
     # uses a point PSF, which must have the shape of a non-square image.
     from gbkfit.instrument import LSFGauss
     images = []
-    for lsf in (None, LSFGauss(2.0)):
+    for lsf in (None, LSFGauss(2.0 * u.km / u.s)):
         dcube = DCube(
             size=(24, 16, 40), step=(1, 1, 1), rpix=(11.5, 7.5, 19.5),
             rval=(0, 0, 0), rota=0, rest=None, medium=None,

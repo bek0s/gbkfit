@@ -36,7 +36,8 @@ PROPERTIES = dict(
 FLAT = dict(type='flat')
 
 INSTRUMENT = dict(
-    psf=dict(type='gauss', sigma=1.5), lsf=dict(type='gauss', sigma=15))
+    psf=dict(type='gauss', sigma=1.5),
+    lsf=dict(type='gauss', sigma='15 km/s'))
 
 SCUBE = dict(
     type='pixel_spectra', size=[32, 41], step=[1, 1],

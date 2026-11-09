@@ -3,12 +3,13 @@ Tests for the observations with a PSF or an LSF that varies along the
 spectral axis.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
 import scipy.signal
 
 import gbkfit.params
-from gbkfit.instrument import LSFGauss, PSFGauss
+from gbkfit.instrument import Channel, LSFGauss, PSFGauss
 from gbkfit.model import galaxy_parser
 from gbkfit.observation import ObservationGroup, observation_parser
 
@@ -52,6 +53,13 @@ def table(low, high):
         points=dict(value=[-500, 500], unit='km/s'), values=[low, high])
 
 
+def kms(width):
+    """A width of an LSF (a number, or a table) in km/s."""
+    if isinstance(width, dict):
+        return width | dict(unit='km/s')
+    return f'{width} km/s'
+
+
 @pytest.mark.parametrize('psf, lsf', [
     (table(1.3, 1.3), table(17, 17)), (table(1.3, 1.3), 17),
     (1.3, table(17, 17)), (table(1.3, 1.3), None), (None, table(17, 17))])
@@ -65,7 +73,7 @@ def test_tables_of_one_value_are_the_constant_psf_and_lsf(
             psf=None if psf_sigma is None
             else dict(type='gauss', sigma=psf_sigma),
             lsf=None if lsf_sigma is None
-            else dict(type='gauss', sigma=lsf_sigma))
+            else dict(type='gauss', sigma=kms(lsf_sigma)))
     varying = spectra(driver, **kernels(psf, lsf), oversampling=oversampling)
     constant = spectra(driver, **kernels(
         None if psf is None else 1.3, None if lsf is None else 17),
@@ -77,7 +85,8 @@ def test_tables_of_one_value_are_the_constant_psf_and_lsf(
 def test_constant_psfs_and_lsfs_convolved_separately_or_not_agree(
         driver, monkeypatch):
     # (each driver does one of the two: see DriverFFT.separable)
-    psf, lsf = dict(type='gauss', sigma=1.3), dict(type='gauss', sigma=17)
+    psf = dict(type='gauss', sigma=1.3)
+    lsf = dict(type='gauss', sigma=kms(17))
     fft_class = type(driver.fft(np.float64))
     monkeypatch.setattr(fft_class, 'separable', False)
     together = spectra(driver, psf, lsf)
@@ -105,11 +114,13 @@ def test_each_channel_has_its_psf(driver):
 def test_each_channel_has_its_lsf(driver):
     # The light of each channel spreads with the LSF of that channel
     sigma = np.interp(VELOCITIES, [-500, 500], [10, 30])
-    varying = spectra(driver, lsf=dict(type='gauss', sigma=table(10, 30)))
+    varying = spectra(
+        driver, lsf=dict(type='gauss', sigma=kms(table(10, 30))))
     plain = spectra(driver)
     expected = np.zeros((SIZE[2] + 200,) + plain.shape[1:])
     for z, s in enumerate(sigma):
-        kernel = LSFGauss(s).asarray(STEP[2], 201)
+        kernel = LSFGauss(s * u.km / u.s).on(Channel()).asarray(
+            STEP[2], 201)
         expected[z:z + 201] += kernel[:, None, None] * plain[z]
     np.testing.assert_allclose(
         varying, expected[100:100 + SIZE[2]],
@@ -138,15 +149,15 @@ def test_psf_images_of_one_image_are_that_image(driver, tmp_path):
 
 def test_lsf_images_of_one_profile_are_that_profile(driver, tmp_path):
     import astropy.io.fits
-    profile = LSFGauss(17).asarray(4)
+    profile = LSFGauss(17 * u.km / u.s).on(Channel()).asarray(4)
     astropy.io.fits.writeto(tmp_path / 'profile.fits', profile)
     astropy.io.fits.writeto(
         tmp_path / 'profiles.fits', np.stack([profile, profile]))
     images = spectra(driver, lsf=dict(
-        type='images', file=str(tmp_path / 'profiles.fits'), step=4,
+        type='images', file=str(tmp_path / 'profiles.fits'), step=kms(4),
         points=dict(value=[-500, 500], unit='km/s')))
     single = spectra(driver, lsf=dict(
-        type='image', file=str(tmp_path / 'profile.fits'), step=4))
+        type='image', file=str(tmp_path / 'profile.fits'), step=kms(4)))
     np.testing.assert_allclose(
         images, single, atol=2e-6 * np.abs(single).max())
 

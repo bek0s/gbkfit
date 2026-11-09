@@ -11,7 +11,6 @@ from collections.abc import Sequence
 from typing import Annotated, Any
 
 import astropy.io.fits as fits
-import astropy.units
 import numpy as np
 import numpy.polynomial.polynomial as npp
 import numpy.typing as npt
@@ -19,7 +18,8 @@ import scipy.interpolate
 
 import gbkfit.units
 from gbkfit.config import (
-    FilePath, TypedParser, TypedSerializable, Unit, check_options)
+    FilePath, QuantityOrText, TypedParser, TypedSerializable, Unit, UnitKinds,
+    check_options)
 from gbkfit.grid import make_rest
 
 
@@ -100,7 +100,8 @@ class TracePolynomial(Trace):
 
     def __init__(
             self,
-            wave: str | astropy.units.Quantity,
+            wave: Annotated[QuantityOrText, UnitKinds(
+                wavelength=('um', 'nm', 'Angstrom', 'm'))],
             dx: Annotated[Sequence[float], Unit('pixel')],
             dy: Annotated[Sequence[float], Unit('pixel')] = (0.0,)
     ):

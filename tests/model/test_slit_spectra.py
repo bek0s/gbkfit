@@ -41,7 +41,8 @@ def evaluate(driver, observable):
 def test_slit_spectra_matches_the_central_row_of_pixel_spectra(driver, psf, rota):
     # The cube has an odd number of rows, so its central row is
     # centred on the slit, which passes through the reference position
-    common = dict(rota=rota, psf=psf, lsf=dict(type='gauss', sigma=15))
+    common = dict(rota=rota, psf=psf, lsf=dict(
+        type='gauss', sigma='15 km/s'))
     scube = evaluate(driver, dict(
         type='pixel_spectra', size=[32, 41], step=[1, 1],
         spectral=dict(size=51, step=10, convention='relativistic'), **common))
@@ -107,10 +108,10 @@ def test_hanning_smoothing_of_the_channels(driver):
     observable = dict(
         type='slit_spectra', size=[32], step=[1],
         spectral=dict(size=61, step=10, convention='relativistic'))
-    gauss = dict(type='gauss', sigma=15)
+    gauss = dict(type='gauss', sigma='15 km/s')
     plain = evaluate(driver, observable | dict(lsf=gauss))
     smoothed = evaluate(driver, observable | dict(lsf=dict(
-        type='convolution', lsfs=[gauss, dict(type='hanning', width=10)])))
+        type='convolution', lsfs=[gauss, dict(type='hanning')])))
     expected = 0.5 * plain
     expected[1:] += 0.25 * plain[:-1]
     expected[:-1] += 0.25 * plain[1:]

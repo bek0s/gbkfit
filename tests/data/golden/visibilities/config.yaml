@@ -1,6 +1,6 @@
 # visibilities: The visibilities of HI channels at random baselines, smoothed by a Hanning correlator response.
 # (written by make_golden.py; do not edit)
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - components:
@@ -24,7 +24,7 @@ observations:
   instrument:
     primary_beam: null
     psf: null
-    lsf: {type: hanning, width: 20}
+    lsf: {type: hanning}
   observable:
     type: visibilities
     fov: [32, 28]

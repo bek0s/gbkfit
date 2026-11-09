@@ -16,7 +16,7 @@ from annotated_types import Gt
 from gbkfit.config import (
     Choices, DataFile, TypedParser, TypedSerializable, check_options)
 from gbkfit.grid import Grid, VelocityConvention
-from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
+from gbkfit.instrument import LSF, PSF, Channel, lsf_parser, psf_parser
 from gbkfit.io import read_data, write_image
 from gbkfit.math.correlation import periodic_correlation
 
@@ -172,8 +172,8 @@ class NoiseGauss(Noise):
         The correlation on the sky: a PSF, or 'instrument' (the PSF of the
         instrument).
     spectral_correlation : LSF, optional
-        The correlation along the spectral axis, in km/s of the axis (see
-        Data); it must not vary.
+        The correlation along the spectral axis (see Data), drawn at the
+        middle channel of the data (see LSF.on); it must not vary.
 
     Raises
     ------
@@ -349,7 +349,8 @@ class NoiseGauss(Noise):
             raise ValueError(
                 "the noise has a spectral correlation, but the data have no "
                 "spectral axis")
-        return spectral.asarray(abs(grid.coords.step[grid.spectral_axis]))
+        channel = Channel.middle(grid)
+        return spectral.on(channel).asarray(channel.width)
 
 
 class NoiseStudentT(Noise):

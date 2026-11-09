@@ -23,7 +23,7 @@ PROPERTIES = dict(
     vsys=0, xpos=0.3, ypos=-0.2, posa=30, incl=60, pt_a=1, pt_s=2.5,
     vpt_rt=2, vpt_vt=150, dpt_a=20)
 GAUSS_PSF = dict(type='gauss', sigma=1.3)
-GAUSS_LSF = dict(type='gauss', sigma=17)
+GAUSS_LSF = dict(type='gauss', sigma='17 km/s')
 VARYING_PSF = dict(type='gauss', sigma=dict(
     points=dict(value=[-500, 500], unit='km/s'), values=[1, 2]))
 FLAT = dict(type='flat')

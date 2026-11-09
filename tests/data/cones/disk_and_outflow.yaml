@@ -1,4 +1,4 @@
-version: 6
+version: 7
 driver: {type: host}
 galaxies:
 - components:
@@ -36,12 +36,6 @@ observations:
     spectral: {size: 41, step: 20, convention: relativistic}
   instrument:
     psf: {type: gauss, sigma: 1.0}
-    lsf: {type: gauss, sigma: 30.0}
+    lsf: {type: gauss, sigma: 30.0 km/s}
 params:
-  properties: {disk_vsys: 0, disk_xpos: 0, disk_ypos: 0, disk_posa: 30,
-    disk_incl: 60, disk_pt_a: 1, disk_pt_s: 3, disk_ht_s: 0.5, disk_vpt_rt: 1,
-    disk_vpt_vt: 200, disk_dpt_a: 30, outflow_vsys: 0, outflow_xpos: 0,
-    outflow_ypos: 0, outflow_posa: 30, outflow_incl: 60, outflow_wall: 25,
-    outflow_pt_a: 0.5, outflow_pt_s: 2,
-    outflow_ht_s: [0.09, 0.35, 0.69, 1.04], outflow_vpt_vo: 300,
-    outflow_dpt_a: 80}
+  properties: {disk_vsys: 0, disk_xpos: 0, disk_ypos: 0, disk_posa: 30, disk_incl: 60, disk_pt_a: 1, disk_pt_s: 3, disk_ht_s: 0.5, disk_vpt_rt: 1, disk_vpt_vt: 200, disk_dpt_a: 30, outflow_vsys: 0, outflow_xpos: 0, outflow_ypos: 0, outflow_posa: 30, outflow_incl: 60, outflow_wall: 25, outflow_pt_a: 0.5, outflow_pt_s: 2, outflow_ht_s: [0.09, 0.35, 0.69, 1.04], outflow_vpt_vo: 300, outflow_dpt_a: 80}

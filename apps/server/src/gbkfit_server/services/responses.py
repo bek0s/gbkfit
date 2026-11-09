@@ -14,7 +14,7 @@ from typing import Any
 import numpy as np
 
 from gbkfit.config import ConfigError, TypedParser, paths_relative_to
-from gbkfit.instrument.lsfs import lsf_parser
+from gbkfit.instrument.lsfs import Channel, ChannelLSF, lsf_parser
 from gbkfit.instrument.psfs import psf_parser
 
 from .errors import Invalid
@@ -158,19 +158,29 @@ class Responses:
         lsf = self._load(lsf_parser, project, options, 'LSF')
         if step is not None and step <= 0:
             raise Invalid(f"the width of the channels must be positive: {step}")
-        # (of its own scale, the first round width below about 1/_ACROSS
-        # of it that it can be drawn on: e.g. a Hanning smoothing, only on
-        # channels of which its width is a multiple)
-        steps = [step] if step is not None else _round_below(
-            lsf.size(1.0) / _ACROSS)
+        # (drawn at 0 km/s of an axis without a rest, on channels of the
+        # data that it is drawn on: its widths in km/s of the light span
+        # as many km/s there, and those in a unit of wavelength or
+        # frequency need the rest of the data)
+        def on(width: float) -> ChannelLSF:
+            return lsf.on(Channel(0.0, width))
+        try:
+            # (of its own scale, the first round width below about 1/_ACROSS
+            # of it that it can be drawn on: e.g. a Hanning smoothing, only
+            # on channels of which its width is a multiple)
+            steps = [step] if step is not None else _round_below(
+                on(1.0).size(1.0) / _ACROSS)
+        except (RuntimeError, ValueError) as e:
+            raise Invalid(f"cannot draw the LSF: {e}") from e
         for i, width in enumerate(steps):
             try:
-                size = lsf.size(width)
+                size = on(width).size(width)
                 if size > _MOST:
                     raise Invalid(
                         f"the LSF needs {size} channels of {width:g} km/s; "
                         f"at most {_MOST}")
-                values = np.asarray(lsf.asarray(width, size), dtype=np.float32)
+                values = np.asarray(
+                    on(width).asarray(width, size), dtype=np.float32)
             except RuntimeError as e:
                 if i == len(steps) - 1:
                     raise Invalid(f"cannot draw the LSF: {e}") from e

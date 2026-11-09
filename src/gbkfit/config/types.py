@@ -20,9 +20,12 @@ from collections.abc import Callable, Mapping
 from typing import Annotated, Any, Literal, NamedTuple, TypeAlias
 
 import annotated_types
+import astropy.units
 import numpy as np
 import pydantic
 import pydantic.warnings
+
+import gbkfit.units
 
 
 __all__ = [
@@ -30,8 +33,12 @@ __all__ = [
     'Column',
     'DataFile',
     'FilePath',
+    'QuantityOrText',
+    'ScalarQuantity',
     'Unit',
+    'UnitKinds',
     'Varying',
+    'config_form',
     'describe_type',
     'is_asdf_file',
     'is_varying',
@@ -41,6 +48,7 @@ __all__ = [
     'type_error',
     'type_problem',
     'union_members',
+    'unit_kinds_of',
     'unit_of',
     'varying_options'
 ]
@@ -62,6 +70,68 @@ class Unit:
     """
 
     unit: str
+
+
+@dataclasses.dataclass(frozen=True, init=False)
+class UnitKinds:
+    """
+    The kinds of unit of a quantity option, as a marker of its annotation:
+    each by its name for people, with units of it, the first an example;
+    e.g. ``UnitKinds(wavelength=('Angstrom', 'nm'), frequency=('kHz',
+    'MHz'))``. A value is in a unit of one of the kinds (e.g. um, or GHz).
+
+    Unlike Unit, the values carry their unit, which is checked (see
+    type_problem): messages name the kinds, and schemas list their units
+    (e.g. as the units a form of the option suggests).
+
+    Parameters
+    ----------
+    **kinds : str or Sequence of str
+        The units of each kind, by its name.
+    """
+
+    kinds: tuple[tuple[str, tuple[str, ...]], ...]
+
+    def __init__(self, **kinds: str | tuple[str, ...]):
+        object.__setattr__(self, 'kinds', tuple(
+            (name, (units,) if isinstance(units, str) else tuple(units))
+            for name, units in kinds.items()))
+
+    def admits(self, unit: Any) -> bool:
+        """Return whether a unit is of one of the kinds."""
+        return _admits(unit, tuple(units[0] for _, units in self.kinds))
+
+    def example(self) -> str:
+        """Return the example unit: the first of the first kind."""
+        return self.kinds[0][1][0]
+
+    def names(self) -> str:
+        """Return the names of the kinds, e.g. 'wavelength or frequency'."""
+        return _either([name for name, _ in self.kinds])
+
+    def described(self) -> str:
+        """
+        Return the kinds with an example of each, e.g. 'wavelength (e.g.
+        Angstrom) or frequency (e.g. kHz)'.
+        """
+        return _either([
+            f"{name} (e.g. {units[0]})" for name, units in self.kinds])
+
+
+def _either(words: list[str]) -> str:
+    """Words joined by commas, the last by 'or'."""
+    return words[0] if len(words) == 1 \
+        else f"{', '.join(words[:-1])} or {words[-1]}"
+
+
+@functools.cache
+def _admits(unit: Any, units: tuple[str, ...]) -> bool:
+    """
+    Whether a unit is of the kind of one of units (see UnitKinds), found
+    once for each: astropy takes long to tell.
+    """
+    import astropy.units
+    return any(unit.is_equivalent(astropy.units.Unit(x)) for x in units)
 
 
 @dataclasses.dataclass(frozen=True, init=False)
@@ -114,9 +184,35 @@ class _ConfigForm:
     name: str
 
 
+def config_form(type_: Any) -> str | None:
+    """
+    Return the name of the form of their own that configurations give the
+    values of an annotation in (e.g. 'path', of FilePath; see
+    _ConfigForm), or None if none.
+    """
+    if typing.get_origin(type_) is not Annotated:
+        return None
+    return next((
+        x.name for x in type_.__metadata__ if isinstance(x, _ConfigForm)),
+        None)
+
+
 # The path of a file; in a configuration, relative to the directory of
 # the configuration (see resolve_path)
 FilePath: TypeAlias = Annotated[str, _ConfigForm('path')]
+
+# A quantity of one value (e.g. a width of the light): in a configuration,
+# its text, a number and its unit (e.g. '2.5 Angstrom'; see
+# gbkfit.units.parse_quantity); its kinds of unit are given by a marker
+# (see UnitKinds)
+ScalarQuantity: TypeAlias = Annotated[
+    astropy.units.Quantity, _ConfigForm('quantity')]
+
+# A quantity of one value that Python also gives as its text, which the
+# callee reads (e.g. a rest, see gbkfit.grid.make_rest); in a
+# configuration, its text, as of a ScalarQuantity
+QuantityOrText: TypeAlias = Annotated[
+    str | astropy.units.Quantity, _ConfigForm('quantity')]
 
 # A file of data, an array or a table (see gbkfit.io): its filename (of
 # a FITS file, its first HDU with data), or its filename and where the
@@ -383,6 +479,12 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
     if value is None:
         return None if type(None) in union_members(type_) \
             else TypeError("cannot be null")
+    kinds = unit_kinds_of(type_)
+    if kinds is not None and _lacks_unit(value):
+        number = float(getattr(value, 'value', value))
+        return TypeError(
+            f"needs its unit, e.g. '{number:g} {kinds.example()}': a unit of "
+            f"{kinds.described()}; it is {number!r}")
     type_, bounds = _split_bounds(_without_none(type_))
     # A plain array (not a subclass, e.g. a Quantity) is checked as a list
     if not matches_type(value, type_) and not (
@@ -405,8 +507,29 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
     bounds = [_bound(x) for x in bounds]
     if not all(check(value) for _, check in bounds):
         within = ' and '.join(words for words, _ in bounds)
-        return ValueError(f"must be {within}; it is {value!r}")
+        return ValueError(f"must be {within}; it is {_shown(value)}")
+    if kinds is not None and isinstance(value, astropy.units.Quantity) \
+            and not kinds.admits(value.unit):
+        return ValueError(
+            f"must be in a unit of {kinds.names()}; it is {_shown(value)}")
     return None
+
+
+def _shown(value: Any) -> str:
+    """A value in messages: a Quantity as its text, others as code."""
+    if isinstance(value, astropy.units.Quantity) and value.isscalar:
+        return gbkfit.units.format_quantity(value)
+    return repr(value)
+
+
+def _lacks_unit(value: Any) -> bool:
+    """
+    Return whether the value of a quantity option lacks its unit: a real
+    number, or a Quantity without a unit (e.g. read from the text '2.5').
+    """
+    if isinstance(value, astropy.units.Quantity):
+        return value.unit == astropy.units.dimensionless_unscaled
+    return isinstance(value, int | float) and not isinstance(value, bool)
 
 
 def _item_error(value: Any, type_: Any) -> TypeError | ValueError | None:
@@ -477,6 +600,19 @@ def _bound(bound: Any) -> tuple[str, Callable[[Any], bool]]:
         case pydantic.AllowInfNan(allow_inf_nan=False):
             return "finite", math.isfinite
     raise TypeError(f"unknown bound {bound!r}")
+
+
+def unit_kinds_of(type_: Any) -> UnitKinds | None:
+    """
+    Return the kinds of unit of an option of a type annotation (its
+    UnitKinds marker; that of the annotation without None), or None if it
+    has none.
+    """
+    type_ = _without_none(type_)
+    if typing.get_origin(type_) is not Annotated:
+        return None
+    kinds = [x for x in type_.__metadata__ if isinstance(x, UnitKinds)]
+    return kinds[0] if kinds else None
 
 
 def unit_of(type_: Any) -> str | None:

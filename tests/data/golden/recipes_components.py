@@ -26,7 +26,7 @@ _HALPHA_NII = dict(type='lines', lines=[
     dict(name='nii', rest='6583.45 Angstrom')])
 
 _PSF = dict(type='gauss', sigma=0.6)
-_LSF = dict(type='gauss', sigma=20)
+_LSF = dict(type='gauss', sigma='20 km/s')
 
 
 def _disk(**options: Any) -> dict[str, Any]:

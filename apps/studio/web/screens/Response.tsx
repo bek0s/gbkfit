@@ -31,28 +31,30 @@ import { useUnsaved } from './editing';
 
 export type Family = 'psf' | 'lsf';
 
+// A width of an LSF of km/s (of the light; its widths carry their unit)
+const kms = (value: number) => `${value} km/s`;
+
 // What the members of each family start with, when chosen (their options
 // that must be given): a PSF of a seeing of about 3.5", an LSF of about
 // 35 km/s
 export const STARTS: Record<string, Record<string, Options>> = {
   psf: {
-    gauss: { sigma: 1.5 },
-    gauss_beam: { bmaj: 3.5, bmin: 3.5, bpa: 0 },
-    moffat: { alpha: 2, beta: 2.5 },
-    ggauss: { alpha: 2, beta: 2 },
+    gauss: { fwhm: 3.5 },
+    moffat: { fwhm: 3.5, beta: 2.5 },
+    ggauss: { fwhm: 3.5, beta: 2 },
     point: {},
     sum: { psfs: [{ type: 'gauss', sigma: 1 }, { type: 'gauss', sigma: 3 }], weights: [0.8, 0.2] },
     convolution: { psfs: [{ type: 'gauss', sigma: 1 }, { type: 'moffat', alpha: 2, beta: 2.5 }] },
   },
   lsf: {
-    gauss: { sigma: 15 },
-    moffat: { alpha: 15, beta: 2.5 },
-    ggauss: { alpha: 15, beta: 2 },
-    lorentz: { gamma: 10 },
-    hanning: { width: 10 },
+    gauss: { fwhm: kms(35) },
+    moffat: { fwhm: kms(35), beta: 2.5 },
+    ggauss: { fwhm: kms(35), beta: 2 },
+    lorentz: { fwhm: kms(20) },
+    hanning: {},
     point: {},
-    sum: { lsfs: [{ type: 'gauss', sigma: 10 }, { type: 'gauss', sigma: 30 }], weights: [0.8, 0.2] },
-    convolution: { lsfs: [{ type: 'gauss', sigma: 10 }, { type: 'hanning', width: 10 }] },
+    sum: { lsfs: [{ type: 'gauss', sigma: kms(10) }, { type: 'gauss', sigma: kms(30) }], weights: [0.8, 0.2] },
+    convolution: { lsfs: [{ type: 'gauss', sigma: kms(10) }, { type: 'hanning' }] },
   },
 };
 

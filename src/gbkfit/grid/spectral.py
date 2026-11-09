@@ -16,7 +16,8 @@ from annotated_types import Gt
 
 import gbkfit.units
 from gbkfit.config import (
-    BasicParser, Choices, Serializable, check_options)
+    BasicParser, Choices, QuantityOrText, Serializable, UnitKinds,
+    check_options)
 
 if typing.TYPE_CHECKING:
     from .coords import Coords, Grid
@@ -27,6 +28,7 @@ __all__ = [
     'FRAMES',
     'SPECTRAL_TYPES',
     'Rest',
+    'RestValue',
     'SpectralAxis',
     'VelocityConvention',
     'air_refractive_index',
@@ -41,8 +43,9 @@ __all__ = [
 ]
 
 
-# The speed of light (km/s)
+# The speed of light (km/s), and the unit of velocities
 _C = astropy.constants.c.to_value('km/s')
+_KMS = astropy.units.km / astropy.units.s
 
 _T = TypeVar('_T')
 
@@ -109,8 +112,14 @@ def check_convention(spectral: 'SpectralAxis') -> None:
             "VELO or WAVE-LOG")
 
 
-# The rest of a spectral axis, as it is given (see make_rest)
-Rest: TypeAlias = str | astropy.units.Quantity | None
+# A rest wavelength or frequency, as it is given (see make_rest): a
+# Quantity, or its text (e.g. '6562.8 Angstrom'); in a configuration, its
+# text
+RestValue: TypeAlias = Annotated[QuantityOrText, UnitKinds(
+    wavelength=('Angstrom', 'nm', 'um', 'm'), frequency=('MHz', 'GHz', 'Hz'))]
+
+# The rest of a spectral axis, if any
+Rest: TypeAlias = RestValue | None
 
 
 def make_rest(value: Rest) -> astropy.units.Quantity | None:
@@ -431,6 +440,56 @@ class VelocityConvention:
         """
         return 1 / (_C * self.log_slope(velocity))
 
+    def span(
+            self, width: astropy.units.Quantity, velocity: npt.ArrayLike
+    ) -> np.ndarray:
+        """
+        Return the km/s of the axis that a width of the light (e.g. of an
+        LSF) spans at velocities of the axis.
+
+        The width is in km/s of the light (c dw / w at its wavelength w;
+        c / R for a resolving power R), or in a unit of wavelength or of
+        frequency (e.g. Angstrom, or kHz; any unit of the spectrum, of the
+        light there). Either is a relative width of the light, dw / w (or
+        df / f), which spans dw / w / log_slope km/s of the axis: the same
+        along an axis of optical velocities for a width in wavelength, of
+        radio velocities for one in frequency, and of log velocities for
+        one in km/s.
+
+        Parameters
+        ----------
+        width : Quantity
+            The width.
+        velocity : array_like
+            The velocities of the axis (km/s).
+
+        Returns
+        -------
+        ndarray
+            The km/s of the axis.
+
+        Raises
+        ------
+        ValueError
+            If the width is not in km/s or in a unit of the spectrum, or is
+            in a unit of the spectrum and the axis has no rest.
+        """
+        v = np.asarray(velocity, dtype=float)
+        unit = width.unit
+        if unit.is_equivalent(_KMS):
+            relative = width.to_value(_KMS) / _C
+        elif unit.is_equivalent(astropy.units.m, astropy.units.spectral()):
+            # The light at the velocities, in the unit of the width (e.g.
+            # its frequency, for a width in kHz)
+            light = (self.wavelength(v) * astropy.units.m).to_value(
+                unit, astropy.units.spectral())
+            relative = width.value / light
+        else:
+            raise ValueError(
+                f"a width of the light is in km/s, or in a unit of "
+                f"wavelength or of frequency; it is in '{unit}'")
+        return relative / self.log_slope(v)
+
     def frequency(self, velocity: npt.ArrayLike) -> np.ndarray:
         """
         Return the frequencies (Hz, in vacuum) at velocities of the axis.
@@ -583,7 +642,7 @@ class SpectralAxis(Serializable):
             rpix: float | None = None,
             rval: float | None = None,
             convention: _Convention | None = None,
-            rest: str | astropy.units.Quantity | None = None,
+            rest: Rest = None,
             medium: _Medium | None = None,
             frame: _Frame | None = None,
             type: _Type | None = None

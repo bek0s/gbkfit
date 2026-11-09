@@ -3,6 +3,7 @@ Tests for the making of observations: their observables from data, and
 the checks of their options.
 """
 
+import astropy.units as u
 import numpy as np
 import pytest
 
@@ -67,7 +68,7 @@ def test_observable_options_are_checked():
     with pytest.raises(ValueError, match="no spectral axis for an LSF"):
         ObservationSky(
             PixelBrightness(size=(8, 8)), LineOfSightFlat(),
-            instrument=Instrument(lsf=LSFGauss(10)))
+            instrument=Instrument(lsf=LSFGauss(10 * u.km / u.s)))
 
 
 def test_grid_options_take_one_value_or_one_for_each_axis():
@@ -160,3 +161,46 @@ def test_residuals_of_upper_limits_are_not_linear_in_the_model():
         observation, DriverHost())
     for form in (comparison_.linear_form, comparison_.pointwise_form):
         assert "has an upper limit" in form(['spectra'])
+
+
+def test_the_psf_must_be_the_beam_of_data_of_a_beam(caplog):
+    # Data of a beam (of a radio interferometer) are smoothed by it, a
+    # Gaussian: a PSF of another shape or size is warned of; a beam for
+    # each channel of a cube is that of the PSF at each, or one of them
+    from gbkfit.dataset import DatasetPixelSpectra
+    from gbkfit.instrument import PSFGauss, PSFMoffat, SpectralTable
+    from gbkfit.io import Beam
+    from gbkfit.observation import PixelSpectra
+    hi = 1420.405752 * u.MHz
+    spectral = SpectralAxis(size=3, step=10, rval=0, rest=hi)
+
+    def warnings(psf, beam):
+        caplog.clear()
+        data = DatasetPixelSpectra(
+            Data(np.zeros((3, 4, 4)), unit='Jy/beam', beam=beam),
+            spectral=SpectralAxis(step=10, rval=0, rest=hi))
+        ObservationSky(
+            PixelSpectra(size=(4, 4), spectral=spectral), LineOfSightFlat(),
+            instrument=Instrument(psf=psf), data=data)
+        return caplog.text
+    beam = Beam(6.0, 3.0, 30.0)
+    assert warnings(PSFGauss.from_beam(6.0, 3.0, 30.0), beam) == ""
+    assert warnings(PSFGauss.from_fwhm(6.0, 0.5, 210.0), beam) == ""
+    assert "the PSF of the instrument is the beam 6 x 3 arcsec at 40" \
+        in warnings(PSFGauss.from_beam(6.0, 3.0, 40.0), beam)
+    assert "of type 'moffat', not a Gaussian" in warnings(
+        PSFMoffat.from_fwhm(6.0, 2.5, 0.5, 30.0), beam)
+    assert "is none (a point)" in warnings(None, beam)
+    # (of a cube of CASA: a beam at the frequency of each channel)
+    frequencies = [1420.4, 1420.36, 1420.31] * u.MHz
+    beams = Beam(
+        np.array([6.0, 6.1, 6.2]), np.full(3, 3.0), np.full(3, 30.0),
+        frequencies)
+    varying = PSFGauss.varying(
+        bmaj=SpectralTable(frequencies, [6.0, 6.1, 6.2]), bmin=3.0,
+        bpa=30.0)
+    assert warnings(varying, beams) == ""
+    text = warnings(PSFGauss.from_beam(6.0, 3.0, 30.0), beams)
+    assert "another at 2 of their 3 channels: e.g. at 1420.36 MHz" in text
+    assert "have one beam, 6 x 3 arcsec at 30 deg, but the PSF of the " \
+        "instrument varies" in warnings(varying, beam)

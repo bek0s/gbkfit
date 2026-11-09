@@ -5,14 +5,14 @@ along the spectral axis (see SpreadFunction), and helpers to draw them.
 
 import abc
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Self, TypeVar
 
 import astropy.units as u
 import astropy.wcs
 import numpy as np
 
 import gbkfit.units
-from gbkfit.config import TypedParser, TypedSerializable
+from gbkfit.config import TypedParser, TypedSerializable, dump_quantity
 from gbkfit.grid import VelocityConvention
 from . import varying
 
@@ -281,6 +281,28 @@ class SpreadFunction(TypedSerializable, abc.ABC):
         return -np.inf, np.inf
 
 
+class GivenOptions(SpreadFunction):
+    """
+    A PSF or an LSF of several forms of options (its config_constructors,
+    e.g. its scale or its FWHM), which dumps those it was given in (see
+    _given_as).
+    """
+
+    def _given_as(self, **given: Any) -> Self:
+        """Itself, with the options it was given, which dump writes."""
+        self._given = given
+        return self
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return dict(type=self.type()) | {
+            name: gbkfit.units.format_quantity(value)
+            if isinstance(value, u.Quantity) else value
+            for name, value in self._given.items()}
+
+
 class VaryingSpreadFunction(SpreadFunction):
     """
     A PSF or an LSF of a type whose options vary along the spectral axis:
@@ -368,9 +390,7 @@ class SpreadFunctionImages(SpreadFunction):
 
     def _dump_points(self) -> dict[str, Any]:
         """The configuration of the points."""
-        return dict(
-            value=self._points.value.tolist(),
-            unit=gbkfit.units.format_unit(self._points.unit))
+        return dump_quantity(self._points)
 
     def varies(self) -> bool:
         return True

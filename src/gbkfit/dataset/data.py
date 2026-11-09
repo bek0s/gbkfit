@@ -12,7 +12,7 @@ import numpy as np
 
 import gbkfit.units
 from gbkfit.config import DataFile, parse_options, split_data_file, warn
-from gbkfit.grid import Coords
+from gbkfit.grid import Coords, Rest
 from gbkfit.instrument import LSF, PSF, lsf_parser, psf_parser
 from gbkfit.io import (
     Beam, ErrorKind, MaskKind, coords_from_header, read_arrays)
@@ -157,8 +157,8 @@ class Data:
         Their beam, for units per beam (e.g. Jy/beam): a Beam, or its
         options bmaj, bmin and bpa.
     spatial_correlation : PSF, optional
-        The correlation of their noise on the sky (e.g. the beam:
-        PSFGaussBeam); it must not vary along the spectral axis.
+        The correlation of their noise on the sky (e.g. the beam: see
+        PSFGauss.from_beam); it must not vary along the spectral axis.
     spectral_correlation : LSF, optional
         The correlation of their noise along the spectral axis; it must
         not vary.
@@ -249,7 +249,7 @@ class Data:
             error: DataFile | float | None = None,
             rpix: float | Sequence[float] | None = None,
             rval: float | Sequence[float] | None = None,
-            rest: str | astropy.units.Quantity | None = None,
+            rest: Rest = None,
             spectral_axis: int | None = None,
             medium: str | None = None,
             unit: str | None = None,

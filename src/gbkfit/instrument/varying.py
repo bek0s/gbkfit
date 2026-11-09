@@ -22,11 +22,14 @@ points and of the values (see SpectralTable.from_file), e.g.
 
     alpha: {file: psf.ecsv, points: wavelength, column: alpha}
 
-Values without units are in the units of the option. Velocities are in
-the convention of the spectral axis (see VelocityConvention):
-optical or log for a rest wavelength, radio for a rest frequency.
+Values without a unit are in the unit of the option (e.g. arcsec for
+the widths of PSFs); the widths of LSFs, Quantities, have a unit of their
+own (e.g. Angstrom), which tables give. Velocities are in the convention
+of the spectral axis (see VelocityConvention): optical or log for a rest
+wavelength, radio for a rest frequency.
 """
 
+import typing
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, TypeVar
 
@@ -36,8 +39,9 @@ import numpy as np
 
 import gbkfit.units
 from gbkfit.config import (
-    DataFile, Serializable, check_options, config_path, option_types,
-    parse_options_for_callable, split_data_file, unit_of, varying_options)
+    DataFile, Serializable, check_options, config_constructor, config_path,
+    dump_quantity, option_types, parse_options_for_callable, split_data_file,
+    union_members, unit_of, varying_options)
 from gbkfit.grid import VelocityConvention
 from gbkfit.io import read_column, read_table
 
@@ -368,12 +372,11 @@ class SpectralTable(Serializable):
         dict
             The configuration.
         """
-        points = dict(
-            value=self._points.value.tolist(),
-            unit=gbkfit.units.format_unit(self._points.unit))
         unit = {} if self._unit is None \
             else dict(unit=gbkfit.units.format_unit(self._unit))
-        return dict(points=points, values=self._values.tolist()) | unit
+        return dict(
+            points=dump_quantity(self._points),
+            values=self._values.tolist()) | unit
 
     def points(self) -> u.Quantity:
         """
@@ -409,9 +412,10 @@ class SpectralTable(Serializable):
         return self._unit
 
     def at(
-            self, points: u.Quantity, unit: str | u.UnitBase,
+            self,
+            points: u.Quantity,
             convention: VelocityConvention | None = None
-    ) -> np.ndarray:
+    ) -> np.ndarray | u.Quantity:
         """
         Return the values at points of the spectral axis.
 
@@ -419,31 +423,24 @@ class SpectralTable(Serializable):
         ----------
         points : Quantity
             The points, of any kind (see as_points).
-        unit : str or Unit
-            The unit of the option. Values with other units are converted
-            to it; for a velocity, a width in wavelength or frequency is
-            converted at each of the points, to km/s of the light (c dw /
-            w: see lsfs).
         convention : VelocityConvention, optional
             The velocity convention of the spectral axis; needed
             between velocities and the other kinds of points.
 
         Returns
         -------
-        ndarray
-            The values at the points, in the unit of the option.
+        ndarray or Quantity
+            The values at the points: in their unit, if they have one.
 
         Raises
         ------
         ValueError
-            If the convention is needed but not given, or has no rest; or
-            the values cannot be converted to the unit of the option.
+            If the convention is needed but not given, or has no rest.
         """
         x = _convert(as_points(points), self._points.unit, convention)
         order = np.argsort(self._points.value)
         values = np.interp(x, self._points.value[order], self._values[order])
-        return self._values_in(
-            values, x * self._points.unit, u.Unit(unit), convention)
+        return values if self._unit is None else values * self._unit
 
     def velocity_range(
             self, convention: VelocityConvention | None = None
@@ -465,36 +462,16 @@ class SpectralTable(Serializable):
         velocities = to_velocities(self._points, convention)
         return float(velocities.min()), float(velocities.max())
 
-    def _values_in(
-            self,
-            values: np.ndarray,
-            points: u.Quantity,
-            unit: u.UnitBase,
-            convention: VelocityConvention | None
-    ) -> np.ndarray:
-        """Values of the table at points of the spectral axis in a unit."""
-        if self._unit is None:
-            return values
-        values = values * self._unit
-        if values.unit.is_equivalent(unit):
-            return values.to_value(unit)
-        if unit.is_equivalent(_KMS) and values.unit.is_equivalent(
-                u.m, u.spectral()):
-            # A width about each point, in wavelength or frequency, in km/s
-            # of the light: c ln(w_high / w_low), c dw / w for a narrow one
-            centres = _convert(points, values.unit, convention)
-            ratios = (centres + values.value / 2) / (centres - values.value / 2)
-            return (_C * np.abs(np.log(ratios)) * _KMS).to_value(unit)
-        raise ValueError(
-            f"the values of a table in '{self._unit}' cannot be converted "
-            f"to '{unit}'")
-
-
 def load_tables(cls: type, info: dict[str, Any]) -> dict[str, Any]:
     """
     Return the options of a configuration of an object of a class (e.g. a
     PSF) with those that can vary (see _VaryingOptions) and are given as
-    tables (dicts) loaded (see SpectralTable).
+    tables loaded (see SpectralTable).
+
+    The options that can vary are those of the constructor of the class
+    that the configuration is of (see config_constructor). A table is a
+    dict of points (inline, or from a file); a Quantity, of a value and a
+    unit, is not one.
 
     Parameters
     ----------
@@ -514,11 +491,25 @@ def load_tables(cls: type, info: dict[str, Any]) -> dict[str, Any]:
         If a table is invalid.
     """
     options = dict(info)
-    for name in varying_options(cls.__init__):
-        if isinstance(info.get(name), Mapping):
+    for name in varying_options(_constructor(cls, info)[0]):
+        if isinstance(info.get(name), Mapping) and 'points' in info[name]:
             with config_path(name):
                 options[name] = SpectralTable.load(info[name])
     return options
+
+
+def _constructor(
+        cls: type, options: Mapping[str, Any]
+) -> tuple[Callable, Callable]:
+    """
+    Return the constructor of a class that options are of (see
+    config_constructor), as a function to read its parameters from, and
+    as a callable that makes the object.
+    """
+    name = config_constructor(cls, options)
+    if name == '__init__':
+        return cls.__init__, cls
+    return getattr(cls, name), getattr(cls, name)
 
 
 class _VaryingOptions:
@@ -526,9 +517,13 @@ class _VaryingOptions:
     The options of an object of a class (e.g. a PSF), some of which are
     tables of values along the spectral axis (see PSF.varying).
 
-    The options of the class that can vary are those whose annotations
-    are marked so (see Varying); their units are those of the
-    annotations (see Unit; none for none).
+    The options are those of a constructor of the class (see
+    config_constructor; e.g. the fwhm of LSFGauss.from_fwhm). Those that
+    can vary are those whose annotations are marked so (see Varying).
+    Values of an option that is a Quantity (e.g. the width of an LSF) are
+    in the unit of their table, which must have one; values of others are
+    in the unit of the annotation (see Unit; none for none), and are
+    converted to it from that of their table.
 
     Parameters
     ----------
@@ -540,36 +535,43 @@ class _VaryingOptions:
     Raises
     ------
     ValueError
-        If an option that cannot vary is a table, or the options are
-        invalid, or so are the values of the tables at their points (see
-        _check).
+        If an option that cannot vary is a table, or a table of a
+        Quantity has no unit, or the options are invalid, or so are the
+        values of the tables at their points (see _check).
     """
 
     def __init__(self, cls: type, options: dict[str, Any]):
+        signature, self._make = _constructor(cls, options)
         tables = {
             name: value for name, value in options.items()
             if isinstance(value, SpectralTable)}
-        for name in tables:
-            if name not in varying_options(cls.__init__):
+        types = option_types(signature)
+        for name, table in tables.items():
+            if name not in varying_options(signature):
                 raise ValueError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
-        types = option_types(cls.__init__)
+            if table.unit() is None and _is_quantity(types[name]):
+                raise ValueError(
+                    f"option '{name}' of {cls.__qualname__} has a unit: give "
+                    f"that of the values of its table (unit)")
         self._cls = cls
         self._units = {
-            name: unit_of(types[name]) or '' for name in tables}
+            name: None if _is_quantity(types[name])
+            else u.Unit(unit_of(types[name]) or '')
+            for name in tables}
         self._constants = parse_options_for_callable(
             {name: value for name, value in options.items()
              if name not in tables},
-            cls.__init__, ignore_params=set(tables))
+            signature, ignore_params=set(tables))
         self._tables = tables
         self._check()
 
     def _check(self) -> None:
         """
         Build the objects at the points of all the tables, from the values
-        of all of them there, in the units of the options: values valid
-        each on its own may not be together (e.g. a bmin above bmaj).
+        of all of them there: values valid each on its own may not be
+        together (e.g. a bmin above bmaj).
 
         Velocities are put among wavelengths or frequencies by the
         convention of the velocities of the spectral axis, which tables
@@ -581,9 +583,9 @@ class _VaryingOptions:
         try:
             points = np.unique(np.concatenate([
                 _convert(table.points(), unit, None) for table in tables]))
-            self.at(points * unit)
         except _NoConvention:
-            pass
+            return
+        self.at(points * unit)
 
     def cls(self) -> type:
         """Return the class."""
@@ -591,7 +593,11 @@ class _VaryingOptions:
 
     def dump(self) -> dict[str, Any]:
         """Return the configuration of the options, with the tables."""
-        return dict(type=self._cls.type()) | self._constants | {
+        constants = {
+            name: gbkfit.units.format_quantity(value)
+            if isinstance(value, u.Quantity) else value
+            for name, value in self._constants.items()}
+        return dict(type=self._cls.type()) | constants | {
             name: table.dump() for name, table in self._tables.items()}
 
     def at(
@@ -606,17 +612,42 @@ class _VaryingOptions:
         the options are invalid at a point (e.g. a bmin above bmaj).
         """
         values = {
-            name: table.at(points, self._units[name], convention)
-            for name, table in self._tables.items()}
+            name: self._values_at(name, points, convention)
+            for name in self._tables}
         objects = []
         for i, point in enumerate(points):
-            options = {name: float(value[i]) for name, value in values.items()}
+            options = {name: value[i] for name, value in values.items()}
             try:
-                objects.append(self._cls(**self._constants | options))
+                objects.append(self._make(**self._constants | options))
             except ValueError as e:
                 raise ValueError(
                     f"at {gbkfit.units.format_quantity(point)}: {e}") from None
         return objects
+
+    def _values_at(
+            self,
+            name: str,
+            points: u.Quantity,
+            convention: VelocityConvention | None
+    ) -> list[float] | u.Quantity:
+        """
+        The values of the table of an option at points (1D): Quantities in
+        the unit of the table, or floats in the unit of the option.
+        """
+        values = self._tables[name].at(points, convention)
+        unit = self._units[name]
+        if unit is None:
+            return values
+        if isinstance(values, u.Quantity):
+            try:
+                values = values.to_value(unit)
+            except u.UnitConversionError:
+                raise ValueError(
+                    f"the values of the table of option '{name}' are in "
+                    f"'{gbkfit.units.format_unit(values.unit)}', which "
+                    f"cannot be converted to "
+                    f"'{gbkfit.units.format_unit(unit)}'") from None
+        return [float(x) for x in values]
 
     def velocity_range(
             self, convention: VelocityConvention | None = None
@@ -626,3 +657,11 @@ class _VaryingOptions:
             table.velocity_range(convention)
             for table in self._tables.values()]
         return (max(low for low, _ in ranges), min(high for _, high in ranges))
+
+
+def _is_quantity(type_: Any) -> bool:
+    """Return whether an option of an annotation is a Quantity."""
+    return any(
+        x is u.Quantity or typing.get_args(x)[:1] == (u.Quantity,)
+        for x in union_members(type_))
+

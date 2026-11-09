@@ -139,7 +139,7 @@ def test_a_thin_disk_in_a_cube(
              spectral=dict(size=NZ, step=DV, convention='relativistic'),
              oversampling=[oversampling, oversampling, 1],
              psf=dict(type='gauss', sigma=PSF_SIGMA),
-             lsf=dict(type='gauss', sigma=LSF_SIGMA)),
+             lsf=dict(type='gauss', sigma=f'{LSF_SIGMA} km/s')),
         dict(type='flat'),
         dict(vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, pt_a=1, pt_s=RD,
              vpt_rt=RT, vpt_vt=VT, dpt_a=SIG))
@@ -228,7 +228,8 @@ def test_a_galaxy_at_redshift_1_5(driver):
         emission=dict(type='lines', lines=['halpha']))
     observable = dict(
         type='pixel_spectra', size=[31, 31], step=[0.2, 0.2],
-        psf=dict(type='gauss', sigma=0.25), lsf=dict(type='gauss', sigma=35))
+        psf=dict(type='gauss', sigma=0.25),
+        lsf=dict(type='gauss', sigma='35 km/s'))
     properties = dict(
         vsys=0, xpos=0, ypos=0, posa=PA, incl=INCL, pt_a=1, pt_s=1,
         vpt_rt=0.5, vpt_vt=VT, dpt_a=SIG)

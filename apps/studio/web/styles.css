@@ -387,6 +387,8 @@ h2 { margin: 0; font: var(--text-heading); }
 .schema-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .schema-field > * { min-width: 0; }
 .schema-field > .ui-number, .schema-field > .ui-text, .schema-field > .ui-choice { flex: 1; }
+.schema-quantity { display: flex; gap: 6px; flex: 1; min-width: 0; }
+.schema-quantity > * { flex: 1; min-width: 0; }
 .schema-slide { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: 10px; min-width: 0; }
 .schema-slider { padding: 0 4px; }
 .schema-number.compact input { text-align: right; font-variant-numeric: tabular-nums; }

@@ -104,7 +104,8 @@ def test_point_with_an_lsf_does_not_depend_on_oversampling(driver, n):
     scube = dict(
         type='pixel_spectra', size=[4, 4], step=[0.5, 0.5],
         spectral=dict(size=101, step=10, convention='relativistic'),
-        oversampling=[1, 1, n], lsf=dict(type='gauss', sigma=30))
+        oversampling=[1, 1, n],
+        lsf=dict(type='gauss', sigma='30 km/s'))
     cube = evaluate(driver, LINE_POINT, scube, dict(
         xpos=0.25, ypos=0.25, flux=1, vsys=0, disp=10))
     velocity = (np.arange(101) - 50) * 10

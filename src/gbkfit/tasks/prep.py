@@ -675,15 +675,14 @@ def prep_lsf_muse(
         output_dir_mode: _Exists = 'overwrite'
 ) -> None:
     """
-    Write the LSF of MUSE as a table of its sigma against wavelength (see
+    Write the LSF of MUSE as a table of its FWHM against wavelength (see
     gbkfit.prep.muse_lsf_table).
     """
     output_dir = _output_dir(output_dir, output_dir_mode)
     filename = _write_table(prep.muse_lsf_table(), output_dir, 'lsf')
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, "
-        f"sigma: {{file: {filename}, points: wavelength, column: "
-        f"sigma}}}}")
+        f"fwhm: {{file: {filename}, points: wavelength, column: fwhm}}}}")
 
 
 def prep_psf_casa_beams(
@@ -701,6 +700,6 @@ def prep_psf_casa_beams(
     # The first column of the table is that of the points
     points = table.colnames[0]
     _log.info(
-        f"the beams are in {filename}; use them as psf: {{type: "
-        f"gauss_beam, bmaj: {{file: {filename}, points: {points}, column: "
-        f"bmaj}}, ...}} (and bmin and bpa)")
+        f"the beams are in {filename}; use them as psf: {{type: gauss, "
+        f"bmaj: {{file: {filename}, points: {points}, column: bmaj}}, ...}} "
+        f"(and bmin and bpa)")

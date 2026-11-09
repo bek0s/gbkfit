@@ -17,7 +17,8 @@ from gbkfit.config import (
 from gbkfit.dataset import Data, Dataset, dataset_parser
 from gbkfit.driver import DeviceArray, Driver
 from gbkfit.grid import GridData, SpectraData, VelocityConvention
-from gbkfit.instrument import Instrument, PSFGaussBeam, instrument_parser
+from gbkfit.instrument import PSF, Instrument, PSFGauss, instrument_parser
+from gbkfit.io import Beam
 from gbkfit.model import (
     Band, BandEmission, DataUnit, Extras, GalaxyState, LightUnit,
     Scene, band_parser)
@@ -386,7 +387,7 @@ class ObservationSky(Observation):
         self._light = None if unit is None \
             else _light_unit(unit, data, observable, instrument)
         if data is not None:
-            _check_beams(data, instrument)
+            _check_beams(data, instrument, observable)
         if dtype is None:
             dtype = 'float64' if data is not None \
                 and _has_correlated_noise(data) else 'float32'
@@ -843,28 +844,86 @@ def _has_correlated_noise(data: Dataset) -> bool:
         for item in data.values())
 
 
-def _check_beams(data: Dataset, instrument: Instrument) -> None:
+def _check_beams(
+        data: Dataset, instrument: Instrument, observable: Observable
+) -> None:
     """
-    Warn (see warn) if an item of the data has one beam, and
-    the PSF of the instrument is another beam: the light of data per beam
-    is per their beam, but the PSF smooths the model otherwise.
+    Warn (see warn) if an item of the data has a beam, and the PSF of the
+    instrument is not that beam: the data, of a radio interferometer, are
+    smoothed by their beam, a Gaussian, and their light per beam is per
+    it, but the PSF smooths the model otherwise. A cube of a beam for each
+    channel is checked against the PSF at the point of each (see PSF.at).
     """
     psf = instrument.psf()
-    if not isinstance(psf, PSFGaussBeam):
-        return
     for key in data.keys():
         beam = data[key].beam()
-        if beam is None or beam.spectral is not None:
+        if beam is None:
             continue
-        # (the position angle of a circular beam is any)
-        same = np.allclose(
-            (beam.bmaj, beam.bmin), (psf.bmaj(), psf.bmin()), rtol=1e-3,
-            atol=0) and (np.isclose(beam.bmaj, beam.bmin, rtol=1e-3) or abs(
-                (beam.bpa - psf.bpa() + 90) % 180 - 90) < 0.1)
-        if not same:
+        if beam.spectral is None:
+            if psf is not None and psf.varies():
+                warn(
+                    f"the data ({key}) have one beam, {_beam_text(beam)}, "
+                    f"but the PSF of the instrument varies along the "
+                    f"spectral axis: the model is smoothed by the PSF, and "
+                    f"its light per beam is per beam of the data")
+            elif not _is_beam(psf, beam):
+                warn(
+                    f"the data ({key}) have the beam {_beam_text(beam)}, "
+                    f"but the PSF of the instrument is {_psf_text(psf)}: the "
+                    f"model is smoothed by the PSF, and its light per beam is "
+                    f"per beam of the data")
+            continue
+        # A beam for each channel, against the PSF at the point of each
+        beams = [
+            Beam(*values) for values in zip(beam.bmaj, beam.bmin, beam.bpa)]
+        psfs = [psf] * len(beams)
+        if psf is not None and psf.varies():
+            try:
+                psfs = psf.at(
+                    beam.spectral,
+                    VelocityConvention.of(observable.grid().coords))
+            except ValueError:
+                # (points of the PSF that the spectral axis cannot place;
+                # the model says so)
+                continue
+        differ = [
+            i for i, (x, y) in enumerate(zip(psfs, beams))
+            if not _is_beam(x, y)]
+        if differ:
+            i = differ[0]
             warn(
-                f"the data ({key}) have the beam {beam.bmaj:g} x "
-                f"{beam.bmin:g} arcsec at {beam.bpa:g} deg, but the PSF of "
-                f"the instrument is the beam {psf.bmaj():g} x {psf.bmin():g} "
-                f"arcsec at {psf.bpa():g} deg: the model is smoothed by the "
-                f"PSF, and its light per beam is per beam of the data")
+                f"the data ({key}) have a beam for each channel, but the PSF "
+                f"of the instrument is another at {len(differ)} of their "
+                f"{len(beams)} channels: e.g. at "
+                f"{gbkfit.units.format_quantity(beam.spectral[i])}, the beam "
+                f"{_beam_text(beams[i])} and the PSF {_psf_text(psfs[i])}; "
+                f"the model is smoothed by the PSF, and its light per beam "
+                f"is per beam of the data")
+
+
+def _is_beam(psf: PSF | None, beam: Beam) -> bool:
+    """
+    Return whether a PSF is a beam (of one channel): a Gaussian of its
+    axes, and of its angle unless it is round.
+    """
+    if not isinstance(psf, PSFGauss):
+        return False
+    own = psf.beam()
+    return bool(np.allclose(
+        (beam.bmaj, beam.bmin), (own.bmaj, own.bmin), rtol=1e-3, atol=0)
+        and (np.isclose(beam.bmaj, beam.bmin, rtol=1e-3)
+             or abs((beam.bpa - own.bpa + 90) % 180 - 90) < 0.1))
+
+
+def _beam_text(beam: Beam) -> str:
+    """A beam (of one channel), in messages."""
+    return f"{beam.bmaj:g} x {beam.bmin:g} arcsec at {beam.bpa:g} deg"
+
+
+def _psf_text(psf: PSF | None) -> str:
+    """A PSF, in messages: its beam, if it is a Gaussian."""
+    if psf is None:
+        return "none (a point)"
+    if isinstance(psf, PSFGauss):
+        return f"the beam {_beam_text(psf.beam())}"
+    return f"of type {psf.type()!r}, not a Gaussian"
