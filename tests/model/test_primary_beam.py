@@ -125,8 +125,8 @@ def test_the_primary_beam_of_a_dish_scales_with_the_wavelength():
                  for x in beam.at([1.4e9, 0.7e9] * u.Hz)]
     np.testing.assert_allclose(responses, [1 / 16, 1 / 2])
     # (and at radio velocities, of a rest frequency)
-    half = beam.at(
-        C / 2 * u.km / u.s, VelocityConvention(1.4e9 * u.Hz))
+    half, = beam.at(
+        [C / 2] * u.km / u.s, VelocityConvention(1.4e9 * u.Hz))
     assert half.response(grid)[0, 0] == pytest.approx(1 / 2)
 
 
@@ -165,6 +165,21 @@ def test_primary_beam_points_at_its_position():
     response = PrimaryBeamGauss(6, x=3, y=-2).response(grid)
     j, i = np.unravel_index(np.argmax(response), response.shape)
     assert (i, j) == (13, 8)
+
+def test_a_primary_beam_of_each_channel_is_not_read_yet(tmp_path):
+    # (a cube, e.g. a CASA .pb cube: its spectral axis was read, and of
+    # one of frequencies, the rest was asked for)
+    from astropy.io import fits
+    from gbkfit.instrument import PrimaryBeamImage
+    header = fits.Header(dict(
+        CTYPE1='RA---SIN', CRVAL1=10.0, CDELT1=-1 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--SIN', CRVAL2=-30.0, CDELT2=1 / 3600, CUNIT2='deg',
+        CTYPE3='FREQ', CRVAL3=1.42e9, CDELT3=1e5, CUNIT3='Hz'))
+    fits.writeto(tmp_path / 'pb.fits', np.ones((4, 8, 8)), header)
+    with pytest.raises(ValueError, match="pb.fits: a primary beam is an "
+                                         "image; it has 3 axes"):
+        PrimaryBeamImage.from_file(str(tmp_path / 'pb.fits'))
+
 
 def test_primary_beam_from_an_image(tmp_path):
     # An image of a Gaussian beam, on a grid rotated on the sky, gives the

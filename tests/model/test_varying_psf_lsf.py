@@ -147,19 +147,19 @@ def test_psf_images_of_one_image_are_that_image(driver, tmp_path):
     np.testing.assert_allclose(cube, single, atol=2e-6 * np.abs(single).max())
 
 
-def test_lsf_images_of_one_profile_are_that_profile(driver, tmp_path):
+def test_lsf_profiles_of_one_profile_are_that_profile(driver, tmp_path):
     import astropy.io.fits
     profile = LSFGauss(17 * u.km / u.s).on(Channel()).asarray(4)
     astropy.io.fits.writeto(tmp_path / 'profile.fits', profile)
     astropy.io.fits.writeto(
         tmp_path / 'profiles.fits', np.stack([profile, profile]))
-    images = spectra(driver, lsf=dict(
-        type='images', file=str(tmp_path / 'profiles.fits'), step=kms(4),
+    profiles = spectra(driver, lsf=dict(
+        type='profiles', file=str(tmp_path / 'profiles.fits'), step=kms(4),
         points=dict(value=[-500, 500], unit='km/s')))
     single = spectra(driver, lsf=dict(
-        type='image', file=str(tmp_path / 'profile.fits'), step=kms(4)))
+        type='profile', file=str(tmp_path / 'profile.fits'), step=kms(4)))
     np.testing.assert_allclose(
-        images, single, atol=2e-6 * np.abs(single).max())
+        profiles, single, atol=2e-6 * np.abs(single).max())
 
 
 def test_points_in_wavelength_on_axes_of_log_velocities():

@@ -8,28 +8,25 @@ along the spectral axis (see varying).
 """
 
 import abc
-import os
 from collections.abc import Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 import astropy.units as u
 import astropy.wcs
 import astropy.wcs.utils
 import numpy as np
-import scipy.ndimage
 import scipy.signal
 import scipy.special
 from annotated_types import Gt, Le
 
 from gbkfit.config import (
     DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
-from gbkfit.grid import Coords
 from gbkfit.io import (
     Beam, header_beam, model_header, parse_wcs, read_header, read_image,
-    write_data, write_image)
+    spectral_points)
 import gbkfit.math
 from . import _detail
-from ._detail import MIN_EXTENT, WING_FLUX
+from ._detail import WING_FLUX
 
 
 __all__ = [
@@ -42,9 +39,14 @@ __all__ = [
     'PSFMoffat',
     'PSFPoint',
     'PSFSum',
-    'PSFVarying',
+    'PSFTables',
     'psf_parser'
 ]
+
+
+# The size of the pixels of images of a PSF along x and y (arcsec); of
+# one number, square pixels
+_Step: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
 
 
 class PSF(_detail.SpreadFunction):
@@ -52,9 +54,11 @@ class PSF(_detail.SpreadFunction):
     A point spread function, drawn on arrays of pixels.
     """
 
+    _TERMS_OPTION = 'psfs'
+
     @staticmethod
-    def _varying_class() -> type['PSFVarying']:
-        return PSFVarying
+    def _tables_class() -> type['PSFTables']:
+        return PSFTables
 
     def size(self, step: tuple[float, float]) -> tuple[int, int]:
         """
@@ -75,10 +79,7 @@ class PSF(_detail.SpreadFunction):
         RuntimeError
             If the wings of the PSF are too heavy for a finite array.
         """
-        base_size = self._size_impl(step)
-        _detail.check_finite_size(self, *base_size)
-        return (int(gbkfit.math.roundu_odd(base_size[0])),
-                int(gbkfit.math.roundu_odd(base_size[1])))
+        return _detail.odd_size(self, *self._size_impl(step))
 
     def asarray(
             self,
@@ -116,13 +117,7 @@ class PSF(_detail.SpreadFunction):
         """
         if size is None:
             size = self.size(step)
-        if (gbkfit.math.is_even(size[0] + offset[0]) or
-              gbkfit.math.is_even(size[1] + offset[1])):
-            raise RuntimeError(
-                f"invalid PSF size: (size + offset) = "
-                f"({size[0]} + {offset[0]} = {size[0] + offset[0]}, "
-                f"{size[1]} + {offset[1]} = {size[1] + offset[1]}), "
-                f"but both values must be odd")
+        _detail.check_odd_centre(size, offset, "PSF")
         return self._asarray_impl(step, size, offset, rota)
 
     def beam_area(self) -> float:
@@ -151,11 +146,11 @@ class PSF(_detail.SpreadFunction):
     def _beam_area_impl(self) -> float:
         """
         Return the solid angle of its beam (see beam_area): here, of the
-        PSF drawn on pixels of about 1/400 of its extent, as the area of a
+        PSF drawn on pixels of about 1/400 of its width, as the area of a
         pixel over the peak (the PSF sums to 1).
         """
-        extent = max(self.size((1.0, 1.0)))
-        step = (extent / 400, extent / 400)
+        width = max(self.size((1.0, 1.0)))
+        step = (width / 400, width / 400)
         return float(step[0] * step[1] / np.max(self.asarray(step)))
 
     @abc.abstractmethod
@@ -173,7 +168,7 @@ class PSF(_detail.SpreadFunction):
         """The PSF on an array (see asarray)."""
 
 
-def _create_grid_2d(
+def _elliptical_radii(
         size: tuple[int, int],
         step: tuple[float, float],
         offset: tuple[int, int],
@@ -187,47 +182,40 @@ def _create_grid_2d(
     """
     center_x = size[0] // 2 + offset[0]
     center_y = size[1] // 2 + offset[1]
-    x = (np.array(range(size[0])) - center_x) * step[0]
-    y = (np.array(range(size[1])) - center_y) * step[1]
+    x = (np.arange(size[0]) - center_x) * step[0]
+    y = (np.arange(size[1]) - center_y) * step[1]
     x = x[None, :]
     y = y[:, None]
     x, y = gbkfit.math.transform_lh_rotate_z(x, y, np.radians(posa))
     return np.sqrt(x * x + y * y / (ratio * ratio))
 
 
-class _AnalyticPSF(_detail.GivenOptions, PSF):
+class _AnalyticPSF(_detail.AnalyticSpreadFunction, PSF):
     """
     A PSF of a profile of the elliptical radius r, round or elliptical by
-    its axis ratio and the position angle of its major axis, drawn out to
-    its extent (see MIN_EXTENT). Configurations give its scale, or its
+    its axis ratio and the position angle of its major axis, of a scale
+    along its major axis (arcsec). Configurations give its scale, or its
     full width at half maximum along its major axis (see from_fwhm), and
     dumps write the one given.
 
     Parameters
     ----------
+    scale : float
+        The scale along the major axis (arcsec).
     ratio : float
         The axis ratio (minor over major), in (0, 1].
     posa : float
         The position angle of the major axis.
     """
 
-    config_constructors = ('__init__', 'from_fwhm')
-
-    def __init__(self, ratio: float, posa: float):
+    def __init__(self, scale: float, ratio: float, posa: float):
+        super().__init__(scale)
         self._ratio = ratio
         self._posa = posa
 
-    @abc.abstractmethod
-    def _extent(self) -> float:
-        """The radius out to which it is drawn (see MIN_EXTENT)."""
-
-    @abc.abstractmethod
-    def _profile(self, r: np.ndarray) -> np.ndarray:
-        """Its profile at the radii r (arcsec), to any factor."""
-
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        return (2 * self._extent() / step[0],
-                2 * self._extent() / step[1])
+        extent = self._extent(self._scale)
+        return 2 * extent / step[0], 2 * extent / step[1]
 
     def _asarray_impl(
             self,
@@ -236,11 +224,9 @@ class _AnalyticPSF(_detail.GivenOptions, PSF):
             offset: tuple[int, int],
             rota: float
     ) -> np.ndarray:
-        r = _create_grid_2d(
+        r = _elliptical_radii(
             size, step, offset, self._ratio, self._posa - rota)
-        data = self._profile(r)
-        data[r > self._extent()] = 0
-        return data / np.sum(data)
+        return self._drawn(r, self._scale)
 
 
 class PSFPoint(PSF):
@@ -277,10 +263,7 @@ class PSFPoint(PSF):
             offset: tuple[int, int],
             rota: float
     ) -> np.ndarray:
-        # Like all images, the array has shape (y, x)
-        data = np.zeros(size[::-1])
-        data[size[1] // 2 + offset[1], size[0] // 2 + offset[0]] = 1
-        return data
+        return _detail.embed(np.ones((1, 1)), size, offset)
 
 
 class PSFGauss(_AnalyticPSF):
@@ -321,8 +304,7 @@ class PSFGauss(_AnalyticPSF):
             posa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFGauss.__init__, locals())
-        super().__init__(ratio, posa)
-        self._sigma = sigma
+        super().__init__(sigma, ratio, posa)
         self._given_as(sigma=sigma, ratio=ratio, posa=posa)
 
     @classmethod
@@ -351,8 +333,9 @@ class PSFGauss(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFGauss.from_fwhm, locals())
-        return cls(gbkfit.math.gauss_fwhm_to_sigma(fwhm), ratio, posa) \
-            ._given_as(fwhm=fwhm, ratio=ratio, posa=posa)
+        sigma = gbkfit.math.gauss_fwhm_to_sigma(fwhm)
+        return cls(sigma, ratio, posa)._given_as(
+            fwhm=fwhm, ratio=ratio, posa=posa)
 
     @classmethod
     def from_beam(
@@ -388,8 +371,9 @@ class PSFGauss(_AnalyticPSF):
         if bmin > bmaj:
             raise ValueError(
                 f"bmin must be at most bmaj; they are {bmin} and {bmaj}")
-        return cls(gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa) \
-            ._given_as(bmaj=bmaj, bmin=bmin, bpa=bpa)
+        return cls(
+            gbkfit.math.gauss_fwhm_to_sigma(bmaj), bmin / bmaj, bpa
+        )._given_as(bmaj=bmaj, bmin=bmin, bpa=bpa)
 
     @classmethod
     def from_file(cls, file: DataFile) -> 'PSFGauss':
@@ -439,24 +423,19 @@ class PSFGauss(_AnalyticPSF):
         Beam
             The beam.
         """
-        fwhm = float(self._sigma * np.sqrt(8 * np.log(2)))
+        fwhm = float(gbkfit.math.gauss_sigma_to_fwhm(self._scale))
         return Beam(fwhm, fwhm * self._ratio, self._posa)
 
     def _beam_area_impl(self) -> float:
         # (2 pi sigma^2 times the axis ratio)
-        return 2 * np.pi * self._sigma ** 2 * self._ratio
+        return 2 * np.pi * self._scale ** 2 * self._ratio
 
-    def _extent(self) -> float:
-        """
-        The radius out to which it is drawn (see MIN_EXTENT). The
-        wings of a 2D Gaussian beyond r hold exp(-r^2 / 2 sigma^2).
-        """
-        return max(
-            MIN_EXTENT * self._sigma,
-            self._sigma * np.sqrt(-2 * np.log(WING_FLUX)))
+    def _wings(self) -> float:
+        # (the wings of a 2D Gaussian beyond r hold exp(-r^2 / 2 sigma^2))
+        return np.sqrt(-2 * np.log(WING_FLUX))
 
-    def _profile(self, r: np.ndarray) -> np.ndarray:
-        return gbkfit.math.gauss_1d_fun(r, 1, 0, self._sigma)
+    def _profile(self, r: np.ndarray, scale: float) -> np.ndarray:
+        return gbkfit.math.gauss_1d_fun(r, 1, 0, scale)
 
 
 class PSFGGauss(_AnalyticPSF):
@@ -496,8 +475,7 @@ class PSFGGauss(_AnalyticPSF):
             posa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFGGauss.__init__, locals())
-        super().__init__(ratio, posa)
-        self._alpha = alpha
+        super().__init__(alpha, ratio, posa)
         self._beta = beta
         self._given_as(alpha=alpha, beta=beta, ratio=ratio, posa=posa)
 
@@ -530,29 +508,24 @@ class PSFGGauss(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFGGauss.from_fwhm, locals())
-        alpha = fwhm / (2 * np.log(2) ** (1 / beta))
+        alpha = gbkfit.math.ggauss_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta, ratio, posa)._given_as(
             fwhm=fwhm, beta=beta, ratio=ratio, posa=posa)
 
     def _beam_area_impl(self) -> float:
         # (2 pi alpha^2 Gamma(2 / beta) / beta times the axis ratio)
         return float(
-            2 * np.pi * self._alpha ** 2 * scipy.special.gamma(2 / self._beta)
+            2 * np.pi * self._scale ** 2 * scipy.special.gamma(2 / self._beta)
             / self._beta * self._ratio)
 
-    def _extent(self) -> float:
-        """
-        The radius out to which it is drawn (see MIN_EXTENT). The
-        flux of a 2D ggauss within r is P(2 / beta, (r / alpha)^beta),
-        P the regularized lower incomplete gamma function.
-        """
-        return max(
-            MIN_EXTENT * self._alpha,
-            self._alpha * scipy.special.gammaincinv(
-                2 / self._beta, 1 - WING_FLUX) ** (1 / self._beta))
+    def _wings(self) -> float:
+        # (the flux of a 2D ggauss within r is P(2 / beta, (r / alpha)^
+        # beta), P the regularized lower incomplete gamma function)
+        return scipy.special.gammaincinv(
+            2 / self._beta, 1 - WING_FLUX) ** (1 / self._beta)
 
-    def _profile(self, r: np.ndarray) -> np.ndarray:
-        return gbkfit.math.ggauss_1d_fun(r, 1, 0, self._alpha, self._beta)
+    def _profile(self, r: np.ndarray, scale: float) -> np.ndarray:
+        return gbkfit.math.ggauss_1d_fun(r, 1, 0, scale, self._beta)
 
 
 class PSFMoffat(_AnalyticPSF):
@@ -591,8 +564,7 @@ class PSFMoffat(_AnalyticPSF):
             posa: Annotated[float, Unit('deg'), Varying()] = 0.0
     ):
         check_options(PSFMoffat.__init__, locals())
-        super().__init__(ratio, posa)
-        self._alpha = alpha
+        super().__init__(alpha, ratio, posa)
         self._beta = beta
         self._given_as(alpha=alpha, beta=beta, ratio=ratio, posa=posa)
 
@@ -626,26 +598,21 @@ class PSFMoffat(_AnalyticPSF):
             The PSF.
         """
         check_options(PSFMoffat.from_fwhm, locals())
-        alpha = fwhm / (2 * np.sqrt(2 ** (1 / beta) - 1))
+        alpha = gbkfit.math.moffat_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta, ratio, posa)._given_as(
             fwhm=fwhm, beta=beta, ratio=ratio, posa=posa)
 
     def _beam_area_impl(self) -> float:
         # (pi alpha^2 / (beta - 1) times the axis ratio)
-        return np.pi * self._alpha ** 2 / (self._beta - 1) * self._ratio
+        return np.pi * self._scale ** 2 / (self._beta - 1) * self._ratio
 
-    def _extent(self) -> float:
-        """
-        The radius out to which it is drawn (see MIN_EXTENT). The
-        wings of a 2D Moffat beyond r hold (1 + (r / alpha)^2)^(1 - beta).
-        """
-        return max(
-            MIN_EXTENT * self._alpha,
-            self._alpha * np.sqrt(
-                WING_FLUX ** (1 / (1 - self._beta)) - 1))
+    def _wings(self) -> float:
+        # (the wings of a 2D Moffat beyond r hold (1 + (r / alpha)^2)^(1 -
+        # beta))
+        return np.sqrt(WING_FLUX ** (1 / (1 - self._beta)) - 1)
 
-    def _profile(self, r: np.ndarray) -> np.ndarray:
-        return gbkfit.math.moffat_1d_fun(r, 1, 0, self._alpha, self._beta)
+    def _profile(self, r: np.ndarray, scale: float) -> np.ndarray:
+        return gbkfit.math.moffat_1d_fun(r, 1, 0, scale, self._beta)
 
 
 class PSFImage(PSF):
@@ -663,9 +630,10 @@ class PSFImage(PSF):
     Parameters
     ----------
     data : ndarray
-        The image.
-    step : Sequence of float, optional
-        The size of the pixels of the image along x and y (arcsec).
+        The image; it holds light.
+    step : float or Sequence of float
+        The size of its pixels along x and y (arcsec); of one number,
+        square pixels.
     """
 
     config_constructors = ('from_file',)
@@ -680,9 +648,7 @@ class PSFImage(PSF):
 
     @classmethod
     def from_file(
-            cls,
-            file: DataFile,
-            step: Annotated[Sequence[float], Unit('arcsec')] | None = None
+            cls, file: DataFile, step: _Step | None = None
     ) -> 'PSFImage':
         """
         Read a PSF image from a file, in the orientation of the model, as
@@ -692,7 +658,7 @@ class PSFImage(PSF):
         ----------
         file : DataFile
             The file of the image, and where it is in it (see read_image).
-        step : Sequence of float, optional
+        step : float or Sequence of float, optional
             The size of the pixels of the image along x and y (arcsec); by
             default, that of the celestial axes of the header.
 
@@ -709,49 +675,41 @@ class PSFImage(PSF):
             the header has no celestial axes.
         """
         check_options(PSFImage.from_file, locals())
-        filename = split_data_file(file)[0]
-        data, wcs = _read_images(file)
+        filename, data, wcs = _read_images(file)
         if data.ndim != 2:
             raise ValueError(
-                f"{filename}: a PSF image has two axes; it has {data.ndim}")
-        return cls(data, _pixel_size(filename, wcs) if step is None else step)
+                f"{filename}: a PSF image has two axes; it has {data.ndim}"
+                + (" (a cube of images at points of the spectral axis is a "
+                   "PSF of type images)" if data.ndim == 3 else ""))
+        return cls(data, _header_step(filename, wcs) if step is None else step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        filename = f'{prefix}psf.fits'
-        rpix = tuple(np.array(self._data.shape[::-1]) / 2 - 0.5)
-        coords = Coords(tuple(self._step), rpix, (0.0, 0.0), 0.0)
-        write_data(filename, self._data, coords, overwrite=overwrite)
-        return dict(
-            type=self.type(),
-            file=filename if dump_path else os.path.basename(filename),
-            step=self._step)
+        return _detail.dump_image(
+            self, self._data, 'psf', prefix, dump_path, overwrite) | dict(
+            step=list(self._step))
 
-    def __init__(
-            self,
-            data: np.ndarray,
-            step: Annotated[Sequence[float], Unit('arcsec')] = (1.0, 1.0)
-    ):
+    def __init__(self, data: np.ndarray, step: _Step):
         check_options(PSFImage.__init__, locals())
         data = np.squeeze(np.asarray(data, dtype=float))
         if data.ndim != 2:
             raise ValueError(
                 f"a PSF image has two axes (those of length 1 left out); its "
                 f"shape is {data.shape}")
-        step = tuple(float(x) for x in step)
-        if len(step) != 2 or not all(x > 0 for x in step):
+        data = np.where(np.isfinite(data), data, 0)
+        if not np.sum(data) > 0:
             raise ValueError(
-                f"the size of the pixels of a PSF image (step) must be two "
-                f"positive numbers; it is {step}")
-        self._data = np.where(np.isfinite(data), data, 0)
-        self._step = step
+                f"a PSF image must hold light; the sum of its pixels is "
+                f"{np.sum(data):g}")
+        self._data = data
+        self._step = _as_step(step)
 
     def _beam_area_impl(self) -> float:
         # (the sum of its pixels times their area, over its peak)
         return float(
-            np.sum(self._data) * abs(self._step[0] * self._step[1])
+            np.sum(self._data) * self._step[0] * self._step[1]
             / np.max(self._data))
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
@@ -766,24 +724,11 @@ class PSFImage(PSF):
             offset: tuple[int, int],
             rota: float
     ) -> np.ndarray:
-        scale_x = step[0] / self._step[0]
-        scale_y = step[1] / self._step[1]
-        # The centre of the image, and the centre of the PSF in the array,
-        # where the analytic PSFs put it
-        old_center_x = self._data.shape[1] / 2 - 0.5
-        old_center_y = self._data.shape[0] / 2 - 0.5
-        new_center_x = size[0] // 2 + offset[0]
-        new_center_y = size[1] // 2 + offset[1]
-        # Like all images, the arrays have shape (y, x)
-        x, y = np.meshgrid(np.arange(size[0]), np.arange(size[1]))
-        nx = (x - new_center_x) * scale_x + old_center_x
-        ny = (y - new_center_y) * scale_y + old_center_y
-        data = scipy.ndimage.map_coordinates(
-            self._data, [ny, nx], order=5, mode='grid-constant')
-        return data / np.sum(data)
+        scale = (step[0] / self._step[0], step[1] / self._step[1])
+        return _detail.resample(self._data, scale, size, offset)
 
 
-class PSFSum(_detail.SpreadFunctionTerms, PSF):
+class PSFSum(_detail.SpreadFunctionSum, PSF):
     """
     A sum of PSFs (e.g. a double Gaussian, or a Gaussian core with Moffat
     wings), each with its fraction of the light.
@@ -796,29 +741,9 @@ class PSFSum(_detail.SpreadFunctionTerms, PSF):
         The weight of each PSF, positive; they are normalised to sum to 1.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'sum'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Sum'
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            psfs=_detail.dump_terms(
-                psf_parser, self._terms, prefix, dump_path, overwrite),
-            weights=self._weights.tolist())
-
     def __init__(self, psfs: Sequence[PSF], weights: Sequence[float]):
         check_options(PSFSum.__init__, locals())
-        self._terms = tuple(psfs)
-        self._weights = _detail.sum_weights(
-            weights, len(self._terms), "a sum of PSFs")
+        super().__init__(psfs, weights, "a sum of PSFs")
 
     def _beam_area_impl(self) -> float:
         # (its terms, each of an integral of 1, peak at 1 over their beam
@@ -827,11 +752,8 @@ class PSFSum(_detail.SpreadFunctionTerms, PSF):
             weight / psf.beam_area()
             for weight, psf in zip(self._weights, self._terms)))
 
-    def _of_terms(self, terms: Sequence[PSF]) -> 'PSFSum':
-        return PSFSum(terms, self._weights)
-
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
-        sizes = np.array([psf._size_impl(step) for psf in self._terms])
+        sizes = np.array([psf.size(step) for psf in self._terms])
         return tuple(sizes.max(axis=0).tolist())
 
     def _asarray_impl(
@@ -847,7 +769,7 @@ class PSFSum(_detail.SpreadFunctionTerms, PSF):
             for weight, psf in zip(self._weights, self._terms))
 
 
-class PSFConvolution(_detail.SpreadFunctionTerms, PSF):
+class PSFConvolution(_detail.SpreadFunctionConvolution, PSF):
     """
     The convolution of PSFs: e.g. the PSF of an adaptive optics system
     and the seeing, or a PSF and the response of the pixels.
@@ -858,31 +780,9 @@ class PSFConvolution(_detail.SpreadFunctionTerms, PSF):
         The PSFs, at least one.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'convolution'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Convolution'
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            psfs=_detail.dump_terms(
-                psf_parser, self._terms, prefix, dump_path, overwrite))
-
     def __init__(self, psfs: Sequence[PSF]):
         check_options(PSFConvolution.__init__, locals())
-        if not psfs:
-            raise ValueError("a convolution of PSFs needs at least one PSF")
-        self._terms = tuple(psfs)
-
-    def _of_terms(self, terms: Sequence[PSF]) -> 'PSFConvolution':
-        return PSFConvolution(terms)
+        super().__init__(psfs, "a convolution of PSFs")
 
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         # The sum of the (odd) sizes of the terms, less one for each
@@ -899,29 +799,28 @@ class PSFConvolution(_detail.SpreadFunctionTerms, PSF):
     ) -> np.ndarray:
         data = np.ones((1, 1))
         for psf in self._terms:
-            data = scipy.signal.convolve(
-                data, psf.asarray(step, rota=rota), method='auto')
+            data = scipy.signal.convolve(data, psf.asarray(step, rota=rota))
         return _detail.embed(data / data.sum(), size, offset)
 
 
 def _read_images(
         file: DataFile, spectral_axis: int | None = None
-) -> tuple[np.ndarray, astropy.wcs.WCS]:
+) -> tuple[str, np.ndarray, astropy.wcs.WCS]:
     """
     The PSF image or images of a file in the orientation of the model, as
-    data are read (see model_header), and their world coordinates in it:
-    an image without its axes of length 1, or images (nz, ny, nx) whose
-    spectral axis, if any, is the axis spectral_axis.
+    data are read (see model_header), with the filename and their world
+    coordinates in it: an image without its axes of length 1, or images
+    (nz, ny, nx) whose spectral axis, if any, is the axis spectral_axis.
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
     header, orientation = model_header(
         filename, header, data.shape, spectral_axis=spectral_axis)
     data = orientation.apply(np.asarray(data, dtype=float))
-    return data, parse_wcs(filename, header)
+    return filename, data, parse_wcs(filename, header)
 
 
-def _pixel_size(source: str, wcs: astropy.wcs.WCS) -> tuple[float, float]:
+def _header_step(source: str, wcs: astropy.wcs.WCS) -> tuple[float, float]:
     """
     The size of the pixels of PSF images along x and y (arcsec), from
     the celestial axes of their world coordinates.
@@ -935,6 +834,21 @@ def _pixel_size(source: str, wcs: astropy.wcs.WCS) -> tuple[float, float]:
     return tuple(
         (astropy.wcs.utils.proj_plane_pixel_scales(wcs.celestial)
          * 3600).tolist())
+
+
+def _as_step(step: float | Sequence[float]) -> tuple[float, float]:
+    """
+    The size of the pixels of PSF images along x and y (see _Step).
+
+    Raise ValueError unless it is one positive number, or two.
+    """
+    step = ((float(step),) * 2 if np.isscalar(step)
+            else tuple(float(x) for x in step))
+    if len(step) != 2 or not all(x > 0 for x in step):
+        raise ValueError(
+            f"the size of the pixels of PSF images (step) is a positive "
+            f"number, or two (along x and y); it is {step}")
+    return step
 
 
 class PSFImages(_detail.SpreadFunctionImages, PSF):
@@ -952,11 +866,12 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
     Parameters
     ----------
     data : ndarray
-        The images (nz, ny, nx).
+        The images (nz, ny, nx); each holds light.
     points : Quantity
         The point of each image: wavelengths, frequencies or velocities.
-    step : Sequence of float
-        The size of the pixels of the images along x and y (arcsec).
+    step : float or Sequence of float
+        The size of the pixels of the images along x and y (arcsec); of
+        one number, square pixels.
     """
 
     config_constructors = ('from_file',)
@@ -974,7 +889,7 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
             cls,
             file: DataFile,
             points: u.Quantity | None = None,
-            step: Annotated[Sequence[float], Unit('arcsec')] | None = None
+            step: _Step | None = None
     ) -> 'PSFImages':
         """
         Read PSF images from a cube (nz, ny, nx), in the orientation of
@@ -987,7 +902,7 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
         points : Quantity, optional
             The point of each image: wavelengths, frequencies or velocities;
             by default, those of the spectral axis of the cube.
-        step : Sequence of float, optional
+        step : float or Sequence of float, optional
             The size of the pixels of the images along x and y (arcsec); by
             default, that of the celestial axes of the cube.
 
@@ -1004,40 +919,32 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
             neither given nor in its header.
         """
         check_options(PSFImages.from_file, locals())
-        filename = split_data_file(file)[0]
-        data, wcs = _read_images(file, spectral_axis=2)
+        filename, data, wcs = _read_images(file, spectral_axis=2)
         if data.ndim != 3:
             raise ValueError(
                 f"{filename}: PSF images must be a cube (nz, ny, nx); it has "
-                f"{data.ndim} axes")
+                f"{data.ndim} axes"
+                + (" (one image is a PSF of type image)" if data.ndim == 2
+                   else ""))
         if points is None:
-            points = _detail.spectral_points(wcs, data.shape[0])
+            points = spectral_points(wcs, data.shape[0])
             if points is None:
                 raise ValueError(
                     f"{filename}: the cube has no spectral axis; give the "
                     f"points of its images (points)")
         if step is None:
-            step = _pixel_size(filename, wcs)
+            step = _header_step(filename, wcs)
         return cls(data, points, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        filename = f'{prefix}psf_images.fits'
-        write_image(filename, self._data, overwrite=overwrite)
-        return dict(
-            type=self.type(),
-            file=filename if dump_path else os.path.basename(filename),
-            points=self._dump_points(),
-            step=list(self._step))
+        return _detail.dump_image(
+            self, self._data, 'psf_images', prefix, dump_path, overwrite
+        ) | dict(points=self._dump_points(), step=list(self._step))
 
-    def __init__(
-            self,
-            data: np.ndarray,
-            points: u.Quantity,
-            step: Annotated[Sequence[float], Unit('arcsec')]
-    ):
+    def __init__(self, data: np.ndarray, points: u.Quantity, step: _Step):
         check_options(PSFImages.__init__, locals())
         data = np.asarray(data, dtype=float)
         if data.ndim != 3:
@@ -1046,18 +953,18 @@ class PSFImages(_detail.SpreadFunctionImages, PSF):
                 f"{data.shape}")
         super().__init__(
             np.where(np.isfinite(data), data, 0), points, "PSF images")
-        self._step = tuple(step)
+        self._step = _as_step(step)
 
-    def _image(self, data: np.ndarray) -> PSFImage:
+    def _of_image(self, data: np.ndarray) -> PSFImage:
         return PSFImage(data, self._step)
 
 
-class PSFVarying(_detail.VaryingSpreadFunction, PSF):
+class PSFTables(_detail.SpreadFunctionTables, PSF):
     """
-    A PSF of a type whose options vary along the spectral axis: a PSF of
-    the type at each channel (see at). It is not drawn itself.
-    It is made by the varying of the class of the type (e.g.
-    PSFMoffat.varying).
+    A PSF of an analytic type whose options vary along the spectral axis,
+    as tables of their values: at each point, a PSF of the type (see at).
+    It is not drawn itself. It is made by the varying of the class of the
+    type (e.g. PSFMoffat.varying).
     """
 
 

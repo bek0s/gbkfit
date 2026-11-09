@@ -284,7 +284,7 @@ function MemberField({
 // The order of the types of the instruments in their menus: the common
 // ones first (others after them; their titles and what each is come from
 // the library)
-const TYPE_ORDER = ['point', 'gauss', 'moffat', 'ggauss', 'lorentz', 'hanning', 'image', 'images', 'sum', 'convolution'];
+const TYPE_ORDER = ['point', 'gauss', 'moffat', 'ggauss', 'lorentz', 'hanning', 'image', 'images', 'profile', 'profiles', 'sum', 'convolution'];
 
 // A form of a member, by its options (e.g. bmaj, bmin, bpa; file)
 function formLabel(form: Schema): string {

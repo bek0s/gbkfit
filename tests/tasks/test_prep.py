@@ -751,7 +751,7 @@ def test_psf_of_muse(tmp_path, keywords):
         type='moffat',
         fwhm=dict(file=table, points='wavelength', column='fwhm'),
         beta=dict(file=table, points='wavelength', column='beta')))
-    moffat = psf.at(7000 * u.AA)
+    moffat, = psf.at([7000] * u.AA)
     assert moffat.dump()['beta'] == pytest.approx(2.5)
     assert moffat.dump()['fwhm'] == pytest.approx(0.8)
 
@@ -767,7 +767,7 @@ def test_lsf_of_muse(tmp_path):
     # A FWHM of 2.48 Angstrom at 7000 Angstrom, which spans c FWHM / 7000
     # km/s of an axis of optical velocities of a rest of 7000 Angstrom
     from gbkfit.instrument import Channel
-    gauss = lsf.at(7000 * u.AA)
+    gauss, = lsf.at([7000] * u.AA)
     fwhm = 5.866e-8 * 7000 ** 2 - 9.187e-4 * 7000 + 6.040
     from gbkfit.units import parse_quantity
     assert u.isclose(parse_quantity(gauss.dump()['fwhm']), fwhm * u.AA)
@@ -802,7 +802,7 @@ def test_beams_of_casa(tmp_path):
         name: dict(file=table, points='frequency', column=name)
         for name in ('bmaj', 'bmin', 'bpa')}))
     # (the frequency of the second channel)
-    beam = psf.at(1.4201e9 * u.Hz)
+    beam, = psf.at([1.4201e9] * u.Hz)
     assert beam.dump() == pytest.approx(
         dict(type='gauss', bmaj=12, bmin=9, bpa=31))
 
@@ -1097,7 +1097,7 @@ def test_lsf_of_resolving_powers(tmp_path):
     lsf = lsf_parser.load(dict(type='gauss', fwhm=dict(
         file=str(tmp_path / 'prep_lsf.ecsv'), points='wave',
         column='fwhm')))
-    assert u.isclose(lsf.at(1.5 * u.um)._scale * np.sqrt(8 * np.log(2)),
+    assert u.isclose(lsf.at([1.5] * u.um)[0]._scale * np.sqrt(8 * np.log(2)),
                      (299792.458 / 2000 + 299792.458 / 3000) / 2 * u.km / u.s)
     # (a resolving power is a number)
     import astropy.table
@@ -1107,6 +1107,20 @@ def test_lsf_of_resolving_powers(tmp_path):
     with pytest.raises(ValueError, match="'R', has a unit"):
         prep.prep_lsf_resolving_power(
             str(wrong), 'wave', 'R', output_dir=str(tmp_path))
+
+
+def test_resolving_powers_are_checked():
+    # One at each point, each positive (the message says which is wrong,
+    # not every power); the column of the points is named for their kind
+    import astropy.units as u
+    from gbkfit.prep import resolving_power_lsf_table
+    with pytest.raises(ValueError, match="1000 points and 999 resolving"):
+        resolving_power_lsf_table(
+            np.linspace(1, 2, 1000) * u.um, np.full(999, 3000.0))
+    with pytest.raises(ValueError, match="positive; the lowest is -1$"):
+        resolving_power_lsf_table([1, 2] * u.um, [3000, -1])
+    assert resolving_power_lsf_table(
+        [1, 2] * u.GHz, [10, 20]).colnames == ['frequency', 'fwhm']
 
 
 def kmos3d_file(path):
@@ -1144,5 +1158,5 @@ def test_psf_and_lsf_of_kmos3d(tmp_path):
         file=str(tmp_path / 'lsf' / 'prep_lsf.ecsv'), points='wavelength',
         column='fwhm')))
     # (R = 1000 + 1500 x 2.2 at 2.2 micron)
-    assert u.isclose(lsf.at(2.2 * u.um)._scale * np.sqrt(8 * np.log(2)),
+    assert u.isclose(lsf.at([2.2] * u.um)[0]._scale * np.sqrt(8 * np.log(2)),
                      299792.458 / 4300 * u.km / u.s)

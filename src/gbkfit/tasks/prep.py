@@ -27,6 +27,7 @@ from astropy.io import fits
 
 import gbkfit.units
 from gbkfit.config import DataFile, split_data_file
+from gbkfit.instrument import psf_parser
 from gbkfit.io import (
     ErrorKind, MaskKind, casa_beam_table, read_column, read_header,
     read_table, spectra_header, write_image)
@@ -704,7 +705,7 @@ def prep_lsf_resolving_power(
     Write the LSF of an instrument of the resolving powers of a table
     file (e.g. of its curve of R against wavelength, as of JWST NIRSpec),
     a Gaussian, as a table of its FWHM against the points (see
-    gbkfit.prep.resolving_power_table).
+    gbkfit.prep.resolving_power_lsf_table).
 
     The points are those of a column of wavelengths, frequencies or
     velocities; their unit is that of the column, or points_unit if it
@@ -723,7 +724,7 @@ def prep_lsf_resolving_power(
             f"({gbkfit.units.format_unit(power.unit)}): a resolving power "
             f"is a number")
     output_dir = _output_dir(output_dir, output_dir_mode)
-    filename = _write_table(prep.resolving_power_table(
+    filename = _write_table(prep.resolving_power_lsf_table(
         point_values, power.value, points), output_dir, 'lsf')
     _log.info(
         f"the LSF is in {filename}; use it as lsf: {{type: gauss, fwhm: "
@@ -768,7 +769,7 @@ def prep_psf_kmos3d(
     if not headers:
         raise ValueError(
             f"{file}: there is no image of the PSF (an HDU named *PSF)")
-    psf = prep.kmos3d_psf(headers[0])
+    psf = psf_parser.dump(prep.kmos3d_psf(headers[0]))
     output_dir = _output_dir(output_dir, output_dir_mode)
     filename = os.path.join(output_dir, 'prep_psf.yaml')
     with open(filename, 'w') as f:

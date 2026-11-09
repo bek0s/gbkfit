@@ -23,15 +23,13 @@ varying).
 
 import abc
 import dataclasses
-import os
+import fractions
 from collections.abc import Sequence
 from typing import Annotated, Any, TypeAlias
 
-import astropy.io.fits
 import astropy.units as u
 import astropy.wcs
 import numpy as np
-import scipy.ndimage
 import scipy.special
 from annotated_types import Gt
 
@@ -41,9 +39,9 @@ from gbkfit.config import (
     DataFile, ScalarQuantity, TypedParser, UnitKinds, Varying,
     check_options, split_data_file)
 from gbkfit.grid import Grid, VelocityConvention
-from gbkfit.io import parse_wcs, read_image, write_image
+from gbkfit.io import parse_wcs, read_image, spectral_points
 from . import _detail
-from ._detail import MIN_EXTENT, WING_FLUX
+from ._detail import WING_FLUX
 
 
 __all__ = [
@@ -54,13 +52,13 @@ __all__ = [
     'LSFGGauss',
     'LSFGauss',
     'LSFHanning',
-    'LSFImage',
-    'LSFImages',
     'LSFLorentz',
     'LSFMoffat',
     'LSFPoint',
+    'LSFProfile',
+    'LSFProfiles',
     'LSFSum',
-    'LSFVarying',
+    'LSFTables',
     'lsf_parser'
 ]
 
@@ -161,8 +159,9 @@ class Channel:
         if width.unit.is_equivalent(u.pix):
             if self.width is None:
                 raise RuntimeError(
-                    "a width in pixels is of channels of the data, whose "
-                    "width is not given")
+                    "an LSF of a width in pixels, or a Hanning smoothing, is "
+                    "drawn in channels of the data, whose width is not given "
+                    "(Channel.width)")
             return float(width.to_value(u.pix)) * self.width
         if self.unit != _KMS:
             if not width.unit.is_equivalent(self.unit):
@@ -186,8 +185,8 @@ class Channel:
 class ChannelLSF:
     """
     An LSF at a channel of the spectral axis of data (see LSF.on), drawn
-    on arrays of the channels of the axis: its widths in km/s of the axis
-    there (see Channel.span).
+    on arrays of the channels of the axis: its widths in the unit of the
+    axis there (e.g. km/s; see Channel.span).
 
     Attributes
     ----------
@@ -207,7 +206,8 @@ class ChannelLSF:
         Parameters
         ----------
         step : float
-            The width of the channels of the array (km/s of the axis).
+            The width of the channels of the array (in the unit of the
+            axis, e.g. km/s).
 
         Returns
         -------
@@ -219,9 +219,8 @@ class ChannelLSF:
         RuntimeError
             If the wings of the LSF are too heavy for a finite array.
         """
-        size = self.lsf._size_impl(step, self.channel)
-        _detail.check_finite_size(self.lsf, size)
-        return int(gbkfit.math.roundu_odd(size))
+        return _detail.odd_size(
+            self.lsf, self.lsf._size_impl(step, self.channel))[0]
 
     def asarray(
             self,
@@ -235,7 +234,8 @@ class ChannelLSF:
         Parameters
         ----------
         step : float
-            The width of the channels of the array (km/s of the axis).
+            The width of the channels of the array (in the unit of the
+            axis, e.g. km/s).
         size : int, optional
             The number of channels; by default, that of size.
         offset : int, optional
@@ -254,12 +254,8 @@ class ChannelLSF:
         """
         if size is None:
             size = self.size(step)
-        if gbkfit.math.is_even(size + offset):
-            raise RuntimeError(
-                f"invalid LSF size: (size + offset) = "
-                f"({size} + {offset} = {size + offset}), "
-                f"but it must be odd")
-        return self.lsf._asarray_impl(step, self.channel, size, offset)
+        _detail.check_odd_centre((size,), (offset,), "LSF")
+        return self.lsf._asarray_impl(step, size, offset, self.channel)
 
 
 class LSF(_detail.SpreadFunction):
@@ -268,9 +264,11 @@ class LSF(_detail.SpreadFunction):
     data (see on).
     """
 
+    _TERMS_OPTION = 'lsfs'
+
     @staticmethod
-    def _varying_class() -> type['LSFVarying']:
-        return LSFVarying
+    def _tables_class() -> type['LSFTables']:
+        return LSFTables
 
     def on(self, channel: Channel) -> ChannelLSF:
         """
@@ -286,7 +284,15 @@ class LSF(_detail.SpreadFunction):
         -------
         ChannelLSF
             The LSF at the channel.
+
+        Raises
+        ------
+        RuntimeError
+            If the LSF varies along the spectral axis (it is drawn as it is
+            at each channel; see at).
         """
+        if self.varies():
+            raise RuntimeError(_detail.NOT_DRAWN)
         return ChannelLSF(self, channel)
 
     @abc.abstractmethod
@@ -298,15 +304,18 @@ class LSF(_detail.SpreadFunction):
 
     @abc.abstractmethod
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
         """The LSF on an array at a channel (see ChannelLSF.asarray)."""
 
 
-def _create_grid_1d(size: int, step: float, offset: int) -> np.ndarray:
-    """The velocities of the channels of an array from its centre."""
+def _offsets(size: int, step: float, offset: int) -> np.ndarray:
+    """
+    The offsets (in the unit of the axis, e.g. km/s) of the channels of an
+    array from its centre (see ChannelLSF.asarray).
+    """
     center = size // 2 + offset
-    return (np.array(range(size)) - center) * step
+    return (np.arange(size) - center) * step
 
 
 class LSFPoint(LSF):
@@ -332,20 +341,17 @@ class LSFPoint(LSF):
         return 1
 
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
-        data = np.zeros(size)
-        data[size // 2 + offset] = 1
-        return data
+        return _detail.embed(np.ones(1), (size,), (offset,))
 
 
-class _AnalyticLSF(_detail.GivenOptions, LSF):
+class _AnalyticLSF(_detail.AnalyticSpreadFunction, LSF):
     """
     An LSF of a symmetric profile of the velocity, of a scale (e.g. its
-    sigma) that is a width of the light (see Channel.span), drawn out to
-    its extent on each side (see MIN_EXTENT). Configurations give its
-    scale, or its full width at half maximum (see from_fwhm), and dumps
-    write the one given.
+    sigma) that is a width of the light (see Channel.span). Configurations
+    give its scale, or its full width at half maximum (see from_fwhm), and
+    dumps write the one given.
 
     Parameters
     ----------
@@ -353,36 +359,14 @@ class _AnalyticLSF(_detail.GivenOptions, LSF):
         The scale.
     """
 
-    config_constructors = ('__init__', 'from_fwhm')
-
-    def __init__(self, scale: u.Quantity):
-        self._scale = scale
-
-    @abc.abstractmethod
-    def _extent(self, scale: float) -> float:
-        """
-        The half-width out to which it is drawn (see MIN_EXTENT), for its
-        scale in km/s of the axis.
-        """
-
-    @abc.abstractmethod
-    def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
-        """
-        Its profile at the velocities v, to any factor, for its scale (both
-        in km/s of the axis).
-        """
-
     def _size_impl(self, step: float, channel: Channel) -> float:
         return 2 * self._extent(channel.span(self._scale)) / step
 
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
-        scale = channel.span(self._scale)
-        z = _create_grid_1d(size, step, offset)
-        data = self._profile(z, scale)
-        data[np.abs(z) > self._extent(scale)] = 0
-        return data / np.sum(data)
+        return self._drawn(
+            _offsets(size, step, offset), channel.span(self._scale))
 
 
 class LSFGauss(_AnalyticLSF):
@@ -433,11 +417,9 @@ class LSFGauss(_AnalyticLSF):
         return cls(gbkfit.math.gauss_fwhm_to_sigma(fwhm))._given_as(
             fwhm=fwhm)
 
-    def _extent(self, scale: float) -> float:
-        # The flux of a Gaussian within |z| < w is erf(w / sqrt(2) sigma)
-        return max(
-            MIN_EXTENT * scale,
-            scale * np.sqrt(2) * scipy.special.erfinv(1 - WING_FLUX))
+    def _wings(self) -> float:
+        # (the flux of a Gaussian within |v| < w is erf(w / sqrt(2) sigma))
+        return np.sqrt(2) * scipy.special.erfinv(1 - WING_FLUX)
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
         return gbkfit.math.gauss_1d_fun(v, 1, 0, scale)
@@ -502,16 +484,14 @@ class LSFGGauss(_AnalyticLSF):
             The LSF.
         """
         check_options(LSFGGauss.from_fwhm, locals())
-        alpha = fwhm / (2 * np.log(2) ** (1 / beta))
+        alpha = gbkfit.math.ggauss_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta)._given_as(fwhm=fwhm, beta=beta)
 
-    def _extent(self, scale: float) -> float:
-        # The flux of a ggauss within |z| < w is P(1 / beta, (w / alpha)^
-        # beta), P the regularized lower incomplete gamma function
-        return max(
-            MIN_EXTENT * scale,
-            scale * scipy.special.gammaincinv(
-                1 / self._beta, 1 - WING_FLUX) ** (1 / self._beta))
+    def _wings(self) -> float:
+        # (the flux of a ggauss within |v| < w is P(1 / beta, (w / alpha)^
+        # beta), P the regularized lower incomplete gamma function)
+        return scipy.special.gammaincinv(
+            1 / self._beta, 1 - WING_FLUX) ** (1 / self._beta)
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
         return gbkfit.math.ggauss_1d_fun(v, 1, 0, scale, self._beta)
@@ -566,12 +546,10 @@ class LSFLorentz(_AnalyticLSF):
         check_options(LSFLorentz.from_fwhm, locals())
         return cls(fwhm / 2)._given_as(fwhm=fwhm)
 
-    def _extent(self, scale: float) -> float:
-        # The flux of a Lorentzian within |z| < w is 2 / pi arctan(w /
-        # gamma)
-        return max(
-            MIN_EXTENT * scale,
-            scale * np.tan(np.pi / 2 * (1 - WING_FLUX)))
+    def _wings(self) -> float:
+        # (the flux of a Lorentzian within |v| < w is 2 / pi arctan(w /
+        # gamma))
+        return np.tan(np.pi / 2 * (1 - WING_FLUX))
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
         return gbkfit.math.lorentz_1d_fun(v, 1, 0, scale)
@@ -635,27 +613,25 @@ class LSFMoffat(_AnalyticLSF):
             The LSF.
         """
         check_options(LSFMoffat.from_fwhm, locals())
-        alpha = fwhm / (2 * np.sqrt(2 ** (1 / beta) - 1))
+        alpha = gbkfit.math.moffat_fwhm_to_alpha(fwhm, beta)
         return cls(alpha, beta)._given_as(fwhm=fwhm, beta=beta)
 
-    def _extent(self, scale: float) -> float:
-        # The flux of a Moffat within |z| < w is I_u(1/2, beta - 1/2), I
+    def _wings(self) -> float:
+        # (the flux of a Moffat within |v| < w is I_u(1/2, beta - 1/2), I
         # the regularized incomplete beta function and u = w^2 / (alpha^2
-        # + w^2)
-        return max(
-            MIN_EXTENT * scale,
-            scale * np.sqrt(1 / (1 - scipy.special.betaincinv(
-                0.5, self._beta - 0.5, 1 - WING_FLUX)) - 1))
+        # + w^2))
+        return np.sqrt(1 / (1 - scipy.special.betaincinv(
+            0.5, self._beta - 0.5, 1 - WING_FLUX)) - 1)
 
     def _profile(self, v: np.ndarray, scale: float) -> np.ndarray:
         return gbkfit.math.moffat_1d_fun(v, 1, 0, scale, self._beta)
 
 
-class LSFImage(LSF):
+class LSFProfile(LSF):
     """
-    A measured LSF, from a 1D image (a profile).
+    A measured LSF, from its profile (a 1D image).
 
-    It is centred on the centre of the image, and resampled to the
+    It is centred on the centre of the profile, and resampled to the
     channels it is drawn on (with splines of order 5).
 
     Configurations give its file (see from_file).
@@ -663,28 +639,28 @@ class LSFImage(LSF):
     Parameters
     ----------
     data : ndarray
-        The image, finite.
+        The profile, finite; it holds light.
     step : Quantity
-        The width of the channels of the image: a width of the light (see
-        Channel.span).
+        The width of the channels of the profile: a width of the light
+        (see Channel.span).
     """
 
     config_constructors = ('from_file',)
 
     @staticmethod
     def type() -> str:
-        return 'image'
+        return 'profile'
 
     @staticmethod
     def type_title() -> str:
-        return 'Image (measured)'
+        return 'Profile (measured)'
 
     @classmethod
     def from_file(
             cls, file: DataFile, step: _Width | None = None
-    ) -> 'LSFImage':
+    ) -> 'LSFProfile':
         """
-        Read an LSF image (a profile) from a file, with its axis as it
+        Read an LSF profile (a 1D image) from a file, with its axis as it
         is: the profile is reversed where the axis runs against the
         velocities of the light (velocities or wavelengths that decrease
         along it, or frequencies that increase).
@@ -692,14 +668,15 @@ class LSFImage(LSF):
         Parameters
         ----------
         file : DataFile
-            The file of the image, and where it is in it (see read_image).
+            The file of the profile, and where it is in it (see
+            read_image).
         step : Quantity, optional
-            The width of the channels of the image: a width of the light
+            The width of the channels of the profile: a width of the light
             (see Channel.span); by default, that of its axis, in its unit.
 
         Returns
         -------
-        LSFImage
+        LSFProfile
             The LSF.
 
         Raises
@@ -709,41 +686,39 @@ class LSFImage(LSF):
             coordinates, or step is not given and the axis has no unit of
             velocity, wavelength or frequency.
         """
-        check_options(LSFImage.from_file, locals())
-        filename = split_data_file(file)[0]
-        data, wcs = _read_profiles(file)
+        check_options(LSFProfile.from_file, locals())
+        filename, data, wcs = _read_profiles(file)
         if data.ndim != 1:
             raise ValueError(
                 f"{filename}: an LSF profile is a 1D image; it has "
-                f"{data.ndim} axes")
-        return cls(data, _channel_width(filename, wcs) if step is None
+                f"{data.ndim} axes"
+                + (" (an image of profiles at points of the spectral axis, "
+                   "one per row, is an LSF of type profiles)"
+                   if data.ndim == 2 else ""))
+        return cls(data, _header_step(filename, wcs) if step is None
                    else step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        # (the file has the width of its channels in its axis, which
-        # from_file reads)
-        filename = f'{prefix}lsf.fits'
-        header = astropy.io.fits.Header(dict(
-            CUNIT1=gbkfit.units.format_unit(self._step.unit),
-            CDELT1=float(self._step.value), CRPIX1=(self._data.size + 1) / 2,
-            CRVAL1=0.0))
-        write_image(filename, self._data, header, overwrite=overwrite)
-        return dict(
-            type=self.type(),
-            file=filename if dump_path else os.path.basename(filename))
+        return _detail.dump_image(
+            self, self._data, 'lsf', prefix, dump_path, overwrite) | dict(
+            step=gbkfit.units.format_quantity(self._step))
 
     def __init__(self, data: np.ndarray, step: _Width):
-        check_options(LSFImage.__init__, locals())
+        check_options(LSFProfile.__init__, locals())
         data = np.squeeze(np.asarray(data, dtype=float))
         if data.ndim != 1:
             raise ValueError(
-                f"an LSF image has one axis (those of length 1 left out); "
+                f"an LSF profile has one axis (those of length 1 left out); "
                 f"its shape is {data.shape}")
         if not np.all(np.isfinite(data)):
-            raise ValueError("the pixels of an LSF image must be finite")
+            raise ValueError("the pixels of an LSF profile must be finite")
+        if not np.sum(data) > 0:
+            raise ValueError(
+                f"an LSF profile must hold light; the sum of its pixels is "
+                f"{np.sum(data):g}")
         self._data = data
         self._step = step
 
@@ -751,21 +726,13 @@ class LSFImage(LSF):
         return channel.span(self._step) / step * self._data.shape[0]
 
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
         scale = step / channel.span(self._step)
-        # The centre of the image, and the centre of the LSF in the array,
-        # where the analytic LSFs put it
-        old_center = self._data.shape[0] / 2 - 0.5
-        new_center = size // 2 + offset
-        x = np.arange(size)
-        nx = (x - new_center) * scale + old_center
-        data = scipy.ndimage.map_coordinates(
-            self._data, [nx], order=5, mode='grid-constant')
-        return data / np.sum(data)
+        return _detail.resample(self._data, (scale,), (size,), (offset,))
 
 
-class LSFSum(_detail.SpreadFunctionTerms, LSF):
+class LSFSum(_detail.SpreadFunctionSum, LSF):
     """
     A sum of LSFs (e.g. a double Gaussian), each with its fraction of the
     light.
@@ -778,38 +745,15 @@ class LSFSum(_detail.SpreadFunctionTerms, LSF):
         The weight of each LSF, positive; they are normalised to sum to 1.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'sum'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Sum'
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            lsfs=_detail.dump_terms(
-                lsf_parser, self._terms, prefix, dump_path, overwrite),
-            weights=self._weights.tolist())
-
     def __init__(self, lsfs: Sequence[LSF], weights: Sequence[float]):
         check_options(LSFSum.__init__, locals())
-        self._terms = tuple(lsfs)
-        self._weights = _detail.sum_weights(
-            weights, len(self._terms), "a sum of LSFs")
-
-    def _of_terms(self, terms: Sequence[LSF]) -> 'LSFSum':
-        return LSFSum(terms, self._weights)
+        super().__init__(lsfs, weights, "a sum of LSFs")
 
     def _size_impl(self, step: float, channel: Channel) -> float:
-        return max(lsf._size_impl(step, channel) for lsf in self._terms)
+        return max(lsf.on(channel).size(step) for lsf in self._terms)
 
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
         # Each term holds its fraction of the light on the same grid
         return sum(
@@ -817,7 +761,7 @@ class LSFSum(_detail.SpreadFunctionTerms, LSF):
             for weight, lsf in zip(self._weights, self._terms))
 
 
-class LSFConvolution(_detail.SpreadFunctionTerms, LSF):
+class LSFConvolution(_detail.SpreadFunctionConvolution, LSF):
     """
     The convolution of LSFs: e.g. the LSF of an instrument and the
     Hanning smoothing of the channels of the data (hanning).
@@ -828,31 +772,9 @@ class LSFConvolution(_detail.SpreadFunctionTerms, LSF):
         The LSFs, at least one.
     """
 
-    @staticmethod
-    def type() -> str:
-        return 'convolution'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Convolution'
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return dict(
-            type=self.type(),
-            lsfs=_detail.dump_terms(
-                lsf_parser, self._terms, prefix, dump_path, overwrite))
-
     def __init__(self, lsfs: Sequence[LSF]):
         check_options(LSFConvolution.__init__, locals())
-        if not lsfs:
-            raise ValueError("a convolution of LSFs needs at least one LSF")
-        self._terms = tuple(lsfs)
-
-    def _of_terms(self, terms: Sequence[LSF]) -> 'LSFConvolution':
-        return LSFConvolution(terms)
+        super().__init__(lsfs, "a convolution of LSFs")
 
     def _size_impl(self, step: float, channel: Channel) -> float:
         # The sum of the (odd) sizes of the terms, less one for each
@@ -861,7 +783,7 @@ class LSFConvolution(_detail.SpreadFunctionTerms, LSF):
         return sum(sizes) - len(sizes) + 1
 
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
         data = np.ones(1)
         for lsf in self._terms:
@@ -907,25 +829,29 @@ class LSFHanning(LSF):
 
     def _steps(self, step: float, channel: Channel) -> int:
         """The number of steps in a smoothed channel."""
-        if channel.width is None:
-            raise RuntimeError(
-                "the Hanning smoothing is of the channels of the data, whose "
-                "width is not given")
-        steps = self._channels * channel.width / step
+        steps = channel.span(self._channels * u.pix) / step
         if abs(steps - round(steps)) > 1e-6 * steps or round(steps) < 1:
+            # (the channels times the oversampling of the axis are the
+            # steps: whole for a multiple of the denominator of the
+            # channels)
+            factor = fractions.Fraction(
+                self._channels).limit_denominator(1000).denominator
             unit = gbkfit.units.format_unit(channel.unit)
             raise RuntimeError(
-                f"the Hanning smoothing of {self._channels:g} channels of "
-                f"{channel.width:g} {unit} must be a multiple of the channels "
-                f"it is drawn on ({step:g} {unit}): oversample the spectral "
-                f"axis by a multiple of {1 / self._channels:g}")
+                f"a Hanning smoothing of {self._channels:g} x "
+                f"{channel.width:g} {unit} (channels of the data) spans "
+                f"{steps:g} of the "
+                f"channels it is drawn on ({step:g} {unit}), not a whole "
+                f"number of them: {self._channels:g} times the oversampling "
+                f"of the spectral axis must be whole (e.g. an oversampling of "
+                f"{factor})")
         return round(steps)
 
     def _size_impl(self, step: float, channel: Channel) -> float:
         return 2 * self._steps(step, channel) + 1
 
     def _asarray_impl(
-            self, step: float, channel: Channel, size: int, offset: int
+            self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
         steps = self._steps(step, channel)
         data = np.zeros(2 * steps + 1)
@@ -933,55 +859,65 @@ class LSFHanning(LSF):
         return _detail.embed(data, (size,), (offset,))
 
 
-def _read_profiles(file: DataFile) -> tuple[np.ndarray, astropy.wcs.WCS]:
+def _read_profiles(
+        file: DataFile
+) -> tuple[str, np.ndarray, astropy.wcs.WCS]:
     """
     The LSF profile, or profiles (one per row of an image: nz, nk), of a
-    file, along its first axis, and its world coordinates (its axes as
-    they are, unlike those of data: the axis of the profiles may be
-    spectral, and so that of the rows). The profiles run along the
-    velocities of the light: they are reversed where their axis runs
-    against them (velocities or wavelengths that decrease along it, or
-    frequencies that increase).
+    file, along its first axis, with the filename and its world
+    coordinates (its axes as they are, unlike those of data: the axis of
+    the profiles may be spectral, and so that of the rows). The profiles
+    run along the velocities of the light: they are reversed where their
+    axis runs against them (velocities or wavelengths that decrease along
+    it, or frequencies that increase).
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
     data = np.asarray(data, dtype=float)
     wcs = parse_wcs(filename, header)
-    unit = u.Unit(wcs.wcs.cunit[0])
-    scale = wcs.pixel_scale_matrix[0, 0]
-    if unit.is_equivalent(_KMS) or unit.is_equivalent(u.m):
-        against = scale < 0
+    step = _axis_step(wcs)
+    if step.unit.is_equivalent(_KMS) or step.unit.is_equivalent(u.m):
+        against = step.value < 0
     else:
         # (frequencies, energies and wave numbers fall as velocities rise)
-        against = scale > 0 and unit.is_equivalent(u.Hz, u.spectral())
-    return (data[..., ::-1] if against else data), wcs
+        against = step.value > 0 and step.unit.is_equivalent(
+            u.Hz, u.spectral())
+    return filename, (data[..., ::-1] if against else data), wcs
 
 
-def _channel_width(source: str, wcs: astropy.wcs.WCS) -> u.Quantity:
+def _axis_step(wcs: astropy.wcs.WCS) -> u.Quantity:
     """
-    The width of the channels of LSF profiles, in the unit of the first
-    axis of their world coordinates (see _read_profiles).
+    The step of the first axis of the world coordinates of LSF profiles
+    (see _read_profiles), with its sign, in its unit.
+    """
+    return float(wcs.pixel_scale_matrix[0, 0]) * u.Unit(wcs.wcs.cunit[0])
+
+
+def _header_step(source: str, wcs: astropy.wcs.WCS) -> u.Quantity:
+    """
+    The width of the channels of LSF profiles, that of the first axis of
+    their world coordinates (see _read_profiles), in its unit.
 
     Raise ValueError if it is not a unit of velocity, wavelength or
     frequency, or pixels.
     """
-    unit = u.Unit(wcs.wcs.cunit[0])
-    if not any(unit.is_equivalent(x) for x in (_KMS, u.m, u.Hz, u.pix)):
+    step = abs(_axis_step(wcs))
+    if not any(step.unit.is_equivalent(x) for x in (_KMS, u.m, u.Hz, u.pix)):
         raise ValueError(
             f"{source}: the axis of the profiles has no unit of velocity, "
             f"wavelength, frequency or pixels; give the width of their "
             f"channels (step)")
-    return abs(float(wcs.pixel_scale_matrix[0, 0])) * unit
+    return step
 
 
-class LSFImages(_detail.SpreadFunctionImages, LSF):
+class LSFProfiles(_detail.SpreadFunctionImages, LSF):
     """
-    A measured LSF that changes with wavelength, from an image.
+    A measured LSF that changes with wavelength, from its profiles.
 
     It is given as profiles at points of the spectral axis (e.g. measured
-    from sky lines or arc lamps). At each channel it is the image LSF (see
-    LSFImage) of the profiles of the two nearest points, interpolated
-    linearly; beyond the points, that of the nearest profile.
+    from sky lines or arc lamps). At each channel it is the profile LSF
+    (see LSFProfile) of the profiles of the two nearest points,
+    interpolated linearly; beyond the points, that of the nearest profile.
 
     Configurations give its file, an image with one profile per row (see
     from_file).
@@ -989,7 +925,7 @@ class LSFImages(_detail.SpreadFunctionImages, LSF):
     Parameters
     ----------
     data : ndarray
-        The profiles (nz, nk), finite.
+        The profiles (nz, nk), finite; each holds light.
     points : Quantity
         The point of each profile: wavelengths, frequencies or velocities.
     step : Quantity
@@ -1001,11 +937,11 @@ class LSFImages(_detail.SpreadFunctionImages, LSF):
 
     @staticmethod
     def type() -> str:
-        return 'images'
+        return 'profiles'
 
     @staticmethod
     def type_title() -> str:
-        return 'Image per wavelength (measured)'
+        return 'Profile per wavelength (measured)'
 
     @classmethod
     def from_file(
@@ -1013,12 +949,12 @@ class LSFImages(_detail.SpreadFunctionImages, LSF):
             file: DataFile,
             points: u.Quantity | None = None,
             step: _Width | None = None
-    ) -> 'LSFImages':
+    ) -> 'LSFProfiles':
         """
         Read LSF profiles from an image, one per row (nz, nk), with its
         axes as they are: the profiles are reversed where the axis of the
         columns runs against the velocities of the light (see
-        LSFImage.from_file).
+        LSFProfile.from_file).
 
         Parameters
         ----------
@@ -1035,7 +971,7 @@ class LSFImages(_detail.SpreadFunctionImages, LSF):
 
         Returns
         -------
-        LSFImages
+        LSFProfiles
             The LSF.
 
         Raises
@@ -1045,32 +981,31 @@ class LSFImages(_detail.SpreadFunctionImages, LSF):
             coordinates, or the points or step are neither given nor in
             its header.
         """
-        check_options(LSFImages.from_file, locals())
-        filename = split_data_file(file)[0]
-        data, wcs = _read_profiles(file)
+        check_options(LSFProfiles.from_file, locals())
+        filename, data, wcs = _read_profiles(file)
         if data.ndim != 2:
             raise ValueError(
                 f"{filename}: LSF profiles must be an image, with one profile "
-                f"per row; it has {data.ndim} axes")
+                f"per row; it has {data.ndim} axes"
+                + (" (one profile is an LSF of type profile)"
+                   if data.ndim == 1 else ""))
         if points is None:
-            points = _detail.spectral_points(wcs.sub([2]), data.shape[0])
+            points = spectral_points(wcs.sub([2]), data.shape[0])
             if points is None:
                 raise ValueError(
                     f"{filename}: the rows have no spectral axis; give the "
                     f"points of the profiles (points)")
         if step is None:
-            step = _channel_width(filename, wcs)
+            step = _header_step(filename, wcs)
         return cls(data, points, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
             overwrite: bool = False
     ) -> dict[str, Any]:
-        filename = f'{prefix}lsf_images.fits'
-        write_image(filename, self._data, overwrite=overwrite)
-        return dict(
-            type=self.type(),
-            file=filename if dump_path else os.path.basename(filename),
+        return _detail.dump_image(
+            self, self._data, 'lsf_profiles', prefix, dump_path, overwrite
+        ) | dict(
             points=self._dump_points(),
             step=gbkfit.units.format_quantity(self._step))
 
@@ -1080,25 +1015,27 @@ class LSFImages(_detail.SpreadFunctionImages, LSF):
             points: u.Quantity,
             step: _Width
     ):
-        check_options(LSFImages.__init__, locals())
+        check_options(LSFProfiles.__init__, locals())
         data = np.asarray(data, dtype=float)
-        if data.ndim != 2 or not np.all(np.isfinite(data)):
+        if data.ndim != 2:
             raise ValueError(
-                f"LSF profiles must be finite, of shape (nz, nk); their "
-                f"shape is {data.shape}")
+                f"LSF profiles are of shape (nz, nk); their shape is "
+                f"{data.shape}")
+        if not np.all(np.isfinite(data)):
+            raise ValueError("the pixels of LSF profiles must be finite")
         super().__init__(data, points, "LSF profiles")
         self._step = step
 
-    def _image(self, data: np.ndarray) -> LSFImage:
-        return LSFImage(data, self._step)
+    def _of_image(self, data: np.ndarray) -> LSFProfile:
+        return LSFProfile(data, self._step)
 
 
-class LSFVarying(_detail.VaryingSpreadFunction, LSF):
+class LSFTables(_detail.SpreadFunctionTables, LSF):
     """
-    An LSF of a type whose options vary along the spectral axis: an LSF of
-    the type at each channel (see at). It is not drawn itself.
-    It is made by the varying of the class of the type (e.g.
-    LSFGauss.varying).
+    An LSF of an analytic type whose options vary along the spectral axis,
+    as tables of their values: at each point, an LSF of the type (see at).
+    It is not drawn itself. It is made by the varying of the class of the
+    type (e.g. LSFGauss.varying).
     """
 
 
@@ -1108,8 +1045,8 @@ lsf_parser = TypedParser(LSF, [
     LSFGGauss,
     LSFLorentz,
     LSFMoffat,
-    LSFImage,
+    LSFProfile,
     LSFSum,
     LSFConvolution,
     LSFHanning,
-    LSFImages])
+    LSFProfiles])

@@ -702,6 +702,28 @@ def test_gaussian_beams_are_gaussians():
         == 3
 
 
+def test_measured_lsfs_are_profiles():
+    # Of the same options (and their steps get their unit); in
+    # instruments, sums, and the noise, but not the PSFs of type image
+    one = dict(type='image', file='lsf.fits', step=5)
+    lsf = dict(type='sum', weights=[1, 1], lsfs=[
+        dict(type='images', file='lsfs.fits'), dict(type='gauss', sigma=20)])
+    psf = dict(type='image', file='psf.fits')
+    config = dict(observations=[
+        dict(instrument=dict(lsf=one, psf=psf)),
+        dict(instrument=dict(lsf=lsf))],
+        mock=dict(noise=dict(type='gauss', spectral_correlation=dict(
+            type='image', file='noise.fits'))))
+    changes = migration.migrate(config, 6)
+    assert one == dict(type='profile', file='lsf.fits', step='5 km/s')
+    assert lsf['lsfs'][0] == dict(type='profiles', file='lsfs.fits')
+    assert config['mock']['noise']['spectral_correlation']['type'] \
+        == 'profile'
+    assert psf['type'] == 'image'
+    assert [c.message for c in changes if c.path[-1] == 'type'] == [
+        'image -> profile', 'images -> profiles', 'image -> profile']
+
+
 def test_tables_of_pieces_of_projects_have_their_hdu_in_their_file(tmp_path):
     # (a table of a piece of an LSF of a project of version 5)
     study = project.create(str(tmp_path / 'study'))

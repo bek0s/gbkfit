@@ -15,12 +15,12 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    DataFile, TypedParser, TypedSerializable, Unit, check_options)
+    DataFile, TypedParser, Unit, check_options, split_data_file)
 from gbkfit.grid import (
     Grid, VelocityConvention, check_overlap, make_grid, pixels_on,
     sky_positions)
-from gbkfit.io import read_data, write_data
-from . import varying
+from gbkfit.io import header_shape, read_data, read_header, write_data
+from . import _detail, varying
 
 
 __all__ = [
@@ -34,75 +34,15 @@ __all__ = [
 
 
 # The argument of the Airy pattern (2 J1(u) / u)^2 at its half maximum
-_AIRY_HALF_MAXIMUM = 1.616339948310703
+_AIRY_HALF_MAXIMUM_ARG = 1.616339948310703
 
 
-class PrimaryBeam(TypedSerializable, abc.ABC):
+class PrimaryBeam(_detail.Response):
     """
     The response of a telescope to the sky, which attenuates its light
-    before the PSF: the same at all frequencies, or of each (see varies).
+    before the PSF: the same at all frequencies, or of each (see varies
+    and at).
     """
-
-    @abc.abstractmethod
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        """
-        Dump the response to its configuration.
-
-        Parameters
-        ----------
-        prefix : str, optional
-            The start of the names of the files of its data (e.g. an
-            image), if any.
-        dump_path : bool, optional
-            Whether the configuration has the paths of the files, or only
-            their names.
-        overwrite : bool, optional
-            Whether to overwrite existing files.
-
-        Returns
-        -------
-        dict
-            The options.
-        """
-
-    def varies(self) -> bool:
-        """
-        Check whether the response varies along the spectral axis (with
-        the frequency).
-
-        Returns
-        -------
-        bool
-            Whether it varies; here, it does not (see at).
-        """
-        return False
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'PrimaryBeam | list[PrimaryBeam]':
-        """
-        Return the primary beam at points of the spectral axis.
-
-        Parameters
-        ----------
-        points : Quantity
-            Wavelengths, frequencies or velocities: one, or a sequence.
-        convention : VelocityConvention, optional
-            The velocity convention of the spectral axis; needed
-            for velocities, if the beam varies.
-
-        Returns
-        -------
-        PrimaryBeam or list of PrimaryBeam
-            The beam (one that does not vary) at each point, or at the
-            point; here, itself.
-        """
-        return varying.per_point(points, lambda points_: [self] * len(points_))
 
     @abc.abstractmethod
     def response(self, grid: Grid) -> np.ndarray:
@@ -122,7 +62,7 @@ class PrimaryBeam(TypedSerializable, abc.ABC):
         """
 
 
-class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
+class PrimaryBeamRadial(PrimaryBeam):
     """
     A response that depends on the distance from its centre, the pointing,
     where it is 1; of a width that is the same at all frequencies, or
@@ -170,17 +110,16 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
     def varies(self) -> bool:
         return self._frequency is not None
 
-    def at(
+    def _at(
             self,
             points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'PrimaryBeam | list[PrimaryBeam]':
-        if not self.varies():
-            return super().at(points, convention)
-        return varying.per_point(points, lambda points_: [
+            convention: VelocityConvention | None
+    ) -> list[PrimaryBeam]:
+        # (of a width inversely proportional to the frequency)
+        return [
             type(self)(self._fwhm * self._frequency / frequency, self._x,
                        self._y)
-            for frequency in varying.to_frequencies(points_, convention)])
+            for frequency in varying.to_frequencies(points, convention)]
 
     def response(self, grid: Grid) -> np.ndarray:
         x, y = sky_positions(grid)
@@ -190,7 +129,6 @@ class PrimaryBeamRadial(PrimaryBeam, abc.ABC):
     @abc.abstractmethod
     def _response_impl(self, radius: np.ndarray) -> np.ndarray:
         """The response at the given radii (in units of the fwhm)."""
-        pass
 
 
 class PrimaryBeamGauss(PrimaryBeamRadial):
@@ -220,9 +158,10 @@ class PrimaryBeamAiry(PrimaryBeamRadial):
         return 'Airy pattern'
 
     def _response_impl(self, radius: np.ndarray) -> np.ndarray:
-        u = 2 * _AIRY_HALF_MAXIMUM * radius
-        u_safe = np.where(u > 0, u, 1)
-        return np.where(u > 0, (2 * scipy.special.j1(u_safe) / u_safe) ** 2, 1)
+        arg = 2 * _AIRY_HALF_MAXIMUM_ARG * radius
+        arg_safe = np.where(arg > 0, arg, 1)
+        return np.where(
+            arg > 0, (2 * scipy.special.j1(arg_safe) / arg_safe) ** 2, 1)
 
 
 class PrimaryBeamImage(PrimaryBeam):
@@ -270,13 +209,12 @@ class PrimaryBeamImage(PrimaryBeam):
             rota: Annotated[float, Unit('deg')] | None = None
     ) -> 'PrimaryBeamImage':
         """
-        Read a primary beam image, and its world coordinates, from a FITS
-        file.
+        Read a primary beam image, and its world coordinates, from a file.
 
         Parameters
         ----------
-        file : str or tuple
-            The file: a filename, or a filename and the HDU of the image.
+        file : DataFile
+            The file of the image, and where it is in it (see read_image).
         step, rpix, rval : float or Sequence of float, optional
             The world coordinates of the image (see make_grid);
             by default, those of the header. Either rpix or rval can be
@@ -290,8 +228,23 @@ class PrimaryBeamImage(PrimaryBeam):
         -------
         PrimaryBeamImage
             The primary beam.
+
+        Raises
+        ------
+        ValueError
+            If the file has no image (e.g. a cube of the beam of each
+            channel), or its header has invalid world coordinates (see
+            read_data).
         """
         check_options(PrimaryBeamImage.from_file, locals())
+        filename = split_data_file(file)[0]
+        axes = sum(n > 1 for n in header_shape(read_header(file)))
+        if axes > 2:
+            raise ValueError(
+                f"{filename}: a primary beam is an image; it has {axes} axes "
+                f"of more than one pixel (a cube of the beam of each channel, "
+                f"e.g. a CASA .pb cube, is not supported yet: give the image "
+                f"of one channel)")
         data, coords = read_data(file, rpix=rpix, rval=rval)
         return cls(
             data, coords.step if step is None else step, coords.rpix,

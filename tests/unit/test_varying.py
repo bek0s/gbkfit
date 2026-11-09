@@ -119,7 +119,7 @@ def test_varying_psfs_round_trip():
     assert psf_parser.dump(psf_parser.load(dict(dumped))) == dumped
     # (an angle in radians is converted to the degrees of posa)
     np.testing.assert_allclose(
-        psf.at(10 * KMS, VelocityConvention(6000 * u.AA)).dump()[
+        psf.at([10] * KMS, VelocityConvention(6000 * u.AA))[0].dump()[
             'posa'],
         np.degrees(0.2))
 
@@ -141,17 +141,34 @@ def kms(values):
     (dict(type='gauss', sigma=dict(points=[1, 2], values=[1, 1])),
      ConfigError, "sigma: option 'points' must be of type Quantity"),
     (dict(type='gauss', sigma=dict(points=kms([0, 0]), values=[1, 1])),
-     ValueError, "must be distinct")])
+     ValueError, "must be distinct"),
+    # (a unit that the option cannot be in: refused as the LSF is made,
+    # though its points are velocities and wavelengths, which only the
+    # data put together)
+    (dict(type='moffat',
+          alpha=dict(points=kms([0, 100]), values=[1, 2], unit='km/s'),
+          beta=dict(points=dict(value=[6000, 7000], unit='Angstrom'),
+                    values=[2, 3], unit='arcsec')),
+     ValueError, "'arcsec', which cannot be converted to ''")])
 def test_varying_options_are_checked(info, error, message):
     with pytest.raises(error, match=message):
         lsf_parser.load(info)
+
+
+def test_an_lsf_that_varies_is_drawn_as_it_is_at_each_channel():
+    from gbkfit.instrument import Channel
+    lsf = lsf_parser.load(dict(type='gauss', sigma=dict(
+        points=kms([0, 100]), values=[10, 20], unit='km/s')))
+    with pytest.raises(RuntimeError, match="as it is at each point"):
+        lsf.on(Channel())
+    lsf.at([50] * KMS)[0].on(Channel()).asarray(1.0)
 
 
 def test_tables_in_wavelength_need_the_rest():
     psf = psf_parser.load(
         dict(type='gauss', sigma=alpha_table(None, 'inline')))
     with pytest.raises(ValueError, match="convention of the velocities"):
-        psf.at(0 * KMS)
+        psf.at([0] * KMS)
 
 
 def gauss_images(sigmas, size=21):
@@ -170,7 +187,7 @@ def test_psf_images_are_interpolated():
     for psf, image in zip(cube.at([0, 150, 300] * KMS), expected):
         np.testing.assert_allclose(
             psf.asarray((1, 1), (21, 21)),
-            PSFImage(image).asarray((1, 1), (21, 21)), atol=1e-12)
+            PSFImage(image, (1, 1)).asarray((1, 1), (21, 21)), atol=1e-12)
 
 
 def test_psf_images_from_files(tmp_path):
@@ -200,12 +217,12 @@ def test_psf_images_from_files(tmp_path):
             a.asarray((0.05, 0.05)), b.asarray((0.05, 0.05)))
 
 
-def test_lsf_images_from_files(tmp_path):
+def test_lsf_profiles_from_files(tmp_path):
     # One profile per row: the points come from the spectral axis of the
     # rows, and the width of the channels from the columns (km/s)
     import astropy.io.fits
     import astropy.wcs
-    from gbkfit.instrument import Channel, LSFGauss, LSFImage
+    from gbkfit.instrument import Channel, LSFGauss, LSFProfile
     profiles = np.stack([
         LSFGauss(sigma * KMS).on(Channel()).asarray(5, 41)
         for sigma in (20, 40)])
@@ -215,9 +232,9 @@ def test_lsf_images_from_files(tmp_path):
     wcs.wcs.cdelt = [5, 2000]
     wcs.wcs.crval = [0, 5000]
     wcs.wcs.crpix = [21, 1]
-    path = tmp_path / 'lsf_images.fits'
+    path = tmp_path / 'lsf_profiles.fits'
     astropy.io.fits.writeto(path, profiles, wcs.to_header())
-    lsf = lsf_parser.load(dict(type='images', file=str(path)))
+    lsf = lsf_parser.load(dict(type='profiles', file=str(path)))
     assert lsf.varies()
     dumped = lsf_parser.dump(lsf, prefix=str(tmp_path / 'd_'))
     assert dumped['step'] == '5.0 km s-1'
@@ -226,10 +243,10 @@ def test_lsf_images_from_files(tmp_path):
         u.Quantity(points['value'], points['unit']).to_value(u.AA),
         [5000, 7000])
     # Halfway between the points, half of each profile
-    middle = lsf_parser.load(dict(dumped)).at(6000 * u.AA)
+    middle, = lsf_parser.load(dict(dumped)).at([6000] * u.AA)
     np.testing.assert_allclose(
         middle.on(Channel()).asarray(5, 41),
-        LSFImage((profiles[0] + profiles[1]) / 2, 5 * KMS).on(
+        LSFProfile((profiles[0] + profiles[1]) / 2, 5 * KMS).on(
             Channel()).asarray(5, 41),
         atol=1e-12)
 
@@ -243,13 +260,15 @@ def test_varying_psfs_in_python(tmp_path):
     loaded = psf_parser.load(dict(
         type='moffat', alpha=alpha_table(tmp_path, 'inline'), beta=2.5))
     assert psf_parser.dump(psf) == psf_parser.dump(loaded)
-    assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)
+    assert psf.at([5900] * u.AA)[0].dump()['alpha'] == pytest.approx(0.7)
     velocity = (5900 * u.AA).to(KMS, u.doppler_optical(6000 * u.AA))
     convention = VelocityConvention(6000 * u.AA)
     assert psf.at([velocity], convention)[0].dump()['alpha'] == (
         pytest.approx(0.7))
-    with pytest.raises(ValueError, match="of PSFImage cannot vary"):
-        PSFImage.varying(data=np.ones((3, 3)), step=alpha)
+    # (only the analytic ones vary by tables of their options)
+    assert not hasattr(PSFImage, 'varying')
+    with pytest.raises(ValueError, match="none of the options of PSFMoffat"):
+        PSFMoffat.varying(alpha=0.7, beta=2.5)
 
 
 def test_spectral_tables_from_files(tmp_path):
@@ -299,7 +318,7 @@ def test_table_files_are_relative_to_the_configuration(tmp_path):
     info = alpha_table(folder, 'ecsv') | dict(file='psf.ecsv')
     with paths_relative_to(str(folder)):
         psf = psf_parser.load(dict(type='moffat', alpha=info, beta=2.5))
-    assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)
+    assert psf.at([5900] * u.AA)[0].dump()['alpha'] == pytest.approx(0.7)
 
 
 def test_tables_are_checked_together_at_their_points():
@@ -310,7 +329,7 @@ def test_tables_are_checked_together_at_their_points():
     psf = psf_parser.load(dict(
         type='gauss', bmaj=dict(points=ghz, values=[10.0, 9.9995, 9.999]),
         bmin=dict(points=ghz, values=[9.9994, 9.999, 9.998])))
-    assert psf.at(1.2 * u.GHz).dump()['bmin'] == 9.998
+    assert psf.at([1.2] * u.GHz)[0].dump()['bmin'] == 9.998
     # Values are compared in the units of the options
     psf_parser.load(dict(
         type='gauss', bmaj=dict(points=ghz, values=[10.0, 10.0, 10.0]),
@@ -335,7 +354,7 @@ def test_lsfs_vary_by_their_fwhm():
                   values=[2.8, 2.4], unit='Angstrom'),
         beta=dict(points=dict(value=[5000, 9000], unit='Angstrom'),
                   values=[2.0, 3.0])))
-    at = lsf.at(7000 * u.AA)
+    at, = lsf.at([7000] * u.AA)
     expected = LSFMoffat.from_fwhm(2.6 * u.AA, 2.5)
     assert at.dump()['beta'] == 2.5
     from gbkfit.units import parse_quantity

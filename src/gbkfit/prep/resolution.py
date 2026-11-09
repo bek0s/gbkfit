@@ -12,18 +12,14 @@ import numpy.typing as npt
 
 
 __all__ = [
-    'resolving_power_table'
+    'resolving_power_lsf_table'
 ]
 
 
-# The speed of light (km/s)
-_C = astropy.constants.c.to_value(u.km / u.s)
-
-
-def resolving_power_table(
+def resolving_power_lsf_table(
         points: u.Quantity,
         resolving_power: npt.ArrayLike,
-        name: str = 'wavelength'
+        name: str | None = None
 ) -> astropy.table.QTable:
     """
     Return the LSF of resolving powers at points of the spectral axis: a
@@ -37,7 +33,8 @@ def resolving_power_table(
     resolving_power : array_like
         The resolving power at each point.
     name : str, optional
-        The name of the column of the points.
+        The name of the column of the points; by default, of their kind:
+        wavelength, frequency or velocity.
 
     Returns
     -------
@@ -51,10 +48,17 @@ def resolving_power_table(
         point.
     """
     power = np.asarray(resolving_power, dtype=float)
-    if power.shape != np.shape(points) or not np.all(power > 0):
+    if power.shape != np.shape(points):
         raise ValueError(
-            f"a resolving power is a positive number at each point; there "
-            f"are {np.size(points)} points, and the powers are "
-            f"{power.tolist()}")
+            f"there must be a resolving power at each point; there are "
+            f"{np.size(points)} points and {power.size} resolving powers")
+    if not np.all(power > 0):
+        raise ValueError(
+            f"resolving powers must be positive; the lowest is "
+            f"{np.min(power):g}")
+    if name is None:
+        name = ('wavelength' if points.unit.is_equivalent(u.m)
+                else 'frequency' if points.unit.is_equivalent(u.Hz)
+                else 'velocity')
     return astropy.table.QTable({
-        name: points, 'fwhm': _C / power * (u.km / u.s)})
+        name: points, 'fwhm': (astropy.constants.c / power).to(u.km / u.s)})

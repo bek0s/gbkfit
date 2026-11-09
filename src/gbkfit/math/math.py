@@ -82,6 +82,30 @@ def gauss_fwhm_to_sigma(fwhm: float) -> float:
     return fwhm / np.sqrt(8 * np.log(2))
 
 
+def gauss_sigma_to_fwhm(sigma: float) -> float:
+    """
+    Return the full width at half maximum of a Gaussian of the given
+    standard deviation.
+    """
+    return sigma * np.sqrt(8 * np.log(2))
+
+
+def ggauss_fwhm_to_alpha(fwhm: float, beta: float) -> float:
+    """
+    Return the scale of a generalised Gaussian, exp(-(|x| / alpha)^beta),
+    of the given full width at half maximum.
+    """
+    return fwhm / (2 * np.log(2) ** (1 / beta))
+
+
+def moffat_fwhm_to_alpha(fwhm: float, beta: float) -> float:
+    """
+    Return the scale of a Moffat, (1 + (x / alpha)^2)^(-beta), of the
+    given full width at half maximum.
+    """
+    return fwhm / (2 * np.sqrt(2 ** (1 / beta) - 1))
+
+
 def gauss_1d_fun(x: np.ndarray, a: float, b: float, c: float) -> np.ndarray:
     """
     Return a Gaussian of amplitude a, centre b and standard deviation c at

@@ -27,6 +27,7 @@ from .headers import has_wcs, ignoring_wcs_fixes
 
 __all__ = [
     'nonstandard_spectral_axis',
+    'spectral_points',
     'velocity_is_ambiguous'
 ]
 
@@ -244,6 +245,30 @@ def _with_velocity_convention(
     radio = 256 if velocity == 'radio' else 0
     header['VELREF'] = _AIPS_FRAMES[frame] + radio
     return header
+
+
+def spectral_points(wcs: astropy.wcs.WCS, n: int) -> u.Quantity | None:
+    """
+    Return the points of the first n pixels of the spectral axis of world
+    coordinates (e.g. of parse_wcs), in the unit of the axis.
+
+    Parameters
+    ----------
+    wcs : astropy.wcs.WCS
+        The world coordinates.
+    n : int
+        The number of pixels.
+
+    Returns
+    -------
+    Quantity or None
+        The points, or None if there is no spectral axis.
+    """
+    if wcs.wcs.spec < 0:
+        return None
+    spectral = wcs.sub([wcs.wcs.spec + 1])
+    return u.Quantity(
+        spectral.pixel_to_world_values(np.arange(n)), spectral.wcs.cunit[0])
 
 
 def velocity_is_ambiguous(header: astropy.io.fits.Header) -> bool:

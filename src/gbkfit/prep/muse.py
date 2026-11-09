@@ -5,9 +5,8 @@ along the spectral axis.
 
 import astropy.io.fits as fits
 import astropy.table
-import astropy.units
+import astropy.units as u
 import numpy as np
-
 
 
 __all__ = [
@@ -62,7 +61,6 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
         beta = np.polyval([
             header[f'{key}B{k:02d}']
             for k in range(header[f'{key}BNC'])], x)
-    u = astropy.units
     return astropy.table.QTable(dict(
         wavelength=wavelengths * u.Angstrom, fwhm=fwhm * u.arcsec,
         beta=beta * u.dimensionless_unscaled))
@@ -75,6 +73,5 @@ def muse_lsf_table() -> astropy.table.QTable:
     """
     w = _MUSE_WAVELENGTHS
     fwhm = 5.866e-8 * w ** 2 - 9.187e-4 * w + 6.040
-    u = astropy.units
     return astropy.table.QTable(dict(
         wavelength=w * u.Angstrom, fwhm=fwhm * u.Angstrom))

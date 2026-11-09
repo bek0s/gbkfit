@@ -13,6 +13,7 @@ from .rules import Change, Rule
 __all__ = [
     'RULES',
     'GaussBeams',
+    'LSFProfileTypes',
     'LSFWidths'
 ]
 
@@ -77,26 +78,33 @@ class _KernelRule(Rule):
         """Rewrite a kernel itself (not its terms), in place."""
 
 
-class LSFWidths(_KernelRule):
+class _LSFRule(_KernelRule):
     """
-    The widths of LSFs have units (2026-11-09; see gbkfit.instrument.lsfs):
-    a width that was a number, of km/s of the light, is its text in km/s
-    (e.g. '20 km/s'), and an inline table of widths without a unit gets
-    unit: km/s;
-    the Hanning smoothing is of the channels of the data (channels), not
-    of a width of the axis (width). The LSFs are those of instruments
-    (lsf) and of the noise (spectral_correlation).
-
-    The spectral correlation of the noise was in km/s of the axis, and is
-    now in km/s of the light, drawn at the middle channel of the data:
-    the same, to 1 + v / c of that channel.
+    A rule of the LSFs of configurations: those of instruments (lsf) and
+    of the noise (spectral_correlation), and the pieces of projects.
     """
 
     _OPTIONS = ('lsf', 'spectral_correlation')
     _PIECES = 'lsf'
     _TERMS = 'lsfs'
 
-    # The widths of the LSFs, by type
+
+class LSFWidths(_LSFRule):
+    """
+    The widths of LSFs have units (2026-11-09; see gbkfit.instrument.lsfs):
+    a width that was a number, of km/s of the light, is its text in km/s
+    (e.g. '20 km/s'), and an inline table of widths without a unit gets
+    unit: km/s;
+    the Hanning smoothing is of the channels of the data (channels), not
+    of a width of the axis (width).
+
+    The spectral correlation of the noise was in km/s of the axis, and is
+    now in km/s of the light, drawn at the middle channel of the data:
+    the same, to 1 + v / c of that channel.
+    """
+
+    # The widths of the LSFs, by type (of version 6: this rule comes before
+    # LSFProfileTypes, which renames image and images)
     _WIDTHS = dict(
         gauss=('sigma',), ggauss=('alpha',), lorentz=('gamma',),
         moffat=('alpha',), image=('step',), images=('step',))
@@ -135,6 +143,30 @@ class LSFWidths(_KernelRule):
         return changes
 
 
+class LSFProfileTypes(_LSFRule):
+    """
+    A measured LSF is a profile (2026-11-09; see LSFProfile and
+    LSFProfiles): type image is profile, and type images profiles, of the
+    same options.
+    """
+
+    # The new types of the old
+    _TYPES = dict(image='profile', images='profiles')
+
+    @staticmethod
+    def version() -> int:
+        return 7
+
+    def _rewrite_kernel(
+            self, kernel: MutableMapping[str, Any], path: list[str | int]
+    ) -> list[Change]:
+        kind = kernel.get('type')
+        if kind not in self._TYPES:
+            return []
+        kernel['type'] = self._TYPES[kind]
+        return [Change(path + ['type'], f"{kind} -> {kernel['type']}")]
+
+
 class GaussBeams(_KernelRule):
     """
     A Gaussian PSF of a radio beam is a Gaussian (2026-11-09): type
@@ -163,5 +195,6 @@ class GaussBeams(_KernelRule):
 # The rules, in the order of the changes
 RULES: tuple[Rule, ...] = (
     LSFWidths(),
+    LSFProfileTypes(),
     GaussBeams(),
 )
