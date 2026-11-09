@@ -116,7 +116,7 @@ def check_convention(spectral: 'SpectralAxis') -> None:
 # Quantity, or its text (e.g. '6562.8 Angstrom'); in a configuration, its
 # text
 RestValue: TypeAlias = Annotated[QuantityOrText, UnitKinds(
-    wavelength=('Angstrom', 'nm', 'um', 'm'), frequency=('MHz', 'GHz', 'Hz'))]
+    wavelength=('Angstrom', 'nm', 'um', 'm'), frequency=('Hz', 'MHz', 'GHz'))]
 
 # The rest of a spectral axis, if any
 Rest: TypeAlias = RestValue | None

@@ -125,10 +125,21 @@ h2 { margin: 0; font: var(--text-heading); }
 .facts dt { font: var(--text-label); color: var(--faint); }
 .facts dd { margin: 0; min-width: 0; font: var(--text-data); }
 .facts .word { font: var(--text-label); color: var(--muted); }
+/* (a fact that is a field: its label level with its middle) */
+.facts dt.field { align-self: center; }
+/* (a heading of a group of facts, across both columns; a unit after a
+   field) */
+.facts .group { grid-column: 1 / -1; margin-top: 4px; font: var(--text-overline); letter-spacing: var(--caps); text-transform: uppercase; color: var(--faint); }
+.facts .group:first-child { margin-top: 0; }
+.facts-unit { align-self: center; flex: none !important; font: var(--text-data); color: var(--muted); }
 .facts + .note { margin-top: 10px; }
 
 /* (the components of Mantine, as the page shows them: see components/ui) */
 .ui-number input { font: var(--text-data); text-align: right; }
+/* (a quantity: its number and its unit side by side, of data type) */
+.ui-quantity { display: flex; gap: 6px; flex: 1; min-width: 0; }
+.ui-quantity > * { flex: 1; min-width: 0; }
+.ui-quantity input { font: var(--text-data); }
 /* (the ring of focus in the accent as a mark: Mantine's, its filled colour,
    is bright by day in some themes) */
 .mantine-focus-auto:focus-visible, .mantine-focus-always:focus { outline-color: var(--accent); }
@@ -387,8 +398,6 @@ h2 { margin: 0; font: var(--text-heading); }
 .schema-field { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .schema-field > * { min-width: 0; }
 .schema-field > .ui-number, .schema-field > .ui-text, .schema-field > .ui-choice { flex: 1; }
-.schema-quantity { display: flex; gap: 6px; flex: 1; min-width: 0; }
-.schema-quantity > * { flex: 1; min-width: 0; }
 .schema-slide { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 76px; align-items: center; gap: 10px; min-width: 0; }
 .schema-slider { padding: 0 4px; }
 .schema-number.compact input { text-align: right; font-variant-numeric: tabular-nums; }

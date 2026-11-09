@@ -938,7 +938,7 @@
     "/api/v1/views/lsf": {
       "post": {
         "summary": "View Lsf",
-        "description": "Draw an LSF of the options of a piece of a project, on channels of a\nwidth or of its own scale, with its width.",
+        "description": "Draw an LSF of the options of a piece of a project, on channels of a\nwidth or of its own scale, of velocities (at the rest of a line, if\ngiven) or of a unit given, with its width.",
         "operationId": "view_lsf_api_v1_views_lsf_post",
         "requestBody": {
           "content": {
@@ -2158,6 +2158,17 @@
               }
             ],
             "title": "Nonstandard Type"
+          },
+          "rest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest"
           }
         },
         "type": "object",
@@ -2174,7 +2185,7 @@
           "problems"
         ],
         "title": "ArrayInfo",
-        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), what a dataset of it refuses or needs given, and\nwhat its values are as errors, if its header states it ('sigma',\n'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),\nand the type its header gives a spectral axis that FITS does not\ndefine (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see\ngbkfit's HDUDescription.nonstandard_type)."
+        "description": "An array of a file of data (e.g. an HDU of a FITS file), from its\nheader: its index and name in the file, its shape and the types of\nits axes, in the order of the model (x, y, then the spectral axis),\nthe unit of its values, the size of its pixels in that order (arcsec,\nand km/s along a velocity axis; the spatial ones alone while its\nspectral axis cannot be read, e.g. velocities of no convention or\nwavelengths without a rest; none if its header has no coordinates on\nthe sky), the pixel (x, y; 0-based) that the model measures positions\non the sky from (its reference pixel; none without coordinates), its\nbeam (bmaj and bmin in arcsec, bpa in degrees; lists\nfor a beam of each channel), the noise of its values that its header\nstates (keyword RMS or NOISE), whether its header leaves it open\nwhether its velocities are radio or optical (a dataset of it gives\ntheir convention), what a dataset of it refuses or needs given, and\nwhat its values are as errors, if its header states it ('sigma',\n'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),\nand the type its header gives a spectral axis that FITS does not\ndefine (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see\ngbkfit's HDUDescription.nonstandard_type), and the rest of its\nspectral axis (e.g. '6562.8 Angstrom': its header's, RESTWAV or\nRESTFRQ, or that given; none if none, or while the axis cannot be\nread)."
       },
       "CatalogueLine": {
         "properties": {
@@ -2731,6 +2742,39 @@
               }
             ],
             "title": "Step"
+          },
+          "rest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rest"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "channel": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
           }
         },
         "type": "object",
@@ -2739,7 +2783,7 @@
           "options"
         ],
         "title": "LSFRequest",
-        "description": "An LSF to draw: the project of its piece, its options (its files\nrelative to the project), and the width of the channels (km/s; none:\nof its own scale)."
+        "description": "An LSF to draw: the project of its piece, its options (its files\nrelative to the project), the width of the channels (none: of its own\nscale), the rest of the line it is drawn at (e.g. '6562.8 Angstrom';\nwidths in a unit of wavelength or frequency need it), the unit of the\nchannels: km/s (velocities) by default, or another, which draws it as\nits widths give it (e.g. 'Angstrom', or 'pix': channels of the data;\nwithout a rest), and the width of the channels of the data, which its\nwidths in pixels and its Hanning smoothing are of (none: those it is\ndrawn on)."
       },
       "LSFViewInfo": {
         "properties": {
@@ -2764,16 +2808,21 @@
               }
             ],
             "title": "Fwhm"
+          },
+          "unit": {
+            "type": "string",
+            "title": "Unit"
           }
         },
         "type": "object",
         "required": [
           "values",
           "step",
-          "fwhm"
+          "fwhm",
+          "unit"
         ],
         "title": "LSFViewInfo",
-        "description": "An LSF drawn on channels (see Responses.lsf): its values (they sum\nto 1), the width of the channels (km/s), and its full width at half\nmaximum (km/s; none for a point)."
+        "description": "An LSF drawn on channels (see Responses.lsf): its values (they sum\nto 1), the width of the channels, its full width at half maximum (none\nfor a point), and the unit of both (e.g. 'km/s')."
       },
       "ObservedArrayInfo": {
         "properties": {

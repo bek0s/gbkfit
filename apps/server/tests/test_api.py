@@ -224,12 +224,45 @@ def test_psfs_and_lsfs_are_drawn_with_their_widths(client, root):
             dict(type='gauss', sigma=kms), dict(type='hanning')]),
         step=10)).json()
     assert lsf['step'] == 10
-    # (a width in Angstrom needs the rest of the data)
+    # (a width in Angstrom spans km/s by the rest of a line, given)
+    angstrom = dict(type='gauss', fwhm='2.5 Angstrom')
     response = client.post('/api/v1/views/lsf', json=dict(
-        project='study', options=dict(
-            type='gauss', fwhm='2.5 Angstrom')))
+        project='study', options=angstrom))
     assert response.status_code == 400
-    assert "give the width in km/s" in response.json()['detail']
+    assert "its rest" in response.json()['detail']
+    lsf = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=angstrom, rest='6562.8 Angstrom')).json()
+    assert np.isclose(lsf['fwhm'], 299792.458 * 2.5 / 6562.8, rtol=1e-3)
+    response = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=angstrom, rest='6562.8'))
+    assert response.status_code == 400
+    assert "the rest of a spectral axis" in response.json()['detail']
+    assert lsf['unit'] == 'km/s'
+    # (or on channels of its own unit, of no rest)
+    lsf = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=angstrom, unit='Angstrom')).json()
+    assert lsf['unit'] == 'Angstrom'
+    assert np.isclose(lsf['fwhm'], 2.5, rtol=1e-3)
+    lsf = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(type='gauss', fwhm='2 pix'),
+        unit='pix')).json()
+    assert np.isclose(lsf['fwhm'], 2, rtol=1e-3)
+    # (in pixels, of the channels of the data, drawn on finer ones)
+    lsf = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(type='gauss', fwhm='2 pix'),
+        channel=20)).json()
+    assert lsf['step'] < 20 and np.isclose(lsf['fwhm'], 40, rtol=1e-3)
+    hanning = client.post('/api/v1/views/lsf', json=dict(
+        project='study', options=dict(type='hanning'), channel=20)).json()
+    assert np.isclose(np.sum(hanning['values']), 1, atol=1e-4)
+    for request, message in [
+            (dict(unit='pix', channel=2), "of width 1"),
+            (dict(unit='Angstrom', rest='6562.8 Angstrom'), "axis of velocities"),
+            (dict(unit='Hz'), "spans no length")]:
+        response = client.post('/api/v1/views/lsf', json=dict(
+            project='study', options=angstrom) | request)
+        assert response.status_code == 400
+        assert message in response.json()['detail'], response.json()
     # (of an image of the project, relative to it)
     os.makedirs(os.path.join(root, 'study/data'), exist_ok=True)
     y, x = np.mgrid[-10:11, -10:11]
@@ -394,10 +427,11 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     (array,) = client.get('/api/v1/describe/study/data/ifu.fits').json()
     assert array['step'] == pytest.approx([0.2, 0.2])
     assert len(array['problems']) == 1 and 'AWAV' in array['problems'][0]
+    assert array['rest'] is None
     (array,) = client.get(
         '/api/v1/describe/study/data/ifu.fits',
         params=dict(rest='6562.8 Angstrom')).json()
-    assert array['problems'] == []
+    assert array['problems'] == [] and array['rest'] == '6562.8 Angstrom'
     assert [abs(step) for step in array['step']] == pytest.approx(
         [0.2, 0.2, 299792.458 * 1.25 / 6562.8], rel=1e-3)
     # (an axis of a type FITS does not define, as CALIFA writes: what it
@@ -420,6 +454,17 @@ def test_a_cube_of_wavelengths_is_described_in_velocities_of_a_rest(
     assert client.get(
         '/api/v1/describe/study/data/califa.fits',
         params=dict(spectral_type='WAVELENGTH')).status_code == 422
+    # (the rest of a header, as a radio cube of velocities states it)
+    radio = fits.Header(dict(
+        CTYPE1='RA---SIN', CDELT1=-2 / 3600, CUNIT1='deg',
+        CTYPE2='DEC--SIN', CDELT2=2 / 3600, CUNIT2='deg',
+        CTYPE3='VRAD', CRVAL3=1000, CDELT3=4000, CUNIT3='m/s',
+        RESTFRQ=1.420405752e9, SPECSYS='BARYCENT'))
+    fits.writeto(
+        pathlib.Path(root, 'study/data/radio.fits'),
+        np.zeros((4, 3, 2), np.float32), radio)
+    (array,) = client.get('/api/v1/describe/study/data/radio.fits').json()
+    assert array['rest'] == '1.420406 GHz'
 
 
 def wait(client, job):

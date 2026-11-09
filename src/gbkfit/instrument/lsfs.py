@@ -72,8 +72,8 @@ _KMS = u.km / u.s
 # wavelength or of frequency, in km/s of the light, or in pixels (channels
 # of the data); in a configuration, its text (e.g. '2.5 Angstrom')
 _Width: TypeAlias = Annotated[ScalarQuantity, Gt(0), UnitKinds(
-    wavelength=('Angstrom', 'nm', 'um'), frequency=('kHz', 'Hz', 'MHz', 'GHz'),
-    velocity=('km/s', 'm/s'), pixels=('pix',))]
+    wavelength=('Angstrom', 'nm', 'um'), frequency=('Hz', 'kHz', 'MHz', 'GHz'),
+    velocity=('m/s', 'km/s'), pixels=('pix',))]
 
 
 @dataclasses.dataclass(frozen=True)
@@ -82,24 +82,30 @@ class Channel:
     A channel of the spectral axis of data, where an LSF is drawn (see
     LSF.on): the velocity of its centre, its width, and the convention of
     the velocities of the axis, which turns the widths of the LSF into
-    km/s of the axis there (see span).
+    km/s of the axis there (see span). Or a channel of an axis of another
+    unit (e.g. Angstrom, or pixels: of channels of the data, each of width
+    1), where an LSF is drawn as its widths give it (e.g. to look at it):
+    they span as much of the axis as they are.
 
     Attributes
     ----------
     velocity : float, optional
-        The velocity of its centre (km/s).
+        The velocity of its centre (km/s; of an axis of velocities).
     width : float, optional
-        Its width (km/s of the axis), for widths in pixels and the Hanning
-        smoothing of the channels (see LSFHanning).
+        Its width (in the unit of the axis), for widths in pixels and the
+        Hanning smoothing of the channels (see LSFHanning).
     convention : VelocityConvention, optional
         The convention of the velocities of the axis; by default, one
         without a rest, which takes widths in km/s only.
+    unit : UnitBase, optional
+        The unit of the axis: km/s, of velocities, by default.
     """
 
     velocity: float = 0.0
     width: float | None = None
     convention: VelocityConvention = dataclasses.field(
         default_factory=VelocityConvention)
+    unit: u.UnitBase = _KMS
 
     @classmethod
     def middle(cls, grid: Grid) -> 'Channel':
@@ -126,9 +132,11 @@ class Channel:
 
     def span(self, width: u.Quantity) -> float:
         """
-        Return the km/s of the axis that a width of the light spans at the
-        channel: of a width in pixels, as many widths of the channel; of
-        others, see VelocityConvention.span.
+        Return the length of the axis (in its unit) that a width of the
+        light spans at the channel: of a width in pixels, as many widths of
+        the channel; on an axis of velocities, of others, see
+        VelocityConvention.span; on an axis of another unit, as much as the
+        width is in it.
 
         Parameters
         ----------
@@ -139,13 +147,14 @@ class Channel:
         Returns
         -------
         float
-            The km/s of the axis.
+            The length of the axis.
 
         Raises
         ------
         ValueError
             If the width is in a unit of wavelength or of frequency and
-            the axis has no rest.
+            the axis, of velocities, has no rest; or the axis is of another
+            unit, which the width is not of.
         RuntimeError
             If the width is in pixels and that of the channel is not given.
         """
@@ -155,6 +164,13 @@ class Channel:
                     "a width in pixels is of channels of the data, whose "
                     "width is not given")
             return float(width.to_value(u.pix)) * self.width
+        if self.unit != _KMS:
+            if not width.unit.is_equivalent(self.unit):
+                raise ValueError(
+                    f"a width in '{gbkfit.units.format_unit(width.unit)}' "
+                    f"spans no length of an axis of "
+                    f"'{gbkfit.units.format_unit(self.unit)}'")
+            return float(width.to_value(self.unit))
         if (self.convention.rest() is None
                 and not width.unit.is_equivalent(_KMS)):
             raise ValueError(
@@ -897,10 +913,11 @@ class LSFHanning(LSF):
                 "width is not given")
         steps = self._channels * channel.width / step
         if abs(steps - round(steps)) > 1e-6 * steps or round(steps) < 1:
+            unit = gbkfit.units.format_unit(channel.unit)
             raise RuntimeError(
                 f"the Hanning smoothing of {self._channels:g} channels of "
-                f"{channel.width:g} km/s must be a multiple of the channels "
-                f"it is drawn on ({step:g} km/s): oversample the spectral "
+                f"{channel.width:g} {unit} must be a multiple of the channels "
+                f"it is drawn on ({step:g} {unit}): oversample the spectral "
                 f"axis by a multiple of {1 / self._channels:g}")
         return round(steps)
 

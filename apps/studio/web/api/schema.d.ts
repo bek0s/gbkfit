@@ -309,7 +309,8 @@ export interface paths {
         /**
          * View Lsf
          * @description Draw an LSF of the options of a piece of a project, on channels of a
-         *     width or of its own scale, with its width.
+         *     width or of its own scale, of velocities (at the rest of a line, if
+         *     given) or of a unit given, with its width.
          */
         post: operations["view_lsf_api_v1_views_lsf_post"];
         delete?: never;
@@ -897,7 +898,10 @@ export interface components {
          *     'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),
          *     and the type its header gives a spectral axis that FITS does not
          *     define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
-         *     gbkfit's HDUDescription.nonstandard_type).
+         *     gbkfit's HDUDescription.nonstandard_type), and the rest of its
+         *     spectral axis (e.g. '6562.8 Angstrom': its header's, RESTWAV or
+         *     RESTFRQ, or that given; none if none, or while the axis cannot be
+         *     read).
          */
         ArrayInfo: {
             /** Index */
@@ -928,6 +932,8 @@ export interface components {
             holds?: ("sigma" | "variance" | "inverse_variance") | null;
             /** Nonstandard Type */
             nonstandard_type?: string | null;
+            /** Rest */
+            rest?: string | null;
         };
         /**
          * CatalogueLine
@@ -1203,8 +1209,14 @@ export interface components {
         /**
          * LSFRequest
          * @description An LSF to draw: the project of its piece, its options (its files
-         *     relative to the project), and the width of the channels (km/s; none:
-         *     of its own scale).
+         *     relative to the project), the width of the channels (none: of its own
+         *     scale), the rest of the line it is drawn at (e.g. '6562.8 Angstrom';
+         *     widths in a unit of wavelength or frequency need it), the unit of the
+         *     channels: km/s (velocities) by default, or another, which draws it as
+         *     its widths give it (e.g. 'Angstrom', or 'pix': channels of the data;
+         *     without a rest), and the width of the channels of the data, which its
+         *     widths in pixels and its Hanning smoothing are of (none: those it is
+         *     drawn on).
          */
         LSFRequest: {
             /** Project */
@@ -1215,12 +1227,18 @@ export interface components {
             };
             /** Step */
             step?: number | null;
+            /** Rest */
+            rest?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Channel */
+            channel?: number | null;
         };
         /**
          * LSFViewInfo
          * @description An LSF drawn on channels (see Responses.lsf): its values (they sum
-         *     to 1), the width of the channels (km/s), and its full width at half
-         *     maximum (km/s; none for a point).
+         *     to 1), the width of the channels, its full width at half maximum (none
+         *     for a point), and the unit of both (e.g. 'km/s').
          */
         LSFViewInfo: {
             /** Values */
@@ -1229,6 +1247,8 @@ export interface components {
             step: number;
             /** Fwhm */
             fwhm: number | null;
+            /** Unit */
+            unit: string;
         };
         /**
          * ObservedArrayInfo

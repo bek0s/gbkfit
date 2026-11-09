@@ -457,6 +457,25 @@ def test_lsf_hanning():
         LSFHanning().on(AT).asarray(3.0)
 
 
+def test_an_lsf_is_drawn_on_an_axis_of_the_unit_of_its_widths():
+    # On an axis of Angstrom, a width of 0.25 nm spans 2.5 of it, as one of
+    # 2.5 km/s spans a velocity axis: no rest needed; a width of another
+    # kind spans none of it
+    gauss = LSFGauss.from_fwhm(0.25 * u.nm)
+    angstrom = Channel(unit=u.AA)
+    np.testing.assert_allclose(
+        gauss.on(angstrom).asarray(0.1, 101),
+        LSFGauss.from_fwhm(2.5 * KMS).on(AT).asarray(0.1, 101))
+    with pytest.raises(ValueError, match="spans no length of an axis"):
+        LSFGauss(kms(10.0)).on(angstrom).asarray(0.1)
+    # (on one of channels of the data, each of width 1, a width in pixels
+    # is as many channels)
+    channels = Channel(width=1.0, unit=u.pix)
+    np.testing.assert_allclose(
+        LSFGauss.from_fwhm(2 * u.pix).on(channels).asarray(0.1, 101),
+        LSFGauss.from_fwhm(2 * KMS).on(AT).asarray(0.1, 101))
+
+
 @pytest.mark.parametrize('lsf', [
     LSFGauss(kms(4.0)), LSFGGauss(kms(4.0), 1.5), LSFLorentz(kms(4.0)),
     LSFMoffat(kms(4.0), 2.5),

@@ -56,16 +56,17 @@ export type Velocity = 'radio' | 'optical';
 export type SpectralTypeOption = NonNullable<NonNullable<operations['describe_api_v1_describe__path__get']['parameters']['query']>['spectral_type']>;
 
 // The arrays of a file of data, from its headers, its ambiguous velocities
-// read by a convention, and its wavelengths or frequencies as velocities of
-// a rest, if given
-export function useDescription(path: string | null, velocity: Velocity | null = null, rest: string | null = null) {
+// read by a convention, its wavelengths or frequencies as velocities of a
+// rest, and its spectral axis of a type FITS does not define as what it
+// is, if given
+export function useDescription(path: string | null, velocity: Velocity | null = null, rest: string | null = null, type: SpectralTypeOption | null = null) {
   return useQuery({
-    queryKey: keys.description(path ?? '', velocity, rest),
+    queryKey: keys.description(path ?? '', velocity, rest, type),
     enabled: path !== null,
     // (the description of the same file stays while another convention or
     // rest is read; never that of another file)
     placeholderData: (previous, query) => (query?.queryKey[1] === path ? previous : undefined),
-    queryFn: () => describe(path ?? '', velocity, rest),
+    queryFn: () => describe(path ?? '', velocity, rest, type),
   });
 }
 
@@ -391,15 +392,23 @@ export function usePsfView(project: string, options: Record<string, unknown>, st
   });
 }
 
-// An LSF of options of a block of a project drawn on channels of a width
-// (km/s; null: of its own scale), with its width
-export function useLsfView(project: string, options: Record<string, unknown>, step: number | null, enabled = true) {
+// How an LSF is drawn (see the server's LSFRequest): on channels of a
+// width (null: of its own scale), of velocities (km/s) at the rest of a
+// line (e.g. '6562.8 Angstrom'; null: none, which its widths in a unit of
+// wavelength or frequency need), or of another unit (e.g. 'Angstrom', or
+// 'pix': channels; null: km/s), its widths in pixels and its Hanning
+// smoothing of channels of the data of a width (null: those it is drawn
+// on)
+export type LsfAt = { step: number | null; rest: string | null; unit: string | null; channel: number | null };
+
+// An LSF of options of a block of a project drawn as given, with its width
+export function useLsfView(project: string, options: Record<string, unknown>, at: LsfAt, enabled = true) {
   return useQuery({
-    queryKey: keys.view('lsf', project, JSON.stringify(options), step ?? ''),
+    queryKey: keys.view('lsf', project, JSON.stringify(options), at.step ?? '', at.rest ?? '', at.unit ?? '', at.channel ?? ''),
     enabled,
     placeholderData: keepPreviousData,
     retry: false,
-    queryFn: () => data(api.POST('/api/v1/views/lsf', { body: { project, options, step } })),
+    queryFn: () => data(api.POST('/api/v1/views/lsf', { body: { project, options, ...at } })),
   });
 }
 

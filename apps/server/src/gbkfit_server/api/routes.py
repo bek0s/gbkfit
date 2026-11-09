@@ -26,6 +26,7 @@ from gbkfit_server.services import frames
 from gbkfit_server.services.errors import Failed, Invalid, NotFound
 from gbkfit_server.services.server import Server
 from gbkfit_server.services.sessions import Latest
+from gbkfit_server.services.units import rest_text
 from gbkfit_server.services.views import Cube
 from .models import (
     ArrayInfo, CatalogueLine, CheckRequest, CheckResult, ComponentTraits,
@@ -292,11 +293,15 @@ def view_psf(server: ServerDep, request: PSFRequest) -> PSFViewInfo:
 def view_lsf(server: ServerDep, request: LSFRequest) -> LSFViewInfo:
     """
     Draw an LSF of the options of a piece of a project, on channels of a
-    width or of its own scale, with its width.
+    width or of its own scale, of velocities (at the rest of a line, if
+    given) or of a unit given, with its width.
     """
-    view = server.responses.lsf(request.project, request.options, request.step)
+    view = server.responses.lsf(
+        request.project, request.options, request.step, request.rest,
+        request.unit, request.channel)
     return LSFViewInfo(
-        values=view.values.tolist(), step=view.step, fwhm=view.fwhm)
+        values=view.values.tolist(), step=view.step, fwhm=view.fwhm,
+        unit=view.unit)
 
 
 @router.post('/parameters')
@@ -409,7 +414,7 @@ def _catalogue_line(line: Any) -> CatalogueLine:
     else:
         frequency = rest.to_value('Hz')
     return CatalogueLine(
-        name=line.name(), rest=_rest_text(rest), wavelength=wavelength,
+        name=line.name(), rest=rest_text(rest), wavelength=wavelength,
         air=air, frequency=frequency)
 
 
@@ -431,18 +436,6 @@ def component_traits() -> dict[str, ComponentTraits]:
             dispersion_directions=list(table.dispersion_directions))
         for component, table in
         gbkfit.model.components.TRAIT_TABLES.items()}
-
-
-def _rest_text(rest: Any) -> str:
-    """
-    Return a rest as short text: a wavelength in Angstrom (um from 1 um),
-    a frequency in GHz (MHz below 1 GHz).
-    """
-    if rest.unit.physical_type == 'length':
-        unit = 'Angstrom' if rest.to_value('um') < 1 else 'um'
-    else:
-        unit = 'GHz' if rest.to_value('GHz') >= 1 else 'MHz'
-    return f"{rest.to_value(unit):.7g} {unit}"
 
 
 @functools.cache

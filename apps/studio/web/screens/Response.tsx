@@ -3,14 +3,15 @@
 // Its options are a form of the schema of the library (see SchemaForm),
 // numbers with sliders, and it is drawn as they change, by the server: at
 // its own scale, or on pixels (channels) of a size given or of a dataset of
-// the project, as a fraction of its peak, linear or logarithmic (its
-// wings), with what it amounts to (its widths along its axes, the solid
-// angle of its beam, its resolving power) and the blocks that name it. Its edits are written to its file when saved (also
-// Ctrl+S).
+// the project (an LSF of widths of wavelength or frequency, at the rest of
+// a line), as a fraction of its peak, linear or logarithmic (its wings),
+// with what it amounts to (its widths along its axes, the solid angle of
+// its beam, its resolving power) and the blocks that name it. Its edits
+// are written to its file when saved (also Ctrl+S).
 import { Combobox, Menu, UnstyledButton } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useDescription, useLsfView, usePiece, useProject, usePsfView, useReferences, useSchema, useUpdateBlock } from '../api/queries';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useDescription, useLsfView, usePiece, useProject, usePsfView, useReferences, useSchema, useUpdateBlock, type LsfAt, type SpectralTypeOption, type Velocity } from '../api/queries';
 import { ColourBar } from '../components/ColourBar';
 import { UNSTRETCHED, type Stretch } from '../components/colours';
 import { joinPath } from '../components/FilePicker';
@@ -19,15 +20,16 @@ import { CutPlot } from '../components/CutPlot';
 import { contourPath, widthAt, type Width } from '../components/contour';
 import { LinkIcon, UnlinkIcon } from '../components/icons';
 import { MapView } from '../components/MapView';
-import { SchemaForm, titleOf, type Defs, type Options } from '../components/SchemaForm';
+import { SchemaForm, titleOf, unitKinds, type Defs, type Options } from '../components/SchemaForm';
 import { SpectrumPlot } from '../components/SpectrumPlot';
 import { Button, NavItem } from '../components/ui/basics';
-import { Segments } from '../components/ui/inputs';
+import { Choice, NumberField, QuantityInput, Segments, splitQuantity } from '../components/ui/inputs';
 import { Dock, DockSection } from '../components/ui/dock';
 import { useBlockHead } from '../shell/BlockMenu';
 import { kindOf } from '../shell/blocks';
 import { useStudio } from '../studio';
 import { useUnsaved } from './editing';
+import { objectAt, textAt } from './observation/model';
 
 export type Family = 'psf' | 'lsf';
 
@@ -85,7 +87,31 @@ const LIGHT = 299792.458;
 
 // What it is drawn on: its own scale, a size typed, or the pixels of an
 // observation or of the data of a dataset of the project
-type Drawn = { source: 'own' } | { source: 'typed'; x: string; y: string } | { source: 'dataset' | 'observation'; name: string };
+type Of = { source: 'dataset' | 'observation'; name: string };
+type Drawn = { source: 'own' } | { source: 'typed'; x: string; y: string } | Of;
+
+// The kinds of units of widths of an LSF that span km/s by the rest of a
+// line (see the library's Channel.span), and of those of velocities and of
+// pixels (of channels), as the schema names them
+const BY_REST = ['wavelength', 'frequency'];
+const VELOCITY = 'velocity';
+const PIXELS = 'pixels';
+
+// How an LSF is drawn (see LsfAt), whether it is drawn yet, and why not,
+// if it cannot be
+type LsfDrawing = { at: LsfAt; drawable: boolean; wanting: string | null };
+
+// The units of a rest of a line that widths of wavelength or frequency
+// span km/s by: those of their kinds, and that of the widths, which a rest
+// of a number alone is in
+type RestUnits = { kinds: Record<string, string[]>; unit: string };
+
+// What the widths of an LSF are, as its options give them: the unit it is
+// drawn in of its own (see ownUnit), and what they need to be in km/s: the
+// rest of a line (of widths of wavelength or frequency; its units), and
+// the width of the channels of the data (of widths in pixels, and of the
+// Hanning smoothing, of channels)
+type LsfUnits = { own: string | null; rest: RestUnits | null; channels: boolean };
 
 export function ResponseScreen({ family, name }: { family: Family; name: string }) {
   const { project } = useStudio();
@@ -97,12 +123,12 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
   // The options as edited (null: as saved)
   const [draft, setDraft] = useState<Options | null>(null);
   const [drawn, setDrawn] = useState<Drawn>({ source: 'own' });
-  // (the size of the pixels or channels of the dataset chosen, once read)
-  const [ofData, setOfData] = useState<Step>(null);
   const saved = piece.data as Options | undefined;
   const options = draft ?? saved;
   // (drawn as they settle while they change)
   const [settled] = useDebouncedValue(options, 120);
+  // (the options drawn: as they settle, or as they are until they first do)
+  const shown = settled ?? options;
   const dirty = draft !== null && JSON.stringify(draft) !== JSON.stringify(saved);
   useUnsaved(dirty);
   const save = () => draft && path && update.mutate({ path, content: draft }, { onSuccess: () => setDraft(null) });
@@ -117,15 +143,53 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
-  const step = drawn.source === 'typed' ? typedStep(drawn.x, drawn.y, family) : drawn.source === 'own' ? null : ofData;
+  const defs = (schema.data?.$defs ?? {}) as Defs;
+  // (what it is drawn on, of an observation or a dataset)
+  const of = drawn.source === 'dataset' || drawn.source === 'observation' ? drawn : null;
+  const onData = useGridOf(project ?? '', family, of);
+  const step = drawn.source === 'typed' ? typedStep(drawn.x, drawn.y, family) : of === null ? null : onData.step;
+  // How an LSF is drawn: on the data, as the model draws it there, in km/s
+  // of the channels of the data at their rest (where its widths are of a
+  // unit of wavelength or frequency); or else, of its own, in the unit of
+  // its widths (as the schema knows their kinds), which needs no rest
+  const kinds = useMemo(() => unitKinds(defs), [schema.data]);
+  const given = family === 'lsf' && shown !== undefined ? unitsGiven(shown, Object.values(kinds).flat()) : [];
+  const byRest = given.filter((unit) => BY_REST.some((kind) => sameUnitIn(kinds[kind] ?? [], unit)));
+  const own = ownUnit(given, kinds);
+  const units: LsfUnits = {
+    own,
+    rest:
+      byRest.length > 0
+        ? { kinds: Object.fromEntries(BY_REST.filter((kind) => byRest.some((unit) => sameUnitIn(kinds[kind] ?? [], unit))).map((kind) => [kind, kinds[kind]])), unit: byRest[0] }
+        : null,
+    channels: given.some((unit) => sameUnitIn(kinds[PIXELS] ?? [], unit)) || (shown !== undefined && hasType(shown, 'hanning')),
+  };
+  const rest = of !== null && byRest.length > 0 ? onData.rest : null;
+  // (why it is not drawn: none while it is read)
+  const wanting =
+    of === null
+      ? own === null
+        ? `Its widths are in ${given.filter((unit) => !sameUnitIn(kinds[PIXELS] ?? [], unit)).join(' and ')}, which share no axis: draw it on an observation or a dataset.`
+        : null
+      : byRest.length > 0 && rest === null && !onData.pending
+        ? `${of.name} gives no rest of a line, which its widths in ${byRest[0]} need to span km/s: give it one (its spectral rest).`
+        : null;
+  const lsf: LsfDrawing = {
+    at: { step: widthOf(step), rest, unit: of === null && own !== 'km/s' ? own : null, channel: null },
+    // (once the schema tells the kinds of its widths, and on the data,
+    // where it has their rest)
+    drawable: schema.data !== undefined && (of === null ? own !== null : byRest.length === 0 || rest !== null),
+    wanting,
+  };
   // (the size of the pixels or channels it is drawn on, as the server drew
   // it (of its own scale, the server's): the query of the preview)
-  const psfView = usePsfView(project ?? '', settled ?? {}, pairOf(step), family === 'psf' && project !== null && settled !== undefined);
-  const lsfView = useLsfView(project ?? '', settled ?? {}, widthOf(step), family === 'lsf' && project !== null && settled !== undefined);
-  const used: Step = family === 'psf' ? (psfView.data?.step ?? null) : lsfView.data ? [lsfView.data.step] : null;
+  const psfView = usePsfView(project ?? '', shown ?? {}, pairOf(step), family === 'psf' && project !== null && shown !== undefined);
+  const lsfView = useLsfView(project ?? '', shown ?? {}, lsf.at, family === 'lsf' && project !== null && shown !== undefined && lsf.drawable);
+  // (of an LSF not drawn, that of what it is drawn on: not of the last one
+  // drawn)
+  const used: Step = family === 'psf' ? (psfView.data?.step ?? null) : lsf.drawable && lsfView.data ? [lsfView.data.step] : step;
   const head = useBlockHead(project ?? '', folder, name);
   if (project === null || path === null) return null;
-  const defs = (schema.data?.$defs ?? {}) as Defs;
   return (
     <section className="screen response-screen">
       <div className="screen-head">
@@ -150,22 +214,17 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
       </div>
       {piece.error && <p className="error screen-error">{piece.error.message}</p>}
       {schema.error && <p className="error screen-error">{schema.error.message}</p>}
-      {options !== undefined && (
+      {options !== undefined && shown !== undefined && (
         <div className="rs-body">
           <div className="rs-view">
           <Preview
             family={family}
             project={project}
-            options={settled ?? options}
+            options={shown}
             step={step}
-            pixels={<DrawnOn family={family} project={project} path={path} drawn={drawn} onDrawn={setDrawn} used={used} />}
-            problem={
-              drawn.source === 'dataset' ? (
-                <DatasetStep key={drawn.name} family={family} project={project} name={drawn.name} step={ofData} onStep={setOfData} />
-              ) : drawn.source === 'observation' ? (
-                <ObservationStep key={drawn.name} family={family} project={project} name={drawn.name} step={ofData} onStep={setOfData} />
-              ) : null
-            }
+            lsf={lsf}
+            pixels={<DrawnOn family={family} project={project} path={path} drawn={drawn} onDrawn={setDrawn} used={used} unit={lsf.at.unit ?? 'km/s'} />}
+            problem={of !== null && onData.problem && <p className="note response-problem">{onData.problem}</p>}
           />
           </div>
           <Dock label={`The ${family.toUpperCase()}`}>
@@ -177,9 +236,9 @@ export function ResponseScreen({ family, name }: { family: Family; name: string 
               )}
             </DockSection>
             {family === 'psf' ? (
-              <PsfProperties project={project} options={settled ?? options} step={step} />
+              <PsfProperties project={project} options={shown} step={step} />
             ) : (
-              <LsfProperties project={project} options={settled ?? options} step={step} />
+              schema.data && <LsfProperties project={project} path={path} options={shown} units={units} />
             )}
             <NamedBy path={path} />
           </Dock>
@@ -204,6 +263,7 @@ function DrawnOn({
   drawn,
   onDrawn,
   used,
+  unit,
 }: {
   family: Family;
   project: string;
@@ -212,6 +272,8 @@ function DrawnOn({
   onDrawn: (drawn: Drawn) => void;
   // (the size it is drawn on, as drawn; none before)
   used: Step;
+  // (of an LSF, the unit of its channels)
+  unit: string;
 }) {
   const [opened, setOpened] = useState(false);
   // (x and y kept one, but where those chosen differ)
@@ -249,13 +311,13 @@ function DrawnOn({
         </Menu.Item>
       ))
     );
-  const unit = psf ? '″' : 'km/s';
+  const suffix = psf ? '″' : unit;
   return (
     <Menu opened={opened} onChange={(next) => !next && setOpened(false)} position="bottom-end" offset={4} width="target" classNames={{ dropdown: 'ui-menu' }}>
       <Menu.Target>
         <div className="response-pixels" data-family={family}>
           <span className="response-pixels-label">{psf ? 'Pixel size' : 'Channel width'}</span>
-          <SizeField value={x} unit={unit} label={psf ? 'The size of the pixels along x' : units.what} onChange={(next) => onDrawn({ source: 'typed', x: next, y: linked || !psf ? next : y })} />
+          <SizeField value={x} unit={suffix} label={psf ? 'The size of the pixels along x' : units.what} onChange={(next) => onDrawn({ source: 'typed', x: next, y: linked || !psf ? next : y })} />
           {psf && (
             <>
               <UnstyledButton
@@ -270,7 +332,7 @@ function DrawnOn({
               >
                 {linked ? <LinkIcon /> : <UnlinkIcon />}
               </UnstyledButton>
-              <SizeField value={y} unit={unit} label="The size of the pixels along y" onChange={(next) => onDrawn({ source: 'typed', x: linked ? next : x, y: next })} />
+              <SizeField value={y} unit={suffix} label="The size of the pixels along y" onChange={(next) => onDrawn({ source: 'typed', x: linked ? next : x, y: next })} />
             </>
           )}
           <span className="response-pixels-source" title={source}>
@@ -350,82 +412,108 @@ function SizeField({ value, unit, label, onChange }: { value: string; unit: stri
   );
 }
 
-// The pixels (PSF) or channels (LSF) of an observation of the project:
-// those of its dataset, if it names one (they are those the model is drawn
-// on), or else those its observable gives
-function ObservationStep({
-  family,
-  project,
-  name,
-  step,
-  onStep,
-}: {
-  family: Family;
-  project: string;
-  name: string;
-  step: Step;
-  onStep: (step: Step) => void;
-}) {
-  const observation = usePiece(joinPath(project, `observations/${name}.yaml`));
-  const options = observation.data as Options | undefined;
-  const data = typeof options?.data === 'string' ? options.data : null;
-  const observable = (options?.observable ?? {}) as Options;
-  const given = family === 'psf' ? observable.step : (observable.spectral as Options | undefined)?.step;
-  // (a PSF of a number, of x and y; or of its x and y)
-  const own: Step =
-    typeof given === 'number'
-      ? family === 'psf'
-        ? [Math.abs(given), Math.abs(given)]
-        : [Math.abs(given)]
-      : family === 'psf' && Array.isArray(given) && given.length === 2 && given.every((n) => typeof n === 'number')
-        ? (given as number[]).map(Math.abs)
-        : null;
-  useEffect(() => {
-    if (data === null) onStep(own);
-  }, [data, own?.join()]);
-  if (data !== null) return <DatasetStep family={family} project={project} name={data} step={step} onStep={onStep} />;
-  if (observation.isPending) return <p className="note response-problem">Reading {name}…</p>;
-  if (own === null) return <p className="note response-problem">{name} has no data and its observable gives no {UNITS[family].of}.</p>;
-  return null;
-}
+// What a response is drawn on of an observation or a dataset of the
+// project: the size of its pixels (PSF) or the width of its channels
+// (LSF), and the rest of its spectral axis (e.g. '6562.8 Angstrom'), if
+// any; whether they are being read, and why they are not known, if they
+// are not
+type Grid = { step: Step; rest: string | null; pending: boolean; problem: string | null };
 
-// The size of the pixels (PSF) or the width of the channels (LSF) of the
-// data of a dataset of the project, from the header of its file (of its
-// first map, of moment maps)
-function DatasetStep({
-  family,
-  project,
-  name,
-  step,
-  onStep,
-}: {
-  family: Family;
-  project: string;
-  name: string;
-  step: Step;
-  onStep: (step: Step) => void;
-}) {
-  const dataset = usePiece(joinPath(project, `datasets/${name}.yaml`)).data as Options | undefined;
+// What a response is drawn on of an observation or a dataset (none: of
+// none): of an observation, of its dataset, if it names one (its data are
+// those the model is drawn on), its observable's spectral options first,
+// or else what its observable gives; of a dataset, from the header of the
+// file of its data (of its first map, of moment maps), read as the dataset
+// reads it (its rest as the server writes it, e.g. '6562.8 Angstrom')
+function useGridOf(project: string, family: Family, of: Of | null): Grid {
+  const observation = usePiece(of?.source === 'observation' ? joinPath(project, `observations/${of.name}.yaml`) : null);
+  const options = observation.data as Options | undefined;
+  const observable = objectAt(options ?? {}, 'observable');
+  const spectral = objectAt(observable, 'spectral');
+  const name = of?.source === 'dataset' ? of.name : textAt(options ?? {}, 'data');
+  const datasetPiece = usePiece(name === null ? null : joinPath(project, `datasets/${name}.yaml`));
+  const dataset = datasetPiece.data as Options | undefined;
   const item = (dataset?.type === 'pixel_moments' ? (dataset.moment0 ?? dataset.moment1) : dataset) as Options | undefined;
   const data = item?.data as string | { file?: string; hdu?: string | number } | undefined;
   const file = typeof data === 'string' ? data : data?.file;
   const hdu = typeof data === 'object' ? data.hdu : undefined;
-  const arrays = useDescription(file ? joinPath(project, file) : null);
+  // (its spectral axis as the dataset reads it: of the rest of the
+  // observation or of the dataset, the convention of velocities its header
+  // leaves ambiguous and the type of an axis FITS does not define)
+  const axis = objectAt(dataset ?? {}, 'spectral');
+  const given = textAt(spectral, 'rest') ?? textAt(axis, 'rest');
+  const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? (axis.convention as Velocity) : null;
+  const arrays = useDescription(file ? joinPath(project, file) : null, velocity, given, textAt(axis, 'type') as SpectralTypeOption | null);
   const array = (arrays.data ?? []).find((a) => a.name === hdu || a.index === hdu) ?? arrays.data?.[0];
-  // (of a PSF, its x and y; of an LSF, the width of its channels)
-  const found: Step = array?.step ? (family === 'psf' ? [Math.abs(array.step[0]), Math.abs(array.step[1])] : array.step.length === 3 ? [Math.abs(array.step[2])] : null) : null;
-  useEffect(() => onStep(found), [found?.join()]);
-  if (arrays.isPending) return <p className="note response-problem">Reading the header of {name}…</p>;
-  if (step === null) {
-    return (
-      <p className="note response-problem">
-        {family === 'lsf' && array && kept(array).length < 3
-          ? `${name} has no spectral axis: an LSF is drawn on the channels of a cube.`
-          : `The header of ${name} does not give its ${UNITS[family].of}${array?.ambiguous_velocity ? ' (say whether its velocities are radio or optical)' : ''}.`}
-      </p>
-    );
+  const pending = observation.isLoading || datasetPiece.isLoading || arrays.isLoading;
+  if (of === null) return { step: null, rest: null, pending: false, problem: null };
+  if (pending) return { step: null, rest: null, pending, problem: `Reading ${name ?? of.name}…` };
+  if (of.source === 'observation' && options === undefined) return { step: null, rest: null, pending, problem: `Cannot read ${of.name}.` };
+  // (without data, what its observable gives: of a PSF, a number of x and
+  // y, or its x and y)
+  if (name === null) {
+    const step = family === 'psf' ? observable.step : spectral.step;
+    const own: Step =
+      typeof step === 'number'
+        ? family === 'psf'
+          ? [Math.abs(step), Math.abs(step)]
+          : [Math.abs(step)]
+        : family === 'psf' && Array.isArray(step) && step.length === 2 && step.every((n) => typeof n === 'number')
+          ? (step as number[]).map(Math.abs)
+          : null;
+    return { step: own, rest: textAt(spectral, 'rest'), pending: false, problem: own === null ? `${of.name} has no data and its observable gives no ${UNITS[family].of}.` : null };
   }
-  return null;
+  // (of a PSF, its x and y; of an LSF, the width of its channels)
+  const step: Step = array?.step ? (family === 'psf' ? [Math.abs(array.step[0]), Math.abs(array.step[1])] : array.step.length === 3 ? [Math.abs(array.step[2])] : null) : null;
+  const problem =
+    step !== null
+      ? null
+      : family === 'lsf' && array && kept(array).length < 3
+        ? `${name} has no spectral axis: an LSF is drawn on the channels of a cube.`
+        : `The header of ${name} does not give its ${UNITS[family].of}${array?.ambiguous_velocity ? ' (say whether its velocities are radio or optical)' : ''}.`;
+  return { step, rest: array?.rest ?? given, pending: false, problem };
+}
+
+// The units of those given (of any case) of the quantities of options (e.g.
+// the widths of an LSF, and of its terms, in Angstrom), as written, each
+// once, in the order they come
+function unitsGiven(value: unknown, units: string[]): string[] {
+  const found: string[] = [];
+  const visit = (item: unknown) => {
+    if (typeof item === 'string') {
+      const [number, unit] = splitQuantity(item);
+      if (number !== '' && sameUnitIn(units, unit) && !sameUnitIn(found, unit)) found.push(unit);
+    } else if (Array.isArray(item)) item.forEach(visit);
+    else if (typeof item === 'object' && item !== null) Object.values(item).forEach(visit);
+  };
+  visit(value);
+  return found;
+}
+
+// Whether options (e.g. of an LSF, and of its terms) are of a type, or
+// have a term of it (e.g. a Hanning smoothing)
+function hasType(value: unknown, type: string): boolean {
+  if (Array.isArray(value)) return value.some((item) => hasType(item, type));
+  if (typeof value !== 'object' || value === null) return false;
+  return (value as Options).type === type || Object.values(value).some((item) => hasType(item, type));
+}
+
+// Whether a unit is one of those given, of any case
+function sameUnitIn(units: string[], unit: string): boolean {
+  return units.some((u) => u.toLowerCase() === unit.toLowerCase());
+}
+
+// The unit an LSF of widths of units given is drawn in of its own (not on
+// data), of the kinds of units of the schema: that of its widths, of one
+// kind (the first given of it; km/s of velocities), channels (pix) of
+// widths in pixels alone, or km/s of none (e.g. a point); none of widths
+// of kinds that share no axis (e.g. Angstrom and km/s)
+function ownUnit(given: string[], kinds: Record<string, string[]>): string | null {
+  const kindOf = (unit: string) => Object.keys(kinds).find((kind) => sameUnitIn(kinds[kind], unit));
+  const axes = [...new Set(given.map(kindOf).filter((kind) => kind !== PIXELS))];
+  if (axes.length > 1) return null;
+  if (axes.length === 0) return given.length > 0 ? 'pix' : 'km/s';
+  return axes[0] === VELOCITY ? 'km/s' : given.find((unit) => kindOf(unit) === axes[0]) ?? null;
 }
 
 function kept(array: { shape: number[] }): number[] {
@@ -477,6 +565,7 @@ function Preview({
   project,
   options,
   step,
+  lsf,
   pixels,
   problem,
 }: {
@@ -484,6 +573,8 @@ function Preview({
   project: string;
   options: Options;
   step: Step;
+  // (of an LSF, how it is drawn)
+  lsf: LsfDrawing;
   // (what it is drawn on, chosen; and why that is not known, if it is not)
   pixels: ReactNode;
   problem: ReactNode;
@@ -512,7 +603,7 @@ function Preview({
       {family === 'psf' ? (
         <PsfPreview project={project} options={options} step={step} scale={scale} tools={tools} problem={problem} />
       ) : (
-        <LsfPreview project={project} options={options} step={step} scale={scale} tools={tools} problem={problem} />
+        <LsfPreview project={project} options={options} step={step} lsf={lsf} scale={scale} tools={tools} problem={problem} />
       )}
     </div>
   );
@@ -706,63 +797,201 @@ function PsfProperties({ project, options, step }: { project: string; options: O
   );
 }
 
-function LsfPreview({ project, options, step, scale, tools, problem }: PreviewProps) {
-  const view = useLsfView(project, options, widthOf(step));
-  const data = view.data;
-  if (data === undefined) return <Waiting error={view.error} tools={tools} problem={problem} />;
-  const n = data.values.length;
-  const centre = Math.floor(n / 2);
-  const peak = Math.max(...data.values);
-  const log = scale === 'log';
-  // (its width at half its peak: its FWHM)
-  const width = widthAt(data.values, peak / 2);
+// (an LSF not drawn says why where it would be)
+type LsfPreviewProps = PreviewProps & { lsf: LsfDrawing };
+
+// (its controls stay where they are whether it is drawn or not, so that
+// what is typed in them keeps its focus as it comes and goes)
+function LsfPreview({ project, options, lsf, scale, tools, problem }: LsfPreviewProps) {
+  const view = useLsfView(project, options, lsf.at, lsf.drawable);
+  const data = lsf.drawable ? view.data : undefined;
+  const error = lsf.drawable ? view.error : null;
   return (
     <div className="response-body">
-      {view.error && <p className="error">{view.error.message}</p>}
+      {error && data !== undefined && <p className="error">{error.message}</p>}
       {problem}
       <div className="response-profiles">
         {tools}
-        <SpectrumPlot
-          values={scaled(data.values, peak, scale)}
-          spectral={data.values.map((_, i) => (i - centre) * data.step)}
-          unit="km/s"
-          valueUnit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'}
-          channel={centre}
-          limits={log ? [FLOOR, 0] : null}
-          zero={!log}
-          width={width && { level: log ? Math.log10(0.5) : 0.5, from: width[0], to: width[1] }}
-          onPick={() => {}}
-        >
-          {width && <FwhmKey title="The width at half the peak: its FWHM" />}
-        </SpectrumPlot>
+        {data !== undefined ? (
+          <LsfPlot values={data.values} step={data.step} fwhm={data.fwhm} unit={data.unit} scale={scale} />
+        ) : error ? (
+          <p className="error">{error.message}</p>
+        ) : (
+          <p className="note">{lsf.wanting ?? 'Drawing…'}</p>
+        )}
       </div>
     </div>
   );
 }
 
-// The resolution of an LSF: its width, and the resolving power of a
-// spectrograph of it (what each is, on its label)
-function LsfProperties({ project, options, step }: { project: string; options: Options; step: Step }) {
-  const data = useLsfView(project, options, widthOf(step)).data;
+// The fewest channels an LSF is shown across: one of fewer (e.g. narrower
+// than a channel, all its light in one) amid empty ones, as the spike it is
+const FEWEST = 11;
+
+// An LSF drawn, on a scale, about its centre, with its width at half its
+// peak (its FWHM), where it was measured (none: narrower than a channel),
+// on channels of a width in a unit
+function LsfPlot({ values: drawn, step, fwhm, unit, scale }: { values: number[]; step: number; fwhm: number | null; unit: string; scale: Scale }) {
+  const empty = Array<number>(Math.max(0, Math.ceil((FEWEST - drawn.length) / 2))).fill(0);
+  const values = [...empty, ...drawn, ...empty];
+  const centre = Math.floor(values.length / 2);
+  const peak = Math.max(...values);
+  const log = scale === 'log';
+  const width = fwhm === null ? null : widthAt(values, peak / 2);
+  return (
+    <SpectrumPlot
+      values={scaled(values, peak, scale)}
+      spectral={values.map((_, i) => (i - centre) * step)}
+      unit={unit}
+      valueUnit={log ? 'Log₁₀ of the fraction of the peak' : 'Fraction of the peak'}
+      channel={centre}
+      limits={log ? [FLOOR, 0] : null}
+      zero={!log}
+      width={width && { level: log ? Math.log10(0.5) : 0.5, from: width[0], to: width[1] }}
+      onPick={() => {}}
+    >
+      {width && <FwhmKey title="The width at half the peak: its FWHM" />}
+    </SpectrumPlot>
+  );
+}
+
+// The resolution of an LSF, of it alone (not as it is drawn above): its
+// widths as given, exactly, in their unit (but of a Hanning smoothing or
+// widths in pixels on an axis not of channels, of the channels of the
+// data); and in velocity, where they are not in km/s or are of channels
+// (see InVelocity). Of a width in km/s of no channels, the one group.
+function LsfProperties({ project, path, options, units }: { project: string; path: string; options: Options; units: LsfUnits }) {
+  const asGiven = units.own !== null && (!units.channels || units.own === 'pix');
+  const inVelocity = units.own !== 'km/s' || units.channels;
+  const given = useLsfView(project, options, { step: null, rest: null, unit: units.own === 'km/s' ? null : units.own, channel: null }, asGiven).data;
+  const both = asGiven && inVelocity;
   return (
     <DockSection id="lsf-resolution" title="Resolution">
-      {data === undefined ? (
-        <p className="note">Measuring…</p>
-      ) : (
-        <dl className="facts">
-          <dt title="The full width at half maximum">FWHM</dt>
-          <dd>{data.fwhm === null ? <span className="word">Narrower than a channel</span> : `${significant(data.fwhm, 3)} km/s`}</dd>
-          {data.fwhm !== null && (
-            <>
-              <dt title="The σ of a Gaussian of the same FWHM">σ</dt>
-              <dd>{significant(data.fwhm / (2 * Math.sqrt(2 * Math.log(2))), 3)} km/s</dd>
-              <dt title="The resolving power of a spectrograph of this LSF: λ/Δλ = c/FWHM">R</dt>
-              <dd>{Math.round(LIGHT / data.fwhm).toLocaleString('en')}</dd>
-            </>
-          )}
-        </dl>
-      )}
+      <dl className="facts">
+        {both && <dt className="group">As given</dt>}
+        {asGiven && <Widths view={given} resolving={units.own === 'km/s'} />}
+        {both && <dt className="group">In velocity</dt>}
+        {inVelocity && <InVelocity project={project} path={path} options={options} units={units} />}
+      </dl>
     </DockSection>
+  );
+}
+
+// The widths of an LSF in km/s, as data take them, and the resolving power
+// there, at what an observation or a dataset of the project gives (as it
+// draws it, see useGridOf) or one typed (custom): the rest of a line, for
+// widths of wavelength or frequency, and the width of the channels, for
+// those of channels; of what it needs not given, none. A calculator, which
+// changes nothing else; rows of a list of facts.
+function InVelocity({ project, path, options, units }: { project: string; path: string; options: Options; units: LsfUnits }) {
+  // (custom, or an observation or a dataset: 'observation:<name>')
+  const [source, setSource] = useState('custom');
+  const [typedRest, setTypedRest] = useState('');
+  const [typedChannel, setTypedChannel] = useState('');
+  const pieces = useProject(project).data?.pieces;
+  const references = useReferences(path).data ?? [];
+  const users = new Set(references.filter((r) => r.folder === 'observations').map((r) => r.name));
+  const observations = pieces?.observations ?? [];
+  const items = [
+    { value: 'custom', label: 'Custom' },
+    ...observations.filter((o) => users.has(o)).map((name) => ({ value: `observation:${name}`, label: name, group: 'Observations that use it' })),
+    ...observations.filter((o) => !users.has(o)).map((name) => ({ value: `observation:${name}`, label: name, group: 'Other observations' })),
+    ...(pieces?.datasets ?? []).map((name) => ({ value: `dataset:${name}`, label: name, group: 'Datasets' })),
+  ];
+  const [kind, ...named] = source.split(':');
+  const of: Of | null = kind === 'observation' || kind === 'dataset' ? { source: kind, name: named.join(':') } : null;
+  const grid = useGridOf(project, 'lsf', of);
+  // (typed, as it settles; a rest of a number alone in the unit of the
+  // widths)
+  const [settledRest] = useDebouncedValue(typedRest, 120);
+  const [settledChannel] = useDebouncedValue(typedChannel, 120);
+  const [number, unit] = splitQuantity(settledRest);
+  const rest = units.rest === null ? null : of !== null ? grid.rest : number === '' ? null : `${number} ${unit || units.rest.unit}`;
+  const channel = !units.channels ? null : of !== null ? widthOf(grid.step) : Number(settledChannel) > 0 ? Number(settledChannel) : null;
+  const ready = (units.rest === null || rest !== null) && (!units.channels || channel !== null);
+  const view = useLsfView(project, options, { step: null, rest, unit: null, channel }, ready);
+  // (what the observation or the dataset does not give, said in place of
+  // its widths, as an error is)
+  const lacks = of === null || grid.pending ? [] : [...(units.rest !== null && rest === null ? ['no rest of a line'] : []), ...(units.channels && channel === null ? ['no channels'] : [])];
+  const why = lacks.length > 0 ? `${of?.name} gives ${lacks.join(' and ')}` : ready ? (view.error?.message ?? null) : null;
+  return (
+    <>
+      <dt className="field">At</dt>
+      <dd>
+        <Choice items={items} value={source} label="What gives what its widths need to be in km/s" onChange={setSource} />
+      </dd>
+      {units.rest !== null && (
+        <>
+          <dt className="field" title="The rest of a line: its widths of wavelength or frequency span km/s by it">
+            Rest
+          </dt>
+          <dd>
+            <QuantityInput
+              value={of === null ? typedRest : (rest ?? '')}
+              units={units.rest.kinds}
+              label="The rest of a line"
+              placeholders={of === null ? ['value', units.rest.unit] : ['none', '']}
+              onChange={setTypedRest}
+              disabled={of !== null}
+            />
+          </dd>
+        </>
+      )}
+      {units.channels && (
+        <>
+          <dt className="field" title="The width of the channels of the data: its widths in pixels and its Hanning smoothing are of them">
+            Channels
+          </dt>
+          <dd>
+            <div className="ui-quantity">
+              <NumberField
+                value={of === null ? typedChannel : channel === null ? '' : String(significant(channel, 3))}
+                min={0}
+                placeholder={of === null ? 'width' : 'none'}
+                label="The width of the channels of the data (km/s)"
+                onChange={setTypedChannel}
+                disabled={of !== null}
+              />
+              <span className="facts-unit">km/s</span>
+            </div>
+          </dd>
+        </>
+      )}
+      <Widths view={ready && !view.error ? view.data : undefined} resolving why={why} />
+    </>
+  );
+}
+
+// The widths of an LSF drawn: its FWHM and the σ of a Gaussian of it, in
+// the unit it is drawn in, and the resolving power of a spectrograph of
+// it, of widths in km/s (resolving; what each is, on its label). Each row
+// is there whether its value is known or not (—), so that nothing moves as
+// they come; why they cannot be, if given, in place of the FWHM.
+function Widths({ view, resolving, why }: { view: { fwhm: number | null; unit: string } | undefined; resolving: boolean; why?: string | null }) {
+  const fwhm = view?.fwhm ?? null;
+  return (
+    <>
+      <dt title="The full width at half maximum">FWHM</dt>
+      <dd>
+        {why ? (
+          <span className="word">{why}</span>
+        ) : view === undefined ? (
+          '—'
+        ) : fwhm === null ? (
+          <span className="word">Narrower than a channel</span>
+        ) : (
+          `${significant(fwhm, 3)} ${view.unit}`
+        )}
+      </dd>
+      <dt title="The σ of a Gaussian of the same FWHM">σ</dt>
+      <dd>{fwhm === null || why ? '—' : `${significant(fwhm / (2 * Math.sqrt(2 * Math.log(2))), 3)} ${view?.unit}`}</dd>
+      {resolving && (
+        <>
+          <dt title="The resolving power of a spectrograph of this LSF: λ/Δλ = c/FWHM">R</dt>
+          <dd>{fwhm === null || why ? '—' : Math.round(LIGHT / fwhm).toLocaleString('en')}</dd>
+        </>
+      )}
+    </>
   );
 }
 

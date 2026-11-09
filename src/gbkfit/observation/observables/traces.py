@@ -101,7 +101,7 @@ class TracePolynomial(Trace):
     def __init__(
             self,
             wave: Annotated[QuantityOrText, UnitKinds(
-                wavelength=('um', 'nm', 'Angstrom', 'm'))],
+                wavelength=('Angstrom', 'nm', 'um', 'm'))],
             dx: Annotated[Sequence[float], Unit('pixel')],
             dy: Annotated[Sequence[float], Unit('pixel')] = (0.0,)
     ):

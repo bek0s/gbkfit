@@ -31,6 +31,7 @@ import gbkfit.project
 import gbkfit.units
 
 from .errors import Invalid, NotFound
+from .units import rest_text
 
 
 __all__ = [
@@ -433,7 +434,8 @@ class Workspace:
         model, unit, the size of its pixels in that order (only the
         spatial ones while its spectral axis cannot be read: velocities of
         no convention, or wavelengths without a rest), beam, the noise its
-        header states, whether its velocities are ambiguous, and problems).
+        header states, whether its velocities are ambiguous, problems, and
+        the rest of its spectral axis as text, if any).
 
         Raises
         ------
@@ -467,7 +469,9 @@ class Workspace:
                  rms=hdu.rms, ambiguous_velocity=hdu.ambiguous_velocity,
                  # (the paths of the problems in the workspace)
                  problems=[p.replace(path, relative) for p in hdu.problems],
-                 holds=hdu.holds, nonstandard_type=hdu.nonstandard_type)
+                 holds=hdu.holds, nonstandard_type=hdu.nonstandard_type,
+                 rest=None if hdu.coords is None or hdu.coords.rest is None
+                 else rest_text(hdu.coords.rest))
             for hdu in hdus]
 
     def header(self, relative: str, hdu: int) -> list[str]:

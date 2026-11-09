@@ -76,9 +76,9 @@ class Unit:
 class UnitKinds:
     """
     The kinds of unit of a quantity option, as a marker of its annotation:
-    each by its name for people, with units of it, the first an example;
-    e.g. ``UnitKinds(wavelength=('Angstrom', 'nm'), frequency=('kHz',
-    'MHz'))``. A value is in a unit of one of the kinds (e.g. um, or GHz).
+    each by its name for people, with units of it, from the smallest; e.g.
+    ``UnitKinds(wavelength=('Angstrom', 'nm'), frequency=('kHz', 'MHz'))``.
+    A value is in a unit of one of the kinds (e.g. um, or GHz).
 
     Unlike Unit, the values carry their unit, which is checked (see
     type_problem): messages name the kinds, and schemas list their units
@@ -101,21 +101,17 @@ class UnitKinds:
         """Return whether a unit is of one of the kinds."""
         return _admits(unit, tuple(units[0] for _, units in self.kinds))
 
-    def example(self) -> str:
-        """Return the example unit: the first of the first kind."""
-        return self.kinds[0][1][0]
-
     def names(self) -> str:
         """Return the names of the kinds, e.g. 'wavelength or frequency'."""
         return _either([name for name, _ in self.kinds])
 
     def described(self) -> str:
         """
-        Return the kinds with an example of each, e.g. 'wavelength (e.g.
-        Angstrom) or frequency (e.g. kHz)'.
+        Return the kinds with their units, e.g. 'wavelength (Angstrom, nm)
+        or frequency (kHz, MHz)'.
         """
         return _either([
-            f"{name} (e.g. {units[0]})" for name, units in self.kinds])
+            f"{name} ({', '.join(units)})" for name, units in self.kinds])
 
 
 def _either(words: list[str]) -> str:
@@ -483,7 +479,7 @@ def type_error(value: Any, type_: Any) -> TypeError | ValueError | None:
     if kinds is not None and _lacks_unit(value):
         number = float(getattr(value, 'value', value))
         return TypeError(
-            f"needs its unit, e.g. '{number:g} {kinds.example()}': a unit of "
+            f"needs its unit, written after the number: a unit of "
             f"{kinds.described()}; it is {number!r}")
     type_, bounds = _split_bounds(_without_none(type_))
     # A plain array (not a subclass, e.g. a Quantity) is checked as a list

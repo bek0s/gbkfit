@@ -37,6 +37,12 @@ export function objectAt(options: Options, key: string): Options {
   return isObject(value) ? value : {};
 }
 
+// The text of an option (none if not given, or not text)
+export function textAt(options: Options, key: string): string | null {
+  const value = options[key];
+  return typeof value === 'string' ? value : null;
+}
+
 // A value set or removed (undefined) in options
 export function withKey(options: Options, key: string, value: unknown): Options {
   const { [key]: _old, ...rest } = options;

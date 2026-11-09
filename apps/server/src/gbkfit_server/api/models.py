@@ -215,12 +215,21 @@ class PSFRequest(BaseModel):
 class LSFRequest(BaseModel):
     """
     An LSF to draw: the project of its piece, its options (its files
-    relative to the project), and the width of the channels (km/s; none:
-    of its own scale).
+    relative to the project), the width of the channels (none: of its own
+    scale), the rest of the line it is drawn at (e.g. '6562.8 Angstrom';
+    widths in a unit of wavelength or frequency need it), the unit of the
+    channels: km/s (velocities) by default, or another, which draws it as
+    its widths give it (e.g. 'Angstrom', or 'pix': channels of the data;
+    without a rest), and the width of the channels of the data, which its
+    widths in pixels and its Hanning smoothing are of (none: those it is
+    drawn on).
     """
     project: str
     options: dict[str, Any]
     step: float | None = None
+    rest: str | None = None
+    unit: str | None = None
+    channel: float | None = None
 
 
 class PSFViewInfo(BaseModel):
@@ -243,12 +252,13 @@ class PSFViewInfo(BaseModel):
 class LSFViewInfo(BaseModel):
     """
     An LSF drawn on channels (see Responses.lsf): its values (they sum
-    to 1), the width of the channels (km/s), and its full width at half
-    maximum (km/s; none for a point).
+    to 1), the width of the channels, its full width at half maximum (none
+    for a point), and the unit of both (e.g. 'km/s').
     """
     values: list[float]
     step: float
     fwhm: float | None
+    unit: str
 
 
 class FileEntry(BaseModel):
@@ -287,7 +297,10 @@ class ArrayInfo(BaseModel):
     'variance' or 'inverse_variance'; see gbkfit's HDUDescription.holds),
     and the type its header gives a spectral axis that FITS does not
     define (e.g. 'WAVELENGTH'; a dataset of it says what the axis is, see
-    gbkfit's HDUDescription.nonstandard_type).
+    gbkfit's HDUDescription.nonstandard_type), and the rest of its
+    spectral axis (e.g. '6562.8 Angstrom': its header's, RESTWAV or
+    RESTFRQ, or that given; none if none, or while the axis cannot be
+    read).
     """
     index: int
     name: str
@@ -302,6 +315,7 @@ class ArrayInfo(BaseModel):
     problems: list[str]
     holds: Literal['sigma', 'variance', 'inverse_variance'] | None = None
     nonstandard_type: str | None = None
+    rest: str | None = None
 
 
 class SpectrumView(BaseModel):

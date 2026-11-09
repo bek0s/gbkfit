@@ -7,13 +7,17 @@ full widths at half maximum of both.
 """
 
 import dataclasses
+import math
 import os
 from collections.abc import Iterator, Mapping
 from typing import Any
 
+import astropy.units as u
 import numpy as np
 
+import gbkfit.units
 from gbkfit.config import ConfigError, TypedParser, paths_relative_to
+from gbkfit.grid.spectral import VelocityConvention, make_rest
 from gbkfit.instrument.lsfs import Channel, ChannelLSF, lsf_parser
 from gbkfit.instrument.psfs import psf_parser
 
@@ -27,6 +31,9 @@ __all__ = [
     'Responses'
 ]
 
+
+# The unit of an axis of velocities
+_KMS = u.km / u.s
 
 # The pixels (channels) across a response drawn at its own scale, and the
 # most drawn at a scale given (e.g. that of the data)
@@ -69,12 +76,13 @@ class PSFView:
 class LSFView:
     """
     An LSF drawn on channels: its values (they sum to 1), the width of
-    the channels (km/s), and its full width at half maximum (km/s; none
-    for a point, or one narrower than a channel).
+    the channels, its full width at half maximum (none for a point, or
+    one narrower than a channel), and the unit of both (e.g. 'km/s').
     """
     values: np.ndarray
     step: float
     fwhm: float | None
+    unit: str
 
 
 class Responses:
@@ -142,34 +150,70 @@ class Responses:
             self,
             project: str,
             options: Mapping[str, Any],
-            step: float | None = None
+            step: float | None = None,
+            rest: str | None = None,
+            unit: str | None = None,
+            channel: float | None = None
     ) -> LSFView:
         """
         Draw an LSF of the options of a piece of a project: on channels
-        of a width (e.g. those of the data; km/s), or of its own scale
-        (about _ACROSS channels across).
+        of a width (e.g. those of the data), or of its own scale (about
+        _ACROSS channels across), of an axis of velocities (km/s), at the
+        rest of a line if given (e.g. '6562.8 Angstrom'; that of the data),
+        which its widths in a unit of wavelength or frequency need; or of
+        an axis of another unit, if given (e.g. 'Angstrom', or 'pix': of
+        channels of the data, each of width 1), which draws it as its
+        widths give it. Its widths in pixels and its Hanning smoothing are
+        of the channels of the data: of a width, if given (in the unit of
+        the axis; e.g. those of a dataset, it drawn on finer ones), or else
+        those it is drawn on.
 
         Raises
         ------
         Invalid
             If the options are not those of an LSF, or one that varies
-            along the spectral axis, or it needs too many channels.
+            along the spectral axis, or it needs too many channels or a
+            rest that is not given, or the rest or the unit is not one, or
+            both are given, or a width of the channels is not positive or
+            is given of an axis of pixels.
         """
         lsf = self._load(lsf_parser, project, options, 'LSF')
-        if step is not None and step <= 0:
-            raise Invalid(f"the width of the channels must be positive: {step}")
-        # (drawn at 0 km/s of an axis without a rest, on channels of the
+        for width in (step, channel):
+            if width is not None and width <= 0:
+                raise Invalid(
+                    f"the width of the channels must be positive: {width}")
+        try:
+            axis = _KMS if unit is None else gbkfit.units.parse_unit(unit)
+            convention = VelocityConvention(make_rest(rest))
+        except ValueError as e:
+            raise Invalid(str(e)) from e
+        if axis != _KMS and rest is not None:
+            raise Invalid(
+                f"a rest is of an axis of velocities, not of '{unit}'")
+        if axis == u.pix and channel is not None:
+            raise Invalid("the channels of an axis of pixels are of width 1")
+        unit = unit or 'km/s'
+        # (drawn at 0 km/s, the velocity of the rest, on channels of the
         # data that it is drawn on: its widths in km/s of the light span
         # as many km/s there, and those in a unit of wavelength or
-        # frequency need the rest of the data)
+        # frequency span km/s by the rest; or on an axis of their unit, as
+        # much as they are, or of channels of the data, each of width 1)
+        data = 1.0 if axis == u.pix else channel
         def on(width: float) -> ChannelLSF:
-            return lsf.on(Channel(0.0, width))
+            return lsf.on(Channel(
+                0.0, width if data is None else data, convention, axis))
         try:
-            # (of its own scale, the first round width below about 1/_ACROSS
-            # of it that it can be drawn on: e.g. a Hanning smoothing, only
+            # (of its own scale, the first width below about 1/_ACROSS of
+            # it that it can be drawn on: round, or a whole part of the
+            # channels of the data, if given (e.g. a Hanning smoothing, only
             # on channels of which its width is a multiple)
-            steps = [step] if step is not None else _round_below(
-                on(1.0).size(1.0) / _ACROSS)
+            if step is not None:
+                steps = [step]
+            elif channel is not None:
+                parts = math.ceil(channel / (on(1.0).size(1.0) / _ACROSS))
+                steps = [channel / k for k in range(parts, parts + 4)]
+            else:
+                steps = _round_below(on(1.0).size(1.0) / _ACROSS)
         except (RuntimeError, ValueError) as e:
             raise Invalid(f"cannot draw the LSF: {e}") from e
         for i, width in enumerate(steps):
@@ -177,7 +221,7 @@ class Responses:
                 size = on(width).size(width)
                 if size > _MOST:
                     raise Invalid(
-                        f"the LSF needs {size} channels of {width:g} km/s; "
+                        f"the LSF needs {size} channels of {width:g} {unit}; "
                         f"at most {_MOST}")
                 values = np.asarray(
                     on(width).asarray(width, size), dtype=np.float32)
@@ -185,7 +229,7 @@ class Responses:
                 if i == len(steps) - 1:
                     raise Invalid(f"cannot draw the LSF: {e}") from e
                 continue
-            return LSFView(values, width, _fwhm(values, width))
+            return LSFView(values, width, _fwhm(values, width), unit)
         raise AssertionError("unreachable: there is a width")
 
     def _load(

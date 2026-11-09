@@ -7,13 +7,13 @@
 // forms. A file is one of the project (imported or uploaded), and its
 // array, if it has several. What the form cannot edit (e.g. a table along
 // the spectral axis) is shown as it is, and kept.
-import { Autocomplete, NumberInput, Slider } from '@mantine/core';
+import { NumberInput, Slider } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useDescription } from '../api/queries';
 import { FileSources } from './FileSources';
 import { Button, Close, TextField } from './ui/basics';
 import { joinPath } from './FilePicker';
-import { Choice } from './ui/inputs';
+import { Choice, QuantityInput } from './ui/inputs';
 
 // A node of a JSON Schema (as the library writes them), and its
 // definitions (its $defs)
@@ -501,37 +501,29 @@ function PlainField({
 }
 
 // A quantity of one value, as its text (e.g. '2.5 Angstrom'; the library
-// reads it): its number, and its unit, with the units of its kinds as
-// suggestions (any other can be typed)
+// reads it), the units of its kinds suggested (see QuantityInput)
 function QuantityField({ node, value, onChange }: { node: Schema; value: string | undefined; onChange: (value: unknown) => void }) {
-  const [number, unit] = splitQuantity(value ?? '');
-  const kinds = (node.unit_kinds as Record<string, string[]> | undefined) ?? {};
-  const units = Object.entries(kinds).map(([kind, items]) => ({ group: kind, items }));
-  const join = (n: string, u: string) => {
-    const text = `${n.trim()} ${u.trim()}`.trim();
-    return text === '' ? undefined : text;
-  };
-  return (
-    <div className="schema-quantity">
-      <TextField value={number} placeholder="value" label="value" onChange={(next) => onChange(join(next, unit))} mono />
-      <Autocomplete
-        className="schema-quantity-unit"
-        value={unit}
-        data={units}
-        placeholder="unit"
-        aria-label="unit"
-        size="xs"
-        onChange={(next) => onChange(join(number, next))}
-      />
-    </div>
-  );
+  const kinds = isObject(node.unit_kinds) ? (node.unit_kinds as Record<string, string[]>) : {};
+  return <QuantityInput value={value ?? ''} units={kinds} label="the quantity" onChange={(next) => onChange(next === '' ? undefined : next)} />;
 }
 
-// The number and the unit of the text of a quantity (e.g. '2.5 Angstrom');
-// a text that does not start with a number is all unit
-function splitQuantity(text: string): [string, string] {
-  const match = /^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(.*)$/.exec(text);
-  return match ? [match[1], match[2].trim()] : ['', text.trim()];
+// The units the schema suggests of each kind (e.g. wavelength: Angstrom,
+// nm, ...), of all its quantities, each once, in the order they come
+export function unitKinds(defs: Defs): Record<string, string[]> {
+  const kinds: Record<string, Set<string>> = {};
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) node.forEach(visit);
+    else if (isObject(node)) {
+      if (node.format === 'quantity' && isObject(node.unit_kinds)) {
+        for (const [kind, units] of Object.entries(node.unit_kinds)) {
+          if (Array.isArray(units)) units.forEach((unit) => (kinds[kind] ??= new Set()).add(String(unit)));
+        }
+      }
+      Object.values(node).forEach(visit);
+    }
+  };
+  visit(defs);
+  return Object.fromEntries(Object.entries(kinds).map(([kind, units]) => [kind, [...units]]));
 }
 
 // The slider of a number: from min to max by step; or, logarithmic (of a

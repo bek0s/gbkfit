@@ -4,7 +4,7 @@
 // scale, its spectral resolution, and its checks); its dock sets it, a
 // section for each stage. Its options are edited as a whole, and saved or
 // reverted (see editing).
-import { useDescriptions, useLsfView, usePiece, usePsfView } from '../../api/queries';
+import { useDescriptions, useLsfView, usePiece, usePsfView, type SpectralTypeOption } from '../../api/queries';
 import { joinPath } from '../../components/FilePicker';
 import { membersOf, SchemaForm, titleOf, typeOf, type Options } from '../../components/SchemaForm';
 import { Dock, DockSection, NeedsNote } from '../../components/ui/dock';
@@ -12,7 +12,7 @@ import { useBlockHead } from '../../shell/BlockMenu';
 import { useStudio } from '../../studio';
 import { arraysOf, draftOfDataset, EMPTY_ITEM, kept, KINDS, kindOfType } from '../dataset/model';
 import { SaveActions, useEditedBlock } from '../editing';
-import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse } from './model';
+import { checksOf, HANDLED_KEYS, headerBeam, isObject, isSpectral, LIGHT_KEYS, needsOf, objectAt, psfEllipse, textAt } from './model';
 import { DataFields, InstrumentFields, LightFields, LikelihoodFields, LineOfSightFields, ObservableFields, OptionFields } from './Sections';
 import { Checks, Resolution, Sky, Stages, type SkyData } from './View';
 
@@ -25,11 +25,17 @@ export function ObservationScreen({ name }: { name: string }) {
   const defs = edited.defs;
   const named = (folder: string, value: unknown) => (typeof value === 'string' && (edited.blocks[folder] ?? []).includes(value) ? joinPath(root, `${folder}/${value}.yaml`) : null);
 
-  // (the dataset it names, and the array of the data of its first item)
+  // (the dataset it names, and the array of the data of its first item,
+  // read as the dataset reads it: of its rest or that of the observation,
+  // the convention of velocities its header leaves ambiguous and the type
+  // of a spectral axis FITS does not define)
   const dataset = usePiece(named('datasets', options?.data)).data as Options | undefined;
   const kind = kindOfType(dataset?.type);
   const first = kind && dataset ? Object.values(draftOfDataset(kind, dataset, root).items)[0]?.files.data : undefined;
-  const describe = useDescriptions(first ? [first.file] : []);
+  const axis = dataset ? objectAt(dataset, 'spectral') : {};
+  const given = textAt(objectAt(objectAt(options ?? {}, 'observable'), 'spectral'), 'rest') ?? textAt(axis, 'rest');
+  const velocity = axis.convention === 'radio' || axis.convention === 'optical' ? axis.convention : null;
+  const describe = useDescriptions(first ? [first.file] : [], velocity, given, textAt(axis, 'type') as SpectralTypeOption | null);
   const array = kind && first ? arraysOf({ ...EMPTY_ITEM, files: { data: first } }, describe, KINDS[kind].ndim).found.data : undefined;
 
   // (its PSF and its LSF, of the project or given in place, as the server
@@ -40,7 +46,8 @@ export function ObservationScreen({ name }: { name: string }) {
   const psfOptions = isObject(instrument.psf) ? instrument.psf : psfPiece;
   const lsfOptions = isObject(instrument.lsf) ? instrument.lsf : lsfPiece;
   const psfView = usePsfView(root, psfOptions ?? {}, null, psfOptions !== undefined && typeof psfOptions.type === 'string');
-  const lsfView = useLsfView(root, lsfOptions ?? {}, null, lsfOptions !== undefined && typeof lsfOptions.type === 'string');
+  // (its LSF at its rest: of its widths of wavelength or frequency)
+  const lsfView = useLsfView(root, lsfOptions ?? {}, { step: null, rest: array?.rest ?? given, unit: null, channel: null }, lsfOptions !== undefined && typeof lsfOptions.type === 'string');
 
   if (project === null) return null;
   const title = (family: string, type: unknown) => (type === undefined ? '—' : titleOf(defs, family, String(type)));
