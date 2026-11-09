@@ -271,6 +271,17 @@ def test_varying_psfs_in_python(tmp_path):
         PSFMoffat.varying(alpha=0.7, beta=2.5)
 
 
+def test_tables_of_quantities_keep_their_unit():
+    # (values in degrees were taken as the arcsec of alpha)
+    from gbkfit.instrument import PSFMoffat, SpectralTable
+    table = SpectralTable([6000, 7000] * u.AA, [0.5, 0.7] * u.deg)
+    assert table.unit() == u.deg
+    psf = PSFMoffat.varying(alpha=table, beta=2.5)
+    assert psf.at([6500] * u.AA)[0].dump()['alpha'] == pytest.approx(2160)
+    with pytest.raises(ValueError, match="its unit is 'arcsec'"):
+        SpectralTable([6000, 7000] * u.AA, [0.5, 0.7] * u.deg, 'arcsec')
+
+
 def test_spectral_tables_from_files(tmp_path):
     from gbkfit.instrument import SpectralTable
     table = SpectralTable.from_file(

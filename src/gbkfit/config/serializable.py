@@ -31,6 +31,7 @@ __all__ = [
     'Serializable',
     'TypedSerializable',
     'config_constructor',
+    'constructor_of',
     'dump_quantity',
     'from_config',
     'is_record',
@@ -91,10 +92,8 @@ class Serializable(abc.ABC):
         Self
             The object.
         """
-        name = config_constructor(cls, info)
-        func = cls.__init__ if name == '__init__' else getattr(cls, name)
-        args = parse_options_for_callable(info, func)
-        return cls(**args) if name == '__init__' else func(**args)
+        func, make = constructor_of(cls, info)
+        return make(**parse_options_for_callable(info, func))
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
@@ -203,7 +202,7 @@ def config_constructor(
         return names[0]
     params = {}
     for name in names:
-        func = cls.__init__ if name == '__init__' else getattr(cls, name)
+        func = _constructor_function(cls, name)
         params[name] = set(funcutils.parameter_names(func).all) \
             - set(cls.given_options)
     own = {
@@ -220,6 +219,43 @@ def config_constructor(
         + (f"those of several: "
            f"{quoted_names(set(info) & set().union(*own.values()))}"
            if given else "none of them"))
+
+
+def constructor_of(
+        cls: type[Serializable], info: Mapping[str, Any]
+) -> tuple[Callable, Callable]:
+    """
+    Return the constructor of a class whose options a configuration has
+    (see config_constructor): the function of its parameters (__init__,
+    or a named constructor), and the callable that makes the object (the
+    class, or the named constructor).
+
+    Parameters
+    ----------
+    cls : type
+        The class.
+    info : Mapping
+        The options of the configuration.
+
+    Returns
+    -------
+    tuple of Callable
+        The function of the parameters, and the callable.
+
+    Raises
+    ------
+    ConfigError
+        If the configuration has the own options of none or of several of
+        the constructors.
+    """
+    name = config_constructor(cls, info)
+    func = _constructor_function(cls, name)
+    return func, cls if name == '__init__' else func
+
+
+def _constructor_function(cls: type, name: str) -> Callable:
+    """The function of the parameters of a constructor of a class."""
+    return cls.__init__ if name == '__init__' else getattr(cls, name)
 
 
 class TypedSerializable(Serializable, abc.ABC):

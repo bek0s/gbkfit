@@ -369,30 +369,63 @@ class SpectralTable(Serializable):
     ----------
     points : Quantity
         The points: wavelengths, frequencies or velocities, each once.
-    values : array_like
-        The value at each point, finite.
+    values : array_like or Quantity
+        The value at each point, finite; of a Quantity, in its unit.
     unit : str or Unit, optional
-        The unit of the values; by default, the units of the option.
+        The unit of the values (of values that are not a Quantity); by
+        default, the units of the option.
 
     Raises
     ------
     TypeError
         If the points are not wavelengths, frequencies or velocities.
     ValueError
-        If the points are invalid (see SpectralPoints), or there is not a
-        finite value for each.
+        If the points are invalid (see SpectralPoints), there is not a
+        finite value for each, or the values are a Quantity of another
+        unit than unit.
     """
 
     config_constructors = ('__init__', 'from_file')
 
+    @staticmethod
+    def is_config(value: Any) -> bool:
+        """
+        Check whether the configuration of an option is a table (see
+        load): a dict of points, inline or of a file. A Quantity, of a
+        value and a unit, is not one.
+
+        Parameters
+        ----------
+        value : Any
+            The configuration of the option.
+
+        Returns
+        -------
+        bool
+            Whether it is a table.
+        """
+        return isinstance(value, Mapping) and 'points' in value
+
     def __init__(
             self,
             points: u.Quantity,
-            values: Sequence[float] | np.ndarray,
+            values: Sequence[float] | np.ndarray | u.Quantity,
             unit: str | u.UnitBase | None = None
     ):
         check_options(SpectralTable.__init__, locals())
         self._points = SpectralPoints(points, "a table")
+        if isinstance(unit, str):
+            unit = gbkfit.units.parse_unit(unit)
+        if isinstance(values, u.Quantity):
+            if unit is not None and values.unit != unit:
+                raise ValueError(
+                    f"the values of a table are in "
+                    f"'{gbkfit.units.format_unit(values.unit)}', and its unit "
+                    f"is '{gbkfit.units.format_unit(unit)}'")
+            # (dimensionless values are in the units of the option)
+            unit = (None if values.unit == u.dimensionless_unscaled
+                    else values.unit)
+            values = values.value
         values = np.asarray(values, dtype=float)
         if values.shape != (len(self._points),):
             raise ValueError(
@@ -401,8 +434,6 @@ class SpectralTable(Serializable):
         if not np.all(np.isfinite(values)):
             raise ValueError("the values of a table must be finite")
         self._values = values
-        if isinstance(unit, str):
-            unit = gbkfit.units.parse_unit(unit)
         self._unit = None if unit is None else u.Unit(unit)
 
     @classmethod
@@ -458,10 +489,7 @@ class SpectralTable(Serializable):
             raise ValueError(
                 f"{filename}: the column of the points, {points!r}, has no "
                 f"unit; give it in units")
-        values = read_column(table, column, units.get(column))
-        unit = (None if values.unit == u.dimensionless_unscaled
-                else values.unit)
-        return cls(point_values, values.value, unit)
+        return cls(point_values, read_column(table, column, units.get(column)))
 
     def dump(self) -> dict[str, Any]:
         """

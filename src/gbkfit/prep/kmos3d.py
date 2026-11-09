@@ -20,7 +20,7 @@ __all__ = [
 
 
 # The number of wavelengths of the table of an LSF, across the channels
-_WAVELENGTHS = 50
+_TABLE_POINTS = 50
 
 
 def kmos3d_lsf_table(
@@ -61,7 +61,7 @@ def kmos3d_lsf_table(
     if wcs.wcs.spec < 0:
         raise ValueError("the cube has no spectral axis")
     points = spectral_points(wcs, cube[f'NAXIS{wcs.wcs.spec + 1}'])
-    wavelengths = np.linspace(*points[[0, -1]].to_value(u.um), _WAVELENGTHS)
+    wavelengths = np.linspace(*points[[0, -1]].to_value(u.um), _TABLE_POINTS)
     return resolving_power_lsf_table(
         wavelengths * u.um,
         np.polynomial.polynomial.polyval(wavelengths, coefficients))

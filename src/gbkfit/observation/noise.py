@@ -334,9 +334,11 @@ class NoiseGauss(Noise):
             raise ValueError(
                 "the spatial correlation of the noise varies along the "
                 "spectral axis, but the data have none")
-        psfs = spatial.at(
-            _velocities(grid) * u.km / u.s,
-            VelocityConvention.of(grid.coords))
+        velocities = _velocities(grid)
+        convention = VelocityConvention.of(grid.coords)
+        spatial.check_covers(
+            velocities, convention, "the spatial correlation of the noise")
+        psfs = spatial.at(velocities * u.km / u.s, convention)
         size = tuple(np.max([p.size(step) for p in psfs], axis=0).tolist())
         return np.stack([p.asarray(step, size, rota=rota) for p in psfs])
 

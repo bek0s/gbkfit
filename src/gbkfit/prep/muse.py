@@ -36,7 +36,6 @@ def muse_psf_table(header: fits.Header) -> astropy.table.QTable:
         If the header has no PSF of MUSE.
     """
     wavelengths = _MUSE_WAVELENGTHS
-    # (MPDAF writes its mode 2, of polynomials, as the integer 2)
     mode = header.get('FSFMODE')
     mode = _MOFFAT_MODES.get(mode, mode)
     fields = [f for f in (*range(10), 99) if f'FSF{f:02d}BET' in header

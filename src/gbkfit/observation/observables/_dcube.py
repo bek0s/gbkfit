@@ -129,17 +129,9 @@ def _varying_padding(
     convention = VelocityConvention.of(dcube.grid().coords)
     step_lo = dcube.step()
     velocities_lo = dcube.zero()[2] + step_lo[2] * np.arange(dcube.size()[2])
-    for kernel, desc in ((psf, 'PSF'), (lsf, 'LSF')):
-        if kernel is None:
-            continue
-        low, high = kernel.velocity_range(convention)
-        margin = 1e-6 * abs(step_lo[2])
-        if (velocities_lo.min() < low - margin
-                or velocities_lo.max() > high + margin):
-            raise ValueError(
-                f"the {desc} is given from {low:g} to {high:g} km/s, but "
-                f"the channels of the data go from {velocities_lo.min():g} "
-                f"to {velocities_lo.max():g} km/s")
+    for kernel, desc in ((psf, 'the PSF'), (lsf, 'the LSF')):
+        if kernel is not None:
+            kernel.check_covers(velocities_lo, convention, desc)
     # The high-res channels of the data (before the padding)
     first = velocities_lo[0] - step_lo[2] / 2 + step_hi[2] / 2
     velocities = first + step_hi[2] * np.arange(size_hi[2])

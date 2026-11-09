@@ -41,6 +41,7 @@ __all__ = [
     'config_form',
     'describe_type',
     'is_asdf_file',
+    'is_quantity',
     'is_varying',
     'matches_type',
     'option_types',
@@ -621,6 +622,17 @@ def unit_of(type_: Any) -> str | None:
         return None
     units = [x.unit for x in type_.__metadata__ if isinstance(x, Unit)]
     return units[0] if units else None
+
+
+def is_quantity(type_: Any) -> bool:
+    """
+    Return whether an option of a type annotation is a Quantity (e.g. a
+    ScalarQuantity, whose configurations give its text).
+    """
+    return any(
+        x is astropy.units.Quantity
+        or typing.get_args(x)[:1] == (astropy.units.Quantity,)
+        for x in union_members(type_))
 
 
 def is_varying(type_: Any) -> bool:

@@ -126,3 +126,16 @@ def test_what_the_noise_refuses(options, psf, message):
     with pytest.raises(ValueError, match=message):
         NoiseGauss(**options).draw(
             np.random.default_rng(), GRID, psf, SIGNAL)
+
+
+def test_a_varying_correlation_covers_the_channels():
+    # Beyond the points of its table it would be that of the nearest, as
+    # the PSF of a model may not be
+    import astropy.units as u
+    from gbkfit.instrument import SpectralTable
+    psf = PSFGauss.varying(
+        sigma=SpectralTable([-100, 100] * u.km / u.s, [10.0, 20.0]))
+    with pytest.raises(ValueError, match="the spatial correlation of the "
+                                         "noise is given from -100 to 100"):
+        NoiseGauss(rms=1, spatial_correlation=psf).draw(
+            np.random.default_rng(), GRID, None, SIGNAL)

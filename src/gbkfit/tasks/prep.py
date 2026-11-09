@@ -768,7 +768,8 @@ def prep_psf_kmos3d(
         headers = [x.header for x in hdus if x.name.endswith(' PSF')]
     if not headers:
         raise ValueError(
-            f"{file}: there is no image of the PSF (an HDU named *PSF)")
+            f"{file}: there is no image of the PSF (an HDU whose name ends "
+            f"in ' PSF')")
     psf = psf_parser.dump(prep.kmos3d_psf(headers[0]))
     output_dir = _output_dir(output_dir, output_dir_mode)
     filename = os.path.join(output_dir, 'prep_psf.yaml')

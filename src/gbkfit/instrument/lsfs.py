@@ -237,7 +237,7 @@ class ChannelLSF:
             The width of the channels of the array (in the unit of the
             axis, e.g. km/s).
         size : int, optional
-            The number of channels; by default, that of size.
+            The number of channels; by default, size(step).
         offset : int, optional
             The offset of the centre of the LSF from the channel
             size // 2. size + offset must be odd.
@@ -266,10 +266,6 @@ class LSF(_detail.SpreadFunction):
 
     _TERMS_OPTION = 'lsfs'
 
-    @staticmethod
-    def _tables_class() -> type['LSFTables']:
-        return LSFTables
-
     def on(self, channel: Channel) -> ChannelLSF:
         """
         Return the LSF at a channel of the spectral axis of data, to draw
@@ -291,8 +287,7 @@ class LSF(_detail.SpreadFunction):
             If the LSF varies along the spectral axis (it is drawn as it is
             at each channel; see at).
         """
-        if self.varies():
-            raise RuntimeError(_detail.NOT_DRAWN)
+        self._check_drawn()
         return ChannelLSF(self, channel)
 
     @abc.abstractmethod
@@ -358,6 +353,10 @@ class _AnalyticLSF(_detail.AnalyticSpreadFunction, LSF):
     scale : Quantity
         The scale.
     """
+
+    @staticmethod
+    def _tables_class() -> type['LSFTables']:
+        return LSFTables
 
     def _size_impl(self, step: float, channel: Channel) -> float:
         return 2 * self._extent(channel.span(self._scale)) / step
@@ -687,7 +686,7 @@ class LSFProfile(LSF):
             velocity, wavelength or frequency.
         """
         check_options(LSFProfile.from_file, locals())
-        filename, data, wcs = _read_profiles(file)
+        filename, data, _, step = _read_profiles(file, step)
         if data.ndim != 1:
             raise ValueError(
                 f"{filename}: an LSF profile is a 1D image; it has "
@@ -695,8 +694,7 @@ class LSFProfile(LSF):
                 + (" (an image of profiles at points of the spectral axis, "
                    "one per row, is an LSF of type profiles)"
                    if data.ndim == 2 else ""))
-        return cls(data, _header_step(filename, wcs) if step is None
-                   else step)
+        return cls(data, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -728,8 +726,9 @@ class LSFProfile(LSF):
     def _asarray_impl(
             self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
-        scale = step / channel.span(self._step)
-        return _detail.resample(self._data, (scale,), (size,), (offset,))
+        step_ratio = step / channel.span(self._step)
+        return _detail.resample(
+            self._data, (step_ratio,), (size,), (offset,))
 
 
 class LSFSum(_detail.SpreadFunctionSum, LSF):
@@ -827,87 +826,75 @@ class LSFHanning(LSF):
         check_options(LSFHanning.__init__, locals())
         self._channels = channels
 
-    def _steps(self, step: float, channel: Channel) -> int:
-        """The number of steps in a smoothed channel."""
-        steps = channel.span(self._channels * u.pix) / step
-        if abs(steps - round(steps)) > 1e-6 * steps or round(steps) < 1:
-            # (the channels times the oversampling of the axis are the
-            # steps: whole for a multiple of the denominator of the
-            # channels)
+    def _tap_spacing(self, step: float, channel: Channel) -> int:
+        """
+        The channels of the array (of width step) between the taps of the
+        smoothing: as many as span its channels.
+        """
+        spacing = channel.span(self._channels * u.pix) / step
+        if abs(spacing - round(spacing)) > 1e-6 * spacing:
+            # (whole on channels of the data divided by a multiple of the
+            # denominator of the channels)
             factor = fractions.Fraction(
                 self._channels).limit_denominator(1000).denominator
             unit = gbkfit.units.format_unit(channel.unit)
             raise RuntimeError(
                 f"a Hanning smoothing of {self._channels:g} x "
                 f"{channel.width:g} {unit} (channels of the data) spans "
-                f"{steps:g} of the "
-                f"channels it is drawn on ({step:g} {unit}), not a whole "
-                f"number of them: {self._channels:g} times the oversampling "
-                f"of the spectral axis must be whole (e.g. an oversampling of "
-                f"{factor})")
-        return round(steps)
+                f"{spacing:g} of the channels it is drawn on ({step:g} "
+                f"{unit}), not a whole number of them: it is drawn on "
+                f"channels of the data divided by a multiple of {factor} (in "
+                f"a model, by an oversampling of the spectral axis)")
+        return round(spacing)
 
     def _size_impl(self, step: float, channel: Channel) -> float:
-        return 2 * self._steps(step, channel) + 1
+        return 2 * self._tap_spacing(step, channel) + 1
 
     def _asarray_impl(
             self, step: float, size: int, offset: int, channel: Channel
     ) -> np.ndarray:
-        steps = self._steps(step, channel)
-        data = np.zeros(2 * steps + 1)
-        data[[0, steps, 2 * steps]] = 0.25, 0.5, 0.25
+        spacing = self._tap_spacing(step, channel)
+        data = np.zeros(2 * spacing + 1)
+        data[[0, spacing, 2 * spacing]] = 0.25, 0.5, 0.25
         return _detail.embed(data, (size,), (offset,))
 
 
 def _read_profiles(
-        file: DataFile
-) -> tuple[str, np.ndarray, astropy.wcs.WCS]:
+        file: DataFile, step: _Width | None
+) -> tuple[str, np.ndarray, astropy.wcs.WCS, _Width]:
     """
     The LSF profile, or profiles (one per row of an image: nz, nk), of a
-    file, along its first axis, with the filename and its world
-    coordinates (its axes as they are, unlike those of data: the axis of
-    the profiles may be spectral, and so that of the rows). The profiles
-    run along the velocities of the light: they are reversed where their
-    axis runs against them (velocities or wavelengths that decrease along
-    it, or frequencies that increase).
+    file, along its first axis, with the filename, its world coordinates
+    (its axes as they are, unlike those of data: the axis of the profiles
+    may be spectral, and so that of the rows), and the width of their
+    channels: step, or by default that of their axis, in its unit. The
+    profiles run along the velocities of the light: they are reversed
+    where their axis runs against them (velocities or wavelengths that
+    decrease along it, or frequencies that increase).
+
+    Raise ValueError if step is not given and the axis has no unit of
+    velocity, wavelength, frequency or pixels.
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
     data = np.asarray(data, dtype=float)
     wcs = parse_wcs(filename, header)
-    step = _axis_step(wcs)
-    if step.unit.is_equivalent(_KMS) or step.unit.is_equivalent(u.m):
-        against = step.value < 0
+    axis = float(wcs.pixel_scale_matrix[0, 0]) * u.Unit(wcs.wcs.cunit[0])
+    if axis.unit.is_equivalent(_KMS) or axis.unit.is_equivalent(u.m):
+        against = axis.value < 0
     else:
         # (frequencies, energies and wave numbers fall as velocities rise)
-        against = step.value > 0 and step.unit.is_equivalent(
+        against = axis.value > 0 and axis.unit.is_equivalent(
             u.Hz, u.spectral())
-    return filename, (data[..., ::-1] if against else data), wcs
-
-
-def _axis_step(wcs: astropy.wcs.WCS) -> u.Quantity:
-    """
-    The step of the first axis of the world coordinates of LSF profiles
-    (see _read_profiles), with its sign, in its unit.
-    """
-    return float(wcs.pixel_scale_matrix[0, 0]) * u.Unit(wcs.wcs.cunit[0])
-
-
-def _header_step(source: str, wcs: astropy.wcs.WCS) -> u.Quantity:
-    """
-    The width of the channels of LSF profiles, that of the first axis of
-    their world coordinates (see _read_profiles), in its unit.
-
-    Raise ValueError if it is not a unit of velocity, wavelength or
-    frequency, or pixels.
-    """
-    step = abs(_axis_step(wcs))
-    if not any(step.unit.is_equivalent(x) for x in (_KMS, u.m, u.Hz, u.pix)):
-        raise ValueError(
-            f"{source}: the axis of the profiles has no unit of velocity, "
-            f"wavelength, frequency or pixels; give the width of their "
-            f"channels (step)")
-    return step
+    if step is None:
+        if not any(axis.unit.is_equivalent(x)
+                   for x in (_KMS, u.m, u.Hz, u.pix)):
+            raise ValueError(
+                f"{filename}: the axis of the profiles has no unit of "
+                f"velocity, wavelength, frequency or pixels; give the width "
+                f"of their channels (step)")
+        step = abs(axis)
+    return filename, (data[..., ::-1] if against else data), wcs, step
 
 
 class LSFProfiles(_detail.SpreadFunctionImages, LSF):
@@ -982,7 +969,7 @@ class LSFProfiles(_detail.SpreadFunctionImages, LSF):
             its header.
         """
         check_options(LSFProfiles.from_file, locals())
-        filename, data, wcs = _read_profiles(file)
+        filename, data, wcs, step = _read_profiles(file, step)
         if data.ndim != 2:
             raise ValueError(
                 f"{filename}: LSF profiles must be an image, with one profile "
@@ -995,8 +982,6 @@ class LSFProfiles(_detail.SpreadFunctionImages, LSF):
                 raise ValueError(
                     f"{filename}: the rows have no spectral axis; give the "
                     f"points of the profiles (points)")
-        if step is None:
-            step = _header_step(filename, wcs)
         return cls(data, points, step)
 
     def dump(

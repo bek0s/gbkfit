@@ -6,7 +6,7 @@ where it points (e.g. the primary beam of a radio interferometer).
 import abc
 import os.path
 from collections.abc import Sequence
-from typing import Annotated, Any
+from typing import Annotated, Any, TypeAlias
 
 import astropy.units as u
 import numpy as np
@@ -28,13 +28,18 @@ __all__ = [
     'PrimaryBeamAiry',
     'PrimaryBeamGauss',
     'PrimaryBeamImage',
-    'PrimaryBeamRadial',
     'primary_beam_parser'
 ]
 
 
 # The argument of the Airy pattern (2 J1(u) / u)^2 at its half maximum
 _AIRY_HALF_MAXIMUM_ARG = 1.616339948310703
+
+# The world coordinates of an image (see make_grid): its reference pixel,
+# the RA and Dec there (degrees), and its rotation on the sky (degrees)
+_Rpix: TypeAlias = float | Sequence[float]
+_Rval: TypeAlias = Annotated[float | Sequence[float], Unit('deg')]
+_Rota: TypeAlias = Annotated[float, Unit('deg')]
 
 
 class PrimaryBeam(_detail.Response):
@@ -44,11 +49,9 @@ class PrimaryBeam(_detail.Response):
     and at).
     """
 
-    @abc.abstractmethod
     def response(self, grid: Grid) -> np.ndarray:
         """
-        Return the response at the pixels of a grid (at the frequency of
-        its fwhm, for a beam that varies).
+        Return the response at the pixels of a grid.
 
         Parameters
         ----------
@@ -59,10 +62,22 @@ class PrimaryBeam(_detail.Response):
         -------
         ndarray
             The response, of shape (ny, nx).
+
+        Raises
+        ------
+        RuntimeError
+            If the beam varies along the spectral axis (it is that at each
+            channel; see at).
         """
+        self._check_drawn()
+        return self._response_impl(grid)
+
+    @abc.abstractmethod
+    def _response_impl(self, grid: Grid) -> np.ndarray:
+        """The response at the pixels of a grid (see response)."""
 
 
-class PrimaryBeamRadial(PrimaryBeam):
+class _RadialPrimaryBeam(PrimaryBeam):
     """
     A response that depends on the distance from its centre, the pointing,
     where it is 1; of a width that is the same at all frequencies, or
@@ -101,7 +116,7 @@ class PrimaryBeamRadial(PrimaryBeam):
             y: Annotated[float, Unit('arcsec')] = 0,
             frequency: Annotated[float, Gt(0), Unit('Hz')] | None = None
     ):
-        check_options(PrimaryBeamRadial.__init__, locals())
+        check_options(_RadialPrimaryBeam.__init__, locals())
         self._fwhm = fwhm
         self._x = x
         self._y = y
@@ -110,7 +125,7 @@ class PrimaryBeamRadial(PrimaryBeam):
     def varies(self) -> bool:
         return self._frequency is not None
 
-    def _at(
+    def _at_impl(
             self,
             points: u.Quantity,
             convention: VelocityConvention | None
@@ -121,17 +136,17 @@ class PrimaryBeamRadial(PrimaryBeam):
                        self._y)
             for frequency in varying.to_frequencies(points, convention)]
 
-    def response(self, grid: Grid) -> np.ndarray:
+    def _response_impl(self, grid: Grid) -> np.ndarray:
         x, y = sky_positions(grid)
         radius = np.hypot(x - self._x, y - self._y)
-        return self._response_impl(radius / self._fwhm)
+        return self._profile(radius / self._fwhm)
 
     @abc.abstractmethod
-    def _response_impl(self, radius: np.ndarray) -> np.ndarray:
+    def _profile(self, radius: np.ndarray) -> np.ndarray:
         """The response at the given radii (in units of the fwhm)."""
 
 
-class PrimaryBeamGauss(PrimaryBeamRadial):
+class PrimaryBeamGauss(_RadialPrimaryBeam):
     """A Gaussian response."""
 
     @staticmethod
@@ -142,11 +157,11 @@ class PrimaryBeamGauss(PrimaryBeamRadial):
     def type_title() -> str:
         return 'Gaussian'
 
-    def _response_impl(self, radius: np.ndarray) -> np.ndarray:
+    def _profile(self, radius: np.ndarray) -> np.ndarray:
         return np.exp(-4 * np.log(2) * radius ** 2)
 
 
-class PrimaryBeamAiry(PrimaryBeamRadial):
+class PrimaryBeamAiry(_RadialPrimaryBeam):
     """The response of a uniformly illuminated dish: an Airy pattern."""
 
     @staticmethod
@@ -157,7 +172,7 @@ class PrimaryBeamAiry(PrimaryBeamRadial):
     def type_title() -> str:
         return 'Airy pattern'
 
-    def _response_impl(self, radius: np.ndarray) -> np.ndarray:
+    def _profile(self, radius: np.ndarray) -> np.ndarray:
         arg = 2 * _AIRY_HALF_MAXIMUM_ARG * radius
         arg_safe = np.where(arg > 0, arg, 1)
         return np.where(
@@ -185,7 +200,7 @@ class PrimaryBeamImage(PrimaryBeam):
     """
 
     # TODO: a cube of an image for each channel (e.g. a CASA .pb cube),
-    # which varies (see varies and at), as the beams of PrimaryBeamRadial
+    # which varies (see varies and at), as the radial beams do
 
     config_constructors = ('from_file',)
 
@@ -201,12 +216,10 @@ class PrimaryBeamImage(PrimaryBeam):
     def from_file(
             cls,
             file: DataFile,
-            step: Annotated[
-                float | Sequence[float], Unit('arcsec')] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: Annotated[
-                float | Sequence[float], Unit('deg')] | None = None,
-            rota: Annotated[float, Unit('deg')] | None = None
+            step: _detail.Step | None = None,
+            rpix: _Rpix | None = None,
+            rval: _Rval | None = None,
+            rota: _Rota | None = None
     ) -> 'PrimaryBeamImage':
         """
         Read a primary beam image, and its world coordinates, from a file.
@@ -264,12 +277,10 @@ class PrimaryBeamImage(PrimaryBeam):
     def __init__(
             self,
             data: np.ndarray,
-            step: Annotated[
-                float | Sequence[float], Unit('arcsec')] | None = None,
-            rpix: float | Sequence[float] | None = None,
-            rval: Annotated[
-                float | Sequence[float], Unit('deg')] | None = None,
-            rota: Annotated[float, Unit('deg')] | None = None
+            step: _detail.Step | None = None,
+            rpix: _Rpix | None = None,
+            rval: _Rval | None = None,
+            rota: _Rota | None = None
     ):
         check_options(PrimaryBeamImage.__init__, locals())
         data = np.asarray(data, dtype=float)
@@ -280,7 +291,7 @@ class PrimaryBeamImage(PrimaryBeam):
         self._grid = make_grid(
             data.shape[::-1], step, rpix, rval, rota)
 
-    def response(self, grid: Grid) -> np.ndarray:
+    def _response_impl(self, grid: Grid) -> np.ndarray:
         check_overlap(grid, self._grid, "the primary beam image")
         pixel_x, pixel_y = pixels_on(grid, self._grid)
         return scipy.ndimage.map_coordinates(

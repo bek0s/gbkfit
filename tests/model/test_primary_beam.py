@@ -124,6 +124,9 @@ def test_the_primary_beam_of_a_dish_scales_with_the_wavelength():
     responses = [x.response(grid)[0, 0]
                  for x in beam.at([1.4e9, 0.7e9] * u.Hz)]
     np.testing.assert_allclose(responses, [1 / 16, 1 / 2])
+    # (it is drawn as it is at each channel, not itself: it was at 1.4 GHz)
+    with pytest.raises(RuntimeError, match="as it is at each point"):
+        beam.response(grid)
     # (and at radio velocities, of a rest frequency)
     half, = beam.at(
         [C / 2] * u.km / u.s, VelocityConvention(1.4e9 * u.Hz))

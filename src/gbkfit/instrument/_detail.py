@@ -9,9 +9,8 @@ convolutions of terms that vary), and helpers to draw them.
 import abc
 import copy
 import os
-import typing
-from collections.abc import Callable, Mapping, Sequence
-from typing import Any, Self
+from collections.abc import Mapping, Sequence
+from typing import Annotated, Any, Self, TypeAlias
 
 import astropy.units as u
 import numpy as np
@@ -20,8 +19,8 @@ import scipy.ndimage
 import gbkfit.math
 import gbkfit.units
 from gbkfit.config import (
-    TypedSerializable, config_constructor, config_path, dump_quantity,
-    option_types, parse_options_for_callable, union_members, unit_of,
+    TypedSerializable, Unit, config_path, constructor_of, dump_quantity,
+    is_quantity, option_types, parse_options_for_callable, unit_of,
     varying_options)
 from gbkfit.grid import VelocityConvention
 from gbkfit.io import write_image
@@ -36,10 +35,14 @@ MIN_EXTENT = 8
 WING_FLUX = 0.01
 
 
-# Why a PSF or an LSF that varies along the spectral axis is not drawn
+# The size of the pixels of an image on the sky along x and y (arcsec);
+# of one number, square pixels
+Step: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
+
+# Why a response that varies along the spectral axis is not drawn
 NOT_DRAWN = (
-    "a PSF or an LSF that varies along the spectral axis is drawn as it is "
-    "at each point of it (see at)")
+    "a PSF, an LSF or a primary beam that varies along the spectral axis "
+    "is drawn as it is at each point of it (see at)")
 
 
 def odd_size(kernel: 'SpreadFunction', *size: float) -> tuple[int, ...]:
@@ -77,44 +80,46 @@ def embed(
         kernel: np.ndarray, size: Sequence[int], offset: Sequence[int]
 ) -> np.ndarray:
     """
-    Put a kernel of odd shape (numpy order) in an array of the given size
-    (FITS order), with its centre at size // 2 + offset on each axis, as
-    the analytic PSFs and LSFs put theirs. It must fit.
+    Put a kernel of odd shape (numpy order), normalised to sum to 1, in an
+    array of the given size (FITS order), with its centre at size // 2 +
+    offset on each axis, as the analytic PSFs and LSFs put theirs. Like
+    theirs, a kernel larger than the array is cut to it, and normalised
+    again.
     """
     shape = tuple(size)[::-1]
     offset = tuple(offset)[::-1]
     data = np.zeros(shape)
-    slices = []
+    into, of = [], []
     for n, k, o in zip(shape, kernel.shape, offset):
         start = n // 2 + o - k // 2
-        if start < 0 or start + k > n:
-            raise RuntimeError(
-                f"a kernel of size {k} does not fit in an array of size {n}")
-        slices.append(slice(start, start + k))
-    data[tuple(slices)] = kernel
-    return data
+        low, high = max(start, 0), min(start + k, n)
+        into.append(slice(low, high))
+        of.append(slice(low - start, high - start))
+    data[tuple(into)] = kernel[tuple(of)]
+    cut = any(x.stop - x.start < k for x, k in zip(of, kernel.shape))
+    return data / np.sum(data) if cut else data
 
 
 def resample(
         image: np.ndarray,
-        scale: Sequence[float],
+        step_ratio: Sequence[float],
         size: Sequence[int],
         offset: Sequence[int]
 ) -> np.ndarray:
     """
     Resample a measured PSF or LSF (an image, numpy order) to an array of
-    the given size (FITS order), of pixels scale times its own along each
-    axis (FITS order): its centre at size // 2 + offset on each axis, as
-    the analytic PSFs and LSFs put theirs, with splines of order 5, and
+    the given size (FITS order), of pixels step_ratio times its own along
+    each axis (FITS order): its centre at size // 2 + offset on each axis,
+    as the analytic PSFs and LSFs put theirs, with splines of order 5, and
     normalised to sum to 1.
     """
     shape = tuple(size)[::-1]
-    scale = tuple(scale)[::-1]
+    step_ratio = tuple(step_ratio)[::-1]
     offset = tuple(offset)[::-1]
     # The pixels of the array in those of the image, from centre to centre
     pixels = np.meshgrid(*(
-        (np.arange(n) - (n // 2 + o)) * s + (k / 2 - 0.5)
-        for n, s, o, k in zip(shape, scale, offset, image.shape)),
+        (np.arange(n) - (n // 2 + o)) * r + (k / 2 - 0.5)
+        for n, r, o, k in zip(shape, step_ratio, offset, image.shape)),
         indexing='ij')
     data = scipy.ndimage.map_coordinates(
         image, pixels, order=5, mode='grid-constant')
@@ -153,27 +158,6 @@ def _common_range(
 ) -> tuple[float, float]:
     """The range of velocities where all of several ranges are."""
     return max(low for low, _ in ranges), min(high for _, high in ranges)
-
-
-def _constructor(
-        cls: type, options: Mapping[str, Any]
-) -> tuple[Callable, Callable]:
-    """
-    Return the constructor of a class that options are of (see
-    config_constructor), as a function to read its parameters from, and
-    as a callable that makes the object.
-    """
-    name = config_constructor(cls, options)
-    if name == '__init__':
-        return cls.__init__, cls
-    return getattr(cls, name), getattr(cls, name)
-
-
-def _is_quantity(type_: Any) -> bool:
-    """Return whether an option of an annotation is a Quantity."""
-    return any(
-        x is u.Quantity or typing.get_args(x)[:1] == (u.Quantity,)
-        for x in union_members(type_))
 
 
 class Response(TypedSerializable, abc.ABC):
@@ -257,9 +241,9 @@ class Response(TypedSerializable, abc.ABC):
                 f"a sequence (1D); their shape is {points.shape}")
         if not self.varies():
             return [self] * len(points)
-        return self._at(points, convention)
+        return self._at_impl(points, convention)
 
-    def _at(
+    def _at_impl(
             self,
             points: u.Quantity,
             convention: VelocityConvention | None
@@ -268,7 +252,16 @@ class Response(TypedSerializable, abc.ABC):
         The response at each of the points (1D) of one that varies (see
         at): those that vary override it.
         """
-        raise NotImplementedError(f"{type(self).__name__}._at")
+        raise NotImplementedError(f"{type(self).__name__}._at_impl")
+
+    def _check_drawn(self) -> None:
+        """
+        Raise RuntimeError if it varies along the spectral axis: then it is
+        drawn (or applied) as it is at each point of it (see at), not
+        itself.
+        """
+        if self.varies():
+            raise RuntimeError(NOT_DRAWN)
 
 
 class SpreadFunction(Response):
@@ -276,18 +269,14 @@ class SpreadFunction(Response):
     A PSF or an LSF: what they share beyond what responses do. Their
     analytic ones can vary by tables of their options (see
     AnalyticSpreadFunction), and their sums and convolutions vary where
-    their terms do (see SpreadFunctionTerms), each of its family (see
-    _TERMS_OPTION and _tables_class).
+    their terms do (see SpreadFunctionTerms, and _TERMS_OPTION). Those
+    that vary are known between the points of the spectral axis they are
+    given at (see velocity_range and check_covers).
     """
 
     # The option of the terms of the sums and the convolutions of the
     # family (e.g. psfs)
     _TERMS_OPTION: str
-
-    @staticmethod
-    @abc.abstractmethod
-    def _tables_class() -> type['SpreadFunctionTables']:
-        """The class of those of the family whose options vary."""
 
     def velocity_range(
             self, convention: VelocityConvention | None = None
@@ -308,6 +297,42 @@ class SpreadFunction(Response):
             varies.
         """
         return -np.inf, np.inf
+
+    def check_covers(
+            self,
+            velocities: np.ndarray,
+            convention: VelocityConvention | None,
+            desc: str
+    ) -> None:
+        """
+        Check that the PSF or the LSF is known at velocities of the
+        spectral axis (e.g. of the channels of data), to a millionth of
+        their spacing (of a km/s, for one): beyond the points it is given
+        at, it would be that of the nearest point.
+
+        Parameters
+        ----------
+        velocities : ndarray
+            The velocities (km/s), evenly spaced.
+        convention : VelocityConvention, optional
+            The velocity convention of the spectral axis.
+        desc : str
+            What the PSF or the LSF is, in messages (e.g. 'the PSF').
+
+        Raises
+        ------
+        ValueError
+            If it is not known at a velocity.
+        """
+        low, high = self.velocity_range(convention)
+        first, last = np.min(velocities), np.max(velocities)
+        spacing = (last - first) / (len(velocities) - 1) \
+            if len(velocities) > 1 else 1.0
+        margin = 1e-6 * spacing
+        if first < low - margin or last > high + margin:
+            raise ValueError(
+                f"{desc} is given from {low:g} to {high:g} km/s, but the "
+                f"channels of the data go from {first:g} to {last:g} km/s")
 
 
 class AnalyticSpreadFunction(SpreadFunction):
@@ -350,8 +375,8 @@ class AnalyticSpreadFunction(SpreadFunction):
             The PSF or the LSF.
         """
         tables = {}
-        for name in varying_options(_constructor(cls, info)[0]):
-            if isinstance(info.get(name), Mapping) and 'points' in info[name]:
+        for name in varying_options(constructor_of(cls, info)[0]):
+            if SpectralTable.is_config(info.get(name)):
                 with config_path(name):
                     tables[name] = SpectralTable.load(info[name])
         if tables:
@@ -386,6 +411,11 @@ class AnalyticSpreadFunction(SpreadFunction):
 
     def __init__(self, scale: float | u.Quantity):
         self._scale = scale
+
+    @staticmethod
+    @abc.abstractmethod
+    def _tables_class() -> type['SpreadFunctionTables']:
+        """The class of those of its family whose options vary."""
 
     def _given_as(self, **given: Any) -> Self:
         """Itself, with the options it was given, which dump writes."""
@@ -455,7 +485,7 @@ class SpreadFunctionTerms(SpreadFunction):
     def varies(self) -> bool:
         return any(term.varies() for term in self._terms)
 
-    def _at(
+    def _at_impl(
             self,
             points: u.Quantity,
             convention: VelocityConvention | None
@@ -598,7 +628,7 @@ class SpreadFunctionTables(VaryingSpreadFunction):
             name: table.dump() for name, table in self._tables.items()}
 
     def __init__(self, cls: type, options: dict[str, Any]):
-        signature, self._make = _constructor(cls, options)
+        signature, self._make = constructor_of(cls, options)
         tables = {
             name: value for name, value in options.items()
             if isinstance(value, SpectralTable)}
@@ -607,28 +637,30 @@ class SpreadFunctionTables(VaryingSpreadFunction):
                 f"none of the options of {cls.__qualname__} is a table of "
                 f"values along the spectral axis")
         types = option_types(signature)
+        # The unit of the values of each option: of its annotation, or of
+        # its table for a Quantity (None)
+        self._units = {}
         for name, table in tables.items():
             if name not in varying_options(signature):
                 raise ValueError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
-            if table.unit() is None and _is_quantity(types[name]):
-                raise ValueError(
-                    f"option '{name}' of {cls.__qualname__} has a unit: give "
-                    f"that of the values of its table (unit)")
-        self._cls = cls
-        self._units = {
-            name: None if _is_quantity(types[name])
-            else u.Unit(unit_of(types[name]) or '')
-            for name in tables}
-        for name, unit in self._units.items():
-            given = tables[name].unit()
-            if unit is not None and given is not None \
-                    and not given.is_equivalent(unit):
+            given = table.unit()
+            if is_quantity(types[name]):
+                if given is None:
+                    raise ValueError(
+                        f"option '{name}' of {cls.__qualname__} has a unit: "
+                        f"give that of the values of its table (unit)")
+                self._units[name] = None
+                continue
+            unit = u.Unit(unit_of(types[name]) or '')
+            if given is not None and not given.is_equivalent(unit):
                 raise ValueError(
                     f"the values of the table of option '{name}' are in "
                     f"'{gbkfit.units.format_unit(given)}', which cannot be "
                     f"converted to '{gbkfit.units.format_unit(unit)}'")
+            self._units[name] = unit
+        self._cls = cls
         self._constants = parse_options_for_callable(
             {name: value for name, value in options.items()
              if name not in tables},
@@ -650,9 +682,9 @@ class SpreadFunctionTables(VaryingSpreadFunction):
         points = merged_points(
             [table.points() for table in self._tables.values()])
         if points is not None:
-            self._at(points, None)
+            self._at_impl(points, None)
 
-    def _at(
+    def _at_impl(
             self,
             points: u.Quantity,
             convention: VelocityConvention | None
@@ -740,7 +772,7 @@ class SpreadFunctionImages(VaryingSpreadFunction):
         """The configuration of the points."""
         return dump_quantity(self._points.quantity())
 
-    def _at(
+    def _at_impl(
             self,
             points: u.Quantity,
             convention: VelocityConvention | None

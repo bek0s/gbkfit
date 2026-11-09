@@ -44,9 +44,11 @@ __all__ = [
 ]
 
 
-# The size of the pixels of images of a PSF along x and y (arcsec); of
-# one number, square pixels
-_Step: TypeAlias = Annotated[float | Sequence[float], Unit('arcsec')]
+# The options of the analytic PSFs: a width (arcsec), an axis ratio
+# (minor over major) and a position angle (degrees, of the major axis)
+_Width: TypeAlias = Annotated[float, Gt(0), Unit('arcsec'), Varying()]
+_Ratio: TypeAlias = Annotated[float, Gt(0), Le(1), Varying()]
+_Angle: TypeAlias = Annotated[float, Unit('deg'), Varying()]
 
 
 class PSF(_detail.SpreadFunction):
@@ -55,10 +57,6 @@ class PSF(_detail.SpreadFunction):
     """
 
     _TERMS_OPTION = 'psfs'
-
-    @staticmethod
-    def _tables_class() -> type['PSFTables']:
-        return PSFTables
 
     def size(self, step: tuple[float, float]) -> tuple[int, int]:
         """
@@ -77,8 +75,10 @@ class PSF(_detail.SpreadFunction):
         Raises
         ------
         RuntimeError
-            If the wings of the PSF are too heavy for a finite array.
+            If the PSF varies along the spectral axis (see at), or its
+            wings are too heavy for a finite array.
         """
+        self._check_drawn()
         return _detail.odd_size(self, *self._size_impl(step))
 
     def asarray(
@@ -96,7 +96,7 @@ class PSF(_detail.SpreadFunction):
         step : tuple of float
             The size of the pixels along x and y (arcsec).
         size : tuple of int, optional
-            The number of pixels along x and y; by default, that of size.
+            The number of pixels along x and y; by default, size(step).
         offset : tuple of int, optional
             The offset of the centre of the PSF from the pixel size // 2,
             along x and y. Each size + offset must be odd.
@@ -113,8 +113,10 @@ class PSF(_detail.SpreadFunction):
         Raises
         ------
         RuntimeError
-            If a size + offset is even.
+            If the PSF varies along the spectral axis (see at), or a size
+            + offset is even.
         """
+        self._check_drawn()
         if size is None:
             size = self.size(step)
         _detail.check_odd_centre(size, offset, "PSF")
@@ -213,6 +215,10 @@ class _AnalyticPSF(_detail.AnalyticSpreadFunction, PSF):
         self._ratio = ratio
         self._posa = posa
 
+    @staticmethod
+    def _tables_class() -> type['PSFTables']:
+        return PSFTables
+
     def _size_impl(self, step: tuple[float, float]) -> tuple[float, float]:
         extent = self._extent(self._scale)
         return 2 * extent / step[0], 2 * extent / step[1]
@@ -299,9 +305,9 @@ class PSFGauss(_AnalyticPSF):
 
     def __init__(
             self,
-            sigma: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
-            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
-            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            sigma: _Width,
+            ratio: _Ratio = 1.0,
+            posa: _Angle = 0.0
     ):
         check_options(PSFGauss.__init__, locals())
         super().__init__(sigma, ratio, posa)
@@ -310,9 +316,9 @@ class PSFGauss(_AnalyticPSF):
     @classmethod
     def from_fwhm(
             cls,
-            fwhm: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
-            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
-            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            fwhm: _Width,
+            ratio: _Ratio = 1.0,
+            posa: _Angle = 0.0
     ) -> 'PSFGauss':
         """
         Make the Gaussian of a full width at half maximum along its major
@@ -340,9 +346,9 @@ class PSFGauss(_AnalyticPSF):
     @classmethod
     def from_beam(
             cls,
-            bmaj: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
-            bmin: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
-            bpa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            bmaj: _Width,
+            bmin: _Width,
+            bpa: _Angle = 0.0
     ) -> 'PSFGauss':
         """
         Make the Gaussian of a radio beam: by the full widths at half
@@ -469,10 +475,10 @@ class PSFGGauss(_AnalyticPSF):
 
     def __init__(
             self,
-            alpha: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            alpha: _Width,
             beta: Annotated[float, Gt(0), Varying()],
-            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
-            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            ratio: _Ratio = 1.0,
+            posa: _Angle = 0.0
     ):
         check_options(PSFGGauss.__init__, locals())
         super().__init__(alpha, ratio, posa)
@@ -482,10 +488,10 @@ class PSFGGauss(_AnalyticPSF):
     @classmethod
     def from_fwhm(
             cls,
-            fwhm: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            fwhm: _Width,
             beta: Annotated[float, Gt(0), Varying()],
-            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
-            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            ratio: _Ratio = 1.0,
+            posa: _Angle = 0.0
     ) -> 'PSFGGauss':
         """
         Make the generalised Gaussian of a full width at half maximum
@@ -558,10 +564,10 @@ class PSFMoffat(_AnalyticPSF):
 
     def __init__(
             self,
-            alpha: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            alpha: _Width,
             beta: Annotated[float, Gt(1), Varying()],
-            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
-            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            ratio: _Ratio = 1.0,
+            posa: _Angle = 0.0
     ):
         check_options(PSFMoffat.__init__, locals())
         super().__init__(alpha, ratio, posa)
@@ -571,10 +577,10 @@ class PSFMoffat(_AnalyticPSF):
     @classmethod
     def from_fwhm(
             cls,
-            fwhm: Annotated[float, Gt(0), Unit('arcsec'), Varying()],
+            fwhm: _Width,
             beta: Annotated[float, Gt(1), Varying()],
-            ratio: Annotated[float, Gt(0), Le(1), Varying()] = 1.0,
-            posa: Annotated[float, Unit('deg'), Varying()] = 0.0
+            ratio: _Ratio = 1.0,
+            posa: _Angle = 0.0
     ) -> 'PSFMoffat':
         """
         Make the Moffat of a full width at half maximum along its major
@@ -615,6 +621,53 @@ class PSFMoffat(_AnalyticPSF):
         return gbkfit.math.moffat_1d_fun(r, 1, 0, scale, self._beta)
 
 
+def _read_images(
+        file: DataFile,
+        step: _detail.Step | None,
+        spectral_axis: int | None = None
+) -> tuple[str, np.ndarray, astropy.wcs.WCS, _detail.Step]:
+    """
+    The PSF image or images of a file in the orientation of the model, as
+    data are read (see model_header), with the filename, their world
+    coordinates in it, and the size of their pixels: step, or by default
+    that of their celestial axes (arcsec). An image is without its axes of
+    length 1, and images (nz, ny, nx) have their spectral axis, if any, at
+    the axis spectral_axis.
+
+    Raise ValueError if step is not given and there are no celestial axes.
+    """
+    filename = split_data_file(file)[0]
+    data, header = read_image(file)
+    header, orientation = model_header(
+        filename, header, data.shape, spectral_axis=spectral_axis)
+    data = orientation.apply(np.asarray(data, dtype=float))
+    wcs = parse_wcs(filename, header)
+    if step is None:
+        if not wcs.has_celestial:
+            raise ValueError(
+                f"{filename}: the header has no celestial axes; give the "
+                f"size of the pixels (step)")
+        step = tuple(
+            (astropy.wcs.utils.proj_plane_pixel_scales(wcs.celestial)
+             * 3600).tolist())
+    return filename, data, wcs, step
+
+
+def _as_step(step: _detail.Step) -> tuple[float, float]:
+    """
+    The size of the pixels of PSF images along x and y (see Step).
+
+    Raise ValueError unless it is one positive number, or two.
+    """
+    pair = ((float(step),) * 2 if np.isscalar(step)
+            else tuple(float(x) for x in step))
+    if len(pair) != 2 or not all(x > 0 for x in pair):
+        raise ValueError(
+            f"the size of the pixels of PSF images (step) is a positive "
+            f"number, or two (along x and y); it is {step}")
+    return pair
+
+
 class PSFImage(PSF):
     """
     A measured PSF, from an image.
@@ -648,7 +701,7 @@ class PSFImage(PSF):
 
     @classmethod
     def from_file(
-            cls, file: DataFile, step: _Step | None = None
+            cls, file: DataFile, step: _detail.Step | None = None
     ) -> 'PSFImage':
         """
         Read a PSF image from a file, in the orientation of the model, as
@@ -675,13 +728,13 @@ class PSFImage(PSF):
             the header has no celestial axes.
         """
         check_options(PSFImage.from_file, locals())
-        filename, data, wcs = _read_images(file)
+        filename, data, _, step = _read_images(file, step)
         if data.ndim != 2:
             raise ValueError(
                 f"{filename}: a PSF image has two axes; it has {data.ndim}"
                 + (" (a cube of images at points of the spectral axis is a "
                    "PSF of type images)" if data.ndim == 3 else ""))
-        return cls(data, _header_step(filename, wcs) if step is None else step)
+        return cls(data, step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -691,7 +744,7 @@ class PSFImage(PSF):
             self, self._data, 'psf', prefix, dump_path, overwrite) | dict(
             step=list(self._step))
 
-    def __init__(self, data: np.ndarray, step: _Step):
+    def __init__(self, data: np.ndarray, step: _detail.Step):
         check_options(PSFImage.__init__, locals())
         data = np.squeeze(np.asarray(data, dtype=float))
         if data.ndim != 2:
@@ -724,8 +777,116 @@ class PSFImage(PSF):
             offset: tuple[int, int],
             rota: float
     ) -> np.ndarray:
-        scale = (step[0] / self._step[0], step[1] / self._step[1])
-        return _detail.resample(self._data, scale, size, offset)
+        step_ratio = (step[0] / self._step[0], step[1] / self._step[1])
+        return _detail.resample(self._data, step_ratio, size, offset)
+
+
+class PSFImages(_detail.SpreadFunctionImages, PSF):
+    """
+    A measured PSF that changes with wavelength, from a cube.
+
+    It is given as images at points of the spectral axis (e.g. simulated
+    by STPSF, or of a star in the data). At each channel it is the image
+    PSF (see PSFImage) of the images of the two nearest points,
+    interpolated linearly; beyond the points, that of the nearest image.
+    Pixels of the images that are not finite hold no light.
+
+    Configurations give its file, a cube of the images (see from_file).
+
+    Parameters
+    ----------
+    data : ndarray
+        The images (nz, ny, nx); each holds light.
+    points : Quantity
+        The point of each image: wavelengths, frequencies or velocities.
+    step : float or Sequence of float
+        The size of the pixels of the images along x and y (arcsec); of
+        one number, square pixels.
+    """
+
+    config_constructors = ('from_file',)
+
+    @staticmethod
+    def type() -> str:
+        return 'images'
+
+    @staticmethod
+    def type_title() -> str:
+        return 'Image per wavelength (measured)'
+
+    @classmethod
+    def from_file(
+            cls,
+            file: DataFile,
+            points: u.Quantity | None = None,
+            step: _detail.Step | None = None
+    ) -> 'PSFImages':
+        """
+        Read PSF images from a cube (nz, ny, nx), in the orientation of
+        the model, as data are (see model_header): its spectral axis last.
+
+        Parameters
+        ----------
+        file : DataFile
+            The file of the cube, and where it is in it (see read_image).
+        points : Quantity, optional
+            The point of each image: wavelengths, frequencies or velocities;
+            by default, those of the spectral axis of the cube.
+        step : float or Sequence of float, optional
+            The size of the pixels of the images along x and y (arcsec); by
+            default, that of the celestial axes of the cube.
+
+        Returns
+        -------
+        PSFImages
+            The PSF.
+
+        Raises
+        ------
+        ValueError
+            If the file has no cube, its header has invalid world
+            coordinates (see model_header), or the points or step are
+            neither given nor in its header.
+        """
+        check_options(PSFImages.from_file, locals())
+        filename, data, wcs, step = _read_images(file, step, spectral_axis=2)
+        if data.ndim != 3:
+            raise ValueError(
+                f"{filename}: PSF images must be a cube (nz, ny, nx); it has "
+                f"{data.ndim} axes"
+                + (" (one image is a PSF of type image)" if data.ndim == 2
+                   else ""))
+        if points is None:
+            points = spectral_points(wcs, data.shape[0])
+            if points is None:
+                raise ValueError(
+                    f"{filename}: the cube has no spectral axis; give the "
+                    f"points of its images (points)")
+        return cls(data, points, step)
+
+    def dump(
+            self, prefix: str = '', dump_path: bool = True,
+            overwrite: bool = False
+    ) -> dict[str, Any]:
+        return _detail.dump_image(
+            self, self._data, 'psf_images', prefix, dump_path, overwrite
+        ) | dict(points=self._dump_points(), step=list(self._step))
+
+    def __init__(
+            self, data: np.ndarray, points: u.Quantity, step: _detail.Step
+    ):
+        check_options(PSFImages.__init__, locals())
+        data = np.asarray(data, dtype=float)
+        if data.ndim != 3:
+            raise ValueError(
+                f"PSF images must be of shape (nz, ny, nx); their shape is "
+                f"{data.shape}")
+        super().__init__(
+            np.where(np.isfinite(data), data, 0), points, "PSF images")
+        self._step = _as_step(step)
+
+    def _of_image(self, data: np.ndarray) -> PSFImage:
+        return PSFImage(data, self._step)
 
 
 class PSFSum(_detail.SpreadFunctionSum, PSF):
@@ -801,162 +962,6 @@ class PSFConvolution(_detail.SpreadFunctionConvolution, PSF):
         for psf in self._terms:
             data = scipy.signal.convolve(data, psf.asarray(step, rota=rota))
         return _detail.embed(data / data.sum(), size, offset)
-
-
-def _read_images(
-        file: DataFile, spectral_axis: int | None = None
-) -> tuple[str, np.ndarray, astropy.wcs.WCS]:
-    """
-    The PSF image or images of a file in the orientation of the model, as
-    data are read (see model_header), with the filename and their world
-    coordinates in it: an image without its axes of length 1, or images
-    (nz, ny, nx) whose spectral axis, if any, is the axis spectral_axis.
-    """
-    filename = split_data_file(file)[0]
-    data, header = read_image(file)
-    header, orientation = model_header(
-        filename, header, data.shape, spectral_axis=spectral_axis)
-    data = orientation.apply(np.asarray(data, dtype=float))
-    return filename, data, parse_wcs(filename, header)
-
-
-def _header_step(source: str, wcs: astropy.wcs.WCS) -> tuple[float, float]:
-    """
-    The size of the pixels of PSF images along x and y (arcsec), from
-    the celestial axes of their world coordinates.
-
-    Raise ValueError if they have none.
-    """
-    if not wcs.has_celestial:
-        raise ValueError(
-            f"{source}: the header has no celestial axes; give the size of "
-            f"the pixels (step)")
-    return tuple(
-        (astropy.wcs.utils.proj_plane_pixel_scales(wcs.celestial)
-         * 3600).tolist())
-
-
-def _as_step(step: float | Sequence[float]) -> tuple[float, float]:
-    """
-    The size of the pixels of PSF images along x and y (see _Step).
-
-    Raise ValueError unless it is one positive number, or two.
-    """
-    step = ((float(step),) * 2 if np.isscalar(step)
-            else tuple(float(x) for x in step))
-    if len(step) != 2 or not all(x > 0 for x in step):
-        raise ValueError(
-            f"the size of the pixels of PSF images (step) is a positive "
-            f"number, or two (along x and y); it is {step}")
-    return step
-
-
-class PSFImages(_detail.SpreadFunctionImages, PSF):
-    """
-    A measured PSF that changes with wavelength, from a cube.
-
-    It is given as images at points of the spectral axis (e.g. simulated
-    by STPSF, or of a star in the data). At each channel it is the image
-    PSF (see PSFImage) of the images of the two nearest points,
-    interpolated linearly; beyond the points, that of the nearest image.
-    Pixels of the images that are not finite hold no light.
-
-    Configurations give its file, a cube of the images (see from_file).
-
-    Parameters
-    ----------
-    data : ndarray
-        The images (nz, ny, nx); each holds light.
-    points : Quantity
-        The point of each image: wavelengths, frequencies or velocities.
-    step : float or Sequence of float
-        The size of the pixels of the images along x and y (arcsec); of
-        one number, square pixels.
-    """
-
-    config_constructors = ('from_file',)
-
-    @staticmethod
-    def type() -> str:
-        return 'images'
-
-    @staticmethod
-    def type_title() -> str:
-        return 'Image per wavelength (measured)'
-
-    @classmethod
-    def from_file(
-            cls,
-            file: DataFile,
-            points: u.Quantity | None = None,
-            step: _Step | None = None
-    ) -> 'PSFImages':
-        """
-        Read PSF images from a cube (nz, ny, nx), in the orientation of
-        the model, as data are (see model_header): its spectral axis last.
-
-        Parameters
-        ----------
-        file : DataFile
-            The file of the cube, and where it is in it (see read_image).
-        points : Quantity, optional
-            The point of each image: wavelengths, frequencies or velocities;
-            by default, those of the spectral axis of the cube.
-        step : float or Sequence of float, optional
-            The size of the pixels of the images along x and y (arcsec); by
-            default, that of the celestial axes of the cube.
-
-        Returns
-        -------
-        PSFImages
-            The PSF.
-
-        Raises
-        ------
-        ValueError
-            If the file has no cube, its header has invalid world
-            coordinates (see model_header), or the points or step are
-            neither given nor in its header.
-        """
-        check_options(PSFImages.from_file, locals())
-        filename, data, wcs = _read_images(file, spectral_axis=2)
-        if data.ndim != 3:
-            raise ValueError(
-                f"{filename}: PSF images must be a cube (nz, ny, nx); it has "
-                f"{data.ndim} axes"
-                + (" (one image is a PSF of type image)" if data.ndim == 2
-                   else ""))
-        if points is None:
-            points = spectral_points(wcs, data.shape[0])
-            if points is None:
-                raise ValueError(
-                    f"{filename}: the cube has no spectral axis; give the "
-                    f"points of its images (points)")
-        if step is None:
-            step = _header_step(filename, wcs)
-        return cls(data, points, step)
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return _detail.dump_image(
-            self, self._data, 'psf_images', prefix, dump_path, overwrite
-        ) | dict(points=self._dump_points(), step=list(self._step))
-
-    def __init__(self, data: np.ndarray, points: u.Quantity, step: _Step):
-        check_options(PSFImages.__init__, locals())
-        data = np.asarray(data, dtype=float)
-        if data.ndim != 3:
-            raise ValueError(
-                f"PSF images must be of shape (nz, ny, nx); their shape is "
-                f"{data.shape}")
-        super().__init__(
-            np.where(np.isfinite(data), data, 0), points, "PSF images")
-        self._step = _as_step(step)
-
-    def _of_image(self, data: np.ndarray) -> PSFImage:
-        return PSFImage(data, self._step)
 
 
 class PSFTables(_detail.SpreadFunctionTables, PSF):

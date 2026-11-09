@@ -455,8 +455,9 @@ def test_lsf_hanning():
         LSFHanning(0.5).on(data).asarray(5.0), [0.25, 0.5, 0.25])
     with pytest.raises(RuntimeError, match="not a whole number of them"):
         LSFHanning().on(data).asarray(3.0)
-    # (of 1.5 channels, an oversampling of a multiple of 2)
-    with pytest.raises(RuntimeError, match=r"an oversampling of 2\)"):
+    # (of 1.5 channels, on channels of the data divided by a multiple of 2;
+    # as the noise draws it, on those of the data)
+    with pytest.raises(RuntimeError, match="divided by a multiple of 2"):
         LSFHanning(1.5).on(data).asarray(10.0)
     with pytest.raises(RuntimeError, match="whose width is not given"):
         LSFHanning().on(AT).asarray(3.0)
@@ -789,3 +790,18 @@ def test_measured_psfs_and_lsfs_are_checked_as_they_are_made(tmp_path):
     assert psf._step == (0.05, 0.05)
     with pytest.raises(ValueError, match="shape is \\(\\)"):
         psf.at(6000 * u.AA)
+
+
+def test_convolutions_are_cut_to_the_arrays_they_are_drawn_on():
+    # As the other PSFs and LSFs are (e.g. the correlation of the noise of
+    # small data, drawn on 2n - 1 pixels or channels): it raised
+    lsf = LSFConvolution([LSFHanning(), LSFGauss(kms(20))])
+    channel = Channel(0.0, 10.0)
+    assert lsf.on(channel).size(10.0) > 19
+    small = lsf.on(channel).asarray(10.0, 19)
+    whole = lsf.on(channel).asarray(10.0)
+    cut = (whole.size - 19) // 2
+    np.testing.assert_allclose(
+        small, whole[cut:-cut] / whole[cut:-cut].sum(), rtol=1e-12)
+    psf = PSFConvolution([PSFGauss(1.0), PSFGauss(1.0)])
+    assert psf.asarray((0.5, 0.5), (9, 9)).sum() == pytest.approx(1)
