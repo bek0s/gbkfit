@@ -22,8 +22,7 @@ from .spectral import _axis_of_rest, _read_as_velocities, _stated_header
 __all__ = [
     'Orientation',
     'model_axis_order',
-    'model_header',
-    'to_model_axes'
+    'model_header'
 ]
 
 
@@ -328,35 +327,6 @@ def _flip_wcs(
     wcs.wcs.crpix[axis] = size + 1 - wcs.wcs.crpix[axis]
     wcs.wcs.set()
     return wcs
-
-
-def to_model_axes(
-        data: np.ndarray,
-        wcs: astropy.wcs.WCS
-) -> tuple[np.ndarray, astropy.wcs.WCS]:
-    """
-    Return data and their world coordinates in the orientation of the
-    model.
-
-    The axes are reordered (see model_axis_order), and those that the
-    model needs reversed are reversed (see _model_axis_flips).
-
-    Parameters
-    ----------
-    data : np.ndarray
-        The data.
-    wcs : astropy.wcs.WCS
-        Their world coordinates.
-
-    Returns
-    -------
-    np.ndarray
-        The data.
-    astropy.wcs.WCS
-        Their world coordinates.
-    """
-    wcs, order, flips = _model_wcs(wcs, data.shape[::-1])
-    return Orientation(data.shape, data.shape, order, flips).apply(data), wcs
 
 
 def _model_wcs(

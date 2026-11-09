@@ -55,6 +55,14 @@ _C = astropy.constants.c.to_value(_KMS)
 _Thing = TypeVar('_Thing')
 
 
+class _NoConvention(ValueError):
+    """
+    The error of a conversion between velocities and wavelengths or
+    frequencies without the convention of the velocities of the spectral
+    axis (see _equivalency).
+    """
+
+
 def _convert(
         points: u.Quantity,
         unit: u.UnitBase,
@@ -83,7 +91,7 @@ def _equivalency(
         If there is no convention, or it has no rest.
     """
     if convention is None:
-        raise ValueError(
+        raise _NoConvention(
             "velocities and wavelengths or frequencies are converted with "
             "the convention of the velocities of the spectral axis, which "
             "is not given")
@@ -225,7 +233,8 @@ def blend(
     list of tuple
         For each point, (i, j, t): it takes 1 - t of the thing of the
         point i and t of that of the point j, the two nearest points;
-        beyond the points, all of the nearest (t = 0).
+        beyond the points, all of the nearest: of i (t = 0) below the
+        first, and of j (t = 1) above the last.
     """
     order = np.argsort(points.value)
     positions = np.interp(
@@ -427,9 +436,8 @@ class SpectralTable(Serializable):
         Raises
         ------
         ValueError
-            If the convention is needed but not given or has no convention,
-            or the values cannot be
-            converted to the unit of the option.
+            If the convention is needed but not given, or has no rest; or
+            the values cannot be converted to the unit of the option.
         """
         x = _convert(as_points(points), self._points.unit, convention)
         order = np.argsort(self._points.value)
@@ -532,8 +540,9 @@ class _VaryingOptions:
     Raises
     ------
     ValueError
-        If an option that cannot vary is a table, or the options, or the
-        values of the tables, are invalid.
+        If an option that cannot vary is a table, or the options are
+        invalid, or so are the values of the tables at their points (see
+        _check).
     """
 
     def __init__(self, cls: type, options: dict[str, Any]):
@@ -545,23 +554,36 @@ class _VaryingOptions:
                 raise ValueError(
                     f"option '{name}' of {cls.__qualname__} cannot vary "
                     f"along the spectral axis")
-        # Check the options with the first value of each table, and the
-        # values of each table with the first values of the others
-        first = {name: table.values()[0] for name, table in tables.items()}
-        checked = parse_options_for_callable(
-            options | first, cls.__init__)
-        for name, table in tables.items():
-            with config_path(name):
-                for value in table.values():
-                    cls(**checked | {name: value})
         types = option_types(cls.__init__)
         self._cls = cls
         self._units = {
             name: unit_of(types[name]) or '' for name in tables}
-        self._constants = {
-            name: value for name, value in checked.items()
-            if name not in tables}
+        self._constants = parse_options_for_callable(
+            {name: value for name, value in options.items()
+             if name not in tables},
+            cls.__init__, ignore_params=set(tables))
         self._tables = tables
+        self._check()
+
+    def _check(self) -> None:
+        """
+        Build the objects at the points of all the tables, from the values
+        of all of them there, in the units of the options: values valid
+        each on its own may not be together (e.g. a bmin above bmaj).
+
+        Velocities are put among wavelengths or frequencies by the
+        convention of the velocities of the spectral axis, which tables
+        do not know: tables that need it are checked where the objects
+        are built, at the channels of the data (see at).
+        """
+        tables = list(self._tables.values())
+        unit = tables[0].points().unit
+        try:
+            points = np.unique(np.concatenate([
+                _convert(table.points(), unit, None) for table in tables]))
+            self.at(points * unit)
+        except _NoConvention:
+            pass
 
     def cls(self) -> type:
         """Return the class."""
@@ -577,14 +599,24 @@ class _VaryingOptions:
             points: u.Quantity,
             convention: VelocityConvention | None = None
     ) -> list[Any]:
-        """Return an object of the class at each of the points (1D)."""
+        """
+        Return an object of the class at each of the points (1D).
+
+        Raise ValueError if the convention is needed but not given, or
+        the options are invalid at a point (e.g. a bmin above bmaj).
+        """
         values = {
             name: table.at(points, self._units[name], convention)
             for name, table in self._tables.items()}
-        return [
-            self._cls(**self._constants | {
-                name: float(value[i]) for name, value in values.items()})
-            for i in range(len(points))]
+        objects = []
+        for i, point in enumerate(points):
+            options = {name: float(value[i]) for name, value in values.items()}
+            try:
+                objects.append(self._cls(**self._constants | options))
+            except ValueError as e:
+                raise ValueError(
+                    f"at {gbkfit.units.format_quantity(point)}: {e}") from None
+        return objects
 
     def velocity_range(
             self, convention: VelocityConvention | None = None

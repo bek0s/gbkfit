@@ -217,11 +217,11 @@ def test_images_without_their_pixel_size_need_it(tmp_path):
         CDELT1=-0.025 / 3600, CDELT2=0.025 / 3600)))
     fits.writeto(tmp_path / 'lsf.fits', np.ones(11))
     for file in ('psf.fits', 'cdelt.fits'):
-        with pytest.raises(ValueError, match="give the size of its pixels"):
+        with pytest.raises(ValueError, match="give the size of the pixels"):
             PSFImage.from_file(str(tmp_path / file))
     psf = PSFImage.from_file(str(tmp_path / 'psf.fits'), step=(0.025, 0.025))
     np.testing.assert_allclose(psf._step, (0.025, 0.025))
-    with pytest.raises(ValueError, match="give the width of its channels"):
+    with pytest.raises(ValueError, match="give the width of their channels"):
         LSFImage.from_file(str(tmp_path / 'lsf.fits'))
     with pytest.raises(ValueError, match="two positive numbers"):
         PSFImage(np.ones((9, 9)), step=(-0.1, 0.1))
@@ -570,3 +570,84 @@ def test_the_beam_area_is_the_integral_over_the_peak(psf):
     step = 0.02
     assert psf.beam_area() == pytest.approx(
         step ** 2 / psf.asarray((step, step)).max(), rel=2e-3)
+
+
+def test_pixels_of_psf_images_that_are_not_finite_hold_no_light():
+    # The PSFs of KMOS3D are recentred on 21 x 21 pixels, NaN beyond the
+    # field of the star they were measured on
+    import astropy.units as u
+    image = PSFGauss(0.3).asarray((0.2, 0.2), (21, 21))
+    unobserved = image.copy()
+    unobserved[:, 16:] = np.nan
+    observed = np.where(np.isfinite(unobserved), unobserved, 0)
+    expected = PSFImage(observed, (0.2, 0.2)).asarray((0.1, 0.1))
+    assert np.all(np.isfinite(expected))
+    np.testing.assert_array_equal(
+        PSFImage(unobserved, (0.2, 0.2)).asarray((0.1, 0.1)), expected)
+    images = PSFImages(
+        np.stack([unobserved, unobserved]), [1, 2] * u.um, (0.2, 0.2))
+    np.testing.assert_allclose(
+        images.at(1.5 * u.um).asarray((0.1, 0.1)), expected, atol=1e-15)
+
+
+def test_psf_images_of_a_cube_with_an_axis_of_stokes(tmp_path):
+    # Read as data are: the axis of Stokes, of length 1, is left out
+    import astropy.units as u
+    import astropy.wcs
+    from astropy.io import fits
+    wcs = astropy.wcs.WCS(naxis=4)
+    wcs.wcs.ctype = ['RA---SIN', 'DEC--SIN', 'FREQ', 'STOKES']
+    wcs.wcs.cunit = ['deg', 'deg', 'Hz', '']
+    wcs.wcs.cdelt = [-0.5 / 3600, 0.5 / 3600, 1e6, 1]
+    wcs.wcs.crval = [150, 2, 1.4e9, 1]
+    wcs.wcs.crpix = [11, 11, 1, 1]
+    images = np.stack([PSFGauss(s).asarray((0.5, 0.5), (21, 21))
+                       for s in (1, 2)])
+    fits.writeto(tmp_path / 'psf.fits', images[None], wcs.to_header())
+    psf = PSFImages.from_file(str(tmp_path / 'psf.fits'))
+    np.testing.assert_allclose(psf._step, (0.5, 0.5))
+    np.testing.assert_allclose(psf._points.to_value(u.Hz), [1.4e9, 1.401e9])
+
+
+def test_lsf_profiles_run_along_the_velocities_of_the_light(tmp_path):
+    # An LSF profile is read alike as an image and as the row of images:
+    # reversed on an axis of velocities (or wavelengths) that decrease,
+    # or of frequencies that increase; and the rows of profiles typed
+    # VRAD keep their points
+    import astropy.units as u
+    from astropy.io import fits
+    profile = np.array([0.0, 1.0, 4.0, 2.0, 1.0, 0.5, 0.0])
+    axis = dict(CTYPE1='VRAD', CUNIT1='km/s', CDELT1=-5.0, CRPIX1=4,
+                CRVAL1=0.0)
+    fits.writeto(tmp_path / 'lsf.fits', profile, fits.Header(axis))
+    fits.writeto(tmp_path / 'lsfs.fits', np.stack([profile, profile]),
+                 fits.Header(axis | dict(
+                     CTYPE2='WAVE', CUNIT2='Angstrom', CDELT2=1000.0,
+                     CRPIX2=1, CRVAL2=5000.0)))
+    fits.writeto(tmp_path / 'freq.fits', profile, fits.Header(dict(
+        CTYPE1='FREQ', CUNIT1='Hz', CDELT1=1e4, CRPIX1=4, CRVAL1=1.4e9)))
+    lsf = LSFImage.from_file(str(tmp_path / 'lsf.fits'))
+    assert lsf._step == 5
+    np.testing.assert_array_equal(lsf._data, profile[::-1])
+    lsfs = LSFImages.from_file(str(tmp_path / 'lsfs.fits'))
+    np.testing.assert_allclose(lsfs._points.to_value(u.AA), [5000, 6000])
+    np.testing.assert_allclose(
+        lsfs.at(5500 * u.AA).asarray(1.0, 41), lsf.asarray(1.0, 41),
+        atol=1e-15)
+    np.testing.assert_array_equal(
+        LSFImage.from_file(str(tmp_path / 'freq.fits'), step=2)._data,
+        profile[::-1])
+
+
+def test_lsf_profiles_on_an_axis_of_wavelengths_take_their_width(tmp_path):
+    # e.g. measured from arc lines: the width of the channels, in km/s of
+    # the light, is given
+    from astropy.io import fits
+    profile = LSFGauss(30.0).asarray(10.0, 21)
+    fits.writeto(tmp_path / 'lsf.fits', profile, fits.Header(dict(
+        CTYPE1='WAVE', CUNIT1='Angstrom', CDELT1=0.2, CRPIX1=11,
+        CRVAL1=6563.0)))
+    with pytest.raises(ValueError, match="not in a velocity unit"):
+        LSFImage.from_file(str(tmp_path / 'lsf.fits'))
+    lsf = LSFImage.from_file(str(tmp_path / 'lsf.fits'), step=10.0)
+    np.testing.assert_array_equal(lsf._data, profile)

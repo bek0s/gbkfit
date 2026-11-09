@@ -297,3 +297,26 @@ def test_table_files_are_relative_to_the_configuration(tmp_path):
     with paths_relative_to(str(folder)):
         psf = psf_parser.load(dict(type='moffat', alpha=info, beta=2.5))
     assert psf.at(5900 * u.AA).dump()['alpha'] == pytest.approx(0.7)
+
+
+def test_tables_are_checked_together_at_their_points():
+    # The beams of a cube of CASA, nearly round and drifting across its
+    # band, are valid at each channel, though the bmin of one channel is
+    # above the bmaj of another
+    ghz = dict(value=[1.0, 1.1, 1.2], unit='GHz')
+    psf = psf_parser.load(dict(
+        type='gauss_beam', bmaj=dict(points=ghz, values=[10.0, 9.9995, 9.999]),
+        bmin=dict(points=ghz, values=[9.9994, 9.999, 9.998])))
+    assert psf.at(1.2 * u.GHz).dump()['bmin'] == 9.998
+    # Values are compared in the units of the options
+    psf_parser.load(dict(
+        type='gauss_beam', bmaj=dict(points=ghz, values=[10.0, 10.0, 10.0]),
+        bmin=dict(points=ghz, values=[9000, 9500, 9900], unit='mas')))
+    # Values invalid together are refused, at the point where they are
+    with pytest.raises(
+            ValueError, match="at 1.1 GHz: bmin must be at most bmaj"):
+        psf_parser.load(dict(
+            type='gauss_beam',
+            bmaj=dict(points=ghz, values=[10.0, 10.0, 10.0]),
+            bmin=dict(points=dict(value=[1.0, 1.15, 1.2], unit='GHz'),
+                      values=[9.0, 11.0, 9.0])))

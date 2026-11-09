@@ -29,12 +29,9 @@ import scipy.special
 from annotated_types import Gt
 
 from gbkfit.config import (
-    DataFile, TypedParser, TypedSerializable, Unit, Varying,
-    check_options, split_data_file)
+    DataFile, TypedParser, Unit, Varying, check_options, split_data_file)
 from gbkfit.grid import Coords, VelocityConvention
-from gbkfit.io import (
-    has_wcs, parse_wcs, read_data, read_header, read_image, write_data,
-    write_image)
+from gbkfit.io import parse_wcs, read_image, write_data, write_image
 import gbkfit.math
 from . import _detail, varying
 from ._detail import MIN_EXTENT, WING_FLUX
@@ -57,86 +54,18 @@ __all__ = [
 ]
 
 
-class LSF(TypedSerializable, abc.ABC):
+# The unit of the widths of the LSFs
+_KMS = u.km / u.s
+
+
+class LSF(_detail.SpreadFunction):
     """
     A line spread function, drawn on arrays of channels.
     """
 
-    @classmethod
-    def load(cls, info: dict[str, Any]) -> 'LSF':
-        """
-        Load an LSF from its configuration.
-
-        Options that can vary (see Varying) given as tables make
-        an LSF that varies along the spectral axis (see varying and
-        LSFVarying).
-
-        Parameters
-        ----------
-        info : dict
-            The options.
-
-        Returns
-        -------
-        LSF
-            The LSF.
-        """
-        options = varying.load_tables(cls, info)
-        if any(isinstance(x, varying.SpectralTable)
-               for x in options.values()):
-            return cls.varying(**options)
-        return super().load(info)
-
-    @classmethod
-    def varying(cls, **options: Any) -> 'LSF':
-        """
-        Make an LSF of this class whose options vary along the spectral
-        axis.
-
-        Parameters
-        ----------
-        **options
-            The options of the class; those that vary (see the
-            options of the class marked Varying) are tables
-            (SpectralTable).
-
-        Returns
-        -------
-        LSF
-            The LSF (see LSFVarying).
-
-        Raises
-        ------
-        ValueError
-            If an option that cannot vary is a table, or the options are
-            invalid.
-        """
-        return LSFVarying(varying._VaryingOptions(cls, options))
-
-    @abc.abstractmethod
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        """
-        Dump the LSF to its configuration.
-
-        Parameters
-        ----------
-        prefix : str, optional
-            The start of the names of the files of its data (e.g. an
-            image), if any.
-        dump_path : bool, optional
-            Whether the configuration has the paths of the files, or only
-            their names.
-        overwrite : bool, optional
-            Whether to overwrite existing files.
-
-        Returns
-        -------
-        dict
-            The options.
-        """
+    @staticmethod
+    def _varying_class() -> type['LSFVarying']:
+        return LSFVarying
 
     @abc.abstractmethod
     def stretched(self, factor: float) -> 'LSF':
@@ -217,62 +146,6 @@ class LSF(TypedSerializable, abc.ABC):
                 f"but it must be odd")
         return self._asarray_impl(step, size, offset)
 
-    def varies(self) -> bool:
-        """
-        Check whether the LSF varies along the spectral axis.
-
-        Returns
-        -------
-        bool
-            Whether it varies.
-        """
-        return False
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'LSF | list[LSF]':
-        """
-        Return the LSF at points of the spectral axis.
-
-        Parameters
-        ----------
-        points : Quantity
-            Wavelengths, frequencies or velocities: one, or a sequence.
-        convention : VelocityConvention, optional
-            The velocity convention of the spectral axis; needed
-            between velocities and the points of the tables of an LSF
-            that varies, if they are of another kind.
-
-        Returns
-        -------
-        LSF or list of LSF
-            The LSF at the point, or at each point: itself, unless it
-            varies.
-        """
-        return varying.per_point(points, lambda points_: [self] * len(points_))
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        """
-        Return the range of velocities of the spectral axis that the LSF
-        is known at.
-
-        Parameters
-        ----------
-        convention : VelocityConvention, optional
-            The velocity convention of the spectral axis.
-
-        Returns
-        -------
-        tuple of float
-            The lowest and highest velocity (km/s); infinite unless it
-            varies.
-        """
-        return -np.inf, np.inf
-
     @abc.abstractmethod
     def _size_impl(self, step: float) -> float:
         """The size of the array that holds the LSF, before rounding."""
@@ -291,6 +164,32 @@ def _create_grid_1d(size: int, step: float, offset: int) -> np.ndarray:
     """The velocities of the channels of an array from its centre."""
     center = size // 2 + offset
     return (np.array(range(size)) - center) * step
+
+
+class _AnalyticLSF(LSF):
+    """
+    An LSF of a symmetric profile of the velocity, drawn out to its
+    extent on each side (see MIN_EXTENT).
+    """
+
+    @abc.abstractmethod
+    def _extent(self) -> float:
+        """The half-width out to which it is drawn (see MIN_EXTENT)."""
+
+    @abc.abstractmethod
+    def _profile(self, v: np.ndarray) -> np.ndarray:
+        """Its profile at the velocities v (km/s), to any factor."""
+
+    def _size_impl(self, step: float) -> float:
+        return 2 * self._extent() / step
+
+    def _asarray_impl(
+            self, step: float, size: int, offset: int
+    ) -> np.ndarray:
+        z = _create_grid_1d(size, step, offset)
+        data = self._profile(z)
+        data[np.abs(z) > self._extent()] = 0
+        return data / np.sum(data)
 
 
 class LSFPoint(LSF):
@@ -326,7 +225,7 @@ class LSFPoint(LSF):
         return data
 
 
-class LSFGauss(LSF):
+class LSFGauss(_AnalyticLSF):
     """
     A Gaussian, by its sigma.
 
@@ -372,19 +271,11 @@ class LSFGauss(LSF):
             MIN_EXTENT * self._sigma,
             self._sigma * np.sqrt(2) * scipy.special.erfinv(1 - WING_FLUX))
 
-    def _size_impl(self, step: float) -> float:
-        return 2 * self._extent() / step
-
-    def _asarray_impl(
-            self, step: float, size: int, offset: int
-    ) -> np.ndarray:
-        z = _create_grid_1d(size, step, offset)
-        data = gbkfit.math.gauss_1d_fun(z, 1, 0, self._sigma)
-        data[np.abs(z) > self._extent()] = 0
-        return data / np.sum(data)
+    def _profile(self, v: np.ndarray) -> np.ndarray:
+        return gbkfit.math.gauss_1d_fun(v, 1, 0, self._sigma)
 
 
-class LSFGGauss(LSF):
+class LSFGGauss(_AnalyticLSF):
     """
     A Gaussian with a shape parameter beta: flat-topped above 2, peaked
     below 2, exponential at 1.
@@ -439,21 +330,14 @@ class LSFGGauss(LSF):
             self._alpha * scipy.special.gammaincinv(
                 1 / self._beta, 1 - WING_FLUX) ** (1 / self._beta))
 
-    def _size_impl(self, step: float) -> float:
-        return 2 * self._extent() / step
-
-    def _asarray_impl(
-            self, step: float, size: int, offset: int
-    ) -> np.ndarray:
-        z = _create_grid_1d(size, step, offset)
-        data = gbkfit.math.ggauss_1d_fun(z, 1, 0, self._alpha, self._beta)
-        data[np.abs(z) > self._extent()] = 0
-        return data / np.sum(data)
+    def _profile(self, v: np.ndarray) -> np.ndarray:
+        return gbkfit.math.ggauss_1d_fun(v, 1, 0, self._alpha, self._beta)
 
 
-class LSFLorentz(LSF):
+class LSFLorentz(_AnalyticLSF):
     """
-    Broad wings, as of natural or pressure broadening.
+    Broad wings, as of a Fabry-Perot interferometer (whose profile about
+    each of its peaks is nearly a Lorentzian).
 
     Its profile is gamma^2 / (v^2 + gamma^2).
 
@@ -497,19 +381,11 @@ class LSFLorentz(LSF):
             MIN_EXTENT * self._gamma,
             self._gamma * np.tan(np.pi / 2 * (1 - WING_FLUX)))
 
-    def _size_impl(self, step: float) -> float:
-        return 2 * self._extent() / step
-
-    def _asarray_impl(
-            self, step: float, size: int, offset: int
-    ) -> np.ndarray:
-        z = _create_grid_1d(size, step, offset)
-        data = gbkfit.math.lorentz_1d_fun(z, 1, 0, self._gamma)
-        data[np.abs(z) > self._extent()] = 0
-        return data / np.sum(data)
+    def _profile(self, v: np.ndarray) -> np.ndarray:
+        return gbkfit.math.lorentz_1d_fun(v, 1, 0, self._gamma)
 
 
-class LSFMoffat(LSF):
+class LSFMoffat(_AnalyticLSF):
     """
     A core with power-law wings.
 
@@ -563,21 +439,13 @@ class LSFMoffat(LSF):
             self._alpha * np.sqrt(1 / (1 - scipy.special.betaincinv(
                 0.5, self._beta - 0.5, 1 - WING_FLUX)) - 1))
 
-    def _size_impl(self, step: float) -> float:
-        return 2 * self._extent() / step
-
-    def _asarray_impl(
-            self, step: float, size: int, offset: int
-    ) -> np.ndarray:
-        z = _create_grid_1d(size, step, offset)
-        data = gbkfit.math.moffat_1d_fun(z, 1, 0, self._alpha, self._beta)
-        data[np.abs(z) > self._extent()] = 0
-        return data / np.sum(data)
+    def _profile(self, v: np.ndarray) -> np.ndarray:
+        return gbkfit.math.moffat_1d_fun(v, 1, 0, self._alpha, self._beta)
 
 
 class LSFImage(LSF):
     """
-    A measured LSF, from a 1D FITS image.
+    A measured LSF, from a 1D image.
 
     It is centred on the centre of the image, and resampled to the
     channels it is drawn on (with splines of order 5).
@@ -609,15 +477,18 @@ class LSFImage(LSF):
             step: Annotated[float, Gt(0), Unit('km/s')] | None = None
     ) -> 'LSFImage':
         """
-        Read an LSF image (a profile) from a FITS file.
+        Read an LSF image (a profile) from a file, with its axis as it
+        is: the profile is reversed where the axis runs against the
+        velocities of the light (velocities or wavelengths that decrease
+        along it, or frequencies that increase).
 
         Parameters
         ----------
-        file : str or tuple
-            The file: a filename, or a filename and the HDU of the image.
+        file : DataFile
+            The file of the image, and where it is in it (see read_image).
         step : float, optional
             The width of the channels of the image (km/s of the light); by
-            default, that of the spectral axis of the header.
+            default, that of its axis, if it is in a velocity unit.
 
         Returns
         -------
@@ -627,20 +498,19 @@ class LSFImage(LSF):
         Raises
         ------
         ValueError
-            If step is not given and the header has no spectral axis.
+            If the file has no 1D image, its header has invalid world
+            coordinates, or step is not given and the axis is not in a
+            velocity unit.
         """
         check_options(LSFImage.from_file, locals())
         filename = split_data_file(file)[0]
-        data, coords = read_data(file)
-        if step is None:
-            header = read_header(file)
-            if not (has_wcs(header)
-                    and astropy.wcs.WCS(header).wcs.spec >= 0):
-                raise ValueError(
-                    f"{filename}: the image has no spectral axis; give the "
-                    f"width of its channels (step)")
-            step = coords.step[0]
-        return cls(data, step)
+        data, wcs = _read_profiles(file)
+        if data.ndim != 1:
+            raise ValueError(
+                f"{filename}: an LSF profile is a 1D image; it has "
+                f"{data.ndim} axes")
+        return cls(data, _channel_width(filename, wcs) if step is None
+                   else step)
 
     def dump(
             self, prefix: str = '', dump_path: bool = True,
@@ -889,44 +759,56 @@ class LSFHanning(LSF):
         return _detail.embed(data, (size,), (offset,))
 
 
-def _read_images(
-        file: DataFile
-) -> tuple[np.ndarray, u.Quantity | None, float | None]:
+def _read_profiles(file: DataFile) -> tuple[np.ndarray, astropy.wcs.WCS]:
     """
-    The LSF profiles of a 2D FITS image (one per row: nz, nk), the point
-    of each profile on the spectral axis (from the axis of the rows, if it
-    is spectral, or None), and the width of their channels in km/s (from
-    the axis of the columns, if it is in a velocity unit, or None).
+    The LSF profile, or profiles (one per row of an image: nz, nk), of a
+    file, along its first axis, and its world coordinates (its axes as
+    they are, unlike those of data: the axis of the profiles may be
+    spectral, and so that of the rows). The profiles run along the
+    velocities of the light: they are reversed where their axis runs
+    against them (velocities or wavelengths that decrease along it, or
+    frequencies that increase).
     """
     filename = split_data_file(file)[0]
     data, header = read_image(file)
     data = np.asarray(data, dtype=float)
     wcs = parse_wcs(filename, header)
-    if data.ndim != 2:
-        raise ValueError(
-            f"{filename}: LSF profiles must be an image, with one profile per "
-            f"row; it has {data.ndim} axes")
-    points = None
-    if wcs.wcs.spec == 1:
-        points = _detail.spectral_points(wcs, data.shape[0])
-    step = None
     unit = u.Unit(wcs.wcs.cunit[0])
-    if unit.is_equivalent(u.km / u.s):
-        step = abs(float(wcs.pixel_scale_matrix[0, 0])) * unit.to(u.km / u.s)
-    return data, points, step
+    scale = wcs.pixel_scale_matrix[0, 0]
+    if unit.is_equivalent(_KMS) or unit.is_equivalent(u.m):
+        against = scale < 0
+    else:
+        # (frequencies, energies and wave numbers fall as velocities rise)
+        against = scale > 0 and unit.is_equivalent(u.Hz, u.spectral())
+    return (data[..., ::-1] if against else data), wcs
 
 
-class LSFImages(LSF):
+def _channel_width(source: str, wcs: astropy.wcs.WCS) -> float:
     """
-    A measured LSF that changes with wavelength, from a FITS file.
+    The width of the channels of LSF profiles (km/s), from the first axis
+    of their world coordinates (see _read_profiles).
+
+    Raise ValueError if it is not in a velocity unit.
+    """
+    unit = u.Unit(wcs.wcs.cunit[0])
+    if not unit.is_equivalent(_KMS):
+        raise ValueError(
+            f"{source}: the axis of the profiles is not in a velocity unit; "
+            f"give the width of their channels (step, km/s)")
+    return abs(float(wcs.pixel_scale_matrix[0, 0])) * unit.to(_KMS)
+
+
+class LSFImages(_detail.SpreadFunctionImages, LSF):
+    """
+    A measured LSF that changes with wavelength, from an image.
 
     It is given as profiles at points of the spectral axis (e.g. measured
     from sky lines or arc lamps). At each channel it is the image LSF (see
     LSFImage) of the profiles of the two nearest points, interpolated
     linearly; beyond the points, that of the nearest profile.
 
-    Configurations give its file, a FITS image with one profile per row
-    (see from_file).
+    Configurations give its file, an image with one profile per row (see
+    from_file).
 
     Parameters
     ----------
@@ -956,15 +838,19 @@ class LSFImages(LSF):
             step: Annotated[float, Gt(0), Unit('km/s')] | None = None
     ) -> 'LSFImages':
         """
-        Read LSF profiles from a FITS image, one per row (nz, nk).
+        Read LSF profiles from an image, one per row (nz, nk), with its
+        axes as they are: the profiles are reversed where the axis of the
+        columns runs against the velocities of the light (see
+        LSFImage.from_file).
 
         Parameters
         ----------
-        file : str or tuple
-            The file: a filename, or a filename and the HDU of the image.
+        file : DataFile
+            The file of the image, and where it is in it (see read_image).
         points : Quantity, optional
             The point of each profile: wavelengths, frequencies or
-            velocities; by default, those of the spectral axis of the rows.
+            velocities; by default, those of the axis of the rows, if it
+            is spectral.
         step : float, optional
             The width of the channels of the profiles (km/s of the light);
             by default, that of the axis of the columns, if it is in a
@@ -978,24 +864,25 @@ class LSFImages(LSF):
         Raises
         ------
         ValueError
-            If the image is not 2D, or the points or step are neither given
-            nor in its header.
+            If the file has no 2D image, its header has invalid world
+            coordinates, or the points or step are neither given nor in
+            its header.
         """
         check_options(LSFImages.from_file, locals())
         filename = split_data_file(file)[0]
-        data, file_points, file_step = _read_images(file)
+        data, wcs = _read_profiles(file)
+        if data.ndim != 2:
+            raise ValueError(
+                f"{filename}: LSF profiles must be an image, with one profile "
+                f"per row; it has {data.ndim} axes")
         if points is None:
-            if file_points is None:
+            points = _detail.spectral_points(wcs.sub([2]), data.shape[0])
+            if points is None:
                 raise ValueError(
                     f"{filename}: the rows have no spectral axis; give the "
                     f"points of the profiles (points)")
-            points = file_points
         if step is None:
-            if file_step is None:
-                raise ValueError(
-                    f"{filename}: the columns are not in a velocity unit; "
-                    f"give the width of the channels (step, km/s)")
-            step = file_step
+            step = _channel_width(filename, wcs)
         return cls(data, points, step)
 
     def dump(
@@ -1007,9 +894,7 @@ class LSFImages(LSF):
         return dict(
             type=self.type(),
             file=filename if dump_path else os.path.basename(filename),
-            points=dict(
-                value=self._points.value.tolist(),
-                unit=str(self._points.unit)),
+            points=self._dump_points(),
             step=self._step)
 
     def __init__(
@@ -1024,64 +909,18 @@ class LSFImages(LSF):
             raise ValueError(
                 f"LSF profiles must be finite, of shape (nz, nk); their "
                 f"shape is {data.shape}")
-        points = u.Quantity(points, dtype=float)
-        if points.shape != data.shape[:1]:
-            raise ValueError(
-                f"LSF profiles need a point for each of the {len(data)} "
-                f"profiles; they have {points.size}")
-        if np.unique(points).size != points.size:
-            raise ValueError("the points of the profiles must be distinct")
-        # (each profile holds all the light)
-        self._data = data / data.sum(axis=1, keepdims=True)
-        self._points = points
+        super().__init__(data, points, "LSF profiles")
         self._step = step
+
+    def _image(self, data: np.ndarray) -> LSFImage:
+        return LSFImage(data, self._step)
 
     def stretched(self, factor: float) -> 'LSFImages':
         raise RuntimeError(
             "LSF profiles are stretched at each channel (see at)")
 
-    def varies(self) -> bool:
-        return True
 
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'LSF | list[LSF]':
-        return varying.per_point(
-            points, lambda points_: self._at(points_, convention))
-
-    def _at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None
-    ) -> list[LSFImage]:
-        """The image of each of the points (1D)."""
-        blends = varying.blend(self._points, points, convention)
-        lsfs = {}
-        for i, j, t in set(blends):
-            lsfs[(i, j, t)] = LSFImage(
-                (1 - t) * self._data[i] + t * self._data[j], self._step)
-        return [lsfs[blend] for blend in blends]
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        points = varying.to_velocities(self._points, convention)
-        return float(points.min()), float(points.max())
-
-    def _size_impl(self, step: float) -> float:
-        raise RuntimeError(
-            "LSF profiles give a profile at each channel (see at)")
-
-    def _asarray_impl(
-            self, step: float, size: int, offset: int
-    ) -> np.ndarray:
-        raise RuntimeError(
-            "LSF profiles give a profile at each channel (see at)")
-
-
-class LSFVarying(LSF):
+class LSFVarying(_detail.VaryingSpreadFunction, LSF):
     """
     An LSF of a type whose options vary along the spectral axis: an LSF of
     the type at each channel (see at). It is not drawn itself.
@@ -1089,52 +928,9 @@ class LSFVarying(LSF):
     LSFGauss.varying).
     """
 
-    def type(self) -> str:
-        return self._options.cls().type()
-
-    def type_title(self) -> str:
-        return self._options.cls().type_title()
-
-    def dump(
-            self, prefix: str = '', dump_path: bool = True,
-            overwrite: bool = False
-    ) -> dict[str, Any]:
-        return self._options.dump()
-
-    def __init__(self, options: 'varying._VaryingOptions'):
-        self._options = options
-
     def stretched(self, factor: float) -> 'LSFVarying':
         raise RuntimeError(
             "an LSF that varies along the spectral axis is stretched at each "
-            "channel (see at)")
-
-    def varies(self) -> bool:
-        return True
-
-    def at(
-            self,
-            points: u.Quantity,
-            convention: VelocityConvention | None = None
-    ) -> 'LSF | list[LSF]':
-        return varying.per_point(
-            points, lambda points_: self._options.at(points_, convention))
-
-    def velocity_range(
-            self, convention: VelocityConvention | None = None
-    ) -> tuple[float, float]:
-        return self._options.velocity_range(convention)
-
-    def _size_impl(self, step: float) -> float:
-        raise RuntimeError(
-            "an LSF that varies along the spectral axis has a size at each "
-            "channel (see at)")
-
-    def _asarray_impl(
-            self, step: float, size: int, offset: int
-    ) -> np.ndarray:
-        raise RuntimeError(
-            "an LSF that varies along the spectral axis is drawn at each "
             "channel (see at)")
 
 
